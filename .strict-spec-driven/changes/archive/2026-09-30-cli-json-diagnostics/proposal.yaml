@@ -1,0 +1,34 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: cli-json-diagnostics
+  status: proposed
+summary:
+  what:
+    - 建立 wa-cli 的命令框架：命令注册表（Command Registry）统一声明每条命令的位置参数、参数（Flag）、输出键和退出码（Exit Code），并由通用解析器按注册表解析参数；新增 wa-cli help 与 help --json。
+    - 定义所有命令共用的 --json 输出信封（Output Envelope）（valid、diagnostics、changedPaths 加命令专属字段）与诊断（Diagnostic）契约：每条诊断含稳定错误码（Error Code）、说明、产物路径、字段路径与可执行的下一步命令；退出码约定 0 成功、1 校验失败、2 用法错误。
+  why:
+    - 后续所有内核命令（init、validate、status、advance 等）都要输出带错误码、产物路径与下一步命令的 --json 诊断；没有统一契约，每个命令会各自发明输出形状，Agent 无法稳定解析。
+    - 命令注册表是后续 MCP tools 生成与 Skill 命令校验的依据；help --json 让 Agent 在调用前查询参数、输出键与退出码，而不是凭记忆猜测。
+scope:
+  in:
+    - internal/cli 中的命令注册表：每条命令声明名称、摘要、位置参数、参数（类型 bool/string、说明）、输出键（名称、说明）与退出码（代码、含义）
+    - 通用参数解析：只接受 --name 与 --name=value 形式的长参数，--json 与 --help 为所有命令共有的参数；未知参数、缺少取值、bool 参数带取值、多余位置参数均为用法错误
+    - wa-cli help [<命令>] [--json] 与 wa-cli <命令> --help：文本形式输出用法；--json 输出 commands 数组，列出参数、输出键和退出码
+    - 统一 JSON 输出信封与诊断结构（code、severity、message、path、field、next），错误码采用稳定的点分小写格式（如 usage.unknown-command）
+    - version --json 改为输出统一信封并保留 version 字段；--json 模式下的用法错误在标准输出写 JSON 诊断，退出码仍为 2
+    - 同步修改 cli 主规格（delta spec）、新增 cli-contract 技术标准（delta tech）、更新 internal/cli 与 cmd/wa-cli 测试
+  out:
+    - wa-cli init / validate / status 等业务命令与工作区（由 workspace-init-and-schemas 等后续规划变更负责）
+    - MCP tools 生成与 Skill 命令校验本身（只提供注册表作为其依据）
+    - 错误码目录的独立查询命令、短参数（-x）与参数别名
+    - wa-cli 调用 LLM
+unchanged_behavior:
+  - wa-cli version（不加 --json）仍输出一行 'wa-cli <version>' 并以退出码 0 退出
+  - 不加 --json 时，无命令、未知命令、未知参数仍把用法说明写到标准错误并以退出码 2 退出
+  - cmd/wa-cli/main.go 仍只转交参数、输出流与退出码；产品二进制不依赖 internal/tools/**；完整回归命令与 80% 覆盖率关卡不变
+roadmap:
+  milestone: kernel-foundation
+  planned_change: cli-json-diagnostics

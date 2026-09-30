@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"slices"
+	"sort"
 	"strings"
 	"testing"
 
@@ -15,6 +17,32 @@ func run(t *testing.T, args ...string) (code int, stdout, stderr string) {
 	var out, errOut bytes.Buffer
 	code = Run(args, &out, &errOut)
 	return code, out.String(), errOut.String()
+}
+
+// runJSON 运行命令并把标准输出解析为 JSON 对象。
+func runJSON(t *testing.T, args ...string) (int, map[string]any) {
+	t.Helper()
+	code, stdout, stderr := run(t, args...)
+	if stderr != "" {
+		t.Fatalf("%v: stderr = %q, want empty", args, stderr)
+	}
+	var got map[string]any
+	if err := json.Unmarshal([]byte(stdout), &got); err != nil {
+		t.Fatalf("%v: stdout is not a JSON object: %v; stdout: %q", args, err, stdout)
+	}
+	if strings.Count(stdout, "\n") != 1 || !strings.HasSuffix(stdout, "\n") {
+		t.Fatalf("%v: stdout should be exactly one JSON line: %q", args, stdout)
+	}
+	return code, got
+}
+
+func keys(m map[string]any) []string {
+	var ks []string
+	for k := range m {
+		ks = append(ks, k)
+	}
+	sort.Strings(ks)
+	return ks
 }
 
 func TestVersionText(t *testing.T) {
@@ -31,30 +59,39 @@ func TestVersionText(t *testing.T) {
 }
 
 func TestVersionJSON(t *testing.T) {
-	code, stdout, stderr := run(t, "version", "--json")
+	code, got := runJSON(t, "version", "--json")
 	if code != 0 {
-		t.Fatalf("exit code = %d, want 0; stderr: %s", code, stderr)
+		t.Fatalf("exit code = %d, want 0", code)
 	}
-	var got map[string]any
-	if err := json.Unmarshal([]byte(stdout), &got); err != nil {
-		t.Fatalf("stdout is not JSON: %v; stdout: %q", err, stdout)
+	if want := []string{"changedPaths", "diagnostics", "valid", "version"}; !slices.Equal(keys(got), want) {
+		t.Fatalf("keys = %v, want %v", keys(got), want)
 	}
-	if got["version"] != version.Version {
-		t.Fatalf("version = %v, want %q", got["version"], version.Version)
+	if got["valid"] != true || got["version"] != version.Version {
+		t.Fatalf("got %v, want valid true and version %q", got, version.Version)
+	}
+	for _, k := range []string{"diagnostics", "changedPaths"} {
+		if arr, ok := got[k].([]any); !ok || len(arr) != 0 {
+			t.Fatalf("%s = %#v, want empty array", k, got[k])
+		}
 	}
 }
 
-func TestUsageErrors(t *testing.T) {
+func TestUsageErrorsText(t *testing.T) {
 	tests := []struct {
 		name       string
 		args       []string
 		wantStderr []string
 	}{
-		{"no command", nil, []string{"用法：wa-cli"}},
-		{"unknown command", []string{"frobnicate"}, []string{"未知命令：frobnicate", "用法：wa-cli"}},
+		{"no command", nil, []string{"缺少命令", "用法：wa-cli <command>"}},
+		{"leading flag", []string{"-json"}, []string{"缺少命令", "用法：wa-cli <command>"}},
+		{"unknown command", []string{"frobnicate"}, []string{"未知命令：frobnicate", "用法：wa-cli <command>"}},
 		{"unknown flag", []string{"version", "--unknown"}, []string{"未知参数：--unknown", "用法：wa-cli version"}},
-		{"flag with value", []string{"version", "--json=maybe"}, []string{"未知参数：--json=maybe", "用法：wa-cli version"}},
-		{"unexpected argument", []string{"version", "extra"}, []string{"未知参数：extra", "用法：wa-cli version"}},
+		{"single dash flag", []string{"version", "-json"}, []string{"未知参数：-json", "用法：wa-cli version"}},
+		{"bare double dash", []string{"version", "--"}, []string{"未知参数：--", "用法：wa-cli version"}},
+		{"bool flag with value", []string{"version", "--json=maybe"}, []string{"参数 --json 不接受取值：--json=maybe", "用法：wa-cli version"}},
+		{"unexpected argument", []string{"version", "extra"}, []string{"多余的参数：extra", "用法：wa-cli version"}},
+		{"help extra argument", []string{"help", "version", "extra"}, []string{"多余的参数：extra", "用法：wa-cli help"}},
+		{"help unknown command", []string{"help", "nope"}, []string{"未知命令：nope", "用法：wa-cli <command>"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -74,18 +111,307 @@ func TestUsageErrors(t *testing.T) {
 	}
 }
 
+func TestUsageErrorsJSON(t *testing.T) {
+	tests := []struct {
+		args        []string
+		wantCode    string
+		wantMessage string
+		wantNext    string
+	}{
+		{[]string{"--json"}, "usage.missing-command", "缺少命令", "wa-cli help --json"},
+		{[]string{"nope", "--json"}, "usage.unknown-command", "未知命令：nope", "wa-cli help --json"},
+		{[]string{"version", "--unknown", "--json"}, "usage.unknown-flag", "未知参数：--unknown", "wa-cli help version --json"},
+		{[]string{"version", "--help=yes", "--json"}, "usage.flag-takes-no-value", "参数 --help 不接受取值：--help=yes", "wa-cli help version --json"},
+		{[]string{"version", "extra", "--json"}, "usage.unexpected-argument", "多余的参数：extra", "wa-cli help version --json"},
+		{[]string{"help", "nope", "--json"}, "usage.unknown-command", "未知命令：nope", "wa-cli help --json"},
+		{[]string{"help", "nope", "--help", "--json"}, "usage.unknown-command", "未知命令：nope", "wa-cli help --json"},
+		{[]string{"--help", "--unknown", "--json"}, "usage.unknown-flag", "未知参数：--unknown", "wa-cli help help --json"},
+	}
+	for _, tt := range tests {
+		t.Run(strings.Join(tt.args, " "), func(t *testing.T) {
+			code, got := runJSON(t, tt.args...)
+			if code != 2 {
+				t.Fatalf("exit code = %d, want 2", code)
+			}
+			if got["valid"] != false {
+				t.Fatalf("valid = %v, want false", got["valid"])
+			}
+			diags := got["diagnostics"].([]any)
+			if len(diags) != 1 {
+				t.Fatalf("diagnostics = %v, want exactly one", diags)
+			}
+			d := diags[0].(map[string]any)
+			if d["code"] != tt.wantCode || d["severity"] != "error" || d["message"] != tt.wantMessage {
+				t.Fatalf("diagnostic = %v, want code %q, severity error, message %q", d, tt.wantCode, tt.wantMessage)
+			}
+			if next := d["next"].([]any); len(next) != 1 || next[0] != tt.wantNext {
+				t.Fatalf("next = %v, want [%q]", next, tt.wantNext)
+			}
+			if _, ok := d["path"]; ok {
+				t.Fatalf("usage diagnostic should omit path: %v", d)
+			}
+		})
+	}
+}
+
+func TestHelpText(t *testing.T) {
+	code, stdout, stderr := run(t, "help")
+	if code != 0 || stderr != "" {
+		t.Fatalf("exit code = %d, stderr = %q; want 0 and empty", code, stderr)
+	}
+	for _, c := range registry {
+		if !strings.Contains(stdout, c.name) || !strings.Contains(stdout, c.summary) {
+			t.Errorf("help does not list %s with its summary:\n%s", c.name, stdout)
+		}
+	}
+}
+
+func TestCommandHelp(t *testing.T) {
+	_, byHelp, _ := run(t, "help", "version")
+	code, byFlag, stderr := run(t, "version", "--help")
+	if code != 0 || stderr != "" {
+		t.Fatalf("version --help: exit code = %d, stderr = %q", code, stderr)
+	}
+	if byFlag != byHelp {
+		t.Fatalf("version --help = %q, help version = %q; want equal", byFlag, byHelp)
+	}
+	for _, want := range []string{"用法：wa-cli version [--json] [--help]", "--json", "输出键（--json）", "version", "退出码", "用法错误"} {
+		if !strings.Contains(byFlag, want) {
+			t.Errorf("version help does not contain %q:\n%s", want, byFlag)
+		}
+	}
+	_, helpHelp, _ := run(t, "help", "help")
+	if !strings.Contains(helpHelp, "位置参数") || !strings.Contains(helpHelp, "<command>") {
+		t.Errorf("help help does not describe the positional argument:\n%s", helpHelp)
+	}
+}
+
+// helpDocs 运行 help --json 类命令并解码 commands 数组。
+func helpDocs(t *testing.T, args ...string) []commandDoc {
+	t.Helper()
+	var out, errOut bytes.Buffer
+	if code := Run(args, &out, &errOut); code != 0 {
+		t.Fatalf("%v: exit code = %d; stderr: %s", args, code, errOut.String())
+	}
+	var res struct {
+		Valid    bool         `json:"valid"`
+		Commands []commandDoc `json:"commands"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &res); err != nil {
+		t.Fatalf("%v: %v", args, err)
+	}
+	if !res.Valid {
+		t.Fatalf("%v: valid = false", args)
+	}
+	return res.Commands
+}
+
+func TestHelpJSON(t *testing.T) {
+	docs := helpDocs(t, "help", "--json")
+	if len(docs) != len(registry) {
+		t.Fatalf("commands = %d, want %d", len(docs), len(registry))
+	}
+	for i, d := range docs {
+		if d.Name != registry[i].name || d.Summary == "" || d.Usage == "" {
+			t.Errorf("command %d = %+v", i, d)
+		}
+		if d.Args == nil || d.Flags == nil || d.OutputKeys == nil || d.ExitCodes == nil {
+			t.Errorf("%s: arrays must not be null: %+v", d.Name, d)
+		}
+		var flags []string
+		for _, f := range d.Flags {
+			flags = append(flags, f.Name)
+		}
+		if !slices.Contains(flags, "json") || !slices.Contains(flags, "help") {
+			t.Errorf("%s: flags %v must include json and help", d.Name, flags)
+		}
+	}
+
+	one := helpDocs(t, "help", "version", "--json")
+	if len(one) != 1 || one[0].Name != "version" {
+		t.Fatalf("help version --json = %+v, want only version", one)
+	}
+	if !slices.ContainsFunc(one[0].OutputKeys, func(k outputKey) bool { return k.Name == "version" }) {
+		t.Fatalf("version outputKeys %v do not include version", one[0].OutputKeys)
+	}
+	if byFlag := helpDocs(t, "version", "--help", "--json"); !slices.EqualFunc(byFlag, one, func(a, b commandDoc) bool { return a.Name == b.Name && a.Usage == b.Usage }) {
+		t.Fatalf("version --help --json = %+v, want %+v", byFlag, one)
+	}
+}
+
+// TestRegistryConsistency 确认 help --json 的声明与命令的实际行为一致。
+func TestRegistryConsistency(t *testing.T) {
+	for _, d := range helpDocs(t, "help", "--json") {
+		t.Run(d.Name, func(t *testing.T) {
+			// 输出键与 --json 的实际顶层字段一致。
+			code, got := runJSON(t, d.Name, "--json")
+			if code != 0 {
+				t.Fatalf("exit code = %d", code)
+			}
+			var declared []string
+			for _, k := range d.OutputKeys {
+				if k.Description == "" {
+					t.Errorf("output key %s has no description", k.Name)
+				}
+				declared = append(declared, k.Name)
+			}
+			sort.Strings(declared)
+			if !slices.Equal(keys(got), declared) {
+				t.Errorf("JSON keys = %v, declared outputKeys = %v", keys(got), declared)
+			}
+			if got["valid"] != true {
+				t.Errorf("valid = %v, want true", got["valid"])
+			}
+			for _, k := range []string{"diagnostics", "changedPaths"} {
+				if arr, ok := got[k].([]any); !ok || len(arr) != 0 {
+					t.Errorf("%s = %#v, want empty array", k, got[k])
+				}
+			}
+			// 声明的每个参数都被解析器接受。
+			c := registry.lookup(d.Name)
+			for _, f := range d.Flags {
+				if f.Description == "" {
+					t.Errorf("flag --%s has no description", f.Name)
+				}
+				args := []string{"--" + f.Name}
+				if f.Type == flagString {
+					args = append(args, "x")
+				}
+				if _, diag := parseArgs(c, args); diag != nil {
+					t.Errorf("declared flag --%s rejected: %v", f.Name, diag.Message)
+				}
+			}
+			// 退出码只取 0、1、2 且都有含义。
+			if len(d.ExitCodes) == 0 {
+				t.Errorf("no exit codes declared")
+			}
+			for _, e := range d.ExitCodes {
+				if e.Code < 0 || e.Code > 2 || e.Meaning == "" {
+					t.Errorf("exit code %+v outside the 0/1/2 convention", e)
+				}
+			}
+		})
+	}
+}
+
+func TestParseStringFlag(t *testing.T) {
+	c := &command{name: "demo", flags: []flagSpec{{"dir", flagString, "目录"}}}
+	for _, args := range [][]string{{"--dir", "a b"}, {"--dir=a b"}} {
+		inv, d := parseArgs(c, args)
+		if d != nil || inv.values["dir"] != "a b" {
+			t.Fatalf("%v: values = %v, diag = %v", args, inv, d)
+		}
+	}
+	if inv, d := parseArgs(c, []string{"--dir="}); d != nil || !inv.flag("dir") || inv.values["dir"] != "" {
+		t.Fatalf("--dir= should set an empty value: %v %v", inv, d)
+	}
+	for _, args := range [][]string{{"--dir"}, {"--dir", "--json"}} {
+		_, d := parseArgs(c, args)
+		if d == nil || d.Code != "usage.missing-flag-value" || d.Message != "参数 --dir 缺少取值" || d.Next[0] != "wa-cli help demo --json" {
+			t.Fatalf("%v: diag = %+v, want usage.missing-flag-value", args, d)
+		}
+	}
+	if u := c.usage(); u != "wa-cli demo [--dir <value>] [--json] [--help]" {
+		t.Fatalf("usage = %q", u)
+	}
+}
+
+func TestWriteJSON(t *testing.T) {
+	var out bytes.Buffer
+	res := &Result{Diagnostics: []Diagnostic{
+		{Code: "demo.warn", Severity: severityWarning, Message: "提示", Path: "a.yaml", Field: "$.x", Next: []string{"wa-cli help"}},
+	}}
+	if err := writeJSON(&out, res); err != nil {
+		t.Fatal(err)
+	}
+	want := `{"valid":true,"diagnostics":[{"code":"demo.warn","severity":"warning","message":"提示","path":"a.yaml","field":"$.x","next":["wa-cli help"]}],"changedPaths":[]}` + "\n"
+	if out.String() != want {
+		t.Fatalf("warning only:\n got %s\nwant %s", out.String(), want)
+	}
+
+	out.Reset()
+	res.Diagnostics = append(res.Diagnostics, Diagnostic{Code: "demo.err", Severity: severityError, Message: "错误", Next: []string{"wa-cli help"}})
+	if err := writeJSON(&out, res); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(out.String(), `{"valid":false,`) {
+		t.Fatalf("an error diagnostic must make valid false: %s", out.String())
+	}
+}
+
 type failingWriter struct{}
 
 func (failingWriter) Write([]byte) (int, error) { return 0, errors.New("disk full") }
 
-func TestVersionWriteFailure(t *testing.T) {
-	for _, args := range [][]string{{"version"}, {"version", "--json"}} {
+func TestWriteFailure(t *testing.T) {
+	for _, args := range [][]string{{"version"}, {"version", "--json"}, {"help"}, {"help", "--json"}, {"help", "version"}} {
 		var errOut bytes.Buffer
 		if code := Run(args, failingWriter{}, &errOut); code != 1 {
 			t.Fatalf("%v: exit code = %d, want 1", args, code)
 		}
-		if !strings.Contains(errOut.String(), "disk full") {
+		if !strings.Contains(errOut.String(), "写入输出失败：disk full") {
 			t.Fatalf("%v: stderr %q does not report the write error", args, errOut.String())
 		}
+	}
+}
+
+func TestRootHelpFlag(t *testing.T) {
+	for _, tt := range [][2][]string{
+		{{"--help"}, {"help"}},
+		{{"--help", "--json"}, {"help", "--json"}},
+		{{"--help", "version"}, {"help", "version"}},
+		{{"--help", "version", "--json"}, {"help", "version", "--json"}},
+	} {
+		code, got, stderr := run(t, tt[0]...)
+		_, want, _ := run(t, tt[1]...)
+		if code != 0 || stderr != "" || got != want {
+			t.Errorf("%v: exit code = %d, stderr = %q, stdout = %q; want 0, empty, output of %v", tt[0], code, stderr, got, tt[1])
+		}
+	}
+}
+
+func TestHelpCommandHelpFlag(t *testing.T) {
+	_, want, _ := run(t, "help", "version")
+	code, got, stderr := run(t, "help", "version", "--help")
+	if code != 0 || stderr != "" || got != want {
+		t.Fatalf("help version --help: exit code = %d, stderr = %q, stdout = %q; want output of help version", code, stderr, got)
+	}
+	_, own, _ := run(t, "help", "help")
+	if _, got, _ := run(t, "help", "--help"); got != own {
+		t.Fatalf("help --help = %q, want help's own usage %q", got, own)
+	}
+}
+
+func TestUsageErrorWriteFailure(t *testing.T) {
+	var errOut bytes.Buffer
+	if code := Run([]string{"nope", "--json"}, failingWriter{}, &errOut); code != 1 {
+		t.Fatalf("JSON usage error with failing stdout: exit code = %d, want 1", code)
+	}
+	if !strings.Contains(errOut.String(), "写入输出失败：disk full") {
+		t.Fatalf("stderr %q does not report the write error", errOut.String())
+	}
+	if code := Run([]string{"nope"}, &bytes.Buffer{}, failingWriter{}); code != 1 {
+		t.Fatalf("text usage error with failing stderr: exit code = %d, want 1", code)
+	}
+}
+
+func TestPlaceholders(t *testing.T) {
+	c := &command{name: "demo", flags: []flagSpec{{"dir", flagString, "目录"}}}
+	texts := []string{registry.overview(), c.usage(), c.helpText()}
+	for _, cmd := range registry {
+		texts = append(texts, cmd.helpText())
+	}
+	for _, text := range texts {
+		for _, bad := range []string{"<命令>", "<值>"} {
+			if strings.Contains(text, bad) {
+				t.Errorf("usage contains Chinese placeholder %s:\n%s", bad, text)
+			}
+		}
+	}
+	if !strings.Contains(registry.overview(), "用法：wa-cli <command> [<args>]") {
+		t.Errorf("overview usage line = %q", registry.overview())
+	}
+	if !strings.Contains(c.usage(), "[--dir <value>]") {
+		t.Errorf("string flag usage = %q", c.usage())
 	}
 }

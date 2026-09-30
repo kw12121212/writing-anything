@@ -1,65 +1,62 @@
-// Package cli 实现 wa-cli 的命令分发。
+// Package cli 实现 wa-cli 的命令框架：命令注册表（Command Registry）、参数解析、
+// help 与所有命令共用的 --json 输出信封（Output Envelope）和诊断（Diagnostic）。
 package cli
 
 import (
-	"encoding/json"
 	"fmt"
 	"io"
-
-	"github.com/kw12121212/writing-anything/internal/version"
+	"slices"
+	"strings"
 )
-
-// 退出码。
-const (
-	exitOK    = 0
-	exitError = 1
-	exitUsage = 2
-)
-
-const usage = `用法：wa-cli <命令> [参数]
-
-命令：
-  version   显示 wa-cli 版本；加 --json 输出 JSON
-`
-
-const versionUsage = "用法：wa-cli version [--json]\n"
 
 // Run 执行 args 指定的命令（不含程序名），并返回进程退出码。
 func Run(args []string, stdout, stderr io.Writer) int {
-	if len(args) == 0 {
-		fmt.Fprint(stderr, usage)
-		return exitUsage
-	}
-	switch args[0] {
-	case "version":
-		return runVersion(args[1:], stdout, stderr)
-	default:
-		fmt.Fprintf(stderr, "未知命令：%s\n\n%s", args[0], usage)
-		return exitUsage
-	}
+	return registry.run(args, stdout, stderr)
 }
 
-func runVersion(args []string, stdout, stderr io.Writer) int {
-	asJSON := false
-	for _, arg := range args {
-		if arg != "--json" && arg != "-json" {
-			fmt.Fprintf(stderr, "未知参数：%s\n\n%s", arg, versionUsage)
-			return exitUsage
-		}
-		asJSON = true
+func (s commandSet) run(args []string, stdout, stderr io.Writer) int {
+	// 只要出现 --json，用法错误也以 JSON 信封写到标准输出，便于 Agent 解析。
+	asJSON := slices.Contains(args, "--json")
+	if len(args) > 0 && args[0] == "--help" {
+		// wa-cli --help [...] 等同 wa-cli help [...]。
+		args = append([]string{helpCommand.name}, args[1:]...)
 	}
+	if len(args) == 0 || strings.HasPrefix(args[0], "-") {
+		return usageError(stdout, stderr, asJSON, usageDiagnostic(nil, codeMissingCommand, "缺少命令"), s.overview())
+	}
+	c := s.lookup(args[0])
+	if c == nil {
+		return usageError(stdout, stderr, asJSON, usageDiagnostic(nil, codeUnknownCommand, "未知命令："+args[0]), s.overview())
+	}
+	inv, d := parseArgs(c, args[1:])
+	if d != nil {
+		return usageError(stdout, stderr, asJSON, d, c.helpText())
+	}
+	inv.all, inv.stdout, inv.stderr = s, stdout, stderr
+	// help 的位置参数就是要查看的命令，help <command> --help 与 help <command> 相同。
+	if inv.flag("help") && (c != helpCommand || len(inv.args) == 0) {
+		return writeHelp(inv, []*command{c}, false)
+	}
+	return c.run(inv)
+}
 
+// usageError 写出用法错误并返回退出码 2：JSON 模式把诊断写到标准输出，否则把说明与用法写到标准错误。
+// 写入失败属于执行失败，返回退出码 1。
+func usageError(stdout, stderr io.Writer, asJSON bool, d *Diagnostic, usage string) int {
 	var err error
 	if asJSON {
-		err = json.NewEncoder(stdout).Encode(struct {
-			Version string `json:"version"`
-		}{version.Version})
+		err = writeJSON(stdout, &Result{Diagnostics: []Diagnostic{*d}})
 	} else {
-		_, err = fmt.Fprintf(stdout, "wa-cli %s\n", version.Version)
+		_, err = fmt.Fprintf(stderr, "%s\n\n%s", d.Message, usage)
 	}
 	if err != nil {
-		fmt.Fprintf(stderr, "写入输出失败：%v\n", err)
-		return exitError
+		return writeFailed(stderr, err)
 	}
-	return exitOK
+	return exitUsage
+}
+
+// writeFailed 报告输出写入失败并返回退出码 1。
+func writeFailed(stderr io.Writer, err error) int {
+	fmt.Fprintf(stderr, "写入输出失败：%v\n", err)
+	return exitError
 }

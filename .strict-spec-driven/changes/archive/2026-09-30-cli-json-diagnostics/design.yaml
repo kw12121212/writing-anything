@@ -1,0 +1,35 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: cli-json-diagnostics
+approach:
+  - 在 internal/cli 中引入命令注册表：每条命令是一个 command 值，声明 name、summary、位置参数、flags、outputKeys、exitCodes 与 run 函数。Run 查表分发；通用解析器按命令声明解析参数，--json 与 --help 由框架自动为每条命令加上。help 命令与 --help 从同一注册表渲染文本或 JSON，保证帮助内容与实际解析一致。
+  - 输出层提供统一信封 result{valid, diagnostics, changedPaths} 加命令专属字段，JSON 模式下由框架统一编码写到标准输出；诊断 diagnostic{code, severity, message, path, field, next}。用法错误在解析阶段产生 usage.* 诊断：文本模式写用法说明到标准错误，JSON 模式把信封写到标准输出，两者退出码都是 2。
+decisions:
+  envelope-shape:
+    decision: JSON 信封的顶层字段固定为 valid（bool）、diagnostics（数组，永不为 null）、changedPaths（数组，永不为 null），命令专属字段与之并列放在顶层；version --json 输出 {valid, diagnostics, changedPaths, version}。
+    rationale: 并列放置让 version 字段保持在原位置，已有的 version --json 解析方式不被破坏；数组永不为 null 让 Agent 不必区分缺失与空。
+  diagnostic-fields:
+    decision: 诊断字段为 code、severity（error 或 warning）、message、path、field、next（字符串数组）；path 与 field 无意义时省略，next 至少给出一条可执行命令。valid 为 false 当且仅当存在 severity=error 的诊断。
+    rationale: 路线图要求错误码、产物路径、字段路径与下一步命令；severity 用于后续命令区分阻塞问题与提示，并让 valid 有确定的判定规则。
+  error-code-format:
+    decision: 错误码采用 <领域>.<kebab-case> 的稳定格式，本变更定义 usage.missing-command、usage.unknown-command、usage.unknown-flag、usage.missing-flag-value、usage.flag-takes-no-value、usage.unexpected-argument；已发布的错误码不得改名或复用。
+    rationale: 点分小写便于按领域前缀过滤，且与 CLI 标识符风格一致；稳定性由 cli-contract 技术标准约束，使 Agent 与 MCP 可以依赖错误码分支。
+  json-usage-errors:
+    decision: 只要参数中出现 --json，用法错误就以 JSON 信封写到标准输出、标准错误为空；否则把用法说明写到标准错误。退出码均为 2。
+    rationale: Agent 以 --json 调用时只解析标准输出，用法错误也必须可解析；文本模式保持 project-scaffold 已定义的行为。
+  long-flags-only:
+    decision: 只支持 --name 与 --name=value 长参数，不支持短参数与单横线形式；bool 参数不接受取值；string 参数用 --name value 形式时，下一个参数以 -- 开头或缺失即为缺少取值（usage.missing-flag-value），不吞掉后面的 --json 等参数。
+    rationale: 形式单一便于注册表生成 MCP tool 参数；project-scaffold 中偶然接受的 -json 未写入规格，去掉可减少歧义；不吞掉 -- 开头的参数保证「出现 --json 即 JSON 模式」的判断与解析结果一致（审查中发现）。
+  help-json-shape:
+    decision: help --json 与 help <命令> --json 的信封中带 commands 数组，每项含 name、summary、usage、args、flags、outputKeys、exitCodes；指定命令时数组只含该命令。
+    rationale: 统一数组形状让调用方用同一段代码处理全量与单个命令查询，也是后续 MCP tools 生成的直接输入。
+alternatives:
+  - option: 引入 spf13/cobra 等第三方命令框架
+    reason: cobra 的 help 与错误输出不是 JSON 契约，需要大量覆盖；违反 stdlib-first，并让注册表结构受第三方类型约束。
+  - option: 使用标准库 flag 包逐命令解析
+    reason: flag 包接受单横线参数且错误信息为英文、直接写 stderr，无法产生带错误码的诊断，也无法从同一数据渲染 help --json。
+risks:
+  - 注册表字段若过度设计，会在 MCP 与 Skill 接入时返工；本变更只放路线图要求的字段。
+  - version --json 输出形状变化会影响已有的调用方；目前只有仓库内测试依赖它，同步修改。

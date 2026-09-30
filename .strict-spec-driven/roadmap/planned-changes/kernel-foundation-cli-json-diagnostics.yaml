@@ -5,7 +5,7 @@ schema_file: ../../templates/strict-spec-driven/schemas/planned-change.yaml
 planned_change:
   id: cli-json-diagnostics
   milestone: kernel-foundation
-status: planned
+status: complete
 summary: 建立命令框架与 --json 输出和诊断（Diagnostic）契约
 details: 实现子命令注册表、参数解析、help 与 help --json（列出参数、输出键和退出码）；这个注册表同时是后续 MCP tools 生成与 Skill 命令校验的依据。所有命令支持 --json，输出包含 valid、diagnostics、changedPaths；每条诊断包含稳定的错误码（Error Code）、产物路径、字段路径和可执行的下一步命令。退出码约定：0 成功，1 校验失败，2 用法错误。面向用户的文字遵循 docs/GLOSSARY.md。
 depends_on:

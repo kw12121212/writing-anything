@@ -2,7 +2,9 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -29,10 +31,11 @@ func TestBinary(t *testing.T) {
 		wantStderr string
 	}{
 		{[]string{"version"}, 0, "wa-cli v9.9.9-test\n", ""},
-		{[]string{"version", "--json"}, 0, "{\"version\":\"v9.9.9-test\"}\n", ""},
+		{[]string{"version", "--json"}, 0, "{\"valid\":true,\"diagnostics\":[],\"changedPaths\":[],\"version\":\"v9.9.9-test\"}\n", ""},
 		{nil, 2, "", "用法：wa-cli"},
 		{[]string{"nope"}, 2, "", "未知命令：nope"},
 		{[]string{"version", "--unknown"}, 2, "", "未知参数：--unknown"},
+		{[]string{"nope", "--json"}, 2, "{\"valid\":false,\"diagnostics\":[{\"code\":\"usage.unknown-command\",\"severity\":\"error\",\"message\":\"未知命令：nope\",\"next\":[\"wa-cli help --json\"]}],\"changedPaths\":[]}\n", ""},
 	}
 	for _, tt := range tests {
 		var stdout, stderr bytes.Buffer
@@ -52,9 +55,51 @@ func TestBinary(t *testing.T) {
 		if stdout.String() != tt.wantStdout {
 			t.Errorf("%v: stdout = %q, want %q", tt.args, stdout.String(), tt.wantStdout)
 		}
+		if tt.wantStderr == "" && stderr.Len() > 0 {
+			t.Errorf("%v: stderr = %q, want empty", tt.args, stderr.String())
+		}
 		if !strings.Contains(stderr.String(), tt.wantStderr) {
 			t.Errorf("%v: stderr %q does not contain %q", tt.args, stderr.String(), tt.wantStderr)
 		}
+	}
+
+	var rootStderr bytes.Buffer
+	rootCmd := exec.Command(bin, "--help")
+	rootCmd.Stderr = &rootStderr
+	rootHelp, err := rootCmd.Output()
+	if err != nil || rootStderr.Len() > 0 {
+		t.Fatalf("--help: err = %v, stderr = %q", err, rootStderr.String())
+	}
+	if help, _ := exec.Command(bin, "help").Output(); string(rootHelp) != string(help) {
+		t.Fatalf("--help = %q, want output of help %q", rootHelp, help)
+	}
+
+	if full, err := os.OpenFile("/dev/full", os.O_WRONLY, 0); err == nil {
+		var stderr bytes.Buffer
+		cmd := exec.Command(bin, "nope", "--json")
+		cmd.Stdout, cmd.Stderr = full, &stderr
+		err := cmd.Run()
+		full.Close()
+		var exitErr *exec.ExitError
+		if !errors.As(err, &exitErr) || exitErr.ExitCode() != 1 || !strings.Contains(stderr.String(), "写入输出失败") {
+			t.Fatalf("nope --json > /dev/full: err = %v, stderr = %q; want exit code 1 and a write failure report", err, stderr.String())
+		}
+	} else {
+		t.Logf("跳过写入失败检查：无法打开 /dev/full：%v", err)
+	}
+
+	out, err := exec.Command(bin, "help", "--json").Output()
+	if err != nil {
+		t.Fatalf("help --json: %v", err)
+	}
+	var help struct {
+		Valid    bool `json:"valid"`
+		Commands []struct {
+			Name string `json:"name"`
+		} `json:"commands"`
+	}
+	if err := json.Unmarshal(out, &help); err != nil || !help.Valid || len(help.Commands) == 0 {
+		t.Fatalf("help --json = %s (err %v), want a valid envelope listing commands", out, err)
 	}
 }
 

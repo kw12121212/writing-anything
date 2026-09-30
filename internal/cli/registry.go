@@ -1,0 +1,106 @@
+package cli
+
+import "io"
+
+// 退出码（Exit Code）。
+const (
+	exitOK    = 0
+	exitError = 1
+	exitUsage = 2
+)
+
+// 参数类型。
+const (
+	flagBool   = "bool"
+	flagString = "string"
+)
+
+// command 是命令注册表（Command Registry）中的一条命令声明。
+// 参数解析、help 文本与 help --json 都只从这些声明派生。
+type command struct {
+	name       string
+	summary    string
+	args       []argSpec   // 位置参数，按顺序匹配，均为可选
+	flags      []flagSpec  // 命令专属参数；--json 与 --help 由框架附加
+	outputKeys []outputKey // 命令专属输出键；信封字段由框架附加
+	exitCodes  []exitCode
+	run        func(inv *invocation) int
+}
+
+type argSpec struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+}
+
+type flagSpec struct {
+	Name        string `json:"name"`
+	Type        string `json:"type"`
+	Description string `json:"description"`
+}
+
+type outputKey struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+}
+
+type exitCode struct {
+	Code    int    `json:"code"`
+	Meaning string `json:"meaning"`
+}
+
+// 所有命令共有的参数与输出键。
+var (
+	commonFlags = []flagSpec{
+		{"json", flagBool, "以 JSON 输出信封（Output Envelope）写出结果"},
+		{"help", flagBool, "显示本命令的用法"},
+	}
+	envelopeKeys = []outputKey{
+		{"valid", "没有 error 级诊断时为 true"},
+		{"diagnostics", "诊断（Diagnostic）数组，每项含 code、severity、message、path、field、next"},
+		{"changedPaths", "本次命令变更的产物路径数组"},
+	}
+	standardExitCodes = []exitCode{
+		{exitOK, "成功"},
+		{exitError, "校验失败或执行失败"},
+		{exitUsage, "用法错误"},
+	}
+)
+
+// commandSet 是一组按 help 列出顺序排列的命令。
+type commandSet []*command
+
+// registry 登记 wa-cli 的全部命令。
+var registry = commandSet{helpCommand, versionCommand}
+
+func (s commandSet) lookup(name string) *command {
+	for _, c := range s {
+		if c.name == name {
+			return c
+		}
+	}
+	return nil
+}
+
+func (c *command) allFlags() []flagSpec {
+	return append(append([]flagSpec{}, c.flags...), commonFlags...)
+}
+
+func (c *command) allOutputKeys() []outputKey {
+	return append(append([]outputKey{}, envelopeKeys...), c.outputKeys...)
+}
+
+// invocation 是一次已解析的命令调用。
+type invocation struct {
+	all    commandSet // 所在的命令注册表；help 通过它列出命令，避免包级变量初始化循环
+	args   []string
+	values map[string]string // 出现过的参数；bool 参数的值为 "true"
+	stdout io.Writer
+	stderr io.Writer
+}
+
+func (inv *invocation) flag(name string) bool {
+	_, ok := inv.values[name]
+	return ok
+}
+
+func (inv *invocation) json() bool { return inv.flag("json") }

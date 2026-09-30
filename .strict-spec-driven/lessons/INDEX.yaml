@@ -9,3 +9,15 @@ categories:
       status: active
       occurrences: 1
       path: .strict-spec-driven/lessons/coding/go-flag-bd930f.yaml
+  documentation:
+    must-must-6af326:
+      title: 修改一条 MUST 需求时，要检查同一规格里相邻的 MUST 是否因此冲突
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/documentation/must-must-6af326.yaml
+  testing:
+    json-9d7a25:
+      title: 规格场景里的错误码只有在 --json 模式下才能被观察到
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/testing/json-9d7a25.yaml

@@ -3,6 +3,10 @@ schema_version: 1
 artifact_type: tech_index
 schema_file: ../schemas/tech-index.yaml
 standards:
+  - id: cli-contract
+    title: wa-cli 命令契约
+    category: architecture
+    path: .strict-spec-driven/tech/cli-contract.yaml
   - id: go-project-structure
     title: Go 工程结构与回归关卡
     category: architecture

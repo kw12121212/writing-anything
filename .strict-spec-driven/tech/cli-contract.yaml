@@ -1,0 +1,60 @@
+schema: strict-spec-driven/main-tech/v1
+schema_version: 1
+artifact_type: main_tech
+schema_file: templates/strict-spec-driven/schemas/main-tech.yaml
+standard:
+  id: cli-contract
+  title: wa-cli 命令契约
+  category: architecture
+rules:
+  registry-declared:
+    strength: MUST
+    statement: 每条 wa-cli 命令必须在 internal/cli 的命令注册表（Command Registry）中声明 name、summary、位置参数、flags、outputKeys 与 exitCodes，参数解析与 help 输出都只从注册表派生；不得绕过注册表单独解析参数。
+    rationale: 注册表是 help --json、后续 MCP tools 生成与 Skill 命令校验的唯一依据，绕过它会使帮助与实际行为漂移。
+    enforcement:
+      method: test
+      detail: internal/cli 的 TestRegistryConsistency 遍历 help --json：断言每条命令 --json 输出的顶层字段恰好等于声明的 outputKeys，声明的每个 flag 都被解析器接受，且 exitCodes 非空；未声明的参数由解析器拒绝（usage.unknown-flag）。
+    examples:
+      good:
+        - 新增命令时在注册表加一项并声明其 flags 与 outputKeys
+      bad:
+        - 在某个命令的 run 函数里手写 for 循环解析 os.Args
+  shared-envelope:
+    strength: MUST
+    statement: 命令的 --json 输出必须通过共享的输出信封（Output Envelope）类型写出，顶层始终含 valid、diagnostics、changedPaths，数组字段不得为 null；命令专属字段与之并列，且必须在 outputKeys 中声明。
+    rationale: Agent 与 MCP 按同一形状解析所有命令输出；逐命令自定义 JSON 会破坏契约。
+    enforcement:
+      method: test
+    examples:
+      good:
+        - result 嵌入命令专属结构体后由框架统一编码
+      bad:
+        - 命令直接 json.Marshal 一个自定义 map 写到 stdout
+  stable-error-codes:
+    strength: MUST
+    statement: 诊断（Diagnostic）的错误码（Error Code）采用 <领域>.<kebab-case> 格式，以常量定义在产生它的包中；已发布的错误码不得改名、删除后复用或改变含义，新增错误码不得与已有错误码重名。
+    rationale: Agent、MCP 与 Skill 依据错误码分支处理，改名或复用会让它们静默出错。
+    enforcement:
+      method: review
+    examples:
+      good:
+        - usage.unknown-flag
+      bad:
+        - 把 usage.unknown-flag 改名为 usage.bad-flag
+  exit-code-convention:
+    strength: MUST
+    statement: 命令只使用退出码（Exit Code）0（成功）、1（校验失败或执行失败）、2（用法错误），并在注册表的 exitCodes 中逐一声明含义。
+    rationale: 统一退出码让脚本与 Agent 不解析输出也能判断结果类别。
+    enforcement:
+      method: test
+  contract-literals-in-tests:
+    strength: SHOULD
+    statement: 测试断言错误码、JSON 输出键与退出码时使用规格中的字面量（如 "usage.unknown-flag"），不引用实现包中的常量。
+    rationale: 以常量断言时，常量被改名或改值后测试会一并通过，stable-error-codes 就失去自动化防线。
+    enforcement:
+      method: review
+    examples:
+      good:
+        - if d.Code != "usage.unknown-flag"
+      bad:
+        - if d.Code != codeUnknownFlag

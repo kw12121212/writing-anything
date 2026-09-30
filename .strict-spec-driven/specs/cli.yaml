@@ -8,7 +8,7 @@ spec:
 requirements:
   version-command:
     strength: MUST
-    statement: wa-cli version 必须在标准输出打印当前 wa-cli 版本并以退出码 0 退出；加 --json 时必须输出包含 version 字段的 JSON 对象。
+    statement: wa-cli version 必须在标准输出打印当前 wa-cli 版本并以退出码 0 退出；加 --json 时必须输出统一的 JSON 输出信封，并在其中包含 version 字段。
     scenarios:
       version-text:
         - GIVEN: 已构建的 wa-cli 二进制
@@ -17,10 +17,10 @@ requirements:
       version-json:
         - GIVEN: 已构建的 wa-cli 二进制
         - WHEN: 运行 wa-cli version --json
-        - THEN: 标准输出是可解析的 JSON 对象，其 version 字段为当前版本字符串，退出码为 0
+        - THEN: 标准输出是可解析的 JSON 对象，valid 为 true，diagnostics 与 changedPaths 为空数组，version 字段为当前版本字符串，退出码为 0
   usage-error:
     strength: MUST
-    statement: 未提供命令、命令未知或参数未知时，wa-cli 必须把用法说明写到标准错误并以退出码 2 退出。
+    statement: 未提供命令、命令未知、参数未知、参数缺少取值、不接受取值的参数带了取值或位置参数多余时，wa-cli 必须以退出码 2 退出；未加 --json 时必须把用法说明写到标准错误；加 --json 时必须在标准输出写出 valid 为 false、含 usage 领域错误码诊断的 JSON 输出信封。写出用法错误本身失败时按 exit-codes 以退出码 1 退出。
     scenarios:
       no-command:
         - GIVEN: 已构建的 wa-cli 二进制
@@ -34,3 +34,87 @@ requirements:
         - GIVEN: 已构建的 wa-cli 二进制
         - WHEN: 运行 wa-cli version --unknown
         - THEN: 标准错误指出未知参数，退出码为 2
+      json-unknown-command:
+        - GIVEN: 已构建的 wa-cli 二进制
+        - WHEN: 运行 wa-cli nope --json
+        - THEN: 标准输出是 valid 为 false 的 JSON 输出信封，diagnostics 中有一条错误码为 usage.unknown-command 的诊断，标准错误为空，退出码为 2
+      flag-takes-no-value:
+        - GIVEN: 已构建的 wa-cli 二进制
+        - WHEN: 运行 wa-cli version --help=yes --json
+        - THEN: 标准输出的诊断错误码为 usage.flag-takes-no-value，message 指出 --help=yes，退出码为 2
+      unexpected-argument:
+        - GIVEN: 已构建的 wa-cli 二进制
+        - WHEN: 运行 wa-cli version extra
+        - THEN: 标准错误指出多余的参数 extra 并包含 version 的用法说明，退出码为 2
+  json-output-envelope:
+    strength: MUST
+    statement: 所有 wa-cli 命令都必须接受 --json；加 --json 时标准输出必须恰好是一个 JSON 对象，即输出信封（Output Envelope），包含 valid（布尔值）、diagnostics（数组）与 changedPaths（数组）字段，命令专属字段与之并列放在顶层；没有诊断或没有变更的产物时对应字段为空数组而不是 null。
+    scenarios:
+      envelope-on-success:
+        - GIVEN: 已构建的 wa-cli 二进制
+        - WHEN: 运行 wa-cli version --json 或 wa-cli help --json
+        - THEN: 标准输出是单个 JSON 对象，含 valid、diagnostics、changedPaths 三个字段，diagnostics 与 changedPaths 为空数组
+  diagnostic-fields:
+    strength: MUST
+    statement: 每条诊断（Diagnostic）必须包含稳定的错误码（Error Code）code、severity（error 或 warning）、说明 message，以及至少一条可执行的下一步命令 next；与某个产物或字段相关时必须包含产物路径 path 与字段路径 field。存在 severity 为 error 的诊断时 valid 必须为 false。
+    scenarios:
+      usage-diagnostic:
+        - GIVEN: 已构建的 wa-cli 二进制
+        - WHEN: 运行 wa-cli version --unknown --json
+        - THEN: diagnostics 中有一条诊断，code 为 usage.unknown-flag，severity 为 error，message 指出 --unknown，next 包含 wa-cli help version --json，valid 为 false
+  exit-codes:
+    strength: MUST
+    statement: wa-cli 必须以退出码（Exit Code）0 表示成功，1 表示校验失败或执行失败，2 表示用法错误；输出写入失败属于执行失败，即使发生在写出用法错误时也必须以退出码 1 退出；help 中列出的每条命令的退出码只能取这三个值。
+    scenarios:
+      success-exit:
+        - GIVEN: 已构建的 wa-cli 二进制
+        - WHEN: 运行 wa-cli help
+        - THEN: 退出码为 0
+      declared-exit-codes:
+        - GIVEN: 已构建的 wa-cli 二进制
+        - WHEN: 运行 wa-cli help --json
+        - THEN: 每条命令的 exitCodes 都带含义说明，code 只取 0、1、2
+      usage-error-write-failure:
+        - GIVEN: 已构建的 wa-cli 二进制，标准输出不可写（重定向到 /dev/full）
+        - WHEN: 运行 wa-cli nope --json
+        - THEN: 标准错误报告写入输出失败，退出码为 1
+  help-command:
+    strength: MUST
+    statement: wa-cli help 与 wa-cli --help 必须列出所有命令及其摘要；wa-cli help <command>、wa-cli help <command> --help 与 wa-cli <command> --help 必须输出该命令的用法并以退出码（Exit Code）0 退出；加 --json 时信封必须包含 commands 数组，每项列出 name、summary、usage、args、flags、outputKeys 与 exitCodes，指定命令时数组只含该命令；help 指定的命令不存在时为用法错误。用法说明中的占位符必须使用英文标识符（如 <command>、<value>），与 help --json 中的参数名一致。
+    scenarios:
+      help-text:
+        - GIVEN: 已构建的 wa-cli 二进制
+        - WHEN: 运行 wa-cli help
+        - THEN: 标准输出列出 help 与 version 等全部命令及其摘要，退出码为 0
+      root-help-flag:
+        - GIVEN: 已构建的 wa-cli 二进制
+        - WHEN: 运行 wa-cli --help
+        - THEN: 标准输出与 wa-cli help 相同，标准错误为空，退出码为 0
+      help-json:
+        - GIVEN: 已构建的 wa-cli 二进制
+        - WHEN: 运行 wa-cli help --json
+        - THEN: commands 数组包含每条已注册命令，每项有 name、summary、usage、args、flags、outputKeys、exitCodes，flags 中包含 --json 与 --help
+      help-one-command:
+        - GIVEN: 已构建的 wa-cli 二进制
+        - WHEN: 运行 wa-cli help version --json
+        - THEN: commands 数组只含 version，其 outputKeys 包含 version
+      command-help-flag:
+        - GIVEN: 已构建的 wa-cli 二进制
+        - WHEN: 运行 wa-cli version --help
+        - THEN: 标准输出为 version 的用法说明，退出码为 0
+      help-command-help-flag:
+        - GIVEN: 已构建的 wa-cli 二进制
+        - WHEN: 运行 wa-cli help version --help
+        - THEN: 标准输出与 wa-cli help version 相同，为 version 的用法说明，退出码为 0
+      help-unknown-command:
+        - GIVEN: 已构建的 wa-cli 二进制
+        - WHEN: 运行 wa-cli help nope --json
+        - THEN: valid 为 false，诊断错误码为 usage.unknown-command，退出码为 2
+      english-placeholders:
+        - GIVEN: 已构建的 wa-cli 二进制
+        - WHEN: 运行 wa-cli help 与 wa-cli help help
+        - THEN: 用法说明中的占位符为 <command> 等英文标识符，不出现 <命令> 等中文占位符
+      help-unknown-command-help-flag:
+        - GIVEN: 已构建的 wa-cli 二进制
+        - WHEN: 运行 wa-cli help nope --help --json
+        - THEN: valid 为 false，诊断错误码为 usage.unknown-command，退出码为 2

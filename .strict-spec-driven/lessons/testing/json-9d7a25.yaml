@@ -1,0 +1,19 @@
+schema: strict-spec-driven/lesson/v1
+schema_version: 1
+artifact_type: lesson
+schema_file: templates/strict-spec-driven/schemas/lesson.yaml
+lesson:
+  id: json-9d7a25
+  title: 规格场景里的错误码只有在 --json 模式下才能被观察到
+category: testing
+status: active
+created_at: '2026-09-30T06:54:38.780Z'
+updated_at: '2026-09-30T06:54:38.780Z'
+context: cli-json-diagnostics 为 wa-cli 用法错误编写 delta spec 场景，并同时定义文本模式（说明写 stderr）与 --json 模式（诊断写 stdout）两种输出。
+observation: 场景 flag-takes-no-value 写成「运行 wa-cli version --json=maybe，诊断错误码为 usage.flag-takes-no-value」。但 --json=maybe 不会触发 JSON 模式，文本模式的 stderr 只有中文说明、没有错误码，这个场景从外部无法验证；实现时只好改写为 wa-cli version --help=yes --json。审查还发现 string 参数会把后面的 --json 当成取值吞掉，使「出现 --json 即 JSON 模式」与解析结果不一致。
+takeaway: 规格场景的 THEN 只能断言该模式下真实可见的输出：断言错误码、severity、next 等诊断字段时，WHEN 必须显式带上 --json 且该 --json 能被识别为参数；文本模式的场景只断言 stderr 文字与退出码。设计会被参数解析影响的判断（如 JSON 模式）时，要测试相邻参数吞值的情形。
+applies_when: 为 wa-cli 命令编写或修改 delta spec 场景、测试用例，并在其中断言诊断错误码或 JSON 输出字段时；或修改参数解析、引入带取值的 string 参数时
+occurrences:
+  - origin: cli-json-diagnostics
+    date: '2026-09-30'
+    evidence: changes/cli-json-diagnostics/specs/cli.yaml 的 usage-error:flag-takes-no-value 场景由 --json=maybe 改为 --help=yes --json；internal/cli/parse.go 的 string 参数不再把以 -- 开头的下一个参数当取值，cli_test.go 的 TestParseStringFlag 覆盖 --dir --json。
