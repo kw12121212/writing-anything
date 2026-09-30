@@ -63,6 +63,20 @@ func TestBinary(t *testing.T) {
 		}
 	}
 
+	// 二进制位于仓库之外，并在另一个临时目录中运行：Schema 随二进制提供，不依赖仓库文件。
+	project := t.TempDir()
+	for _, args := range [][]string{{"init", "--json"}, {"validate", "--json"}} {
+		cmd := exec.Command(bin, args...)
+		cmd.Dir = project
+		out, err := cmd.Output()
+		var res struct {
+			Valid bool `json:"valid"`
+		}
+		if err != nil || json.Unmarshal(out, &res) != nil || !res.Valid {
+			t.Fatalf("%v in %s: err = %v, stdout = %s", args, project, err, out)
+		}
+	}
+
 	var rootStderr bytes.Buffer
 	rootCmd := exec.Command(bin, "--help")
 	rootCmd.Stderr = &rootStderr

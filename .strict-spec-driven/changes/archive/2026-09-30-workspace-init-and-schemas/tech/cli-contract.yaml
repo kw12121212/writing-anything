@@ -1,0 +1,39 @@
+schema: strict-spec-driven/delta-tech/v1
+schema_version: 1
+artifact_type: delta_tech
+schema_file: templates/strict-spec-driven/schemas/delta-tech.yaml
+target_standard: cli-contract
+operations:
+  ADDED:
+    runnable-next:
+      strength: MUST
+      statement: 诊断的 next 中每一条都必须是可以直接粘贴到 shell 运行的完整命令：参数按 shell 规则加引号（internal/cli 的 shellCommand），不得包含 <value> 这类需要替换的占位符；需要作者给出取值时，在 message 中说明，next 给出 wa-cli help <command> --json 或列出每个允许取值的命令。
+      rationale: Agent 会直接执行 next；占位符中的 < 与 > 会被 shell 当作重定向，可能截断或创建文件。
+      enforcement:
+        method: test
+        detail: internal/cli 的 runWS 测试辅助函数断言每条工作区命令的诊断 next 都不含 < 或 >；TestShellCommandQuoting 覆盖带空格与单引号的参数。
+      examples:
+        good:
+          - wa-cli config set gate_level strict --dir . --json
+        bad:
+          - wa-cli config set gate_level <value> --dir .
+    sample-invocation:
+      strength: MUST
+      statement: 每条命令都必须在 internal/cli 的 sampleArgs 中登记一次成功且不变更产物的调用；工作区命令在临时工作区中通过 --dir 运行，测试不得在包目录中创建 .writing-anything/。
+      rationale: TestRegistryConsistency 依靠这些调用检查 --json 输出键与声明一致；不带 --dir 的工作区命令会在包目录中创建真实工作区。
+      enforcement:
+        method: test
+        detail: TestRegistryConsistency 对 help --json 列出的每条命令调用 sampleArgs，缺少登记时测试失败。
+    workspace-dir-flag:
+      strength: MUST
+      statement: 读写工作区的命令都必须声明 internal/cli 共享的 --dir 参数（项目目录，默认当前目录），只在该目录下寻找 .writing-anything/，不向上查找父目录；找不到工作区时报告 workspace.not-found，next 为 wa-cli init --dir <dir> --json。
+      rationale: 显式目录让命令行为确定、易于在进程内测试，也避免 Agent 在子目录中意外操作到上层的另一个工作区；统一的参数与诊断让 Agent 用同一套方式调用所有工作区命令。
+      enforcement:
+        method: review
+      examples:
+        good:
+          - 'flags: []flagSpec{dirFlag}'
+        bad:
+          - 新命令用 os.Getwd() 向上逐级查找 .writing-anything/
+  MODIFIED: {}
+  REMOVED: {}

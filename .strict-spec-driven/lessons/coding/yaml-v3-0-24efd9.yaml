@@ -1,0 +1,19 @@
+schema: strict-spec-driven/lesson/v1
+schema_version: 1
+artifact_type: lesson
+schema_file: templates/strict-spec-driven/schemas/lesson.yaml
+lesson:
+  id: yaml-v3-0-24efd9
+  title: yaml.v3 解析器错误的行号从 0 开始，第一行时不给行号
+category: coding
+status: active
+created_at: '2026-09-30T08:10:16.273Z'
+updated_at: '2026-09-30T08:10:16.273Z'
+context: workspace-init-and-schemas 用 go.yaml.in/yaml/v3 解析工作区产物，并把错误信息中的 line N 作为诊断行号报告给作者。
+observation: fixture 第 3 行的 [a, b 未闭合，yaml.v3 报 line 2。查 decode.go 的 parser.fail：解析器错误（did not find expected …、found … directive 等）使用从 0 开始的 context_mark 或 problem_mark 行号，只有扫描器错误会加 1；两者都为 0 时完全省略 line 前缀。引用不存在的锚点等组装阶段的错误也没有行号。
+takeaway: 不要直接相信 yaml.v3 错误文本中的行号：按问题文本区分解析器错误（加 1，缺省时为第 1 行）与扫描器错误（原样使用），无法确定时不报行号；测试要用未闭合的流式序列、第一行错误与未知锚点等夹具断言精确行号。
+applies_when: 用 yaml.v3（go.yaml.in/yaml/v3 或 gopkg.in/yaml.v3）解析文件，并从错误信息中提取行号报告给用户或写入诊断时
+occurrences:
+  - origin: workspace-init-and-schemas
+    date: '2026-09-30'
+    evidence: internal/schema/schema.go 的 parserProblems 与 parseProblem 做了换算；internal/schema/schema_test.go 的 TestConfigProblems（parse-error.yaml 期望第 3 行）与 TestParseErrors 覆盖各类情形。

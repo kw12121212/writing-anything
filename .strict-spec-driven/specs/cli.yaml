@@ -20,7 +20,7 @@ requirements:
         - THEN: 标准输出是可解析的 JSON 对象，valid 为 true，diagnostics 与 changedPaths 为空数组，version 字段为当前版本字符串，退出码为 0
   usage-error:
     strength: MUST
-    statement: 未提供命令、命令未知、参数未知、参数缺少取值、不接受取值的参数带了取值或位置参数多余时，wa-cli 必须以退出码 2 退出；未加 --json 时必须把用法说明写到标准错误；加 --json 时必须在标准输出写出 valid 为 false、含 usage 领域错误码诊断的 JSON 输出信封。写出用法错误本身失败时按 exit-codes 以退出码 1 退出。
+    statement: 未提供命令、命令未知、参数未知、参数缺少取值、不接受取值的参数带了取值、缺少必需的位置参数或位置参数多余时，wa-cli 必须以退出码 2 退出；未加 --json 时必须把用法说明写到标准错误；加 --json 时必须在标准输出写出 valid 为 false、含 usage 领域错误码诊断的 JSON 输出信封。写出用法错误本身失败时按 exit-codes 以退出码 1 退出。
     scenarios:
       no-command:
         - GIVEN: 已构建的 wa-cli 二进制
@@ -46,6 +46,10 @@ requirements:
         - GIVEN: 已构建的 wa-cli 二进制
         - WHEN: 运行 wa-cli version extra
         - THEN: 标准错误指出多余的参数 extra 并包含 version 的用法说明，退出码为 2
+      missing-argument:
+        - GIVEN: 已构建的 wa-cli 二进制
+        - WHEN: 运行 wa-cli config set gate_level --json
+        - THEN: valid 为 false，diagnostics 中有一条错误码为 usage.missing-argument 的诊断，message 指出缺少 <value>，next 包含 wa-cli help config set --json，退出码为 2
   json-output-envelope:
     strength: MUST
     statement: 所有 wa-cli 命令都必须接受 --json；加 --json 时标准输出必须恰好是一个 JSON 对象，即输出信封（Output Envelope），包含 valid（布尔值）、diagnostics（数组）与 changedPaths（数组）字段，命令专属字段与之并列放在顶层；没有诊断或没有变更的产物时对应字段为空数组而不是 null。
@@ -117,4 +121,28 @@ requirements:
       help-unknown-command-help-flag:
         - GIVEN: 已构建的 wa-cli 二进制
         - WHEN: 运行 wa-cli help nope --help --json
+        - THEN: valid 为 false，诊断错误码为 usage.unknown-command，退出码为 2
+  command-groups:
+    strength: MUST
+    statement: 命令名可以由命令组与子命令两个词组成（如 config set）。wa-cli <group> <subcommand>、wa-cli <group> <subcommand> --help 与 wa-cli help <group> <subcommand> 必须按完整命令名识别该命令；help 列表与 help --json 中的 name 为完整命令名。只给出命令组名，或命令组下不存在该子命令时，必须按用法错误处理，错误码为 usage.unknown-command，message 列出该命令组可用的子命令。help --json 中 args 的每一项必须包含 required 字段；用法说明中必需的位置参数写作 <name>，可选的写作 [<name>]。
+    scenarios:
+      group-command-runs:
+        - GIVEN: 已构建的 wa-cli 二进制与一个已初始化的工作区 D
+        - WHEN: 运行 wa-cli config set gate_level fast --dir D --json
+        - THEN: 命令按 config set 执行，退出码为 0
+      group-help:
+        - GIVEN: 已构建的 wa-cli 二进制
+        - WHEN: 运行 wa-cli help config set --json
+        - THEN: commands 数组只含 name 为 config set 的一项，其 args 为 key 与 value，二者的 required 均为 true，退出码为 0
+      group-help-flag:
+        - GIVEN: 已构建的 wa-cli 二进制
+        - WHEN: 运行 wa-cli config set --help
+        - THEN: 标准输出与 wa-cli help config set 相同，用法中含 <key> <value>，退出码为 0
+      bare-group:
+        - GIVEN: 已构建的 wa-cli 二进制
+        - WHEN: 运行 wa-cli config --json
+        - THEN: valid 为 false，诊断错误码为 usage.unknown-command，message 列出 config set，退出码为 2
+      unknown-subcommand:
+        - GIVEN: 已构建的 wa-cli 二进制
+        - WHEN: 运行 wa-cli help config nope --json
         - THEN: valid 为 false，诊断错误码为 usage.unknown-command，退出码为 2

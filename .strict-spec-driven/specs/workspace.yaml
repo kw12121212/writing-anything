@@ -1,0 +1,180 @@
+schema: strict-spec-driven/main-spec/v1
+schema_version: 1
+artifact_type: main_spec
+schema_file: templates/strict-spec-driven/schemas/main-spec.yaml
+spec:
+  id: workspace
+  title: 工作区（Workspace）
+requirements:
+  init-creates-workspace:
+    strength: MUST
+    statement: wa-cli init 必须在 --dir 指定的项目目录（未指定时为当前目录）下创建工作区（Workspace）.writing-anything/，其中包含 config.yaml、sources/ 与 works/；成功时退出码为 0，加 --json 时输出信封的 workspace 字段为相对项目目录的工作区路径，changedPaths 列出本次新建的每个文件与目录（相对项目目录，以 / 分隔）。
+    scenarios:
+      fresh-init:
+        - GIVEN: 一个不含 .writing-anything/ 的空目录 D
+        - WHEN: 运行 wa-cli init --dir D --json
+        - THEN: D/.writing-anything/ 下存在 config.yaml、sources/、works/；valid 为 true，workspace 为 .writing-anything，changedPaths 包含 .writing-anything/config.yaml、.writing-anything/sources、.writing-anything/works，退出码为 0
+      init-then-validate:
+        - GIVEN: 刚用 wa-cli init --dir D 创建的工作区
+        - WHEN: 运行 wa-cli validate --dir D --json
+        - THEN: valid 为 true，diagnostics 为空数组，退出码为 0
+  config-fields:
+    strength: MUST
+    statement: init 写出的 config.yaml 必须包含 schema_version（值为 1）、language（语言标签，默认 zh-CN）、packs（启用的规范包（Pack）id 数组，默认为空）与 gate_level（关卡强度（Gate Level），取值 strict、standard 或 fast，默认 standard）；传入 --genre 时必须包含 default_genre。--language、--genre、--gate-level 的取值必须写入对应字段。
+    scenarios:
+      default-config:
+        - GIVEN: 一个空目录 D
+        - WHEN: 运行 wa-cli init --dir D
+        - THEN: config.yaml 中 schema_version 为 1，language 为 zh-CN，packs 为空数组，gate_level 为 standard，不含 default_genre
+      config-from-flags:
+        - GIVEN: 一个空目录 D
+        - WHEN: 运行 wa-cli init --dir D --language en --genre tech-blog --gate-level strict
+        - THEN: config.yaml 中 language 为 en，default_genre 为 tech-blog，gate_level 为 strict
+  init-preserves-existing:
+    strength: MUST
+    statement: 对已有工作区重复运行 wa-cli init 时，必须只创建缺失的文件与目录，不得修改或覆盖任何已有文件；changedPaths 只列出本次新建的路径。已有 config.yaml 的某个字段与本次传入的参数取值不同时，必须保留原文件，并给出 severity 为 warning、错误码为 workspace.config-kept 的诊断，指明该字段；此时 valid 仍为 true，退出码为 0。
+    scenarios:
+      rerun-no-change:
+        - GIVEN: 已初始化的工作区，作者修改过 config.yaml 的 language
+        - WHEN: 再次运行 wa-cli init --dir D --json
+        - THEN: config.yaml 内容与运行前逐字节相同，changedPaths 为空数组，退出码为 0
+      rerun-fills-missing:
+        - GIVEN: 已初始化的工作区，works/ 已被删除
+        - WHEN: 运行 wa-cli init --dir D --json
+        - THEN: works/ 被重新创建，changedPaths 只含 .writing-anything/works，config.yaml 未被修改
+      rerun-conflicting-flag:
+        - GIVEN: 已初始化的工作区，config.yaml 的 gate_level 为 standard
+        - WHEN: 运行 wa-cli init --dir D --gate-level strict --json
+        - THEN: config.yaml 的 gate_level 仍为 standard；diagnostics 中有一条错误码为 workspace.config-kept、severity 为 warning、field 为 gate_level 的诊断；valid 为 true，退出码为 0
+  init-rejects-invalid-config:
+    strength: MUST
+    statement: init 根据参数生成的配置不符合工作区配置的 JSON Schema 时，必须以退出码 1 退出，给出错误码为 artifact.schema-violation、field 指向出错字段的诊断，并且不得创建任何文件或目录。
+    scenarios:
+      invalid-gate-level:
+        - GIVEN: 一个空目录 D
+        - WHEN: 运行 wa-cli init --dir D --gate-level bogus --json
+        - THEN: valid 为 false，diagnostics 中有一条错误码为 artifact.schema-violation、field 为 gate_level 的诊断，D 下没有 .writing-anything/，退出码为 1
+  validate-workspace:
+    strength: MUST
+    statement: 不带位置参数的 wa-cli validate 必须校验 --dir 下的整个工作区：config.yaml 符合工作区配置的 JSON Schema，且 sources/ 与 works/ 存在。全部通过时 valid 为 true、退出码为 0，--json 输出的 checked 字段列出已校验的产物路径；发现问题时退出码为 1，并为每个问题给出一条诊断：缺少必需目录时错误码为 workspace.missing-directory，缺少 config.yaml 时为 artifact.not-found，两者的 next 都包含 wa-cli init --dir <dir>。
+    scenarios:
+      missing-directory:
+        - GIVEN: 已初始化的工作区，sources/ 已被删除
+        - WHEN: 运行 wa-cli validate --dir D --json
+        - THEN: valid 为 false，diagnostics 中有一条错误码为 workspace.missing-directory、path 为 .writing-anything/sources 的诊断，其 next 包含一条 wa-cli init 命令，退出码为 1
+      missing-config:
+        - GIVEN: 已初始化的工作区，config.yaml 已被删除
+        - WHEN: 运行 wa-cli validate --dir D --json
+        - THEN: diagnostics 中有一条错误码为 artifact.not-found、path 为 .writing-anything/config.yaml 的诊断，退出码为 1
+  artifact-diagnostics:
+    strength: MUST
+    statement: 校验产物时，YAML 语法错误必须报告为错误码 artifact.parse-error，解析器能确定出错位置时必须在 message 中给出行号；展开别名后节点过多的产物也必须报告为 artifact.parse-error，而不是耗尽内存。内容不符合 JSON Schema 的每一处必须报告为错误码 artifact.schema-violation，path 为该产物相对项目目录的路径，field 为出错字段的点分路径（数组下标写作 [i]，如 packs[0]；缺少必需字段或出现未定义字段时为该字段），message 说明违反的约束，并在能确定时给出行号。每条诊断的 next 必须包含至少一条可以直接运行的 wa-cli 命令，不含需要替换的占位符。
+    scenarios:
+      schema-violation:
+        - GIVEN: 工作区的 config.yaml 中 gate_level 为 bogus
+        - WHEN: 运行 wa-cli validate --dir D --json
+        - THEN: diagnostics 中有一条错误码为 artifact.schema-violation、path 为 .writing-anything/config.yaml、field 为 gate_level 的诊断，next 非空，退出码为 1
+      unknown-field:
+        - GIVEN: 工作区的 config.yaml 多了一个未定义的字段 colour
+        - WHEN: 运行 wa-cli validate --dir D --json
+        - THEN: diagnostics 中有一条错误码为 artifact.schema-violation 的诊断，message 指出 colour，退出码为 1
+      array-field-path:
+        - GIVEN: 工作区的 config.yaml 中 packs 的第一项为 Not_A_Id
+        - WHEN: 运行 wa-cli validate --dir D --json
+        - THEN: diagnostics 中有一条错误码为 artifact.schema-violation、field 为 packs[0] 的诊断，退出码为 1
+      parse-error:
+        - GIVEN: 工作区的 config.yaml 第 3 行存在 YAML 语法错误
+        - WHEN: 运行 wa-cli validate --dir D --json
+        - THEN: diagnostics 中有一条错误码为 artifact.parse-error、path 为 .writing-anything/config.yaml 的诊断，message 包含行号 3，退出码为 1
+      alias-expansion-limit:
+        - GIVEN: 工作区的 config.yaml 用 8 层、每层 10 个别名层层引用
+        - WHEN: 运行 wa-cli validate --dir D --json
+        - THEN: diagnostics 中有一条错误码为 artifact.parse-error 的诊断，说明展开别名后节点过多，退出码为 1
+  validate-single-artifact:
+    strength: MUST
+    statement: wa-cli validate <path> 必须只校验 path 指向的产物；path 相对于 --dir 解析，也可以是绝对路径。产物类型由其在工作区内的位置决定；path 不对应任何已知产物类型时，必须报告错误码 artifact.unknown-kind；文件不存在时，必须报告错误码 artifact.not-found；两种情况的退出码都为 1。
+    scenarios:
+      single-valid:
+        - GIVEN: 刚初始化的工作区
+        - WHEN: 运行 wa-cli validate .writing-anything/config.yaml --dir D --json
+        - THEN: valid 为 true，checked 只含 .writing-anything/config.yaml，退出码为 0
+      unknown-kind:
+        - GIVEN: 刚初始化的工作区，D/notes.yaml 是一个普通文件
+        - WHEN: 运行 wa-cli validate notes.yaml --dir D --json
+        - THEN: valid 为 false，diagnostics 中有一条错误码为 artifact.unknown-kind 的诊断，退出码为 1
+      artifact-missing:
+        - GIVEN: 刚初始化的工作区，config.yaml 已被删除
+        - WHEN: 运行 wa-cli validate .writing-anything/config.yaml --dir D --json
+        - THEN: diagnostics 中有一条错误码为 artifact.not-found 的诊断，退出码为 1
+  status-summary:
+    strength: MUST
+    statement: wa-cli status 必须汇总 --dir 下的工作区：--json 输出包含 workspace（相对项目目录的工作区路径）、config（language、defaultGenre、packs、gateLevel；配置无法解析时为 null）、sources 与 works（sources/ 与 works/ 下的直接条目数，不含以 . 开头的隐藏条目）。工作区校验全部通过时退出码为 0；有 error 级诊断时仍输出上述字段，但 valid 为 false，退出码为 1。不加 --json 时，以人读文本输出同样的信息。
+    scenarios:
+      status-fresh:
+        - GIVEN: 刚用 wa-cli init --dir D --genre tech-blog 创建的工作区
+        - WHEN: 运行 wa-cli status --dir D --json
+        - THEN: workspace 为 .writing-anything，config.defaultGenre 为 tech-blog，config.gateLevel 为 standard，sources 与 works 均为 0，valid 为 true，退出码为 0
+      status-counts:
+        - GIVEN: 已初始化的工作区，works/ 下有两个子目录，sources/ 下有一个文件
+        - WHEN: 运行 wa-cli status --dir D --json
+        - THEN: works 为 2，sources 为 1
+      status-invalid-config:
+        - GIVEN: 已初始化的工作区，config.yaml 中 gate_level 为 bogus
+        - WHEN: 运行 wa-cli status --dir D --json
+        - THEN: 输出仍包含 workspace、sources 与 works；diagnostics 中有一条错误码为 artifact.schema-violation 的诊断；valid 为 false，退出码为 1
+  self-contained-schemas:
+    strength: MUST
+    statement: 校验所需的 JSON Schema 必须随 wa-cli 二进制提供：只复制 wa-cli 二进制到另一台机器或另一个目录，validate 的结果也必须不变，不需要网络访问或额外的 Schema 文件。
+    scenarios:
+      relocated-binary:
+        - GIVEN: 把构建好的 wa-cli 二进制单独复制到仓库之外的临时目录，并在另一个临时目录中初始化工作区
+        - WHEN: 用复制后的二进制运行 wa-cli validate --dir D --json
+        - THEN: valid 为 true，退出码为 0
+  workspace-not-found:
+    strength: MUST
+    statement: 项目目录（--dir）下不存在 .writing-anything/ 时，wa-cli validate 与 wa-cli status 必须以退出码 1 退出，并给出错误码为 workspace.not-found 的诊断，其 next 包含 wa-cli init --dir <dir>。
+    scenarios:
+      validate-no-workspace:
+        - GIVEN: 一个不含 .writing-anything/ 的目录 D
+        - WHEN: 运行 wa-cli validate --dir D --json
+        - THEN: valid 为 false，diagnostics 中有一条错误码为 workspace.not-found 的诊断，其 next 包含 wa-cli init，退出码为 1
+      status-no-workspace:
+        - GIVEN: 一个不含 .writing-anything/ 的目录 D
+        - WHEN: 运行 wa-cli status --dir D --json
+        - THEN: valid 为 false，diagnostics 中有一条错误码为 workspace.not-found 的诊断，退出码为 1
+  config-set:
+    strength: MUST
+    statement: wa-cli config set <key> <value> 必须把工作区 config.yaml 中的 key 设为 value，并保留其他字段与 YAML 注释。key 只能是 language、default_genre、packs、gate_level；packs 的 value 按逗号分隔，空字符串表示空数组；default_genre 的 value 为空字符串时删除该字段。写入成功时退出码为 0，changedPaths 为 .writing-anything/config.yaml，--json 输出的 config 字段为修改后的配置；新值与原值相同时不写文件，changedPaths 为空数组。新值不符合 Schema 时必须报告 artifact.schema-violation 并保持文件不变，退出码为 1；key 不在上述范围内时必须报告错误码 config.unknown-key，退出码为 1；key 当前的值带有 YAML 锚点时必须报告错误码 config.anchored-value 并保持文件不变，退出码为 1；修改后的文档无法重新解析时不得写入；未找到工作区时按 workspace-not-found 处理。
+    scenarios:
+      set-gate-level:
+        - GIVEN: 刚初始化的工作区 D，作者在 config.yaml 中加了一行注释
+        - WHEN: 运行 wa-cli config set gate_level strict --dir D --json
+        - THEN: config.yaml 的 gate_level 为 strict，注释与其他字段不变；changedPaths 为 [.writing-anything/config.yaml]，config.gateLevel 为 strict，退出码为 0
+      set-packs:
+        - GIVEN: 刚初始化的工作区 D
+        - WHEN: 运行 wa-cli config set packs "house-style, glossary-zh" --dir D --json
+        - THEN: config.yaml 的 packs 为 [house-style, glossary-zh]，退出码为 0
+      clear-default-genre:
+        - GIVEN: 用 wa-cli init --dir D --genre tech-blog 创建的工作区
+        - WHEN: 运行 wa-cli config set default_genre "" --dir D --json
+        - THEN: config.yaml 不再含 default_genre，config.defaultGenre 为 null，退出码为 0
+      set-invalid-value:
+        - GIVEN: 刚初始化的工作区 D
+        - WHEN: 运行 wa-cli config set gate_level bogus --dir D --json
+        - THEN: valid 为 false，diagnostics 中有一条错误码为 artifact.schema-violation、field 为 gate_level 的诊断，config.yaml 与运行前逐字节相同，退出码为 1
+      set-unknown-key:
+        - GIVEN: 刚初始化的工作区 D
+        - WHEN: 运行 wa-cli config set schema_version 2 --dir D --json
+        - THEN: valid 为 false，diagnostics 中有一条错误码为 config.unknown-key 的诊断，config.yaml 不变，退出码为 1
+      set-same-value:
+        - GIVEN: 刚初始化的工作区 D，gate_level 为 standard
+        - WHEN: 运行 wa-cli config set gate_level standard --dir D --json
+        - THEN: changedPaths 为空数组，config.yaml 不变，退出码为 0
+      repair-broken-field:
+        - GIVEN: 工作区 D 的 config.yaml 中 gate_level 为 bogus
+        - WHEN: 运行 wa-cli config set gate_level fast --dir D --json
+        - THEN: config.yaml 的 gate_level 变为 fast，valid 为 true，退出码为 0；此后 wa-cli validate --dir D 通过
+      set-anchored-value:
+        - GIVEN: '工作区 D 的 config.yaml 为 default_genre: &genre tech-blog 且 packs: [*genre]'
+        - WHEN: 运行 wa-cli config set default_genre "" --dir D --json
+        - THEN: valid 为 false，diagnostics 中有一条错误码为 config.anchored-value、field 为 default_genre 的诊断，config.yaml 与运行前逐字节相同，退出码为 1

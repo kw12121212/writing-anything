@@ -244,7 +244,7 @@ func TestRegistryConsistency(t *testing.T) {
 	for _, d := range helpDocs(t, "help", "--json") {
 		t.Run(d.Name, func(t *testing.T) {
 			// 输出键与 --json 的实际顶层字段一致。
-			code, got := runJSON(t, d.Name, "--json")
+			code, got := runJSON(t, sampleArgs(t, d.Name)...)
 			if code != 0 {
 				t.Fatalf("exit code = %d", code)
 			}
@@ -269,11 +269,24 @@ func TestRegistryConsistency(t *testing.T) {
 			}
 			// 声明的每个参数都被解析器接受。
 			c := registry.lookup(d.Name)
+			var required []string
+			for i, a := range d.Args {
+				if a.Description == "" {
+					t.Errorf("argument <%s> has no description", a.Name)
+				}
+				if a.Required {
+					// 必需参数只能排在可选参数之前。
+					if i != len(required) {
+						t.Errorf("required argument <%s> follows an optional argument", a.Name)
+					}
+					required = append(required, "x")
+				}
+			}
 			for _, f := range d.Flags {
 				if f.Description == "" {
 					t.Errorf("flag --%s has no description", f.Name)
 				}
-				args := []string{"--" + f.Name}
+				args := append(slices.Clip(required), "--"+f.Name)
 				if f.Type == flagString {
 					args = append(args, "x")
 				}
@@ -292,6 +305,21 @@ func TestRegistryConsistency(t *testing.T) {
 			}
 		})
 	}
+}
+
+// sampleArgs 返回命令的一次成功且不变更任何产物的调用；工作区命令在已初始化的临时工作区中运行。
+func sampleArgs(t *testing.T, name string) []string {
+	t.Helper()
+	switch name {
+	case "help", "version":
+		return []string{name, "--json"}
+	case "init", "validate", "status":
+		return []string{name, "--dir", newWorkspace(t), "--json"}
+	case "config set":
+		return []string{"config", "set", "gate_level", "standard", "--dir", newWorkspace(t), "--json"}
+	}
+	t.Fatalf("no sample invocation for command %q; add one to sampleArgs", name)
+	return nil
 }
 
 func TestParseStringFlag(t *testing.T) {

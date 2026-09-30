@@ -9,7 +9,10 @@ import (
 var helpCommand = &command{
 	name:       "help",
 	summary:    "显示命令的用法；加 --json 列出参数、输出键和退出码",
-	args:       []argSpec{{"command", "要查看用法的命令；省略时列出全部命令"}},
+	args: []argSpec{
+		{"command", "要查看用法的命令；省略时列出全部命令", false},
+		{"subcommand", "命令组中的子命令，如 wa-cli help config set 中的 set", false},
+	},
 	outputKeys: []outputKey{{"commands", "命令说明数组，每项含 name、summary、usage、args、flags、outputKeys、exitCodes"}},
 	exitCodes:  standardExitCodes,
 	run:        runHelp,
@@ -19,10 +22,15 @@ func runHelp(inv *invocation) int {
 	if len(inv.args) == 0 {
 		return writeHelp(inv, inv.all, true)
 	}
-	c := inv.all.lookup(inv.args[0])
-	if c == nil {
-		d := usageDiagnostic(nil, codeUnknownCommand, "未知命令："+inv.args[0])
-		return usageError(inv.stdout, inv.stderr, inv.json(), d, inv.all.overview())
+	c, rest := inv.all.find(inv.args)
+	switch {
+	case c == nil:
+		return usageError(inv.stdout, inv.stderr, inv.json(), inv.all.unknownCommand(inv.args), inv.all.overview())
+	case len(rest) > 0:
+		// 单词命令后多出的参数，如 help version extra。
+		help := inv.all.lookup("help")
+		d := usageDiagnostic(help, codeUnexpectedArgument, "多余的参数："+rest[0])
+		return usageError(inv.stdout, inv.stderr, inv.json(), d, help.helpText())
 	}
 	return writeHelp(inv, []*command{c}, false)
 }
@@ -76,11 +84,15 @@ func (c *command) doc() commandDoc {
 	}
 }
 
-// usage 返回一行用法，如 wa-cli help [<command>] [--json] [--help]。
+// usage 返回一行用法，如 wa-cli help [<command>] [<subcommand>] [--json] [--help]。
 func (c *command) usage() string {
 	parts := []string{"wa-cli", c.name}
 	for _, a := range c.args {
-		parts = append(parts, "[<"+a.Name+">]")
+		if a.Required {
+			parts = append(parts, "<"+a.Name+">")
+		} else {
+			parts = append(parts, "[<"+a.Name+">]")
+		}
 	}
 	for _, f := range c.allFlags() {
 		if f.Type == flagString {

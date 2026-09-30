@@ -24,11 +24,11 @@ func (s commandSet) run(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 || strings.HasPrefix(args[0], "-") {
 		return usageError(stdout, stderr, asJSON, usageDiagnostic(nil, codeMissingCommand, "缺少命令"), s.overview())
 	}
-	c := s.lookup(args[0])
+	c, rest := s.find(args)
 	if c == nil {
-		return usageError(stdout, stderr, asJSON, usageDiagnostic(nil, codeUnknownCommand, "未知命令："+args[0]), s.overview())
+		return usageError(stdout, stderr, asJSON, s.unknownCommand(args), s.overview())
 	}
-	inv, d := parseArgs(c, args[1:])
+	inv, d := parseArgs(c, rest)
 	if d != nil {
 		return usageError(stdout, stderr, asJSON, d, c.helpText())
 	}

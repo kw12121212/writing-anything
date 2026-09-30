@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "工作区配置",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "language", "packs", "gate_level"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "language": {"type": "string", "pattern": "^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$"},
+    "default_genre": {"type": "string", "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$"},
+    "packs": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"type": "string", "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$"}
+    },
+    "gate_level": {"enum": ["strict", "standard", "fast"]}
+  }
+}

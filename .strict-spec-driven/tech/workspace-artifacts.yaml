@@ -1,0 +1,60 @@
+schema: strict-spec-driven/main-tech/v1
+schema_version: 1
+artifact_type: main_tech
+schema_file: templates/strict-spec-driven/schemas/main-tech.yaml
+standard:
+  id: workspace-artifacts
+  title: 工作区产物与 JSON Schema
+  category: architecture
+rules:
+  embedded-schemas:
+    strength: MUST
+    statement: 工作区中的每种结构化产物（Artifact）都必须在 internal/schema 中登记产物类型，并以 JSON Schema（draft 2020-12）文件声明结构，用 go:embed 打包进二进制；命令读写产物时必须经过 internal/schema 的统一校验入口，不得在命令中手写字段检查代替 Schema。
+    rationale: Schema 是 Agent、作者与 wa-cli 共享的结构契约；嵌入二进制保证单文件分发时照样能校验；只有一个校验入口，诊断格式和错误码才能保持一致。
+    enforcement:
+      method: test
+      detail: internal/schema 的测试遍历产物类型表：断言每个已登记类型的 Schema 都能编译，并且在 testdata/ 下各有至少一个合法和一个不合法的夹具，校验结果与预期相符。
+    examples:
+      good:
+        - 新增单元产物时，在 internal/schema/schemas/ 加一份 Schema 文件，并在类型表中登记它的路径模式
+      bad:
+        - 在 status 命令里用 if cfg.GateLevel != "strict" && ... 手写取值检查
+  workspace-relative-paths:
+    strength: MUST
+    statement: 诊断的 path 与输出信封的 changedPaths 必须是相对项目目录（--dir）、以 / 分隔的路径，不得输出绝对路径或平台相关的分隔符。
+    rationale: 相对路径在不同机器、不同操作系统上保持一致，Agent 可以直接把它拼接到 --dir 后使用，测试断言也不依赖临时目录的位置。
+    enforcement:
+      method: test
+      detail: internal/cli 的 runWS 测试辅助函数在 t.TempDir() 中运行每条工作区命令，断言所有 path 与 changedPaths 都不是绝对路径、不含临时目录前缀与反斜杠。
+  field-path-format:
+    strength: MUST
+    statement: Schema 校验诊断的 field 必须使用点分字段路径，数组下标写作 [i]（如 packs[0]、units[2].title）；缺少必需字段或出现未定义字段时，field 为该字段的路径；其他指向产物根部的问题不填 field。
+    rationale: 统一的字段路径让 Agent 可以按同一规则定位任意产物中的出错位置；点分路径比 JSON Pointer 更接近作者阅读 YAML 的方式。
+    enforcement:
+      method: test
+      detail: internal/schema 的测试断言嵌套字段、数组元素、缺少与未定义字段违规时 field 的精确字面量。
+  atomic-writes:
+    strength: MUST
+    statement: 写入工作区文件必须经过 internal/workspace 的统一写入函数：先写同目录的临时文件再重命名，覆盖已有文件时保留其权限；不得直接用 os.WriteFile 覆盖产物。
+    rationale: 进程中断或磁盘写满时，直接覆盖会留下写了一半的产物，作者的内容随之损坏；统一入口也让权限处理保持一致。
+    enforcement:
+      method: review
+    examples:
+      good:
+        - writeFile(abs(root, ConfigPath), data)
+      bad:
+        - os.WriteFile(path, data, 0o644) 直接覆盖 config.yaml
+  structured-edits:
+    strength: MUST
+    statement: 修改已有的结构化产物时，必须在 YAML 节点树上只改目标节点，保留其他字段与注释；写出前必须重新解析并用 Schema 校验修改后的文档，无法解析或目标字段违规时不写；取值未变时不写文件，changedPaths 为空；不修改带有 YAML 锚点的值。
+    rationale: 作者会直接编辑结构化产物并写注释，整体重写会丢失这些内容；写前校验与锚点检查保证 wa-cli 不会把可用的文件改坏；取值未变不写，changedPaths 才如实反映变更。
+    enforcement:
+      method: test
+      detail: internal/workspace 的 TestSetConfigPreservesComments、TestSetConfigRejects、TestSetConfigSameValue 与 TestSetConfigAnchors 覆盖注释保留、拒绝写入、取值未变与锚点。
+  input-limits:
+    strength: MUST
+    statement: 解析产物时必须限制展开别名后的节点数（schema.MaxNodes），超限报告 artifact.parse-error，不得先展开再检查。
+    rationale: Agent 会对不可信的工作区自动运行命令，层层引用的别名能让很小的文件展开成海量节点并耗尽内存。
+    enforcement:
+      method: test
+      detail: internal/schema 的 TestAliasBomb 与 internal/cli 的 TestValidateAliasExpansionLimit 用 8 层、每层 10 个别名的文档断言返回 artifact.parse-error。

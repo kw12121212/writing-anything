@@ -1,0 +1,4 @@
+schema_version: 1
+language: zh-CN
+packs: [a, b, a]
+gate_level: standard

@@ -7,8 +7,13 @@ categories:
     go-flag-bd930f:
       title: Go flag 包的默认报错不符合中文术语约定
       status: active
-      occurrences: 1
+      occurrences: 2
       path: .strict-spec-driven/lessons/coding/go-flag-bd930f.yaml
+    yaml-v3-0-24efd9:
+      title: yaml.v3 解析器错误的行号从 0 开始，第一行时不给行号
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/coding/yaml-v3-0-24efd9.yaml
   documentation:
     must-must-6af326:
       title: 修改一条 MUST 需求时，要检查同一规格里相邻的 MUST 是否因此冲突

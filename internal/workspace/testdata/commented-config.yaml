@@ -1,0 +1,6 @@
+# 作者的配置说明
+schema_version: 1
+language: zh-CN # 中文写作
+packs: []
+# 关卡强度按项目需要调整
+gate_level: standard

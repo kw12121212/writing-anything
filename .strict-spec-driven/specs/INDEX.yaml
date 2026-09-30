@@ -6,3 +6,6 @@ specs:
   - id: cli
     title: 命令行工具（CLI）
     path: .strict-spec-driven/specs/cli.yaml
+  - id: workspace
+    title: 工作区（Workspace）
+    path: .strict-spec-driven/specs/workspace.yaml

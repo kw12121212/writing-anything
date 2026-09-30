@@ -54,3 +54,9 @@ rules:
     enforcement:
       method: test
       detail: cmd/wa-cli/main_test.go 的 TestNoDevToolDependency 用 go list -deps 断言产品二进制不依赖 internal/tools/**。
+  domain-problems:
+    strength: SHOULD
+    statement: 领域包（如 internal/schema、internal/workspace）只返回结构化的问题（错误码、路径、字段、行号、说明），由 internal/cli 统一转换为诊断并填写 next；领域包不 import internal/cli。
+    rationale: 下一步命令取决于调用方式（--dir、命令名），属于命令层；领域包保持与输出格式无关，后续 MCP 服务也能复用同样的问题。
+    enforcement:
+      method: review

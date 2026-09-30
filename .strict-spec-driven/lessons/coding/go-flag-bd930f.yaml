@@ -8,7 +8,7 @@ lesson:
 category: coding
 status: active
 created_at: '2026-09-30T06:35:41.162Z'
-updated_at: '2026-09-30T06:35:41.162Z'
+updated_at: '2026-09-30T08:10:16.092Z'
 context: project-scaffold 用标准库 flag 包解析 wa-cli version 的参数，并把 flag 的默认报错直接输出给用户。
 observation: 'wa-cli version --unknown 输出英文 ''flag provided but not defined: -unknown''，把用户输入的 --unknown 回显成 -unknown；--json=maybe 输出英文 parse error。同一命令其他报错是中文「未知参数：…」，语言和格式都不一致，测试只断言含 -unknown 也没发现。审查后改为手动解析参数。'
 takeaway: 面向用户的 wa-cli 报错必须由我们自己生成：使用 flag 包时要 SetOutput(io.Discard) 并把错误翻译成术语表中的中文诊断，参数很少时直接手动解析；测试要断言报错的语义文字（如「未知参数：<原样参数>」），不能只断言参数名出现。
@@ -17,3 +17,6 @@ occurrences:
   - origin: project-scaffold
     date: '2026-09-30'
     evidence: internal/cli/cli.go 的 runVersion 由 flag.NewFlagSet 改为手动解析；internal/cli/cli_test.go 的 unknown flag 用例改为断言「未知参数：--unknown」。
+  - origin: workspace-init-and-schemas
+    date: '2026-09-30'
+    evidence: internal/schema/schema.go 的 describe 兜底分支原本透传 jsonschema 校验器的英文说明（LocalizedString），审查指出与中文诊断约定不符；改为只输出约束关键字，并去掉对 golang.org/x/text 的直接依赖。

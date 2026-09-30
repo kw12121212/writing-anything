@@ -11,3 +11,7 @@ standards:
     title: Go 工程结构与回归关卡
     category: architecture
     path: .strict-spec-driven/tech/go-project-structure.yaml
+  - id: workspace-artifacts
+    title: 工作区产物与 JSON Schema
+    category: architecture
+    path: .strict-spec-driven/tech/workspace-artifacts.yaml

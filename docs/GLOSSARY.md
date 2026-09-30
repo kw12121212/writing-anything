@@ -281,6 +281,7 @@
 | 退出码 | Exit Code | 退出码 | 命令结束时返回的数字：0 成功、1 校验失败或执行失败、2 用法错误 |
 | 输出信封 | Output Envelope | 输出信封 | 所有命令 `--json` 输出共用的顶层结构：`valid`、`diagnostics`、`changedPaths` |
 | 命令注册表 | Command Registry | 命令注册表 | 声明每条命令参数、输出键和退出码的清单；help 由它生成，它也是 MCP tools 与 Skill 命令校验的依据 |
+| 产物 | Artifact | 产物 | 工作区中由 `wa-cli` 管理的文件：受 JSON Schema 约束的结构化 YAML 文件（如 `config.yaml`）与 Markdown 正文 |
 | 数据结构约束 | JSON Schema | JSON Schema | 校验 YAML 产物结构的规范 |
 | 测试夹具 | Test Fixture | 测试夹具 | 测试用的示例数据，放在各包的 `testdata/` |
 | 回归测试 | Regression Test | 回归测试 | 每次变更后运行的完整测试 |
