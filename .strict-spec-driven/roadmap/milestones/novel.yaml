@@ -20,8 +20,8 @@ scope:
     - 已验收单元的分层摘要（场景 → 章 → 部 → 全书）与卷末作者检查点
   out:
     - 连续性审查、审查任务包、影响传播、会话交接、组稿（novel-continuity）
-    - 向量检索与 embedding（wa-cli 不调用模型）
     - 跨作品共享设定集（novel-series）
+    - 向量检索与嵌入模型（wa-cli 不调用模型）
 done_criteria:
   - wa-cli state at <scene> 输出的状态快照等于此前已确认事件的重放结果；测试夹具中修改早期事件后，后续快照随之变化
   - context 只包含视角人物已知的信息，并单列读者已知、人物未知的内容
@@ -38,11 +38,11 @@ intake_questions:
     question: 上下文预算如何度量与配置？
     context: 不同 Agent 的上下文窗口差别很大。
     impact: 影响 context 命令的裁剪策略与摘要层级。
-    recommendation: 以字符数近似度量，由 genre 提供默认值，pack 或项目配置可以覆盖；context 输出报告实际占用与被裁剪的内容。
+    recommendation: 以字符数近似度量，由文体提供默认值，规范包或项目配置可以覆盖；context 输出报告实际占用与被裁剪的内容。
   - id: retrieval-method
-    question: 上下文检索用显式引用还是向量相似度？
-    context: 向量检索需要调用 embedding 模型，结果也不完全确定。
-    impact: 决定 context 的组装方式与 wa-cli 是否需要模型。
+    question: 上下文检索用显式引用还是向量检索（Vector Search）？
+    context: 向量检索需要调用嵌入（Embedding）模型，结果也不完全确定。
+    impact: 决定 context 的组装方式，以及 wa-cli 是否需要模型。
     recommendation: 按场景契约的显式引用精确组装，辅以内置倒排索引的全文检索；不引入向量检索，保持确定且不需要模型。
   - id: extraction-completeness
     question: 如何降低写后收口漏抽事实的风险？

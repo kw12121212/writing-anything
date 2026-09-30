@@ -285,6 +285,8 @@
 | 锁定文件 | Lock File | 锁定文件 | 记录已安装规范包确切版本的文件 |
 | 全文检索 | Full-text Search | 全文检索 | 按关键词查找正文中的出现位置 |
 | 倒排索引 | Inverted Index | 倒排索引 | 从词到出现位置的索引结构，用于全文检索 |
+| 向量检索 | Vector Search | 向量检索 | 按语义相似度查找内容，需要嵌入模型；本项目不采用 |
+| 嵌入 | Embedding | 嵌入 / Embedding | 把文本转换成向量的模型输出 |
 
 ## 开发管理（strict-spec-driven）
 

@@ -7,7 +7,7 @@ planned_change:
   milestone: tech-blog-workflow
 status: planned
 summary: wa-cli context 有界上下文包（Context Pack）
-details: wa-cli context <unit> 只输出当前单元需要的内容：写作简报摘要、选用写作法对本节的要求、本节大纲与覆盖的核心观点、引用素材的原文、生效的规范要点、相邻节摘要、未处理的作者反馈和决策。支持 --json 与 Markdown 两种格式。上下文预算（Context Budget）以字符数近似度量，由文体提供默认值，项目配置可以覆盖；超出预算时按优先级裁剪，并报告实际占用和被裁剪的内容。
+details: wa-cli context <unit> 只输出当前单元需要的内容：写作简报摘要、选用写作法对本节的要求、本节大纲与覆盖的核心观点、引用素材的原文、生效的规范要点、相邻节摘要、未处理的作者反馈和决策。支持 --json 与 Markdown 两种格式。上下文预算（Context Budget）以字符数近似度量，按 文体默认值 → 规范包 → 项目配置 的顺序合并，后者覆盖前者，wa-cli config resolved 能看到最终取值及来源；超出预算时按优先级裁剪，并报告实际占用和被裁剪的内容。
 depends_on:
   - outline-coverage
   - decision-queue

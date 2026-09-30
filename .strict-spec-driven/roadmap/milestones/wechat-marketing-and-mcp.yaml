@@ -30,7 +30,7 @@ intake_questions:
     question: 广告法词表的来源与维护方式？
     context: 内置词表需要持续维护，不同行业还有额外限制。
     impact: 影响合规规则的数据格式与责任边界。
-    recommendation: 内置基础极限词表并标注来源；行业词表通过 pack 扩展；所有输出标注为辅助检查。
+    recommendation: 内置基础极限词表并标注来源；行业词表通过规范包扩展；所有输出标注为辅助检查。
 planned_changes: {}
 dependencies:
   - tech-blog-workflow

@@ -26,10 +26,10 @@ done_criteria:
   - 系列中第二篇文章的 context 输出包含第一篇的已验收摘要
 intake_questions:
   - id: pack-registry
-    question: 是否需要中心化的 pack registry？
-    context: git 地址足以支撑早期分发，registry 涉及托管与审核。
-    impact: 影响 pack 标识与版本解析方式。
-    recommendation: 先只支持 git 地址与本地路径，pack 标识预留命名空间，registry 以后再评估。
+    question: 是否需要中心化的规范包仓库（Registry）？
+    context: git 地址足以支撑早期分发，中心化仓库涉及托管与审核。
+    impact: 影响规范包标识与版本解析方式。
+    recommendation: 先只支持 git 地址与本地路径，规范包标识预留命名空间 <owner>/<name>，中心化仓库以后再评估。
   - id: metric-blocking
     question: 指标类发现项是否阻塞验收？
     context: AI 评分有波动，确定性指标也只能反映偏离而非好坏。

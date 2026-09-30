@@ -20,9 +20,9 @@ done_criteria:
   - 人物在同一时间出现在两地等时间矛盾，在作品内与跨作品范围都能被 wa-cli continuity 报告
 intake_questions:
   - id: canon-scope
-    question: 系列级与作品级 canon 冲突时以谁为准？
+    question: 系列级与作品级设定冲突时以谁为准？
     context: 前传、平行线等情况会合理地改写设定。
-    impact: 决定 canon 的作用域解析规则。
+    impact: 决定设定集的作用域解析规则。
     recommendation: 默认以作品级为准，但必须显式记录覆盖原因并经作者确认。
 planned_changes: {}
 dependencies:

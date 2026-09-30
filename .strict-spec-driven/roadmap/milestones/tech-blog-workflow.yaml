@@ -31,10 +31,10 @@ done_criteria:
   - 用测试夹具中的作者素材跑通一篇技术博客从写作简报到 Markdown 导出的端到端测试
 intake_questions:
   - id: review-writer
-    question: LLM 审稿结果如何进入系统？
-    context: wa-cli 不调用 LLM，但评分标准审稿需要模型判断。
-    impact: 决定 review 产物的写入命令与校验方式。
-    recommendation: Agent 按评分标准逐项打分并附证据，通过 wa-cli review record 写入；CLI 校验每个评分项都有结论与正文位置引用。
+    question: 大语言模型的审稿结果如何进入系统？
+    context: wa-cli 不调用大语言模型，但按评分标准审稿需要模型判断。
+    impact: 决定审稿产物的写入命令与校验方式。
+    recommendation: Agent 按评分标准逐项打分并附证据，通过 wa-cli review record 写入；wa-cli 校验每个评分项都有结论与正文位置引用。
 planned_changes: {}
 dependencies:
   - kernel-foundation
@@ -43,4 +43,4 @@ risks:
   - AI 腔词表与中文排版规则容易误报，需要支持在规范包中关闭规则，以及单处豁免并写明理由
 status: proposed
 notes: []
-details: 这是第一个可以对外演示的里程碑。修订通过作者反馈与审稿发现项生成修订任务实现，不单独设计复杂的修订轮次。审稿分两部分：wa-cli 的确定性文本检查（Lint），以及 Agent 按文体与规范包的评分标准（Rubric）给出的结构化审稿结果，经 wa-cli 校验后写入审稿产物。上下文预算（Context Budget）以字符数近似度量，由文体提供默认值，项目配置可以覆盖。文本检查不发起网络请求，以保证结果确定。
+details: 这是第一个可以对外演示的里程碑。修订通过作者反馈与审稿发现项生成修订任务实现，不单独设计复杂的修订轮次。审稿分两部分：wa-cli 的确定性文本检查（Lint），以及 Agent 按文体与规范包的评分标准（Rubric）给出的结构化审稿结果，经 wa-cli 校验后写入审稿产物。上下文预算（Context Budget）以字符数近似度量，由文体提供默认值，规范包或项目配置可以覆盖。文本检查不发起网络请求，以保证结果确定。

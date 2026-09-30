@@ -27,10 +27,10 @@ done_criteria:
   - Agent 试图修改作者钦定的设定条目时，命令被拒绝并生成阻塞决策
 intake_questions:
   - id: canon-model
-    question: canon 是事实库的扩展还是独立存储？
+    question: 设定集是事实库的扩展，还是独立存储？
     context: 文章的素材与论断和小说的设定都需要带出处与保护级别。
-    impact: 决定事实库在 kernel 中的通用程度。
-    recommendation: 作为事实库的扩展：同一套 id、出处与保护级别，增加人物、地点、规则等条目类型。
+    impact: 决定事实库在内核中的通用程度。
+    recommendation: 作为事实库的扩展：沿用同一套 id、出处与保护级别，增加人物、地点、世界规则等条目类型。
 planned_changes: {}
 dependencies:
   - packs-and-series
