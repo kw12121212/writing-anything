@@ -1,0 +1,13 @@
+schema: strict-spec-driven/planned-change/v1
+schema_version: 1
+artifact_type: planned_change
+schema_file: ../../templates/strict-spec-driven/schemas/planned-change.yaml
+planned_change:
+  id: writing-method-templates
+  milestone: tech-blog-workflow
+status: planned
+summary: 写作法模板（Method Template）与内置文章类写作法
+details: 写作法模板是纯数据，分三类：规划类（分步产出规划产物，每步经作者确认后进入下一步）、结构类（节拍及其在全文中的位置范围）、文章类（必需章节及其顺序）；每个模板可以附带评分标准条目。文体提供默认模板，作者在写作简报中用 --method 选择其他模板，也可以不用；规范包可以定义自有模板（例如企业内容 SOP）。wa-cli method list / show 列出和查看模板。检查：大纲缺少模板要求的章节或节拍时，validate 与 advance 以非零退出；成稿后按字数比例核对节拍位置，超出范围只提示不阻塞。内置文章类写作法：金字塔原理与 SCQA、总分总、倒金字塔、Diátaxis（教程 / 操作指南 / 参考 / 解释）。
+depends_on:
+  - outline-coverage
+  - genre-and-pack-loading

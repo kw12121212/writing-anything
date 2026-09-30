@@ -7,6 +7,7 @@ planned_change:
   milestone: mcp-integration
 status: planned
 summary: 内置 MCP 服务（MCP Server）
-details: wa-cli mcp 以 stdio 方式启动 MCP 服务，必须显式指定项目根目录。tools 由命令注册表自动生成，调用与 CLI 相同的实现，不另写业务逻辑，后续新增的命令自动获得对应 tool；resources 暴露工作区产物和生效的规范包；prompts 对应各个 Skill 的流程说明。测试逐一校验每个命令都有对应 tool，并验证同一操作经 MCP 与 CLI 调用的结果一致。
+details: wa-cli mcp 以 stdio 方式启动 MCP 服务，必须显式指定项目根目录。tools 由命令注册表自动生成，调用与 CLI 相同的实现，不另写业务逻辑，后续新增的命令自动获得对应 tool；resources 暴露工作区产物、生效的规范包和作者反馈，作者提交新反馈时发送资源更新通知，支持订阅的客户端可以即时响应；prompts 对应各个 Skill 的流程说明。测试逐一校验每个命令都有对应 tool，并验证同一操作经 MCP 与 CLI 调用的结果一致。
 depends_on:
   - agent-skills-package
+  - author-feedback

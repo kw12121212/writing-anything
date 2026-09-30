@@ -103,6 +103,11 @@
 | 阻塞 | Blocking | 阻塞 | 未解决前禁止继续推进 |
 | 确认记录 | Confirmation Record | 确认记录 | 作者确认的时间与原话摘要 |
 | 批注 | Comment | 批注 | 作者写在正文里的修改意见，如 `<!-- @me: ... -->` |
+| 作者反馈 | Feedback | 反馈 | 作者对正文的结构化意见，来自对话、正文批注或阅读页 |
+| 锚点 | Anchor | 锚点 | 反馈指向的原文片段及其前后文，正文修改后用于重新定位 |
+| 失去锚点 | Orphaned Anchor | 失去锚点 | 正文修改后无法重新定位的反馈，需要作者处理 |
+| 阅读卡点 | Sticking Point | 阅读卡点 | 作者阅读时标记的"读不下去"的位置 |
+| 阅读页 | Reading View | 阅读页 | `wa-cli preview --serve` 提供的本地阅读与反馈页面 |
 | 人工编辑保护 | Human Edit Protection | 人工编辑保护 | 人改过的正文不被 Agent 覆盖 |
 | 上下文包 | Context Pack | 上下文包 | 只包含当前单元所需信息的输入集合 |
 | 上下文预算 | Context Budget | 上下文预算 | 上下文包的大小上限，以字符数近似度量 |
@@ -235,6 +240,30 @@
 | 前传 | Prequel | 前传 | |
 | 续集 | Sequel | 续集 | |
 | 同人 | Fan Fiction | 同人 | 基于已有作品的二次创作 |
+
+## 写作法
+
+写作法以写作法模板（Method Template）的形式提供，分为规划类、结构类、文章类三种。金字塔原理、总分总、起承转合、三幕结构、英雄之旅、雪花写作法见上文各节。
+
+| 中文 | English | 常用写法 | 说明 |
+|---|---|---|---|
+| 写作法模板 | Method Template | 写作法模板 | 以纯数据描述的写作方法：规划步骤、结构节拍或章节模板 |
+| 规划类写作法 | Planning Method | 规划类写作法 | 分步产出规划产物，每步经作者确认后进入下一步，如雪花写作法 |
+| 结构类写作法 | Structure Method | 结构类写作法 | 规定节拍及其在全文中的位置范围，如三幕结构 |
+| 文章类写作法 | Article Method | 文章类写作法 | 规定必需章节及其顺序，如金字塔原理 |
+| SCQA | Situation–Complication–Question–Answer | SCQA | 情境 → 冲突 → 问题 → 答案的开篇结构，常与金字塔原理配合 |
+| 倒金字塔 | Inverted Pyramid | 倒金字塔 | 最重要的信息放在最前面，常用于新闻与资讯 |
+| Diátaxis | Diátaxis | Diátaxis | 技术文档四分类：教程、操作指南、参考、解释 |
+| 操作指南 | How-to Guide | 操作指南 | Diátaxis 中解决具体问题的步骤说明 |
+| AIDA | Attention–Interest–Desire–Action | AIDA | 注意 → 兴趣 → 欲望 → 行动的营销文案结构 |
+| PAS | Problem–Agitate–Solution | PAS | 问题 → 放大 → 解决的营销文案结构 |
+| 4U 标题法 | 4U Headline Formula | 4U 标题法 | 有用（Useful）、紧迫（Urgent）、独特（Unique）、具体（Ultra-specific） |
+| 救猫咪节拍表 | Save the Cat! Beat Sheet | 救猫咪 | 布莱克·斯奈德提出的 15 个故事节拍 |
+| 七点结构 | Seven-Point Story Structure | 七点结构 | 钩子、第一情节点、第一压力点、中点、第二压力点、第二情节点、结局 |
+| 催化剂 | Catalyst / Inciting Incident | 催化剂 / 激励事件 | 打破主角日常、引出故事的事件 |
+| 中点 | Midpoint | 中点 | 故事中段的重大转折 |
+| 黄金三章 | Golden First Three Chapters | 黄金三章 | 网文前三章须完成钩子、主角亮相、核心冲突与金手指揭示 |
+| 卷结构 | Volume Structure | 卷结构 | 网文按卷规划目标、高潮与断章 |
 
 ## 工程
 

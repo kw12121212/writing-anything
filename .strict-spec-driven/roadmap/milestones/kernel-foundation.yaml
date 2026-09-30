@@ -17,6 +17,7 @@ scope:
     - 决策队列（阻塞 / 非阻塞）与 decide 命令
     - 正文人工编辑检测保护与正文内批注解析
     - Go 1.27 工程骨架：cmd/wa-cli 入口、internal/ 实现、embed 打包、覆盖率 80% 的完整回归命令（含 internal/tools/covercheck）
+    - 作者反馈模型：文本锚点与重新定位、状态流转、feedback watch 即时输出
   out:
     - 规则引擎与具体 lint 规则、审稿与验收（tech-blog-workflow）
     - MCP server、公众号文体、pack 远程安装、小说相关能力
@@ -25,9 +26,10 @@ done_criteria:
   - wa-cli init 创建的工作区通过 wa-cli validate；损坏的产物返回带错误码、产物路径与修复命令的 --json 诊断
   - 能用 CLI 创建一篇文章单元、登记作者素材，并通过 status / next 看到当前阶段与下一步命令
   - go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out 在干净仓库通过
-  - Agent 通过 wa-cli draft write 写入正文；作者直接修改 draft.md 后，draft write 拒绝覆盖并提示用 wa-cli diff 查看人工改动；正文批注被列为待处理修订项
   - wa-cli config resolved --json 输出 文体 → 规范包 → 项目配置 的合并结果与每项来源；含未知规则类型或可执行内容的规范包校验失败
   - 存在未解决的阻塞决策时，wa-cli advance 拒绝推进关联单元
+  - 反馈按文本锚点定位；正文修改后能重新定位，无法定位时标为失去锚点；wa-cli feedback watch 能输出新增的反馈
+  - Agent 通过 wa-cli draft write 写入正文；作者直接修改 draft.md 后，draft write 拒绝覆盖并提示用 wa-cli diff 查看人工改动；正文批注被解析为作者反馈
 intake_questions:
   - id: lifecycle-owner
     question: 生命周期阶段序列由 kernel 固定还是由 genre 声明？

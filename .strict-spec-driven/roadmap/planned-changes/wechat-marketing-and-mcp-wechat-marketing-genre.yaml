@@ -6,7 +6,8 @@ planned_change:
   id: wechat-marketing-genre
   milestone: wechat-marketing-and-mcp
 status: planned
-summary: wechat-marketing 文体与营销类结构化产物
-details: 内置 wechat-marketing 文体：标题候选（Headline Candidates，多个候选由作者选定，选择记为决策）、摘要、开头钩子（Hook）、行动号召（CTA）作为结构化产物，通过 wa-cli 命名参数写入；提供推荐结构、字数与段落长度的默认值，以及营销评分标准。端到端测试覆盖一篇公众号文章从写作简报到验收的全流程。
+summary: wechat-marketing 文体、营销写作法与营销类结构化产物
+details: 内置 wechat-marketing 文体：标题候选（Headline Candidates，多个候选由作者选定，选择记为决策）、摘要、开头钩子（Hook）、行动号召（CTA）作为结构化产物，通过 wa-cli 命名参数写入。内置营销写作法：AIDA（注意 → 兴趣 → 欲望 → 行动）、PAS（问题 → 放大 → 解决）作为文章类模板，4U 标题法（有用、紧迫、独特、具体）作为标题候选的评分标准。提供推荐结构、字数与段落长度的默认值，以及营销评分标准。端到端测试覆盖一篇公众号文章从写作简报到验收的全流程。
 depends_on:
   - tech-blog-genre-and-export
+  - writing-method-templates
