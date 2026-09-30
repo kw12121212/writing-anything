@@ -1,0 +1,12 @@
+schema: strict-spec-driven/planned-change/v1
+schema_version: 1
+artifact_type: planned_change
+schema_file: ../../templates/strict-spec-driven/schemas/planned-change.yaml
+planned_change:
+  id: unit-tree-and-lifecycle
+  milestone: kernel-foundation
+status: planned
+summary: 实现通用单元树（Unit Tree）与按单元推进的生命周期（Lifecycle）状态机
+details: 作品（Work）包含单元树，单元类型由文体声明，支持单层（文章 → 节）和多层（部 → 章 → 场景）两种数据形状，测试夹具同时覆盖这两种。wa-cli new <genre> <slug> 创建作品；wa-cli advance <unit> 按文体声明的阶段（Stage）序列推进，缺少必需产物或存在阻塞项时拒绝并给出诊断；wa-cli status / next 输出每个单元的当前阶段、阻塞项和下一步命令。
+depends_on:
+  - genre-and-pack-loading

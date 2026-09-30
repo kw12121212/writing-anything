@@ -1,0 +1,12 @@
+schema: strict-spec-driven/planned-change/v1
+schema_version: 1
+artifact_type: planned_change
+schema_file: ../../templates/strict-spec-driven/schemas/planned-change.yaml
+planned_change:
+  id: multi-level-units
+  milestone: novel
+status: planned
+summary: 长篇的多层单元树：部（Part）/ 章（Chapter）/ 场景
+details: 内置 novel 文体，单元层级为 部 → 章 → 场景：场景走完整生命周期，章与部的状态由子单元汇总得出；wa-cli status 与 next 按层级输出进度和阻塞项；支持在层级中插入、移动场景，并保持 id 稳定。
+depends_on:
+  - scene-context-and-fiction-rules

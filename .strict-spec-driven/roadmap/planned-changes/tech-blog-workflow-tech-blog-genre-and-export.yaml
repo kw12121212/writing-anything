@@ -1,0 +1,13 @@
+schema: strict-spec-driven/planned-change/v1
+schema_version: 1
+artifact_type: planned_change
+schema_file: ../../templates/strict-spec-driven/schemas/planned-change.yaml
+planned_change:
+  id: tech-blog-genre-and-export
+  milestone: tech-blog-workflow
+status: planned
+summary: tech-blog 文体与 Markdown 导出（Export）
+details: 内置 tech-blog 文体：推荐结构（问题 → 方案 → 验证 → 总结）、代码块必须标注语言、链接格式检查（只检查格式，不访问网络）、版本号与 API 说法需要 reference 类型的素材作为出处，以及技术博客评分标准。wa-cli export <work> --format markdown 只导出已验收的单元，可选附带 front matter（文件头元数据）。用测试夹具中的作者素材完成端到端测试，覆盖从写作简报到导出的全流程。
+depends_on:
+  - review-and-acceptance
+  - context-pack

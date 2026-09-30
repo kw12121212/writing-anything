@@ -1,0 +1,37 @@
+schema: strict-spec-driven/roadmap-milestone/v2
+schema_version: 2
+artifact_type: roadmap_milestone
+schema_file: ../schemas/roadmap-milestone.yaml
+milestone:
+  wechat-marketing-and-mcp:
+    title: 营销/公众号（Marketing & WeChat）
+order: 300
+goal: Agent 能用 wa-cli 完成一篇公众号营销文章，包括标题候选（Headline Candidates）、摘要、开头钩子（Hook）、行动号召（CTA）、广告法极限词（Superlative Claims）检查、内联样式（Inline Style）HTML 导出和 AI 生成内容标识（AI-generated Content Label）。
+scope:
+  in:
+    - wechat-marketing 文体：标题候选、摘要、开头钩子、CTA 作为结构化产物
+    - 广告法极限词等合规规则，可由 pack 扩展
+    - 公众号内联样式 HTML 导出与配图占位
+    - 按出处生成 AI 生成内容标识
+  out:
+    - 直接调用公众号 API 发布
+    - 图片生成
+done_criteria:
+  - 公众号文章端到端测试通过，导出的 HTML 只含内联样式
+  - 命中极限词时 lint 以非零退出，并标明规则来源
+  - 段落出处包含 agent 时，导出结果带 AI 参与说明；不包含时不生成
+intake_questions:
+  - id: compliance-source
+    question: 广告法词表的来源与维护方式？
+    context: 内置词表需要持续维护，不同行业还有额外限制。
+    impact: 影响合规规则的数据格式与责任边界。
+    recommendation: 内置基础极限词表并标注来源；行业词表通过 pack 扩展；所有输出标注为辅助检查。
+planned_changes: {}
+dependencies:
+  - tech-blog-workflow
+risks:
+  - 合规词表只是辅助检查，不构成法律意见，需在输出中说明
+  - 公众号编辑器对 HTML 的过滤规则可能变化
+status: proposed
+notes: []
+details: 本里程碑只包含营销文体相关工作；MCP 已拆分到 mcp-integration 里程碑。里程碑 id 创建后保持稳定，因此仍为 wechat-marketing-and-mcp。

@@ -1,0 +1,12 @@
+schema: strict-spec-driven/planned-change/v1
+schema_version: 1
+artifact_type: planned_change
+schema_file: ../../templates/strict-spec-driven/schemas/planned-change.yaml
+planned_change:
+  id: pack-install-distribution
+  milestone: packs-and-series
+status: planned
+summary: 规范包（Pack）安装、锁定与移除
+details: wa-cli pack install <git-url|path> 把规范包安装到工作区，并在锁定文件（Lock File）中记录解析到的提交或内容哈希；wa-cli pack list 与 wa-cli pack remove 管理已安装的规范包。安装时校验规范包只含数据、声明的规则类型都已知。规范包标识预留命名空间 <owner>/<name>，为以后可能的中心化仓库留出空间。
+depends_on:
+  - genre-and-pack-loading

@@ -1,0 +1,10 @@
+schema: strict-spec-driven/tech-index/v1
+schema_version: 1
+artifact_type: tech_index
+schema_file: ../schemas/tech-index.yaml
+standards:
+  # Replace the sample entry below with real technical standards, or remove if unused.
+  - id: sample-standard
+    title: Sample Technical Standard
+    category: coding
+    path: .strict-spec-driven/tech/sample-standard.yaml

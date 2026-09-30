@@ -1,0 +1,14 @@
+schema: strict-spec-driven/planned-change/v1
+schema_version: 1
+artifact_type: planned_change
+schema_file: ../../templates/strict-spec-driven/schemas/planned-change.yaml
+planned_change:
+  id: scene-close-out
+  milestone: novel
+status: planned
+summary: 写后收口（Close-out）：让记忆与正文同步
+details: 场景草拟后，Agent 通过 wa-cli scene close-out 提交抽取结果：状态变化、新增设定、知情变化、伏笔埋设与回收、产生的事件。wa-cli 对照场景契约，检查契约要求的内容是否都已提交；同时依据人名与别名词典扫描正文，列出设定集里没有的疑似专有名词，提示补录或豁免。收口未完成、或提议尚未经作者处理时，场景不能验收。
+depends_on:
+  - state-change-proposals
+  - knowledge-state
+  - foreshadowing-ledger

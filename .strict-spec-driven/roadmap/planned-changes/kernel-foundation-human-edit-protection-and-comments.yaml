@@ -1,0 +1,12 @@
+schema: strict-spec-driven/planned-change/v1
+schema_version: 1
+artifact_type: planned_change
+schema_file: ../../templates/strict-spec-driven/schemas/planned-change.yaml
+planned_change:
+  id: human-edit-protection-and-comments
+  milestone: kernel-foundation
+status: planned
+summary: 人工编辑保护（Human Edit Protection）与正文批注（Comment）解析
+details: '当 draft.md 的当前内容与最近一次 draft write 记录的哈希不一致时，视为作者修改过：再次调用 draft write 会被拒绝，诊断提示先用 wa-cli diff <unit> 查看人工改动；只有用 draft write --base <hash> 显式声明基于作者的当前版本时才允许写入。被修改的段落出处更新为 human 或 agent-draft-human-edited。解析正文中的 <!-- @me: ... --> 批注，wa-cli comments 把它们列为修订任务，wa-cli comments resolve 标记为已解决并保留记录。'
+depends_on:
+  - author-sources-and-provenance

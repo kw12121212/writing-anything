@@ -1,0 +1,14 @@
+schema: strict-spec-driven/planned-change/v1
+schema_version: 1
+artifact_type: planned_change
+schema_file: ../../templates/strict-spec-driven/schemas/planned-change.yaml
+planned_change:
+  id: context-pack
+  milestone: tech-blog-workflow
+status: planned
+summary: wa-cli context 有界上下文包（Context Pack）
+details: wa-cli context <unit> 只输出当前单元需要的内容：写作简报摘要、本节大纲与覆盖的核心观点、引用素材的原文、生效的规范要点、相邻节摘要、未解决的批注和决策。支持 --json 与 Markdown 两种格式。上下文预算（Context Budget）以字符数近似度量，由文体提供默认值，项目配置可以覆盖；超出预算时按优先级裁剪，并报告实际占用和被裁剪的内容。
+depends_on:
+  - outline-coverage
+  - decision-queue
+  - human-edit-protection-and-comments

@@ -1,0 +1,12 @@
+schema: strict-spec-driven/planned-change/v1
+schema_version: 1
+artifact_type: planned_change
+schema_file: ../../templates/strict-spec-driven/schemas/planned-change.yaml
+planned_change:
+  id: series-shared-context
+  milestone: packs-and-series
+status: planned
+summary: 系列（Series）：多作品共享规范包、事实库与已验收摘要
+details: wa-cli series 创建系列并加入作品。系列级的规范包、素材和事实被成员作品继承，作品级可以覆盖。单元验收后由 Agent 撰写摘要（Summary），wa-cli 校验摘要非空、长度在文体规定的范围内，并记录对应单元的内容哈希；单元之后又被修改时，摘要标为过期。成员作品的 context 输出包含系列前序作品的已验收摘要，并注明过期状态。数据模型按后续系列小说共享设定集（Canon）的需要设计。
+depends_on:
+  - context-pack

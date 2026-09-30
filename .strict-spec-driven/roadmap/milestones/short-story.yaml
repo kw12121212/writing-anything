@@ -1,0 +1,39 @@
+schema: strict-spec-driven/roadmap-milestone/v2
+schema_version: 2
+artifact_type: roadmap_milestone
+schema_file: ../schemas/roadmap-milestone.yaml
+milestone:
+  short-story:
+    title: 短篇小说（Short Story）
+order: 500
+goal: 作者提供前提、人物与关键转折后，Agent 能以场景（Scene）为单元草拟、审稿并导出一篇短篇小说；作者钦定（Author-pinned）的设定受最高级别保护。
+scope:
+  in:
+    - short-story 文体：场景单元、情节节拍、视角与人称规则
+    - 人物卡与轻量 canon（基于事实库扩展，作者钦定项受保护）
+    - 场景级上下文包：人物当前状态与前情摘要
+    - 小说专用规则：对话标点、视角一致、小说 AI 腔
+    - 短篇 Markdown 与纯文本导出
+    - 情绪曲线（Emotion Curve）与张力曲线（Tension Curve）：对比场景契约中的目标，并套用文体节奏模板
+  out:
+    - 多层单元树、连续性审查、状态变更提议（novel）
+done_criteria:
+  - 短篇小说端到端测试通过，场景逐个经历起草、审查、验收
+  - Agent 试图修改作者钦定的 canon 项时，命令被拒绝并生成阻塞决策
+  - 对话标点与视角（POV）一致规则在测试夹具的违例文本上报告发现项，在合规文本上不报告
+  - 写作简报中的前提与关键转折没有关联作者素材或确认记录时，推进被阻塞
+  - 测试夹具中张力曲线偏离契约目标的场景被列为发现项，且默认不阻塞验收
+intake_questions:
+  - id: canon-model
+    question: canon 是事实库的扩展还是独立存储？
+    context: 文章的素材与论断和小说的设定都需要带出处与保护级别。
+    impact: 决定事实库在 kernel 中的通用程度。
+    recommendation: 作为事实库的扩展：同一套 id、出处与保护级别，增加人物、地点、规则等条目类型。
+planned_changes: {}
+dependencies:
+  - packs-and-series
+risks:
+  - 文章阶段的出处规则（亲历必须有来源）不适用于虚构内容，需要按 genre 关闭或替换
+status: proposed
+notes: []
+details: 本里程碑首次验证单元树（Unit Tree）与生命周期能否承载虚构文体，同时验证设定集（Canon）能否作为事实库的扩展实现。文章阶段的论断出处检查对虚构内容关闭，改为要求前提与关键转折来自作者。

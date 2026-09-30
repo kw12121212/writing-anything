@@ -1,0 +1,12 @@
+schema: strict-spec-driven/planned-change/v1
+schema_version: 1
+artifact_type: planned_change
+schema_file: ../../templates/strict-spec-driven/schemas/planned-change.yaml
+planned_change:
+  id: local-review-preview
+  milestone: packs-and-series
+status: planned
+summary: 本地 HTML 预览与批注回写
+details: wa-cli preview <unit> 生成纯本地的静态 HTML 预览，展示正文、按出处着色、文本检查与审稿发现项。在预览里添加的批注导出为批注文件，再用 wa-cli comments import 回写为正文批注。不启动常驻服务，不做成完整的 Web 产品；作者可以选择是否使用。
+depends_on:
+  - human-edit-protection-and-comments

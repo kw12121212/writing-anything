@@ -1,0 +1,50 @@
+schema: strict-spec-driven/config/v1
+schema_version: 1
+artifact_type: workflow_config
+preferred_human_language: Chinese
+context: writing-anything 是面向 AI 智能体（Agent）的规范化辅助写作工具：第三方 Agent 通过命令行工具（CLI）wa-cli、技能（Skill）与 MCP 服务（MCP Server）接入，以作者（Author）为意图、素材（Source）和最终决策的来源，按规范包（Pack）与文体（Genre）完成 写作简报（Brief）→ 大纲（Outline）→ 草稿（Draft）→ 审稿（Review）→ 修订（Revision）→ 导出（Export）的写作生命周期（Lifecycle）。定位：帮 Agent 规范地协助人写作，而不是替人写作。产品工作区（Workspace）为 .writing-anything/。三层架构：内核（Kernel，含单元树、按单元推进的生命周期、带出处的事实库、规则引擎、上下文包、决策队列、人工编辑保护、导出）；文体（首批 tech-blog、wechat-marketing，后续 short-story、novel、系列小说）；规范包（第三方或作者提供的纯数据规范，不执行代码）。技术栈：Go 1.27，编译为跨平台单文件 wa-cli 二进制（内含 MCP 服务），JSON Schema、内置文体与规范包通过 embed 打包；结构化产物为 JSON Schema 约束的 YAML，正文为 Markdown。术语以 docs/GLOSSARY.md 为准。本仓库开发由 strict-spec-driven 管理，但产品运行时不依赖 strict-spec-driven。
+rules:
+  specs:
+    - Describe observable behavior only — no implementation details, technology choices, or internal structure
+    - MUST = required with no exceptions; SHOULD = default unless explicitly justified; MAY = genuinely optional
+    - Each requirement must be independently verifiable from outside the system
+    - 涉及作者意图、亲历内容、事实来源和验收的行为，规格必须写明人的确认点或出处要求
+    - 专有名词在每份产物中首次出现时写作「中文（English）」，此后使用 docs/GLOSSARY.md 中的常用写法
+  change:
+    - Implement only what is in scope in proposal.yaml — if scope needs to expand, use strict-spec-modify first, never expand silently
+    - When a requirement or task is ambiguous, ask the user before proceeding — do not assume or guess
+    - Delta specs must reflect what was actually built, not the original plan
+    - Mark tasks done immediately upon completion — never batch at the end
+    - Every change must include test tasks (validation + unit tests at minimum)
+    - 引入新的专有名词时，在同一变更中把它加入 docs/GLOSSARY.md
+  code:
+    - Read existing code before modifying it
+    - Implement only what the current task requires — no speculative features
+    - No abstractions for hypothetical future needs (YAGNI)
+    - 产品运行时（wa-cli、Skills、MCP server）不得依赖或调用 strict-spec-driven
+    - wa-cli 是唯一真相来源；MCP 与 Skills 只做薄封装，不实现 CLI 之外的业务逻辑
+    - 所有 wa-cli 命令支持 --json，诊断包含错误码、产物路径与下一步可执行命令
+    - 结构化产物只通过 wa-cli 命令变更；Agent 通过 wa-cli draft write 写入正文，作者可以直接编辑正文，作者的编辑优先于 Agent
+    - 规范包（Pack）只能是数据，不得执行第三方代码
+    - 面向用户的 CLI 输出、诊断、Skill 与文档遵循 docs/GLOSSARY.md 的中英文术语；命令名、参数名、字段名、文件名等标识符保持英文
+  test:
+    - Tests must verify observable behavior described in specs, not internal implementation details
+    - Each test must be independent — no shared mutable state between tests
+    - Prefer real dependencies over mocks for code the project owns
+review_evidence:
+  project_regression:
+    method: complete_project_regression
+    command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+    meaning: Passing this command is required review evidence before strict-spec-review recommends archive or strict-spec-auto performs archive. This command represents the complete project-level regression suite, not only the Testing section tasks for an individual change. When a coverage declaration is present, this command also enforces the minimum coverage threshold, so insufficient coverage is a blocking workflow failure rather than advisory output.
+    unavailable_behavior: If the command cannot run because required dependencies, services, credentials, fixtures, or other test conditions are unavailable, review or auto archive is blocked until a human prepares the environment or explicitly provides the missing evidence.
+    coverage:
+      metric: line
+      threshold: 80
+      scope:
+        include:
+          - internal/**
+        exclude:
+          - internal/tools/**
+maintenance:
+  checks:
+    - type: roadmap-sync-check

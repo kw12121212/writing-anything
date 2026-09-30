@@ -1,0 +1,12 @@
+schema: strict-spec-driven/planned-change/v1
+schema_version: 1
+artifact_type: planned_change
+schema_file: ../../templates/strict-spec-driven/schemas/planned-change.yaml
+planned_change:
+  id: foreshadowing-ledger
+  milestone: novel
+status: planned
+summary: 伏笔台账（Foreshadowing Ledger）
+details: 伏笔条目记录埋设场景、计划回收位置（章或场景）和状态（open 未回收 / paid 已回收 / dropped 放弃），放弃需要作者确认。wa-cli threads 列出未回收伏笔，并标出已超过计划回收位置的伏笔；回收引用不存在的埋设时校验失败。context 输出与当前场景契约相关的未回收伏笔。
+depends_on:
+  - scene-contract-and-causality

@@ -1,0 +1,13 @@
+schema: strict-spec-driven/architecture/v1
+schema_version: 1
+artifact_type: architecture
+schema_file: templates/strict-spec-driven/schemas/architecture.yaml
+architecture:
+  id: project-architecture
+  title: Project Architecture
+# Fill these collections with /strict-spec-architecture, then render ARCHITECTURE.md
+# with `strict-spec-cli architecture-generate`. Specification and technical-standard
+# sections are projected from existing artifacts and never belong here.
+components: {}
+data_flows: {}
+decisions: {}

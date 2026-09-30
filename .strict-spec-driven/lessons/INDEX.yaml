@@ -1,0 +1,10 @@
+schema: strict-spec-driven/lessons-index/v2
+schema_version: 2
+artifact_type: lessons_index
+schema_file: ../schemas/lessons-index.yaml
+# Lessons record reusable engineering experience — a pitfall, a path that failed, or diagnostic
+# knowledge — that specs and technical standards deliberately exclude. Create them with
+# `strict-spec-cli lesson-create`; this index is rebuilt from the lesson files and is not
+# hand-edited. A lesson that becomes general enough to bind is promoted into a technical standard
+# rule and keeps its original text as the motivating context that rule omits.
+categories: {}

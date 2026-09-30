@@ -1,0 +1,12 @@
+schema: strict-spec-driven/planned-change/v1
+schema_version: 1
+artifact_type: planned_change
+schema_file: ../../templates/strict-spec-driven/schemas/planned-change.yaml
+planned_change:
+  id: short-story-genre
+  milestone: short-story
+status: planned
+summary: short-story 文体：场景（Scene）单元、情节节拍（Story Beat）与轻量场景契约
+details: 内置 short-story 文体，单元类型为场景。写作简报扩展为前提、主题、视角（POV）与人称、目标字数，其中前提与关键转折必须关联作者素材或确认记录，否则推进被阻塞。大纲扩展为情节节拍；每个场景声明轻量场景契约（Scene Contract）：出场人物、承担的节拍、揭示边界（Reveal Boundary，本场景不能提前透露的信息）。契约的数据格式与长篇一致，长篇在此基础上扩展因果链、状态变化和伏笔。论断出处检查对虚构内容关闭；评分标准覆盖冲突、节奏和人物动机。
+depends_on:
+  - tech-blog-genre-and-export

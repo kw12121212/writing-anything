@@ -1,0 +1,12 @@
+schema: strict-spec-driven/planned-change/v1
+schema_version: 1
+artifact_type: planned_change
+schema_file: ../../templates/strict-spec-driven/schemas/planned-change.yaml
+planned_change:
+  id: author-sources-and-provenance
+  milestone: kernel-foundation
+status: planned
+summary: 作者素材库（Source Library）、正文写入命令与段落级出处（Provenance）
+details: wa-cli source add 登记素材，类型包括 author-note、interview、transcript、reference、past-article；原文存档不做改写，并分配稳定 id。wa-cli draft write <unit> 从文件或标准输入写入正文，记录每个段落的内容哈希，并把这些段落标为 agent。段落出处取值为 human、agent、agent-draft-human-edited，由写入记录与当前内容的哈希对比推导；单元级汇总各类出处的占比。论断（Claim）产物把论断关联到素材 id。出处数据供后续的 AI 生成内容标识与作者偏好学习使用。
+depends_on:
+  - unit-tree-and-lifecycle

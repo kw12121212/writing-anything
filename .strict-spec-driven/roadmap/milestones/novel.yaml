@@ -1,0 +1,58 @@
+schema: strict-spec-driven/roadmap-milestone/v2
+schema_version: 2
+artifact_type: roadmap_milestone
+schema_file: ../schemas/roadmap-milestone.yaml
+milestone:
+  novel:
+    title: 长篇结构与记忆（Novel Structure & Memory）
+order: 600
+goal: 在任何单个会话都装不下全书的前提下，Agent 能逐场景推进一部长篇小说：细纲中的场景契约（Scene Contract）先约定每个场景的内容与因果，状态快照（State Snapshot）、知情表（Knowledge State）、伏笔台账（Foreshadowing Ledger）等外部记忆由 wa-cli 管理，场景写完后必须收口（Close-out）同步记忆，wa-cli context 按契约精确组装不超过预算的上下文。
+scope:
+  in:
+    - 多层单元树（部 / 章 / 场景），按场景推进生命周期
+    - 状态变更提议与作者确认后的 canon 合并
+    - 已接受单元的分层摘要与上下文预算
+    - 场景契约与因果链（Causality Chain）：动笔前声明视角、人物、节拍、状态变化、伏笔、揭示边界与起因
+    - 事件溯源（Event Sourcing）的状态快照：任一场景开始时的状态由已确认事件重放得出
+    - 知情表：人物与读者在各场景已知的信息
+    - 伏笔台账：埋设、计划回收与状态
+    - 写后收口：抽取结果对照契约提交，未收口不能验收
+    - 按契约显式引用组装上下文，以及基于内置倒排索引的 recall 全文检索
+  out:
+    - 跨作品共享 canon（novel-series）
+    - 连续性审查、审查任务包、影响传播、会话交接、组稿（novel-continuity）
+    - 向量检索与 embedding（wa-cli 不调用模型）
+done_criteria:
+  - 测试夹具中包含至少三章的长篇，任一场景的 context 输出都不超过 genre 配置的上下文预算
+  - 状态变更提议未经作者确认时不进入 canon
+  - wa-cli state at <scene> 输出的状态快照等于此前已确认事件的重放结果；测试夹具中修改早期事件后，后续快照随之变化
+  - context 只包含视角人物已知的信息，并单列读者已知、人物未知的内容
+  - 伏笔回收引用不存在的埋设时校验失败；wa-cli threads 标出超过计划回收位置的未回收伏笔
+  - 场景起因引用不存在或尚未发生的事件时 validate 失败
+  - 契约要求的状态变化或伏笔未在收口中提交时，wa-cli accept 被拒绝
+  - wa-cli recall 按人物名或别名返回全部出现位置
+intake_questions:
+  - id: context-budget
+    question: 上下文预算如何度量与配置？
+    context: 不同 Agent 的上下文窗口差别很大。
+    impact: 影响 context 命令的裁剪策略与摘要层级。
+    recommendation: 以字符数近似度量，由 genre 提供默认值，pack 或项目配置可以覆盖；context 输出报告实际占用与被裁剪的内容。
+  - id: retrieval-method
+    question: 上下文检索用显式引用还是向量相似度？
+    context: 向量检索需要调用 embedding 模型，结果也不完全确定。
+    impact: 决定 context 的组装方式与 wa-cli 是否需要模型。
+    recommendation: 按场景契约的显式引用精确组装，辅以内置倒排索引的全文检索；不引入向量检索，保持确定且不需要模型。
+  - id: extraction-completeness
+    question: 如何降低写后收口漏抽事实的风险？
+    context: 抽取由 Agent 完成，漏抽的事实不会进入台账，也就不会被检查。
+    impact: 决定收口的校验强度与作者的工作量。
+    recommendation: 契约要求的变化必须提交；CLI 扫描正文中设定集之外的疑似专有名词并提示补录或豁免；每卷结束由作者抽查。
+planned_changes: {}
+dependencies:
+  - short-story
+risks:
+  - 摘要压缩会丢失细节，导致连续性审查漏报
+  - 写后收口由 Agent 抽取，漏抽的事实不会被检查；以契约对照、设定集外专有名词扫描与卷末作者抽查缓解
+status: proposed
+notes: []
+details: 长篇的连续性不依赖模型记忆：记忆存放在磁盘上的故事圣经（Story Bible）台账中，每个会话只处理一个场景。上下文按场景契约的显式引用精确组装，结果可复现；recall 全文检索作为补充，供 Agent 查找前文出现位置。上下文预算沿用技术博客阶段确定的字符数度量。依赖时间的检查（例如人物同时出现在两地）放在系列小说里程碑的时间线。
