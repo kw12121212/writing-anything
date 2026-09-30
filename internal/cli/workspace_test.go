@@ -49,6 +49,7 @@ type result struct {
 	Sources      int              `json:"sources"`
 	Works        int              `json:"works"`
 	Resolved     *json.RawMessage `json:"resolved"`
+	stdout       string           // 原始输出，供解析命令专属字段
 }
 
 // runWS 以 --json 运行工作区命令，并断言路径都相对项目目录、以 / 分隔（workspace-artifacts/workspace-relative-paths）。
@@ -59,7 +60,7 @@ func runWS(t *testing.T, dir string, args ...string) (int, result) {
 	if stderr != "" {
 		t.Fatalf("%v: stderr = %q, want empty", args, stderr)
 	}
-	var res result
+	res := result{stdout: stdout}
 	if err := json.Unmarshal([]byte(stdout), &res); err != nil {
 		t.Fatalf("%v: stdout is not JSON: %v; %q", args, err, stdout)
 	}
@@ -307,11 +308,14 @@ func TestStatus(t *testing.T) {
 		t.Fatalf("status-fresh: exit code = %d, result = %+v, config = %v", code, res, cfg)
 	}
 	ws := filepath.Join(dir, ".writing-anything")
-	os.Mkdir(filepath.Join(ws, "works", "a"), 0o755)
-	os.Mkdir(filepath.Join(ws, "works", "b"), 0o755)
+	for _, slug := range []string{"a", "b"} {
+		if code, _ := runWS(t, dir, "new", "minimal", slug); code != 0 {
+			t.Fatalf("new %s: exit code = %d", slug, code)
+		}
+	}
 	writeFile(t, filepath.Join(ws, "sources", "interview.md"), "")
-	if _, res := runWS(t, dir, "status"); res.Sources != 1 || res.Works != 2 {
-		t.Fatalf("status-counts: sources = %d, works = %d", res.Sources, res.Works)
+	if _, res := runWS(t, dir, "status"); !res.Valid || res.Sources != 1 || res.Works != 2 {
+		t.Fatalf("status-counts: valid = %v, sources = %d, works = %d", res.Valid, res.Sources, res.Works)
 	}
 	writeFile(t, configPath(dir), strings.Replace(readFile(t, configPath(dir)), "gate_level: standard", "gate_level: bogus", 1))
 	code, res = runWS(t, dir, "status")

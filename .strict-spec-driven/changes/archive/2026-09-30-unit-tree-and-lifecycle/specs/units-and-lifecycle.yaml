@@ -1,0 +1,176 @@
+schema: strict-spec-driven/delta-spec/v1
+schema_version: 1
+artifact_type: delta_spec
+schema_file: templates/strict-spec-driven/schemas/delta-spec.yaml
+target_spec: units-and-lifecycle
+spec:
+  title: 单元树与生命周期（Unit Tree and Lifecycle）
+  path: .strict-spec-driven/specs/units-and-lifecycle.yaml
+operations:
+  ADDED:
+    new-work:
+      strength: MUST
+      statement: wa-cli new <genre> <slug> 必须在 --dir 下的工作区（Workspace）创建作品（Work）产物 .writing-anything/works/<slug>/work.yaml。作品本身就是单元树（Unit Tree）的根单元（Root Unit）：id 为 slug，genre 为给定的文体（Genre），type 为该文体的第一个单元类型，stage 为该文体的第一个阶段（Stage），units 为空数组。成功时退出码为 0，changedPaths 为 .writing-anything/works/<slug> 与 .writing-anything/works/<slug>/work.yaml，--json 输出的 work 字段含 id、genre、type 与 stage。文体不存在时报告错误码 work.unknown-genre（message 列出可用的文体）；slug 不符合 id 格式时报告 artifact.schema-violation（field 为 id）；作品目录已存在时报告 work.exists（path 为该作品目录）；三种情况都不得创建或修改任何文件，退出码为 1。未找到工作区时按 workspace 主规格的 workspace-not-found 处理。
+      scenarios:
+        new-article:
+          - GIVEN: 刚用 wa-cli init --dir D 创建的工作区
+          - WHEN: 运行 wa-cli new minimal my-post --dir D --json
+          - THEN: work.yaml 中 id 为 my-post、genre 为 minimal、type 为 article、stage 为 brief、units 为空数组；changedPaths 为 [.writing-anything/works/my-post, .writing-anything/works/my-post/work.yaml]；valid 为 true，退出码为 0；此后 wa-cli validate --dir D 通过
+        new-unknown-genre:
+          - GIVEN: 刚初始化的工作区 D
+          - WHEN: 运行 wa-cli new no-such-genre my-post --dir D --json
+          - THEN: valid 为 false，diagnostics 中有一条错误码为 work.unknown-genre 的诊断，message 列出 minimal；D/.writing-anything/works/ 下没有 my-post，退出码为 1
+        new-existing-work:
+          - GIVEN: 已用 wa-cli new minimal my-post --dir D 创建作品
+          - WHEN: 再次运行 wa-cli new minimal my-post --dir D --json
+          - THEN: diagnostics 中有一条错误码为 work.exists、path 为 .writing-anything/works/my-post 的诊断；work.yaml 与运行前逐字节相同，退出码为 1
+        new-invalid-slug:
+          - GIVEN: 刚初始化的工作区 D
+          - WHEN: 运行 wa-cli new minimal My_Post --dir D --json
+          - THEN: diagnostics 中有一条错误码为 artifact.schema-violation、field 为 id 的诊断；works/ 下没有新建目录，退出码为 1
+        new-no-workspace:
+          - GIVEN: 一个不含 .writing-anything/ 的目录 D
+          - WHEN: 运行 wa-cli new minimal my-post --dir D --json
+          - THEN: diagnostics 中有一条错误码为 workspace.not-found 的诊断，D 下没有新建任何文件，退出码为 1
+    work-validation:
+      strength: MUST
+      statement: 作品产物 work.yaml 必须符合作品的 JSON Schema，并满足：id 等于作品目录名，否则报告 work.id-mismatch（field 为 id）；genre 是存在的文体，否则报告 work.unknown-genre（field 为 genre）；根单元的 type 是文体的第一个单元类型，否则报告 work.root-type-mismatch（field 为 type）；每个单元的 type 是文体声明的单元类型，否则报告 work.unknown-unit-type；子单元的 type 出现在父单元类型的 children 中，否则报告 work.child-type-not-allowed（message 列出允许的类型）；stage 是文体声明的阶段 id 或保留的终点 done，否则报告 work.unknown-stage；单元 id 在作品内唯一且不等于作品 id，否则报告 artifact.duplicate-id。这些诊断的 path 为该 work.yaml，field 为出错字段的点分路径（如 units[0].units[1].type）；wa-cli validate 整体校验与 wa-cli validate <path> 都执行这些检查，发现问题时退出码为 1。
+      scenarios:
+        single-work:
+          - GIVEN: 已用 wa-cli new minimal my-post --dir D 创建作品
+          - WHEN: 运行 wa-cli validate .writing-anything/works/my-post/work.yaml --dir D --json
+          - THEN: valid 为 true，checked 只含 .writing-anything/works/my-post/work.yaml，退出码为 0
+        unknown-unit-type:
+          - GIVEN: 作品 my-post 的 work.yaml 中 units[0] 的 type 为 chapter，minimal 文体没有声明 chapter
+          - WHEN: 运行 wa-cli validate --dir D --json
+          - THEN: diagnostics 中有一条错误码为 work.unknown-unit-type、path 为 .writing-anything/works/my-post/work.yaml、field 为 units[0].type 的诊断，退出码为 1
+        child-type-not-allowed:
+          - GIVEN: 作品 my-post 的 units[0] 是 section，其 units[0] 也是 section，minimal 文体中 section 没有声明 children
+          - WHEN: 运行 wa-cli validate --dir D --json
+          - THEN: diagnostics 中有一条错误码为 work.child-type-not-allowed、field 为 units[0].units[0].type 的诊断，退出码为 1
+        unknown-stage:
+          - GIVEN: 作品 my-post 的 work.yaml 中 stage 为 bogus
+          - WHEN: 运行 wa-cli validate --dir D --json
+          - THEN: diagnostics 中有一条错误码为 work.unknown-stage、field 为 stage 的诊断，退出码为 1
+        duplicate-unit-id:
+          - GIVEN: 作品 my-post 的 units 中有两个 id 为 intro 的单元
+          - WHEN: 运行 wa-cli validate --dir D --json
+          - THEN: diagnostics 中有一条错误码为 artifact.duplicate-id、field 为 units[1].id 的诊断，退出码为 1
+        id-mismatch:
+          - GIVEN: .writing-anything/works/my-post/work.yaml 中 id 为 other
+          - WHEN: 运行 wa-cli validate --dir D --json
+          - THEN: diagnostics 中有一条错误码为 work.id-mismatch、field 为 id 的诊断，退出码为 1
+        root-type-mismatch:
+          - GIVEN: 作品 my-post 的 work.yaml 中根单元 type 为 section
+          - WHEN: 运行 wa-cli validate --dir D --json
+          - THEN: diagnostics 中有一条错误码为 work.root-type-mismatch、field 为 type 的诊断，退出码为 1
+    unit-reference:
+      strength: MUST
+      statement: 接受 <unit> 或 <parent> 参数的命令必须接受单元引用（Unit Reference）：<work> 表示该作品的根单元，<work>/<unit-id> 表示该作品中任意深度的、id 为 unit-id 的单元，不需要写出层级路径。作品不存在时报告错误码 work.not-found，作品中没有该单元时报告 unit.not-found；两者的 next 都包含 wa-cli status --dir <dir> --json，退出码为 1，且不修改任何文件。作品目录是符号链接时视为作品不存在，wa-cli 不跟随它读写项目目录之外的文件。
+      scenarios:
+        unit-not-found:
+          - GIVEN: 已用 wa-cli new minimal my-post --dir D 创建作品，没有 id 为 nope 的单元
+          - WHEN: 运行 wa-cli advance my-post/nope --dir D --json
+          - THEN: valid 为 false，diagnostics 中有一条错误码为 unit.not-found 的诊断，其 next 包含 wa-cli status 命令，退出码为 1
+        work-not-found:
+          - GIVEN: 刚初始化的工作区 D
+          - WHEN: 运行 wa-cli advance nope --dir D --json
+          - THEN: diagnostics 中有一条错误码为 work.not-found 的诊断，退出码为 1
+        child-reference:
+          - GIVEN: 作品 my-post 已有子单元 intro
+          - WHEN: 运行 wa-cli next my-post/intro --dir D --json
+          - THEN: steps 只含 unit 为 my-post/intro 的一项，其 stage 为 brief，退出码为 0
+    unit-add:
+      strength: MUST
+      statement: wa-cli unit add <parent> <type> <id> 必须在 parent 所指单元的子单元末尾追加一个单元：id 为 id，type 为 type，stage 为文体的第一个阶段，units 为空数组；只修改 work.yaml 中的该处，保留其他内容与 YAML 注释。成功时 changedPaths 为该 work.yaml，--json 输出的 unit 字段含 unit（新单元的引用）、type、parent（父单元的引用）与 stage，退出码为 0。type 不在父单元类型的 children 中（包括文体未声明的类型）时报告 work.child-type-not-allowed（message 列出允许的类型）；id 不符合 id 格式时报告 artifact.schema-violation；id 与作品中已有单元或作品 id 相同时报告 artifact.duplicate-id；父单元或其 units 经由 YAML 锚点、别名或合并键得到时报告 work.anchored-value；这些情况都不修改文件，退出码为 1。
+      scenarios:
+        add-section:
+          - GIVEN: 已用 wa-cli new minimal my-post --dir D 创建作品，作者在 work.yaml 中加了一行注释
+          - WHEN: 运行 wa-cli unit add my-post section intro --dir D --json
+          - THEN: work.yaml 的 units 为一个 id 为 intro、type 为 section、stage 为 brief 的单元，注释保留；unit.unit 为 my-post/intro，unit.parent 为 my-post；changedPaths 为 [.writing-anything/works/my-post/work.yaml]，退出码为 0
+        add-disallowed-type:
+          - GIVEN: 已用 wa-cli new minimal my-post --dir D 创建作品
+          - WHEN: 运行 wa-cli unit add my-post article nested --dir D --json
+          - THEN: diagnostics 中有一条错误码为 work.child-type-not-allowed 的诊断，message 列出 section；work.yaml 与运行前逐字节相同，退出码为 1
+        add-under-leaf:
+          - GIVEN: 作品 my-post 已有子单元 intro（type 为 section）
+          - WHEN: 运行 wa-cli unit add my-post/intro section deep --dir D --json
+          - THEN: diagnostics 中有一条错误码为 work.child-type-not-allowed 的诊断，work.yaml 不变，退出码为 1
+        add-duplicate-id:
+          - GIVEN: 作品 my-post 已有子单元 intro
+          - WHEN: 运行 wa-cli unit add my-post section intro --dir D --json
+          - THEN: diagnostics 中有一条错误码为 artifact.duplicate-id 的诊断，work.yaml 不变，退出码为 1
+        add-undeclared-type:
+          - GIVEN: 已用 wa-cli new minimal my-post --dir D 创建作品，minimal 文体没有声明 chapter
+          - WHEN: 运行 wa-cli unit add my-post chapter c1 --dir D --json
+          - THEN: diagnostics 中有一条错误码为 work.child-type-not-allowed 的诊断，message 列出 section；work.yaml 不变，退出码为 1
+    advance-stage:
+      strength: MUST
+      statement: wa-cli advance <unit> 必须按作品文体声明的阶段序列推进单元。当前阶段的每个必需产物（Required Artifact）a 都要求单元目录下存在 a.yaml 或 a.md；根单元的单元目录为 .writing-anything/works/<work>/，其他单元为 .writing-anything/works/<work>/units/<unit-id>/。全部存在时把该单元的 stage 改为下一阶段，当前为最后一个阶段时改为保留的终点 done；只修改该单元的 stage，保留 work.yaml 的其他内容与 YAML 注释；changedPaths 为该 work.yaml，--json 输出的 unit 字段含 unit、type、previousStage 与 stage，退出码为 0。有必需产物缺失时必须拒绝推进、不修改文件，为每个缺失的产物给出一条错误码为 lifecycle.missing-artifact 的诊断（path 为单元目录，message 列出 a.yaml 与 a.md，next 包含 wa-cli next <unit> --dir <dir> --json），退出码为 1。单元的 stage 已是 done 时报告 lifecycle.already-done，退出码为 1。work.yaml 不通过作品校验时报告其诊断且不修改文件；目标单元或其 stage 经由 YAML 锚点、别名或合并键得到时报告 work.anchored-value，不修改文件，退出码为 1。文体不得声明 id 为 done 的阶段。
+      scenarios:
+        advance-to-next:
+          - GIVEN: 已用 wa-cli new minimal my-post --dir D 创建作品，D/.writing-anything/works/my-post/brief.yaml 存在
+          - WHEN: 运行 wa-cli advance my-post --dir D --json
+          - THEN: work.yaml 的 stage 为 draft；unit.previousStage 为 brief，unit.stage 为 draft；changedPaths 为 [.writing-anything/works/my-post/work.yaml]，退出码为 0
+        markdown-artifact:
+          - GIVEN: 作品 my-post 的 stage 为 draft，D/.writing-anything/works/my-post/draft.md 存在
+          - WHEN: 运行 wa-cli advance my-post --dir D --json
+          - THEN: work.yaml 的 stage 为 review，退出码为 0
+        missing-artifact:
+          - GIVEN: 刚用 wa-cli new minimal my-post --dir D 创建的作品，没有 brief.yaml 与 brief.md
+          - WHEN: 运行 wa-cli advance my-post --dir D --json
+          - THEN: valid 为 false，diagnostics 中有一条错误码为 lifecycle.missing-artifact、path 为 .writing-anything/works/my-post 的诊断，message 含 brief.yaml 与 brief.md，next 包含 wa-cli next my-post 命令；work.yaml 与运行前逐字节相同，退出码为 1
+        advance-to-done:
+          - GIVEN: 作品 my-post 的 stage 为 review（minimal 的最后一个阶段），review.yaml 存在
+          - WHEN: 运行 wa-cli advance my-post --dir D --json
+          - THEN: work.yaml 的 stage 为 done，unit.stage 为 done，退出码为 0
+        already-done:
+          - GIVEN: 作品 my-post 的 stage 为 done
+          - WHEN: 运行 wa-cli advance my-post --dir D --json
+          - THEN: diagnostics 中有一条错误码为 lifecycle.already-done 的诊断，work.yaml 不变，退出码为 1
+        child-unit-directory:
+          - GIVEN: 作品 my-post 有子单元 intro，D/.writing-anything/works/my-post/brief.yaml 存在，但 D/.writing-anything/works/my-post/units/intro/ 下没有 brief 产物
+          - WHEN: 运行 wa-cli advance my-post/intro --dir D --json
+          - THEN: diagnostics 中有一条错误码为 lifecycle.missing-artifact、path 为 .writing-anything/works/my-post/units/intro 的诊断，退出码为 1
+        preserves-comments:
+          - GIVEN: 作品 my-post 的 work.yaml 中有作者写的注释，brief.yaml 存在
+          - WHEN: 运行 wa-cli advance my-post --dir D --json
+          - THEN: 注释与除 stage 以外的字段不变，退出码为 0
+        invalid-work:
+          - GIVEN: 作品 my-post 的 work.yaml 中 stage 为 bogus
+          - WHEN: 运行 wa-cli advance my-post --dir D --json
+          - THEN: diagnostics 中有一条错误码为 work.unknown-stage 的诊断，work.yaml 不变，退出码为 1
+    independent-units:
+      strength: MUST
+      statement: 作品中的每个单元（含根单元与各级子单元）都必须按文体的同一阶段序列独立推进：推进一个单元不得修改其他单元的 stage，推进父单元不检查子单元的阶段，推进子单元也不检查父单元的阶段。
+      scenarios:
+        child-advance-isolated:
+          - GIVEN: 作品 my-post 的 stage 为 brief，子单元 intro 的 stage 为 brief，D/.writing-anything/works/my-post/units/intro/brief.yaml 存在
+          - WHEN: 运行 wa-cli advance my-post/intro --dir D --json
+          - THEN: intro 的 stage 为 draft，my-post 的 stage 仍为 brief，退出码为 0
+        parent-ignores-children:
+          - GIVEN: 作品 my-post 的 brief.yaml 存在，子单元 intro 的 stage 为 brief
+          - WHEN: 运行 wa-cli advance my-post --dir D --json
+          - THEN: my-post 的 stage 为 draft，intro 的 stage 仍为 brief，退出码为 0
+    next-steps:
+      strength: MUST
+      statement: wa-cli next [<unit>] 必须只读地输出下一步：--json 输出 steps 数组，未给出 unit 时包含工作区中所有可加载作品里 stage 不为 done 的单元（按作品 id 排序、单元树先序），给出 unit 时只含该单元。每项含 unit（单元引用）、stage、blockers、action 与 commands。blockers 为阻塞项（Blocker）数组，每项含 code、artifact、path 与 message，本变更中阻塞项只有缺失的必需产物（code 为 lifecycle.missing-artifact）；action 为人读说明；commands 为可以直接运行、不含占位符的 wa-cli 命令：没有阻塞项时为 [wa-cli advance <unit> --dir <dir> --json]，被缺失产物阻塞时只列出为该产物登记的生成命令，尚未登记时为空数组，此时 action 列出所缺产物与期望的文件路径。给出的单元已是 done 时，该项 blockers 与 commands 为空数组。changedPaths 为空数组；有作品不通过作品校验时报告其诊断、valid 为 false、退出码为 1，其他作品照常列出；否则退出码为 0。不加 --json 时以人读文本输出同样的信息。
+      scenarios:
+        next-blocked:
+          - GIVEN: 刚用 wa-cli new minimal my-post --dir D 创建的作品
+          - WHEN: 运行 wa-cli next --dir D --json
+          - THEN: steps 只含一项：unit 为 my-post，stage 为 brief，blockers 中有一条 code 为 lifecycle.missing-artifact、artifact 为 brief 的阻塞项，commands 为空数组，action 提到 brief.yaml；valid 为 true，changedPaths 为空数组，退出码为 0
+        next-unblocked:
+          - GIVEN: 同上，D/.writing-anything/works/my-post/brief.yaml 已存在
+          - WHEN: 运行 wa-cli next my-post --dir D --json
+          - THEN: steps 只含 my-post 一项，blockers 为空数组，commands 只含一条 wa-cli advance my-post 命令，退出码为 0
+        next-skips-done:
+          - GIVEN: 作品 my-post 的 stage 为 done，子单元 intro 的 stage 为 draft
+          - WHEN: 运行 wa-cli next --dir D --json
+          - THEN: steps 只含 unit 为 my-post/intro 的一项，退出码为 0
+        next-read-only:
+          - GIVEN: 含作品的合法工作区
+          - WHEN: 运行 wa-cli next --dir D --json
+          - THEN: changedPaths 为空数组，工作区内所有文件的内容与修改时间不变
+  MODIFIED: {}
+  REMOVED: {}

@@ -138,6 +138,15 @@ func TestCheckGenre(t *testing.T) {
 	}
 }
 
+// 阶段 id done 保留为生命周期终点。
+func TestCheckGenreReservedStage(t *testing.T) {
+	g := &Genre{ID: "g", UnitTypes: []UnitType{{ID: "a"}}, Stages: []Stage{{ID: "draft"}, {ID: "done"}}}
+	ps := checkGenre(g)
+	if len(ps) != 1 || ps[0].Code != "genre.reserved-stage-id" || ps[0].Field != "stages[1].id" {
+		t.Fatalf("problems = %+v, want one genre.reserved-stage-id at stages[1].id", ps)
+	}
+}
+
 func TestCheckWorkspacePacks(t *testing.T) {
 	root := project(t, "house.yaml", "office.yaml")
 	// 隐藏文件（如编辑器的临时文件）不当作规范包。

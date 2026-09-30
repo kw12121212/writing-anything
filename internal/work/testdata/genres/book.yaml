@@ -1,0 +1,12 @@
+# 测试文体：多层单元树 book → part → chapter → scene，只在 internal/work 的测试中使用。
+schema_version: 1
+id: book
+title: 测试长篇
+unit_types:
+  - {id: book, title: 书, children: [part]}
+  - {id: part, title: 部, children: [chapter]}
+  - {id: chapter, title: 章, children: [scene]}
+  - {id: scene, title: 场景}
+stages:
+  - {id: plan, title: 规划, required_artifacts: [plan]}
+  - {id: draft, title: 草稿, required_artifacts: [draft, notes]}

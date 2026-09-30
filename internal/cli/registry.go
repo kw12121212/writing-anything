@@ -75,7 +75,8 @@ var (
 type commandSet []*command
 
 // registry 登记 wa-cli 的全部命令。
-var registry = commandSet{helpCommand, versionCommand, initCommand, validateCommand, statusCommand, configSetCommand, configResolvedCommand}
+var registry = commandSet{helpCommand, versionCommand, initCommand, validateCommand, statusCommand, configSetCommand, configResolvedCommand,
+	newCommand, unitAddCommand, advanceCommand, nextCommand}
 
 func (s commandSet) lookup(name string) *command {
 	for _, c := range s {

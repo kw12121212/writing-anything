@@ -1,0 +1,35 @@
+schema: strict-spec-driven/delta-tech/v1
+schema_version: 1
+artifact_type: delta_tech
+schema_file: templates/strict-spec-driven/schemas/delta-tech.yaml
+target_standard: workspace-artifacts
+operations:
+  ADDED:
+    validated-path-segments:
+      strength: MUST
+      statement: 由命令参数（单元引用、作品 slug、单元 id）拼接工作区路径前，每个路径段都必须先按 common.schema.json 的 id 格式校验，不匹配时报告对应的 not-found 或 artifact.schema-violation，诊断不填 path，也不访问该路径；作品目录等由参数定位的目录必须是真实目录，不跟随符号链接。
+      rationale: Agent 会对不可信的输入与工作区自动运行命令；未经校验的路径段（如 ../x）或符号链接会让读写逃出项目目录，而诊断与 changedPaths 仍报告工作区内的路径。
+      enforcement:
+        method: test
+        detail: internal/work 的 TestResolve（../x 用例）、TestCreate（非法 slug）与 TestSymlinkedWorkDir 断言不合法的路径段与符号链接不会被读写。
+    single-blocker-source:
+      strength: MUST
+      statement: 单元的阻塞项（Blocker）只能由 internal/work 的 Work.Blockers 计算；advance 的拒绝、next 的 steps 与 status 的 units 都必须通过它得到阻塞项，不得在命令中另行判断；新增阻塞来源（如阻塞决策、写作简报关卡）时在 Work.Blockers 中追加。
+      rationale: 同一单元在 advance、next 与 status 中给出不同的阻塞结论会让 Agent 无所适从；只有一处计算，后续的决策队列与关卡上线时三条命令才会同时生效，与 resolved-sources 对合并结果的约束一致。
+      enforcement:
+        method: review
+        detail: 审查时确认新增或修改的命令只通过 Work.Blockers 读取阻塞项，新阻塞来源的测试同时覆盖 advance 与 next。
+      examples:
+        good:
+          - decision-queue 在 Work.Blockers 中追加未解决的阻塞决策，advance、next、status 无需修改即报告它
+        bad:
+          - 在 runAdvance 中单独检查决策队列，next 与 status 却看不到这个阻塞项
+  MODIFIED:
+    structured-edits:
+      strength: MUST
+      statement: 修改已有的结构化产物时，必须在 YAML 节点树上只改目标节点，保留其他字段与注释；目标节点或到达它途经的任一节点带有 YAML 锚点、是别名或所在映射含合并键时不修改；写出前必须对编码结果重新解析，并执行 Schema 校验与该产物类型的领域校验（如作品的文体检查），无法解析或任一校验失败时不写；取值未变时不写文件，changedPaths 为空。
+      rationale: 作者会直接编辑结构化产物并写注释，整体重写会丢失这些内容；经由锚点、别名或合并键共享的节点被修改时会同时改动其他位置；只做 Schema 校验会写出结构合法但领域上不可用的产物（如子单元类型不被允许），写前复查整套校验才能保证 wa-cli 不会把可用的文件改坏；取值未变不写，changedPaths 才如实反映变更。
+      enforcement:
+        method: test
+        detail: internal/workspace 的 TestSetConfigPreservesComments、TestSetConfigRejects、TestSetConfigSameValue 与 TestSetConfigAnchors，internal/work 的 TestAdvance、TestAddUnit 与 TestAnchoredEdits 覆盖注释保留、写前复查、取值未变与锚点、别名、合并键。
+  REMOVED: {}

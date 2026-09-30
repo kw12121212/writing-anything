@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"path/filepath"
 	"slices"
 	"sort"
 	"strings"
@@ -262,10 +263,12 @@ func TestRegistryConsistency(t *testing.T) {
 			if got["valid"] != true {
 				t.Errorf("valid = %v, want true", got["valid"])
 			}
-			for _, k := range []string{"diagnostics", "changedPaths"} {
-				if arr, ok := got[k].([]any); !ok || len(arr) != 0 {
-					t.Errorf("%s = %#v, want empty array", k, got[k])
-				}
+			if arr, ok := got["diagnostics"].([]any); !ok || len(arr) != 0 {
+				t.Errorf("diagnostics = %#v, want empty array", got["diagnostics"])
+			}
+			// 只能通过变更产物才能成功的命令，其样例变更了临时工作区中的产物（cli-contract/sample-invocation）。
+			if arr, ok := got["changedPaths"].([]any); !ok || (len(arr) != 0) != mutatingSamples[d.Name] {
+				t.Errorf("changedPaths = %#v, want %s array", got["changedPaths"], map[bool]string{true: "a non-empty", false: "an empty"}[mutatingSamples[d.Name]])
 			}
 			// 声明的每个参数都被解析器接受。
 			c := registry.lookup(d.Name)
@@ -307,10 +310,24 @@ func TestRegistryConsistency(t *testing.T) {
 	}
 }
 
-// sampleArgs 返回命令的一次成功且不变更任何产物的调用；工作区命令在已初始化的临时工作区中运行。
+// mutatingSamples 列出只能通过变更产物才能成功的命令；它们的样例在临时工作区中变更产物。
+var mutatingSamples = map[string]bool{"new": true, "unit add": true, "advance": true}
+
+// sampleArgs 返回命令的一次成功调用：除 mutatingSamples 中的命令外都不变更任何产物；工作区命令在已初始化的
+// 临时工作区中运行。
 func sampleArgs(t *testing.T, name string) []string {
 	t.Helper()
 	switch name {
+	case "new":
+		return []string{"new", "minimal", "my-post", "--dir", newWorkspace(t), "--json"}
+	case "unit add":
+		return []string{"unit", "add", "my-post", "section", "intro", "--dir", newWork(t), "--json"}
+	case "advance":
+		dir := newWork(t)
+		writeFile(t, filepath.Join(dir, ".writing-anything", "works", "my-post", "brief.yaml"), "k: v\n")
+		return []string{"advance", "my-post", "--dir", dir, "--json"}
+	case "next":
+		return []string{"next", "--dir", newWork(t), "--json"}
 	case "help", "version":
 		return []string{name, "--json"}
 	case "init", "validate", "status":

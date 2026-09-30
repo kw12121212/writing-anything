@@ -1,0 +1,13 @@
+# 单层单元树：文章 → 节。
+schema_version: 1
+id: my-post
+genre: minimal
+type: article
+stage: brief # 作者的行尾注释
+units:
+  - id: intro
+    type: section
+    stage: brief
+  - id: body
+    type: section
+    stage: review

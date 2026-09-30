@@ -19,6 +19,11 @@ categories:
       status: active
       occurrences: 1
       path: .strict-spec-driven/lessons/coding/nil-null-1d1e16.yaml
+    lesson-c2d85f:
+      title: 复用整体校验做写前检查时，错误码取决于整体校验的检查顺序
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/coding/lesson-c2d85f.yaml
   documentation:
     must-must-6af326:
       title: 修改一条 MUST 需求时，要检查同一规格里相邻的 MUST 是否因此冲突

@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "作品",
+  "description": "作品（Work）本身是单元树（Unit Tree）的根单元：顶层的 type、stage 与 units 描述根单元。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "id", "genre", "type", "stage"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "id": {"$ref": "common.schema.json#/$defs/id"},
+    "genre": {"$ref": "common.schema.json#/$defs/id"},
+    "type": {"$ref": "common.schema.json#/$defs/id"},
+    "stage": {"$ref": "common.schema.json#/$defs/id"},
+    "units": {"$ref": "#/$defs/units"}
+  },
+  "$defs": {
+    "units": {"type": "array", "items": {"$ref": "#/$defs/unit"}},
+    "unit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type", "stage"],
+      "properties": {
+        "id": {"$ref": "common.schema.json#/$defs/id"},
+        "type": {"$ref": "common.schema.json#/$defs/id"},
+        "stage": {"$ref": "common.schema.json#/$defs/id"},
+        "units": {"$ref": "#/$defs/units"}
+      }
+    }
+  }
+}

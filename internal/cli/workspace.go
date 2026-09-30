@@ -10,6 +10,7 @@ import (
 	"github.com/kw12121212/writing-anything/internal/catalog"
 	"github.com/kw12121212/writing-anything/internal/resolve"
 	"github.com/kw12121212/writing-anything/internal/schema"
+	"github.com/kw12121212/writing-anything/internal/work"
 	"github.com/kw12121212/writing-anything/internal/workspace"
 )
 
@@ -41,13 +42,14 @@ var validateCommand = &command{
 
 var statusCommand = &command{
 	name:    "status",
-	summary: "汇总工作区的配置、素材与作品数量以及校验结果",
+	summary: "汇总工作区的配置、素材与作品数量、每个单元（Unit）的阶段（Stage）与阻塞项（Blocker），以及校验结果",
 	flags:   []flagSpec{dirFlag},
 	outputKeys: []outputKey{
 		{"workspace", "相对项目目录的工作区路径"},
 		{"config", "配置摘要，含 language、defaultGenre、packs、gateLevel；配置无法解析时为 null"},
 		{"sources", "sources/ 下的直接条目数，不含隐藏条目"},
 		{"works", "works/ 下的直接条目数，不含隐藏条目"},
+		{"units", "按作品与单元树先序列出的单元，每项含 unit、work、type、parent、stage、blockers 与 commands"},
 	},
 	exitCodes: standardExitCodes,
 	run:       runStatus,
@@ -91,6 +93,7 @@ type statusResult struct {
 	Config    *workspace.Config `json:"config"`
 	Sources   int               `json:"sources"`
 	Works     int               `json:"works"`
+	Units     []unitView        `json:"units"`
 }
 
 type configResolvedResult struct {
@@ -155,9 +158,12 @@ func runValidate(inv *invocation) int {
 			checked, problems = workspace.ValidateArtifact(dir, inv.args[0])
 			if len(checked) == 1 && len(problems) == 0 {
 				problems = resolve.CheckArtifact(dir, checked[0])
+				if schema.KindFor(checked[0]).Name == "work" {
+					problems = append(problems, work.CheckArtifact(dir, checked[0])...)
+				}
 			}
 		} else {
-			checked, problems = checkWorkspace(dir)
+			checked, _, problems = checkWorkspace(dir)
 		}
 		res.Checked = append(res.Checked, checked...)
 	}
@@ -173,12 +179,14 @@ func runValidate(inv *invocation) int {
 
 func runStatus(inv *invocation) int {
 	dir := projectDir(inv)
-	res := &statusResult{Workspace: workspace.Dir}
+	res := &statusResult{Workspace: workspace.Dir, Units: []unitView{}}
 	problems := workspace.Require(dir)
 	if problems == nil {
 		res.Config, _ = workspace.Load(dir)
-		_, problems = checkWorkspace(dir)
+		var works []*work.Work
+		_, works, problems = checkWorkspace(dir)
 		res.Sources, res.Works = workspace.Summary(dir)
+		res.Units = unitViews(dir, works)
 	}
 	res.Diagnostics = diagnostics(problems, dir)
 	return finish(inv, res, func(w io.Writer) error {
@@ -198,6 +206,23 @@ func runStatus(inv *invocation) int {
 			fmt.Fprintf(&b, "语言：%s\n默认文体（Genre）：%s\n规范包（Pack）：%s\n关卡强度（Gate Level）：%s\n", c.Language, genre, packs, c.GateLevel)
 		}
 		fmt.Fprintf(&b, "素材（Source）：%d\n作品（Work）：%d\n", res.Sources, res.Works)
+		if len(res.Units) > 0 {
+			b.WriteString("单元（Unit）：\n")
+		}
+		for _, u := range res.Units {
+			indent := strings.Repeat("  ", u.depth+1)
+			fmt.Fprintf(&b, "%s%s（%s）：阶段 %s", indent, u.Unit, u.Type, u.Stage)
+			if len(u.Blockers) > 0 {
+				fmt.Fprintf(&b, "，阻塞项 %d 项", len(u.Blockers))
+			}
+			b.WriteString("\n")
+			for _, bl := range u.Blockers {
+				fmt.Fprintf(&b, "%s  阻塞项：%s\n", indent, bl.Message)
+			}
+			for _, c := range u.Commands {
+				fmt.Fprintf(&b, "%s  下一步：%s\n", indent, c)
+			}
+		}
 		if !hasError(res.Diagnostics) {
 			b.WriteString("校验通过\n")
 		}
@@ -345,11 +370,14 @@ func resolvedText(r *resolve.Resolved) string {
 	return b.String()
 }
 
-// checkWorkspace 校验整个工作区：工作区结构与配置，以及规范包文件、文体与规范包引用和合并问题。
-func checkWorkspace(dir string) (checked []string, problems []workspace.Problem) {
+// checkWorkspace 校验整个工作区：工作区结构与配置，规范包文件、文体与规范包引用和合并问题，以及每个作品。
+// 同时返回能加载的作品。
+func checkWorkspace(dir string) (checked []string, works []*work.Work, problems []workspace.Problem) {
 	checked, problems = workspace.Check(dir)
 	more, ps := resolve.Check(dir)
-	return append(checked, more...), append(problems, ps...)
+	works, wchecked, wps := work.LoadAll(dir)
+	checked = append(append(checked, more...), wchecked...)
+	return checked, works, append(append(problems, ps...), wps...)
 }
 
 func projectDir(inv *invocation) string {
@@ -374,7 +402,11 @@ func diagnostics(problems []workspace.Problem, dir string) []Diagnostic {
 		if len(loc) > 0 {
 			msg = strings.TrimSpace(msg + " " + strings.Join(loc, " "))
 		}
-		msg += "：" + p.Message
+		if msg == "" {
+			msg = p.Message // 没有位置可写时不加前导的「：」
+		} else {
+			msg += "：" + p.Message
+		}
 		if p.Origin != "" {
 			// 内置产物没有工作区路径：以出处说明开头，位置放在末尾。
 			msg = p.Origin + "：" + p.Message
@@ -405,9 +437,20 @@ func next(p workspace.Problem, dir string) []string {
 		// 内置产物的问题只会在合并时出现，用整体校验复查。
 		validate = validateAll
 	}
+	status := shellCommand("wa-cli", "status", "--dir", dir, "--json")
 	switch p.Code {
-	case workspace.CodeNotFound, workspace.CodeMissingDirectory, schema.CodeNotFound:
+	case schema.CodeNotFound:
+		if k := schema.KindFor(p.Path); k != nil && k.Name == "work" {
+			// 作品目录中缺少 work.yaml：init 不会补齐它，作品只能用 wa-cli new 创建。
+			return []string{"wa-cli help new --json", validateAll}
+		}
 		return []string{initCmd}
+	case workspace.CodeNotFound, workspace.CodeMissingDirectory:
+		return []string{initCmd}
+	case work.CodeNotFound, work.CodeUnitNotFound, work.CodeExists, work.CodeAlreadyDone:
+		return []string{status}
+	case work.CodeMissingArtifact:
+		return []string{shellCommand("wa-cli", "next", work.RefOf(p.Path), "--dir", dir, "--json")}
 	case schema.CodeSchemaViolation:
 		var out []string
 		switch key := configKey(p); key {
@@ -436,6 +479,9 @@ func next(p workspace.Problem, dir string) []string {
 	case workspace.CodeUnknownConfigKey, workspace.CodeConfigKept, workspace.CodeAnchoredValue:
 		return []string{"wa-cli help config set --json"}
 	case workspace.CodeWriteFailed, workspace.CodeReadFailed:
+		if strings.HasPrefix(p.Path, workspace.WorksPath+"/") {
+			return []string{status}
+		}
 		if p.Path != workspace.ConfigPath {
 			return []string{initCmd}
 		}

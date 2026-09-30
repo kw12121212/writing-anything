@@ -27,7 +27,11 @@ const (
 	CodeUnknownUnitType = "genre.unknown-unit-type"
 	CodePackIDMismatch  = "pack.id-mismatch"
 	CodePackIDConflict  = "pack.id-conflict"
+	CodeReservedStageID = "genre.reserved-stage-id"
 )
+
+// StageDone 是保留的阶段 id，表示单元走完了全部阶段；文体不得声明同名阶段。
+const StageDone = "done"
 
 // 规范包的出处。
 const (
@@ -249,6 +253,11 @@ func checkGenre(g *Genre) []workspace.Problem {
 			if !declared[c] {
 				add(CodeUnknownUnitType, fmt.Sprintf("unit_types[%d].children[%d]", i, j), "子单元类型 "+c+" 未声明")
 			}
+		}
+	}
+	for i, s := range g.Stages {
+		if s.ID == StageDone {
+			add(CodeReservedStageID, fmt.Sprintf("stages[%d].id", i), "阶段 id "+StageDone+" 保留为生命周期终点，文体不得声明")
 		}
 	}
 	for _, d := range duplicates(len(g.Stages), func(i int) string { return g.Stages[i].ID }) {

@@ -1,0 +1,5 @@
+schema_version: 1
+id: my-post
+genre: minimal
+type: article
+stage: done

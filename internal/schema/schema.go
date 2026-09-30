@@ -47,6 +47,7 @@ var kinds = []*Kind{
 	newKind("config", ".writing-anything/config.yaml", "config.schema.json"),
 	newKind("pack", ".writing-anything/packs/*.yaml", "pack.schema.json"),
 	newKind("genre", "", "genre.schema.json"),
+	newKind("work", ".writing-anything/works/*/work.yaml", "work.schema.json"),
 }
 
 func newKind(name, pattern, file string) *Kind {

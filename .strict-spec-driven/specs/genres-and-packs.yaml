@@ -120,7 +120,7 @@ requirements:
         - THEN: resolved.packs 只含 house，不含 default
   duplicate-entries:
     strength: MUST
-    statement: 同一个规范包中 glossary 或 banned_terms 的 term 重复、rubric 的 id 重复，或同一个文体中 unit_types、stages、rubric 的 id 重复时，必须报告错误码 artifact.duplicate-id，field 指向重复出现的那一项；文体的单元类型 children 引用未声明的单元类型时报告 genre.unknown-unit-type。两种情况都以退出码 1 退出。
+    statement: 同一个规范包中 glossary 或 banned_terms 的 term 重复、rubric 的 id 重复，或同一个文体中 unit_types、stages、rubric 的 id 重复时，必须报告错误码 artifact.duplicate-id，field 指向重复出现的那一项；文体的单元类型 children 引用未声明的单元类型时报告 genre.unknown-unit-type；文体声明 id 为 done 的阶段时报告 genre.reserved-stage-id（done 保留为生命周期终点，field 指向该阶段的 id）。三种情况都以退出码 1 退出。
     scenarios:
       duplicate-glossary-term:
         - GIVEN: .writing-anything/packs/house.yaml 的 glossary 中「规范包」出现两次

@@ -228,6 +228,9 @@ func packs(v string) *yaml.Node {
 	return seq
 }
 
+// Encode 把 YAML 文档编码为缩进两格的文本，保留注释。
+func Encode(doc *yaml.Node) ([]byte, error) { return encode(doc) }
+
 func encode(doc *yaml.Node) ([]byte, error) {
 	var b bytes.Buffer
 	enc := yaml.NewEncoder(&b)
@@ -240,6 +243,9 @@ func encode(doc *yaml.Node) ([]byte, error) {
 	}
 	return b.Bytes(), nil
 }
+
+// WriteFile 原子写入 root 下的产物 rel，所有产物写入都经过它（workspace-artifacts/atomic-writes）。
+func WriteFile(root, rel string, data []byte) error { return writeFile(abs(root, rel), data) }
 
 // writeFile 先写同目录的临时文件再重命名，避免留下写了一半的文件；覆盖已有文件时保留其权限。
 func writeFile(path string, data []byte) error {

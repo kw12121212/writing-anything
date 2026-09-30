@@ -246,6 +246,22 @@ func TestKindsForPacksAndGenres(t *testing.T) {
 	}
 }
 
+func TestKindForWorks(t *testing.T) {
+	if k := KindFor(".writing-anything/works/my-post/work.yaml"); k == nil || k.Name != "work" {
+		t.Fatalf("KindFor(works/my-post/work.yaml) = %+v", k)
+	}
+	for _, rel := range []string{".writing-anything/works/work.yaml", ".writing-anything/works/a/b/work.yaml", ".writing-anything/works/my-post/brief.yaml"} {
+		if k := KindFor(rel); k != nil {
+			t.Errorf("KindFor(%q) = %s, want nil", rel, k.Name)
+		}
+	}
+	// 嵌套单元的字段路径逐层写出下标。
+	ps := Named("work").Validate([]byte("schema_version: 1\nid: w\ngenre: minimal\ntype: article\nstage: brief\nunits:\n  - id: a\n    type: section\n    stage: brief\n    units:\n      - {id: b, type: section}\n"))
+	if len(ps) != 1 || ps[0].Code != "artifact.schema-violation" || ps[0].Field != "units[0].units[0].stage" {
+		t.Fatalf("problems = %+v, want one missing units[0].units[0].stage", ps)
+	}
+}
+
 // 可执行内容先于 Schema 校验报告，给出字段路径与行号；核心标签、合并键与别名不算可执行内容。
 func TestExecutable(t *testing.T) {
 	pack := Named("pack")

@@ -68,11 +68,16 @@ rules:
         - wa-cli config set gate_level <value> --dir .
   sample-invocation:
     strength: MUST
-    statement: 每条命令都必须在 internal/cli 的 sampleArgs 中登记一次成功且不变更产物的调用；工作区命令在临时工作区中通过 --dir 运行，测试不得在包目录中创建 .writing-anything/。
-    rationale: TestRegistryConsistency 依靠这些调用检查 --json 输出键与声明一致；不带 --dir 的工作区命令会在包目录中创建真实工作区。
+    statement: 每条命令都必须在 internal/cli 的 sampleArgs 中登记一次成功的调用：只读命令，以及能以取值不变的方式成功的命令（如 config set 设为当前值、init 重复运行），登记不变更产物的调用；只能通过变更产物才能成功的命令（如 new、unit add、advance）登记一次在临时工作区中变更产物的调用，并在 mutatingSamples 中列出。工作区命令在临时工作区中通过 --dir 运行，测试不得在包目录中创建 .writing-anything/。
+    rationale: TestRegistryConsistency 依靠这些调用检查 --json 输出键与声明一致；创建作品、追加单元与推进阶段的命令不存在不变更产物的成功调用，要求它们不变更产物会使这些命令无法登记；显式列出会变更产物的样例，测试才能对其 changedPaths 断言非空、对其他命令断言为空。不带 --dir 的工作区命令会在包目录中创建真实工作区。
     enforcement:
       method: test
-      detail: TestRegistryConsistency 对 help --json 列出的每条命令调用 sampleArgs，缺少登记时测试失败。
+      detail: TestRegistryConsistency 对 help --json 列出的每条命令调用 sampleArgs，缺少登记时测试失败；mutatingSamples 中的命令断言 changedPaths 为非空数组，其余命令断言为空数组。
+    examples:
+      good:
+        - sampleArgs 为 advance 返回一个已有作品与 brief.yaml 的临时工作区中的 advance 调用，并把 advance 列入 mutatingSamples
+      bad:
+        - 为 new 登记一次会报告 work.exists 的失败调用，以满足不变更产物的要求
   workspace-dir-flag:
     strength: MUST
     statement: 读写工作区的命令都必须声明 internal/cli 共享的 --dir 参数（项目目录，默认当前目录），只在该目录下寻找 .writing-anything/，不向上查找父目录；找不到工作区时报告 workspace.not-found，next 为 wa-cli init --dir <dir> --json。

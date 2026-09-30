@@ -1,0 +1,43 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: unit-tree-and-lifecycle
+  status: proposed
+summary:
+  what:
+    - 新增作品（Work）产物 .writing-anything/works/<work>/work.yaml：作品本身就是单元树（Unit Tree）的根单元（Root Unit），记录文体、根单元类型、当前阶段（Stage）与嵌套的子单元；单元类型与阶段序列都取自作品声明的文体（Genre），同时支持单层（文章 → 节）与多层（部 → 章 → 场景）两种数据形状。
+    - 新增 wa-cli new <genre> <slug> 创建作品，wa-cli unit add <parent> <type> <id> 在父单元下追加子单元；单元用单元引用（Unit Reference）<work> 或 <work>/<unit-id> 定位。
+    - 新增 wa-cli advance <unit>：按文体声明的阶段序列把单元推进到下一阶段，走完最后一个阶段后进入保留的终点 done；当前阶段的必需产物（Required Artifact）缺失时拒绝推进，并给出带错误码、产物路径与下一步命令的诊断。
+    - 新增 wa-cli next [<unit>]，扩展 wa-cli status：输出每个单元的当前阶段、阻塞项（Blocker）与下一步命令；wa-cli validate 同时校验每个作品的 work.yaml。
+  why:
+    - 里程碑 kernel-foundation 的完成标准要求能用 CLI 创建一篇文章单元，并通过 status / next 看到当前阶段与下一步命令；目前工作区只有配置、文体与规范包，works/ 下没有任何受 wa-cli 管理的产物，Agent 无法得知一篇文章进行到哪一步、下一步该做什么。
+    - 决策队列（decision-queue）、作者素材与出处（author-sources-and-provenance）、作者反馈（author-feedback）都依赖单元与阶段：阻塞决策要挂在单元上、正文要写进单元、反馈要锚定在单元的正文里；没有统一的单元树与生命周期（Lifecycle）状态机，它们只能各自定义单元与推进规则。
+    - 里程碑已确认生命周期阶段序列由文体声明、内核提供通用状态机与转换校验；本变更把 genre-and-pack-loading 已加载但尚无消费者的 unit_types 与 stages 真正用起来。
+scope:
+  in:
+    - internal/schema：新增 work 产物类型与 work.schema.json（schema_version、id、genre、type、stage、units；units 递归嵌套，每项含 id、type、stage、units），按 .writing-anything/works/*/work.yaml 识别，embed 打包
+    - 新的领域包 internal/work：加载与校验作品（id 与目录名一致、文体存在、单元类型已声明、子单元类型为父类型 children 所允许、根单元类型为文体的第一个单元类型、阶段已声明或为 done、单元 id 在作品内唯一且不等于作品 id）、解析单元引用、计算阻塞项、推进阶段与追加子单元；只返回结构化问题
+    - wa-cli new <genre> <slug>、wa-cli unit add <parent> <type> <id>、wa-cli advance <unit>、wa-cli next [<unit>] 四条命令：在命令注册表中声明参数、输出键与退出码，共享 --dir 与 --json；修改 work.yaml 时在 YAML 节点树上只改目标节点，写前重新校验，经 internal/workspace 的统一写入函数原子写入
+    - wa-cli validate：整体校验时校验 works/ 下每个作品目录的 work.yaml 并计入 checked，validate <path> 识别 work.yaml；wa-cli status：--json 输出新增 units 字段，按作品与单元树先序列出每个单元的引用、类型、父单元、阶段、阻塞项与下一步命令，人读文本以缩进树输出
+    - internal/catalog：阶段 id done 保留为生命周期终点，文体声明同名阶段时报告 genre.reserved-stage-id
+    - 测试夹具（Test Fixture）同时覆盖单层（minimal 文体的 article → section）与多层（testdata 中 book → part → chapter → scene 的测试文体）两种单元树数据形状
+    - 新增 units-and-lifecycle 主规格（delta spec），修改 workspace 主规格的 validate-workspace 与 status-summary；把新术语加入 docs/GLOSSARY.md
+    - 修改 cli-contract 技术标准的 sample-invocation 规则（delta tech）：只能通过变更产物才能成功的命令（new、unit add、advance）登记在临时工作区中变更产物的样例调用
+    - 修改 workspace-artifacts 技术标准（delta tech）：structured-edits 扩展到途经节点的锚点、别名与合并键以及写前领域校验，新增 validated-path-segments；修改 genres-and-packs 主规格的 duplicate-entries，登记 genre.reserved-stage-id
+  out:
+    - 决策队列与阻塞决策（wa-cli decision add / decisions / decide，由 decision-queue 负责）；本变更的阻塞项只有缺失的必需产物
+    - 写作简报、大纲、正文等具体产物的内容 Schema 与生成命令（brief set、outline、draft write 等由后续变更负责）；本变更只按文件是否存在判断必需产物
+    - 父单元状态由子单元汇总、在单元树中插入或移动单元、删除单元与改名（由 novel-multi-level-units 等后续变更负责）
+    - 关卡强度（Gate Level）对推进的影响、按单元类型声明不同的阶段序列、阶段回退
+    - 内置 tech-blog、novel 等面向作者的文体；多层单元树只通过测试文体与夹具验证
+    - wa-cli 调用 LLM
+unchanged_behavior:
+  - 输出信封（Output Envelope）字段 valid、diagnostics、changedPaths 与退出码约定 0/1/2 不变；已发布错误码的含义不变
+  - wa-cli init 创建的文件与目录不变；config set、config resolved 的参数、输出与诊断不变
+  - wa-cli status 已有的 workspace、config、sources、works 字段及其含义不变，只新增 units 字段
+  - 内置 minimal 文体与 default 规范包的内容不变；仓库根目录不创建 .writing-anything/；产品二进制不依赖 internal/tools/** 与 strict-spec-driven
+roadmap:
+  milestone: kernel-foundation
+  planned_change: unit-tree-and-lifecycle
