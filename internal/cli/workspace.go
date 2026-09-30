@@ -3,8 +3,12 @@ package cli
 import (
 	"fmt"
 	"io"
+	"maps"
+	"slices"
 	"strings"
 
+	"github.com/kw12121212/writing-anything/internal/catalog"
+	"github.com/kw12121212/writing-anything/internal/resolve"
 	"github.com/kw12121212/writing-anything/internal/schema"
 	"github.com/kw12121212/writing-anything/internal/workspace"
 )
@@ -62,6 +66,15 @@ var configSetCommand = &command{
 	run:        runConfigSet,
 }
 
+var configResolvedCommand = &command{
+	name:       "config resolved",
+	summary:    "按 文体（Genre）→ 规范包（Pack）→ 项目配置 合并生效的设置，并列出每项的来源",
+	flags:      []flagSpec{dirFlag},
+	outputKeys: []outputKey{{"resolved", "解析后配置（Resolved Config），含 genre、packs、unitTypes、stages、rules、glossary、bannedTerms、style、rubric，每项带 source；有 error 级诊断时为 null"}},
+	exitCodes:  standardExitCodes,
+	run:        runConfigResolved,
+}
+
 type initResult struct {
 	Result
 	Workspace string `json:"workspace"`
@@ -78,6 +91,11 @@ type statusResult struct {
 	Config    *workspace.Config `json:"config"`
 	Sources   int               `json:"sources"`
 	Works     int               `json:"works"`
+}
+
+type configResolvedResult struct {
+	Result
+	Resolved *resolve.Resolved `json:"resolved"`
 }
 
 type configSetResult struct {
@@ -135,8 +153,11 @@ func runValidate(inv *invocation) int {
 		var checked []string
 		if len(inv.args) == 1 {
 			checked, problems = workspace.ValidateArtifact(dir, inv.args[0])
+			if len(checked) == 1 && len(problems) == 0 {
+				problems = resolve.CheckArtifact(dir, checked[0])
+			}
 		} else {
-			checked, problems = workspace.Check(dir)
+			checked, problems = checkWorkspace(dir)
 		}
 		res.Checked = append(res.Checked, checked...)
 	}
@@ -156,7 +177,7 @@ func runStatus(inv *invocation) int {
 	problems := workspace.Require(dir)
 	if problems == nil {
 		res.Config, _ = workspace.Load(dir)
-		_, problems = workspace.Check(dir)
+		_, problems = checkWorkspace(dir)
 		res.Sources, res.Works = workspace.Summary(dir)
 	}
 	res.Diagnostics = diagnostics(problems, dir)
@@ -210,6 +231,127 @@ func runConfigSet(inv *invocation) int {
 	})
 }
 
+func runConfigResolved(inv *invocation) int {
+	dir := projectDir(inv)
+	res := &configResolvedResult{}
+	problems := workspace.Require(dir)
+	if problems == nil {
+		res.Resolved, problems = resolve.Resolve(dir)
+	}
+	res.Diagnostics = diagnostics(problems, dir)
+	return finish(inv, res, func(w io.Writer) error {
+		if res.Resolved == nil {
+			return nil
+		}
+		_, err := io.WriteString(w, resolvedText(res.Resolved))
+		return err
+	})
+}
+
+// resolvedText 以人读文本列出解析后配置的每一项，并注明来源层。
+func resolvedText(r *resolve.Resolved) string {
+	var b strings.Builder
+	from := func(source string) string { return "（来自 " + source + "）" }
+	if r.Genre == nil {
+		b.WriteString("文体（Genre）：未设置\n")
+	} else {
+		fmt.Fprintf(&b, "文体（Genre）：%s（%s）\n", r.Genre.ID, r.Genre.Origin)
+	}
+	b.WriteString("规范包（Pack），按应用顺序：\n")
+	for _, p := range r.Packs {
+		where := p.Origin
+		if p.Path != "" {
+			where += "，" + p.Path
+		}
+		fmt.Fprintf(&b, "  %s（%s）\n", p.ID, where)
+	}
+	section := func(title string, n int) bool {
+		if n == 0 {
+			fmt.Fprintf(&b, "%s：无\n", title)
+			return false
+		}
+		fmt.Fprintf(&b, "%s：\n", title)
+		return true
+	}
+	if section("单元类型（Unit Type）", len(r.UnitTypes)) {
+		for _, u := range r.UnitTypes {
+			children := ""
+			if len(u.Children) > 0 {
+				children = "，子单元类型 " + strings.Join(u.Children, "、")
+			}
+			fmt.Fprintf(&b, "  %s %s%s%s\n", u.ID, u.Title, children, from(u.Source))
+		}
+	}
+	if section("阶段（Stage）", len(r.Stages)) {
+		for _, s := range r.Stages {
+			required := ""
+			if len(s.RequiredArtifacts) > 0 {
+				required = "，必需产物 " + strings.Join(s.RequiredArtifacts, "、")
+			}
+			fmt.Fprintf(&b, "  %s %s%s%s\n", s.ID, s.Title, required, from(s.Source))
+		}
+	}
+	if section("规则（Rule）", len(r.Rules)) {
+		for _, id := range slices.Sorted(maps.Keys(r.Rules)) {
+			rule := r.Rules[id]
+			fmt.Fprintf(&b, "  %s：%v%s，%v%s", id, rule.Type.Value, from(rule.Type.Source), rule.Severity.Value, from(rule.Severity.Source))
+			for _, k := range slices.Sorted(maps.Keys(rule.Params)) {
+				fmt.Fprintf(&b, "，%s=%v%s", k, rule.Params[k].Value, from(rule.Params[k].Source))
+			}
+			if rule.Waiver != nil {
+				fmt.Fprintf(&b, "；已豁免%s：%s", from(rule.Waiver.Source), rule.Waiver.Reason)
+			}
+			b.WriteString("\n")
+		}
+	}
+	if section("术语表（Glossary）", len(r.Glossary)) {
+		for _, t := range r.Glossary {
+			english, avoid := "", ""
+			if t.English != "" {
+				english = "（" + t.English + "）"
+			}
+			if len(t.Avoid) > 0 {
+				avoid = "，避免写作 " + strings.Join(t.Avoid, "、")
+			}
+			fmt.Fprintf(&b, "  %s%s%s%s\n", t.Term.Term, english, avoid, from(t.Source))
+		}
+	}
+	if section("禁用词（Banned Term）", len(r.BannedTerms)) {
+		for _, t := range r.BannedTerms {
+			line := t.Term
+			if t.Reason != "" {
+				line += "：" + t.Reason
+			}
+			if t.Replacement != "" {
+				line += "，改用 " + t.Replacement
+			}
+			fmt.Fprintf(&b, "  %s%s\n", line, from(t.Source))
+		}
+	}
+	if section("文风（Writing Style）", len(r.Style)) {
+		for _, s := range r.Style {
+			fmt.Fprintf(&b, "  %s%s\n", s.Text, from(s.Source))
+		}
+	}
+	if section("评分标准（Rubric）", len(r.Rubric)) {
+		for _, it := range r.Rubric {
+			desc := ""
+			if it.Description != "" {
+				desc = "：" + it.Description
+			}
+			fmt.Fprintf(&b, "  %s %s%s%s\n", it.ID, it.Title, desc, from(it.Source))
+		}
+	}
+	return b.String()
+}
+
+// checkWorkspace 校验整个工作区：工作区结构与配置，以及规范包文件、文体与规范包引用和合并问题。
+func checkWorkspace(dir string) (checked []string, problems []workspace.Problem) {
+	checked, problems = workspace.Check(dir)
+	more, ps := resolve.Check(dir)
+	return append(checked, more...), append(problems, ps...)
+}
+
 func projectDir(inv *invocation) string {
 	if d := inv.values["dir"]; d != "" {
 		return d
@@ -233,6 +375,13 @@ func diagnostics(problems []workspace.Problem, dir string) []Diagnostic {
 			msg = strings.TrimSpace(msg + " " + strings.Join(loc, " "))
 		}
 		msg += "：" + p.Message
+		if p.Origin != "" {
+			// 内置产物没有工作区路径：以出处说明开头，位置放在末尾。
+			msg = p.Origin + "：" + p.Message
+			if len(loc) > 0 {
+				msg += "（" + strings.Join(loc, " ") + "）"
+			}
+		}
 		if key := configKey(p); key != "" && p.Code == schema.CodeSchemaViolation {
 			msg += "；可用 wa-cli config set " + key + " <value> 修改"
 		}
@@ -248,8 +397,13 @@ func diagnostics(problems []workspace.Problem, dir string) []Diagnostic {
 func next(p workspace.Problem, dir string) []string {
 	initCmd := shellCommand("wa-cli", "init", "--dir", dir, "--json")
 	validate := shellCommand("wa-cli", "validate", workspace.ConfigPath, "--dir", dir, "--json")
+	validateAll := shellCommand("wa-cli", "validate", "--dir", dir, "--json")
 	if schema.KindFor(p.Path) != nil {
 		validate = shellCommand("wa-cli", "validate", p.Path, "--dir", dir, "--json")
+	}
+	if p.Origin != "" {
+		// 内置产物的问题只会在合并时出现，用整体校验复查。
+		validate = validateAll
 	}
 	switch p.Code {
 	case workspace.CodeNotFound, workspace.CodeMissingDirectory, schema.CodeNotFound:
@@ -268,6 +422,17 @@ func next(p workspace.Problem, dir string) []string {
 		return append(out, validate)
 	case schema.CodeUnknownKind:
 		return []string{"wa-cli help validate --json"}
+	case resolve.CodeUnknownGenre:
+		var out []string
+		for _, g := range catalog.BuiltinGenres() {
+			out = append(out, shellCommand("wa-cli", "config", "set", "default_genre", g, "--dir", dir, "--json"))
+		}
+		return append(out, shellCommand("wa-cli", "config", "set", "default_genre", "", "--dir", dir, "--json"))
+	case resolve.CodeUnknownPack:
+		return []string{"wa-cli help config set --json", validateAll}
+	case resolve.CodeMissingRuleType, resolve.CodeRuleTypeConflict, resolve.CodeUnknownWaiverTarget:
+		// 合并问题涉及多个配置层，只有整体校验能重新检出。
+		return []string{validateAll}
 	case workspace.CodeUnknownConfigKey, workspace.CodeConfigKept, workspace.CodeAnchoredValue:
 		return []string{"wa-cli help config set --json"}
 	case workspace.CodeWriteFailed, workspace.CodeReadFailed:

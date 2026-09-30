@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "规范包",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "id", "title"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "id": {"$ref": "common.schema.json#/$defs/id"},
+    "title": {"$ref": "common.schema.json#/$defs/text"},
+    "description": {"type": "string"},
+    "style": {"type": "array", "items": {"$ref": "common.schema.json#/$defs/text"}},
+    "glossary": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["term"],
+        "properties": {
+          "term": {"$ref": "common.schema.json#/$defs/text"},
+          "english": {"type": "string"},
+          "avoid": {"type": "array", "uniqueItems": true, "items": {"$ref": "common.schema.json#/$defs/text"}}
+        }
+      }
+    },
+    "banned_terms": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["term"],
+        "properties": {
+          "term": {"$ref": "common.schema.json#/$defs/text"},
+          "reason": {"type": "string"},
+          "replacement": {"type": "string"}
+        }
+      }
+    },
+    "rules": {"$ref": "common.schema.json#/$defs/rules"},
+    "waivers": {"$ref": "common.schema.json#/$defs/waivers"},
+    "rubric": {"$ref": "common.schema.json#/$defs/rubric"}
+  }
+}

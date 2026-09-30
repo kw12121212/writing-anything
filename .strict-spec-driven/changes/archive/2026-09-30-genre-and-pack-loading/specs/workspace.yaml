@@ -1,0 +1,53 @@
+schema: strict-spec-driven/delta-spec/v1
+schema_version: 1
+artifact_type: delta_spec
+schema_file: templates/strict-spec-driven/schemas/delta-spec.yaml
+target_spec: workspace
+operations:
+  ADDED: {}
+  MODIFIED:
+    validate-workspace:
+      strength: MUST
+      statement: 不带位置参数的 wa-cli validate 必须校验 --dir 下的整个工作区：config.yaml 符合工作区配置的 JSON Schema，sources/ 与 works/ 存在，.writing-anything/packs/ 下的每个 .yaml 文件都是合法的规范包（Pack），default_genre 与 packs 引用的文体（Genre）与规范包都存在，且按 文体 → 规范包 → 项目配置 合并时没有冲突。全部通过时 valid 为 true、退出码为 0，--json 输出的 checked 字段列出已校验的产物路径（含每个规范包文件）；发现问题时退出码为 1，并为每个问题给出一条诊断：缺少必需目录时错误码为 workspace.missing-directory，缺少 config.yaml 时为 artifact.not-found，两者的 next 都包含 wa-cli init --dir <dir>；引用不存在的文体时为 config.unknown-genre，引用不存在的规范包时为 config.unknown-pack，两者的 path 为 .writing-anything/config.yaml、field 为出错的字段。
+      scenarios:
+        missing-directory:
+          - GIVEN: 已初始化的工作区，sources/ 已被删除
+          - WHEN: 运行 wa-cli validate --dir D --json
+          - THEN: valid 为 false，diagnostics 中有一条错误码为 workspace.missing-directory、path 为 .writing-anything/sources 的诊断，其 next 包含一条 wa-cli init 命令，退出码为 1
+        missing-config:
+          - GIVEN: 已初始化的工作区，config.yaml 已被删除
+          - WHEN: 运行 wa-cli validate --dir D --json
+          - THEN: diagnostics 中有一条错误码为 artifact.not-found、path 为 .writing-anything/config.yaml 的诊断，退出码为 1
+        unknown-genre:
+          - GIVEN: 已初始化的工作区，config.yaml 中 default_genre 为 no-such-genre
+          - WHEN: 运行 wa-cli validate --dir D --json
+          - THEN: diagnostics 中有一条错误码为 config.unknown-genre、path 为 .writing-anything/config.yaml、field 为 default_genre 的诊断，valid 为 false，退出码为 1
+        unknown-pack:
+          - GIVEN: 已初始化的工作区，config.yaml 中 packs 为 [default, no-such-pack]
+          - WHEN: 运行 wa-cli validate --dir D --json
+          - THEN: diagnostics 中有一条错误码为 config.unknown-pack、field 为 packs[1] 的诊断，退出码为 1
+        checks-pack-files:
+          - GIVEN: 已初始化的工作区，.writing-anything/packs/house.yaml 是合法的规范包，config.yaml 的 packs 为 [house]
+          - WHEN: 运行 wa-cli validate --dir D --json
+          - THEN: valid 为 true，checked 包含 .writing-anything/config.yaml 与 .writing-anything/packs/house.yaml，退出码为 0
+    status-summary:
+      strength: MUST
+      statement: wa-cli status 必须汇总 --dir 下的工作区：--json 输出包含 workspace（相对项目目录的工作区路径）、config（language、defaultGenre、packs、gateLevel；配置无法解析时为 null）、sources 与 works（sources/ 与 works/ 下的直接条目数，不含以 . 开头的隐藏条目）。工作区校验（与 validate-workspace 相同）全部通过时退出码为 0；有 error 级诊断时仍输出上述字段，但 valid 为 false，退出码为 1。不加 --json 时，以人读文本输出同样的信息。
+      scenarios:
+        status-fresh:
+          - GIVEN: 刚用 wa-cli init --dir D --genre minimal 创建的工作区
+          - WHEN: 运行 wa-cli status --dir D --json
+          - THEN: workspace 为 .writing-anything，config.defaultGenre 为 minimal，config.gateLevel 为 standard，sources 与 works 均为 0，valid 为 true，退出码为 0
+        status-counts:
+          - GIVEN: 已初始化的工作区，works/ 下有两个子目录，sources/ 下有一个文件
+          - WHEN: 运行 wa-cli status --dir D --json
+          - THEN: works 为 2，sources 为 1
+        status-invalid-config:
+          - GIVEN: 已初始化的工作区，config.yaml 中 gate_level 为 bogus
+          - WHEN: 运行 wa-cli status --dir D --json
+          - THEN: 输出仍包含 workspace、sources 与 works；diagnostics 中有一条错误码为 artifact.schema-violation 的诊断；valid 为 false，退出码为 1
+        status-unknown-genre:
+          - GIVEN: 已初始化的工作区，config.yaml 中 default_genre 为 no-such-genre
+          - WHEN: 运行 wa-cli status --dir D --json
+          - THEN: config.defaultGenre 仍为 no-such-genre；diagnostics 中有一条错误码为 config.unknown-genre 的诊断；valid 为 false，退出码为 1
+  REMOVED: {}

@@ -1,0 +1,26 @@
+schema_version: 1
+id: house
+title: 团队规范
+description: 测试用规范包
+style:
+  - 结论先行
+glossary:
+  - term: 规范包
+    english: Pack
+    avoid: [插件包]
+banned_terms:
+  - term: 赋能
+    reason: 空泛
+    replacement: 帮助
+rules:
+  length:
+    severity: error
+    params: {max: 3000}
+  typography:
+    type: cjk-typography
+waivers:
+  - rule: typography
+    reason: 本团队不检查排版
+rubric:
+  - id: clarity
+    title: 清晰

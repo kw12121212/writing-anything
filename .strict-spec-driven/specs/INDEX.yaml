@@ -6,6 +6,9 @@ specs:
   - id: cli
     title: 命令行工具（CLI）
     path: .strict-spec-driven/specs/cli.yaml
+  - id: genres-and-packs
+    title: 文体与规范包（Genre and Pack）
+    path: .strict-spec-driven/specs/genres-and-packs.yaml
   - id: workspace
     title: 工作区（Workspace）
     path: .strict-spec-driven/specs/workspace.yaml

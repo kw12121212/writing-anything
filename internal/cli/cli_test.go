@@ -317,6 +317,8 @@ func sampleArgs(t *testing.T, name string) []string {
 		return []string{name, "--dir", newWorkspace(t), "--json"}
 	case "config set":
 		return []string{"config", "set", "gate_level", "standard", "--dir", newWorkspace(t), "--json"}
+	case "config resolved":
+		return []string{"config", "resolved", "--dir", newWorkspace(t), "--json"}
 	}
 	t.Fatalf("no sample invocation for command %q; add one to sampleArgs", name)
 	return nil

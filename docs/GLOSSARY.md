@@ -19,9 +19,13 @@
 | 工作区 | Workspace | 工作区 | 项目中的 `.writing-anything/` 目录 |
 | 作品 | Work | 作品 | 一篇文章、一部小说等独立成品 |
 | 单元 | Unit | 单元 | 作品中逐个推进的组成部分，如节、章、场景 |
+| 单元类型 | Unit Type | 单元类型 | 文体声明的单元种类，如文章、节；决定单元树的层级 |
 | 单元树 | Unit Tree | 单元树 | 单元的层级结构，如 部 → 章 → 场景 |
 | 系列 | Series | 系列 | 共享规范与设定的多部作品；文章领域也称"专栏" |
 | 作用域 | Scope | 作用域 | 设定或配置生效的范围，如系列级、作品级 |
+| 内置 | Built-in | 内置 | 随 `wa-cli` 二进制提供的文体与规范包，如 `default` 规范包 |
+| 配置层 | Config Layer | 配置层 | 参与合并的一层设置：文体默认、规范包、项目配置，后者覆盖前者；来源写作 `genre:<id>`、`pack:<id>`、`project` |
+| 解析后配置 | Resolved Config | 解析后配置 | 各配置层合并后的生效设置，每项注明来源层，由 `wa-cli config resolved` 输出 |
 
 ## 写作流程
 
@@ -76,6 +80,8 @@
 | 文本检查 | Lint | 文本检查 | 确定性的自动检查，类似代码的 lint |
 | 发现项 | Finding | 发现项 | 检查或审稿发现的一个问题 |
 | 豁免 | Waiver | 豁免 | 对某条规则在某处不适用的显式声明，须写明理由 |
+| 规则类型 | Rule Type | 规则类型 | 规则的检查方式，如 `length-range`、`banned-terms`；只能取已知类型 |
+| 禁用词 | Banned Term | 禁用词 | 规范包中不允许出现的词语，可附理由与替换写法 |
 | 评分标准 | Rubric | 评分标准 | 审稿时逐项评判的标准 |
 | AI 腔 | AI Cliché | AI 腔 | 典型的 AI 套话与句式，如"值得注意的是" |
 | 中文排版 | CJK Typography | 中文排版 | 中英文间空格、全角/半角标点等排版规范 |
@@ -283,6 +289,7 @@
 | 命令注册表 | Command Registry | 命令注册表 | 声明每条命令参数、输出键和退出码的清单；help 由它生成，它也是 MCP tools 与 Skill 命令校验的依据 |
 | 产物 | Artifact | 产物 | 工作区中由 `wa-cli` 管理的文件：受 JSON Schema 约束的结构化 YAML 文件（如 `config.yaml`）与 Markdown 正文 |
 | 数据结构约束 | JSON Schema | JSON Schema | 校验 YAML 产物结构的规范 |
+| 可执行内容 | Executable Content | 可执行内容 | 产物中可能被当作代码执行的部分：非数据的 YAML 标签，或 `script`、`command` 等字段；规范包中一律拒绝 |
 | 测试夹具 | Test Fixture | 测试夹具 | 测试用的示例数据，放在各包的 `testdata/` |
 | 回归测试 | Regression Test | 回归测试 | 每次变更后运行的完整测试 |
 | 覆盖率 | Coverage | 覆盖率 | 测试执行到的代码比例 |

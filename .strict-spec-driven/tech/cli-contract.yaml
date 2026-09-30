@@ -21,15 +21,11 @@ rules:
         - 在某个命令的 run 函数里手写 for 循环解析 os.Args
   shared-envelope:
     strength: MUST
-    statement: 命令的 --json 输出必须通过共享的输出信封（Output Envelope）类型写出，顶层始终含 valid、diagnostics、changedPaths，数组字段不得为 null；命令专属字段与之并列，且必须在 outputKeys 中声明。
-    rationale: Agent 与 MCP 按同一形状解析所有命令输出；逐命令自定义 JSON 会破坏契约。
+    statement: 命令的 --json 输出必须通过共享的输出信封（Output Envelope）类型写出，顶层始终含 valid、diagnostics、changedPaths；任何层级的数组字段（包括嵌套在命令专属字段中的数组，如 resolved.unitTypes[].children）都不得为 null，没有元素时为空数组；命令专属字段与之并列，且必须在 outputKeys 中声明。
+    rationale: Agent 与 MCP 按同一形状解析所有命令输出；逐命令自定义 JSON 会破坏契约，嵌套数组为 null 同样会让按数组遍历的调用方出错。
     enforcement:
       method: test
-    examples:
-      good:
-        - result 嵌入命令专属结构体后由框架统一编码
-      bad:
-        - 命令直接 json.Marshal 一个自定义 map 写到 stdout
+      detail: internal/cli 的测试递归遍历 config resolved 的 JSON 输出，断言除可为 null 的对象字段外没有 null。
   stable-error-codes:
     strength: MUST
     statement: 诊断（Diagnostic）的错误码（Error Code）采用 <领域>.<kebab-case> 格式，以常量定义在产生它的包中；已发布的错误码不得改名、删除后复用或改变含义，新增错误码不得与已有错误码重名。
@@ -88,3 +84,15 @@ rules:
         - 'flags: []flagSpec{dirFlag}'
       bad:
         - 新命令用 os.Getwd() 向上逐级查找 .writing-anything/
+  next-rechecks-problem:
+    strength: SHOULD
+    statement: 诊断 next 中给出的复查命令必须能重新检出该问题：涉及多个产物的问题（引用、合并、内置产物与工作区产物的冲突）给出整体校验 wa-cli validate --dir <dir> --json，不得给出只校验单个文件、会报告 valid 为 true 的命令。
+    rationale: Agent 按 next 复查；复查命令检不出问题时，Agent 会误以为问题已经解决。
+    enforcement:
+      method: test
+      detail: internal/cli 的测试对跨产物错误码断言 next 为整体校验，并运行该命令断言仍报告同一诊断。
+    examples:
+      good:
+        - rule.type-conflict 的 next 为 wa-cli validate --dir . --json
+      bad:
+        - rule.type-conflict 的 next 为 wa-cli validate .writing-anything/packs/house.yaml --dir . --json

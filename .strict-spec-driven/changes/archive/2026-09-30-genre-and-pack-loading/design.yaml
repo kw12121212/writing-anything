@@ -1,0 +1,49 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: genre-and-pack-loading
+approach:
+  - 内置数据放在 internal/catalog/builtin/genres/<id>.yaml 与 internal/catalog/builtin/packs/<id>.yaml，用 go:embed 打包；首批只有 default 规范包（中文排版与 AI 腔等通用规则的默认参数、少量文风条目）和 minimal 文体（单层 article → section 单元类型、少量阶段，只用于内核测试，后续文体上线后仍保留）。工作区规范包位于 .writing-anything/packs/<id>.yaml，文件名必须等于 id，且不得与内置规范包同名。查找规范包时先看内置，再看工作区。
+  - 加载流程：schema.Parse 解析 → 可执行内容检查（在 YAML 节点树上进行，先于 Schema 校验，保证报告的是专门的错误码）→ Kind.ValidateNode 做 Schema 校验 → catalog 做 id 重复、单元类型 children 引用与规则类型检查。合并由 internal/resolve 完成：按 文体 → packs 顺序的各规范包 → 项目配置 逐层应用；每个规则的 type、severity 与每个顶层 params 键都记录值和来源层；豁免在全部层应用后关闭对应规则并记录理由与来源；glossary 与 banned_terms 按 term 合并、rubric 按 id 合并（后者替换前者、保留首次出现的位置），style 按层追加；每一项都带 source。
+  - CLI：在注册表中新增 config resolved 命令（config 命令组第二个子命令），接受共享的 --dir，输出键 resolved；validate 整体校验时追加 packs/*.yaml 与引用检查，并把规范包路径计入 checked。领域包只返回结构化问题，由 internal/cli 转换为诊断并填写可直接运行的 next。
+  - 工作区规范包位置 .writing-anything/packs/<id>.yaml 已由作者在 questions.yaml workspace-packs 中确认。
+  - '数据模型：文体 YAML 含 schema_version、id、title、description、unit_types（有序数组，每项含 id、title 与 children）、stages（有序数组，每项含 id、title、required_artifacts）、rules（以规则 id 为键，含 type、severity、params）与 rubric（有序数组，每项含 id、title、description）。规范包 YAML 含 schema_version、id、title、description、style（文风条目字符串数组）、glossary（term、english、avoid）、banned_terms（term、reason、replacement）、rules（同上，覆盖已有规则时可以省略 type）、waivers（rule、reason）与 rubric。config.yaml 新增可选的 rules 与 waivers，形状与规范包相同。三者共用的定义放在 common.schema.json，由各自的 Schema 通过 $ref 引用；所有对象都 additionalProperties: false，只有 params 接受任意对象。'
+decisions:
+  catalog-and-resolve-packages:
+    decision: 新增 internal/catalog（文体与规范包的定义、内置数据、加载与校验）与 internal/resolve（逐层合并与来源记录）两个领域包，不放进 internal/workspace 或 internal/schema。
+    rationale: internal/schema 只负责通用的解析与 Schema 校验，internal/workspace 只负责工作区文件与配置读写；把目录查找、规则类型登记和合并放进去会让两个包承担与文体相关的知识。拆成两个包后，unit-tree-and-lifecycle 只依赖 catalog 读取阶段序列，rule-engine-and-lint 只依赖 resolve 读取合并后的规则。
+  executable-content-check:
+    decision: 可执行内容定义为：YAML 核心 Schema（!!str、!!int、!!float、!!bool、!!null、!!map、!!seq、!!timestamp）以外的任何标签，以及任意深度上名为 script、scripts、command、commands、exec、shell、hook、hooks、plugin、plugins、run、eval 的字段；在 Schema 校验前检查，报告为 artifact.executable-content，适用于规范包、文体与 config.yaml。
+    rationale: 'Schema 的 additionalProperties: false 已经拒绝大部分未声明字段，但 params 必须接受任意对象，自定义标签也可能被当成字符串通过校验；单独的检查给出明确的错误码，作者和 Agent 能直接看出这是安全限制而不是拼写错误。wa-cli 本身不执行任何数据，这个检查是为了让规范包在被其他工具消费时也保持纯数据。'
+  known-rule-types:
+    decision: 已知规则类型在 internal/catalog 中以固定列表登记：cjk-typography、ai-cliche、banned-terms、term-consistency、length-range、paragraph-length、required-sections，取自规划变更 rule-engine-and-lint；本变更不校验各类型的 params 结构。
+    rationale: 未知规则类型必须在加载时就能拒绝，而规则类型集合已由路线图明确列出；params 的逐类型结构属于规则引擎的职责，现在定义会在规则实现前锁定参数形状，违反 YAGNI。
+  layer-sources:
+    decision: 来源层标识写作 genre:<id>、pack:<id> 与 project；config resolved 输出中每个规则的 type、severity、每个 params 键，以及术语表、禁用词、文风、评分标准、单元类型与阶段的每一项都带 source 字段。
+    rationale: 规划变更要求输出每项来源；按字段而不是按规则记录来源，才能说明一条规则的默认严重程度来自文体、参数来自规范包的情形，后续 lint 发现项的规则来源也可以直接复用。
+  rule-merge-semantics:
+    decision: 规则按 id 合并：首次定义某个 id 的层必须给出 type，否则报 rule.missing-type；后续层给出不同的 type 报 rule.type-conflict；severity 取最后一层的值，params 按顶层键覆盖。豁免必须写明 reason（Schema 要求非空），指向合并后不存在的规则时报 rule.unknown-waiver-target；被豁免的规则 enabled 为 false 并记录 waiver 的 reason 与 source。项目配置不能重新启用被规范包豁免的规则。
+    rationale: 按顶层键覆盖 params 足以支持改一个阈值而不重写整条规则，又避免深度合并带来的数组语义歧义；豁免作为唯一的关闭方式可以保证每次关闭规则都有理由记录，符合术语表中豁免须写明理由的约定。
+  validate-checks-references:
+    decision: wa-cli validate 与 status 在工作区校验中检查 default_genre 与 packs 引用的文体、规范包是否存在（config.unknown-genre、config.unknown-pack），并报告合并问题；init 与 config set 保持只做 Schema 校验。已有测试中使用 --genre tech-blog 的用例改用 minimal。
+    rationale: 引用错误会让后续所有按文体推进的命令失败，应该在 validate 这一统一的检查入口暴露；而让 init 拒绝尚未上线的文体 id 会改变已发布的 init 行为，也会让作者无法提前为后续文体准备工作区。
+  no-new-dependencies:
+    decision: 不引入新的第三方依赖，继续使用已有的 go.yaml.in/yaml/v3 与 santhosh-tekuri/jsonschema/v6。
+    rationale: 解析、Schema 校验与节点树遍历都已有依赖覆盖，合并逻辑用标准库即可实现，符合 go-project-structure/stdlib-first。
+  default-pack-implicit:
+    decision: packs 为空时隐式启用内置 default 规范包；packs 非空时只应用列出的规范包，需要 default 时显式列出（作者于 questions.yaml default-pack-activation 确认）。
+    rationale: 作者看到的 packs 就是实际生效的规范包，文体的默认规则不会被 default 意外覆盖；未配置任何规范包的新工作区仍能得到通用的默认规则。
+  problem-origin:
+    decision: workspace.Problem 新增 Origin 字段：内置文体或规范包的问题不填 Path，Origin 写「内置文体 <id>」或「内置规范包 <id>」，由 internal/cli 组装为以出处开头、位置放在末尾的 message；合并类问题（rule.missing-type、rule.type-conflict、rule.unknown-waiver-target、config.unknown-pack）与内置产物问题的 next 为整体 wa-cli validate --dir <dir> --json。
+    rationale: 出处是结构化信息，放在领域包的说明文字里会被 cli 拼接的位置前缀挡住；合并与引用问题涉及多个产物，单文件 validate 检不出来，next 给出它会让 Agent 得到 valid 为 true 的错误结论。
+alternatives:
+  - option: 把合并结果只输出为最终值，不记录每项来源。
+    reason: 无法满足里程碑完成标准中「每项来源」的要求，后续文本检查也无法告诉作者一条规则来自文体、规范包还是项目配置。
+  - option: '在规则条目中用 enabled: false 关闭规则。'
+    reason: 关闭规则时不强制写理由，与豁免须写明理由的约定冲突，也会与 waivers 形成两套关闭机制。
+  - option: '只在 Schema 中用 additionalProperties: false 拒绝可执行内容，不做单独检查。'
+    reason: params 必须接受任意对象，自定义 YAML 标签也会被解码为普通字符串，两者都能绕过 Schema；而且报告为 artifact.schema-violation 无法表明这是安全限制。
+risks:
+  - 已知规则类型列表提前登记，rule-engine-and-lint 实现时可能需要增删类型；新增类型不违反稳定性约定，但删除已发布的类型会让使用它的规范包校验失败。
+  - 可执行内容的字段名列表是启发式的，可能误伤 params 中合法的同名键（例如名为 run 的参数）；此时规范包作者需要改名，这是偏安全的误判方向。

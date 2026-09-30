@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "文体",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "id", "title", "unit_types", "stages"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "id": {"$ref": "common.schema.json#/$defs/id"},
+    "title": {"$ref": "common.schema.json#/$defs/text"},
+    "description": {"type": "string"},
+    "unit_types": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "title"],
+        "properties": {
+          "id": {"$ref": "common.schema.json#/$defs/id"},
+          "title": {"$ref": "common.schema.json#/$defs/text"},
+          "children": {"$ref": "common.schema.json#/$defs/ids"}
+        }
+      }
+    },
+    "stages": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "title"],
+        "properties": {
+          "id": {"$ref": "common.schema.json#/$defs/id"},
+          "title": {"$ref": "common.schema.json#/$defs/text"},
+          "required_artifacts": {"$ref": "common.schema.json#/$defs/ids"}
+        }
+      }
+    },
+    "rules": {"$ref": "common.schema.json#/$defs/rules"},
+    "rubric": {"$ref": "common.schema.json#/$defs/rubric"}
+  }
+}

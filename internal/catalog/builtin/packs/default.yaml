@@ -1,0 +1,17 @@
+# 内置默认规范包：config.yaml 的 packs 为空时生效。只放与文体无关的通用中文写作规范。
+schema_version: 1
+id: default
+title: 默认规范包
+description: 通用的中文写作规范：中文排版与常见 AI 腔。
+style:
+  - 结论先行，先说结果再说过程。
+  - 用具体的事实、数据和例子代替空泛的形容词。
+rules:
+  cjk-typography:
+    type: cjk-typography
+    severity: warning
+  ai-cliche:
+    type: ai-cliche
+    severity: warning
+    params:
+      terms: [值得注意的是, 不难看出, 总而言之, 综上所述, 在当今时代]

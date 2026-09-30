@@ -1,0 +1,42 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: genre-and-pack-loading
+  status: proposed
+summary:
+  what:
+    - 以 JSON Schema 声明文体（Genre）与规范包（Pack）两种纯数据产物：文体声明单元类型、生命周期阶段（Stage）序列、每阶段必需产物、默认规则（Rule）配置与评分标准（Rubric）；规范包声明文风、术语表（Glossary）、禁用词、规则参数覆盖、豁免（Waiver）与评分标准。
+    - 新增 wa-cli config resolved：按 文体默认 → 规范包（按 config.yaml 中 packs 的顺序）→ 项目配置 的顺序合并规则、术语表、禁用词、文风与评分标准，--json 输出合并结果以及每项设置的来源层。
+    - 规范包含可执行内容（非标准 YAML 标签、脚本或命令类字段）或未知规则类型时校验失败；wa-cli validate 同时校验工作区规范包文件，以及 default_genre 与 packs 引用的文体和规范包是否存在。
+    - 用 embed 内置一个 default 规范包（config.yaml 的 packs 为空时隐式启用）和一个仅供内核测试的最小文体 minimal；作者自有的规范包放在工作区的 .writing-anything/packs/<id>.yaml。
+  why:
+    - 后续的单元树与生命周期（unit-tree-and-lifecycle）要按文体声明的单元类型与阶段序列推进，规则引擎与文本检查（rule-engine-and-lint）、写作法模板、规范包安装都依赖文体与规范包的数据模型和合并结果；没有统一的加载与合并，它们只能各自解析配置，规则来源也无法追溯。
+    - 里程碑 kernel-foundation 的完成标准要求：wa-cli config resolved --json 输出 文体 → 规范包 → 项目配置 的合并结果与每项来源；含未知规则类型或可执行内容的规范包校验失败。
+    - 项目约定规范包只能是数据、不得执行第三方代码；需要在加载入口就拒绝可执行内容，而不是依赖使用方自觉。
+scope:
+  in:
+    - internal/schema：新增 genre 与 pack 两种产物类型的 JSON Schema（draft 2020-12），embed 打包；pack 产物类型按 .writing-anything/packs/*.yaml 识别，genre 只作为内置数据校验；config.schema.json 新增可选的项目级 rules 与 waivers 字段
+    - 新的领域包（internal/catalog）：内置文体与规范包的 embed 目录、按 id 查找、工作区规范包加载、已知规则类型登记（cjk-typography、ai-cliche、banned-terms、term-consistency、length-range、paragraph-length、required-sections）、可执行内容检查、id 重复与引用检查，只返回结构化问题
+    - 合并逻辑（internal/resolve）：文体默认 → 规范包 → 项目配置 的逐层合并，规则按 id 合并 severity 与 params，豁免关闭规则并记录理由，术语表与禁用词按词条合并，评分标准按 id 合并，文风按层追加；每项结果都记录来源层（genre:<id>、pack:<id>、project）
+    - wa-cli config resolved [--dir <path>]：在命令注册表中声明，输出 resolved 字段；引用不存在的文体或规范包、规则类型冲突等问题以诊断报告并以退出码 1 退出
+    - wa-cli validate：整体校验时额外校验 .writing-anything/packs/*.yaml 并检查 default_genre、packs 引用与合并问题；validate <path> 支持单个规范包文件；status 的校验结果随之变化
+    - 内置 default 规范包与 minimal 文体的数据文件，以及覆盖合法、非法、含可执行内容、未知规则类型等情形的 testdata/ 测试夹具
+    - 修改 workspace 主规格（validate-workspace、status-summary），新增 genres-and-packs 主规格（delta spec），修改 workspace-artifacts 技术标准（delta tech），并把新术语加入 docs/GLOSSARY.md
+  out:
+    - 规则的执行与文本检查（wa-cli lint）、规则参数的逐类型 Schema 与语义校验（由 rule-engine-and-lint 负责）；本变更只登记规则类型 id，params 按任意对象接受
+    - 作品、单元树与按阶段推进（wa-cli new / advance / next，由 unit-tree-and-lifecycle 负责）；本变更只加载并输出文体声明的单元类型与阶段
+    - tech-blog、wechat-marketing 等面向作者的文体，写作法模板（Method Template）
+    - 规范包的安装、锁定文件与移除（wa-cli pack install / list / remove，由 pack-install-distribution 负责），远程获取规范包，规范包命名空间 <owner>/<name>
+    - wa-cli init 与 wa-cli config set 对 default_genre、packs 是否存在的检查；两者仍只做 Schema 校验，引用是否存在由 validate 与 config resolved 报告
+    - config set 设置项目级 rules 与 waivers；本变更中项目级规则覆盖只能由作者直接编辑 config.yaml 后经 validate 校验
+    - wa-cli 调用 LLM
+unchanged_behavior:
+  - 输出信封（Output Envelope）字段 valid、diagnostics、changedPaths 与退出码约定 0/1/2 保持不变；已发布错误码的含义不变
+  - wa-cli init 创建的文件与目录不变（不创建 packs/），init 与 config set 的参数、输出与已有诊断不变
+  - 仓库根目录不创建 .writing-anything/；产品二进制不依赖 internal/tools/**，也不依赖 strict-spec-driven
+  - version、help 与已有命令的用法输出不变；help 列表只多出 config resolved（命令名更长，help 列表的对齐宽度随之加宽）
+roadmap:
+  milestone: kernel-foundation
+  planned_change: genre-and-pack-loading

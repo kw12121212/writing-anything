@@ -13,6 +13,8 @@
       "uniqueItems": true,
       "items": {"type": "string", "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$"}
     },
-    "gate_level": {"enum": ["strict", "standard", "fast"]}
+    "gate_level": {"enum": ["strict", "standard", "fast"]},
+    "rules": {"$ref": "common.schema.json#/$defs/rules"},
+    "waivers": {"$ref": "common.schema.json#/$defs/waivers"}
   }
 }

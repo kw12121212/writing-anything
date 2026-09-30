@@ -1,0 +1,12 @@
+schema_version: 1
+id: house
+title: 团队规范
+glossary:
+  - term: 规范包
+    english: Pack
+banned_terms:
+  - term: 赋能
+rules:
+  length:
+    severity: error
+    params: {max: 3000}

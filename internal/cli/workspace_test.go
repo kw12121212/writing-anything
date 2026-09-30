@@ -48,6 +48,7 @@ type result struct {
 	Config       *json.RawMessage `json:"config"`
 	Sources      int              `json:"sources"`
 	Works        int              `json:"works"`
+	Resolved     *json.RawMessage `json:"resolved"`
 }
 
 // runWS 以 --json 运行工作区命令，并断言路径都相对项目目录、以 / 分隔（workspace-artifacts/workspace-relative-paths）。
@@ -142,9 +143,9 @@ func TestInitFresh(t *testing.T) {
 }
 
 func TestInitFromFlags(t *testing.T) {
-	dir := newWorkspace(t, "--language", "en", "--genre", "tech-blog", "--gate-level", "strict")
+	dir := newWorkspace(t, "--language", "en", "--genre", "minimal", "--gate-level", "strict")
 	cfg := readFile(t, configPath(dir))
-	for _, line := range []string{"language: en\n", "default_genre: tech-blog\n", "gate_level: strict\n"} {
+	for _, line := range []string{"language: en\n", "default_genre: minimal\n", "gate_level: strict\n"} {
 		if !strings.Contains(cfg, line) {
 			t.Errorf("config.yaml lacks %q:\n%s", line, cfg)
 		}
@@ -299,10 +300,10 @@ func TestNoWorkspace(t *testing.T) {
 }
 
 func TestStatus(t *testing.T) {
-	dir := newWorkspace(t, "--genre", "tech-blog")
+	dir := newWorkspace(t, "--genre", "minimal")
 	code, res := runWS(t, dir, "status")
 	cfg := res.config(t)
-	if code != 0 || !res.Valid || res.Workspace != ".writing-anything" || cfg["defaultGenre"] != "tech-blog" || cfg["gateLevel"] != "standard" || res.Sources != 0 || res.Works != 0 {
+	if code != 0 || !res.Valid || res.Workspace != ".writing-anything" || cfg["defaultGenre"] != "minimal" || cfg["gateLevel"] != "standard" || res.Sources != 0 || res.Works != 0 {
 		t.Fatalf("status-fresh: exit code = %d, result = %+v, config = %v", code, res, cfg)
 	}
 	ws := filepath.Join(dir, ".writing-anything")
@@ -324,13 +325,13 @@ func TestStatus(t *testing.T) {
 }
 
 func TestConfigSet(t *testing.T) {
-	dir := newWorkspace(t, "--genre", "tech-blog")
+	dir := newWorkspace(t, "--genre", "minimal")
 	writeFile(t, configPath(dir), "# 作者的注释\n"+readFile(t, configPath(dir)))
 	code, res := runWS(t, dir, "config", "set", "gate_level", "strict")
 	if code != 0 || !res.Valid || !slices.Equal(res.ChangedPaths, []string{".writing-anything/config.yaml"}) || res.config(t)["gateLevel"] != "strict" {
 		t.Fatalf("set-gate-level: exit code = %d, result = %+v", code, res)
 	}
-	if cfg := readFile(t, configPath(dir)); !strings.Contains(cfg, "# 作者的注释\n") || !strings.Contains(cfg, "gate_level: strict\n") || !strings.Contains(cfg, "default_genre: tech-blog\n") {
+	if cfg := readFile(t, configPath(dir)); !strings.Contains(cfg, "# 作者的注释\n") || !strings.Contains(cfg, "gate_level: strict\n") || !strings.Contains(cfg, "default_genre: minimal\n") {
 		t.Fatalf("config.yaml =\n%s", cfg)
 	}
 	if code, _ := runWS(t, dir, "config", "set", "packs", "house-style, glossary-zh"); code != 0 || !strings.Contains(readFile(t, configPath(dir)), "packs: [house-style, glossary-zh]\n") {

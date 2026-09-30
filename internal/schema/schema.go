@@ -28,6 +28,7 @@ const (
 	CodeUnknownKind     = "artifact.unknown-kind"
 	CodeParseError      = "artifact.parse-error"
 	CodeSchemaViolation = "artifact.schema-violation"
+	CodeExecutable      = "artifact.executable-content"
 )
 
 //go:embed schemas/*.schema.json
@@ -36,13 +37,16 @@ var files embed.FS
 // Kind 是一种产物类型：按相对项目目录、以 / 分隔的路径模式识别，用一份嵌入的 JSON Schema 校验。
 type Kind struct {
 	Name    string // 产物类型名，如 config
-	Pattern string // path.Match 语法的路径模式
+	Pattern string // path.Match 语法的路径模式；为空时不对应任何工作区路径，只作为内置数据校验
 	File    string // schemas/ 下的 Schema 文件名
 	compile func() (*jsonschema.Schema, error)
 }
 
+// 文体、规范包与工作区配置都只能包含数据，校验时先做可执行内容检查。
 var kinds = []*Kind{
 	newKind("config", ".writing-anything/config.yaml", "config.schema.json"),
+	newKind("pack", ".writing-anything/packs/*.yaml", "pack.schema.json"),
+	newKind("genre", "", "genre.schema.json"),
 }
 
 func newKind(name, pattern, file string) *Kind {
@@ -51,22 +55,30 @@ func newKind(name, pattern, file string) *Kind {
 	})}
 }
 
+// schemaURL 是 Schema 文件的资源地址；所有资源都预先登记，编译时不会访问网络。
+func schemaURL(file string) string { return "https://writing-anything.invalid/schemas/" + file }
+
+// compileFile 编译 file；schemas/ 下的其他文件都登记为资源，供 $ref 引用共用的定义。
 func compileFile(file string) (*jsonschema.Schema, error) {
-	data, err := files.ReadFile("schemas/" + file)
+	entries, err := files.ReadDir("schemas")
 	if err != nil {
 		return nil, err
 	}
-	doc, err := jsonschema.UnmarshalJSON(bytes.NewReader(data))
-	if err != nil {
-		return nil, err
-	}
-	// 资源已预先登记，编译时不会访问这个 URL。
-	url := "https://writing-anything.invalid/schemas/" + file
 	c := jsonschema.NewCompiler()
-	if err := c.AddResource(url, doc); err != nil {
-		return nil, err
+	for _, e := range entries {
+		data, err := files.ReadFile("schemas/" + e.Name())
+		if err != nil {
+			return nil, err
+		}
+		doc, err := jsonschema.UnmarshalJSON(bytes.NewReader(data))
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", e.Name(), err)
+		}
+		if err := c.AddResource(schemaURL(e.Name()), doc); err != nil {
+			return nil, err
+		}
 	}
-	return c.Compile(url)
+	return c.Compile(schemaURL(file))
 }
 
 // Kinds 返回全部已登记的产物类型。
@@ -75,7 +87,17 @@ func Kinds() []*Kind { return slices.Clone(kinds) }
 // KindFor 返回 rel（相对项目目录、以 / 分隔的路径）对应的产物类型；未登记时返回 nil。
 func KindFor(rel string) *Kind {
 	for _, k := range kinds {
-		if ok, _ := path.Match(k.Pattern, rel); ok {
+		if ok, _ := path.Match(k.Pattern, rel); ok && k.Pattern != "" {
+			return k
+		}
+	}
+	return nil
+}
+
+// Named 返回名为 name 的产物类型；未登记时返回 nil。
+func Named(name string) *Kind {
+	for _, k := range kinds {
+		if k.Name == name {
 			return k
 		}
 	}
@@ -99,8 +121,11 @@ func (k *Kind) Validate(data []byte) []Problem {
 	return k.ValidateNode(doc)
 }
 
-// ValidateNode 按 k 的 Schema 校验已解析的 YAML 文档。
+// ValidateNode 按 k 的 Schema 校验已解析的 YAML 文档。文档含可执行内容时只报告这些内容，不再做 Schema 校验。
 func (k *Kind) ValidateNode(doc *yaml.Node) []Problem {
+	if ps := Executable(doc); len(ps) > 0 {
+		return ps
+	}
 	sch, err := k.compile()
 	if err != nil {
 		// 嵌入的 Schema 由测试保证可编译；走到这里说明二进制本身有缺陷。
@@ -229,6 +254,50 @@ func checkKeys(n *yaml.Node) *Problem {
 		}
 	}
 	return nil
+}
+
+// dataTags 是 YAML 核心 Schema 的标签；其他标签可能被某些解析器解释为对象构造或代码，一律视为可执行内容。
+var dataTags = []string{"!!str", "!!int", "!!float", "!!bool", "!!null", "!!map", "!!seq", "!!timestamp", "!!merge"}
+
+// ExecutableKeys 是在任意深度出现即视为可执行内容的字段名，比较时不区分大小写。
+var ExecutableKeys = []string{"script", "scripts", "command", "commands", "exec", "shell", "hook", "hooks", "plugin", "plugins", "run", "eval"}
+
+// Executable 报告文档中的可执行内容：YAML 核心 Schema 以外的标签，以及名为 ExecutableKeys 的字段（不区分大小写）。
+// 不进入别名，被引用的节点在其定义处检查。
+func Executable(doc *yaml.Node) []Problem {
+	var out []Problem
+	var walk func(n *yaml.Node, field string)
+	walk = func(n *yaml.Node, field string) {
+		if n.Kind != yaml.DocumentNode && n.Kind != yaml.AliasNode && !slices.Contains(dataTags, n.ShortTag()) {
+			out = append(out, Problem{Code: CodeExecutable, Field: field, Line: n.Line,
+				Message: fmt.Sprintf("出现了非数据标签 %s；产物只能包含数据", n.Tag)})
+		}
+		switch n.Kind {
+		case yaml.DocumentNode:
+			for _, c := range n.Content {
+				walk(c, field)
+			}
+		case yaml.SequenceNode:
+			for i, c := range n.Content {
+				walk(c, fmt.Sprintf("%s[%d]", field, i))
+			}
+		case yaml.MappingNode:
+			for i := 0; i+1 < len(n.Content); i += 2 {
+				k, v := n.Content[i], n.Content[i+1]
+				child := joinField(field, k.Value)
+				if isMerge(k) {
+					child = field
+				} else if slices.Contains(ExecutableKeys, strings.ToLower(k.Value)) {
+					out = append(out, Problem{Code: CodeExecutable, Field: child, Line: k.Line,
+						Message: fmt.Sprintf("出现了脚本或命令类字段 %s；产物只能包含数据", k.Value)})
+				}
+				walk(k, child)
+				walk(v, child)
+			}
+		}
+	}
+	walk(doc, "")
+	return out
 }
 
 func isMerge(k *yaml.Node) bool { return k.Kind == yaml.ScalarNode && k.ShortTag() == "!!merge" }

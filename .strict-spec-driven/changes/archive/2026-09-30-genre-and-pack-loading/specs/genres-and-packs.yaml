@@ -1,0 +1,132 @@
+schema: strict-spec-driven/delta-spec/v1
+schema_version: 1
+artifact_type: delta_spec
+schema_file: templates/strict-spec-driven/schemas/delta-spec.yaml
+target_spec: genres-and-packs
+spec:
+  title: 文体与规范包（Genre and Pack）
+  path: .strict-spec-driven/specs/genres-and-packs.yaml
+operations:
+  ADDED:
+    builtin-catalog:
+      strength: MUST
+      statement: wa-cli 必须随二进制提供内置（Built-in）的 default 规范包（Pack）与 minimal 文体（Genre），不需要网络访问或额外文件；minimal 文体声明单元类型、生命周期阶段（Stage）序列与每阶段必需产物，只用于内核验证。内置文体与规范包的内容都必须通过与工作区规范包相同的校验。
+      scenarios:
+        builtin-genre-resolves:
+          - GIVEN: 用 wa-cli init --dir D --genre minimal 创建的工作区，只把 wa-cli 二进制复制到另一个目录运行
+          - WHEN: 运行 wa-cli config resolved --dir D --json
+          - THEN: valid 为 true，resolved.genre.id 为 minimal，resolved.unitTypes 与 resolved.stages 非空且每项的 source 为 genre:minimal，退出码为 0
+    config-resolved:
+      strength: MUST
+      statement: wa-cli config resolved 必须按 文体默认 → 规范包（按 config.yaml 中 packs 的顺序）→ 项目配置 的顺序合并 --dir 下工作区生效的设置，只读取、不修改任何产物，changedPaths 为空数组。--json 输出的 resolved 字段包含 genre（生效文体的 id 与 origin；未设置 default_genre 时为 null）、packs（按应用顺序的规范包，每项含 id、origin（builtin 或 workspace），工作区规范包另含 path）、unitTypes、stages、rules、glossary、bannedTerms、style 与 rubric。每项设置都必须带 source 字段，取值为 genre:<id>、pack:<id> 或 project，指明最终值来自哪个配置层（Config Layer）；rules 以规则 id 为键，其中 type、severity 与 params 的每个顶层键都各自带 value 与 source，任何配置层都没有给出 severity 时为 warning，来源为定义该规则的配置层。glossary 与 bannedTerms 按 term、rubric 按 id 合并，后面的配置层整项替换前面的同名项并保留其位置；style 按配置层顺序追加。存在 error 级诊断时 resolved 为 null，退出码为 1。未加 --json 时以人读文本输出同样的信息。未找到工作区时按 workspace-not-found 处理。
+      scenarios:
+        later-pack-wins:
+          - GIVEN: packs 为 [a, b]，a 与 b 都在 glossary 中定义词条「规范包」但写法不同
+          - WHEN: 运行 wa-cli config resolved --dir D --json
+          - THEN: resolved.glossary 中只有一条「规范包」词条，内容与 b 相同，source 为 pack:b
+        resolved-read-only:
+          - GIVEN: 合法的工作区
+          - WHEN: 运行 wa-cli config resolved --dir D --json
+          - THEN: changedPaths 为空数组，工作区内所有文件的内容与修改时间不变
+        pack-overrides-genre:
+          - GIVEN: '工作区的 default_genre 为 minimal（内置规则 length：type 为 length-range，severity 为 warning，params 为 {min: 300, max: 5000}），packs 为 [house]，house 规范包把 length 的 severity 设为 error、params.max 设为 20'
+          - WHEN: 运行 wa-cli config resolved --dir D --json
+          - THEN: 'resolved.rules.length 的 severity 为 {value: error, source: pack:house}，params.max 为 {value: 20, source: pack:house}，params.min 为 {value: 300, source: genre:minimal}，type 为 {value: length-range, source: genre:minimal}，退出码为 0'
+        project-overrides-pack:
+          - GIVEN: 同上，config.yaml 的 rules 中把 length 的 params.max 设为 30
+          - WHEN: 运行 wa-cli config resolved --dir D --json
+          - THEN: 'resolved.rules.length.params.max 为 {value: 30, source: project}，severity 仍来自 pack:house'
+        errors-null-resolved:
+          - GIVEN: packs 为 [house]，house 规范包定义了没有 type 的新规则 r9
+          - WHEN: 运行 wa-cli config resolved --dir D --json
+          - THEN: valid 为 false，resolved 为 null，退出码为 1
+    rule-merge:
+      strength: MUST
+      statement: 合并规则（Rule）时，首次定义某个规则 id 的配置层必须给出 type，否则报告错误码 rule.missing-type（field 为 rules.<id>）；后续配置层给出与已有值不同的 type 时报告错误码 rule.type-conflict（field 为 rules.<id>.type）。两种情况下 wa-cli config resolved 与 wa-cli validate 都以退出码 1 退出，诊断的 path 为出问题的配置层的产物路径；内置文体或规范包不填 path，message 以「内置文体 <id>：」或「内置规范包 <id>：」开头指明出处。
+      scenarios:
+        missing-type:
+          - GIVEN: house 规范包的 rules 中定义了文体与之前的规范包都没有的规则 r9，但没有 type
+          - WHEN: 运行 wa-cli config resolved --dir D --json
+          - THEN: diagnostics 中有一条错误码为 rule.missing-type、path 为 .writing-anything/packs/house.yaml、field 为 rules.r9 的诊断，valid 为 false，退出码为 1
+        type-conflict:
+          - GIVEN: default_genre 为 minimal（length 的 type 为 length-range），house 规范包把 length 的 type 写成 paragraph-length
+          - WHEN: 运行 wa-cli config resolved --dir D --json
+          - THEN: diagnostics 中有一条错误码为 rule.type-conflict、path 为 .writing-anything/packs/house.yaml、field 为 rules.length.type 的诊断，退出码为 1
+        builtin-layer-problem:
+          - GIVEN: packs 为 [a, default]，工作区规范包 a 把规则 ai-cliche 定义为 banned-terms 类型，内置 default 规范包中 ai-cliche 的类型为 ai-cliche
+          - WHEN: 运行 wa-cli config resolved --dir D --json
+          - THEN: diagnostics 中有一条错误码为 rule.type-conflict 的诊断，不含 path，message 以「内置规范包 default：」开头，退出码为 1
+    waivers:
+      strength: MUST
+      statement: 规范包与项目配置可以用 waivers 豁免（Waiver）一条规则，每项豁免必须写明非空的 reason。被豁免的规则在 resolved.rules 中 enabled 为 false，并带 waiver（reason 与 source）；未被豁免的规则 enabled 为 true、waiver 为 null。豁免缺少 reason 时报告 artifact.schema-violation；豁免指向合并后不存在的规则时报告错误码 rule.unknown-waiver-target；两种情况都以退出码 1 退出。
+      scenarios:
+        waiver-disables:
+          - GIVEN: 'house 规范包的 waivers 为 [{rule: r1, reason: 本团队不限制段落长度}]'
+          - WHEN: 运行 wa-cli config resolved --dir D --json
+          - THEN: 'resolved.rules.r1.enabled 为 false，waiver 为 {reason: 本团队不限制段落长度, source: pack:house}，退出码为 0'
+        waiver-without-reason:
+          - GIVEN: house 规范包的豁免缺少 reason
+          - WHEN: 运行 wa-cli validate --dir D --json
+          - THEN: diagnostics 中有一条错误码为 artifact.schema-violation、field 为 waivers[0].reason 的诊断，退出码为 1
+        waiver-unknown-rule:
+          - GIVEN: house 规范包豁免了不存在的规则 nope
+          - WHEN: 运行 wa-cli config resolved --dir D --json
+          - THEN: diagnostics 中有一条错误码为 rule.unknown-waiver-target、field 为 waivers[0].rule 的诊断，退出码为 1
+    data-only-packs:
+      strength: MUST
+      statement: 规范包、文体与 config.yaml 只能包含数据。出现 YAML 核心标签（!!str、!!int、!!float、!!bool、!!null、!!map、!!seq、!!timestamp）以外的标签，或在任意深度出现名为（不区分大小写）script、scripts、command、commands、exec、shell、hook、hooks、plugin、plugins、run、eval 的字段时，wa-cli validate 与 wa-cli config resolved 都必须报告错误码 artifact.executable-content（path 为该产物路径，field 为出现位置，message 给出行号），以退出码 1 退出；wa-cli 在任何情况下都不得执行产物中的内容。
+      scenarios:
+        custom-tag:
+          - GIVEN: .writing-anything/packs/house.yaml 中某个值带有 !exec 标签
+          - WHEN: 运行 wa-cli validate .writing-anything/packs/house.yaml --dir D --json
+          - THEN: diagnostics 中有一条错误码为 artifact.executable-content、path 为 .writing-anything/packs/house.yaml 的诊断，message 含该标签所在的行号，退出码为 1
+        script-field-in-params:
+          - GIVEN: house 规范包某条规则的 params 中含有 script 字段
+          - WHEN: 运行 wa-cli config resolved --dir D --json
+          - THEN: diagnostics 中有一条错误码为 artifact.executable-content、field 指向该 script 字段的诊断，valid 为 false，退出码为 1
+    known-rule-types:
+      strength: MUST
+      statement: 规则的 type 必须是已知规则类型（Rule Type）之一：cjk-typography、ai-cliche、banned-terms、term-consistency、length-range、paragraph-length、required-sections。出现其他 type 时，wa-cli validate 与 wa-cli config resolved 必须报告错误码 rule.unknown-type（field 为该规则的 type，message 列出已知类型），以退出码 1 退出。
+      scenarios:
+        unknown-rule-type:
+          - GIVEN: house 规范包定义规则 r9，type 为 run-shell
+          - WHEN: 运行 wa-cli validate --dir D --json
+          - THEN: diagnostics 中有一条错误码为 rule.unknown-type、field 为 rules.r9.type 的诊断，message 列出已知的规则类型，退出码为 1
+    workspace-pack-files:
+      strength: MUST
+      statement: 作者可以把自有规范包放在 .writing-anything/packs/<id>.yaml，并在 config.yaml 的 packs 中按 id 引用；wa-cli validate <path> 必须把该位置的文件识别为规范包并校验。文件内的 id 与文件名（去掉 .yaml）不一致时报告错误码 pack.id-mismatch；id 与内置规范包相同时报告错误码 pack.id-conflict；两者都以退出码 1 退出。wa-cli init 不创建 packs/ 目录，缺少该目录不是错误。
+      scenarios:
+        id-mismatch:
+          - GIVEN: .writing-anything/packs/house.yaml 中 id 为 office
+          - WHEN: 运行 wa-cli validate --dir D --json
+          - THEN: diagnostics 中有一条错误码为 pack.id-mismatch、path 为 .writing-anything/packs/house.yaml、field 为 id 的诊断，退出码为 1
+        id-conflict:
+          - GIVEN: .writing-anything/packs/default.yaml 是 id 为 default 的合法规范包
+          - WHEN: 运行 wa-cli validate --dir D --json
+          - THEN: diagnostics 中有一条错误码为 pack.id-conflict、path 为 .writing-anything/packs/default.yaml 的诊断，退出码为 1
+        no-packs-dir:
+          - GIVEN: 刚用 wa-cli init --dir D 创建的工作区，没有 packs/ 目录
+          - WHEN: 运行 wa-cli validate --dir D --json
+          - THEN: valid 为 true，退出码为 0
+    default-pack:
+      strength: MUST
+      statement: 'config.yaml 的 packs 为空数组时，wa-cli config resolved 必须隐式应用内置 default 规范包，resolved.packs 为 [{id: default, origin: builtin}]；packs 非空时只按列出的顺序应用列出的规范包，需要 default 时须显式列出。'
+      scenarios:
+        empty-packs-uses-default:
+          - GIVEN: 刚用 wa-cli init --dir D 创建的工作区，packs 为空
+          - WHEN: 运行 wa-cli config resolved --dir D --json
+          - THEN: resolved.packs 只含 default，resolved.genre 为 null，resolved.rules 中每条规则的 source 都为 pack:default，退出码为 0
+        explicit-packs-replace-default:
+          - GIVEN: packs 为 [house]
+          - WHEN: 运行 wa-cli config resolved --dir D --json
+          - THEN: resolved.packs 只含 house，不含 default
+    duplicate-entries:
+      strength: MUST
+      statement: 同一个规范包中 glossary 或 banned_terms 的 term 重复、rubric 的 id 重复，或同一个文体中 unit_types、stages、rubric 的 id 重复时，必须报告错误码 artifact.duplicate-id，field 指向重复出现的那一项；文体的单元类型 children 引用未声明的单元类型时报告 genre.unknown-unit-type。两种情况都以退出码 1 退出。
+      scenarios:
+        duplicate-glossary-term:
+          - GIVEN: .writing-anything/packs/house.yaml 的 glossary 中「规范包」出现两次
+          - WHEN: 运行 wa-cli validate --dir D --json
+          - THEN: diagnostics 中有一条错误码为 artifact.duplicate-id、field 为 glossary[1].term 的诊断，退出码为 1
+  MODIFIED: {}
+  REMOVED: {}

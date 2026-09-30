@@ -1,0 +1,19 @@
+schema: strict-spec-driven/lesson/v1
+schema_version: 1
+artifact_type: lesson
+schema_file: templates/strict-spec-driven/schemas/lesson.yaml
+lesson:
+  id: nil-null-1d1e16
+  title: 嵌套在命令专属输出中的 nil 切片会编码成 null
+category: coding
+status: active
+created_at: '2026-09-30T11:25:38.773Z'
+updated_at: '2026-09-30T11:25:38.773Z'
+context: wa-cli 的 --json 输出由 writeJSON 统一补齐信封，但它只把顶层的 diagnostics 与 changedPaths 从 nil 改成空数组。
+observation: genre-and-pack-loading 中 config resolved 输出的 unitTypes[].children 与 stages[].requiredArtifacts 来自 YAML 中可省略的字段，解码后为 nil 切片，JSON 中成了 null，违反 cli-contract/shared-envelope；已有测试只检查顶层字段，直到独立审查才发现。
+takeaway: 从可省略的 YAML 字段解码出的切片，在进入输出结构前规范成空切片；对新命令的 JSON 输出做一次递归的 null 检查测试，而不是只断言顶层字段。
+applies_when: 新增或修改 wa-cli 命令的 --json 输出，且命令专属字段里嵌套了来自产物可选字段的数组时
+occurrences:
+  - origin: genre-and-pack-loading
+    date: '2026-09-30'
+    evidence: internal/catalog/catalog.go 的 nonNil 与 internal/cli/resolved_test.go 的 noNullArrays

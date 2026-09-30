@@ -11,6 +11,7 @@ import (
 
 	"github.com/santhosh-tekuri/jsonschema/v6"
 	"github.com/santhosh-tekuri/jsonschema/v6/kind"
+	"go.yaml.in/yaml/v3"
 )
 
 func readFixture(t *testing.T, path string) []byte {
@@ -225,5 +226,81 @@ func TestAliasBomb(t *testing.T) {
 	}
 	if Decode(nil) != nil {
 		t.Fatal("Decode(nil) must be nil")
+	}
+}
+
+func TestKindsForPacksAndGenres(t *testing.T) {
+	if k := KindFor(".writing-anything/packs/house.yaml"); k == nil || k.Name != "pack" {
+		t.Fatalf("KindFor(packs/house.yaml) = %+v", k)
+	}
+	for _, rel := range []string{"", ".writing-anything/packs/sub/house.yaml", ".writing-anything/genres/minimal.yaml"} {
+		if k := KindFor(rel); k != nil {
+			t.Errorf("KindFor(%q) = %s, want nil", rel, k.Name)
+		}
+	}
+	if k := Named("genre"); k == nil || k.Pattern != "" {
+		t.Fatalf("Named(genre) = %+v, want a built-in-only kind", k)
+	}
+	if Named("nope") != nil {
+		t.Fatal("Named(nope) must be nil")
+	}
+}
+
+// 可执行内容先于 Schema 校验报告，给出字段路径与行号；核心标签、合并键与别名不算可执行内容。
+func TestExecutable(t *testing.T) {
+	pack := Named("pack")
+	tests := []struct {
+		src   string
+		field string
+		line  int
+	}{
+		{"schema_version: 1\nid: a\ntitle: t\ndescription: !exec rm\n", "description", 4},
+		{"schema_version: 1\nid: a\ntitle: t\nrules:\n  r:\n    type: length-range\n    params:\n      run: x\n", "rules.r.params.run", 8},
+		{"schema_version: 1\nid: a\ntitle: t\nstyle:\n  - ok\n  - !!python/object:os.system x\n", "style[1]", 6},
+		{"schema_version: 1\nid: a\ntitle: t\nhooks: [a]\n", "hooks", 4},
+		{"schema_version: 1\nid: a\ntitle: t\nrules:\n  r:\n    type: length-range\n    params: {Script: x}\n", "rules.r.params.Script", 7},
+	}
+	for _, tt := range tests {
+		ps := pack.Validate([]byte(tt.src))
+		if len(ps) != 1 || ps[0].Code != "artifact.executable-content" || ps[0].Field != tt.field || ps[0].Line != tt.line {
+			t.Errorf("%q: problems = %+v, want one artifact.executable-content at %s line %d", tt.src, ps, tt.field, tt.line)
+		}
+	}
+	ok := "schema_version: 1\nid: a\ntitle: !!str t\nbase: &b {x: 1}\n"
+	if ps := Executable(mustParse(t, ok)); len(ps) != 0 {
+		t.Errorf("core tags and anchors: problems = %+v, want none", ps)
+	}
+	merged := "a: &a {k: 1}\nb:\n  <<: *a\n  n: 1.5\n  t: 2001-12-14\n  z: null\n  y: true\n"
+	if ps := Executable(mustParse(t, merged)); len(ps) != 0 {
+		t.Errorf("merge keys: problems = %+v, want none", ps)
+	}
+	// 工作区配置同样只能包含数据。
+	if ps := KindFor(".writing-anything/config.yaml").Validate(readFixture(t, filepath.Join("testdata", "config", "invalid", "python-tag.yaml"))); len(ps) != 1 || ps[0].Code != "artifact.executable-content" || ps[0].Field != "language" {
+		t.Errorf("config: problems = %+v", ps)
+	}
+}
+
+func mustParse(t *testing.T, src string) *yaml.Node {
+	t.Helper()
+	doc, p := Parse([]byte(src))
+	if p != nil {
+		t.Fatal(p)
+	}
+	return doc
+}
+
+// 文体与规范包共用 common.schema.json 中的定义。
+func TestSharedDefinitions(t *testing.T) {
+	ps := Named("pack").Validate(readFixture(t, filepath.Join("testdata", "pack", "invalid", "waiver-without-reason.yaml")))
+	if len(ps) != 1 || ps[0].Code != "artifact.schema-violation" || ps[0].Field != "waivers[0].reason" {
+		t.Fatalf("problems = %+v, want waivers[0].reason missing", ps)
+	}
+	ps = Named("genre").Validate(readFixture(t, filepath.Join("testdata", "genre", "invalid", "bad-severity.yaml")))
+	if len(ps) != 1 || ps[0].Field != "rules.length.severity" {
+		t.Fatalf("problems = %+v, want rules.length.severity", ps)
+	}
+	ps = Named("pack").Validate([]byte("schema_version: 1\nid: a\ntitle: t\nwaivers:\n  - rule: r\n    reason: '  '\n"))
+	if len(ps) != 1 || ps[0].Field != "waivers[0].reason" {
+		t.Fatalf("blank reason: problems = %+v", ps)
 	}
 }

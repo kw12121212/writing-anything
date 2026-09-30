@@ -5,7 +5,7 @@ schema_file: ../../templates/strict-spec-driven/schemas/planned-change.yaml
 planned_change:
   id: genre-and-pack-loading
   milestone: kernel-foundation
-status: planned
+status: complete
 summary: 声明式加载文体（Genre）与规范包（Pack），规范包可覆盖文体默认规则
 details: 定义文体 YAML（单元类型、生命周期阶段序列、每阶段必需产物、默认规则配置、评分标准 Rubric）和规范包 YAML（文风、术语表 Glossary、禁用词、规则参数覆盖、豁免 Waiver）。内置一个 default 规范包和一个仅供测试的最小文体，均用 embed 打包。合并顺序为 文体默认 → 规范包 → 项目配置；wa-cli config resolved --json 输出合并结果和每项来源。规范包出现可执行内容或未知规则类型时校验失败。
 depends_on:

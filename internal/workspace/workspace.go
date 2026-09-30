@@ -40,6 +40,7 @@ const (
 	ConfigPath  = Dir + "/config.yaml"
 	SourcesPath = Dir + "/sources"
 	WorksPath   = Dir + "/works"
+	PacksPath   = Dir + "/packs"
 )
 
 // 配置的默认值。
@@ -60,7 +61,8 @@ type Problem struct {
 	Severity string
 	Path     string
 	Field    string
-	Line     int // YAML 行号；未知时为 0
+	Line     int    // YAML 行号；未知时为 0
+	Origin   string // 内置产物的出处，如「内置规范包 default」；工作区产物为空
 	Message  string
 }
 
@@ -75,6 +77,9 @@ type Config struct {
 func errorAt(code, path, msg string) Problem {
 	return Problem{Code: code, Severity: SeverityError, Path: path, Message: msg}
 }
+
+// FromSchema 把 path 处产物的 Schema 校验问题转换为工作区问题。
+func FromSchema(path string, ps []schema.Problem) []Problem { return fromSchema(path, ps) }
 
 func fromSchema(path string, ps []schema.Problem) []Problem {
 	var out []Problem
@@ -271,6 +276,9 @@ func Load(root string) (*Config, []Problem) {
 	}
 	return summarize(schema.Decode(doc)), fromSchema(ConfigPath, configKind().ValidateNode(doc))
 }
+
+// Read 读取并解析 root 下的产物 rel；失败时返回 nil 与问题。
+func Read(root, rel string) (*yaml.Node, []Problem) { return read(root, rel) }
 
 // read 读取并解析 rel；失败时返回 nil 与问题。
 func read(root, rel string) (*yaml.Node, []Problem) {

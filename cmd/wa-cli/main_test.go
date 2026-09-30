@@ -63,17 +63,25 @@ func TestBinary(t *testing.T) {
 		}
 	}
 
-	// 二进制位于仓库之外，并在另一个临时目录中运行：Schema 随二进制提供，不依赖仓库文件。
+	// 二进制位于仓库之外，并在另一个临时目录中运行：Schema、内置文体与规范包随二进制提供，不依赖仓库文件。
 	project := t.TempDir()
-	for _, args := range [][]string{{"init", "--json"}, {"validate", "--json"}} {
+	for _, args := range [][]string{{"init", "--genre", "minimal", "--json"}, {"validate", "--json"}, {"config", "resolved", "--json"}} {
 		cmd := exec.Command(bin, args...)
 		cmd.Dir = project
 		out, err := cmd.Output()
 		var res struct {
-			Valid bool `json:"valid"`
+			Valid    bool `json:"valid"`
+			Resolved *struct {
+				Genre struct {
+					ID string `json:"id"`
+				} `json:"genre"`
+			} `json:"resolved"`
 		}
 		if err != nil || json.Unmarshal(out, &res) != nil || !res.Valid {
 			t.Fatalf("%v in %s: err = %v, stdout = %s", args, project, err, out)
+		}
+		if args[0] == "config" && (res.Resolved == nil || res.Resolved.Genre.ID != "minimal") {
+			t.Fatalf("config resolved: stdout = %s, want the built-in minimal genre", out)
 		}
 	}
 

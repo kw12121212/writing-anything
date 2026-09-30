@@ -14,6 +14,11 @@ categories:
       status: active
       occurrences: 1
       path: .strict-spec-driven/lessons/coding/yaml-v3-0-24efd9.yaml
+    nil-null-1d1e16:
+      title: 嵌套在命令专属输出中的 nil 切片会编码成 null
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/coding/nil-null-1d1e16.yaml
   documentation:
     must-must-6af326:
       title: 修改一条 MUST 需求时，要检查同一规格里相邻的 MUST 是否因此冲突
