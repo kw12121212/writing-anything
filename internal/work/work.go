@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/kw12121212/writing-anything/internal/catalog"
+	"github.com/kw12121212/writing-anything/internal/decision"
 	"github.com/kw12121212/writing-anything/internal/schema"
 	"github.com/kw12121212/writing-anything/internal/workspace"
 	"go.yaml.in/yaml/v3"
@@ -62,11 +63,18 @@ type Unit struct {
 
 // Work 是一个已通过校验的作品。
 type Work struct {
-	ID    string
-	Path  string // work.yaml 相对项目目录的路径
-	Genre *catalog.Genre
-	Root  *Unit
-	doc   *yaml.Node
+	ID        string
+	Path      string // work.yaml 相对项目目录的路径
+	Genre     *catalog.Genre
+	Root      *Unit
+	doc       *yaml.Node
+	decisions *loadedQueue // 决策队列，首次计算阻塞项时加载
+}
+
+// loadedQueue 是一次加载的决策队列。
+type loadedQueue struct {
+	ds      []decision.Decision
+	invalid bool
 }
 
 // 文件格式：字段名与 YAML 一致。
@@ -289,13 +297,15 @@ func RefOf(dir string) string {
 // Blocker 是阻止单元推进的一个阻塞项（Blocker）。
 type Blocker struct {
 	Code     string
-	Artifact string // 缺失的必需产物 id
-	Path     string // 单元目录，相对项目目录
+	Artifact string // 缺失的必需产物 id；决策阻塞项为 decisions
+	Path     string // 缺失产物所在的单元目录或决策队列，相对项目目录
+	Decision string // 决策阻塞项的决策 id；其他阻塞项为空
 	Message  string
 }
 
 // Blockers 返回单元 u 在当前阶段的全部阻塞项；advance、next 与 status 都只通过它得到阻塞项。
-// 目前唯一的阻塞来源是缺失的必需产物（Required Artifact）：单元目录下既没有 <a>.yaml 也没有 <a>.md。
+// 阻塞来源依次为：缺失的必需产物（Required Artifact），即单元目录下既没有 <a>.yaml 也没有 <a>.md；关联该单元的
+// 未决定阻塞决策；决策队列无法加载时，偏安全地给出一条 decision.invalid-queue。
 func (w *Work) Blockers(root string, u *Unit) []Blocker {
 	s := w.stage(u.Stage)
 	if s == nil {
@@ -310,7 +320,26 @@ func (w *Work) Blockers(root string, u *Unit) []Blocker {
 		out = append(out, Blocker{Code: CodeMissingArtifact, Artifact: a, Path: dir,
 			Message: fmt.Sprintf("阶段 %s 的必需产物（Required Artifact）%s 缺失：%s/ 下没有 %s.yaml 或 %s.md", u.Stage, a, dir, a, a)})
 	}
+	all, invalid := w.queue(root)
+	ds := decision.BlockingIn(all, u.Ref)
+	if invalid {
+		out = append(out, Blocker{Code: decision.CodeInvalidQueue, Artifact: "decisions", Path: decision.Path,
+			Message: "决策队列（Decision Queue）无法加载，无法确认是否存在阻塞决策；请先修复 " + decision.Path})
+	}
+	for _, d := range ds {
+		out = append(out, Blocker{Code: decision.CodeBlocking, Artifact: "decisions", Path: decision.Path, Decision: d.ID,
+			Message: fmt.Sprintf("阻塞决策（Blocking）%s 尚未决定：%s", d.ID, d.Question)})
+	}
 	return out
+}
+
+// queue 返回决策队列与它是否无法加载；同一个作品只加载一次，逐单元计算阻塞项时不重复读取与校验。
+func (w *Work) queue(root string) ([]decision.Decision, bool) {
+	if w.decisions == nil {
+		ds, _, ps := decision.Load(root)
+		w.decisions = &loadedQueue{ds: ds, invalid: len(ps) > 0}
+	}
+	return w.decisions.ds, w.decisions.invalid
 }
 
 // stage 返回阶段 id 的声明；id 为 done 时返回 nil。
@@ -516,7 +545,7 @@ func addUnit(root, parentRef, typ, id string, genres genreLookup) (*Work, *Unit,
 	unit := &yaml.Node{Kind: yaml.MappingNode}
 	unit.Content = []*yaml.Node{str("id"), str(id), str("type"), str(typ), str("stage"), str(w.Genre.Stages[0].ID),
 		str("units"), {Kind: yaml.SequenceNode, Tag: "!!seq", Style: yaml.FlowStyle}}
-	units.Style &^= yaml.FlowStyle // 空的流式序列 [] 追加单元后改为块式，便于阅读
+	workspace.BlockSequence(node, "units") // 空的流式序列 [] 追加单元后改为块式，便于阅读
 	units.Content = append(units.Content, unit)
 	saved, ps := w.save(root)
 	if saved == nil {

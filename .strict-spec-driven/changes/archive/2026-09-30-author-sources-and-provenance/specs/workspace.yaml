@@ -1,0 +1,45 @@
+schema: strict-spec-driven/delta-spec/v1
+schema_version: 1
+artifact_type: delta_spec
+schema_file: templates/strict-spec-driven/schemas/delta-spec.yaml
+target_spec: workspace
+operations:
+  ADDED: {}
+  MODIFIED:
+    validate-workspace:
+      strength: MUST
+      statement: 不带位置参数的 wa-cli validate 必须校验 --dir 下的整个工作区：config.yaml 符合工作区配置的 JSON Schema，sources/ 与 works/ 存在，.writing-anything/packs/ 下的每个 .yaml 文件都是合法的规范包（Pack），default_genre 与 packs 引用的文体（Genre）与规范包都存在，且按 文体 → 规范包 → 项目配置 合并时没有冲突；works/ 下每个不以 . 开头的子目录都必须含通过作品校验（见 units-and-lifecycle 主规格的 work-validation）的作品产物 work.yaml；sources/ 下每个不以 . 开头的子目录都必须是完整的素材（见 sources-and-provenance 主规格的 archive-integrity），每个作品的单元目录中存在的 provenance.yaml 与 claims.yaml 都必须合法（见 sources-and-provenance 主规格的 unit-artifact-validation）。全部通过时 valid 为 true、退出码为 0，--json 输出的 checked 字段列出已校验的产物路径（含每个规范包文件、每个 work.yaml、每个 source.yaml 与每个单元目录中的 provenance.yaml、claims.yaml）；发现问题时退出码为 1，并为每个问题给出一条诊断：缺少必需目录时错误码为 workspace.missing-directory，缺少 config.yaml 时为 artifact.not-found，两者的 next 都包含 wa-cli init --dir <dir>；作品目录中缺少 work.yaml 时同样为 artifact.not-found，其 next 包含 wa-cli help new --json；引用不存在的文体时为 config.unknown-genre，引用不存在的规范包时为 config.unknown-pack，两者的 path 为 .writing-anything/config.yaml、field 为出错的字段。
+      scenarios:
+        missing-directory:
+          - GIVEN: 已初始化的工作区，sources/ 已被删除
+          - WHEN: 运行 wa-cli validate --dir D --json
+          - THEN: valid 为 false，diagnostics 中有一条错误码为 workspace.missing-directory、path 为 .writing-anything/sources 的诊断，其 next 包含一条 wa-cli init 命令，退出码为 1
+        missing-config:
+          - GIVEN: 已初始化的工作区，config.yaml 已被删除
+          - WHEN: 运行 wa-cli validate --dir D --json
+          - THEN: diagnostics 中有一条错误码为 artifact.not-found、path 为 .writing-anything/config.yaml 的诊断，退出码为 1
+        unknown-genre:
+          - GIVEN: 已初始化的工作区，config.yaml 中 default_genre 为 no-such-genre
+          - WHEN: 运行 wa-cli validate --dir D --json
+          - THEN: diagnostics 中有一条错误码为 config.unknown-genre、path 为 .writing-anything/config.yaml、field 为 default_genre 的诊断，valid 为 false，退出码为 1
+        unknown-pack:
+          - GIVEN: 已初始化的工作区，config.yaml 中 packs 为 [default, no-such-pack]
+          - WHEN: 运行 wa-cli validate --dir D --json
+          - THEN: diagnostics 中有一条错误码为 config.unknown-pack、field 为 packs[1] 的诊断，退出码为 1
+        checks-pack-files:
+          - GIVEN: 已初始化的工作区，.writing-anything/packs/house.yaml 是合法的规范包，config.yaml 的 packs 为 [house]
+          - WHEN: 运行 wa-cli validate --dir D --json
+          - THEN: valid 为 true，checked 包含 .writing-anything/config.yaml 与 .writing-anything/packs/house.yaml，退出码为 0
+        checks-work-files:
+          - GIVEN: 已初始化的工作区，已用 wa-cli new minimal my-post --dir D 创建作品
+          - WHEN: 运行 wa-cli validate --dir D --json
+          - THEN: valid 为 true，checked 包含 .writing-anything/works/my-post/work.yaml，退出码为 0
+        missing-work-file:
+          - GIVEN: 已初始化的工作区，works/ 下有一个没有 work.yaml 的子目录 draft-notes
+          - WHEN: 运行 wa-cli validate --dir D --json
+          - THEN: diagnostics 中有一条错误码为 artifact.not-found、path 为 .writing-anything/works/draft-notes/work.yaml 的诊断，其 next 包含 wa-cli help new --json，valid 为 false，退出码为 1
+        checks-source-and-unit-files:
+          - GIVEN: 已初始化的工作区，已登记素材 interview-ceo，作品 my-post 已用 wa-cli draft write 与 wa-cli claim add 写入正文与论断
+          - WHEN: 运行 wa-cli validate --dir D --json
+          - THEN: valid 为 true，checked 包含 .writing-anything/sources/interview-ceo/source.yaml、.writing-anything/works/my-post/provenance.yaml 与 .writing-anything/works/my-post/claims.yaml，退出码为 0
+  REMOVED: {}

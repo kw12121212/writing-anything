@@ -1,0 +1,3 @@
+schema_version: 1
+decisions:
+  - {id: dec-1, question: q, options: [], blocking: true, units: [], status: decided, decided_at: "2026-09-30T12:00:00Z"}

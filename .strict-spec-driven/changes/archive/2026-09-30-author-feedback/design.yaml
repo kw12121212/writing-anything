@@ -1,0 +1,46 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: author-feedback
+approach:
+  - 数据模型：单元目录下的 feedback.yaml 含 schema_version（1）与 feedback 数组，每项含 id（单元内唯一，默认 fb-<n>）、kind（must-fix、suggestion、question、praise）、status（open、accepted、resolved、rejected）、text、可选的 note（处理说明）与可选的 anchor（quote 原文片段、before 与 after 为原文前后各至多 30 个字符、paragraph 为所在段落的哈希）。不带锚点的反馈针对整个单元，永远不会失去锚点。
+  - 定位：在 CRLF 换成 LF 后的当前 draft.md 中精确查找 quote。feedback add 要求原文恰好出现一次（没有时 feedback.quote-not-found，多处时 feedback.ambiguous-quote，给出 --quote 但没有正文时 draft.not-found）。重新定位时：找不到为 orphaned；有多处时为每处打分——所在段落哈希与锚点一致得 1000 分，加上 before 的公共后缀长度与 after 的公共前缀长度——取最高分，同分取最靠前的一处。定位结果含 line（匹配处所在行）与 paragraph（所在段落的序号，从 1 开始）。定位只在读取时推导，不写回 feedback.yaml。
+  - 状态：feedback resolve <unit> <id> --status 把状态改为 open、accepted、resolved 或 rejected（默认 resolved），可选 --note 写入处理说明；在 YAML 节点树上只改目标节点、保留注释，取值未变时不写文件。未处理完的反馈指 status 为 open 或 accepted。
+  - 即时通知：feedback watch 启动时记录已有反馈的键（单元引用加反馈 id），此后每隔 --interval 毫秒（默认 1000）重新扫描所有作品的单元目录，按作品 id、单元树先序与文件内顺序输出新出现的反馈；每条反馈输出一行完整的输出信封（valid、diagnostics、changedPaths 与 feedback），--all 先输出已有的未处理反馈，--max 在输出指定条数后以退出码 0 结束，否则一直运行。扫描中遇到的问题以 feedback 为 null 的信封输出一次，同一问题不重复输出。
+  - next 集成：steps 每项新增 feedback 数组，列出该单元未处理完的反馈（unit、id、kind、status、text、anchor），action 在有未处理反馈时提示先处理；阻塞项与 commands 不变。validate 对每个单元目录中存在的 feedback.yaml 做 Schema 校验与 id 唯一检查。
+  - 分层：新增领域包 internal/feedback，依赖 internal/draft 导出的 Read（逐级 Lstat 的正文读取）与 Split；internal/cli 新增四条命令并扩展 next 与 checkWorkspace。
+  - 审查后补充：重新定位的打分从匹配处向前、向后按字符比较，行号随匹配偏移递增累计、段落用二分查找，耗时与正文长度成线性；list 与 watch 同样报告反馈 id 重复；feedback.yaml 本身是符号链接时 add 报告 workspace.write-failed，不替换它；--interval 与 --max 上限为 86400000。
+decisions:
+  derived-anchor-state:
+    decision: 锚点状态（located、orphaned、none）在读取时由当前正文推导，不写回 feedback.yaml。
+    rationale: 与段落出处的推导方式一致：作者直接改正文后不需要任何命令就能看到最新状态；原文被改回来时反馈自动恢复定位，不会因为写回过 orphaned 而需要人工清理。
+  exact-quote-matching:
+    decision: 重新定位只做精确匹配，多处匹配时用段落哈希与前后文择优，不做模糊匹配。
+    rationale: 精确匹配结果可以在规格中逐步描述并由测试断言；原文被改写后标为失去锚点正是里程碑要求的行为，交由作者判断比猜测一个相似片段更安全。
+  unique-quote-on-add:
+    decision: feedback add 要求 --quote 在当前正文中恰好出现一次，多处出现时报告 feedback.ambiguous-quote 并提示加长原文。
+    rationale: 记录时就歧义的锚点在正文修改后更难判断指向哪里；Agent 在对话中总能取更长的原文片段消除歧义。
+  envelope-per-line:
+    decision: feedback watch 每条事件输出一行完整的输出信封，并以 --max 与 --interval 使其可在进程内测试；新增 cli-contract 规则 streaming-envelopes（delta tech）。
+    rationale: 规划变更要求每行一条 JSON；让每一行都是共享信封，Agent 与 MCP 可以用解析其他命令的同一方式解析事件，cli-contract/shared-envelope 与注册表一致性测试也无需例外。
+  open-and-accepted-pending:
+    decision: next 列出 status 为 open 或 accepted 的反馈，不阻止推进。
+    rationale: accepted 表示已同意修改但尚未改完，仍是 Agent 下一步要做的事；规划变更只要求在每一步开始前列出，把反馈变成阻塞项会改变 advance 的已有行为，应由关卡强度等后续变更决定。
+  polling-watch:
+    decision: feedback watch 用轮询扫描实现，不使用文件系统事件通知。
+    rationale: 标准库没有跨平台的文件通知，引入第三方依赖违反 go-project-structure/stdlib-first；反馈文件数量少，默认每秒一次的扫描开销可以忽略。
+  shared-block-sequence:
+    decision: 向流式序列追加元素改为块式的逻辑收敛到 internal/workspace.BlockSequence，把序列上的行尾注释移到键上；feedback、claims 与 work 的追加都使用它。
+    rationale: 'yaml.v3 把 feedback: []  # 注释 的注释挂在序列节点上，改为块式后编码器不再输出它，违反 structured-edits；三处追加共用同一实现才不会只修一处（fresh-context 审查发现）。'
+  validate-path-no-symlink:
+    decision: validate <path> 在工作区目录之下途经符号链接时报告 artifact.not-found，与整体校验、list 和 next 跳过这类文件的行为一致。
+    rationale: 整体校验跳过符号链接而单文件校验跟随它，会读取项目目录之外的文件并报告 valid 为 true（fresh-context 审查实测）；validated-path-segments 要求所有入口一致。
+alternatives:
+  - option: 每条反馈写成独立文件，watch 按新文件判断新增。
+    reason: 反馈与论断等单元产物的存放方式不一致，validate 与 list 需要遍历大量小文件，状态修改也要定位文件。
+  - option: 把 orphaned 作为状态写回 feedback.yaml。
+    reason: 需要某个命令在正文修改后主动运行才能更新，作者直接编辑正文时状态会过期。
+risks:
+  - 轮询在反馈很多的大工作区中有扫描开销；到时可以改为只扫描修改时间变化的文件。
+  - 精确匹配对空白或标点的细微改动敏感，原文被轻微改写的反馈会失去锚点，需要作者确认。

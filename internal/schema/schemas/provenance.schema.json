@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "写入记录",
+  "description": "写入记录（Draft Record）：最近一次 wa-cli draft write 写入的整篇正文哈希与每个段落的哈希及出处（Provenance）。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "sha256", "paragraphs"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "sha256": {"$ref": "common.schema.json#/$defs/sha256"},
+    "paragraphs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["hash", "origin"],
+        "properties": {
+          "hash": {"$ref": "common.schema.json#/$defs/sha256"},
+          "origin": {"enum": ["human", "agent", "agent-draft-human-edited"]}
+        }
+      }
+    }
+  }
+}

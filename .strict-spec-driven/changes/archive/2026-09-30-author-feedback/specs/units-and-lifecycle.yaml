@@ -1,0 +1,33 @@
+schema: strict-spec-driven/delta-spec/v1
+schema_version: 1
+artifact_type: delta_spec
+schema_file: templates/strict-spec-driven/schemas/delta-spec.yaml
+target_spec: units-and-lifecycle
+operations:
+  ADDED: {}
+  MODIFIED:
+    next-steps:
+      strength: MUST
+      statement: wa-cli next [<unit>] 必须只读地输出下一步：--json 输出 steps 数组，未给出 unit 时包含工作区中所有可加载作品里 stage 不为 done 的单元（按作品 id 排序、单元树先序），给出 unit 时只含该单元。每项含 unit（单元引用）、stage、blockers、action、commands 与 feedback。blockers 为阻塞项（Blocker）数组，每项含 code、artifact、path 与 message，本变更中阻塞项只有缺失的必需产物（code 为 lifecycle.missing-artifact）；action 为人读说明；commands 为可以直接运行、不含占位符的 wa-cli 命令：没有阻塞项时为 [wa-cli advance <unit> --dir <dir> --json]，被缺失产物阻塞时只列出为该产物登记的生成命令，尚未登记时为空数组，此时 action 列出所缺产物与期望的文件路径。feedback 为该单元未处理完（status 为 open 或 accepted）的作者反馈数组，每项的字段与 wa-cli feedback list 相同（见 feedback 主规格的 feedback-list），有未处理的反馈时 action 提示先处理这些反馈；反馈不是阻塞项，不影响 blockers 与 commands。给出的单元已是 done 时，该项 blockers 与 commands 为空数组。changedPaths 为空数组；有作品不通过作品校验时报告其诊断、valid 为 false、退出码为 1，其他作品照常列出；否则退出码为 0。不加 --json 时以人读文本输出同样的信息。
+      scenarios:
+        next-blocked:
+          - GIVEN: 刚用 wa-cli new minimal my-post --dir D 创建的作品
+          - WHEN: 运行 wa-cli next --dir D --json
+          - THEN: steps 只含一项：unit 为 my-post，stage 为 brief，blockers 中有一条 code 为 lifecycle.missing-artifact、artifact 为 brief 的阻塞项，commands 为空数组，action 提到 brief.yaml；valid 为 true，changedPaths 为空数组，退出码为 0
+        next-unblocked:
+          - GIVEN: 同上，D/.writing-anything/works/my-post/brief.yaml 已存在
+          - WHEN: 运行 wa-cli next my-post --dir D --json
+          - THEN: steps 只含 my-post 一项，blockers 为空数组，commands 只含一条 wa-cli advance my-post 命令，退出码为 0
+        next-skips-done:
+          - GIVEN: 作品 my-post 的 stage 为 done，子单元 intro 的 stage 为 draft
+          - WHEN: 运行 wa-cli next --dir D --json
+          - THEN: steps 只含 unit 为 my-post/intro 的一项，退出码为 0
+        next-read-only:
+          - GIVEN: 含作品的合法工作区
+          - WHEN: 运行 wa-cli next --dir D --json
+          - THEN: changedPaths 为空数组，工作区内所有文件的内容与修改时间不变
+        next-lists-feedback:
+          - GIVEN: 作品 my-post 有 open 的 fb-1、accepted 的 fb-2 与 resolved 的 fb-3
+          - WHEN: 运行 wa-cli next my-post --dir D --json
+          - THEN: steps 只含 my-post 一项，其 feedback 依次为 fb-1 与 fb-2，action 提到作者反馈；blockers 与 commands 与没有反馈时相同，退出码为 0
+  REMOVED: {}

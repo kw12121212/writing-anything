@@ -46,17 +46,34 @@ type result struct {
 	Workspace    string           `json:"workspace"`
 	Checked      []string         `json:"checked"`
 	Config       *json.RawMessage `json:"config"`
-	Sources      int              `json:"sources"`
+	Sources      count            `json:"sources"`
 	Works        int              `json:"works"`
 	Resolved     *json.RawMessage `json:"resolved"`
 	stdout       string           // 原始输出，供解析命令专属字段
 }
 
+// count 是 status 输出的条目数；source list 的同名字段是数组，解码时忽略非数字的取值。
+type count int
+
+func (c *count) UnmarshalJSON(data []byte) error {
+	var n int
+	if json.Unmarshal(data, &n) == nil {
+		*c = count(n)
+	}
+	return nil
+}
+
 // runWS 以 --json 运行工作区命令，并断言路径都相对项目目录、以 / 分隔（workspace-artifacts/workspace-relative-paths）。
 func runWS(t *testing.T, dir string, args ...string) (int, result) {
 	t.Helper()
+	return runWSIn(t, dir, "", args...)
+}
+
+// runWSIn 与 runWS 相同，但以 input 作为标准输入。
+func runWSIn(t *testing.T, dir, input string, args ...string) (int, result) {
+	t.Helper()
 	args = append(args, "--dir", dir, "--json")
-	code, stdout, stderr := run(t, args...)
+	code, stdout, stderr := runIn(t, input, args...)
 	if stderr != "" {
 		t.Fatalf("%v: stderr = %q, want empty", args, stderr)
 	}
@@ -506,14 +523,14 @@ func TestWorkspaceWriteFailure(t *testing.T) {
 	dir := newWorkspace(t)
 	for _, args := range [][]string{{"status", "--dir", dir}, {"status", "--dir", dir, "--json"}, {"init", "--dir", dir}, {"validate", "--dir", dir}} {
 		var errOut bytes.Buffer
-		if code := Run(args, failingWriter{}, &errOut); code != 1 || !strings.Contains(errOut.String(), "写入输出失败：disk full") {
+		if code := Run(args, strings.NewReader(""), failingWriter{}, &errOut); code != 1 || !strings.Contains(errOut.String(), "写入输出失败：disk full") {
 			t.Fatalf("%v: exit code = %d, stderr = %q", args, code, errOut.String())
 		}
 	}
 	// 标准错误不可写时，诊断写入失败同样是执行失败。
 	os.Remove(configPath(dir))
 	var out bytes.Buffer
-	if code := Run([]string{"validate", "--dir", dir}, &out, failingWriter{}); code != 1 {
+	if code := Run([]string{"validate", "--dir", dir}, strings.NewReader(""), &out, failingWriter{}); code != 1 {
 		t.Fatalf("exit code = %d, want 1", code)
 	}
 }

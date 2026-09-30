@@ -9,14 +9,14 @@ standard:
 rules:
   embedded-schemas:
     strength: MUST
-    statement: 工作区中的每种结构化产物（Artifact）都必须在 internal/schema 中登记产物类型，并以 JSON Schema（draft 2020-12）文件声明结构，用 go:embed 打包进二进制；命令读写产物时必须经过 internal/schema 的统一校验入口，不得在命令中手写字段检查代替 Schema。
-    rationale: Schema 是 Agent、作者与 wa-cli 共享的结构契约；嵌入二进制保证单文件分发时照样能校验；只有一个校验入口，诊断格式和错误码才能保持一致。
+    statement: 工作区中的每种结构化产物（Artifact）都必须在 internal/schema 中登记产物类型，并以 JSON Schema（draft 2020-12）文件声明结构，用 go:embed 打包进二进制；同一产物类型可以登记多个路径模式（如同时出现在根单元目录与子单元目录中的 provenance.yaml），每个工作区路径至多匹配一种产物类型；命令读写产物时必须经过 internal/schema 的统一校验入口，不得在命令中手写字段检查代替 Schema。
+    rationale: Schema 是 Agent、作者与 wa-cli 共享的结构契约；嵌入二进制保证单文件分发时照样能校验；只有一个校验入口，诊断格式和错误码才能保持一致；单元目录深度不同，同一产物需要多个路径模式，而登记为多个同名类型会让按名称查找与遍历出现重复。
     enforcement:
       method: test
-      detail: internal/schema 的测试遍历产物类型表：断言每个已登记类型的 Schema 都能编译，并且在 testdata/ 下各有至少一个合法和一个不合法的夹具，校验结果与预期相符。
+      detail: internal/schema 的测试遍历产物类型表：断言每个已登记类型的 Schema 都能编译，并且在 testdata/ 下各有至少一个合法和一个不合法的夹具，校验结果与预期相符；断言每个路径模式的示例路径只匹配一种产物类型。
     examples:
       good:
-        - 新增单元产物时，在 internal/schema/schemas/ 加一份 Schema 文件，并在类型表中登记它的路径模式
+        - 新增单元产物时，在 internal/schema/schemas/ 加一份 Schema 文件，并在类型表中登记它的全部路径模式
       bad:
         - 在 status 命令里用 if cfg.GateLevel != "strict" && ... 手写取值检查
   workspace-relative-paths:
@@ -46,18 +46,18 @@ rules:
         - os.WriteFile(path, data, 0o644) 直接覆盖 config.yaml
   structured-edits:
     strength: MUST
-    statement: 修改已有的结构化产物时，必须在 YAML 节点树上只改目标节点，保留其他字段与注释；目标节点或到达它途经的任一节点带有 YAML 锚点、是别名或所在映射含合并键时不修改；写出前必须对编码结果重新解析，并执行 Schema 校验与该产物类型的领域校验（如作品的文体检查），无法解析或任一校验失败时不写；取值未变时不写文件，changedPaths 为空。
-    rationale: 作者会直接编辑结构化产物并写注释，整体重写会丢失这些内容；经由锚点、别名或合并键共享的节点被修改时会同时改动其他位置；只做 Schema 校验会写出结构合法但领域上不可用的产物（如子单元类型不被允许），写前复查整套校验才能保证 wa-cli 不会把可用的文件改坏；取值未变不写，changedPaths 才如实反映变更。
+    statement: 修改已有的结构化产物时，必须在 YAML 节点树上只改目标节点，保留其他字段与注释；改变节点风格（如向流式序列 [] 追加元素后改为块式）时，节点上的注释必须迁移到仍会输出的位置（internal/workspace.BlockSequence）；目标节点或到达它途经的任一节点带有 YAML 锚点、是别名或所在映射含合并键时不修改；写出前必须对编码结果重新解析，并执行 Schema 校验与该产物类型的领域校验（如作品的文体检查），无法解析或任一校验失败时不写；取值未变时不写文件，changedPaths 为空。
+    rationale: 作者会直接编辑结构化产物并写注释，整体重写或改变节点风格都会丢失这些内容；经由锚点、别名或合并键共享的节点被修改时会同时改动其他位置；只做 Schema 校验会写出结构合法但领域上不可用的产物；取值未变不写，changedPaths 才如实反映变更。
     enforcement:
       method: test
-      detail: internal/workspace 的 TestSetConfigPreservesComments、TestSetConfigRejects、TestSetConfigSameValue 与 TestSetConfigAnchors，internal/work 的 TestAdvance、TestAddUnit 与 TestAnchoredEdits 覆盖注释保留、写前复查、取值未变与锚点、别名、合并键。
+      detail: internal/workspace 的 TestSetConfigPreservesComments、TestSetConfigRejects、TestSetConfigSameValue、TestSetConfigAnchors 与 TestBlockSequenceKeepsLineComment，internal/work 的 TestAdvance、TestAddUnit、TestAddUnitKeepsFlowComment 与 TestAnchoredEdits，internal/draft 的 TestAddClaimKeepsFlowComment，internal/feedback 的 TestAddPreservesCommentsAndSkipsIDs 覆盖注释保留（含流式序列的行尾注释）、写前复查、取值未变与锚点、别名、合并键。
   input-limits:
     strength: MUST
-    statement: 解析产物时必须限制展开别名后的节点数（schema.MaxNodes），超限报告 artifact.parse-error，不得先展开再检查。
-    rationale: Agent 会对不可信的工作区自动运行命令，层层引用的别名能让很小的文件展开成海量节点并耗尽内存。
+    statement: 解析产物时必须限制展开别名后的节点数（schema.MaxNodes），超限报告 artifact.parse-error，不得先展开再检查；对工作区文件做推导、匹配或比较的算法（如段落出处的最长公共子序列对齐、反馈锚点的重新定位）必须限制输入规模，并使内存与耗时与之相称（draft.MaxParagraphs，超限报告 draft.too-large）：不得让不可信的文件决定平方级内存，也不得在每处匹配重新扫描前文。对同一文档做逐项推导（每个批注、每条锚点的行号、段落与前后文）时共用一次切分与规范化的结果，对正文的扫描次数不得随条目数增长；条目数没有其他上限时另设上限（如 feedback.MaxComments，超限报告 feedback.too-many-comments）。
+    rationale: Agent 会对不可信的工作区自动运行命令，层层引用的别名、极长的正文或大量重复的原文片段、批注都能让很小的操作耗尽内存或长时间占满 CPU；feedback watch 会反复执行这些计算。
     enforcement:
       method: test
-      detail: internal/schema 的 TestAliasBomb 与 internal/cli 的 TestValidateAliasExpansionLimit 用 8 层、每层 10 个别名的文档断言返回 artifact.parse-error。
+      detail: internal/schema 的 TestAliasBomb 与 internal/cli 的 TestValidateAliasExpansionLimit 断言返回 artifact.parse-error；internal/draft 的 TestTooManyParagraphs 断言 draft.too-large；internal/feedback 的 TestLocateManyMatches 断言 9000 处匹配的重新定位在 2 秒内完成。internal/feedback 的 TestManyComments 与 TestManyRecordedComments 断言大量批注的列出在限定时间内完成，并在超过上限时报告 feedback.too-many-comments。
   data-only-artifacts:
     strength: MUST
     statement: 文体、规范包与 config.yaml 的校验必须经过 internal/schema 的统一校验入口（Kind.Validate 或 Kind.ValidateNode），它在 Schema 校验之前做可执行内容检查（YAML 核心标签白名单与脚本类字段名黑名单），发现可执行内容时只报告 artifact.executable-content；任何包都不得对产物内容做模板求值、表达式计算、动态加载，或把其中的字符串当作命令执行。
@@ -88,11 +88,11 @@ rules:
       detail: internal/cli 的 TestBuiltinLayerDiagnostic 断言内置层问题 path 为空、message 以「内置规范包 default：」开头、next 为整体校验并能重新检出。
   validated-path-segments:
     strength: MUST
-    statement: 由命令参数（单元引用、作品 slug、单元 id）拼接工作区路径前，每个路径段都必须先按 common.schema.json 的 id 格式校验，不匹配时报告对应的 not-found 或 artifact.schema-violation，诊断不填 path，也不访问该路径；作品目录等由参数定位的目录必须是真实目录，不跟随符号链接。
-    rationale: Agent 会对不可信的输入与工作区自动运行命令；未经校验的路径段（如 ../x）或符号链接会让读写逃出项目目录，而诊断与 changedPaths 仍报告工作区内的路径。
+    statement: 由命令参数（单元引用、作品 slug、单元 id、素材 id、validate 的 path）拼接或解析工作区路径前，每个由参数给出的 id 路径段都必须先按 common.schema.json 的 id 格式校验，不匹配时报告对应的 not-found 或 artifact.schema-violation，诊断不填 path，也不访问该路径；工作区目录之下的路径在读取与写入时都必须逐级确认途经的是真实目录、不跟随符号链接，只对最后一级文件做 Lstat 不够；同一产物在所有入口（整体校验、validate <path>、列表与修改命令）上对符号链接的处理必须一致。
+    rationale: Agent 会对不可信的输入与工作区自动运行命令；未经校验的路径段（如 ../x）或途经的符号链接会让读写逃出项目目录，而诊断与 changedPaths 仍报告工作区内的路径；只在部分入口防护时，另一个入口会读取项目目录之外的文件并报告通过。
     enforcement:
       method: test
-      detail: internal/work 的 TestResolve（../x 用例）、TestCreate（非法 slug）与 TestSymlinkedWorkDir 断言不合法的路径段与符号链接不会被读写。
+      detail: internal/work 的 TestResolve（../x 用例）、TestCreate（非法 slug）与 TestSymlinkedWorkDir，internal/draft 的 TestSymlinkedUnitDirNotRead 与 TestWriteRejects，internal/source 的 TestSymlinkedMetadata，internal/feedback 的 TestSymlinks，internal/workspace 的 TestValidateArtifactSymlinks，internal/cli 的 TestFeedbackSymlinkedUnitDir 断言不合法的路径段与途经的符号链接不会被读写。
   single-blocker-source:
     strength: MUST
     statement: 单元的阻塞项（Blocker）只能由 internal/work 的 Work.Blockers 计算；advance 的拒绝、next 的 steps 与 status 的 units 都必须通过它得到阻塞项，不得在命令中另行判断；新增阻塞来源（如阻塞决策、写作简报关卡）时在 Work.Blockers 中追加。
@@ -105,3 +105,22 @@ rules:
         - decision-queue 在 Work.Blockers 中追加未解决的阻塞决策，advance、next、status 无需修改即报告它
       bad:
         - 在 runAdvance 中单独检查决策队列，next 与 status 却看不到这个阻塞项
+  load-once-per-command:
+    strength: SHOULD
+    statement: 工作区级产物（如 decisions.yaml）参与每个单元的推导时，每条命令只加载并校验一次（如 Work 首次计算阻塞项时缓存决策队列），再用于逐单元计算；不得在逐单元循环中重复读取文件与做 Schema 校验；按单元引用检查存在性时同样按作品缓存。
+    rationale: 逐单元重复加载让开销变为单元数乘以产物大小（fresh-context 审查实测 300 个单元、150 条决策时 next 慢约 100 倍），也会让同一命令内的不同单元读到不同版本的数据。
+    enforcement:
+      method: review
+      detail: 审查时确认 Work.Blockers 通过 Work.queue 读取决策队列，internal/cli 的 unitExists 按作品缓存解析结果。
+    examples:
+      good:
+        - w.queue(root) 首次调用时 decision.Load，之后复用
+      bad:
+        - 在 Work.Blockers 中对每个单元调用 decision.Load
+  self-edit-rebaseline:
+    strength: MUST
+    statement: wa-cli 自己修改作者可编辑的正文（如移除已解决的批注）时，只有在修改前正文的 SHA-256 等于写入记录的 sha256 时，才按原出处重建写入记录（draft.Rebaseline）；正文已被作者改过时不得因此把它变成未编辑状态。
+    rationale: 不重建时，下一次 draft write 会把 wa-cli 自己的修改误判为人工编辑；无条件重建则会让作者的改动失去人工编辑保护，Agent 可以不带 --base 覆盖它。
+    enforcement:
+      method: test
+      detail: internal/draft 的 TestRebaseline 与 internal/feedback 的 TestResolveComment 覆盖正文未改与已改两种情况。

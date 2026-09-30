@@ -6,6 +6,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/kw12121212/writing-anything/internal/schema"
 )
 
 // initialized 返回一个刚初始化的项目目录。
@@ -451,5 +453,35 @@ func TestWriteFileKeepsMode(t *testing.T) {
 	}
 	if info, _ := os.Stat(path); info.Mode().Perm() != 0o600 {
 		t.Fatalf("mode = %v, want 0600", info.Mode().Perm())
+	}
+}
+
+// validate <path> 不跟随工作区目录之下的符号链接读取项目目录之外的文件。
+func TestValidateArtifactSymlinks(t *testing.T) {
+	dir := t.TempDir()
+	if _, ps := Init(dir, nil); len(ps) > 0 {
+		t.Fatal(ps)
+	}
+	outside := t.TempDir()
+	os.WriteFile(filepath.Join(outside, "feedback.yaml"), []byte("schema_version: 1\nfeedback: []\n"), 0o644)
+	work := filepath.Join(dir, ".writing-anything", "works", "my-post")
+	os.MkdirAll(filepath.Join(work, "units"), 0o755)
+	os.Symlink(outside, filepath.Join(work, "units", "intro"))
+	os.Symlink(filepath.Join(outside, "feedback.yaml"), filepath.Join(work, "feedback.yaml"))
+	for _, rel := range []string{".writing-anything/works/my-post/units/intro/feedback.yaml", ".writing-anything/works/my-post/feedback.yaml"} {
+		if checked, ps := ValidateArtifact(dir, rel); len(checked) != 0 || len(ps) != 1 || ps[0].Code != "artifact.not-found" {
+			t.Errorf("%s: checked = %v, problems = %+v", rel, checked, ps)
+		}
+	}
+}
+
+func TestBlockSequenceKeepsLineComment(t *testing.T) {
+	doc, _ := schema.Parse([]byte("a: []  # 注释\nb: [x]\n"))
+	m := doc.Content[0]
+	BlockSequence(m, "a")
+	BlockSequence(m, "b")
+	data, _ := Encode(doc)
+	if !strings.Contains(string(data), "a: # 注释") || strings.Contains(string(data), "[x]") {
+		t.Fatalf("encoded:\n%s", data)
 	}
 }

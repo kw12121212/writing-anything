@@ -1,0 +1,100 @@
+schema: strict-spec-driven/delta-spec/v1
+schema_version: 1
+artifact_type: delta_spec
+schema_file: templates/strict-spec-driven/schemas/delta-spec.yaml
+target_spec: feedback
+spec:
+  title: 作者反馈（Feedback）
+  path: .strict-spec-driven/specs/feedback.yaml
+operations:
+  ADDED:
+    feedback-add:
+      strength: MUST
+      statement: wa-cli feedback add <unit> --text <text> 必须在单元目录下的 feedback.yaml 的 feedback 末尾追加一条作者反馈（Feedback）：kind 由 --kind 给出，取值为 must-fix、suggestion、question、praise 之一，省略时为 suggestion；status 为 open；id 由 --id 指定，省略时为 fb-<n>，n 从已有反馈数加一开始递增到不重复。给出 --quote 时，原文必须在当前 draft.md（CRLF 换成 LF 后）中恰好出现一次，并记录锚点（Anchor）：quote、before 与 after（原文前后各至多 30 个字符）以及 paragraph（原文所在段落的哈希，段落定义见 sources-and-provenance 主规格的 paragraph-model）；不给出 --quote 的反馈针对整个单元，没有锚点。feedback.yaml 不存在时创建（含 schema_version 1），子单元目录不存在时先创建；已有 feedback.yaml 时只追加该项，保留其他内容与 YAML 注释。成功时退出码为 0，changedPaths 列出新建的单元目录与 feedback.yaml，--json 输出的 feedback 字段为新反馈（字段见 feedback-list）。原文在正文中不存在时报告 feedback.quote-not-found，出现多次时报告 feedback.ambiguous-quote（message 提示加长原文），给出 --quote 但单元没有 draft.md 时报告 draft.not-found；kind 不在取值范围内、--id 不符合 id 格式或 text 为空时报告 artifact.schema-violation（field 为 kind、id 或 text）；id 与已有反馈相同时报告 artifact.duplicate-id（field 为 id）；这些情况的 next 包含 wa-cli help feedback add --json。已有 feedback.yaml 不通过校验时报告其诊断；feedback 经由 YAML 锚点、别名或合并键得到时报告 feedback.anchored-value；feedback.yaml 或单元目录不是普通文件或真实目录（如符号链接）时报告 workspace.write-failed，不替换它；这些情况都不修改文件，退出码为 1。
+      scenarios:
+        add-unit-level:
+          - GIVEN: 已创建作品 my-post，没有 draft.md
+          - WHEN: 运行 wa-cli feedback add my-post --text 整体太长 --dir D --json
+          - THEN: 新反馈的 kind 为 suggestion，没有 anchor，输出的 feedback.anchor.state 为 none，退出码为 0
+        quote-not-found:
+          - GIVEN: 作品 my-post 的 draft.md 不含「不存在的话」
+          - WHEN: 运行 wa-cli feedback add my-post --quote 不存在的话 --text x --dir D --json
+          - THEN: diagnostics 中有一条错误码为 feedback.quote-not-found 的诊断，next 包含 wa-cli help feedback add --json，没有写入 feedback.yaml，退出码为 1
+        ambiguous-quote:
+          - GIVEN: 作品 my-post 的 draft.md 中「方案」出现了两次
+          - WHEN: 运行 wa-cli feedback add my-post --quote 方案 --text x --dir D --json
+          - THEN: diagnostics 中有一条错误码为 feedback.ambiguous-quote 的诊断，退出码为 1
+        add-anchored:
+          - GIVEN: 作品 my-post 的 draft.md 为「第一段讲背景。\n\n第二段讲方案。」
+          - WHEN: 运行 wa-cli feedback add my-post --kind must-fix --quote 讲方案 --text 方案要给出数据 --dir D --json
+          - THEN: feedback.yaml 的 feedback 为一项：id 为 fb-1、kind 为 must-fix、status 为 open，anchor.quote 为 讲方案、before 以「第二段」结尾、after 为「。」；输出的 feedback.anchor.state 为 located、line 为 3、paragraph 为 2；changedPaths 为 [.writing-anything/works/my-post/feedback.yaml]，退出码为 0
+    anchor-relocation:
+      strength: MUST
+      statement: 带锚点的反馈每次被读取时都必须在当前 draft.md（CRLF 换成 LF 后）中重新定位，结果不写回 feedback.yaml：quote 不出现（包括单元没有 draft.md）时锚点状态为 orphaned（失去锚点（Orphaned Anchor））；出现一次时为 located；出现多次时为每一处打分——所在段落的哈希等于 anchor.paragraph 时得 1000 分，再加上该处之前文本与 before 的公共后缀长度和该处之后文本与 after 的公共前缀长度（按字符计）——取得分最高的一处，同分取最靠前的一处，状态为 located。located 的锚点给出匹配处首字符所在的行号 line 与所在段落的序号 paragraph（从 1 开始）。没有锚点的反馈状态为 none。
+      scenarios:
+        moved-quote:
+          - GIVEN: 反馈 fb-1 的原文位于第二段，作者之后在正文开头插入了一段
+          - WHEN: 运行 wa-cli feedback list my-post --dir D --json
+          - THEN: fb-1 的 anchor.state 为 located，paragraph 为 3，line 随之后移
+        rewritten-quote:
+          - GIVEN: 反馈 fb-1 的原文为「讲方案」，作者之后把它改成了「讲设计」
+          - WHEN: 运行 wa-cli feedback list my-post --dir D --json
+          - THEN: fb-1 的 anchor.state 为 orphaned，line 与 paragraph 为 null，退出码为 0
+        duplicate-after-edit:
+          - GIVEN: 反馈 fb-1 记录时原文「方案」只在第二段出现，作者之后在第一段也写了「方案」
+          - WHEN: 运行 wa-cli feedback list my-post --dir D --json
+          - THEN: fb-1 的 anchor.state 为 located，paragraph 仍为 2
+    feedback-list:
+      strength: MUST
+      statement: wa-cli feedback list [<unit>] 必须只读地列出反馈：--json 输出 feedback 数组，未给出 unit 时包含工作区中所有可加载作品的每个单元的反馈（按作品 id 排序、单元树先序、文件内顺序），给出 unit 时只含该单元；--status 只列出该状态（open、accepted、resolved、rejected）的反馈，取值不合法时报告 input.invalid-value，退出码为 1。每项含 unit（单元引用）、id、kind、status、text、note（没有时为 null）与 anchor（state 为 located、orphaned 或 none，quote、line、paragraph 在不适用时为 null）。changedPaths 为空数组；有 feedback.yaml 不通过校验（含反馈 id 重复，见 feedback-validation）时报告其诊断、valid 为 false、退出码为 1，其他反馈照常列出；否则退出码为 0。不加 --json 时以人读文本输出同样的信息。
+      scenarios:
+        list-all:
+          - GIVEN: 作品 my-post 的根单元有 fb-1，子单元 intro 有 fb-1
+          - WHEN: 运行 wa-cli feedback list --dir D --json
+          - THEN: feedback 依次为 unit 为 my-post 与 my-post/intro 的两项，changedPaths 为空数组，退出码为 0
+        list-by-status:
+          - GIVEN: 作品 my-post 有 fb-1（open）与 fb-2（resolved）
+          - WHEN: 运行 wa-cli feedback list my-post --status open --dir D --json
+          - THEN: feedback 只含 fb-1，退出码为 0
+    feedback-resolve:
+      strength: MUST
+      statement: wa-cli feedback resolve <unit> <id> 必须把该单元中 id 为 id 的反馈的 status 改为 --status 给出的取值（open、accepted、resolved、rejected，省略时为 resolved），给出 --note 时把 note 设为该取值；只修改 feedback.yaml 中的这些节点，保留其他内容与 YAML 注释。成功时退出码为 0，changedPaths 为该 feedback.yaml，--json 输出的 feedback 字段为修改后的反馈；status 与 note 都未变化时不写文件，changedPaths 为空数组。单元中没有该反馈时报告 feedback.not-found（next 包含 wa-cli feedback list <unit> 命令）；--status 取值不合法时报告 artifact.schema-violation（field 为 status）；目标反馈或其字段经由 YAML 锚点、别名或合并键得到时报告 feedback.anchored-value；这些情况都不修改文件，退出码为 1。
+      scenarios:
+        resolve-with-note:
+          - GIVEN: 作品 my-post 有 open 状态的 fb-1，作者在 feedback.yaml 中写了一行注释
+          - WHEN: 运行 wa-cli feedback resolve my-post fb-1 --note 已在第二段补充数据 --dir D --json
+          - THEN: fb-1 的 status 为 resolved、note 为「已在第二段补充数据」，注释保留；changedPaths 为 [.writing-anything/works/my-post/feedback.yaml]，退出码为 0
+        resolve-same:
+          - GIVEN: fb-1 的 status 已是 resolved
+          - WHEN: 运行 wa-cli feedback resolve my-post fb-1 --dir D --json
+          - THEN: changedPaths 为空数组，feedback.yaml 不变，退出码为 0
+        resolve-missing:
+          - GIVEN: 作品 my-post 没有 fb-9
+          - WHEN: 运行 wa-cli feedback resolve my-post fb-9 --dir D --json
+          - THEN: diagnostics 中有一条错误码为 feedback.not-found 的诊断，退出码为 1
+    feedback-watch:
+      strength: MUST
+      statement: wa-cli feedback watch 必须持续检查工作区并输出新增的反馈：启动时记录已有反馈（以单元引用加反馈 id 区分），此后每隔 --interval 毫秒（不超过 86400000 的正整数，默认 1000）重新扫描，按作品 id、单元树先序与文件内顺序输出新出现的反馈；给出 --all 时先输出启动时已有的未处理完（status 为 open 或 accepted）的反馈。加 --json 时每条反馈输出一行完整的输出信封：valid 为 true、diagnostics 与 changedPaths 为空数组、feedback 为该反馈（字段见 feedback-list）；扫描中遇到的问题输出一行 feedback 为 null、含诊断的信封，同一问题只输出一次。给出 --max <n>（正整数）时输出 n 条反馈后以退出码 0 结束，否则一直运行到被中断。--interval 或 --max 不是不超过 86400000 的正整数时报告 input.invalid-value，退出码为 1；未找到工作区时报告 workspace.not-found，退出码为 1。不加 --json 时每条反馈输出一行人读文本。
+      scenarios:
+        watch-new:
+          - GIVEN: 作品 my-post 已有 fb-1
+          - WHEN: 运行 wa-cli feedback watch --max 1 --interval 50 --dir D --json 期间，另一个进程运行 wa-cli feedback add my-post --text 新意见 --dir D
+          - THEN: 标准输出恰好一行 JSON，valid 为 true，feedback.id 为 fb-2、feedback.text 为 新意见；fb-1 没有输出；命令以退出码 0 结束
+        watch-all:
+          - GIVEN: 作品 my-post 有 open 的 fb-1 与 resolved 的 fb-2
+          - WHEN: 运行 wa-cli feedback watch --all --max 1 --dir D --json
+          - THEN: 输出一行，feedback.id 为 fb-1，退出码为 0
+        watch-bad-interval:
+          - GIVEN: 已初始化的工作区 D
+          - WHEN: 运行 wa-cli feedback watch --interval 0 --dir D --json
+          - THEN: diagnostics 中有一条错误码为 input.invalid-value 的诊断，退出码为 1
+    feedback-validation:
+      strength: MUST
+      statement: wa-cli validate 整体校验时，必须对每个可加载作品的每个单元目录中存在的 feedback.yaml 做 Schema 校验并计入 checked，且反馈 id 在文件内唯一（否则 artifact.duplicate-id，field 为 feedback[i].id）；wa-cli validate <path> 按产物所在位置识别 feedback.yaml 并执行同样的检查。单元目录途经符号链接时，整体校验、feedback list 与 wa-cli next 都不读取其中的 feedback.yaml，validate <path> 报告 artifact.not-found（见 workspace 主规格的 validate-single-artifact）。
+      scenarios:
+        duplicate-feedback-id:
+          - GIVEN: 作品 my-post 的 feedback.yaml 中有两条 id 为 fb-1 的反馈
+          - WHEN: 运行 wa-cli validate --dir D --json
+          - THEN: diagnostics 中有一条错误码为 artifact.duplicate-id、path 为 .writing-anything/works/my-post/feedback.yaml、field 为 feedback[1].id 的诊断，退出码为 1
+  MODIFIED: {}
+  REMOVED: {}

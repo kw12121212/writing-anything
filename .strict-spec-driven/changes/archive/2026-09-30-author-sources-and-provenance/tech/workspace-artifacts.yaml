@@ -1,0 +1,35 @@
+schema: strict-spec-driven/delta-tech/v1
+schema_version: 1
+artifact_type: delta_tech
+schema_file: templates/strict-spec-driven/schemas/delta-tech.yaml
+target_standard: workspace-artifacts
+operations:
+  ADDED: {}
+  MODIFIED:
+    embedded-schemas:
+      strength: MUST
+      statement: 工作区中的每种结构化产物（Artifact）都必须在 internal/schema 中登记产物类型，并以 JSON Schema（draft 2020-12）文件声明结构，用 go:embed 打包进二进制；同一产物类型可以登记多个路径模式（如同时出现在根单元目录与子单元目录中的 provenance.yaml），每个工作区路径至多匹配一种产物类型；命令读写产物时必须经过 internal/schema 的统一校验入口，不得在命令中手写字段检查代替 Schema。
+      rationale: Schema 是 Agent、作者与 wa-cli 共享的结构契约；嵌入二进制保证单文件分发时照样能校验；只有一个校验入口，诊断格式和错误码才能保持一致；单元目录深度不同，同一产物需要多个路径模式，而登记为多个同名类型会让按名称查找与遍历出现重复。
+      enforcement:
+        method: test
+        detail: internal/schema 的测试遍历产物类型表：断言每个已登记类型的 Schema 都能编译，并且在 testdata/ 下各有至少一个合法和一个不合法的夹具，校验结果与预期相符；断言每个路径模式的示例路径只匹配一种产物类型。
+      examples:
+        good:
+          - 新增单元产物时，在 internal/schema/schemas/ 加一份 Schema 文件，并在类型表中登记它的全部路径模式
+        bad:
+          - 在 status 命令里用 if cfg.GateLevel != "strict" && ... 手写取值检查
+    validated-path-segments:
+      strength: MUST
+      statement: 由命令参数（单元引用、作品 slug、单元 id、素材 id）拼接工作区路径前，每个路径段都必须先按 common.schema.json 的 id 格式校验，不匹配时报告对应的 not-found 或 artifact.schema-violation，诊断不填 path，也不访问该路径；由参数定位的目录（作品目录、units/、单元目录、素材目录）在读取与写入时都必须逐级确认是真实目录，不跟随符号链接，只对最后一级文件做 Lstat 不够。
+      rationale: Agent 会对不可信的输入与工作区自动运行命令；未经校验的路径段（如 ../x）或途经的符号链接会让读写逃出项目目录，而诊断与 changedPaths 仍报告工作区内的路径。
+      enforcement:
+        method: test
+        detail: internal/work 的 TestResolve（../x 用例）、TestCreate（非法 slug）与 TestSymlinkedWorkDir，internal/draft 的 TestSymlinkedUnitDirNotRead 与 TestWriteRejects，internal/source 的 TestSymlinkedMetadata 断言不合法的路径段与途经的符号链接不会被读写。
+    input-limits:
+      strength: MUST
+      statement: 解析产物时必须限制展开别名后的节点数（schema.MaxNodes），超限报告 artifact.parse-error，不得先展开再检查；对工作区文件做推导或比较的算法（如段落出处的最长公共子序列对齐）必须限制输入规模并使用与之相称的内存（draft.MaxParagraphs，超限报告 draft.too-large），不得让不可信的文件决定平方级内存。
+      rationale: Agent 会对不可信的工作区自动运行命令，层层引用的别名或极长的正文都能让很小的操作耗尽内存。
+      enforcement:
+        method: test
+        detail: internal/schema 的 TestAliasBomb 与 internal/cli 的 TestValidateAliasExpansionLimit 用 8 层、每层 10 个别名的文档断言返回 artifact.parse-error；internal/draft 的 TestTooManyParagraphs 断言超过段落上限时 draft write 与 provenance 报告 draft.too-large。
+  REMOVED: {}

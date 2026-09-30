@@ -1,0 +1,7 @@
+schema_version: 1
+feedback:
+  - id: fb-1
+    kind: question
+    status: open
+    text: x
+    anchor: {quote: "", before: "", after: "", paragraph: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa}

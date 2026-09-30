@@ -36,22 +36,28 @@ var files embed.FS
 
 // Kind 是一种产物类型：按相对项目目录、以 / 分隔的路径模式识别，用一份嵌入的 JSON Schema 校验。
 type Kind struct {
-	Name    string // 产物类型名，如 config
-	Pattern string // path.Match 语法的路径模式；为空时不对应任何工作区路径，只作为内置数据校验
-	File    string // schemas/ 下的 Schema 文件名
-	compile func() (*jsonschema.Schema, error)
+	Name     string   // 产物类型名，如 config
+	Patterns []string // path.Match 语法的路径模式；为空时不对应任何工作区路径，只作为内置数据校验
+	File     string   // schemas/ 下的 Schema 文件名
+	compile  func() (*jsonschema.Schema, error)
 }
 
 // 文体、规范包与工作区配置都只能包含数据，校验时先做可执行内容检查。
+// 单元目录中的产物同时出现在根单元的作品目录与子单元的 units/<unit-id>/ 下。
 var kinds = []*Kind{
-	newKind("config", ".writing-anything/config.yaml", "config.schema.json"),
-	newKind("pack", ".writing-anything/packs/*.yaml", "pack.schema.json"),
-	newKind("genre", "", "genre.schema.json"),
-	newKind("work", ".writing-anything/works/*/work.yaml", "work.schema.json"),
+	newKind("config", "config.schema.json", ".writing-anything/config.yaml"),
+	newKind("pack", "pack.schema.json", ".writing-anything/packs/*.yaml"),
+	newKind("genre", "genre.schema.json"),
+	newKind("work", "work.schema.json", ".writing-anything/works/*/work.yaml"),
+	newKind("source", "source.schema.json", ".writing-anything/sources/*/source.yaml"),
+	newKind("provenance", "provenance.schema.json", ".writing-anything/works/*/provenance.yaml", ".writing-anything/works/*/units/*/provenance.yaml"),
+	newKind("claims", "claims.schema.json", ".writing-anything/works/*/claims.yaml", ".writing-anything/works/*/units/*/claims.yaml"),
+	newKind("decisions", "decisions.schema.json", ".writing-anything/decisions.yaml"),
+	newKind("feedback", "feedback.schema.json", ".writing-anything/works/*/feedback.yaml", ".writing-anything/works/*/units/*/feedback.yaml"),
 }
 
-func newKind(name, pattern, file string) *Kind {
-	return &Kind{Name: name, Pattern: pattern, File: file, compile: sync.OnceValues(func() (*jsonschema.Schema, error) {
+func newKind(name, file string, patterns ...string) *Kind {
+	return &Kind{Name: name, Patterns: patterns, File: file, compile: sync.OnceValues(func() (*jsonschema.Schema, error) {
 		return compileFile(file)
 	})}
 }
@@ -88,8 +94,10 @@ func Kinds() []*Kind { return slices.Clone(kinds) }
 // KindFor 返回 rel（相对项目目录、以 / 分隔的路径）对应的产物类型；未登记时返回 nil。
 func KindFor(rel string) *Kind {
 	for _, k := range kinds {
-		if ok, _ := path.Match(k.Pattern, rel); ok && k.Pattern != "" {
-			return k
+		for _, p := range k.Patterns {
+			if ok, _ := path.Match(p, rel); ok {
+				return k
+			}
 		}
 	}
 	return nil

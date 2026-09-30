@@ -1,0 +1,224 @@
+schema: strict-spec-driven/main-spec/v1
+schema_version: 1
+artifact_type: main_spec
+schema_file: templates/strict-spec-driven/schemas/main-spec.yaml
+spec:
+  id: sources-and-provenance
+  title: 素材与出处（Sources and Provenance）
+requirements:
+  content-input:
+    strength: MUST
+    statement: 从作者或 Agent 读取内容的命令（wa-cli source add、wa-cli draft write）必须接受 --file <path>：path 相对 --dir 解析，也可以是绝对路径；省略 --file 时从标准输入读取全部内容。文件无法读取时报告错误码 input.read-failed（不填 path，message 含给出的路径与原因，next 包含该命令的 wa-cli help <command> --json），退出码为 1，且不修改任何文件。
+    scenarios:
+      file-relative-to-dir:
+        - GIVEN: 工作区 D 下有文件 D/notes/idea.md
+        - WHEN: 运行 wa-cli source add --type author-note --file notes/idea.md --dir D --json
+        - THEN: 素材登记成功，存档内容与 D/notes/idea.md 逐字节相同，退出码为 0
+      read-stdin:
+        - GIVEN: 刚初始化的工作区 D
+        - WHEN: 通过标准输入传入「第一段」运行 wa-cli source add --type author-note --dir D --json
+        - THEN: 素材的存档文件为 original.txt，内容为「第一段」，退出码为 0
+      missing-file:
+        - GIVEN: 刚初始化的工作区 D，D/nope.md 不存在
+        - WHEN: 运行 wa-cli draft write my-post --file nope.md --dir D --json
+        - THEN: diagnostics 中有一条错误码为 input.read-failed 的诊断，message 含 nope.md；工作区内没有新建或修改的文件，退出码为 1
+  source-add:
+    strength: MUST
+    statement: wa-cli source add --type <type> 必须把读取到的内容登记为素材（Source）：type 取值为 author-note、interview、transcript、reference、past-article 之一；内容逐字节存档到 .writing-anything/sources/<id>/，文件名为 original 加 --file 的扩展名（没有扩展名时为 original，来自标准输入时为 original.txt），并写出 .writing-anything/sources/<id>/source.yaml，含 schema_version（1）、id、type、file（存档文件名）、sha256（内容的 SHA-256 十六进制）、bytes（字节数），给出 --title 时含 title，来自文件时含 original_name（输入文件的文件名）。id 由 --id 指定，省略时为 src- 加 sha256 的前 12 个字符。成功时退出码为 0，changedPaths 为素材目录、存档文件与 source.yaml，--json 输出的 source 字段含 id、type、title（未给出时为 null）、path（存档文件路径）与 sha256。type 不在取值范围内或 --id 不符合 id 格式时报告 artifact.schema-violation（field 为 type 或 id）；内容为空时报告 source.empty；素材目录已存在时报告 source.exists（path 为该素材目录）；这些情况都不创建或修改任何文件，退出码为 1。未找到工作区时报告 workspace.not-found。
+    scenarios:
+      add-note:
+        - GIVEN: 刚初始化的工作区 D，D/idea.md 的内容为「我在 2023 年迁移过一次数据库」
+        - WHEN: 运行 wa-cli source add --type author-note --file idea.md --title 迁移笔记 --dir D --json
+        - THEN: source.id 为 src- 加该内容 SHA-256 的前 12 个字符，source.type 为 author-note，source.title 为 迁移笔记；D/.writing-anything/sources/<id>/original.md 与 idea.md 逐字节相同，source.yaml 中 original_name 为 idea.md；changedPaths 含素材目录、original.md 与 source.yaml，退出码为 0
+      explicit-id:
+        - GIVEN: 刚初始化的工作区 D
+        - WHEN: 通过标准输入传入访谈稿运行 wa-cli source add --type interview --id interview-ceo --dir D --json
+        - THEN: 素材目录为 .writing-anything/sources/interview-ceo，source.id 为 interview-ceo，退出码为 0
+      duplicate-content:
+        - GIVEN: 已用 wa-cli source add --type author-note --file idea.md --dir D 登记过素材
+        - WHEN: 再次运行同一命令
+        - THEN: diagnostics 中有一条错误码为 source.exists、path 为该素材目录的诊断；存档与 source.yaml 与运行前逐字节相同，退出码为 1
+      unknown-type:
+        - GIVEN: 刚初始化的工作区 D
+        - WHEN: 运行 wa-cli source add --type diary --file idea.md --dir D --json
+        - THEN: diagnostics 中有一条错误码为 artifact.schema-violation、field 为 type 的诊断，sources/ 下没有新建目录，退出码为 1
+      empty-content:
+        - GIVEN: 刚初始化的工作区 D，D/empty.md 为空文件
+        - WHEN: 运行 wa-cli source add --type author-note --file empty.md --dir D --json
+        - THEN: diagnostics 中有一条错误码为 source.empty 的诊断，sources/ 下没有新建目录，退出码为 1
+  source-list:
+    strength: MUST
+    statement: wa-cli source list 必须只读地列出工作区中已登记的素材：--json 输出 sources 数组，按 id 排序，每项含 id、type、title（未设置时为 null）、path（存档文件路径）与 sha256；只列出 sources/ 下不以 . 开头、通过素材校验（见 archive-integrity）的子目录。changedPaths 为空数组；有素材目录不通过素材校验时报告其诊断、valid 为 false、退出码为 1，其他素材照常列出；否则退出码为 0。
+    scenarios:
+      list-sources:
+        - GIVEN: 已登记素材 interview-ceo 与 src-0123456789ab
+        - WHEN: 运行 wa-cli source list --dir D --json
+        - THEN: sources 依次为 interview-ceo 与 src-0123456789ab，changedPaths 为空数组，退出码为 0
+      list-empty:
+        - GIVEN: 刚初始化的工作区 D
+        - WHEN: 运行 wa-cli source list --dir D --json
+        - THEN: sources 为空数组，valid 为 true，退出码为 0
+      list-skips-tampered:
+        - GIVEN: 已登记素材 interview-ceo 与 tampered，tampered 的存档文件被改动
+        - WHEN: 运行 wa-cli source list --dir D --json
+        - THEN: sources 只含 interview-ceo；diagnostics 中有一条错误码为 source.modified 的诊断，valid 为 false，退出码为 1
+  archive-integrity:
+    strength: MUST
+    statement: 素材原文不得被改写：对 sources/ 下每个不以 . 开头的子目录，wa-cli validate 必须检查 source.yaml 存在（否则 artifact.not-found）且符合素材的 JSON Schema、id 等于目录名（否则 source.id-mismatch，field 为 id）、file 指向的存档文件存在（否则 artifact.not-found，path 为该文件）且其 SHA-256 等于 sha256（否则 source.modified，path 为存档文件）。sources/ 下的普通文件不属于素材库，不检查。每个检查过的 source.yaml 计入 checked。
+    scenarios:
+      tampered-archive:
+        - GIVEN: 已登记素材 interview-ceo，之后有人修改了其存档文件 original.txt
+        - WHEN: 运行 wa-cli validate --dir D --json
+        - THEN: diagnostics 中有一条错误码为 source.modified、path 为 .writing-anything/sources/interview-ceo/original.txt 的诊断，valid 为 false，退出码为 1
+      intact-archive:
+        - GIVEN: 已登记素材 interview-ceo，存档未被改动
+        - WHEN: 运行 wa-cli validate --dir D --json
+        - THEN: valid 为 true，checked 包含 .writing-anything/sources/interview-ceo/source.yaml，退出码为 0
+      missing-metadata:
+        - GIVEN: sources/ 下有一个没有 source.yaml 的子目录 loose
+        - WHEN: 运行 wa-cli validate --dir D --json
+        - THEN: diagnostics 中有一条错误码为 artifact.not-found、path 为 .writing-anything/sources/loose/source.yaml 的诊断，退出码为 1
+  paragraph-model:
+    strength: MUST
+    statement: 正文按段落（Paragraph）计算出处：段落是由空行（只含空白字符的行）分隔的连续非空行；去掉行首空白后以 ``` 或 ~~~ 开头的行开启围栏代码块，直到去掉行首空白后以同样字符开头的行结束，整个代码块（含其中的空行）与紧邻的非空行同属一个段落，未闭合的围栏延续到正文末尾。段落哈希为把 CRLF 换成 LF、去掉每行行尾空白后的段落文本的 SHA-256 十六进制；只在行尾空白或换行符上不同的两个段落哈希相同。一个单元的正文最多 10000 个段落。
+    scenarios:
+      fenced-code:
+        - GIVEN: 正文为一段说明、一个内部含空行的 ``` 代码块、再一段说明，三者之间以空行分隔
+        - WHEN: 通过 wa-cli draft write 写入后运行 wa-cli provenance my-post --dir D --json
+        - THEN: provenance.paragraphs 共 3 项，第 2 项为整个代码块
+      trailing-whitespace:
+        - GIVEN: Agent 写入的某段行尾没有空格，作者之后只在该段行尾加了空格
+        - WHEN: 运行 wa-cli provenance my-post --dir D --json
+        - THEN: 该段的 origin 仍为 agent
+  draft-write:
+    strength: MUST
+    statement: wa-cli draft write <unit> 必须把读取到的内容逐字节写入单元目录（见 units-and-lifecycle 主规格的 advance-stage）下的 draft.md，子单元的单元目录不存在时先创建；同时写出同目录的写入记录（Draft Record）provenance.yaml，含 schema_version（1）、sha256（整篇正文原始字节的 SHA-256）与 paragraphs（按顺序排列的每个段落的 hash 与 origin）。新正文中与写入前 draft.md 里出处为 human 或 agent-draft-human-edited 的某个段落哈希相同的段落保留该出处，其余段落的 origin 为 agent。成功时退出码为 0，changedPaths 列出新建的单元目录与内容发生变化的 draft.md、provenance.yaml（正文与写入记录都不变时为空数组），--json 输出的 draft 字段含 unit（单元引用）、path（draft.md 路径）、paragraphs（段落数）与 sha256。内容为空或只含空白时报告 draft.empty；新正文或现有 draft.md 超过 10000 个段落时报告 draft.too-large；现有 provenance.yaml 不通过 Schema 校验时报告其诊断；单元目录途经的 units/ 或单元目录本身不是真实目录（如符号链接）时报告 workspace.write-failed；单元引用无法解析时按 units-and-lifecycle 主规格的 unit-reference 处理；这些情况都不修改文件，退出码为 1。作者改过正文时的写入条件见 human-edit-protection；通过检查、写入正文之前，把当前 draft.md 中尚未记入的批注记入 feedback.yaml（见 feedback 主规格的 comment-feedback），此时 changedPaths 也列出 feedback.yaml。
+    scenarios:
+      write-root:
+        - GIVEN: 已用 wa-cli new minimal my-post --dir D 创建作品
+        - WHEN: 通过标准输入传入三段正文运行 wa-cli draft write my-post --dir D --json
+        - THEN: D/.writing-anything/works/my-post/draft.md 与输入逐字节相同，provenance.yaml 的 paragraphs 为 3 项且 origin 均为 agent；draft.paragraphs 为 3；changedPaths 为 [.writing-anything/works/my-post/draft.md, .writing-anything/works/my-post/provenance.yaml]，退出码为 0；此后 wa-cli next my-post 不再报告缺少 draft 产物（阶段为 draft 时）
+      write-child:
+        - GIVEN: 作品 my-post 有子单元 intro，D/.writing-anything/works/my-post/units/intro/ 不存在
+        - WHEN: 运行 wa-cli draft write my-post/intro --file intro.md --dir D --json
+        - THEN: changedPaths 为 [.writing-anything/works/my-post/units/intro, .writing-anything/works/my-post/units/intro/draft.md, .writing-anything/works/my-post/units/intro/provenance.yaml]，退出码为 0
+      rewrite-keeps-human:
+        - GIVEN: Agent 写入两段后，作者在 draft.md 末尾加了第三段
+        - WHEN: Agent 用 wa-cli diff my-post 取得 base 后，保留作者的第三段、改写第一段，运行 wa-cli draft write my-post --base <base> --dir D --json
+        - THEN: provenance.yaml 中第一段与第二段的 origin 为 agent，第三段为 human，退出码为 0
+      same-content:
+        - GIVEN: 刚用 wa-cli draft write my-post 写入正文，之后没有任何改动
+        - WHEN: 用相同内容再次运行 wa-cli draft write my-post --dir D --json
+        - THEN: changedPaths 为空数组，draft.md 与 provenance.yaml 的修改时间不变，退出码为 0
+      empty-draft:
+        - GIVEN: 已创建作品 my-post
+        - WHEN: 通过标准输入传入空内容运行 wa-cli draft write my-post --dir D --json
+        - THEN: diagnostics 中有一条错误码为 draft.empty 的诊断，单元目录下没有 draft.md，退出码为 1
+      too-large:
+        - GIVEN: 已创建作品 my-post
+        - WHEN: 通过标准输入传入 10001 个段落运行 wa-cli draft write my-post --dir D --json
+        - THEN: diagnostics 中有一条错误码为 draft.too-large 的诊断，单元目录下没有 draft.md，退出码为 1
+  provenance-derivation:
+    strength: MUST
+    statement: 段落出处必须由写入记录与当前 draft.md 推导，取值为 human、agent、agent-draft-human-edited：把当前段落的哈希序列与写入记录 paragraphs 的哈希序列按最长公共子序列对齐，对齐上的段落沿用记录中的 origin；在相邻两个对齐点之间（含开头与结尾），未对齐的当前段落按顺序与同一区间内未对齐的记录段落一一配对，配对上的段落在记录 origin 为 human 时为 human、否则为 agent-draft-human-edited，没有配对的当前段落为 human。单元目录下没有 provenance.yaml 时，全部段落为 human。
+    scenarios:
+      edit-one:
+        - GIVEN: Agent 用 draft write 写入三段，作者直接修改了 draft.md 的第二段
+        - WHEN: 运行 wa-cli provenance my-post --dir D --json
+        - THEN: 三段的 origin 依次为 agent、agent-draft-human-edited、agent
+      insert-one:
+        - GIVEN: Agent 写入三段，作者在第一段与第二段之间插入了一段
+        - WHEN: 运行 wa-cli provenance my-post --dir D --json
+        - THEN: 四段的 origin 依次为 agent、human、agent、agent
+      delete-one:
+        - GIVEN: Agent 写入三段，作者删除了第二段
+        - WHEN: 运行 wa-cli provenance my-post --dir D --json
+        - THEN: 两段的 origin 均为 agent
+      no-record:
+        - GIVEN: 作者直接创建了 D/.writing-anything/works/my-post/draft.md，含两段，没有运行过 draft write
+        - WHEN: 运行 wa-cli provenance my-post --dir D --json
+        - THEN: 两段的 origin 均为 human，退出码为 0
+  provenance-report:
+    strength: MUST
+    statement: wa-cli provenance <unit> 必须只读地输出单元正文的出处：--json 输出的 provenance 字段含 unit、path（draft.md 路径）、paragraphs（按顺序的数组，每项含 index（从 1 开始）、line（段落首行的行号）、origin 与 chars）与 summary（按 human、agent、agent-draft-human-edited 固定顺序的三项，每项含 origin、paragraphs、chars 与 ratio），以及 totalParagraphs 与 totalChars。chars 为段落中非空白 Unicode 字符的个数；ratio 为该类 chars 占 totalChars 的比例，保留 4 位小数，totalChars 为 0 时为 0。changedPaths 为空数组。单元目录下没有 draft.md（包括单元目录途经符号链接、draft.md 不是普通文件）时报告 draft.not-found（path 为 draft.md 的路径，next 包含 wa-cli help draft write --json），provenance 为 null，退出码为 1；draft.md 超过 10000 个段落时报告 draft.too-large；provenance.yaml 不通过 Schema 校验时报告其诊断，退出码为 1。不加 --json 时以人读文本输出汇总与逐段出处。
+    scenarios:
+      summary-ratio:
+        - GIVEN: Agent 写入两段各 30 个非空白字符的正文，作者之后追加了一段 40 个非空白字符的段落
+        - WHEN: 运行 wa-cli provenance my-post --dir D --json
+        - THEN: totalParagraphs 为 3，totalChars 为 100；summary 依次为 {human, 1, 40, 0.4}、{agent, 2, 60, 0.6}、{agent-draft-human-edited, 0, 0, 0}，changedPaths 为空数组，退出码为 0
+      no-draft:
+        - GIVEN: 已创建作品 my-post，单元目录下没有 draft.md
+        - WHEN: 运行 wa-cli provenance my-post --dir D --json
+        - THEN: diagnostics 中有一条错误码为 draft.not-found、path 为 .writing-anything/works/my-post/draft.md 的诊断，provenance 为 null，退出码为 1
+  claim-add:
+    strength: MUST
+    statement: wa-cli claim add <unit> --kind <kind> --text <text> 必须在单元目录下的 claims.yaml 的 claims 末尾追加一个论断（Claim）：kind 取值为 experience、opinion、case、data、fact 之一；--sources 为逗号分隔的素材 id（省略时为空数组，表示尚未关联素材）；id 由 --id 指定，省略时为 claim-<n>，n 从已有论断数加一开始递增到不与已有论断重复。claims.yaml 不存在时创建（含 schema_version 1），子单元目录不存在时先创建；已有 claims.yaml 时只追加该项，保留其他内容与 YAML 注释。成功时退出码为 0，changedPaths 列出新建的单元目录与 claims.yaml，--json 输出的 claim 字段含 unit、id、kind、text 与 sources。sources 中的素材 id 未登记时报告 claim.unknown-source（field 为 sources[i]）；kind 不在取值范围内、--id 不符合 id 格式或 text 为空时报告 artifact.schema-violation（field 为 kind、id 或 text）；id 与该单元已有论断相同时报告 artifact.duplicate-id（field 为 id）；这些由参数引起的诊断的 next 包含 wa-cli help claim add --json 与 wa-cli source list。已有 claims.yaml 不通过校验时报告其诊断（field 以 claims 开头，next 保留能复查它的校验命令）；claims 经由 YAML 锚点、别名或合并键得到时报告 claim.anchored-value；这些情况都不修改文件，退出码为 1。
+    scenarios:
+      add-claim:
+        - GIVEN: 已创建作品 my-post，已登记素材 interview-ceo
+        - WHEN: 运行 wa-cli claim add my-post --kind experience --text 我们在一周内完成了迁移 --sources interview-ceo --dir D --json
+        - THEN: D/.writing-anything/works/my-post/claims.yaml 的 claims 为一项：id 为 claim-1、kind 为 experience、sources 为 [interview-ceo]；claim.id 为 claim-1；changedPaths 为 [.writing-anything/works/my-post/claims.yaml]，退出码为 0
+      unknown-source:
+        - GIVEN: 已创建作品 my-post，没有登记素材 nope
+        - WHEN: 运行 wa-cli claim add my-post --kind data --text 性能提升了 30% --sources nope --dir D --json
+        - THEN: diagnostics 中有一条错误码为 claim.unknown-source、field 为 sources[0] 的诊断，单元目录下没有 claims.yaml，退出码为 1
+      claim-without-source:
+        - GIVEN: 已创建作品 my-post
+        - WHEN: 运行 wa-cli claim add my-post --kind opinion --text 微服务不适合小团队 --dir D --json
+        - THEN: claims.yaml 中该论断的 sources 为空数组，退出码为 0
+      existing-problem-kept:
+        - GIVEN: 作品 my-post 的 claims.yaml 中 claim-1 引用的素材 interview-ceo 已被删除
+        - WHEN: 运行 wa-cli claim add my-post --kind fact --text 无关 --dir D --json
+        - THEN: diagnostics 中有一条错误码为 claim.unknown-source、field 为 claims[0].sources[0] 的诊断，其 next 包含 wa-cli validate --dir D --json；claims.yaml 不变，退出码为 1
+  unit-artifact-validation:
+    strength: MUST
+    statement: wa-cli validate 整体校验时，必须对每个可加载作品的每个单元目录中存在的 provenance.yaml 与 claims.yaml 做 Schema 校验并计入 checked；claims.yaml 另须满足论断 id 在文件内唯一（否则 artifact.duplicate-id）且 sources 中的每个素材 id 都已登记（否则 claim.unknown-source，field 为 claims[i].sources[j]），这两类诊断的 next 包含 wa-cli validate --dir <dir> --json。wa-cli validate <path> 按产物所在位置识别 source.yaml、provenance.yaml 与 claims.yaml，并执行与整体校验相同的检查。
+    scenarios:
+      claim-source-removed:
+        - GIVEN: 作品 my-post 的 claims.yaml 引用素材 interview-ceo，之后 sources/interview-ceo/ 被删除
+        - WHEN: 运行 wa-cli validate --dir D --json
+        - THEN: diagnostics 中有一条错误码为 claim.unknown-source、path 为 .writing-anything/works/my-post/claims.yaml、field 为 claims[0].sources[0] 的诊断，退出码为 1
+      single-claims-file:
+        - GIVEN: 作品 my-post 的 claims.yaml 合法
+        - WHEN: 运行 wa-cli validate .writing-anything/works/my-post/claims.yaml --dir D --json
+        - THEN: valid 为 true，checked 只含该文件，退出码为 0
+  human-edit-protection:
+    strength: MUST
+    statement: 单元目录下已有 draft.md，且没有写入记录或 draft.md 原始字节的 SHA-256 不等于写入记录的 sha256 时，视为作者改过正文（人工编辑保护（Human Edit Protection））：wa-cli draft write 的新内容与当前 draft.md 逐字节相同时照常成功；否则只有 --base 等于当前 draft.md 的 SHA-256 才写入。未给出 --base 时报告 draft.human-edited，--base 与当前 SHA-256 不同时报告 draft.base-mismatch；两者的 path 为 draft.md，message 说明作者改过正文，next 包含 wa-cli diff <unit> --dir <dir> --json；都不修改任何文件（包括 feedback.yaml），退出码为 1。作者没有改过正文时 --base 可以省略，给出时同样必须等于当前 SHA-256。draft write 在写入任何文件（包括记入批注）之前完成全部检查：内容、段落上限、上述人工编辑检查，以及现有 draft.md 的段落上限与写入记录的校验；任何一项失败都不修改文件。
+    scenarios:
+      refuse-overwrite:
+        - GIVEN: Agent 用 wa-cli draft write my-post 写入正文后，作者直接修改了 draft.md
+        - WHEN: 运行 wa-cli draft write my-post --file new.md --dir D --json
+        - THEN: diagnostics 中有一条错误码为 draft.human-edited、path 为 .writing-anything/works/my-post/draft.md 的诊断，其 next 包含 wa-cli diff my-post 命令；draft.md 与 provenance.yaml 与运行前逐字节相同，退出码为 1
+      write-with-base:
+        - GIVEN: 同上，wa-cli diff my-post --dir D --json 输出的 diff.base 为 B
+        - WHEN: 运行 wa-cli draft write my-post --file new.md --base B --dir D --json
+        - THEN: draft.md 与 new.md 逐字节相同，退出码为 0
+      stale-base:
+        - GIVEN: 同上，取得 B 之后作者再次修改了 draft.md
+        - WHEN: 运行 wa-cli draft write my-post --file new.md --base B --dir D --json
+        - THEN: diagnostics 中有一条错误码为 draft.base-mismatch 的诊断，draft.md 不变，退出码为 1
+      author-only-draft:
+        - GIVEN: 作者直接创建了 draft.md，没有运行过 draft write
+        - WHEN: 运行 wa-cli draft write my-post --file new.md --dir D --json
+        - THEN: diagnostics 中有一条错误码为 draft.human-edited 的诊断，退出码为 1
+      identical-rewrite:
+        - GIVEN: 作者改过 draft.md
+        - WHEN: 以与当前 draft.md 逐字节相同的内容运行 wa-cli draft write my-post --dir D --json
+        - THEN: 退出码为 0，此后写入记录的 sha256 等于 draft.md 的 SHA-256
+  draft-diff:
+    strength: MUST
+    statement: wa-cli diff <unit> 必须只读地列出作者自最近一次 draft write 以来对正文的改动：--json 输出的 diff 字段含 unit、path（draft.md 路径）、edited（作者是否改过正文，判断同 human-edit-protection）、base（当前 draft.md 的 SHA-256，可直接用作 draft write 的 --base）、recorded（写入记录的 sha256，没有写入记录时为 null）与 changes。changes 按正文顺序列出改动：把当前段落与写入记录的段落按最长公共子序列对齐，相邻对齐点之间未对齐的当前段落与记录段落按顺序配对，配对上的当前段落为 edited，多出的当前段落为 added，多出的记录段落为 removed；没有写入记录时每个段落都是 added。每项含 kind、at（added 与 edited 为该段落的序号，removed 为其后第一个当前段落的序号，位于末尾时为段落数加一）、line（段落首行的行号，removed 为 null）与 text（段落当前的文字，removed 为 null）。changedPaths 为空数组；单元没有 draft.md 时报告 draft.not-found，diff 为 null，退出码为 1。不加 --json 时以人读文本列出改动与 base。
+    scenarios:
+      diff-clean:
+        - GIVEN: Agent 写入正文后作者没有修改
+        - WHEN: 运行 wa-cli diff my-post --dir D --json
+        - THEN: diff.edited 为 false，changes 为空数组，退出码为 0
+      diff-edits:
+        - GIVEN: Agent 写入三段 A、B、C 后，作者把 B 改成 B2 并删除了 C
+        - WHEN: 运行 wa-cli diff my-post --dir D --json
+        - THEN: diff.edited 为 true，changes 依次为 {edited, at 2, text B2} 与 {removed, at 3, line null, text null}，diff.base 等于 draft.md 的 SHA-256，changedPaths 为空数组，退出码为 0
+      diff-insert:
+        - GIVEN: Agent 写入三段 A、B、C 后，作者在 A 与 B 之间插入了 X
+        - WHEN: 运行 wa-cli diff my-post --dir D --json
+        - THEN: changes 只含 {added, at 2, text X}，退出码为 0

@@ -1,0 +1,61 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: author-sources-and-provenance
+approach:
+  - 素材库：每个素材一个目录 .writing-anything/sources/<id>/，内含逐字节存档的原文（文件名为 original 加输入文件的扩展名，来自标准输入时为 original.txt）与元数据 source.yaml（schema_version、id、type、可选的 title 与 original_name、file、sha256、bytes）。默认 id 为 src- 加内容 SHA-256 的前 12 位十六进制，--id 可指定；同一内容重复登记会命中已存在的 id 并报告 source.exists。validate 对 sources/ 下每个不以 . 开头的子目录检查 source.yaml、id 与目录名一致、存档文件存在且 SHA-256 与记录一致；sources/ 下的普通文件不属于素材库，不检查，status 的 sources 计数含义不变。
+  - 正文与写入记录：单元的正文固定为单元目录下的 draft.md（与 minimal 文体的 draft 必需产物同名），写入记录为同目录的 provenance.yaml（schema_version、sha256 为整篇正文的哈希、paragraphs 为按顺序排列的 {hash, origin}）。draft write 逐字节写入正文；子单元目录不存在时创建。写入前读取现有正文并推导其段落出处，新正文中与现有 human 或 agent-draft-human-edited 段落哈希相同的段落保留该出处，其余标为 agent；正文与记录都未变化时不写文件。
+  - 段落与哈希：段落是由空行分隔的连续非空行，以 ``` 或 ~~~ 开头的围栏代码块从开始到结束整体算一段（内部空行不分段）。哈希前把 CRLF 换成 LF 并去掉每行行尾空白，取 SHA-256 的十六进制；整篇哈希按原始字节计算，供 human-edit-protection-and-comments 判断正文是否被改动。
+  - 出处推导：把当前段落的哈希序列与记录中的哈希序列按最长公共子序列对齐，对齐上的段落沿用记录中的出处；相邻两个对齐点之间未对齐的当前段落按顺序与同一区间内未对齐的记录段落配对，配对上的段落在记录出处为 human 时仍为 human、否则为 agent-draft-human-edited，多出来的当前段落为 human。没有写入记录时全部段落为 human。单元级汇总按 human、agent、agent-draft-human-edited 的固定顺序给出段落数、字符数（Unicode 码点，不含空白）与字符占比（保留 4 位小数）。
+  - 论断：单元目录下的 claims.yaml 含 schema_version 与 claims 数组，每项含 id、kind（experience、opinion、case、data、fact）、text 与 sources（素材 id 数组，可以为空，由后续 claim-source-check 报告缺少素材的论断）。claim add 追加一项，默认 id 为 claim-<n>（n 从已有论断数加一起递增到不重复）；--sources 按逗号分隔。引用的素材 id 必须已登记（claim.unknown-source），id 在该单元内唯一（artifact.duplicate-id）。validate 对每个作品的每个单元目录中存在的 provenance.yaml 与 claims.yaml 做 Schema 校验，claims.yaml 另做素材引用与 id 唯一性检查。
+  - CLI 与分层：新增领域包 internal/source 与 internal/draft，只返回结构化问题；internal/cli 新增 source add、source list、draft write、provenance、claim add，单元引用经 internal/work.Resolve 解析、单元目录取 Work.UnitDir。所有写入经 internal/workspace.WriteFile 原子写入，写前对 YAML 产物重新解析并校验。--file 相对 --dir 解析（与 validate <path> 一致），省略时读取 cli.Run 新增的标准输入参数；cmd/wa-cli 传入 os.Stdin。
+  - 审查后补充：读取单元产物时逐级确认工作区之下途经的目录都是真实目录，不跟随符号链接；出处推导的最长公共子序列只保留两行长度并按位记录方向，内存为 n·m/8 字节，正文段落数上限为 10000（draft.too-large）。
+decisions:
+  provenance-carry-forward:
+    decision: draft write 写入时不把全部段落一律标为 agent：新正文中与现有正文里 human 或 agent-draft-human-edited 段落哈希相同的段落保留原出处，其余标为 agent。
+    rationale: 规划变更要求把写入的段落标为 agent，但 Agent 常常在作者改过的正文基础上整体重写并保留作者的段落；一律标为 agent 会把作者亲手写的段落记到 Agent 名下，与项目「作者的编辑优先于 Agent」和出处用于 AI 生成内容标识的目的相悖。按哈希保留只影响逐字未变的段落，新写的段落仍为 agent，符合规划变更的本意。
+  lcs-gap-pairing:
+    decision: 段落出处按最长公共子序列对齐后，在每个未对齐区间内按顺序把当前段落与记录段落配对，以区分 agent-draft-human-edited（改过的 Agent 段落）与 human（作者新增的段落）。
+    rationale: 只按哈希是否存在无法区分「改过的段落」与「新写的段落」；按相似度阈值判断需要调参且结果难以向作者解释。区间配对完全确定、可以在规格中逐步描述并由测试断言，对最常见的操作（改一段、加一段、删一段）给出直观的结果。
+  fenced-code-paragraphs:
+    decision: 围栏代码块整体算一个段落，内部的空行不分段。
+    rationale: 技术博客的代码块常含空行，按空行切分会把一个代码块拆成多个互不相关的段落，出处与后续反馈锚点都会落到代码片段上；围栏是 Markdown 中唯一需要特殊处理的块级结构，识别成本很低。
+  content-addressed-source-id:
+    decision: 素材默认 id 为 src- 加内容 SHA-256 的前 12 位十六进制，--id 可以显式指定；id 已存在时报告 source.exists，不覆盖。
+    rationale: 内容派生的 id 不依赖时间或计数，同一素材在不同机器上登记得到相同 id，重复登记会直接指向已有素材；12 位十六进制在单个工作区内冲突概率可以忽略，又比完整哈希便于 Agent 在论断中引用。
+  verbatim-archive:
+    decision: 素材原文逐字节存档，不做换行、编码或空白规范化；validate 按记录的 SHA-256 检查存档未被改动（source.modified）。
+    rationale: 规划变更要求原文存档不做改写；逐字节保存加哈希校验让论断引用的素材可被事后核对，任何改动都会被 validate 发现。
+  stdin-injection:
+    decision: cli.Run 的签名改为 Run(args, stdin, stdout, stderr)，命令通过 invocation 读取标准输入；修改 go-project-structure/injectable-io 规则（delta tech）。
+    rationale: draft write 与 source add 需要从标准输入读取正文，直接读 os.Stdin 会让这两条命令无法在进程内测试并计入覆盖率，违反 injectable-io 的初衷；显式注入与现有的 stdout、stderr 注入方式一致。
+  multi-pattern-kinds:
+    decision: internal/schema 的产物类型把单个 Pattern 改为 Patterns 列表，provenance 与 claims 同时登记根单元目录（works/*/）与子单元目录（works/*/units/*/）两个模式；修改 workspace-artifacts/embedded-schemas 规则（delta tech）。
+    rationale: 根单元与子单元的单元目录深度不同，path.Match 的 * 不跨越 /，单个模式无法同时匹配；把同一产物登记为两个同名类型会让 Named 与测试遍历出现重复。
+  comma-separated-sources:
+    decision: claim add 用 --sources <id,id> 以逗号分隔多个素材 id，而不是重复 --source 参数。
+    rationale: 命令注册表的参数解析每个参数只保留一个取值；逗号分隔与 config set packs 的约定一致，不需要为一条命令扩展解析器。
+  draft-write-always-writes:
+    decision: 本变更的 draft write 不检查作者是否改过正文，总是写入；拒绝覆盖、diff 与 --base 由 human-edit-protection-and-comments 负责。
+    rationale: 路线图把人工编辑保护拆成独立的规划变更，它依赖本变更记录的整篇哈希；本变更先提供写入记录，并通过出处保留减少重写对作者段落归属的影响。
+  no-new-dependencies:
+    decision: 不引入新的第三方依赖：哈希用 crypto/sha256，最长公共子序列用标准库自行实现。
+    rationale: 符合 go-project-structure/stdlib-first；段落数量有限，O(n·m) 的动态规划足够。
+  paragraph-limit:
+    decision: 正文最多 10000 个段落，draft write 的新正文与 provenance 读取的现有 draft.md 超过上限时报告 draft.too-large；最长公共子序列按位存储方向。
+    rationale: 出处推导需要对齐两个段落序列，内存随段落数平方增长；不可信的工作区可以放入极长的 draft.md 耗尽内存（fresh-context 审查实测 8000×8000 段约 537MB）。按位存储把 10000×10000 的对齐压到约 12.5MB，上限远高于单个单元的正常篇幅。
+  claim-anchored-code:
+    decision: claims.yaml 经由锚点、别名或合并键得到时报告新的错误码 claim.anchored-value，不复用 work.anchored-value。
+    rationale: work.anchored-value 在已发布的主规格中专指 work.yaml，复用会扩大其含义，违反 cli-contract/stable-error-codes（fresh-context 审查发现）。
+alternatives:
+  - option: draft write 把写入的全部段落一律标为 agent（规划变更字面读法）。
+    reason: 作者原有的段落在 Agent 重写后会被记到 Agent 名下，出处数据失真。
+  - option: 按编辑距离或相似度阈值判断段落是否由 Agent 段落修改而来。
+    reason: 阈值需要调参，同一操作在不同段落长度下结论不同，难以在规格中给出确定的场景。
+  - option: 素材元数据集中存放在一个 sources.yaml 索引中。
+    reason: 多个命令并发登记素材时会争用同一文件，作者删除一个素材目录也会让索引失效；每个素材自带元数据更简单。
+risks:
+  - 本变更的 draft write 不做人工编辑保护，在 human-edit-protection-and-comments 上线前，Agent 重写正文会覆盖作者的改动（出处仍会保留逐字未变的作者段落）。
+  - 段落切分只识别空行与围栏代码块；列表、表格等内部含空行的结构会被切成多段，由后续需要时再细化。
+  - 出处推导依赖 Agent 遵守通过 draft write 写正文的约定；Agent 直接改 draft.md 会被判为人工编辑，这是里程碑已接受的偏安全误判方向。

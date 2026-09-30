@@ -1,0 +1,10 @@
+schema_version: 1
+claims:
+  - id: claim-1
+    kind: experience
+    text: 我们在一周内完成了迁移
+    sources: [interview-ceo]
+  - id: claim-2
+    kind: opinion
+    text: 微服务不适合小团队
+    sources: []

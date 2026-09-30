@@ -95,9 +95,12 @@ func (c *command) usage() string {
 		}
 	}
 	for _, f := range c.allFlags() {
-		if f.Type == flagString {
+		switch f.Type {
+		case flagString:
 			parts = append(parts, "[--"+f.Name+" <value>]")
-		} else {
+		case flagList:
+			parts = append(parts, "[--"+f.Name+" <value>]...")
+		default:
 			parts = append(parts, "[--"+f.Name+"]")
 		}
 	}

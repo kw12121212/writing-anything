@@ -5,7 +5,7 @@ schema_file: ../../templates/strict-spec-driven/schemas/planned-change.yaml
 planned_change:
   id: human-edit-protection-and-comments
   milestone: kernel-foundation
-status: planned
+status: complete
 summary: 人工编辑保护（Human Edit Protection）与正文批注（Comment）解析
 details: '当 draft.md 的当前内容与最近一次 draft write 记录的哈希不一致时，视为作者修改过：再次调用 draft write 会被拒绝，诊断提示先用 wa-cli diff <unit> 查看人工改动；只有用 draft write --base <hash> 显式声明基于作者的当前版本时才允许写入。被修改的段落出处更新为 human 或 agent-draft-human-edited。正文中的 <!-- @me: ... --> 批注被解析为作者反馈，锚点取批注所在的段落；反馈解决后批注从正文移除，记录保留在反馈中。'
 depends_on:

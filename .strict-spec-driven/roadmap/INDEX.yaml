@@ -6,7 +6,7 @@ milestones:
   kernel-foundation:
     title: 内核地基（Kernel Foundation）
     path: roadmap/milestones/kernel-foundation.yaml
-    status: proposed
+    status: complete
   tech-blog-workflow:
     title: 技术博客工作流（Tech Blog Workflow）
     path: roadmap/milestones/tech-blog-workflow.yaml

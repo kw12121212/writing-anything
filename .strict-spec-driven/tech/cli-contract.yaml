@@ -9,11 +9,11 @@ standard:
 rules:
   registry-declared:
     strength: MUST
-    statement: 每条 wa-cli 命令必须在 internal/cli 的命令注册表（Command Registry）中声明 name、summary、位置参数、flags、outputKeys 与 exitCodes，参数解析与 help 输出都只从注册表派生；不得绕过注册表单独解析参数。
+    statement: 每条 wa-cli 命令必须在 internal/cli 的命令注册表（Command Registry）中声明 name、summary、位置参数、flags、outputKeys 与 exitCodes，参数解析与 help 输出都只从注册表派生；参数类型为 bool、string 或 list（可重复出现、按出现顺序收集的多个取值）；不得绕过注册表单独解析参数。
     rationale: 注册表是 help --json、后续 MCP tools 生成与 Skill 命令校验的唯一依据，绕过它会使帮助与实际行为漂移。
     enforcement:
       method: test
-      detail: internal/cli 的 TestRegistryConsistency 遍历 help --json：断言每条命令 --json 输出的顶层字段恰好等于声明的 outputKeys，声明的每个 flag 都被解析器接受，且 exitCodes 非空；未声明的参数由解析器拒绝（usage.unknown-flag）。
+      detail: internal/cli 的 TestRegistryConsistency 遍历 help --json：断言每条命令 --json 输出的顶层字段恰好等于声明的 outputKeys，声明的每个 flag 都被解析器接受，且 exitCodes 非空；未声明的参数由解析器拒绝（usage.unknown-flag）。list 参数由 TestParseListFlag 覆盖重复出现与顺序。
     examples:
       good:
         - 新增命令时在注册表加一项并声明其 flags 与 outputKeys
@@ -91,13 +91,48 @@ rules:
         - 新命令用 os.Getwd() 向上逐级查找 .writing-anything/
   next-rechecks-problem:
     strength: SHOULD
-    statement: 诊断 next 中给出的复查命令必须能重新检出该问题：涉及多个产物的问题（引用、合并、内置产物与工作区产物的冲突）给出整体校验 wa-cli validate --dir <dir> --json，不得给出只校验单个文件、会报告 valid 为 true 的命令。
-    rationale: Agent 按 next 复查；复查命令检不出问题时，Agent 会误以为问题已经解决。
+    statement: 诊断 next 中给出的复查命令必须能重新检出该问题：涉及多个产物的问题（引用、合并、内置产物与工作区产物的冲突）给出整体校验 wa-cli validate --dir <dir> --json，不得给出只校验单个文件、会报告 valid 为 true 的命令；命令按自身改写 next（如指向 wa-cli help <command>）时，只改写由本次参数引起的问题，已有产物中存在的问题保留默认的复查命令。判断问题是否由本次参数引起时，按诊断字段是否为参数名（或其下标、子字段）的白名单判断，不以「字段不以产物内路径开头」推断：已有产物的根级问题（如 schema_version、未定义的字段）也属于已有产物。
+    rationale: Agent 按 next 复查；复查命令检不出问题时，Agent 会误以为问题已经解决；把已有产物的问题也改成查看用法，Agent 会反复调整参数而问题始终存在；以前缀排除会漏掉根级字段（fresh-context 审查在 decision add 与 claim add 中都复现）。
     enforcement:
       method: test
-      detail: internal/cli 的测试对跨产物错误码断言 next 为整体校验，并运行该命令断言仍报告同一诊断。
+      detail: internal/cli 的测试对跨产物错误码断言 next 为整体校验并能重新检出；TestClaimAdd、TestFeedbackAdd 与 TestDecisionAdd 断言已有产物的问题（含根级字段）保留默认的复查命令。
     examples:
       good:
-        - rule.type-conflict 的 next 为 wa-cli validate --dir . --json
+        - paramField(d.Field, "question", "options", "id", "recommendation") 为真时才改写为 wa-cli help decision add --json
       bad:
-        - rule.type-conflict 的 next 为 wa-cli validate .writing-anything/packs/house.yaml --dir . --json
+        - '!strings.HasPrefix(d.Field, "decisions") 时改写 next，schema_version 的问题也被改成查看用法'
+  streaming-envelopes:
+    strength: MUST
+    statement: 持续输出事件的流式命令（如 feedback watch）在 --json 模式下每个事件输出一行完整的输出信封（valid、diagnostics、changedPaths 与声明的输出键），不得输出不带信封的裸对象；流式命令必须提供使其在输出指定条数后结束的参数（如 --max）与轮询间隔参数，以便在进程内测试并登记样例调用。
+    rationale: Agent 与 MCP 用同一方式解析所有命令的输出，逐行信封让流式事件也符合 shared-envelope；可结束的参数让 TestRegistryConsistency 与行为测试不必启动子进程或依赖超时。
+    enforcement:
+      method: test
+      detail: internal/cli 的 TestRegistryConsistency 以 --all --max 1 调用 feedback watch 并断言输出为一行信封；TestFeedbackWatch 在并发追加反馈时断言每行都是信封。
+    examples:
+      good:
+        - feedback watch --max 1 --json 输出一行 {"valid":true,"diagnostics":[],"changedPaths":[],"feedback":{...}}
+      bad:
+        - feedback watch --json 每行只输出 {"id":"fb-2",...}
+  invalid-value-code:
+    strength: SHOULD
+    statement: 参数取值不合法（如应为正整数、应为枚举取值）且不对应任何产物字段时，统一报告错误码 input.invalid-value，诊断不填 path，message 说明参数名、给出的取值与期望，next 为 wa-cli help <command> --json；取值写入产物字段时仍由 Schema 校验报告 artifact.schema-violation。
+    rationale: Agent 依据错误码分支处理，同一类参数错误各命令各自造错误码会让分支逻辑膨胀；与写入产物的字段错误区分开，Agent 才知道该改参数还是改产物。
+    enforcement:
+      method: review
+    examples:
+      good:
+        - feedback watch --interval 0 报告 input.invalid-value，next 为 wa-cli help feedback watch --json
+      bad:
+        - feedback watch --interval 0 报告 feedback.bad-interval
+  precheck-before-side-effects:
+    strength: MUST
+    statement: 一条命令会写入多个产物时，必须在第一次写入之前完成全部可能失败的检查（包括针对已有产物的检查，如段落上限、写入记录的校验），领域包提供的预检查函数（如 draft.Precheck）与实际写入共用同一套检查；任一检查失败时所有产物逐字节不变，changedPaths 为空。只读命令不得因读到推导出的数据（如正文批注）而写文件，推导出的记录只在显式的变更命令中记入，并出现在该命令的 changedPaths 中。
+    rationale: draft write 先记入批注再写正文，若只在写正文时才发现已有正文过大，feedback.yaml 已被修改而命令报告失败，Agent 看到的结果与工作区不一致（fresh-context 审查实测）；读取命令写文件会让 watch 轮询反复写入、changedPaths 失真。
+    enforcement:
+      method: test
+      detail: internal/cli 的 TestRejectedWriteTouchesNothing 断言被拒绝与过大正文的 draft write 不创建 feedback.yaml；TestCommentFeedback 断言 feedback list 不创建 feedback.yaml。
+    examples:
+      good:
+        - draft.Precheck 通过后才调用 feedback.ImportComments，再调用 draft.Write
+      bad:
+        - 先记入批注，draft.Write 发现现有正文过大后返回 draft.too-large

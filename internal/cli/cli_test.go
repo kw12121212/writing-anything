@@ -15,8 +15,14 @@ import (
 
 func run(t *testing.T, args ...string) (code int, stdout, stderr string) {
 	t.Helper()
+	return runIn(t, "", args...)
+}
+
+// runIn 以 input 作为标准输入运行命令。
+func runIn(t *testing.T, input string, args ...string) (code int, stdout, stderr string) {
+	t.Helper()
 	var out, errOut bytes.Buffer
-	code = Run(args, &out, &errOut)
+	code = Run(args, strings.NewReader(input), &out, &errOut)
 	return code, out.String(), errOut.String()
 }
 
@@ -191,7 +197,7 @@ func TestCommandHelp(t *testing.T) {
 func helpDocs(t *testing.T, args ...string) []commandDoc {
 	t.Helper()
 	var out, errOut bytes.Buffer
-	if code := Run(args, &out, &errOut); code != 0 {
+	if code := Run(args, strings.NewReader(""), &out, &errOut); code != 0 {
 		t.Fatalf("%v: exit code = %d; stderr: %s", args, code, errOut.String())
 	}
 	var res struct {
@@ -290,7 +296,7 @@ func TestRegistryConsistency(t *testing.T) {
 					t.Errorf("flag --%s has no description", f.Name)
 				}
 				args := append(slices.Clip(required), "--"+f.Name)
-				if f.Type == flagString {
+				if f.Type == flagString || f.Type == flagList {
 					args = append(args, "x")
 				}
 				if _, diag := parseArgs(c, args); diag != nil {
@@ -311,7 +317,7 @@ func TestRegistryConsistency(t *testing.T) {
 }
 
 // mutatingSamples 列出只能通过变更产物才能成功的命令；它们的样例在临时工作区中变更产物。
-var mutatingSamples = map[string]bool{"new": true, "unit add": true, "advance": true}
+var mutatingSamples = map[string]bool{"new": true, "unit add": true, "advance": true, "source add": true, "claim add": true, "feedback add": true, "decision add": true, "decide": true}
 
 // sampleArgs 返回命令的一次成功调用：除 mutatingSamples 中的命令外都不变更任何产物；工作区命令在已初始化的
 // 临时工作区中运行。
@@ -328,6 +334,55 @@ func sampleArgs(t *testing.T, name string) []string {
 		return []string{"advance", "my-post", "--dir", dir, "--json"}
 	case "next":
 		return []string{"next", "--dir", newWork(t), "--json"}
+	case "source add":
+		dir := newWorkspace(t)
+		writeFile(t, filepath.Join(dir, "idea.md"), "作者笔记")
+		return []string{"source", "add", "--type", "author-note", "--file", "idea.md", "--dir", dir, "--json"}
+	case "source list":
+		return []string{"source", "list", "--dir", newWorkspace(t), "--json"}
+	case "draft write":
+		// 同样的内容再次写入不变更产物（cli-contract/sample-invocation）。
+		dir := newWork(t)
+		writeFile(t, filepath.Join(dir, "draft.md"), "正文")
+		args := []string{"draft", "write", "my-post", "--file", "draft.md", "--dir", dir, "--json"}
+		if code, stdout, _ := run(t, args...); code != 0 {
+			t.Fatalf("draft write: exit code = %d; %s", code, stdout)
+		}
+		return args
+	case "diff":
+		dir := newWork(t)
+		writeFile(t, filepath.Join(dir, ".writing-anything", "works", "my-post", "draft.md"), "作者写的")
+		return []string{"diff", "my-post", "--dir", dir, "--json"}
+	case "provenance":
+		dir := newWork(t)
+		writeFile(t, filepath.Join(dir, ".writing-anything", "works", "my-post", "draft.md"), "正文")
+		return []string{"provenance", "my-post", "--dir", dir, "--json"}
+	case "feedback add":
+		return []string{"feedback", "add", "my-post", "--text", "整体太长", "--dir", newWork(t), "--json"}
+	case "feedback list":
+		return []string{"feedback", "list", "--dir", newWork(t), "--json"}
+	case "feedback resolve":
+		// 状态未变时不变更产物。
+		dir := newWork(t)
+		run(t, "feedback", "add", "my-post", "--text", "x", "--dir", dir)
+		run(t, "feedback", "resolve", "my-post", "fb-1", "--dir", dir)
+		return []string{"feedback", "resolve", "my-post", "fb-1", "--dir", dir, "--json"}
+	case "feedback watch":
+		dir := newWork(t)
+		run(t, "feedback", "add", "my-post", "--text", "x", "--dir", dir)
+		return []string{"feedback", "watch", "--all", "--max", "1", "--dir", dir, "--json"}
+	case "decision add":
+		return []string{"decision", "add", "--question", "标题用哪个", "--option", "甲", "--option", "乙", "--unit", "my-post", "--blocking", "--dir", newWork(t), "--json"}
+	case "decisions":
+		dir := newWork(t)
+		run(t, "decision", "add", "--question", "q", "--dir", dir)
+		return []string{"decisions", "--all", "--dir", dir, "--json"}
+	case "decide":
+		dir := newWork(t)
+		run(t, "decision", "add", "--question", "q", "--option", "甲", "--dir", dir)
+		return []string{"decide", "dec-1", "--option", "a", "--confirmation", "作者同意", "--dir", dir, "--json"}
+	case "claim add":
+		return []string{"claim", "add", "my-post", "--kind", "opinion", "--text", "观点", "--dir", newWork(t), "--json"}
 	case "help", "version":
 		return []string{name, "--json"}
 	case "init", "validate", "status":
@@ -393,7 +448,7 @@ func (failingWriter) Write([]byte) (int, error) { return 0, errors.New("disk ful
 func TestWriteFailure(t *testing.T) {
 	for _, args := range [][]string{{"version"}, {"version", "--json"}, {"help"}, {"help", "--json"}, {"help", "version"}} {
 		var errOut bytes.Buffer
-		if code := Run(args, failingWriter{}, &errOut); code != 1 {
+		if code := Run(args, strings.NewReader(""), failingWriter{}, &errOut); code != 1 {
 			t.Fatalf("%v: exit code = %d, want 1", args, code)
 		}
 		if !strings.Contains(errOut.String(), "写入输出失败：disk full") {
@@ -431,13 +486,13 @@ func TestHelpCommandHelpFlag(t *testing.T) {
 
 func TestUsageErrorWriteFailure(t *testing.T) {
 	var errOut bytes.Buffer
-	if code := Run([]string{"nope", "--json"}, failingWriter{}, &errOut); code != 1 {
+	if code := Run([]string{"nope", "--json"}, strings.NewReader(""), failingWriter{}, &errOut); code != 1 {
 		t.Fatalf("JSON usage error with failing stdout: exit code = %d, want 1", code)
 	}
 	if !strings.Contains(errOut.String(), "写入输出失败：disk full") {
 		t.Fatalf("stderr %q does not report the write error", errOut.String())
 	}
-	if code := Run([]string{"nope"}, &bytes.Buffer{}, failingWriter{}); code != 1 {
+	if code := Run([]string{"nope"}, strings.NewReader(""), &bytes.Buffer{}, failingWriter{}); code != 1 {
 		t.Fatalf("text usage error with failing stderr: exit code = %d, want 1", code)
 	}
 }
@@ -460,5 +515,16 @@ func TestPlaceholders(t *testing.T) {
 	}
 	if !strings.Contains(c.usage(), "[--dir <value>]") {
 		t.Errorf("string flag usage = %q", c.usage())
+	}
+}
+
+func TestParseListFlag(t *testing.T) {
+	c := &command{name: "demo", flags: []flagSpec{{"option", flagList, "选项"}}}
+	inv, d := parseArgs(c, []string{"--option", "甲", "--option=乙", "--option", "丙"})
+	if d != nil || !slices.Equal(inv.lists["option"], []string{"甲", "乙", "丙"}) || inv.values["option"] != "丙" {
+		t.Fatalf("lists = %v, values = %v, %v", inv.lists, inv.values, d)
+	}
+	if !strings.Contains(c.usage(), "[--option <value>]...") {
+		t.Errorf("usage = %q", c.usage())
 	}
 }

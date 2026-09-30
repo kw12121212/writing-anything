@@ -6,9 +6,18 @@ specs:
   - id: cli
     title: 命令行工具（CLI）
     path: .strict-spec-driven/specs/cli.yaml
+  - id: decisions
+    title: 决策队列（Decision Queue）
+    path: .strict-spec-driven/specs/decisions.yaml
+  - id: feedback
+    title: 作者反馈（Feedback）
+    path: .strict-spec-driven/specs/feedback.yaml
   - id: genres-and-packs
     title: 文体与规范包（Genre and Pack）
     path: .strict-spec-driven/specs/genres-and-packs.yaml
+  - id: sources-and-provenance
+    title: 素材与出处（Sources and Provenance）
+    path: .strict-spec-driven/specs/sources-and-provenance.yaml
   - id: units-and-lifecycle
     title: 单元树与生命周期（Unit Tree and Lifecycle）
     path: .strict-spec-driven/specs/units-and-lifecycle.yaml

@@ -9,12 +9,12 @@ import (
 	"strings"
 )
 
-// Run 执行 args 指定的命令（不含程序名），并返回进程退出码。
-func Run(args []string, stdout, stderr io.Writer) int {
-	return registry.run(args, stdout, stderr)
+// Run 执行 args 指定的命令（不含程序名），并返回进程退出码。stdin 供从标准输入读取内容的命令使用。
+func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
+	return registry.run(args, stdin, stdout, stderr)
 }
 
-func (s commandSet) run(args []string, stdout, stderr io.Writer) int {
+func (s commandSet) run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	// 只要出现 --json，用法错误也以 JSON 信封写到标准输出，便于 Agent 解析。
 	asJSON := slices.Contains(args, "--json")
 	if len(args) > 0 && args[0] == "--help" {
@@ -32,7 +32,7 @@ func (s commandSet) run(args []string, stdout, stderr io.Writer) int {
 	if d != nil {
 		return usageError(stdout, stderr, asJSON, d, c.helpText())
 	}
-	inv.all, inv.stdout, inv.stderr = s, stdout, stderr
+	inv.all, inv.stdin, inv.stdout, inv.stderr = s, stdin, stdout, stderr
 	// help 的位置参数就是要查看的命令，help <command> --help 与 help <command> 相同。
 	if inv.flag("help") && (c != helpCommand || len(inv.args) == 0) {
 		return writeHelp(inv, []*command{c}, false)

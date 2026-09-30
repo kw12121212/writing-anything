@@ -1,0 +1,42 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: human-edit-protection-and-comments
+approach:
+  - 人工编辑检测：draft write 写入前读取当前 draft.md 与写入记录；draft.md 存在且（没有写入记录，或其原始字节的 SHA-256 不等于记录的 sha256）即视为作者改过。此时新内容与当前正文逐字节相同则照常成功（不会丢失任何内容）；否则只有 --base 等于当前正文的 SHA-256 才写入，--base 缺失报告 draft.human-edited，--base 与当前哈希不同报告 draft.base-mismatch，两者的 next 都是 wa-cli diff <unit> --dir <dir> --json，不修改任何文件。写入成功后的出处保留规则不变（作者段落按哈希保留 human 或 agent-draft-human-edited）。
+  - diff：按最长公共子序列把当前段落与写入记录的段落对齐，未对齐区间内按顺序配对：配对上的当前段落为 edited，多出的当前段落为 added，多出的记录段落为 removed（只有位置，没有原文）；没有写入记录时每个段落都是 added。输出 diff 字段：unit、path、edited（作者是否改过）、base（当前正文 SHA-256，可直接用作 --base）、recorded（记录的 sha256，没有记录时为 null）与 changes（每项含 kind、at、line、text；removed 的 at 为其后第一个当前段落的序号，line 与 text 为 null）。
+  - '批注：在不属于围栏代码块的正文中匹配 <!-- @me: 文本 --> 或 <!-- @me(kind): 文本 -->（可跨行）。每个批注是一条反馈：id 为 cm- 加 kind 与规范化文本 SHA-256 的前 8 个十六进制字符，同一正文中重复的依次加 -2、-3；kind 省略时为 suggestion；status 为 open；source 为 comment；锚点 quote 为整个批注文本，因此总能在正文中定位。feedback list、watch 与 next 在每个单元已记入的反馈之后，按正文顺序追加尚未记入 feedback.yaml 的批注反馈；已记入的同 id 只出现一次。'
+  - 记入与移除：draft write 通过人工编辑检查、写入正文之前，把当前正文中未记入的批注追加到 feedback.yaml（changedPaths 含 feedback.yaml）；feedback resolve 的目标是未记入的批注时先记入。source 为 comment 的反馈状态改为 resolved 或 rejected 时，若正文中仍有该批注则移除它（批注独占的行整行删除），changedPaths 含 draft.md；移除前的正文哈希等于写入记录时，按移除前各段的出处重建写入记录（对齐上的与配对上的段落继承原出处），使 wa-cli 自己的改动不被当作人工编辑。
+  - 分层：internal/draft 不 import internal/feedback；internal/feedback 使用 internal/draft 的 Read、Split、段落文字与重建写入记录的函数。命令层在 draft write 中依次调用 draft.Guard、feedback.ImportComments 与 draft.Write（Write 内部再次执行同一检查）。
+  - 审查后补充：批注改为手工扫描，不跨空行、不含嵌套的 <!--、开头与结尾都不在围栏内、开头不在行内代码中；编号跳过已关闭记录的 id；每个单元最多解析 1000 个批注（feedback.too-many-comments）；未记入批注的定位按偏移递增计算；draft.Precheck 在记入批注之前完成包括现有正文在内的全部检查；正文没有批注时 ImportComments 不读取 feedback.yaml。
+decisions:
+  refuse-without-record:
+    decision: draft.md 存在但没有写入记录时同样视为作者改过，拒绝覆盖。
+    rationale: 没有写入记录意味着正文全部由作者写成，覆盖它的风险比覆盖部分改动更大；与出处推导「没有写入记录时全部为 human」一致。
+  identical-content-allowed:
+    decision: 作者改过正文、但新内容与当前 draft.md 逐字节相同时，不要求 --base，照常成功并更新写入记录。
+    rationale: 此时不会丢失作者的任何内容；Agent 常在读取当前正文后原样写回以确认基线，强制 --base 只增加一次无意义的往返。
+  paragraph-level-diff:
+    decision: diff 以段落为单位报告新增、修改与删除，删除只给出位置。
+    rationale: 出处与写入记录都以段落为最小粒度，写入记录只保存哈希；为 diff 另存完整的 Agent 原文会让每个单元多一份需要保护的副本，而 Agent 需要的是作者改了哪些段落及其当前文字，这些都能从当前正文与写入记录推出。
+  derived-comment-feedback:
+    decision: 批注在读取时解析为反馈，只在 draft write 覆盖前与 feedback resolve 时记入 feedback.yaml。
+    rationale: feedback list、watch 与 next 是只读命令，不能因为读到批注就写文件；覆盖正文可能删掉批注，必须在那之前记入才能「记录保留在反馈中」；解决批注需要一条可以修改状态的记录。
+  comment-id-by-content:
+    decision: 批注反馈的 id 由 kind 与文本的哈希派生（cm-<8 位十六进制>，重复加序号）。
+    rationale: 批注没有作者写的 id；按内容派生使同一批注在多次读取、watch 轮询与记入前后保持同一 id，作者改写批注文字则视为新的反馈。
+  rebaseline-after-removal:
+    decision: wa-cli 移除批注时，若移除前正文未被作者改过，则按原出处重建写入记录。
+    rationale: 移除批注是 wa-cli 自己对正文的修改，若不更新写入记录，下一次 draft write 会把它误判为人工编辑；正文已被作者改过时不重建，保留原有的人工编辑状态。
+  closed-ids-skip-numbering:
+    decision: 批注编号时跳过已关闭（resolved、rejected）记录的 id。
+    rationale: 否则两条相同批注解决一条后，剩下的一条与已解决的记录同 id 而被隐藏，也无法移除；作者重写一条与已解决批注相同的文字时同样会被隐藏（fresh-context 审查复现）。
+alternatives:
+  - option: 只要写入记录与当前正文不同，就允许 Agent 用一个强制参数覆盖。
+    reason: 强制参数不证明 Agent 看过作者的版本；base 参数必须等于当前哈希，作者再次修改后旧的取值会失效。
+  - option: 读取时（feedback list）自动把批注写入 feedback.yaml。
+    reason: 只读命令会产生写入，changedPaths 也无法如实反映；watch 轮询时会反复写文件。
+risks:
+  - 批注被作者改写一个字就会成为新 id 的反馈，旧的未记入批注反馈随之消失；已记入的记录保留。
+  - diff 无法显示被删除段落的原文，作者删除大段内容时 Agent 只能从上下文判断。

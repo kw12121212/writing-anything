@@ -1,0 +1,35 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: decision-queue
+  status: proposed
+summary:
+  what:
+    - 新增决策队列（Decision Queue）产物 .writing-anything/decisions.yaml：每个待决事项含问题、选项（按顺序编号 a、b、c…）、Agent 推荐的选项与理由、是否阻塞（Blocking）、关联的单元，以及状态（open 待决、decided 已决定）；决定后记录作者的选择、答复与确认记录（Confirmation Record）：作者确认原话的摘要与确认时间。
+    - 新增 wa-cli decision add 记录待决事项，wa-cli decisions 列出待决事项并按阻塞与非阻塞分组，方便 Agent 一次性询问作者；wa-cli decide <id> 记录作者的选择与确认原话摘要。
+    - 未决定的阻塞决策成为关联单元的阻塞项（Blocker）：wa-cli advance 拒绝推进关联单元，wa-cli next 与 wa-cli status 列出该阻塞项及查看决策队列的命令；wa-cli validate 校验决策队列。
+  why:
+    - 里程碑 kernel-foundation 的完成标准要求存在未解决的阻塞决策时 wa-cli advance 拒绝推进关联单元；目前 Agent 遇到需要作者拍板的事项只能在对话中临时询问，问过即丢，没有记录作者选了什么、原话怎么说，也无法阻止 Agent 在作者决定之前继续推进。
+    - 项目约定作者是最终决策的来源、验收需记录作者确认；单元树与生命周期已预留在 Work.Blockers 中追加阻塞来源的位置，决策队列是第一个非产物类的阻塞来源，后续的写作简报关卡、审稿与验收都会复用确认记录。
+scope:
+  in:
+    - internal/schema：新增 decisions 产物类型与 decisions.schema.json（.writing-anything/decisions.yaml）
+    - 新的领域包 internal/decision：追加待决事项（默认 id dec-<n>、选项编号、推荐必须是已有选项）、记录决定（选项或答复、确认原话摘要必填、确认时间、已决定时拒绝）、列出与分组、校验决策队列（id 唯一、推荐与选择必须是已有选项、decided 必须有确认记录）
+    - internal/work 的 Work.Blockers 追加阻塞来源：关联该单元的未决定阻塞决策（decision.blocking），决策队列无法加载时报告 decision.invalid-queue，偏安全地阻止推进
+    - wa-cli decision add、decisions、decide 三条命令；命令注册表新增可重复的列表参数类型，供 --option 与 --unit 使用
+    - next 与 status 的阻塞项新增 decision 字段，被决策阻塞时 commands 给出 wa-cli decisions 命令；validate 校验 decisions.yaml 并检查关联单元存在（decision.unknown-unit）
+    - 新增 decisions 主规格（delta spec），修改 units-and-lifecycle 主规格的 advance-stage 与 next-steps、workspace 主规格的 validate-workspace；修改 cli-contract 技术标准的 registry-declared（列表参数）
+  out:
+    - 决策的修改、撤销与重新决定；决策到期提醒；按关卡强度（Gate Level）调整阻塞行为
+    - 写作简报关卡、审稿与验收对确认记录的消费（由 tech-blog-workflow 负责）
+    - wa-cli 调用 LLM 或替作者做决定
+unchanged_behavior:
+  - 输出信封字段与退出码约定不变；已发布错误码的含义不变
+  - 没有阻塞决策时，advance、next、status 的行为与输出不变（阻塞项只新增 decision 字段，缺失产物的阻塞项该字段为 null）
+  - 其他命令的参数、输出与诊断不变；已有的单值参数解析不变
+  - 仓库根目录不创建 .writing-anything/；产品二进制不依赖 internal/tools/** 与 strict-spec-driven
+roadmap:
+  milestone: kernel-foundation
+  planned_change: decision-queue

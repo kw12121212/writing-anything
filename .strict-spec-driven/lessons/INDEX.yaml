@@ -24,6 +24,26 @@ categories:
       status: active
       occurrences: 1
       path: .strict-spec-driven/lessons/coding/lesson-c2d85f.yaml
+    lesson-db34bd:
+      title: 只在写入路径防符号链接不够，读取单元产物也会被途经的符号链接带出项目目录
+      status: active
+      occurrences: 2
+      path: .strict-spec-driven/lessons/coding/lesson-db34bd.yaml
+    yaml-v3-a5c850:
+      title: 向流式序列追加元素改为块式时，yaml.v3 会丢掉挂在序列上的行尾注释
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/coding/yaml-v3-a5c850.yaml
+    lesson-ccfda7:
+      title: 按「字段不以产物路径开头」判断参数问题，会把已有产物的根级问题误当作参数问题
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/coding/lesson-ccfda7.yaml
+    wa-cli-f2cd1e:
+      title: wa-cli 会据以删除作者正文的解析规则，必须把边界限死在最小范围
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/coding/wa-cli-f2cd1e.yaml
   documentation:
     must-must-6af326:
       title: 修改一条 MUST 需求时，要检查同一规格里相邻的 MUST 是否因此冲突

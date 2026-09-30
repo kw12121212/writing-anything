@@ -1,0 +1,22 @@
+schema: strict-spec-driven/lesson/v1
+schema_version: 1
+artifact_type: lesson
+schema_file: templates/strict-spec-driven/schemas/lesson.yaml
+lesson:
+  id: lesson-db34bd
+  title: 只在写入路径防符号链接不够，读取单元产物也会被途经的符号链接带出项目目录
+category: coding
+status: active
+created_at: '2026-09-30T12:34:33.352Z'
+updated_at: '2026-09-30T12:56:36.721Z'
+context: author-sources-and-provenance 为 draft write 的写入路径检查了 units/ 与单元目录是否为真实目录，读取 draft.md、provenance.yaml、claims.yaml 时只对最后一级文件做 Lstat。
+observation: fresh-context 审查把 units/intro 换成指向外部目录的符号链接后，wa-cli provenance 输出了外部 draft.md 的段落统计，validate 校验了外部的 claims.yaml；全部测试通过，因为测试只覆盖了写入路径的符号链接。
+takeaway: 按参数定位的目录在读和写两条路径上都要逐级 Lstat 确认是真实目录；把检查放进统一的读取辅助函数，并为 provenance、validate、draft write 各写一条途经符号链接的测试。
+applies_when: 新增读取单元目录或素材目录中产物的 wa-cli 命令或校验，路径由单元引用、作品 id、素材 id 等参数拼接而成时
+occurrences:
+  - origin: author-sources-and-provenance
+    date: '2026-09-30'
+    evidence: internal/draft/draft.go readRegular 逐级 Lstat；internal/draft/draft_test.go TestSymlinkedUnitDirNotRead；internal/source/source.go Load 拒绝符号链接的 source.yaml
+  - origin: author-feedback
+    date: '2026-09-30'
+    evidence: fresh-context 审查发现 validate <path> 通过 workspace.ValidateArtifact 直接 os.ReadFile，穿过符号链接的单元目录读取外部 feedback.yaml 并报告 valid 为 true，而整体校验已正确跳过；internal/workspace.ValidateArtifact 增加逐级 Lstat，TestValidateArtifactSymlinks 与 TestFeedbackSymlinkedUnitDir 覆盖。

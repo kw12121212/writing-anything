@@ -47,7 +47,7 @@ dependencies:
 risks:
   - 单元树与生命周期抽象若过度贴合文章，后续小说阶段需要重写；需用测试夹具同时覆盖单层文章与多层单元树的数据形状
   - 人工编辑检测依赖 Agent 遵守通过 draft write 写正文的约定；Agent 直接改文件会被判为人工编辑，这是偏安全的误判方向
-status: proposed
+status: complete
 notes:
   - wa-cli 不内置 LLM 调用：生成与审稿由接入的 Agent 完成，CLI 只负责结构、规则、状态与出处，保持确定性且无需 API key
 details: 内核（Kernel）是三层架构中的最小可用集合。生命周期的阶段（Stage）序列由文体声明，内核提供通用状态机、转换校验与关卡（Gate）钩子。结构化产物（写作简报、大纲、论断、决策等）只能通过 wa-cli 命令创建和修改；Agent 通过 wa-cli draft write 写入正文，作者可以直接编辑正文，凡不经 draft write 产生的正文变化都视为人工编辑。技术栈为 Go 1.27，JSON Schema 与内置文体、规范包用 embed 打包进二进制。测试夹具（Test Fixture）放在各包的 testdata/ 下，不在仓库根目录创建 .writing-anything/。面向用户的文字遵循 docs/GLOSSARY.md。

@@ -17,6 +17,7 @@ const (
 const (
 	flagBool   = "bool"
 	flagString = "string"
+	flagList   = "list" // 可重复出现，按出现顺序收集全部取值
 )
 
 // command 是命令注册表（Command Registry）中的一条命令声明。
@@ -76,7 +77,10 @@ type commandSet []*command
 
 // registry 登记 wa-cli 的全部命令。
 var registry = commandSet{helpCommand, versionCommand, initCommand, validateCommand, statusCommand, configSetCommand, configResolvedCommand,
-	newCommand, unitAddCommand, advanceCommand, nextCommand}
+	newCommand, unitAddCommand, advanceCommand, nextCommand,
+	sourceAddCommand, sourceListCommand, draftWriteCommand, diffCommand, provenanceCommand, claimAddCommand,
+	feedbackAddCommand, feedbackListCommand, feedbackResolveCommand, feedbackWatchCommand,
+	decisionAddCommand, decisionsCommand, decideCommand}
 
 func (s commandSet) lookup(name string) *command {
 	for _, c := range s {
@@ -132,7 +136,9 @@ func (c *command) allOutputKeys() []outputKey {
 type invocation struct {
 	all    commandSet // 所在的命令注册表；help 通过它列出命令，避免包级变量初始化循环
 	args   []string
-	values map[string]string // 出现过的参数；bool 参数的值为 "true"
+	values map[string]string   // 出现过的参数；bool 参数的值为 "true"，list 参数为最后一次的取值
+	lists  map[string][]string // list 参数按出现顺序的全部取值
+	stdin  io.Reader
 	stdout io.Writer
 	stderr io.Writer
 }

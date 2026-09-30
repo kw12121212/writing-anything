@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math/big"
 	"os"
+	"path"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -238,7 +239,7 @@ func TestKindsForPacksAndGenres(t *testing.T) {
 			t.Errorf("KindFor(%q) = %s, want nil", rel, k.Name)
 		}
 	}
-	if k := Named("genre"); k == nil || k.Pattern != "" {
+	if k := Named("genre"); k == nil || len(k.Patterns) != 0 {
 		t.Fatalf("Named(genre) = %+v, want a built-in-only kind", k)
 	}
 	if Named("nope") != nil {
@@ -318,5 +319,46 @@ func TestSharedDefinitions(t *testing.T) {
 	ps = Named("pack").Validate([]byte("schema_version: 1\nid: a\ntitle: t\nwaivers:\n  - rule: r\n    reason: '  '\n"))
 	if len(ps) != 1 || ps[0].Field != "waivers[0].reason" {
 		t.Fatalf("blank reason: problems = %+v", ps)
+	}
+}
+
+func TestKindForSourcesAndUnitArtifacts(t *testing.T) {
+	for rel, want := range map[string]string{
+		".writing-anything/decisions.yaml":                            "decisions",
+		".writing-anything/sources/src-1/source.yaml":                 "source",
+		".writing-anything/works/my-post/provenance.yaml":             "provenance",
+		".writing-anything/works/my-post/units/intro/provenance.yaml": "provenance",
+		".writing-anything/works/my-post/claims.yaml":                 "claims",
+		".writing-anything/works/my-post/units/intro/claims.yaml":     "claims",
+	} {
+		if k := KindFor(rel); k == nil || k.Name != want {
+			t.Errorf("KindFor(%q) = %+v, want %s", rel, k, want)
+		}
+	}
+	for _, rel := range []string{".writing-anything/sources/source.yaml", ".writing-anything/sources/a/original.md",
+		".writing-anything/works/my-post/units/provenance.yaml", ".writing-anything/works/my-post/units/a/b/claims.yaml"} {
+		if k := KindFor(rel); k != nil {
+			t.Errorf("KindFor(%q) = %s, want nil", rel, k.Name)
+		}
+	}
+}
+
+// 每个路径模式的示例路径只匹配一种产物类型（workspace-artifacts/embedded-schemas）。
+func TestPatternsMatchOneKind(t *testing.T) {
+	for _, k := range Kinds() {
+		for _, p := range k.Patterns {
+			rel := strings.ReplaceAll(p, "*", "x")
+			n := 0
+			for _, other := range Kinds() {
+				for _, q := range other.Patterns {
+					if ok, _ := path.Match(q, rel); ok {
+						n++
+					}
+				}
+			}
+			if n != 1 || KindFor(rel) != k {
+				t.Errorf("%s matches %d patterns, KindFor = %v, want only %s", rel, n, KindFor(rel), k.Name)
+			}
+		}
 	}
 }

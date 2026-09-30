@@ -62,13 +62,14 @@ func runUnits(t *testing.T, dir string, args ...string) (int, unitResult) {
 	return code, out
 }
 
-// noNulls 断言 JSON 值中只有可为 null 的字段（parent、work、unit、config、defaultGenre）为 null，数组永不为 null。
+// noNulls 断言 JSON 值中只有可为 null 的字段（parent、work、unit、config、defaultGenre，以及反馈的 note 与锚点的
+// quote、line、paragraph）为 null，数组永不为 null。
 func noNulls(t *testing.T, v any, path string) {
 	t.Helper()
 	switch v := v.(type) {
 	case map[string]any:
 		for k, c := range v {
-			if c == nil && !slices.Contains([]string{"parent", "work", "unit", "config", "defaultGenre"}, k) {
+			if c == nil && !slices.Contains([]string{"parent", "work", "unit", "config", "defaultGenre", "note", "quote", "line", "paragraph", "decision", "recommendation", "rationale", "choice", "answer", "confirmation", "decidedAt", "text", "recorded", "diff"}, k) {
 				t.Errorf("%s.%s is null", path, k)
 			}
 			noNulls(t, c, path+"."+k)

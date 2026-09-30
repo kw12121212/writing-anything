@@ -1,0 +1,42 @@
+schema: strict-spec-driven/question-list/v1
+schema_version: 1
+artifact_type: question_list
+schema_file: templates/strict-spec-driven/schemas/question-list.yaml
+change: author-feedback
+open: []
+resolved:
+  - id: requirement-problem
+    question: What is concretely going wrong today, and for whom?
+    context: 'Why this is asked: the change is planned against a need, and the need lives only with the requester. A "problem" here means what someone does or suffers today — not a feature that is missing. If the answer names a button, a field, a page, or an endpoint, it is a solution, and the underlying problem is still unstated. What a sufficient answer contains: who is affected, what they do today instead, and how often. Worked example: "every Monday one person spends forty minutes copying order rows into a spreadsheet to send the weekly report". What it changes: this becomes the proposal''s why, and it decides whether the change is worth making.'
+    answer: 据里程碑 kernel-foundation 与规划变更 author-feedback：作者在对话中提出的意见目前只存在于 Agent 的上下文里，换一个会话、正文一改或意见一多就无从追溯；作者无法确认每条意见是否被处理，Agent 也没有统一的格式记录意见指向正文的哪一处。受影响的是作者、接入 wa-cli 的 Agent，以及依赖反馈模型的 human-edit-protection-and-comments 与后续修订工作流。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-outcome
+    question: What observable difference proves the problem is solved?
+    context: 'Why this is asked: without a success condition, nobody can tell afterwards whether the change worked. "Observable" means someone outside the system can check it without reading the code. What a sufficient answer contains: what a person will see, or no longer have to do, once this is done. Worked example: "the report is in the manager''s inbox on Monday morning without anyone assembling it". What it changes: this becomes the delta spec''s scenarios and the acceptance evidence at review time.'
+    answer: 据规划变更 details 与里程碑 done_criteria：Agent 能用 wa-cli feedback add 记录带原文锚点的作者意见；正文修改后 feedback list 能重新定位，定位不到时标为失去锚点；feedback resolve 管理状态；wa-cli feedback watch 输出新增的反馈（每行一条 JSON）；wa-cli next 在每一步列出未处理的反馈。具体场景写在 feedback、units-and-lifecycle 与 workspace delta spec 中。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-trigger
+    question: Why now — what forced this?
+    context: 'Why this is asked: work that nothing forced is the work most often thrown away later. This question catches a request that sounds reasonable but has no real driver behind it. What a sufficient answer contains: the concrete event, deadline, incident, or cost that made this surface now, or an honest statement that nothing did. Worked example: "the report was missed last month and it was raised with the team". What it changes: a change with no trigger is a candidate for deferral, and the answer is weighed at review before archive.'
+    answer: 据路线图：本规划变更依赖的 unit-tree-and-lifecycle 与 author-sources-and-provenance 都已归档，而 human-edit-protection-and-comments 依赖它；roadmap-recommend 推荐它为下一项。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-non-goals
+    question: What must explicitly not change?
+    context: 'Why this is asked: the requester knows which nearby behavior other people depend on, and the agent does not. A "non-goal" is something the change must leave alone even though it sits close to the work. What a sufficient answer contains: the behavior, setting, or output that must survive untouched, and who relies on it. Worked example: "do not change the saved filters — several people rely on their own". What it changes: these become the proposal''s unchanged_behavior items, which review checks the finished result against.'
+    answer: 据规划变更 details 与里程碑 scope：不解析正文批注（human-edit-protection-and-comments），不实现阅读页等其他反馈渠道，不让反馈阻止推进，wa-cli 不调用 LLM；next 已有字段、advance 的阻塞判断、其他命令的行为，输出信封与退出码约定保持不变。已写入 proposal 的 out 与 unchanged。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-interpretation
+    question: Which reading of the request is intended, where more than one is possible?
+    context: 'Why this is asked: a short request usually admits several readings, and building the wrong one is indistinguishable from building nothing. What a sufficient answer contains: the reading that is meant, stated plainly enough to rule the others out — or a statement that only one reading exists and what it is. Worked example: "export means the version sent to the manager, not the one I read myself". What it changes: this fixes the scope boundary before any code is written, and settles disputes about what was asked for.'
+    answer: 据规划变更 details：所有渠道的作者意见统一存为结构化反馈，锚点为被评论的原文片段及其前后文加段落标识，类型为必须改、建议、疑问、赞，状态为待处理、已采纳、已解决、不采纳；正文修改后按锚点重新定位，定位不到标为失去锚点；feedback watch 每行输出一条 JSON。段落标识取段落哈希、锚点状态读取时推导、精确匹配、每行输出完整信封等技术取舍写在 design 的决策中；关联的修订记录在修订工作流上线前以自由文本 note 记录。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap

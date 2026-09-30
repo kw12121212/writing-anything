@@ -1,0 +1,32 @@
+schema: strict-spec-driven/delta-tech/v1
+schema_version: 1
+artifact_type: delta_tech
+schema_file: templates/strict-spec-driven/schemas/delta-tech.yaml
+target_standard: cli-contract
+operations:
+  ADDED:
+    streaming-envelopes:
+      strength: MUST
+      statement: 持续输出事件的流式命令（如 feedback watch）在 --json 模式下每个事件输出一行完整的输出信封（valid、diagnostics、changedPaths 与声明的输出键），不得输出不带信封的裸对象；流式命令必须提供使其在输出指定条数后结束的参数（如 --max）与轮询间隔参数，以便在进程内测试并登记样例调用。
+      rationale: Agent 与 MCP 用同一方式解析所有命令的输出，逐行信封让流式事件也符合 shared-envelope；可结束的参数让 TestRegistryConsistency 与行为测试不必启动子进程或依赖超时。
+      enforcement:
+        method: test
+        detail: internal/cli 的 TestRegistryConsistency 以 --all --max 1 调用 feedback watch 并断言输出为一行信封；TestFeedbackWatch 在并发追加反馈时断言每行都是信封。
+      examples:
+        good:
+          - feedback watch --max 1 --json 输出一行 {"valid":true,"diagnostics":[],"changedPaths":[],"feedback":{...}}
+        bad:
+          - feedback watch --json 每行只输出 {"id":"fb-2",...}
+    invalid-value-code:
+      strength: SHOULD
+      statement: 参数取值不合法（如应为正整数、应为枚举取值）且不对应任何产物字段时，统一报告错误码 input.invalid-value，诊断不填 path，message 说明参数名、给出的取值与期望，next 为 wa-cli help <command> --json；取值写入产物字段时仍由 Schema 校验报告 artifact.schema-violation。
+      rationale: Agent 依据错误码分支处理，同一类参数错误各命令各自造错误码会让分支逻辑膨胀；与写入产物的字段错误区分开，Agent 才知道该改参数还是改产物。
+      enforcement:
+        method: review
+      examples:
+        good:
+          - feedback watch --interval 0 报告 input.invalid-value，next 为 wa-cli help feedback watch --json
+        bad:
+          - feedback watch --interval 0 报告 feedback.bad-interval
+  MODIFIED: {}
+  REMOVED: {}

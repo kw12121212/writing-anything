@@ -1,0 +1,3 @@
+schema_version: 1
+feedback:
+  - {id: fb-1, kind: question, status: done, text: x}

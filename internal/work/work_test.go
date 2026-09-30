@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/kw12121212/writing-anything/internal/catalog"
+	"github.com/kw12121212/writing-anything/internal/decision"
 	"github.com/kw12121212/writing-anything/internal/schema"
 	"github.com/kw12121212/writing-anything/internal/workspace"
 )
@@ -409,5 +410,59 @@ func TestRefOf(t *testing.T) {
 		if got := RefOf(w.UnitDir(u)); got != u.Ref {
 			t.Errorf("RefOf(%s) = %s, want %s", w.UnitDir(u), got, u.Ref)
 		}
+	}
+}
+
+func TestAddUnitKeepsFlowComment(t *testing.T) {
+	root := project(t)
+	if _, _, ps := Create(root, "minimal", "my-post"); len(ps) > 0 {
+		t.Fatal(ps)
+	}
+	src := strings.Replace(string(read(t, abs(root, Path("my-post")))), "units: []", "units: []  # 子单元", 1)
+	put(t, root, Path("my-post"), src)
+	if _, _, ps := AddUnit(root, "my-post", "section", "intro"); len(ps) > 0 {
+		t.Fatal(ps)
+	}
+	if got := string(read(t, abs(root, Path("my-post")))); !strings.Contains(got, "# 子单元") {
+		t.Fatalf("work.yaml =\n%s", got)
+	}
+}
+
+// 未决定的阻塞决策是关联单元的阻塞项；决策队列无法加载时偏安全地阻塞（workspace-artifacts/single-blocker-source）。
+func TestDecisionBlockers(t *testing.T) {
+	root := project(t)
+	if _, _, ps := Create(root, "minimal", "my-post"); len(ps) > 0 {
+		t.Fatal(ps)
+	}
+	put(t, root, Dir("my-post")+"/brief.yaml", "k: v\n")
+	put(t, root, decision.Path, "schema_version: 1\ndecisions:\n"+
+		"  - {id: dec-1, question: 标题, options: [], blocking: true, units: [my-post], status: open}\n"+
+		"  - {id: dec-2, question: 字数, options: [], blocking: false, units: [my-post], status: open}\n")
+	w, u, _ := Resolve(root, "my-post")
+	bs := w.Blockers(root, u)
+	if len(bs) != 1 || bs[0].Code != "decision.blocking" || bs[0].Decision != "dec-1" || bs[0].Artifact != "decisions" || bs[0].Path != ".writing-anything/decisions.yaml" {
+		t.Fatalf("blockers = %+v", bs)
+	}
+	if _, _, _, ps := Advance(root, "my-post"); len(ps) != 1 || ps[0].Code != "decision.blocking" {
+		t.Fatalf("advance = %v", ps)
+	}
+	if !strings.Contains(bs[0].Message, "标题") {
+		t.Errorf("message %q lacks the question", bs[0].Message)
+	}
+	put(t, root, decision.Path, "a: [\n")
+	w, u, _ = Resolve(root, "my-post")
+	if bs := w.Blockers(root, u); len(bs) != 1 || bs[0].Code != "decision.invalid-queue" || bs[0].Decision != "" {
+		t.Fatalf("invalid queue blockers = %+v", bs)
+	}
+	// 已完成的单元没有阻塞项，即使决策队列损坏。
+	put(t, root, Path("my-post"), strings.Replace(string(read(t, abs(root, Path("my-post")))), "stage: brief", "stage: done", 1))
+	w, u, _ = Resolve(root, "my-post")
+	if bs := w.Blockers(root, u); len(bs) != 0 {
+		t.Fatalf("done unit blockers = %+v", bs)
+	}
+	put(t, root, Path("my-post"), strings.Replace(string(read(t, abs(root, Path("my-post")))), "stage: done", "stage: brief", 1))
+	os.Remove(abs(root, decision.Path))
+	if _, _, _, ps := Advance(root, "my-post"); len(ps) != 0 {
+		t.Fatalf("advance without queue = %v", ps)
 	}
 }

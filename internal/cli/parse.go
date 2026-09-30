@@ -19,7 +19,7 @@ const (
 // parseArgs 按 c 的声明解析 args（不含命令名）。只接受 --name 与 --name=value 形式的长参数；
 // 位置参数按声明顺序匹配，缺少必需参数时报错。出错时返回一条用法诊断。
 func parseArgs(c *command, args []string) (*invocation, *Diagnostic) {
-	inv := &invocation{values: map[string]string{}}
+	inv := &invocation{values: map[string]string{}, lists: map[string][]string{}}
 	flags := c.allFlags()
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
@@ -48,6 +48,9 @@ func parseArgs(c *command, args []string) (*invocation, *Diagnostic) {
 			return nil, usageDiagnostic(c, codeMissingFlagValue, fmt.Sprintf("参数 --%s 缺少取值", name))
 		}
 		inv.values[name] = value
+		if spec.Type == flagList {
+			inv.lists[name] = append(inv.lists[name], value)
+		}
 	}
 	// 查看用法时不要求必需参数，wa-cli config set --help 也能输出用法。
 	if !inv.flag("help") {

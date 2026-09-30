@@ -8,8 +8,12 @@ import (
 	"strings"
 
 	"github.com/kw12121212/writing-anything/internal/catalog"
+	"github.com/kw12121212/writing-anything/internal/decision"
+	"github.com/kw12121212/writing-anything/internal/draft"
+	"github.com/kw12121212/writing-anything/internal/feedback"
 	"github.com/kw12121212/writing-anything/internal/resolve"
 	"github.com/kw12121212/writing-anything/internal/schema"
+	"github.com/kw12121212/writing-anything/internal/source"
 	"github.com/kw12121212/writing-anything/internal/work"
 	"github.com/kw12121212/writing-anything/internal/workspace"
 )
@@ -158,8 +162,17 @@ func runValidate(inv *invocation) int {
 			checked, problems = workspace.ValidateArtifact(dir, inv.args[0])
 			if len(checked) == 1 && len(problems) == 0 {
 				problems = resolve.CheckArtifact(dir, checked[0])
-				if schema.KindFor(checked[0]).Name == "work" {
+				switch schema.KindFor(checked[0]).Name {
+				case "work":
 					problems = append(problems, work.CheckArtifact(dir, checked[0])...)
+				case "source":
+					problems = append(problems, source.CheckArtifact(dir, checked[0])...)
+				case "claims":
+					problems = append(problems, draft.CheckArtifact(dir, checked[0])...)
+				case "feedback":
+					problems = append(problems, feedback.CheckArtifact(dir, checked[0])...)
+				case "decisions":
+					_, problems = decision.Check(dir, unitExists(dir))
 				}
 			}
 		} else {
@@ -370,14 +383,35 @@ func resolvedText(r *resolve.Resolved) string {
 	return b.String()
 }
 
-// checkWorkspace 校验整个工作区：工作区结构与配置，规范包文件、文体与规范包引用和合并问题，以及每个作品。
-// 同时返回能加载的作品。
+// checkWorkspace 校验整个工作区：工作区结构与配置，规范包文件、文体与规范包引用和合并问题，每个作品，
+// 素材库中的每个素材，以及单元目录中的写入记录与论断。同时返回能加载的作品。
 func checkWorkspace(dir string) (checked []string, works []*work.Work, problems []workspace.Problem) {
 	checked, problems = workspace.Check(dir)
 	more, ps := resolve.Check(dir)
 	works, wchecked, wps := work.LoadAll(dir)
-	checked = append(append(checked, more...), wchecked...)
-	return checked, works, append(append(problems, ps...), wps...)
+	_, schecked, sps := source.LoadAll(dir)
+	uchecked, ups := draft.CheckUnitArtifacts(dir, works)
+	fchecked, fps := feedback.CheckUnitArtifacts(dir, works)
+	dchecked, dps := decision.Check(dir, unitExists(dir))
+	checked = slices.Concat(checked, more, wchecked, schecked, uchecked, fchecked, dchecked)
+	return checked, works, slices.Concat(problems, ps, wps, sps, ups, fps, dps)
+}
+
+// unitExists 返回检查单元引用能否解析的函数，供决策队列检查关联单元；每个作品只解析一次。
+func unitExists(dir string) func(ref string) bool {
+	works := map[string]*work.Work{}
+	return func(ref string) bool {
+		workID, unitID, child := strings.Cut(ref, "/")
+		w, seen := works[workID]
+		if !seen {
+			w, _, _ = work.Resolve(dir, workID)
+			works[workID] = w
+		}
+		if w == nil {
+			return false
+		}
+		return !child || slices.ContainsFunc(w.Units(), func(u *work.Unit) bool { return u.Parent != nil && u.ID == unitID })
+	}
 }
 
 func projectDir(inv *invocation) string {
@@ -438,13 +472,48 @@ func next(p workspace.Problem, dir string) []string {
 		validate = validateAll
 	}
 	status := shellCommand("wa-cli", "status", "--dir", dir, "--json")
+	if n := feedbackNext(p, dir); n != nil {
+		return n
+	}
+	inSources := strings.HasPrefix(p.Path, workspace.SourcesPath+"/")
+	if p.Path == decision.Path && (p.Code == schema.CodeNotFound || p.Code == workspace.CodeReadFailed) {
+		// 决策队列不可读：init 不会修复它，用整体校验复查。
+		return []string{validateAll, shellCommand("wa-cli", "decisions", "--dir", dir, "--json")}
+	}
 	switch p.Code {
 	case schema.CodeNotFound:
 		if k := schema.KindFor(p.Path); k != nil && k.Name == "work" {
 			// 作品目录中缺少 work.yaml：init 不会补齐它，作品只能用 wa-cli new 创建。
 			return []string{"wa-cli help new --json", validateAll}
 		}
+		if inSources {
+			// 素材目录不完整：init 不会补齐它，素材只能用 wa-cli source add 登记。
+			return []string{"wa-cli help source add --json", validateAll}
+		}
 		return []string{initCmd}
+	case source.CodeModified:
+		return []string{validateAll}
+	case decision.CodeBlocking:
+		return []string{shellCommand("wa-cli", "decisions", "--dir", dir, "--json")}
+	case decision.CodeInvalidQueue:
+		// wa-cli decisions 会报出决策队列的具体问题，整体校验同样能复查。
+		return []string{shellCommand("wa-cli", "decisions", "--dir", dir, "--json"), validateAll}
+	case decision.CodeUnknownUnit:
+		// 关联单元涉及多个产物，用整体校验复查。
+		return []string{validateAll}
+	case source.CodeExists:
+		return []string{shellCommand("wa-cli", "source", "list", "--dir", dir, "--json")}
+	case draft.CodeNotFound:
+		return []string{"wa-cli help draft write --json"}
+	case draft.CodeHumanEdited, draft.CodeBaseMismatch:
+		return []string{shellCommand("wa-cli", "diff", work.RefOf(strings.TrimSuffix(p.Path, "/"+draft.FileName)), "--dir", dir, "--json")}
+	case draft.CodeUnknownSource:
+		// 素材引用涉及多个产物，用整体校验复查。
+		return []string{shellCommand("wa-cli", "source", "list", "--dir", dir, "--json"), validateAll}
+	case catalog.CodeDuplicateID:
+		if strings.HasSuffix(p.Path, "/"+draft.ClaimsName) {
+			return []string{validateAll}
+		}
 	case workspace.CodeNotFound, workspace.CodeMissingDirectory:
 		return []string{initCmd}
 	case work.CodeNotFound, work.CodeUnitNotFound, work.CodeExists, work.CodeAlreadyDone:
@@ -479,7 +548,7 @@ func next(p workspace.Problem, dir string) []string {
 	case workspace.CodeUnknownConfigKey, workspace.CodeConfigKept, workspace.CodeAnchoredValue:
 		return []string{"wa-cli help config set --json"}
 	case workspace.CodeWriteFailed, workspace.CodeReadFailed:
-		if strings.HasPrefix(p.Path, workspace.WorksPath+"/") {
+		if strings.HasPrefix(p.Path, workspace.WorksPath+"/") || inSources {
 			return []string{status}
 		}
 		if p.Path != workspace.ConfigPath {

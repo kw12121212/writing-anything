@@ -1,0 +1,19 @@
+schema: strict-spec-driven/lesson/v1
+schema_version: 1
+artifact_type: lesson
+schema_file: templates/strict-spec-driven/schemas/lesson.yaml
+lesson:
+  id: yaml-v3-a5c850
+  title: 向流式序列追加元素改为块式时，yaml.v3 会丢掉挂在序列上的行尾注释
+category: coding
+status: active
+created_at: '2026-09-30T12:56:36.913Z'
+updated_at: '2026-09-30T12:56:36.913Z'
+context: 'author-feedback 的 feedback add 与既有的 claim add、unit add 在追加元素后用 Style &^= yaml.FlowStyle 把 feedback: [] 改为块式，便于阅读。'
+observation: 'yaml.v3 把「feedback: []  # 注释」的行尾注释挂在序列节点的 LineComment 上，改为块式后编码器不再输出它；已有的注释保留测试只覆盖了块式文件与头部注释，直到 fresh-context 审查手工构造流式序列加行尾注释才发现。'
+takeaway: 改变 YAML 节点风格前先迁移节点上的注释（统一用 internal/workspace.BlockSequence），注释保留测试要覆盖流式序列加行尾注释的写法。
+applies_when: 修改结构化产物时要向序列追加元素、或以任何方式改变节点的 Style（流式与块式互换）时
+occurrences:
+  - origin: author-feedback
+    date: '2026-09-30'
+    evidence: internal/workspace.BlockSequence；TestBlockSequenceKeepsLineComment、TestAddUnitKeepsFlowComment、TestAddClaimKeepsFlowComment、TestAddPreservesCommentsAndSkipsIDs

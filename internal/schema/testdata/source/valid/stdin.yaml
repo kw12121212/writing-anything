@@ -1,0 +1,6 @@
+schema_version: 1
+id: interview-ceo
+type: interview
+file: original.txt
+sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+bytes: 3

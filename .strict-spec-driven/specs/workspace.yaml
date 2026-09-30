@@ -56,7 +56,7 @@ requirements:
         - THEN: valid 为 false，diagnostics 中有一条错误码为 artifact.schema-violation、field 为 gate_level 的诊断，D 下没有 .writing-anything/，退出码为 1
   validate-workspace:
     strength: MUST
-    statement: 不带位置参数的 wa-cli validate 必须校验 --dir 下的整个工作区：config.yaml 符合工作区配置的 JSON Schema，sources/ 与 works/ 存在，.writing-anything/packs/ 下的每个 .yaml 文件都是合法的规范包（Pack），default_genre 与 packs 引用的文体（Genre）与规范包都存在，且按 文体 → 规范包 → 项目配置 合并时没有冲突；works/ 下每个不以 . 开头的子目录都必须含通过作品校验（见 units-and-lifecycle 主规格的 work-validation）的作品产物 work.yaml。全部通过时 valid 为 true、退出码为 0，--json 输出的 checked 字段列出已校验的产物路径（含每个规范包文件与每个 work.yaml）；发现问题时退出码为 1，并为每个问题给出一条诊断：缺少必需目录时错误码为 workspace.missing-directory，缺少 config.yaml 时为 artifact.not-found，两者的 next 都包含 wa-cli init --dir <dir>；作品目录中缺少 work.yaml 时同样为 artifact.not-found，其 next 包含 wa-cli help new --json；引用不存在的文体时为 config.unknown-genre，引用不存在的规范包时为 config.unknown-pack，两者的 path 为 .writing-anything/config.yaml、field 为出错的字段。
+    statement: 不带位置参数的 wa-cli validate 必须校验 --dir 下的整个工作区：config.yaml 符合工作区配置的 JSON Schema，sources/ 与 works/ 存在，.writing-anything/packs/ 下的每个 .yaml 文件都是合法的规范包（Pack），default_genre 与 packs 引用的文体（Genre）与规范包都存在，且按 文体 → 规范包 → 项目配置 合并时没有冲突；works/ 下每个不以 . 开头的子目录都必须含通过作品校验（见 units-and-lifecycle 主规格的 work-validation）的作品产物 work.yaml；sources/ 下每个不以 . 开头的子目录都必须是完整的素材（见 sources-and-provenance 主规格的 archive-integrity），每个作品的单元目录中存在的 provenance.yaml 与 claims.yaml 都必须合法（见 sources-and-provenance 主规格的 unit-artifact-validation），feedback.yaml 也必须合法（见 feedback 主规格的 feedback-validation）；.writing-anything/decisions.yaml 存在时必须合法（见 decisions 主规格的 decisions-validation）。全部通过时 valid 为 true、退出码为 0，--json 输出的 checked 字段列出已校验的产物路径（含每个规范包文件、每个 work.yaml、每个 source.yaml 与每个单元目录中的 provenance.yaml、claims.yaml、feedback.yaml，以及存在时的 decisions.yaml）；发现问题时退出码为 1，并为每个问题给出一条诊断：缺少必需目录时错误码为 workspace.missing-directory，缺少 config.yaml 时为 artifact.not-found，两者的 next 都包含 wa-cli init --dir <dir>；作品目录中缺少 work.yaml 时同样为 artifact.not-found，其 next 包含 wa-cli help new --json；引用不存在的文体时为 config.unknown-genre，引用不存在的规范包时为 config.unknown-pack，两者的 path 为 .writing-anything/config.yaml、field 为出错的字段。
     scenarios:
       missing-directory:
         - GIVEN: 已初始化的工作区，sources/ 已被删除
@@ -86,6 +86,18 @@ requirements:
         - GIVEN: 已初始化的工作区，works/ 下有一个没有 work.yaml 的子目录 draft-notes
         - WHEN: 运行 wa-cli validate --dir D --json
         - THEN: diagnostics 中有一条错误码为 artifact.not-found、path 为 .writing-anything/works/draft-notes/work.yaml 的诊断，其 next 包含 wa-cli help new --json，valid 为 false，退出码为 1
+      checks-source-and-unit-files:
+        - GIVEN: 已初始化的工作区，已登记素材 interview-ceo，作品 my-post 已用 wa-cli draft write 与 wa-cli claim add 写入正文与论断
+        - WHEN: 运行 wa-cli validate --dir D --json
+        - THEN: valid 为 true，checked 包含 .writing-anything/sources/interview-ceo/source.yaml、.writing-anything/works/my-post/provenance.yaml 与 .writing-anything/works/my-post/claims.yaml，退出码为 0
+      checks-feedback-files:
+        - GIVEN: 已初始化的工作区，作品 my-post 已用 wa-cli feedback add 记录反馈
+        - WHEN: 运行 wa-cli validate --dir D --json
+        - THEN: valid 为 true，checked 包含 .writing-anything/works/my-post/feedback.yaml，退出码为 0
+      checks-decisions:
+        - GIVEN: 已初始化的工作区，已用 wa-cli decision add 记录待决事项
+        - WHEN: 运行 wa-cli validate --dir D --json
+        - THEN: valid 为 true，checked 包含 .writing-anything/decisions.yaml，退出码为 0
   artifact-diagnostics:
     strength: MUST
     statement: 校验产物时，YAML 语法错误必须报告为错误码 artifact.parse-error，解析器能确定出错位置时必须在 message 中给出行号；展开别名后节点过多的产物也必须报告为 artifact.parse-error，而不是耗尽内存。内容不符合 JSON Schema 的每一处必须报告为错误码 artifact.schema-violation，path 为该产物相对项目目录的路径，field 为出错字段的点分路径（数组下标写作 [i]，如 packs[0]；缺少必需字段或出现未定义字段时为该字段），message 说明违反的约束，并在能确定时给出行号。每条诊断的 next 必须包含至少一条可以直接运行的 wa-cli 命令，不含需要替换的占位符。
@@ -112,7 +124,7 @@ requirements:
         - THEN: diagnostics 中有一条错误码为 artifact.parse-error 的诊断，说明展开别名后节点过多，退出码为 1
   validate-single-artifact:
     strength: MUST
-    statement: wa-cli validate <path> 必须只校验 path 指向的产物；path 相对于 --dir 解析，也可以是绝对路径。产物类型由其在工作区内的位置决定；path 不对应任何已知产物类型时，必须报告错误码 artifact.unknown-kind；文件不存在时，必须报告错误码 artifact.not-found；两种情况的退出码都为 1。
+    statement: wa-cli validate <path> 必须只校验 path 指向的产物；path 相对于 --dir 解析，也可以是绝对路径。产物类型由其在工作区内的位置决定；path 不对应任何已知产物类型时，必须报告错误码 artifact.unknown-kind；文件不存在，或 path 在工作区目录之下途经符号链接（包括文件本身是符号链接）时，必须报告错误码 artifact.not-found，不读取项目目录之外的文件；两种情况的退出码都为 1。
     scenarios:
       single-valid:
         - GIVEN: 刚初始化的工作区
@@ -126,6 +138,10 @@ requirements:
         - GIVEN: 刚初始化的工作区，config.yaml 已被删除
         - WHEN: 运行 wa-cli validate .writing-anything/config.yaml --dir D --json
         - THEN: diagnostics 中有一条错误码为 artifact.not-found 的诊断，退出码为 1
+      symlinked-path:
+        - GIVEN: 作品 my-post 的 units/intro 是指向项目目录之外的符号链接，其中有 feedback.yaml
+        - WHEN: 运行 wa-cli validate .writing-anything/works/my-post/units/intro/feedback.yaml --dir D --json
+        - THEN: diagnostics 中有一条错误码为 artifact.not-found 的诊断，checked 为空数组，退出码为 1
   status-summary:
     strength: MUST
     statement: wa-cli status 必须汇总 --dir 下的工作区：--json 输出包含 workspace（相对项目目录的工作区路径）、config（language、defaultGenre、packs、gateLevel；配置无法解析时为 null）、sources 与 works（sources/ 与 works/ 下的直接条目数，不含以 . 开头的隐藏条目），以及 units：按作品 id 排序、单元树先序列出每个可加载作品的每个单元，每项含 unit（单元引用）、work、type、parent（父单元的引用，根单元为 null）、stage、blockers 与 commands，blockers 与 commands 的含义与 wa-cli next 相同（stage 为 done 的单元两者为空数组）。工作区校验（与 validate-workspace 相同）全部通过时退出码为 0；有 error 级诊断时仍输出上述字段，但 valid 为 false，退出码为 1。不加 --json 时，以人读文本输出同样的信息，单元以缩进树列出。

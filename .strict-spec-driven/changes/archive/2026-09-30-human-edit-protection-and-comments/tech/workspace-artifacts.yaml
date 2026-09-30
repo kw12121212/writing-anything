@@ -1,0 +1,23 @@
+schema: strict-spec-driven/delta-tech/v1
+schema_version: 1
+artifact_type: delta_tech
+schema_file: templates/strict-spec-driven/schemas/delta-tech.yaml
+target_standard: workspace-artifacts
+operations:
+  ADDED:
+    self-edit-rebaseline:
+      strength: MUST
+      statement: wa-cli 自己修改作者可编辑的正文（如移除已解决的批注）时，只有在修改前正文的 SHA-256 等于写入记录的 sha256 时，才按原出处重建写入记录（draft.Rebaseline）；正文已被作者改过时不得因此把它变成未编辑状态。
+      rationale: 不重建时，下一次 draft write 会把 wa-cli 自己的修改误判为人工编辑；无条件重建则会让作者的改动失去人工编辑保护，Agent 可以不带 --base 覆盖它。
+      enforcement:
+        method: test
+        detail: internal/draft 的 TestRebaseline 与 internal/feedback 的 TestResolveComment 覆盖正文未改与已改两种情况。
+  MODIFIED:
+    input-limits:
+      strength: MUST
+      statement: 解析产物时必须限制展开别名后的节点数（schema.MaxNodes），超限报告 artifact.parse-error，不得先展开再检查；对工作区文件做推导、匹配或比较的算法（如段落出处的最长公共子序列对齐、反馈锚点的重新定位）必须限制输入规模，并使内存与耗时与之相称（draft.MaxParagraphs，超限报告 draft.too-large）：不得让不可信的文件决定平方级内存，也不得在每处匹配重新扫描前文。对同一文档做逐项推导（每个批注、每条锚点的行号、段落与前后文）时共用一次切分与规范化的结果，对正文的扫描次数不得随条目数增长；条目数没有其他上限时另设上限（如 feedback.MaxComments，超限报告 feedback.too-many-comments）。
+      rationale: Agent 会对不可信的工作区自动运行命令，层层引用的别名、极长的正文或大量重复的原文片段、批注都能让很小的操作耗尽内存或长时间占满 CPU；feedback watch 会反复执行这些计算。
+      enforcement:
+        method: test
+        detail: internal/schema 的 TestAliasBomb 与 internal/cli 的 TestValidateAliasExpansionLimit 断言返回 artifact.parse-error；internal/draft 的 TestTooManyParagraphs 断言 draft.too-large；internal/feedback 的 TestLocateManyMatches 断言 9000 处匹配的重新定位在 2 秒内完成。internal/feedback 的 TestManyComments 与 TestManyRecordedComments 断言大量批注的列出在限定时间内完成，并在超过上限时报告 feedback.too-many-comments。
+  REMOVED: {}

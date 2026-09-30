@@ -55,7 +55,9 @@
 | 素材 | Source | 素材 | 作者笔记、访谈、转写稿、参考资料、过往文章 |
 | 素材库 | Source Library | 素材库 | 原文存档的素材集合 |
 | 论断 | Claim | 论断 | 需要出处支撑的事实、数据、经历或观点 |
-| 出处 | Provenance | 出处 | 内容来自人、Agent，还是 Agent 起草后经人修改 |
+| 出处 | Provenance | 出处 | 内容来自人、Agent，还是 Agent 起草后经人修改；段落出处取值为 `human`（作者）、`agent`（Agent）、`agent-draft-human-edited`（Agent 起草、作者修改） |
+| 段落 | Paragraph | 段落 | 正文中由空行分隔的连续非空行，围栏代码块整体算一段；出处的最小粒度 |
+| 写入记录 | Draft Record | 写入记录 | `wa-cli draft write` 在单元目录留下的 `provenance.yaml`：整篇正文与每个段落的哈希及出处，用于推导段落出处 |
 | 事实库 | Fact Store | 事实库 | 带出处与保护级别的素材、论断与设定条目 |
 | 设定集 | Canon | 设定集 | 小说的人物、地点、世界规则等既定设定 |
 | 作者钦定 | Author-pinned | 作者钦定 | 由作者确定、受最高级别保护的内容 |
@@ -111,7 +113,7 @@
 | 智能体 | Agent | Agent | 接入本工具、协助作者写作的 AI 程序 |
 | 决策队列 | Decision Queue | 决策队列 | 等待作者决定的事项列表 |
 | 阻塞 | Blocking | 阻塞 | 未解决前禁止继续推进 |
-| 阻塞项 | Blocker | 阻塞项 | 阻止单元推进的具体原因，如缺失的必需产物，由 `wa-cli next` 与 `wa-cli status` 列出 |
+| 阻塞项 | Blocker | 阻塞项 | 阻止单元推进的具体原因，如缺失的必需产物、未决定的阻塞决策，由 `wa-cli next` 与 `wa-cli status` 列出 |
 | 确认记录 | Confirmation Record | 确认记录 | 作者确认的时间与原话摘要 |
 | 批注 | Comment | 批注 | 作者写在正文里的修改意见，如 `<!-- @me: ... -->` |
 | 作者反馈 | Feedback | 反馈 | 作者对正文的结构化意见，来自对话、正文批注或阅读页 |

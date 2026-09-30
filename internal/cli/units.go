@@ -55,7 +55,7 @@ var nextCommand = &command{
 	summary:    "列出单元（Unit）的当前阶段（Stage）、阻塞项（Blocker）与下一步命令",
 	args:       []argSpec{{"unit", "只列出该单元；省略时列出所有未完成的单元。" + unitRefHelp, false}},
 	flags:      []flagSpec{dirFlag},
-	outputKeys: []outputKey{{"steps", "下一步数组，每项含 unit、stage、blockers、action 与 commands"}},
+	outputKeys: []outputKey{{"steps", "下一步数组，每项含 unit、stage、blockers、action、commands 与 feedback（未处理完的作者反馈）"}},
 	exitCodes:  standardExitCodes,
 	run:        runNext,
 }
@@ -97,18 +97,20 @@ type advanceResult struct {
 }
 
 type blockerView struct {
-	Code     string `json:"code"`
-	Artifact string `json:"artifact"`
-	Path     string `json:"path"`
-	Message  string `json:"message"`
+	Code     string  `json:"code"`
+	Artifact string  `json:"artifact"`
+	Path     string  `json:"path"`
+	Decision *string `json:"decision"` // 决策阻塞项的决策 id；其他阻塞项为 null
+	Message  string  `json:"message"`
 }
 
 type stepView struct {
-	Unit     string        `json:"unit"`
-	Stage    string        `json:"stage"`
-	Blockers []blockerView `json:"blockers"`
-	Action   string        `json:"action"`
-	Commands []string      `json:"commands"`
+	Unit     string         `json:"unit"`
+	Stage    string         `json:"stage"`
+	Blockers []blockerView  `json:"blockers"`
+	Action   string         `json:"action"`
+	Commands []string       `json:"commands"`
+	Feedback []feedbackView `json:"feedback"`
 }
 
 type nextResult struct {
@@ -261,6 +263,9 @@ func runNext(inv *invocation) int {
 			for _, c := range s.Commands {
 				fmt.Fprintf(&b, "  下一步：%s\n", c)
 			}
+			for _, f := range s.Feedback {
+				fmt.Fprintf(&b, "  反馈：%s\n", feedbackText(f))
+			}
 		}
 		_, err := io.WriteString(w, b.String())
 		return err
@@ -269,18 +274,32 @@ func runNext(inv *invocation) int {
 
 func step(dir string, w *work.Work, u *work.Unit) stepView {
 	blockers, commands := progress(dir, w, u)
-	return stepView{Unit: u.Ref, Stage: u.Stage, Blockers: blockers, Action: action(w, u, blockers), Commands: commands}
+	s := stepView{Unit: u.Ref, Stage: u.Stage, Blockers: blockers, Action: action(w, u, blockers), Commands: commands,
+		Feedback: pendingFeedback(dir, w, u)}
+	if n := len(s.Feedback); n > 0 {
+		s.Action = fmt.Sprintf("先处理 %d 条未处理的作者反馈（Feedback）；%s", n, s.Action)
+	}
+	return s
 }
 
 // progress 返回单元的阻塞项与可以直接运行的下一步命令，next 与 status 共用；数组永不为 nil。
 func progress(dir string, w *work.Work, u *work.Unit) ([]blockerView, []string) {
 	blockers, commands := []blockerView{}, []string{}
+	byDecision := false
 	for _, b := range w.Blockers(dir, u) {
-		blockers = append(blockers, blockerView{Code: b.Code, Artifact: b.Artifact, Path: b.Path, Message: b.Message})
+		v := blockerView{Code: b.Code, Artifact: b.Artifact, Path: b.Path, Message: b.Message}
+		if b.Decision != "" {
+			v.Decision = &b.Decision
+		}
+		byDecision = byDecision || strings.HasPrefix(b.Code, "decision.")
+		blockers = append(blockers, v)
 	}
-	// 被缺失产物阻塞时只能列出为该产物登记的生成命令；目前还没有产物登记生成命令，commands 为空数组。
-	if u.Stage != catalog.StageDone && len(blockers) == 0 {
+	// 被缺失产物阻塞时只能列出为该产物登记的生成命令；目前还没有产物登记生成命令。被决策阻塞时给出查看决策队列的命令。
+	switch {
+	case u.Stage != catalog.StageDone && len(blockers) == 0:
 		commands = append(commands, shellCommand("wa-cli", "advance", u.Ref, "--dir", dir, "--json"))
+	case byDecision:
+		commands = append(commands, shellCommand("wa-cli", "decisions", "--dir", dir, "--json"))
 	}
 	return blockers, commands
 }
@@ -291,11 +310,29 @@ func action(w *work.Work, u *work.Unit, blockers []blockerView) string {
 	case u.Stage == catalog.StageDone:
 		return "已走完全部阶段"
 	case len(blockers) > 0:
-		var missing []string
+		var missing, decisions []string
+		broken := false
 		for _, b := range blockers {
-			missing = append(missing, fmt.Sprintf("%s（在 %s/ 下写入 %s.yaml 或 %s.md）", b.Artifact, b.Path, b.Artifact, b.Artifact))
+			switch {
+			case b.Decision != nil:
+				decisions = append(decisions, *b.Decision)
+			case strings.HasPrefix(b.Code, "decision."):
+				broken = true
+			default:
+				missing = append(missing, fmt.Sprintf("%s（在 %s/ 下写入 %s.yaml 或 %s.md）", b.Artifact, b.Path, b.Artifact, b.Artifact))
+			}
 		}
-		return "先产出必需产物（Required Artifact）" + strings.Join(missing, "、") + "，再推进"
+		var todo []string
+		if len(missing) > 0 {
+			todo = append(todo, "产出必需产物（Required Artifact）"+strings.Join(missing, "、"))
+		}
+		if len(decisions) > 0 {
+			todo = append(todo, "请作者决定阻塞决策（Blocking）"+strings.Join(decisions, "、"))
+		}
+		if broken {
+			todo = append(todo, "修复无法加载的决策队列（Decision Queue）")
+		}
+		return "先" + strings.Join(todo, "，并") + "，再推进"
 	}
 	return fmt.Sprintf("阶段 %s 的必需产物已齐备，可以推进到 %s", u.Stage, w.NextStage(u))
 }

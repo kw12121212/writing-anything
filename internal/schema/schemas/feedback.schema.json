@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "作者反馈",
+  "description": "单元中的作者反馈（Feedback）；anchor 记录被评论的原文片段、前后文与所在段落的哈希，正文修改后据此重新定位。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "feedback"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "feedback": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "kind", "status", "text"],
+        "properties": {
+          "id": {"$ref": "common.schema.json#/$defs/id"},
+          "kind": {"enum": ["must-fix", "suggestion", "question", "praise"]},
+          "status": {"enum": ["open", "accepted", "resolved", "rejected"]},
+          "text": {"type": "string", "pattern": "\\S"},
+          "note": {"type": "string"},
+          "source": {"enum": ["conversation", "comment"]},
+          "anchor": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["quote", "before", "after", "paragraph"],
+            "properties": {
+              "quote": {"type": "string", "minLength": 1},
+              "before": {"type": "string"},
+              "after": {"type": "string"},
+              "paragraph": {"$ref": "common.schema.json#/$defs/sha256"}
+            }
+          }
+        }
+      }
+    }
+  }
+}

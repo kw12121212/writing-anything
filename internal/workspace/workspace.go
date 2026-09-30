@@ -359,6 +359,17 @@ func ValidateArtifact(root, p string) (checked []string, problems []Problem) {
 	if k == nil {
 		return nil, []Problem{errorAt(schema.CodeUnknownKind, rel, "不对应任何已知的产物类型")}
 	}
+	// 工作区目录之下途经符号链接（或途经的不是目录）时视为不存在，不读取项目目录之外的文件。
+	segs := strings.Split(rel, "/")
+	for i := 2; i <= len(segs); i++ {
+		info, err := os.Lstat(abs(root, strings.Join(segs[:i], "/")))
+		if err != nil {
+			break
+		}
+		if i < len(segs) && !info.IsDir() || info.Mode()&fs.ModeSymlink != 0 {
+			return nil, []Problem{errorAt(schema.CodeNotFound, rel, "产物途经符号链接，按不存在处理")}
+		}
+	}
 	doc, ps := read(root, rel)
 	if doc == nil {
 		return nil, ps
@@ -473,4 +484,19 @@ func equal(cur, next *yaml.Node) bool {
 		return cur == next
 	}
 	return reflect.DeepEqual(schema.Decode(cur), schema.Decode(next))
+}
+
+// BlockSequence 把映射 m 中键 key 的序列值改为块式，便于追加元素后阅读；流式序列上的行尾注释移到键上，
+// 避免编码时丢失（workspace-artifacts/structured-edits）。
+func BlockSequence(m *yaml.Node, key string) {
+	for i := 0; i+1 < len(m.Content); i += 2 {
+		k, v := m.Content[i], m.Content[i+1]
+		if k.Value != key || v.Kind != yaml.SequenceNode || v.Style&yaml.FlowStyle == 0 {
+			continue
+		}
+		if v.LineComment != "" && k.LineComment == "" {
+			k.LineComment, v.LineComment = v.LineComment, ""
+		}
+		v.Style &^= yaml.FlowStyle
+	}
 }

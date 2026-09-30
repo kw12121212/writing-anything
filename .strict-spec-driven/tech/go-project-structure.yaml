@@ -9,13 +9,13 @@ standard:
 rules:
   thin-entry:
     strength: MUST
-    statement: wa-cli 的入口位于 cmd/wa-cli/，只转交参数、输出流与退出码；全部实现位于 internal/ 下。
+    statement: wa-cli 的入口位于 cmd/wa-cli/，只转交参数、输入输出流与退出码；全部实现位于 internal/ 下。
     rationale: 覆盖率统计范围只含 internal/**，逻辑放在 cmd/ 会逃出回归关卡。
     enforcement:
       method: review
     examples:
       good:
-        - main 调用 cli.Run(os.Args[1:], os.Stdout, os.Stderr) 并 os.Exit 其返回值
+        - main 调用 cli.Run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr) 并 os.Exit 其返回值
       bad:
         - 在 cmd/wa-cli/main.go 中解析子命令并实现业务逻辑
   coverage-gate:
@@ -38,15 +38,15 @@ rules:
       method: review
   injectable-io:
     strength: SHOULD
-    statement: 命令与开发工具的实现接收 args []string 与 stdout、stderr io.Writer 并返回 int 退出码；除 cmd/ 与 internal/tools/* 的 main 函数外，不调用 os.Exit，也不直接读写 os.Stdout、os.Stderr。
-    rationale: 这样命令可以在进程内测试并计入覆盖率，无需为每个用例启动子进程。
+    statement: 命令与开发工具的实现接收 args []string、stdin io.Reader 与 stdout、stderr io.Writer（开发工具不读标准输入时可省略 stdin）并返回 int 退出码；除 cmd/ 与 internal/tools/* 的 main 函数外，不调用 os.Exit，也不直接读写 os.Stdin、os.Stdout、os.Stderr。
+    rationale: 这样命令可以在进程内测试并计入覆盖率，无需为每个用例启动子进程；draft write 与 source add 从标准输入读取内容，标准输入同样需要注入。
     enforcement:
       method: review
     examples:
       good:
-        - func Run(args []string, stdout, stderr io.Writer) int
+        - func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int
       bad:
-        - 在 internal/cli 中调用 os.Exit(2) 或 fmt.Println
+        - 在 internal/cli 中调用 os.Exit(2)、fmt.Println 或 io.ReadAll(os.Stdin)
   dev-tools-isolation:
     strength: MUST
     statement: 只在开发时使用的工具放在 internal/tools/<name>/，写成 package main，不计入覆盖率范围；产品包（cmd/wa-cli 与 internal/ 下其他包）不得 import internal/tools/**。
@@ -60,3 +60,15 @@ rules:
     rationale: 下一步命令取决于调用方式（--dir、命令名），属于命令层；领域包保持与输出格式无关，后续 MCP 服务也能复用同样的问题。
     enforcement:
       method: review
+  output-sync-in-tests:
+    strength: SHOULD
+    statement: 流式或轮询命令的测试用输出作为同步点（轮询输出直到出现哨兵事件或期望的内容），不以固定的 sleep 假定后台扫描已经完成；测试中写入待观测的文件时先写临时文件再重命名。
+    rationale: 固定等待在慢速或满载的 CI 上会让基线扫描晚于测试动作，事件被算进基线后测试只能等到超时失败；非原子写入会让扫描读到写了一半的文件，产生另一种诊断。
+    enforcement:
+      method: review
+      detail: internal/cli 的 TestFeedbackWatch 以 --all 输出的哨兵反馈作为启动扫描完成的同步点，并用 atomicWrite 写入不合法的 feedback.yaml。
+    examples:
+      good:
+        - waitFor(t, out, "哨兵") 后再追加反馈
+      bad:
+        - time.Sleep(200 * time.Millisecond) 后假定 watch 已完成启动扫描

@@ -1,0 +1,12 @@
+schema_version: 1
+feedback:
+  - id: fb-1
+    kind: must-fix
+    status: open
+    text: 方案要给出数据
+    anchor: {quote: 讲方案, before: 第二段, after: 。, paragraph: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa}
+  - id: fb-2
+    kind: praise
+    status: resolved
+    text: 开头很好
+    note: 保留

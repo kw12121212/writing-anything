@@ -1,0 +1,39 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: human-edit-protection-and-comments
+sections:
+  Implementation:
+    draft-guard:
+      text: internal/draft：Guard 检查人工编辑与 --base（draft.human-edited、draft.base-mismatch，原样写回照常成功），Write 接收 base 并在写入前执行同一检查；段落带原文文字；Diff 推导逐段改动；Rebaseline 在 wa-cli 修改正文后按原出处重建写入记录
+      status: complete
+    comment-feedback:
+      text: internal/feedback：解析批注（围栏代码块外、可跨行、kind、cm-<hash> id 与重复序号），List 合并未记入的批注反馈，ImportComments 记入 feedback.yaml（source 为 comment），Resolve 支持批注 id 并在 resolved/rejected 时移除批注、必要时重建写入记录；feedback.schema.json 新增 source
+      status: complete
+    cli-commands:
+      text: internal/cli：draft write 新增 --base 并在写入前记入批注；新增 diff 命令（登记注册表与 sampleArgs）；feedback resolve 的 changedPaths 含被修改的 draft.md 与 provenance.yaml；诊断 next 指向 wa-cli diff
+      status: complete
+  Testing:
+    unit-tests:
+      text: 为 draft、feedback 与 cli 编写单元测试：作者改过或没有写入记录时拒绝覆盖、--base 正确与过期、原样写回、diff 的 added/edited/removed、批注解析（kind、跨行、重复、围栏内忽略）、list/next/watch 中的批注反馈、draft write 前记入、resolve 移除批注与重建写入记录；断言使用规格中的字面量
+      status: complete
+      command: go test ./internal/...
+    full-regression:
+      text: 运行完整回归命令，覆盖率不低于 80%
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    spec-alignment:
+      text: 对照 sources-and-provenance 与 feedback delta spec 的每个场景确认实现与测试覆盖，并按实际实现修正 delta spec
+      status: complete
+    strict-ready:
+      text: 运行 strict-spec-cli ready 与 strict-spec-cli verify，确认变更产物有效
+      status: complete
+      command: strict-spec-cli ready human-edit-protection-and-comments && strict-spec-cli verify human-edit-protection-and-comments
+    archive-readiness:
+      text: 确认 delta spec 能合并进 sources-and-provenance 与 feedback 主规格，归档后路线图中的 human-edit-protection-and-comments 标记为完成、里程碑 kernel-foundation 的计划变更全部完成
+      status: complete
+testing_gates:
+  validation_task: full-regression
+  unit_test_task: unit-tests

@@ -1,0 +1,19 @@
+schema: strict-spec-driven/lesson/v1
+schema_version: 1
+artifact_type: lesson
+schema_file: templates/strict-spec-driven/schemas/lesson.yaml
+lesson:
+  id: lesson-ccfda7
+  title: 按「字段不以产物路径开头」判断参数问题，会把已有产物的根级问题误当作参数问题
+category: coding
+status: active
+created_at: '2026-09-30T13:12:03.507Z'
+updated_at: '2026-09-30T13:12:03.507Z'
+context: claim add、decision add 等追加命令把由本次参数引起的问题的 next 改写为 wa-cli help <command>，已有产物中的问题保留默认的复查命令，最初用「field 不以 claims / decisions 开头」区分。
+observation: '已有文件的根级问题（schema_version 取值错误、未定义的字段）field 为 schema_version、foo 或空，同样不以产物数组路径开头，被误改写成查看用法，Agent 无法复查；测试只用了 claims: {} 这类 field 恰好以产物路径开头的坏文件，两次变更都是 fresh-context 审查才发现。'
+takeaway: 按参数名白名单判断问题来源（internal/cli 的 paramField），测试要覆盖已有产物的根级字段问题（错误的 schema_version、未定义的根键）。
+applies_when: 命令需要按问题来源分别给出 next（参数错误指向用法、已有产物问题指向复查）时
+occurrences:
+  - origin: decision-queue
+    date: '2026-09-30'
+    evidence: internal/cli/decisions.go paramField；TestDecisionAdd 与 TestClaimAdd 的根级字段用例
