@@ -41,3 +41,9 @@ writing-anything 是面向 AI 智能体（Agent）的规范化辅助写作工具
 ## 开发流程
 
 本仓库开发由 strict-spec-driven 管理（`.strict-spec-driven/`），使用 `strict-spec-*` / `strict-roadmap-*` 技能。产品运行时不得依赖或调用 strict-spec-driven。
+
+## 分支
+
+- `main`：主分支，只接收从 `dev` 合并的稳定版本，不直接在上面开发。
+- `dev`：主力开发分支，日常提交与变更都在 `dev` 上进行；需要隔离的工作从 `dev` 拉出功能分支，完成后合并回 `dev`。
+- `CLAUDE.md` 是指向本文件的软链接，只修改 `AGENTS.md`。
