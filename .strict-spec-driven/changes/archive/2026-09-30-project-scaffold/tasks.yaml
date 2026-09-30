@@ -1,0 +1,63 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: project-scaffold
+sections:
+  Implementation:
+    go-module:
+      text: 新建 go.mod（module github.com/kw12121212/writing-anything，go 1.27）与 .gitignore（忽略 coverage.out、wa-cli 二进制）
+      status: complete
+    version-package:
+      text: 实现 internal/version：Version 变量默认 dev，可通过 -ldflags -X 注入
+      status: complete
+    cli-run:
+      text: '实现 internal/cli.Run(args, stdout, stderr) int：version 输出 ''wa-cli <version>''，version --json 输出 {"version": "<version>"}，未知命令/参数或无命令时写用法到 stderr 并返回 2'
+      status: complete
+    main-entry:
+      text: 实现 cmd/wa-cli/main.go：调用 cli.Run(os.Args[1:], os.Stdout, os.Stderr) 并 os.Exit 返回值
+      status: complete
+    covercheck:
+      text: 实现 internal/tools/covercheck：解析 coverage.out，读取 go.mod 模块路径，按语句加权并合并重复块计算 internal/**（不含 internal/tools/**）覆盖率；-min 默认 80、-profile 默认 coverage.out；低于阈值、范围为空、文件不可读或格式错误时 stderr 报告并退出 1，通过时打印覆盖率退出 0
+      status: complete
+  Testing:
+    version-test:
+      text: 为 internal/version 编写默认值测试
+      status: complete
+      command: go test ./internal/version/...
+    cli-test:
+      text: 为 internal/cli 编写测试：version 纯文本与 --json 输出、未知命令、未知参数、无命令时的退出码与 stderr
+      status: complete
+      command: go test ./internal/cli/...
+    covercheck-test:
+      text: 为 covercheck 编写测试，profile 夹具放在 testdata/，go.mod 在测试中用 t.TempDir() 生成：达标通过、低于阈值失败（两位小数）、internal/tools 与非 internal 文件被排除、重复块合并、范围为空失败、计数与位置格式错误失败、-profile 默认值与相对路径、-min 越界或 NaN 为用法错误
+      status: complete
+      command: go test ./internal/tools/covercheck/...
+    build-binary:
+      text: 构建单文件二进制并运行 version 命令，确认输出与退出码
+      status: complete
+      command: go build -o /tmp/wa-cli ./cmd/wa-cli && /tmp/wa-cli version && /tmp/wa-cli version --json
+    binary-test:
+      text: cmd/wa-cli 二进制级测试：以 -ldflags 注入版本号构建二进制，验证 version 文本/JSON 输出与用法错误退出码，并用 go list -deps 确认不依赖 internal/tools/**
+      status: complete
+      command: go test ./cmd/wa-cli/...
+    full-regression:
+      text: 在干净仓库运行完整回归命令并确认覆盖率不低于 80%
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    ready-check:
+      text: 运行 strict-spec-cli ready project-scaffold 无阻塞诊断
+      status: complete
+      command: strict-spec-cli ready project-scaffold
+    verify-check:
+      text: 运行 strict-spec-cli verify project-scaffold，确认全部任务完成且 delta spec/delta tech 与实现一致
+      status: complete
+      command: strict-spec-cli verify project-scaffold
+    archive-readiness:
+      text: 确认归档会新建主规格 cli 与技术标准 go-project-structure，并把规划变更 project-scaffold 标记为完成
+      status: complete
+      command: strict-spec-cli roadmap-status
+testing_gates:
+  validation_task: full-regression
+  unit_test_task: cli-test

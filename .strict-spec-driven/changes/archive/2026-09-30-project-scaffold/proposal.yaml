@@ -1,0 +1,32 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: project-scaffold
+  status: proposed
+summary:
+  what:
+    - 搭建 Go 1.27 工程骨架：go.mod、cmd/wa-cli/ 入口、internal/ 实现目录、internal/tools/covercheck 覆盖率（Coverage）检查工具，以及最小的 wa-cli version 命令及其测试，使 config 中的完整回归测试（Regression Test）命令在干净仓库通过。
+  why:
+    - 内核地基（Kernel Foundation）里程碑的所有后续规划变更都依赖可构建、可测试的工程骨架与可运行的回归命令；没有它，review_evidence 中的 80% 覆盖率关卡无法执行。
+scope:
+  in:
+    - 新建 go.mod，模块路径 github.com/kw12121212/writing-anything，go 1.27，不引入第三方依赖
+    - internal/cli：最小命令分发，支持 wa-cli version（纯文本）与 wa-cli version --json；未知命令或缺少命令时输出用法到 stderr 并以退出码 2 退出
+    - internal/version：保存版本号，默认 dev，可通过 -ldflags -X 在构建时注入
+    - internal/tools/covercheck：读取 go test -coverprofile 生成的 coverage.out，按语句加权计算覆盖率，统计范围 internal/**（不含 internal/tools/**），低于 -min 阈值或范围内无语句时以非零退出
+    - 为 internal/cli、internal/version 与 internal/tools/covercheck 编写测试，测试夹具放在各包 testdata/ 下
+    - .gitignore 忽略 coverage.out 与构建产物 wa-cli
+    - cmd/wa-cli/main.go 只把参数与标准输出转交 internal/cli 并以其返回值退出；go build ./cmd/wa-cli 产出单文件 wa-cli 二进制，go build ./... 编译全部包
+    - cmd/wa-cli 下的二进制级测试：构建注入版本号的二进制并验证输出与退出码，并确认产品二进制不依赖 internal/tools/**
+  out:
+    - 命令框架、help、统一的 --json 输出信封与诊断（Diagnostic）契约（由 cli-json-diagnostics 负责）
+    - wa-cli init / validate / status 等任何业务命令与 .writing-anything/ 工作区（Workspace）
+    - 二进制发布、交叉编译与安装（由 binary-release-and-install 负责）
+    - MCP 服务与 Skill
+unchanged_behavior:
+  - strict-spec-driven 工作流文件、路线图与 docs/GLOSSARY.md 中已有术语的含义不变；产品运行时不依赖 strict-spec-driven
+roadmap:
+  milestone: kernel-foundation
+  planned_change: project-scaffold

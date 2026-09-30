@@ -1,0 +1,4 @@
+# 覆盖率与构建产物
+coverage.out
+/wa-cli
+/wa-cli.exe

@@ -1,0 +1,59 @@
+schema: strict-spec-driven/delta-tech/v1
+schema_version: 1
+artifact_type: delta_tech
+schema_file: templates/strict-spec-driven/schemas/delta-tech.yaml
+target_standard: go-project-structure
+standard:
+  title: Go 工程结构与回归关卡
+  category: architecture
+operations:
+  ADDED:
+    thin-entry:
+      strength: MUST
+      statement: wa-cli 的入口位于 cmd/wa-cli/，只转交参数、输出流与退出码；全部实现位于 internal/ 下。
+      rationale: 覆盖率统计范围只含 internal/**，逻辑放在 cmd/ 会逃出回归关卡。
+      enforcement:
+        method: review
+      examples:
+        good:
+          - main 调用 cli.Run(os.Args[1:], os.Stdout, os.Stderr) 并 os.Exit 其返回值
+        bad:
+          - 在 cmd/wa-cli/main.go 中解析子命令并实现业务逻辑
+    coverage-gate:
+      strength: MUST
+      statement: config.yaml 中 review_evidence.project_regression.command 声明的完整回归命令必须通过；其中 internal/tools/covercheck 按语句加权统计 internal/**（不含 internal/tools/**）的覆盖率，低于声明的阈值即失败。
+      rationale: 回归命令与阈值只在 config.yaml 维护一处，避免标准与配置漂移；覆盖率不足是阻塞性失败而非提示。
+      enforcement:
+        method: test
+    testdata-fixtures:
+      strength: MUST
+      statement: 测试夹具（Test Fixture）放在各包的 testdata/ 目录下；仓库根目录不创建 .writing-anything/；testdata/ 下不放 go.mod，需要 go.mod 的场景在测试中用 t.TempDir() 生成。
+      rationale: 夹具随包就近维护，避免仓库根目录出现产品工作区与真实工作区混淆；testdata 中的 go.mod 会形成嵌套模块边界，使夹具脱离外层模块。
+      enforcement:
+        method: review
+    stdlib-first:
+      strength: SHOULD
+      statement: 工具与内核实现优先使用 Go 标准库；引入第三方依赖需在变更设计中说明理由。
+      rationale: 保持单文件二进制精简、构建可复现。
+      enforcement:
+        method: review
+    injectable-io:
+      strength: SHOULD
+      statement: 命令与开发工具的实现接收 args []string 与 stdout、stderr io.Writer 并返回 int 退出码；除 cmd/ 与 internal/tools/* 的 main 函数外，不调用 os.Exit，也不直接读写 os.Stdout、os.Stderr。
+      rationale: 这样命令可以在进程内测试并计入覆盖率，无需为每个用例启动子进程。
+      enforcement:
+        method: review
+      examples:
+        good:
+          - func Run(args []string, stdout, stderr io.Writer) int
+        bad:
+          - 在 internal/cli 中调用 os.Exit(2) 或 fmt.Println
+    dev-tools-isolation:
+      strength: MUST
+      statement: 只在开发时使用的工具放在 internal/tools/<name>/，写成 package main，不计入覆盖率范围；产品包（cmd/wa-cli 与 internal/ 下其他包）不得 import internal/tools/**。
+      rationale: 覆盖率排除 internal/tools/** 的前提是这些工具不属于产品运行时。
+      enforcement:
+        method: test
+        detail: cmd/wa-cli/main_test.go 的 TestNoDevToolDependency 用 go list -deps 断言产品二进制不依赖 internal/tools/**。
+  MODIFIED: {}
+  REMOVED: {}

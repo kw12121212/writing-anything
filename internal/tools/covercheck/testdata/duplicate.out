@@ -1,0 +1,4 @@
+mode: count
+example.com/m/internal/a/a.go:1.1,2.2 3 0
+example.com/m/internal/a/a.go:3.1,4.2 1 0
+example.com/m/internal/a/a.go:1.1,2.2 3 2

@@ -1,0 +1,36 @@
+schema: strict-spec-driven/main-spec/v1
+schema_version: 1
+artifact_type: main_spec
+schema_file: templates/strict-spec-driven/schemas/main-spec.yaml
+spec:
+  id: cli
+  title: 命令行工具（CLI）
+requirements:
+  version-command:
+    strength: MUST
+    statement: wa-cli version 必须在标准输出打印当前 wa-cli 版本并以退出码 0 退出；加 --json 时必须输出包含 version 字段的 JSON 对象。
+    scenarios:
+      version-text:
+        - GIVEN: 已构建的 wa-cli 二进制
+        - WHEN: 运行 wa-cli version
+        - THEN: 标准输出为一行 'wa-cli <version>'，退出码为 0
+      version-json:
+        - GIVEN: 已构建的 wa-cli 二进制
+        - WHEN: 运行 wa-cli version --json
+        - THEN: 标准输出是可解析的 JSON 对象，其 version 字段为当前版本字符串，退出码为 0
+  usage-error:
+    strength: MUST
+    statement: 未提供命令、命令未知或参数未知时，wa-cli 必须把用法说明写到标准错误并以退出码 2 退出。
+    scenarios:
+      no-command:
+        - GIVEN: 已构建的 wa-cli 二进制
+        - WHEN: 不带任何参数运行 wa-cli
+        - THEN: 标准错误包含用法说明，退出码为 2
+      unknown-command:
+        - GIVEN: 已构建的 wa-cli 二进制
+        - WHEN: 运行 wa-cli 一个不存在的命令
+        - THEN: 标准错误指出未知命令并包含用法说明，退出码为 2
+      unknown-flag:
+        - GIVEN: 已构建的 wa-cli 二进制
+        - WHEN: 运行 wa-cli version --unknown
+        - THEN: 标准错误指出未知参数，退出码为 2

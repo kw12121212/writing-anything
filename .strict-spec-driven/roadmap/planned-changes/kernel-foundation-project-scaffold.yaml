@@ -5,7 +5,7 @@ schema_file: ../../templates/strict-spec-driven/schemas/planned-change.yaml
 planned_change:
   id: project-scaffold
   milestone: kernel-foundation
-status: planned
+status: complete
 summary: 搭建 Go 1.27 工程骨架，使完整回归测试（Regression Test）命令可运行
 details: 新建 go.mod（Go 1.27）、cmd/wa-cli/ 入口与 internal/ 实现目录，go build ./... 产出单文件 wa-cli 二进制。新增 internal/tools/covercheck：读取 go test 生成的 coverage.out，按语句加权计算覆盖率（Coverage，作为行覆盖率的近似），统计范围为 internal/**（不含 internal/tools/**），低于 -min 阈值时以非零退出。完成后，config 中的回归命令在干净仓库通过。只实现一个最小的 wa-cli version 命令及其测试，不实现业务命令。
 depends_on: []

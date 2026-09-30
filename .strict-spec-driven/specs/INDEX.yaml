@@ -3,7 +3,6 @@ schema_version: 1
 artifact_type: spec_index
 schema_file: ../schemas/spec-index.yaml
 specs:
-  # Replace the sample entry below with real specs, or remove if unused.
-  - id: sample-spec
-    title: Sample Spec Title
-    path: .strict-spec-driven/specs/sample-area.yaml
+  - id: cli
+    title: 命令行工具（CLI）
+    path: .strict-spec-driven/specs/cli.yaml
