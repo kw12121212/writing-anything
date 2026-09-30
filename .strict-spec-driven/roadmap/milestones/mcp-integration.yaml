@@ -11,6 +11,7 @@ scope:
   in:
     - wa-cli mcp：stdio 方式的 MCP 服务（MCP Server），tools 由命令注册表生成，resources 暴露工作区产物与生效的规范包，prompts 对应各 Skill 的流程说明
     - wa-cli mcp install：注册到 claude-code、codex 与通用 JSON 配置
+    - 作者提交新反馈时，向订阅了资源的客户端推送更新通知
   out:
     - HTTP / SSE 等远程传输方式
     - 在 MCP 服务中实现 CLI 之外的业务逻辑
@@ -18,6 +19,7 @@ done_criteria:
   - 每个注册到命令注册表的 wa-cli 命令都有对应的 MCP tool，测试逐一校验
   - 同一操作经 MCP 与 CLI 调用，产物与 --json 输出一致
   - wa-cli mcp install 重复执行结果幂等，并保留客户端配置中已有的其他条目
+  - 作者提交新反馈后，订阅了反馈资源的 MCP 客户端收到资源更新通知
 intake_questions:
   - id: mcp-transport
     question: MCP 服务需要支持哪些传输方式？

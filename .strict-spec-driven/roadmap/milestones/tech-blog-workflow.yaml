@@ -9,26 +9,26 @@ order: 200
 goal: 作者提供素材与观点后，Agent 能通过 wa-cli 与技能（Skill）完成一篇技术博客从写作简报（Brief）、大纲（Outline）、草稿（Draft）、审稿（Review）、修订（Revision）、验收（Acceptance）到 Markdown 导出（Export）的全流程，每一步都有确定性校验、覆盖追踪（Coverage Tracing）与作者确认记录（Confirmation Record）。
 scope:
   in:
-    - brief 产物与提问关卡
-    - outline 覆盖追踪：每个核心观点必须被某一节覆盖
     - wa-cli context 有界上下文包
     - 声明式规则引擎与通用规则：中文排版、AI 腔词表、禁用词、术语一致、长度、必需章节
     - 论断出处检查：亲历、观点、数据必须链接作者素材
-    - review 产物、关卡强度（strict / standard / fast）与带作者确认记录的验收
     - tech-blog 文体（结构、代码块语言、链接、版本出处）与 Markdown 导出
     - 跨平台二进制发布与安装脚本；内置 Skill 与 wa-cli skills install
     - 写作法模板机制与内置文章类写作法（金字塔原理 / SCQA、总分总、倒金字塔、Diátaxis）
+    - 写作简报产物与提问关卡
+    - 大纲覆盖追踪：每个核心观点必须被某一节覆盖
+    - 审稿产物与 AI 预审（预审发现项默认不阻塞）、关卡强度（strict / standard / fast）与带作者确认记录的验收
   out:
-    - 公众号文体、HTML 导出、MCP server
-    - pack 远程安装与文风学习
+    - 公众号文体、HTML 导出、MCP 服务
+    - 规范包远程安装、文风学习与文风量化
 done_criteria:
-  - 用测试夹具中的作者素材跑通一篇技术博客从 brief 到 Markdown 导出的端到端测试
   - 缺少核心观点覆盖、亲历内容无出处、命中禁用词或 AI 腔词表时，对应命令以非零退出并给出可执行修复命令
   - 没有作者确认记录时，strict 关卡下 accept 被拒绝
   - wa-cli skills install 把内置 Skill 安装到 Claude Code 与 Codex 的技能目录；测试校验每个 Skill 引用的 wa-cli 命令都存在于 wa-cli help --json 中
   - 发布产物覆盖 linux、macOS、Windows 的 amd64 与 arm64 二进制并附 SHA-256 校验文件；安装脚本能下载、校验并安装 wa-cli
   - 写作简报选定的写作法所要求的章节在大纲中缺失时，validate 与 advance 以非零退出；不选写作法时不做该检查
   - 审稿发现项与作者反馈都转为修订任务；未全部解决或豁免前，standard 与 strict 关卡下不能验收
+  - 用测试夹具中的作者素材跑通一篇技术博客从写作简报到 Markdown 导出的端到端测试
 intake_questions:
   - id: review-writer
     question: LLM 审稿结果如何进入系统？
@@ -39,8 +39,8 @@ planned_changes: {}
 dependencies:
   - kernel-foundation
 risks:
-  - AI 腔词表与中文排版规则易误报，需要支持 pack 级别关闭与豁免标注
   - LLM 审稿结果由 Agent 写入，质量取决于 Agent；CLI 只能校验结构与覆盖，不能保证审稿质量
+  - AI 腔词表与中文排版规则容易误报，需要支持在规范包中关闭规则，以及单处豁免并写明理由
 status: proposed
 notes: []
 details: 这是第一个可以对外演示的里程碑。修订通过作者反馈与审稿发现项生成修订任务实现，不单独设计复杂的修订轮次。审稿分两部分：wa-cli 的确定性文本检查（Lint），以及 Agent 按文体与规范包的评分标准（Rubric）给出的结构化审稿结果，经 wa-cli 校验后写入审稿产物。上下文预算（Context Budget）以字符数近似度量，由文体提供默认值，项目配置可以覆盖。文本检查不发起网络请求，以保证结果确定。

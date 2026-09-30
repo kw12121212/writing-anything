@@ -11,17 +11,17 @@ scope:
   in:
     - 命令框架与 --json 输出契约（错误码、产物路径、下一步命令）
     - wa-cli init / validate / status，产物 JSON Schema 校验
-    - 声明式 genre 与 pack 加载、内置默认 pack、pack 覆盖 genre 默认规则
     - 通用单元树与按单元推进的生命周期状态机、status / next
-    - 作者素材库（原文存档）、出处标记 human / agent / human-edited
     - 决策队列（阻塞 / 非阻塞）与 decide 命令
-    - 正文人工编辑检测保护与正文内批注解析
     - Go 1.27 工程骨架：cmd/wa-cli 入口、internal/ 实现、embed 打包、覆盖率 80% 的完整回归命令（含 internal/tools/covercheck）
     - 作者反馈模型：文本锚点与重新定位、状态流转、feedback watch 即时输出
+    - 声明式文体与规范包加载、内置默认规范包、规范包覆盖文体默认规则
+    - 作者素材库（原文存档）、wa-cli draft write 正文写入、段落级出处标记 human / agent / agent-draft-human-edited
+    - 人工编辑检测与保护；正文批注解析为作者反馈
   out:
-    - 规则引擎与具体 lint 规则、审稿与验收（tech-blog-workflow）
-    - MCP server、公众号文体、pack 远程安装、小说相关能力
     - wa-cli 自身调用任何 LLM
+    - 规则引擎与具体文本检查规则、审稿与验收（tech-blog-workflow）
+    - MCP 服务、公众号文体、规范包远程安装、小说相关能力
 done_criteria:
   - wa-cli init 创建的工作区通过 wa-cli validate；损坏的产物返回带错误码、产物路径与修复命令的 --json 诊断
   - 能用 CLI 创建一篇文章单元、登记作者素材，并通过 status / next 看到当前阶段与下一步命令
