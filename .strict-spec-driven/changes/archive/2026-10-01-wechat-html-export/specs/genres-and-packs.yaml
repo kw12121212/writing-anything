@@ -1,0 +1,45 @@
+schema: strict-spec-driven/delta-spec/v1
+schema_version: 1
+artifact_type: delta_spec
+schema_file: templates/strict-spec-driven/schemas/delta-spec.yaml
+target_spec: genres-and-packs
+operations:
+  ADDED:
+    pack-html-theme:
+      strength: MUST
+      statement: '规范包可以用 html_theme 声明 HTML 导出的样式主题（HTML Theme）：键必须是元素名 wrapper、h1、h2、h3、h4、p、strong、em、code、pre、blockquote、ul、ol、li、hr、figure、caption、footnote 与 references 之一，值为 CSS 声明（一个或多个「属性: 值」，用分号分隔；属性名由小写字母与连字符组成，值只能由英文字母、数字、空格、制表符与 # % . , ( ) + - 组成（字符白名单），且不区分大小写地不含 url(、expression 与 javascript）；元素名不在列表中或取值不符合时 wa-cli validate 与 wa-cli config resolved 报告 artifact.schema-violation（field 为 html_theme.<元素名>），config resolved 的 resolved 为 null，以退出码 1 退出。合并时以内置默认主题为基础，按 config.yaml 中 packs 的顺序逐个元素覆盖，后面的规范包覆盖前面的；resolved.htmlTheme 的每个元素含 value 与 source（规范包为 pack:<id>，内置默认为 default）。文体与 config.yaml 不能声明 html_theme。'
+      scenarios:
+        theme-override:
+          - GIVEN: '工作区规范包 brand 的 html_theme 为 {h2: "color: #c00"}，config.yaml 的 packs 为 [default, brand]'
+          - WHEN: 运行 wa-cli config resolved --dir D --json，再导出已验收的作品 --format wechat-html
+          - THEN: 'resolved.htmlTheme.h2 为 {value: "color: #c00", source: pack:brand}，htmlTheme.p 的 source 为 default；导出的 h2 标签 style 为 color: #c00'
+        theme-unsafe:
+          - GIVEN: '规范包 brand 的 html_theme 为 {p: "background: url(http://x/a.png)"}'
+          - WHEN: 运行 wa-cli validate --dir D --json
+          - THEN: diagnostics 中有一条错误码为 artifact.schema-violation、field 为 html_theme.p 的诊断，退出码为 1
+  MODIFIED:
+    config-resolved:
+      strength: MUST
+      statement: wa-cli config resolved 必须按 文体默认 → 规范包（按 config.yaml 中 packs 的顺序）→ 项目配置 的顺序合并 --dir 下工作区生效的设置，只读取、不修改任何产物，changedPaths 为空数组。--json 输出的 resolved 字段包含 genre（生效文体的 id 与 origin；未设置 default_genre 时为 null）、packs（按应用顺序的规范包，每项含 id、origin（builtin 或 workspace），工作区规范包另含 path）、unitTypes、stages、rules、glossary、bannedTerms、style、rubric、contextBudget（见 context 主规格的 context-budget）与 htmlTheme（见 pack-html-theme：每个元素名对应 value 与 source，没有规范包覆盖的元素来源为 default）。每项设置都必须带 source 字段，取值为 genre:<id>、pack:<id> 或 project（没有任何配置层给出 contextBudget 时，其来源为 default），指明最终值来自哪个配置层（Config Layer）；rules 以规则 id 为键，其中 type、severity 与 params 的每个顶层键都各自带 value 与 source，任何配置层都没有给出 severity 时为 warning，来源为定义该规则的配置层。glossary 与 bannedTerms 按 term、rubric 按 id 合并，后面的配置层整项替换前面的同名项并保留其位置；style 按配置层顺序追加。存在 error 级诊断时 resolved 为 null，退出码为 1。未加 --json 时以人读文本输出同样的信息。未找到工作区时按 workspace-not-found 处理。
+      scenarios:
+        later-pack-wins:
+          - GIVEN: packs 为 [a, b]，a 与 b 都在 glossary 中定义词条「规范包」但写法不同
+          - WHEN: 运行 wa-cli config resolved --dir D --json
+          - THEN: resolved.glossary 中只有一条「规范包」词条，内容与 b 相同，source 为 pack:b
+        resolved-read-only:
+          - GIVEN: 合法的工作区
+          - WHEN: 运行 wa-cli config resolved --dir D --json
+          - THEN: changedPaths 为空数组，工作区内所有文件的内容与修改时间不变
+        pack-overrides-genre:
+          - GIVEN: '工作区的 default_genre 为 minimal（内置规则 length：type 为 length-range，severity 为 warning，params 为 {min: 300, max: 5000}），packs 为 [house]，house 规范包把 length 的 severity 设为 error、params.max 设为 20'
+          - WHEN: 运行 wa-cli config resolved --dir D --json
+          - THEN: 'resolved.rules.length 的 severity 为 {value: error, source: pack:house}，params.max 为 {value: 20, source: pack:house}，params.min 为 {value: 300, source: genre:minimal}，type 为 {value: length-range, source: genre:minimal}，退出码为 0'
+        project-overrides-pack:
+          - GIVEN: 同上，config.yaml 的 rules 中把 length 的 params.max 设为 30
+          - WHEN: 运行 wa-cli config resolved --dir D --json
+          - THEN: 'resolved.rules.length.params.max 为 {value: 30, source: project}，severity 仍来自 pack:house'
+        errors-null-resolved:
+          - GIVEN: packs 为 [house]，house 规范包定义了没有 type 的新规则 r9
+          - WHEN: 运行 wa-cli config resolved --dir D --json
+          - THEN: valid 为 false，resolved 为 null，退出码为 1
+  REMOVED: {}

@@ -54,7 +54,7 @@ func TestMethodListShow(t *testing.T) {
 			t.Errorf("builtin method %v", m)
 		}
 	}
-	want := []string{"diataxis-explanation", "diataxis-how-to", "diataxis-reference", "diataxis-tutorial", "general-specific-general", "inverted-pyramid", "pyramid-scqa"}
+	want := []string{"aida", "diataxis-explanation", "diataxis-how-to", "diataxis-reference", "diataxis-tutorial", "general-specific-general", "inverted-pyramid", "pas", "pyramid-scqa"}
 	if code != 0 || !slices.Equal(ids, want) {
 		t.Fatalf("method list: code = %d, ids = %v", code, ids)
 	}
@@ -74,7 +74,7 @@ func TestMethodListShow(t *testing.T) {
 	for _, m := range res.Methods {
 		got[m["id"].(string)] = m
 	}
-	if got["general-specific-general"]["source"] != "pack:house" || got["three-act"]["kind"] != "structure" || len(res.Methods) != 8 {
+	if got["general-specific-general"]["source"] != "pack:house" || got["three-act"]["kind"] != "structure" || len(res.Methods) != 10 {
 		t.Fatalf("pack methods: %v", got)
 	}
 	if _, res = runMethod(t, dir, "method", "show", "three-act"); res.Method["beats"].([]any)[1].(map[string]any)["position"].(map[string]any)["min"] != 0.7 {

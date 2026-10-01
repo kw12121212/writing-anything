@@ -96,7 +96,7 @@ requirements:
         - THEN: banned-terms 只报告 Go 一处，column 为 10
   rule-params:
     strength: MUST
-    statement: wa-cli lint 执行规则前必须按规则类型校验合并后的 params：出现该类型没有声明的参数、参数类型不符（布尔、正整数、正数、字符串数组）、必需参数缺失或 length-range 的 min 与 max 都没有给出、min 大于 max 时，报告一条错误码为 rule.invalid-params、severity 为 error 的诊断（field 为 rules.<id>.params 或 rules.<id>.params.<name>，message 说明原因与给出该参数的配置层；path 为该配置层的产物：config.yaml 或工作区规范包文件，内置文体与规范包不填 path、以出处开头说明），该规则不执行，其他规则照常执行，valid 为 false，退出码为 1；next 为 wa-cli lint <unit> --dir <dir> --json 与 wa-cli config resolved --dir <dir> --json（validate 不校验规则参数）。
+    statement: wa-cli lint 执行规则前必须按规则类型校验合并后的 params：出现该类型没有声明的参数、参数类型不符（布尔、正整数、正数、非空字符串、字符串数组）、必需参数缺失、length-range 的 min 与 max 都没有给出、min 大于 max，或 ad-compliance 的 builtin 为 false 而 terms 没有任何一项（field 为 rules.<id>.params.terms）时，报告一条错误码为 rule.invalid-params、severity 为 error 的诊断（field 为 rules.<id>.params 或 rules.<id>.params.<name>，message 说明原因与给出该参数的配置层；path 为该配置层的产物：config.yaml 或工作区规范包文件，内置文体与规范包不填 path、以出处开头说明），该规则不执行，其他规则照常执行，valid 为 false，退出码为 1；next 为 wa-cli lint <unit> --dir <dir> --json 与 wa-cli config resolved --dir <dir> --json（validate 不校验规则参数）。
     scenarios:
       invalid-params:
         - GIVEN: '项目配置定义 rules.para {type: paragraph-length, params: {max: many}}'
@@ -106,6 +106,10 @@ requirements:
         - GIVEN: '项目配置定义 rules.sections {type: required-sections}'
         - WHEN: 运行 wa-cli lint my-post --dir D --json
         - THEN: diagnostics 中有一条错误码为 rule.invalid-params、field 为 rules.sections.params.sections 的诊断，退出码为 1
+      empty-ad-terms:
+        - GIVEN: '项目配置定义 rules.ads {type: ad-compliance, params: {builtin: false}}'
+        - WHEN: 运行 wa-cli lint my-post --dir D --json
+        - THEN: diagnostics 中有一条错误码为 rule.invalid-params、field 为 rules.ads.params.terms 的诊断，ads 不执行，退出码为 1
   inline-waiver:
     strength: MUST
     statement: '正文中的注释 <!-- lint-ignore <rule-id>: 理由 -->（冒号可为全角，理由为冒号之后去掉首尾空白的文字）必须豁免它所在的散文段落中规则 rule-id 的发现项；注释不在散文段落中（单独成段或跨越空行）时，豁免注释结束之后的第一个散文段落。被豁免的发现项移入 waived，每项另含 reason。单处豁免不作用于全文级发现项。以 lint-ignore 开头的注释格式不对（缺少冒号等）或理由为空时豁免无效，给出一条 severity 为 warning、错误码为 lint.invalid-waiver 的诊断；注释开始行所在段落的出处（Provenance，见 sources-and-provenance 主规格的 provenance-derivation）为 agent 时豁免无效（Agent 不能替作者豁免），给出一条 severity 为 warning、错误码为 lint.agent-waiver 的诊断，作者修改该段后出处变为 agent-draft-human-edited，豁免生效；单元有写入记录但无法推导出处（写入记录不通过校验）时，所有豁免都不生效，写入记录的问题以 severity 为 warning 的诊断报告；rule-id 不是任何生效规则的 id 时给出一条 severity 为 warning、错误码为 lint.unknown-waiver-rule 的诊断；两者的 path 为 draft.md，message 含注释所在的行号，next 为 wa-cli help lint --json 与 wa-cli provenance <unit> --dir <dir> --json。lint-ignore 注释不是作者反馈。'
@@ -210,3 +214,27 @@ requirements:
         - GIVEN: 同上，登记了文字含「从 Go 1.22 开始」的论断并关联 reference 类型的素材
         - WHEN: 运行 wa-cli lint my-post --dir D --json
         - THEN: findings 中没有 text 为 Go 1.22 的发现项
+  ad-compliance-rule-type:
+    strength: MUST
+    statement: 规则引擎必须提供 ad-compliance 规则类型，检查正文中的极限词（Superlative Claims），参数为 terms（字符串数组，可选）、builtin（布尔，默认 true）与 basis（非空字符串，可选）。builtin 为 true 时检查内置基础极限词表：最佳、最好、最优、最强、最高级、最先进、最低价、最便宜、最受欢迎、国家级、世界级、全球级、顶级、顶尖、极致、极品、独一无二、史无前例、绝无仅有、万能、首选、唯一、遥遥领先、全球领先、销量第一、排名第一、全国第一、全网第一、行业第一、世界第一、第一品牌，依据为《中华人民共和国广告法》第九条第（三）项；terms 中的词一并检查，依据为 basis（没有给出时说明词来自规则参数 terms）。每个词的每处出现报告一项发现项（词的匹配与屏蔽区域同 rule-types；同一个词在内置词表与 terms 中都出现时只报告一次，按内置词表的依据），text 为该词，suggestion 为 null，message 含该词、依据与「辅助检查，不构成法律意见」。规范包可以声明自己的 ad-compliance 规则扩展行业词表，其发现项的 source 为该规范包（pack:<id>）；单处豁免（lint-ignore）与规则级 waivers 对 ad-compliance 照常生效。内置 default 规范包与 tech-blog 文体不声明 ad-compliance 规则。
+    scenarios:
+      builtin-superlative:
+        - GIVEN: config.yaml 的 rules 定义 ads（type 为 ad-compliance，severity 为 error），draft.md 为「这是全网最好的咖啡机。」
+        - WHEN: 运行 wa-cli lint my-post --dir D --json
+        - THEN: findings 含一项 rule 为 ads、type 为 ad-compliance、source 为 project、text 为「最好」、suggestion 为 null 的发现项，message 含《中华人民共和国广告法》第九条第（三）项与「辅助检查，不构成法律意见」；有一条错误码为 lint.findings 的诊断，退出码为 1
+      pack-industry-terms:
+        - GIVEN: '工作区规范包 medical 定义规则 ad-medical（type 为 ad-compliance，severity 为 error，params 为 builtin: false、terms: [根治]、basis: 《医疗广告管理办法》），config.yaml 的 packs 为 [default, medical]，draft.md 为「三天根治，效果最佳。」'
+        - WHEN: 运行 wa-cli lint my-post --dir D --json
+        - THEN: findings 只含一项 rule 为 ad-medical、source 为 pack:medical、text 为「根治」的发现项，message 含《医疗广告管理办法》；「最佳」不被报告（builtin 为 false），退出码为 1
+      waive-superlative:
+        - GIVEN: 'config.yaml 定义 ads（type 为 ad-compliance），draft.md 的一段为「本店是国家级非遗老字号。<!-- lint-ignore ads: 已取得国家级非遗认定 -->」，该段出自作者'
+        - WHEN: 运行 wa-cli lint my-post --dir D --json
+        - THEN: 「国家级」的发现项在 waived 中，reason 为「已取得国家级非遗认定」，不在 findings 中
+      tech-blog-off:
+        - GIVEN: default_genre 为 tech-blog 的工作区（packs 为空），draft.md 含「最佳实践」
+        - WHEN: 运行 wa-cli lint my-post --dir D --json
+        - THEN: findings 中没有 type 为 ad-compliance 的发现项
+      invalid-basis:
+        - GIVEN: 'config.yaml 定义 ads（type 为 ad-compliance），params 为 basis: 3'
+        - WHEN: 运行 wa-cli lint my-post --dir D --json
+        - THEN: diagnostics 中有一条错误码为 rule.invalid-params、field 为 rules.ads.params.basis 的诊断，ads 不执行，退出码为 1

@@ -38,6 +38,6 @@ risks:
   - 合规词表只是辅助检查，不构成法律意见，需在输出中说明
   - 公众号编辑器对 HTML 的过滤规则可能变化
   - 本地阅读页是项目中唯一的网络监听，必须只监听回环地址并校验随机令牌，测试需要覆盖拒绝无令牌请求
-status: proposed
+status: complete
 notes: []
 details: 本里程碑只包含营销文体与阅读反馈相关工作；MCP 已拆分到 mcp-integration 里程碑。阅读反馈页从规范包里程碑提前到这里，是为了让作者尽早获得即时反馈的体验。里程碑 id 创建后保持稳定，因此仍为 wechat-marketing-and-mcp。

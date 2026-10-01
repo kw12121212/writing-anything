@@ -253,3 +253,64 @@ func TestLintClaims(t *testing.T) {
 		t.Fatalf("claim rules waived: exit code = %d, diagnostics = %+v", code, res.Diagnostics)
 	}
 }
+
+// 广告法极限词检查（ad-compliance-rule-type）：项目配置启用、规范包扩展行业词表、单处豁免、参数校验与 tech-blog 默认关闭。
+func TestLintAdCompliance(t *testing.T) {
+	dir := newWork(t)
+	base := readFile(t, configPath(dir))
+	writeFile(t, configPath(dir), base+"rules:\n  ads: {type: ad-compliance, severity: error}\n")
+	code, res := runLintJSON(t, dir, "这是全网最好的咖啡机。")
+	f := findingsOf(res.Findings, "ads")
+	if code != 1 || len(f) != 1 || f[0]["type"] != "ad-compliance" || f[0]["source"] != "project" || f[0]["text"] != "最好" || f[0]["suggestion"] != nil ||
+		!strings.Contains(f[0]["message"].(string), "《中华人民共和国广告法》第九条第（三）项") || !strings.Contains(f[0]["message"].(string), "辅助检查，不构成法律意见") ||
+		diag(t, res.result, "lint.findings").Code == "" {
+		t.Fatalf("builtin-superlative: exit code = %d, result = %+v", code, res)
+	}
+	// waive-superlative
+	code, res = runLintJSON(t, dir, "本店是国家级非遗老字号。<!-- lint-ignore ads: 已取得国家级非遗认定 -->")
+	if len(findingsOf(res.Findings, "ads")) != 0 || len(res.Waived) != 1 || res.Waived[0]["reason"] != "已取得国家级非遗认定" ||
+		res.Waived[0]["rule"] != "ads" || res.Waived[0]["text"] != "国家级" {
+		t.Fatalf("waive-superlative: exit code = %d, result = %+v", code, res)
+	}
+	// invalid-basis
+	writeFile(t, configPath(dir), base+"rules:\n  ads: {type: ad-compliance, params: {basis: 3}}\n")
+	if code, res := runLintJSON(t, dir, "最好"); code != 1 || diag(t, res.result, "rule.invalid-params").Field != "rules.ads.params.basis" || len(findingsOf(res.Findings, "ads")) != 0 {
+		t.Fatalf("invalid-basis: exit code = %d, result = %+v", code, res)
+	}
+	// empty-ad-terms：不用内置词表又没有追加词时按参数问题报告。
+	writeFile(t, configPath(dir), base+"rules:\n  ads: {type: ad-compliance, params: {builtin: false}}\n")
+	if code, res := runLintJSON(t, dir, "最好"); code != 1 || diag(t, res.result, "rule.invalid-params").Field != "rules.ads.params.terms" {
+		t.Fatalf("empty-ad-terms: exit code = %d, result = %+v", code, res)
+	}
+	// pack-industry-terms
+	writeFile(t, configPath(dir), base)
+	writePack(t, dir, "medical", "schema_version: 1\nid: medical\ntitle: 医疗\nrules:\n  ad-medical:\n    type: ad-compliance\n    severity: error\n    params: {builtin: false, terms: [根治], basis: 《医疗广告管理办法》}\n")
+	mustRunWS(t, dir, "config", "set", "packs", "default,medical")
+	code, res = runLintJSON(t, dir, "三天根治，效果最佳。")
+	f = findingsOf(res.Findings, "ad-medical")
+	if code != 1 || len(f) != 1 || f[0]["source"] != "pack:medical" || f[0]["text"] != "根治" || !strings.Contains(f[0]["message"].(string), "《医疗广告管理办法》") {
+		t.Fatalf("pack-industry-terms: exit code = %d, result = %+v", code, res)
+	}
+	for _, x := range res.Findings {
+		if x["text"] == "最佳" {
+			t.Fatalf("builtin false: %v", res.Findings)
+		}
+	}
+}
+
+// tech-blog 文体与 default 规范包不声明 ad-compliance（tech-blog-off）。
+func TestLintAdComplianceTechBlogOff(t *testing.T) {
+	dir := t.TempDir()
+	mustRunWS(t, dir, "init", "--genre", "tech-blog")
+	mustRunWS(t, dir, "new", "tech-blog", "my-post")
+	_, res := runLintJSON(t, dir, "这是最佳实践。")
+	for _, f := range res.Findings {
+		if f["type"] == "ad-compliance" {
+			t.Fatalf("tech-blog-off: %v", res.Findings)
+		}
+	}
+	// 规则确实执行了：tech-blog 的 length 规则报告字数不足。
+	if len(findingsOf(res.Findings, "length")) != 1 {
+		t.Fatalf("rules did not run: %v", res.Findings)
+	}
+}

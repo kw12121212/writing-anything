@@ -1,0 +1,33 @@
+schema: strict-spec-driven/delta-tech/v1
+schema_version: 1
+artifact_type: delta_tech
+schema_file: templates/strict-spec-driven/schemas/delta-tech.yaml
+target_standard: workspace-artifacts
+operations:
+  ADDED:
+    deliverable-outputs:
+      strength: MUST
+      statement: 把交付文件写到 --output 指定位置的命令（如 export、preview 与后续的其他导出格式）必须经过 internal/export 的 WriteOutput：路径相对项目目录、规整后不得离开项目目录、在工作区中时只能在 .writing-anything/exports/ 之下（不区分大小写，并按文件身份复查）、途经的目录必须是真实目录、已存在的输出文件必须是普通文件，原子写入；违反时以该命令自己的错误码（如 export.invalid-output、preview.invalid-output）报告，field 为 output。不得在命令中另写一套输出路径检查。
+      rationale: 交付文件的位置由用户参数决定，最容易被用来覆盖工作区产物或经符号链接写到项目之外；集中在一个函数里，新增的导出格式自动获得同样的防护。
+      enforcement:
+        method: test
+        detail: internal/export 的 TestOutputPath 覆盖路径规则；internal/cli 的 export 与 preview 测试断言无效输出的错误码与不写文件。
+      examples:
+        good:
+          - rel, changed, ps := export.WriteOutput(dir, out, data, preview.CodeInvalidOutput)
+        bad:
+          - os.WriteFile(filepath.Join(dir, out), data, 0o644)
+    generated-html:
+      strength: MUST
+      statement: wa-cli 生成的 HTML（如阅读页与后续的 HTML 导出）必须用 html/template 生成，正文等来自产物的文字一律经模板转义，不得用字符串拼接产生标记；样式内联，不引用任何外部资源；静态输出不含 script 元素并带限制性的 Content-Security-Policy；需要脚本时脚本内容固定，不内插数据，由 Content-Security-Policy 按其哈希放行。
+      rationale: 正文与作者反馈都是不可信的文本，模板转义防止注入；不引用外部资源保证离线可读、不泄露阅读行为；固定脚本加哈希的 CSP 在转义之外再加一层防护。
+      enforcement:
+        method: test
+        detail: internal/cli 的 TestPreviewStatic 断言正文中的 <b> 被转义、静态页不含 <script 与 http(s) 资源；TestPreviewServe 断言 CSP 中的哈希与页面内联脚本一致。
+      examples:
+        good:
+          - template.Must(template.New("page").Parse(pageHTML)).Execute(&b, page)
+        bad:
+          - b.WriteString("<div>" + paragraph + "</div>")
+  MODIFIED: {}
+  REMOVED: {}

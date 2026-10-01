@@ -5,7 +5,7 @@ schema_file: ../../templates/strict-spec-driven/schemas/planned-change.yaml
 planned_change:
   id: ad-compliance-rules
   milestone: wechat-marketing-and-mcp
-status: planned
+status: complete
 summary: 广告法极限词（Superlative Claims）等合规检查规则
 details: 新增 ad-compliance 规则类型：内置基础极限词表（例如「最」「第一」「国家级」）并标注来源；支持规范包扩展行业词表；支持单处豁免并写明理由。发现项标明规则来源，输出注明这是辅助检查，不构成法律意见。wechat-marketing 文体默认启用，tech-blog 文体默认关闭。
 depends_on:

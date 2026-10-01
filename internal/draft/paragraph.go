@@ -18,6 +18,9 @@ const (
 // Origins 按汇总输出的固定顺序列出全部出处取值。
 var Origins = []string{OriginHuman, OriginAgent, OriginEdited}
 
+// OriginNames 是出处取值的人读名称。
+var OriginNames = map[string]string{OriginHuman: "作者", OriginAgent: "Agent", OriginEdited: "Agent 起草、作者修改"}
+
 // Paragraph 是正文中的一个段落（Paragraph）。
 type Paragraph struct {
 	Line   int    // 段落首行的行号，从 1 开始

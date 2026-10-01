@@ -1,0 +1,19 @@
+schema: strict-spec-driven/lesson/v1
+schema_version: 1
+artifact_type: lesson
+schema_file: templates/strict-spec-driven/schemas/lesson.yaml
+lesson:
+  id: ai-3e00aa
+  title: 把出处推导的任何问题都当作写入记录损坏，会把作者写的正文误标为 AI 参与
+category: coding
+status: active
+created_at: '2026-10-01T13:24:29.555Z'
+updated_at: '2026-10-01T13:24:29.555Z'
+context: ai-content-disclosure 对无法推导出处的单元保守地全部算作 AI 参与。
+observation: 独立审查发现：draft.Provenance 在正文段落数超过上限时即使没有 provenance.yaml 也返回 draft.too-large，作者手写的超长正文因此被标为 100% AI 参与，还报告了不存在的写入记录。
+takeaway: 「没有记录即为作者」这类规则先确认记录是否存在，再把推导错误解释为记录损坏；规模类错误不等于记录损坏。
+applies_when: 根据写入记录或其他可选产物是否存在来决定默认结论，并在推导失败时采取保守处理
+occurrences:
+  - origin: ai-content-disclosure
+    date: '2026-10-01'
+    evidence: internal/export/disclosure.go 的 hasRecord；internal/cli/export_test.go TestAIDisclosureTotals 的 large human draft

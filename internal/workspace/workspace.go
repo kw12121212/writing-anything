@@ -54,7 +54,7 @@ const (
 var GateLevels = []string{"strict", "standard", "fast"}
 
 // SettableKeys 是 config set 可以设置的配置项，按 config.yaml 中的顺序排列。
-var SettableKeys = []string{"language", "default_genre", "packs", "gate_level", "context_budget"}
+var SettableKeys = []string{"language", "default_genre", "packs", "gate_level", "context_budget", "ai_disclosure"}
 
 // Problem 是工作区中的一个问题。Path 相对项目目录、以 / 分隔。
 type Problem struct {
@@ -75,6 +75,8 @@ type Config struct {
 	GateLevel    string   `json:"gateLevel"`
 	// ContextBudget 是项目配置层的上下文预算（Context Budget）；未设置时为 nil。
 	ContextBudget *int `json:"contextBudget"`
+	// AIDisclosure 是 AI 参与说明的放置位置（footer、metadata 或 both）；未设置时为 nil，即 both。
+	AIDisclosure *string `json:"aiDisclosure"`
 }
 
 func errorAt(code, path, msg string) Problem {
@@ -354,6 +356,9 @@ func summarize(v any) *Config {
 	if g, ok := m["default_genre"].(string); ok {
 		c.DefaultGenre = &g
 	}
+	if a, ok := m["ai_disclosure"].(string); ok {
+		c.AIDisclosure = &a
+	}
 	switch n := m["context_budget"].(type) {
 	case int:
 		c.ContextBudget = &n
@@ -523,7 +528,7 @@ func configValue(key, v string) *yaml.Node {
 	switch {
 	case key == "packs":
 		return packs(v)
-	case (key == "default_genre" || key == "context_budget") && v == "":
+	case (key == "default_genre" || key == "context_budget" || key == "ai_disclosure") && v == "":
 		return nil
 	case key == "context_budget":
 		// 十进制整数写为整数，交给 Schema 检查是否为正整数；其他取值写为字符串，由 Schema 报告类型错误。

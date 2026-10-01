@@ -10,6 +10,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/kw12121212/writing-anything/internal/brief"
@@ -30,8 +31,14 @@ const (
 // MaxBytes 是导出时单个单元正文的字节数上限，与正文写入的上限一致（workspace-artifacts/input-limits）。
 const MaxBytes = 2 << 20
 
+// 导出格式。
+const (
+	FormatMarkdown = "markdown"
+	FormatWechat   = "wechat-html"
+)
+
 // Formats 是支持的导出格式。
-var Formats = []string{"markdown"}
+var Formats = []string{FormatMarkdown, FormatWechat}
 
 // ExportsDir 是工作区中存放导出文件的目录。
 const ExportsDir = workspace.Dir + "/exports"
@@ -47,17 +54,21 @@ type Skipped struct {
 
 // Result 是一次导出的结果：Path 为写出的文件，Units 为按顺序导出的单元引用。
 type Result struct {
-	Path    string
-	Units   []string
-	Skipped []Skipped
-	Chars   int
+	Path       string
+	Units      []string
+	Skipped    []Skipped
+	Chars      int
+	Images     []Image     // wechat-html 的配图；Markdown 为空
+	ImageList  string      // 配图清单的路径；没有配图时为空
+	Disclosure *Disclosure // AI 参与说明；没有 AI 参与时为 nil
 }
 
 // Options 是导出的选项：FrontMatter 为 true 时附带 front matter；Output 为相对项目目录的输出路径，空时为 DefaultPath。
 type Options struct {
 	FrontMatter bool
 	Output      string
-	Level       string // 工作区配置的关卡强度，用于判断验收是否仍然有效
+	Level       string            // 工作区配置的关卡强度，用于判断验收是否仍然有效
+	Disclosure  *DisclosureConfig // AI 参与说明的配置；nil 时不生成说明
 }
 
 // Markdown 把作品 w 中已验收的单元导出为一个 Markdown 文件。没有可导出的单元时报告 export.nothing-accepted，不写文件；
@@ -67,13 +78,115 @@ func Markdown(root string, w *work.Work, opt Options) (*Result, []string, []work
 	if out == "" {
 		out = DefaultPath(w.ID)
 	}
-	rel, p := cleanOutput(out)
+	rel, p := cleanOutput(out, CodeInvalidOutput)
 	if p != nil {
 		return nil, nil, []workspace.Problem{*p}
 	}
-	res := &Result{Path: rel, Units: []string{}, Skipped: []Skipped{}}
+	res, parts, units, accepted, problems := collect(root, w, opt.Level)
+	if len(parts) == 0 {
+		return nil, nil, problems
+	}
+	res.Path = rel
+	d, ps := disclose(root, w, units, opt.Disclosure)
+	problems, res.Disclosure = append(problems, ps...), d
+	doc := strings.Join(parts, "\n\n") + "\n"
+	if d.footer() {
+		doc += "\n---\n\n" + d.Text + "\n"
+	}
+	if opt.FrontMatter {
+		label := ""
+		if d.metadata() {
+			label = d.Text
+		}
+		fm, err := frontMatter(root, w, parts[0], res.Units, accepted, label)
+		if err != nil {
+			return nil, nil, append(problems, workspace.Problem{Code: workspace.CodeWriteFailed, Severity: workspace.SeverityError, Path: rel, Message: "生成 front matter 失败：" + err.Error()})
+		}
+		doc = fm + doc
+	}
+	changed, ps := write(root, rel, []byte(doc), CodeInvalidOutput)
+	if len(ps) > 0 {
+		return nil, nil, append(problems, ps...)
+	}
+	res.Chars = len([]rune(doc))
+	return res, changed, problems
+}
+
+// WechatHTML 把作品 w 中已验收的单元导出为只含内联样式的公众号 HTML（见 RenderWechat），theme 为合并后的样式主题。存在配图时
+// 在导出文件旁写出配图清单（ImageListPath）；两个路径都在写入任何文件之前检查。没有可导出的单元时报告 export.nothing-accepted。
+func WechatHTML(root string, w *work.Work, opt Options, theme map[string]string) (*Result, []string, []workspace.Problem) {
+	out := opt.Output
+	if out == "" {
+		out = ExportsDir + "/" + w.ID + ".html"
+	}
+	rel, p := cleanOutput(out, CodeInvalidOutput)
+	if p != nil {
+		return nil, nil, []workspace.Problem{*p}
+	}
+	res, parts, units, _, problems := collect(root, w, opt.Level)
+	if len(parts) == 0 {
+		return nil, nil, problems
+	}
+	res.Path = rel
+	d, ps := disclose(root, w, units, opt.Disclosure)
+	problems, res.Disclosure = append(problems, ps...), d
+	footer := ""
+	if d.footer() {
+		footer = d.Text
+	}
+	doc, images := RenderWechat(strings.Join(parts, "\n\n"), theme, footer)
+	res.Images = images
+	var list []byte
+	if len(images) > 0 {
+		lp, p := cleanOutput(ImageListPath(rel), CodeInvalidOutput)
+		if p != nil {
+			return nil, nil, append(problems, *p)
+		}
+		// 先不带副作用地检查两个路径，导出文件与清单要么都写，要么都不写。
+		if ps := slices.Concat(checkParents(root, rel, CodeInvalidOutput), checkParents(root, lp, CodeInvalidOutput)); len(ps) > 0 {
+			return nil, nil, append(problems, ps...)
+		}
+		res.ImageList = lp
+		var b strings.Builder
+		b.WriteString("# 配图清单\n\n")
+		for _, img := range images {
+			fmt.Fprintf(&b, "%d. %s：%s", img.Index, img.Alt, img.Src)
+			if img.Title != "" {
+				fmt.Fprintf(&b, "（%s）", img.Title)
+			}
+			b.WriteString("\n")
+		}
+		list = []byte(b.String())
+	}
+	changed, ps := write(root, rel, []byte(doc), CodeInvalidOutput)
+	if len(ps) > 0 {
+		return nil, nil, append(problems, ps...)
+	}
+	if list != nil {
+		more, ps := write(root, res.ImageList, list, CodeInvalidOutput)
+		if len(ps) > 0 {
+			return nil, changed, append(problems, ps...)
+		}
+		for _, c := range more {
+			if !slices.Contains(changed, c) {
+				changed = append(changed, c)
+			}
+		}
+	}
+	res.Chars = len([]rune(doc))
+	return res, changed, problems
+}
+
+// ImageListPath 返回导出文件 rel 的配图清单路径：去掉 .html 后缀（没有时为整个文件名）加 .images.md。
+func ImageListPath(rel string) string { return strings.TrimSuffix(rel, ".html") + ".images.md" }
+
+// collect 选出作品 w 中验收记录有效的单元（level 为工作区当前的关卡强度），返回结果（不含 Path 与 Chars）、各单元去掉过程注释后的
+// 正文、导出的单元与验收记录；跳过的单元以 warning 级 export.unaccepted 报告，没有可导出的单元时追加 export.nothing-accepted。
+func collect(root string, w *work.Work, level string) (*Result, []string, []*work.Unit, []*review.Acceptance, []workspace.Problem) {
+	res := &Result{Units: []string{}, Skipped: []Skipped{}, Images: []Image{}}
 	var problems []workspace.Problem
 	var parts []string
+	var units []*work.Unit
 	var accepted []*review.Acceptance
 	for _, u := range w.Units() {
 		dir := w.UnitDir(u)
@@ -89,7 +202,7 @@ func Markdown(root string, w *work.Work, opt Options) (*Result, []string, []work
 			reason = fmt.Sprintf("正文有 %d 字节，超过导出的上限 %d 字节", len(content), MaxBytes)
 		default:
 			a, _ = review.LoadAcceptance(root, dir)
-			if bs := review.AcceptanceBlockers(root, dir, opt.Level); len(bs) > 0 {
+			if bs := review.AcceptanceBlockers(root, dir, level); len(bs) > 0 {
 				reason = bs[0].Message // 不通过校验、过期或关卡强度低于当前配置
 			} else if a == nil {
 				reason = "尚未验收"
@@ -103,36 +216,44 @@ func Markdown(root string, w *work.Work, opt Options) (*Result, []string, []work
 		}
 		body := strings.TrimRight(strings.ReplaceAll(string(StripComments(content)), "\r\n", "\n"), "\n")
 		parts = append(parts, body)
+		units = append(units, u)
 		res.Units = append(res.Units, u.Ref)
 		accepted = append(accepted, a)
 	}
 	if len(parts) == 0 {
-		return nil, nil, append(problems, workspace.Problem{Code: CodeNothing, Severity: workspace.SeverityError, Path: work.Dir(w.ID),
+		problems = append(problems, workspace.Problem{Code: CodeNothing, Severity: workspace.SeverityError, Path: work.Dir(w.ID),
 			Message: "作品 " + w.ID + " 没有已验收的单元，无法导出；请先审稿（Review）并用 wa-cli accept 验收"})
 	}
-	doc := strings.Join(parts, "\n\n") + "\n"
-	if opt.FrontMatter {
-		fm, err := frontMatter(root, w, parts[0], res.Units, accepted)
-		if err != nil {
-			return nil, nil, append(problems, workspace.Problem{Code: workspace.CodeWriteFailed, Severity: workspace.SeverityError, Path: rel, Message: "生成 front matter 失败：" + err.Error()})
-		}
-		doc = fm + doc
+	return res, parts, units, accepted, problems
+}
+
+// WriteOutput 按导出的输出路径规则（export-output）把 data 原子写入相对项目目录的 out：路径不合法、途经符号链接或落在工作区中
+// exports/ 之外时以错误码 code 报告，不写文件。返回规整后的路径与变更的路径（新建的目录与该文件）。
+func WriteOutput(root, out string, data []byte, code string) (string, []string, []workspace.Problem) {
+	rel, p := cleanOutput(out, code)
+	if p != nil {
+		return "", nil, []workspace.Problem{*p}
 	}
-	changed, ps := ensureParents(root, rel)
+	changed, ps := write(root, rel, data, code)
+	return rel, changed, ps
+}
+
+// write 确保 rel 的上级目录后原子写入 data，返回新建的目录与 rel。
+func write(root, rel string, data []byte, code string) ([]string, []workspace.Problem) {
+	changed, ps := ensureParents(root, rel, code)
 	if len(ps) > 0 {
-		return nil, nil, append(problems, ps...)
+		return nil, ps
 	}
-	if err := workspace.WriteFile(root, rel, []byte(doc)); err != nil {
-		return nil, nil, append(problems, workspace.Problem{Code: workspace.CodeWriteFailed, Severity: workspace.SeverityError, Path: rel, Message: "写入导出文件失败：" + err.Error()})
+	if err := workspace.WriteFile(root, rel, data); err != nil {
+		return nil, []workspace.Problem{{Code: workspace.CodeWriteFailed, Severity: workspace.SeverityError, Path: rel, Message: "写入导出文件失败：" + err.Error()}}
 	}
-	res.Chars = len([]rune(doc))
-	return res, append(changed, rel), problems
+	return append(changed, rel), nil
 }
 
 // cleanOutput 校验输出路径：相对项目目录，不得是绝对路径或离开项目目录，不得是目录，在工作区中时只能在 exports/ 之下。
-func cleanOutput(out string) (string, *workspace.Problem) {
+func cleanOutput(out, code string) (string, *workspace.Problem) {
 	bad := func(msg string) (string, *workspace.Problem) {
-		return "", &workspace.Problem{Code: CodeInvalidOutput, Severity: workspace.SeverityError, Field: "output", Message: msg}
+		return "", &workspace.Problem{Code: code, Severity: workspace.SeverityError, Field: "output", Message: msg}
 	}
 	if filepath.IsAbs(out) || strings.HasPrefix(out, "/") || strings.Contains(out, "\\") {
 		return bad("输出路径 " + out + " 必须是相对项目目录（--dir）的路径，使用 / 分隔")
@@ -157,11 +278,22 @@ func workspaceOutput(out string) string {
 // ensureParents 确保输出文件所在的每一级目录都是项目目录之内的真实目录（不跟随符号链接），不存在时创建；输出文件已存在时
 // 必须是普通文件。按文件身份（os.SameFile）判断途经的目录是否为工作区目录：是时下一级必须是工作区的 exports 目录（或尚不存在、
 // 名为 exports），使不区分大小写的文件系统上换个大小写也写不进工作区产物。返回新建的目录（workspace-artifacts/validated-path-segments）。
-func ensureParents(root, rel string) ([]string, []workspace.Problem) {
+func ensureParents(root, rel, code string) ([]string, []workspace.Problem) {
+	return parents(root, rel, code, true)
+}
+
+// checkParents 做与 ensureParents 相同的检查，但不创建目录（写入多个交付文件前的无副作用预检查）。
+func checkParents(root, rel, code string) []workspace.Problem {
+	_, ps := parents(root, rel, code, false)
+	return ps
+}
+
+// parents 检查 rel 途经的目录与 rel 本身；create 为 true 时创建不存在的目录并返回它们。
+func parents(root, rel, code string, create bool) ([]string, []workspace.Problem) {
 	segs := strings.Split(rel, "/")
 	var created []string
 	bad := func(p, msg string) []workspace.Problem {
-		return []workspace.Problem{{Code: CodeInvalidOutput, Severity: workspace.SeverityError, Path: p, Field: "output", Message: msg}}
+		return []workspace.Problem{{Code: code, Severity: workspace.SeverityError, Path: p, Field: "output", Message: msg}}
 	}
 	ws, wsErr := os.Lstat(filepath.Join(root, workspace.Dir))
 	exports, exErr := os.Lstat(filepath.Join(root, filepath.FromSlash(ExportsDir)))
@@ -188,7 +320,7 @@ func ensureParents(root, rel string) ([]string, []workspace.Problem) {
 			return nil, bad(p, p+" 不是真实目录或普通文件（如符号链接），wa-cli 不会写入它")
 		case !errors.Is(err, fs.ErrNotExist):
 			return nil, []workspace.Problem{{Code: workspace.CodeReadFailed, Severity: workspace.SeverityError, Path: p, Message: "读取失败：" + err.Error()}}
-		case last:
+		case last || !create:
 			continue
 		}
 		if err := os.Mkdir(filepath.Join(root, filepath.FromSlash(p)), 0o755); err != nil {
@@ -201,7 +333,7 @@ func ensureParents(root, rel string) ([]string, []workspace.Problem) {
 
 // frontMatter 生成 front matter：title（第一个导出单元正文中的第一个一级标题，没有时为作品 id）、description（根单元写作简报的
 // purpose，没有时省略）、genre、units 与 accepted_at（导出单元中最晚的验收时间）。
-func frontMatter(root string, w *work.Work, first string, units []string, accepted []*review.Acceptance) (string, error) {
+func frontMatter(root string, w *work.Work, first string, units []string, accepted []*review.Acceptance, label string) (string, error) {
 	title := w.ID
 	if h := FirstHeading(first); h != "" {
 		title = h
@@ -218,8 +350,9 @@ func frontMatter(root string, w *work.Work, first string, units []string, accept
 		Genre       string   `yaml:"genre"`
 		Units       []string `yaml:"units,flow"`
 		AcceptedAt  string   `yaml:"accepted_at"`
+		Disclosure  string   `yaml:"ai_disclosure,omitempty"`
 	}
-	v := fm{Title: title, Genre: w.Genre.ID, Units: units, AcceptedAt: latest}
+	v := fm{Title: title, Genre: w.Genre.ID, Units: units, AcceptedAt: latest, Disclosure: label}
 	if b, _ := brief.Load(root, w.UnitDir(w.Root), brief.Queue{Invalid: true}); b != nil {
 		v.Description = b.Purpose
 	}

@@ -1,0 +1,76 @@
+schema: strict-spec-driven/main-spec/v1
+schema_version: 1
+artifact_type: main_spec
+schema_file: templates/strict-spec-driven/schemas/main-spec.yaml
+spec:
+  id: preview
+  title: 阅读页（Reading View）
+requirements:
+  preview-static:
+    strength: MUST
+    statement: wa-cli preview <unit> 必须把该单元及其后代（单元树先序）的阅读页（Reading View）写成一个自包含的静态 HTML 文件：--output 为相对项目目录的文件路径，省略时为 .writing-anything/exports/<work>.preview.html（子单元为 <work>.<unit-id>.preview.html）；输出路径的规则与 export 主规格的 export-output 相同，违反时报告 preview.invalid-output（field 为 output，next 包含 wa-cli help preview --json），不写文件。文件原子写入，已存在时覆盖；HTML 不含 script 元素，也不引用任何外部资源（样式内联），可以离线打开。成功时退出码为 0，changedPaths 为新建的目录与该文件，--json 输出的 preview 字段含 unit、units（按顺序列出的单元引用）、path（文件路径）与 url（null），feedback 为 null。除阅读页文件外不创建或修改任何文件。单元引用无法解析时按 units-and-lifecycle 主规格报告，未找到工作区时报告 workspace.not-found，都以退出码 1 退出。不加 --json 时输出一行说明文件路径。
+    scenarios:
+      static-page:
+        - GIVEN: 作品 my-post 的 draft.md 为「值得注意的是，连接池很重要。」，由 wa-cli draft write 写入
+        - WHEN: 运行 wa-cli preview my-post --dir D --json
+        - THEN: 退出码为 0，changedPaths 含 .writing-anything/exports/my-post.preview.html，preview.path 为该路径、url 为 null、units 为 [my-post]；文件含该段原文、出处 agent 与 ai-cliche 发现项，不含 <script，不含 http:// 或 https:// 的资源引用
+      static-invalid-output:
+        - GIVEN: 已初始化的工作区与作品 my-post
+        - WHEN: 运行 wa-cli preview my-post --output .writing-anything/config.yaml --dir D --json
+        - THEN: diagnostics 中有一条错误码为 preview.invalid-output、field 为 output 的诊断，next 包含 wa-cli help preview --json，config.yaml 不变，退出码为 1
+  preview-content:
+    strength: MUST
+    statement: 阅读页必须按单元树先序列出每个单元的单元引用与阶段（Stage）；有正文时按段落（见 sources-and-provenance 主规格的 paragraph-model）逐段展示原文（HTML 转义、保留换行，不渲染 Markdown），每段标注段落序号与出处（human、agent 或 agent-draft-human-edited，见 provenance-derivation），并提供不依赖脚本的按出处着色开关。文本检查（Lint）的结果与 wa-cli lint 相同：未被豁免的发现项（含 severity、rule、message 与 suggestion）显示在所在段落之后，全文级发现项显示在单元开头；审稿（Review）发现项（review.yaml 中的 id、status、message 与 suggestion）显示在所引段落之后，审稿的 draft_sha256 与当前正文不同时标明审稿基于旧版正文。没有正文的单元显示「还没有正文」；正文超过 2 MiB 时只显示说明；文本检查无法运行、出处无法推导或 review.yaml 不通过校验时在单元开头说明原因，不影响命令的退出码。阅读页不提供编辑正文的功能。
+    scenarios:
+      content-findings:
+        - GIVEN: 作品 my-post 有子单元 intro，根单元正文第 1 段含「值得注意的是」，review.yaml 有一项 paragraph 为 1、id 为 r1 的发现项，intro 没有正文
+        - WHEN: 运行 wa-cli preview my-post --dir D --json
+        - THEN: units 为 [my-post, my-post/intro]；文件中 my-post 第 1 段之后列出 ai-cliche 发现项与审稿发现项 r1，intro 显示「还没有正文」
+      content-escaped:
+        - GIVEN: draft.md 含「<b>粗体</b> & 引号」
+        - WHEN: 运行 wa-cli preview my-post --dir D --json
+        - THEN: 文件中该段落显示为 &lt;b&gt;粗体&lt;/b&gt; &amp; 引号，不含未转义的 <b>
+  preview-serve:
+    strength: MUST
+    statement: 'wa-cli preview <unit> --serve 必须启动一个只监听 127.0.0.1 的本地 HTTP 服务（--port 指定端口，省略时由系统分配），并生成至少 128 位的随机令牌（Token），不写阅读页文件。--json 时先输出一行输出信封：preview 含 unit、units、path（null）与 url（http://127.0.0.1:<port>/?token=<令牌>，地址取自实际监听的地址），feedback 为 null，changedPaths 为空数组；之后每保存一条反馈输出一行信封，feedback 为该反馈（字段见 feedback 主规格的 feedback-list），changedPaths 为这次保存变更的路径，preview 同首行。服务对每个请求都校验 Host 头（只接受 127.0.0.1:<port> 与 localhost:<port>；端口为 80 时也接受不带端口的写法）与令牌（GET 用查询参数 token，POST 用请求头 X-WA-Token），不符合时返回 403，不读取也不修改任何产物。GET / 返回按当前工作区状态重新生成的阅读页（内容同 preview-content，另含选中文字后提交意见的脚本）；POST /feedback 见 preview-feedback；其他路径返回 404，其他方法返回 405。响应带 Cache-Control: no-store、Referrer-Policy: no-referrer、X-Frame-Options: DENY 与 Content-Security-Policy（只放行哈希与页面内联脚本一致的脚本）。给出 --max <n> 时保存 n 条反馈后关闭服务并以退出码 0 结束，否则一直运行到命令被中断；命令结束即关闭服务。--port 不是 1 到 65535 的整数，--max 不是不超过 86400000 的正整数，未给出 --serve 却给出 --port 或 --max，或给出 --serve 又给出 --output 时报告 input.invalid-value（next 为 wa-cli help preview --json），退出码为 1；端口无法监听时报告 preview.listen-failed，退出码为 1。不加 --json 时首行输出阅读页地址，之后每条反馈输出一行人读文本。'
+    scenarios:
+      serve-url:
+        - GIVEN: 作品 my-post 有正文
+        - WHEN: 运行 wa-cli preview my-post --serve --max 1 --dir D --json
+        - THEN: '首行信封的 preview.url 以 http://127.0.0.1: 开头并含 token=，path 为 null；用该地址 GET 得到 200 与含正文的页面，响应带 Cache-Control: no-store 与 Referrer-Policy: no-referrer'
+      serve-reject-no-token:
+        - GIVEN: preview --serve 正在运行
+        - WHEN: GET / 不带 token，或 POST /feedback 不带 X-WA-Token 或令牌错误，或 Host 头为 evil.example:<port>
+        - THEN: 都返回 403，feedback.yaml 不被创建或修改
+      serve-bad-flags:
+        - GIVEN: 已初始化的工作区与作品 my-post
+        - WHEN: 运行 wa-cli preview my-post --port 70000 --serve --dir D --json，或 wa-cli preview my-post --max 1 --dir D --json
+        - THEN: diagnostics 中有一条错误码为 input.invalid-value 的诊断，next 为 wa-cli help preview --json，退出码为 1
+  preview-feedback:
+    strength: MUST
+    statement: POST /feedback 的请求体必须是不超过 64 KiB 的单个 JSON 对象：unit（单元引用，必须是按当前单元树生成的阅读页所列的单元之一）、quote（选中的原文；为空或省略时反馈针对整个单元）、text、kind（可选）与 mark（可选：stuck、good 或 question）。给出 mark 时 kind 由它决定：stuck 为 must-fix，text 为空时为「阅读卡点：这里读不下去了」，否则为「阅读卡点：」加 text；good 为 praise，text 为「好」或「好：」加 text；question 为 question，text 为「疑问」或「疑问：」加 text。反馈的保存与 wa-cli feedback add <unit> --text <text> --kind <kind> --quote <quote> 完全相同（锚点、id、校验与错误码，见 feedback 主规格的 feedback-add），保存后立即出现在 wa-cli feedback list 与 feedback watch 的输出中。成功时返回 200 与 JSON 输出信封：valid 为 true、diagnostics 为空数组、feedback 为新反馈。请求体不是单个合法 JSON 对象（含对象之后还有其他内容）、超过上限、mark 不在取值范围内或 unit 不在阅读页中时返回 400，诊断的错误码为 input.invalid-value；feedback add 的诊断（如 feedback.ambiguous-quote、feedback.quote-not-found）同样以 400 返回，其中读写文件失败（workspace.write-failed、workspace.read-failed）以 500 返回；已保存 --max 条反馈、服务正在关闭时返回 503，错误码为 preview.closing。失败时 valid 为 false、feedback 为 null，不修改任何文件。
+    scenarios:
+      select-and-comment:
+        - GIVEN: preview my-post --serve --max 1 正在运行，draft.md 含「连接池很重要」一次
+        - WHEN: '带令牌 POST /feedback：{unit: my-post, quote: 连接池很重要, text: 补一个例子}'
+        - THEN: 返回 200，feedback.id 为 fb-1、kind 为 suggestion、anchor.state 为 located；命令输出一行 feedback 为该反馈的信封后以退出码 0 结束；wa-cli feedback list my-post --json 列出这条反馈
+      quick-mark-stuck:
+        - GIVEN: preview my-post --serve 正在运行
+        - WHEN: '带令牌 POST /feedback：{unit: my-post, quote: 连接池很重要, mark: stuck}'
+        - THEN: 返回 200，feedback.kind 为 must-fix、text 为「阅读卡点：这里读不下去了」
+      ambiguous-selection:
+        - GIVEN: draft.md 含两处「连接池」，preview --serve 正在运行
+        - WHEN: '带令牌 POST /feedback：{unit: my-post, quote: 连接池, text: x}'
+        - THEN: 返回 400，diagnostics 中有一条错误码为 feedback.ambiguous-quote 的诊断，feedback.yaml 不被创建
+      watch-sees-page-feedback:
+        - GIVEN: feedback watch --max 1 --json 与 preview --serve 都在运行
+        - WHEN: 带令牌 POST /feedback 保存一条反馈
+        - THEN: feedback watch 输出一行 feedback 为该反馈的信封
+      page-follows-unit-tree:
+        - GIVEN: preview my-post --serve 正在运行，之后运行 wa-cli unit add my-post section later
+        - WHEN: 'GET / 后带令牌 POST /feedback：{unit: my-post/later, text: 新单元}'
+        - THEN: 页面列出 my-post/later，提交返回 200
+      closing:
+        - GIVEN: preview --serve --max 1 已保存 1 条反馈、正在关闭
+        - WHEN: 又有一个带令牌的 POST /feedback 到达
+        - THEN: 返回 503，diagnostics 中有一条错误码为 preview.closing 的诊断，不保存反馈

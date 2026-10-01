@@ -16,7 +16,7 @@ requirements:
         - THEN: valid 为 true，resolved.genre.id 为 minimal，resolved.unitTypes 与 resolved.stages 非空且每项的 source 为 genre:minimal，退出码为 0
   config-resolved:
     strength: MUST
-    statement: wa-cli config resolved 必须按 文体默认 → 规范包（按 config.yaml 中 packs 的顺序）→ 项目配置 的顺序合并 --dir 下工作区生效的设置，只读取、不修改任何产物，changedPaths 为空数组。--json 输出的 resolved 字段包含 genre（生效文体的 id 与 origin；未设置 default_genre 时为 null）、packs（按应用顺序的规范包，每项含 id、origin（builtin 或 workspace），工作区规范包另含 path）、unitTypes、stages、rules、glossary、bannedTerms、style、rubric 与 contextBudget（见 context 主规格的 context-budget）。每项设置都必须带 source 字段，取值为 genre:<id>、pack:<id> 或 project（没有任何配置层给出 contextBudget 时，其来源为 default），指明最终值来自哪个配置层（Config Layer）；rules 以规则 id 为键，其中 type、severity 与 params 的每个顶层键都各自带 value 与 source，任何配置层都没有给出 severity 时为 warning，来源为定义该规则的配置层。glossary 与 bannedTerms 按 term、rubric 按 id 合并，后面的配置层整项替换前面的同名项并保留其位置；style 按配置层顺序追加。存在 error 级诊断时 resolved 为 null，退出码为 1。未加 --json 时以人读文本输出同样的信息。未找到工作区时按 workspace-not-found 处理。
+    statement: wa-cli config resolved 必须按 文体默认 → 规范包（按 config.yaml 中 packs 的顺序）→ 项目配置 的顺序合并 --dir 下工作区生效的设置，只读取、不修改任何产物，changedPaths 为空数组。--json 输出的 resolved 字段包含 genre（生效文体的 id 与 origin；未设置 default_genre 时为 null）、packs（按应用顺序的规范包，每项含 id、origin（builtin 或 workspace），工作区规范包另含 path）、unitTypes、stages、rules、glossary、bannedTerms、style、rubric、contextBudget（见 context 主规格的 context-budget）、htmlTheme（见 pack-html-theme：每个元素名对应 value 与 source，没有规范包覆盖的元素来源为 default）与 aiDisclosure（placement 与 template 各含 value 与 source，见 export 主规格的 ai-disclosure）。每项设置都必须带 source 字段，取值为 genre:<id>、pack:<id> 或 project（没有任何配置层给出 contextBudget 时，其来源为 default），指明最终值来自哪个配置层（Config Layer）；rules 以规则 id 为键，其中 type、severity 与 params 的每个顶层键都各自带 value 与 source，任何配置层都没有给出 severity 时为 warning，来源为定义该规则的配置层。glossary 与 bannedTerms 按 term、rubric 按 id 合并，后面的配置层整项替换前面的同名项并保留其位置；style 按配置层顺序追加。存在 error 级诊断时 resolved 为 null，退出码为 1。未加 --json 时以人读文本输出同样的信息。未找到工作区时按 workspace-not-found 处理。
     scenarios:
       later-pack-wins:
         - GIVEN: packs 为 [a, b]，a 与 b 都在 glossary 中定义词条「规范包」但写法不同
@@ -38,6 +38,10 @@ requirements:
         - GIVEN: packs 为 [house]，house 规范包定义了没有 type 的新规则 r9
         - WHEN: 运行 wa-cli config resolved --dir D --json
         - THEN: valid 为 false，resolved 为 null，退出码为 1
+      resolved-ai-disclosure:
+        - GIVEN: config.yaml 的 ai_disclosure 为 metadata，packs 为 [default, brand]，brand 声明了 ai_disclosure_template
+        - WHEN: 运行 wa-cli config resolved --dir D --json
+        - THEN: 'resolved.aiDisclosure.placement 为 {value: metadata, source: project}，template 的 source 为 pack:brand；没有这些配置时 placement 为 {value: both, source: default}、template 的 source 为 default'
   rule-merge:
     strength: MUST
     statement: 合并规则（Rule）时，首次定义某个规则 id 的配置层必须给出 type，否则报告错误码 rule.missing-type（field 为 rules.<id>）；后续配置层给出与已有值不同的 type 时报告错误码 rule.type-conflict（field 为 rules.<id>.type）。两种情况下 wa-cli config resolved 与 wa-cli validate 都以退出码 1 退出，诊断的 path 为出问题的配置层的产物路径；内置文体或规范包不填 path，message 以「内置文体 <id>：」或「内置规范包 <id>：」开头指明出处。
@@ -84,12 +88,12 @@ requirements:
         - THEN: diagnostics 中有一条错误码为 artifact.executable-content、field 指向该 script 字段的诊断，valid 为 false，退出码为 1
   known-rule-types:
     strength: MUST
-    statement: 规则的 type 必须是已知规则类型（Rule Type）之一：cjk-typography、ai-cliche、banned-terms、term-consistency、length-range、paragraph-length、required-sections、claim-sources、claim-candidates、code-block-language、link-format、reference-sources。出现其他 type 时，wa-cli validate 与 wa-cli config resolved 必须报告错误码 rule.unknown-type（field 为该规则的 type，message 列出已知类型），以退出码 1 退出。
+    statement: 规则的 type 必须是已知规则类型（Rule Type）之一：cjk-typography、ai-cliche、banned-terms、term-consistency、length-range、paragraph-length、required-sections、claim-sources、claim-candidates、code-block-language、link-format、reference-sources、ad-compliance。出现其他 type 时，wa-cli validate 与 wa-cli config resolved 必须报告错误码 rule.unknown-type（field 为该规则的 type，message 列出已知类型），以退出码 1 退出。
     scenarios:
       unknown-rule-type:
         - GIVEN: house 规范包定义规则 r9，type 为 run-shell
         - WHEN: 运行 wa-cli validate --dir D --json
-        - THEN: diagnostics 中有一条错误码为 rule.unknown-type、field 为 rules.r9.type 的诊断，message 列出已知的规则类型，退出码为 1
+        - THEN: diagnostics 中有一条错误码为 rule.unknown-type、field 为 rules.r9.type 的诊断，message 列出已知的规则类型（含 ad-compliance），退出码为 1
   workspace-pack-files:
     strength: MUST
     statement: 作者可以把自有规范包放在 .writing-anything/packs/<id>.yaml，并在 config.yaml 的 packs 中按 id 引用；wa-cli validate <path> 必须把该位置的文件识别为规范包并校验。文件内的 id 与文件名（去掉 .yaml）不一致时报告错误码 pack.id-mismatch；id 与内置规范包相同时报告错误码 pack.id-conflict；两者都以退出码 1 退出。wa-cli init 不创建 packs/ 目录，缺少该目录不是错误。
@@ -134,3 +138,31 @@ requirements:
         - GIVEN: 刚用 wa-cli init --dir D 初始化的工作区
         - WHEN: 运行 wa-cli new tech-blog post --dir D --json，再运行 wa-cli config resolved --dir D --json（config.yaml 的 default_genre 为 tech-blog）
         - THEN: work.yaml 的 genre 为 tech-blog、type 为 article、stage 为 brief；resolved.rules 含 code-language、links 与 references，resolved.rubric 含 accuracy 且 blocking 为 true，退出码都为 0
+  wechat-marketing-genre:
+    strength: MUST
+    statement: 'wa-cli 必须随二进制提供内置的 wechat-marketing 文体（公众号营销文章）：单元类型 article（子单元类型 section，简报必填项为 audience、purpose 与 key_messages）与 section；阶段依次为 brief（必需产物 brief）、outline（outline）、draft（draft 与 marketing，见 marketing 主规格的 marketing-gate）与 review（review 与 acceptance）；默认写作法为 aida；规则 claims（claim-sources，error）、claim-candidates（warning）、ads（ad-compliance，error）、length（length-range，warning，1500 到 4000 字）与 paragraphs（paragraph-length，warning，每段不超过 150 字）；评分标准为 reader-benefit（读者收益）、hook（开头钩子）、cta（行动号召）、compliance（合规可信，blocking: true）与 4U 标题法的 headline-useful（有用）、headline-urgent（紧迫）、headline-unique（独特）、headline-specific（具体），标题类评分项针对作者选定的标题；上下文预算为 12000。它与其他内置文体一样通过文体的校验。'
+    scenarios:
+      new-wechat-marketing:
+        - GIVEN: 用 wa-cli init --genre wechat-marketing --dir D 初始化的工作区
+        - WHEN: 运行 wa-cli new wechat-marketing post --dir D --json，再运行 wa-cli config resolved --dir D --json
+        - THEN: work.yaml 的 genre 为 wechat-marketing、type 为 article、stage 为 brief；resolved.rules.ads.type.value 为 ad-compliance、severity 为 error；resolved.rubric 含 headline-useful 与 blocking 为 true 的 compliance；退出码都为 0
+      superlative-fails-lint:
+        - GIVEN: wechat-marketing 作品 post 的 draft.md 含「全网最低价」
+        - WHEN: 运行 wa-cli lint post --dir D --json
+        - THEN: findings 含一项 rule 为 ads、type 为 ad-compliance、source 为 genre:wechat-marketing 的发现项，退出码为 1
+      wechat-e2e:
+        - GIVEN: 用 wa-cli init --genre wechat-marketing --gate-level strict 初始化的工作区
+        - WHEN: 只用 wa-cli 命令完成：new、source add、brief set、advance、按 aida 的章节 outline set、advance、draft write、claim add、marketing set、marketing ask、decide、lint（没有 error 级发现项）、advance、review record（含 4U 评分项）、accept（给出作者确认）、advance 与 export
+        - THEN: 作品 stage 为 done，导出文件含正文，validate 通过；缺少某个营销要素或标题未决定时 advance 被拒绝
+  pack-html-theme:
+    strength: MUST
+    statement: '规范包可以用 html_theme 声明 HTML 导出的样式主题（HTML Theme）：键必须是元素名 wrapper、h1、h2、h3、h4、p、strong、em、code、pre、blockquote、ul、ol、li、hr、figure、caption、footnote 与 references 之一，值为 CSS 声明（一个或多个「属性: 值」，用分号分隔；属性名由小写字母与连字符组成，值只能由英文字母、数字、空格、制表符与 # % . , ( ) + - 组成（字符白名单），且不区分大小写地不含 url(、expression 与 javascript）；元素名不在列表中或取值不符合时 wa-cli validate 与 wa-cli config resolved 报告 artifact.schema-violation（field 为 html_theme.<元素名>），config resolved 的 resolved 为 null，以退出码 1 退出。合并时以内置默认主题为基础，按 config.yaml 中 packs 的顺序逐个元素覆盖，后面的规范包覆盖前面的；resolved.htmlTheme 的每个元素含 value 与 source（规范包为 pack:<id>，内置默认为 default）。文体与 config.yaml 不能声明 html_theme。'
+    scenarios:
+      theme-override:
+        - GIVEN: '工作区规范包 brand 的 html_theme 为 {h2: "color: #c00"}，config.yaml 的 packs 为 [default, brand]'
+        - WHEN: 运行 wa-cli config resolved --dir D --json，再导出已验收的作品 --format wechat-html
+        - THEN: 'resolved.htmlTheme.h2 为 {value: "color: #c00", source: pack:brand}，htmlTheme.p 的 source 为 default；导出的 h2 标签 style 为 color: #c00'
+      theme-unsafe:
+        - GIVEN: '规范包 brand 的 html_theme 为 {p: "background: url(http://x/a.png)"}'
+        - WHEN: 运行 wa-cli validate --dir D --json
+        - THEN: diagnostics 中有一条错误码为 artifact.schema-violation、field 为 html_theme.p 的诊断，退出码为 1

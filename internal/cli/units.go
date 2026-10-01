@@ -9,6 +9,7 @@ import (
 	"github.com/kw12121212/writing-anything/internal/brief"
 	"github.com/kw12121212/writing-anything/internal/catalog"
 	"github.com/kw12121212/writing-anything/internal/decision"
+	"github.com/kw12121212/writing-anything/internal/marketing"
 	"github.com/kw12121212/writing-anything/internal/outline"
 	"github.com/kw12121212/writing-anything/internal/review"
 	"github.com/kw12121212/writing-anything/internal/schema"
@@ -327,6 +328,14 @@ func blockerNext(dir, code, path string) []string {
 	case outline.CodeUncoveredMessage, outline.CodeMissingReason, outline.CodeMissingPart, outline.CodeMethodOrder, outline.CodeUnknownRole:
 		ref := work.RefOf(path[:strings.LastIndex(path, "/")])
 		return []string{shellCommand("wa-cli", "outline", "show", ref, "--dir", dir, "--json"), "wa-cli help outline set --json"}
+	case marketing.CodeInvalid:
+		return []string{shellCommand("wa-cli", "validate", path, "--dir", dir, "--json")}
+	case marketing.CodeMissingField, marketing.CodeTooManyHeadlines:
+		ref := work.RefOf(path[:strings.LastIndex(path, "/")])
+		return []string{shellCommand("wa-cli", "marketing", "show", ref, "--dir", dir, "--json"), "wa-cli help marketing set --json"}
+	case marketing.CodeHeadlineUnasked, marketing.CodeHeadlineStale:
+		ref := work.RefOf(path[:strings.LastIndex(path, "/")])
+		return []string{shellCommand("wa-cli", "marketing", "show", ref, "--dir", dir, "--json"), "wa-cli help marketing ask --json"}
 	case brief.CodeUnconfirmedMessage, decision.CodeBlocking, decision.CodeInvalidQueue:
 		return []string{shellCommand("wa-cli", "decisions", "--dir", dir, "--json")}
 	case review.CodeAcceptanceStale, review.CodeAcceptanceInvalid, review.CodeAcceptanceWeakerGate:
@@ -337,9 +346,11 @@ func blockerNext(dir, code, path string) []string {
 	return nil
 }
 
-// artifactNext 返回为必需产物登记的生成命令：审稿（review）与验收（acceptance）；其他产物还没有登记命令。
+// artifactNext 返回为必需产物登记的生成命令：营销要素（marketing）、审稿（review）与验收（acceptance）；其他产物还没有登记命令。
 func artifactNext(dir, artifact, unitDir string) []string {
 	switch artifact {
+	case "marketing":
+		return []string{"wa-cli help marketing set --json"}
 	case "review":
 		return []string{"wa-cli help review record --json", shellCommand("wa-cli", "provenance", work.RefOf(unitDir), "--dir", dir, "--json")}
 	case "acceptance":
@@ -354,7 +365,7 @@ func action(w *work.Work, u *work.Unit, blockers []blockerView) string {
 	case u.Stage == catalog.StageDone:
 		return "已走完全部阶段"
 	case len(blockers) > 0:
-		var missing, decisions, questions, gaps, accepts []string
+		var missing, decisions, questions, gaps, accepts, elements []string
 		broken := false
 		for _, b := range blockers {
 			switch {
@@ -373,6 +384,8 @@ func action(w *work.Work, u *work.Unit, blockers []blockerView) string {
 				gaps = append(gaps, "修复不通过校验的大纲（Outline）或写作简报")
 			case strings.HasPrefix(b.Code, "outline."):
 				gaps = append(gaps, strings.TrimSuffix(b.Message, "。"))
+			case strings.HasPrefix(b.Code, "marketing."):
+				elements = append(elements, strings.TrimSuffix(b.Message, "。"))
 			default:
 				missing = append(missing, fmt.Sprintf("%s（在 %s/ 下写入 %s.yaml 或 %s.md）", b.Artifact, b.Path, b.Artifact, b.Artifact))
 			}
@@ -386,6 +399,9 @@ func action(w *work.Work, u *work.Unit, blockers []blockerView) string {
 		}
 		if len(gaps) > 0 {
 			todo = append(todo, "补齐大纲（Outline）的覆盖："+strings.Join(gaps, "；"))
+		}
+		if len(elements) > 0 {
+			todo = append(todo, "补齐营销要素（Marketing Elements）："+strings.Join(elements, "；"))
 		}
 		if len(accepts) > 0 {
 			todo = append(todo, "重新审稿（Review）并用 wa-cli accept 验收（Acceptance）："+strings.Join(accepts, "；"))

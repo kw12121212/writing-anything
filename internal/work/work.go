@@ -17,6 +17,7 @@ import (
 	"github.com/kw12121212/writing-anything/internal/brief"
 	"github.com/kw12121212/writing-anything/internal/catalog"
 	"github.com/kw12121212/writing-anything/internal/decision"
+	"github.com/kw12121212/writing-anything/internal/marketing"
 	"github.com/kw12121212/writing-anything/internal/outline"
 	"github.com/kw12121212/writing-anything/internal/review"
 	"github.com/kw12121212/writing-anything/internal/schema"
@@ -308,7 +309,7 @@ type Blocker struct {
 
 // Blockers 返回单元 u 在当前阶段的全部阻塞项；advance、next 与 status 都只通过它得到阻塞项。
 // 阻塞来源依次为：缺失的必需产物（Required Artifact），即单元目录下既没有 <a>.yaml 也没有 <a>.md；当前阶段要求 brief
-// 时的写作简报问题（brief-gate）；当前阶段要求 outline 时的覆盖缺口（outline-gate）；决策队列无法加载时，偏安全地给出一条 decision.invalid-queue；关联该单元的未决定阻塞决策。
+// 时的写作简报问题（brief-gate）；当前阶段要求 outline 时的覆盖缺口（outline-gate）；当前阶段要求 marketing 时仍缺的营销要素（marketing-gate）；当前阶段要求 acceptance 时失效的验收记录；决策队列无法加载时，偏安全地给出一条 decision.invalid-queue；关联该单元的未决定阻塞决策。
 func (w *Work) Blockers(root string, u *Unit) []Blocker {
 	s := w.stage(u.Stage)
 	if s == nil {
@@ -330,6 +331,9 @@ func (w *Work) Blockers(root string, u *Unit) []Blocker {
 	}
 	if slices.Contains(s.RequiredArtifacts, "outline") {
 		out = append(out, w.outlineBlockers(root, u, q)...)
+	}
+	if slices.Contains(s.RequiredArtifacts, "marketing") {
+		out = append(out, w.marketingBlockers(root, u, marketing.Queue{Decisions: all, Invalid: invalid})...)
 	}
 	if slices.Contains(s.RequiredArtifacts, "acceptance") {
 		// 验收后正文又被修改，或验收记录不通过校验：原来的验收不再有效。
@@ -384,6 +388,25 @@ func (w *Work) outlineBlockers(root string, u *Unit, q brief.Queue) []Blocker {
 	var out []Blocker
 	for _, gap := range g.Gaps {
 		out = append(out, Blocker{Code: gap.Code, Artifact: "outline", Path: g.Path, Message: gap.Message})
+	}
+	return out
+}
+
+// marketingBlockers 返回单元 u 的营销要素（Marketing Elements）阻塞项：marketing.yaml 不通过校验时一条 marketing.invalid，否则
+// 每个仍缺的要素一条；单元目录下没有 marketing.yaml 与 marketing.md 时没有（由缺失产物报告）。标题决策尚未决定时由决策阻塞项报告。
+func (w *Work) marketingBlockers(root string, u *Unit, q marketing.Queue) []Blocker {
+	dir := w.UnitDir(u)
+	g := marketing.Check(root, dir, isFile(root, marketing.Path(dir)), isFile(root, dir+"/"+marketing.MDName), q)
+	if g == nil {
+		return nil
+	}
+	if len(g.Invalid) > 0 {
+		return []Blocker{{Code: marketing.CodeInvalid, Artifact: "marketing", Path: g.Path,
+			Message: fmt.Sprintf("营销要素（Marketing Elements）%s 不通过校验（%s）；请先修复", g.Path, g.Invalid[0].Message)}}
+	}
+	var out []Blocker
+	for _, q := range g.Questions {
+		out = append(out, Blocker{Code: q.Code, Artifact: "marketing", Path: g.Path, Message: q.Message})
 	}
 	return out
 }

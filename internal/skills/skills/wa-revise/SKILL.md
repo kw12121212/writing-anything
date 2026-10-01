@@ -7,7 +7,7 @@ description: 处理审稿发现项与作者反馈形成的修订任务，修改�
 
 ## 步骤
 
-1. 运行 `wa-cli feedback list <单元> --json` 与 `wa-cli review show <单元> --json`，列出修订任务（Revision Task）：未处理的审稿发现项与作者反馈（Feedback，包括正文中的 `<!-- @me: … -->` 批注（Comment））。等待作者的新反馈时运行 `wa-cli feedback watch --max 1 --json`，收到一条后返回。
+1. 运行 `wa-cli feedback list <单元> --json` 与 `wa-cli review show <单元> --json`，列出修订任务（Revision Task）：未处理的审稿发现项与作者反馈（Feedback，包括正文中的 `<!-- @me: … -->` 批注（Comment））。等待作者的新反馈时运行 `wa-cli feedback watch --max 1 --json`，收到一条后返回。作者想边读边提意见时运行 `wa-cli preview <单元> --serve --json`，把首行输出中的 preview.url 交给作者在浏览器中打开（只在本机可访问）；作者在阅读页（Reading View）中提交的意见会保存为作者反馈，同样出现在 feedback watch 中。
 2. 逐项和作者确认怎么改，修改正文后用 `wa-cli draft write <单元> --file <文件> --json` 写入（作者改过正文时先 `wa-cli diff <单元> --json`）。
 3. 处理完的反馈用 `wa-cli feedback resolve <单元> <反馈 id> --json`；审稿发现项用 `wa-cli review resolve <单元> <发现项 id> --json`，作者决定不改的用 `--status waived --note <作者的理由>`。
 4. 正文改动后审稿过期：回到 wa-review 重新记录审稿；用 `wa-cli lint <单元> --json` 确认没有 error 级发现项。

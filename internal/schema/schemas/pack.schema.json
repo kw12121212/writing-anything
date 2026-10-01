@@ -3,23 +3,52 @@
   "title": "规范包",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "id", "title"],
+  "required": [
+    "schema_version",
+    "id",
+    "title"
+  ],
   "properties": {
-    "schema_version": {"const": 1},
-    "id": {"$ref": "common.schema.json#/$defs/id"},
-    "title": {"$ref": "common.schema.json#/$defs/text"},
-    "description": {"type": "string"},
-    "style": {"type": "array", "items": {"$ref": "common.schema.json#/$defs/text"}},
+    "schema_version": {
+      "const": 1
+    },
+    "id": {
+      "$ref": "common.schema.json#/$defs/id"
+    },
+    "title": {
+      "$ref": "common.schema.json#/$defs/text"
+    },
+    "description": {
+      "type": "string"
+    },
+    "style": {
+      "type": "array",
+      "items": {
+        "$ref": "common.schema.json#/$defs/text"
+      }
+    },
     "glossary": {
       "type": "array",
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["term"],
+        "required": [
+          "term"
+        ],
         "properties": {
-          "term": {"$ref": "common.schema.json#/$defs/text"},
-          "english": {"type": "string"},
-          "avoid": {"type": "array", "uniqueItems": true, "items": {"$ref": "common.schema.json#/$defs/text"}}
+          "term": {
+            "$ref": "common.schema.json#/$defs/text"
+          },
+          "english": {
+            "type": "string"
+          },
+          "avoid": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "$ref": "common.schema.json#/$defs/text"
+            }
+          }
         }
       }
     },
@@ -28,14 +57,122 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["term"],
-        "properties": {"term": {"$ref": "common.schema.json#/$defs/text"}, "reason": {"type": "string"}, "replacement": {"type": "string"}}
+        "required": [
+          "term"
+        ],
+        "properties": {
+          "term": {
+            "$ref": "common.schema.json#/$defs/text"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "replacement": {
+            "type": "string"
+          }
+        }
       }
     },
-    "rules": {"$ref": "common.schema.json#/$defs/rules"},
-    "waivers": {"$ref": "common.schema.json#/$defs/waivers"},
-    "rubric": {"$ref": "common.schema.json#/$defs/rubric"},
-    "context_budget": {"$ref": "common.schema.json#/$defs/budget"},
-    "methods": {"type": "array", "items": {"$ref": "common.schema.json#/$defs/methodBody", "unevaluatedProperties": false}}
+    "rules": {
+      "$ref": "common.schema.json#/$defs/rules"
+    },
+    "waivers": {
+      "$ref": "common.schema.json#/$defs/waivers"
+    },
+    "rubric": {
+      "$ref": "common.schema.json#/$defs/rubric"
+    },
+    "context_budget": {
+      "$ref": "common.schema.json#/$defs/budget"
+    },
+    "methods": {
+      "type": "array",
+      "items": {
+        "$ref": "common.schema.json#/$defs/methodBody",
+        "unevaluatedProperties": false
+      }
+    },
+    "html_theme": {
+      "type": "object",
+      "description": "HTML 导出的样式主题（HTML Theme）：元素名 → CSS 声明，覆盖内置的默认主题；取值格式与 internal/catalog 的 CSSPattern、UnsafeCSSPattern 相同",
+      "additionalProperties": false,
+      "properties": {
+        "wrapper": {
+          "$ref": "#/$defs/css"
+        },
+        "h1": {
+          "$ref": "#/$defs/css"
+        },
+        "h2": {
+          "$ref": "#/$defs/css"
+        },
+        "h3": {
+          "$ref": "#/$defs/css"
+        },
+        "h4": {
+          "$ref": "#/$defs/css"
+        },
+        "p": {
+          "$ref": "#/$defs/css"
+        },
+        "strong": {
+          "$ref": "#/$defs/css"
+        },
+        "em": {
+          "$ref": "#/$defs/css"
+        },
+        "code": {
+          "$ref": "#/$defs/css"
+        },
+        "pre": {
+          "$ref": "#/$defs/css"
+        },
+        "blockquote": {
+          "$ref": "#/$defs/css"
+        },
+        "ul": {
+          "$ref": "#/$defs/css"
+        },
+        "ol": {
+          "$ref": "#/$defs/css"
+        },
+        "li": {
+          "$ref": "#/$defs/css"
+        },
+        "hr": {
+          "$ref": "#/$defs/css"
+        },
+        "figure": {
+          "$ref": "#/$defs/css"
+        },
+        "caption": {
+          "$ref": "#/$defs/css"
+        },
+        "footnote": {
+          "$ref": "#/$defs/css"
+        },
+        "references": {
+          "$ref": "#/$defs/css"
+        }
+      }
+    },
+    "ai_disclosure_template": {
+      "type": "string",
+      "description": "AI 参与说明的模板：一行、至多 500 个字符，只能含占位符 {ai_percent}、{ai_paragraphs} 与 {paragraphs}",
+      "pattern": "^(?:[^{}\\r\\n]|\\{(?:ai_percent|ai_paragraphs|paragraphs)\\})+$",
+      "not": {
+        "pattern": "^\\s*$"
+      },
+      "maxLength": 500
+    }
+  },
+  "$defs": {
+    "css": {
+      "type": "string",
+      "pattern": "^[ \\t]*[a-z-]+[ \\t]*:[ \\t]*[A-Za-z0-9#%., ()+-]+([ \\t]*;[ \\t]*[a-z-]+[ \\t]*:[ \\t]*[A-Za-z0-9#%., ()+-]+)*[ \\t]*;?[ \\t]*$",
+      "not": {
+        "pattern": "(?i)url\\(|expression|javascript"
+      }
+    }
   }
 }

@@ -148,3 +148,63 @@ rules:
         - lint.Run 接收按行查询段落出处的 Origin，出处为 agent 时报告 lint.agent-waiver
       bad:
         - 只要正文中出现 lint-ignore 注释就豁免，不区分作者还是 Agent 写入
+  deliverable-outputs:
+    strength: MUST
+    statement: 把交付文件写到 --output 指定位置的命令（如 export、preview 与其他导出格式）必须经过 internal/export 的输出路径检查与原子写入（WriteOutput 或同一组内部函数）：路径相对项目目录、规整后不得离开项目目录、在工作区中时只能在 .writing-anything/exports/ 之下（不区分大小写，并按文件身份复查）、途经的目录必须是真实目录、已存在的输出文件必须是普通文件；违反时以该命令自己的错误码（如 export.invalid-output、preview.invalid-output）报告，field 为 output。一次写出多个交付文件（如导出文件与配图清单）时，先不带副作用地检查全部路径，再创建目录并写入，新建的目录与文件都列在 changedPaths 中。不得在命令中另写一套输出路径检查。
+    rationale: 交付文件的位置由用户参数决定，最容易被用来覆盖工作区产物或经符号链接写到项目之外；集中在一组函数里，新增的导出格式自动获得同样的防护；预检查不带副作用，失败时不留下多余的目录，成功时如实报告变更。
+    enforcement:
+      method: test
+      detail: internal/export 的 TestOutputPath 覆盖路径规则；internal/cli 的 export 与 preview 测试断言无效输出的错误码与不写文件，TestExportWechatPaths 断言新建的目录列在 changedPaths 中，清单路径不合法时两个文件都不写。
+    examples:
+      good:
+        - checkParents 检查导出文件与配图清单两个路径后再 write
+      bad:
+        - 检查清单路径时创建了目录、丢弃了新建目录的列表
+  generated-html:
+    strength: MUST
+    statement: wa-cli 生成的 HTML（如阅读页与公众号 HTML 导出）必须用 html/template 生成：先把内容解析成节点树，再由模板按节点种类输出固定的标签，正文等来自产物的文字一律经模板转义，不得用字符串拼接产生标记，也不得对已含生成标记的字符串再做正则或文字替换，不得在内容中插入作为标记用途的字符（真实输入可能含有它们）；规范包等第三方提供的、写进 style 等属性的取值必须用字符白名单校验（Schema 一次、渲染时再一次），不得把第三方数据用作正则替换模板；样式内联，不引用任何外部资源。完整的 HTML 文档（如静态阅读页）不含 script 元素并带限制性的 Content-Security-Policy；需要脚本时脚本内容固定，不内插数据，由 Content-Security-Policy 按其哈希放行；供粘贴的 HTML 片段（如公众号 HTML）不含 script，无法携带 Content-Security-Policy。渲染器必须有测试断言输出只含允许的标签与属性（包括使用对抗性的样式取值），并有在输入上限（2 MiB）的对抗性输入上完成的耗时测试。
+    rationale: 正文、作者反馈与规范包取值都是不可信的数据：模板转义防止注入；对已生成标记做替换会让第三方取值改写标签结构（本变更的审查复现了经样式取值注入 onclick）；白名单比黑名单可靠；不引用外部资源保证离线可读、不泄露阅读行为；片段由编辑器承载，CSP 只能用于完整文档。
+    enforcement:
+      method: test
+      detail: internal/export 的 TestRenderUnsafeTheme 用对抗性样式取值断言允许列表，TestRenderLargeInputs 在 2 MiB 对抗性输入上断言耗时；internal/cli 的 TestPreviewStatic、TestPreviewServe、TestExportWechatHTML 断言转义、允许列表与 CSP。
+    examples:
+      good:
+        - 节点树经 page.ExecuteTemplate 输出，style 为通过 catalog.SafeCSS 的 template.CSS
+      bad:
+        - 先插入 <strong style="主题取值"> 再对整串做 *斜体* 的正则替换
+  artifact-field-names:
+    strength: MUST
+    statement: 工作区产物的 JSON Schema 中声明的字段名（任意深度的 properties，不区分大小写）不得与可执行内容检查保留的字段名（schema.ExecutableKeys：script、command、exec、shell、hook、plugin、run、eval 及其复数等）相同；需要表达这类含义时换用其他字段名（如开头钩子用 opening 而不是 hook）。
+    rationale: 可执行内容检查在 Schema 校验之前按字段名拦截，产物若声明了保留的字段名，作者写入的合法内容会被报告为 artifact.executable-content，且无法绕过；在 Schema 层面避免冲突比放宽检查安全。
+    enforcement:
+      method: test
+      detail: internal/schema 的 TestFieldNamesAvoidExecutableKeys 遍历 schemas/*.schema.json 的全部 properties，断言没有字段名属于 ExecutableKeys。
+    examples:
+      good:
+        - marketing.schema.json 用 opening 表示开头钩子（Hook）
+      bad:
+        - marketing.schema.json 声明 hook 字段，合法的营销要素被报告为 artifact.executable-content
+  author-choice-decisions:
+    strength: SHOULD
+    statement: 产物中需要作者从多个候选中选定的内容（如标题候选）通过决策队列确认：产物只记录决策 id，选定结果与状态（none、open、decided、stale、unknown）由决策推导，不把选择复制进产物；代替产物向决策队列写入时，先完成全部检查并用 decision.NextID 预先算出 id，先写决策队列、再写引用它的产物，后者失败时在 changedPaths 中如实列出决策队列；候选在决定前改变时原地替换该决策的选项（decision.Replace），不另建会继续阻塞单元的新决策。
+    rationale: 决策队列是作者确认的唯一记录，复制选择会产生两个可能不一致的事实来源；预先算出 id 与固定的写入顺序满足 precheck-before-side-effects，原地替换避免作者没有办法撤回的过时阻塞决策。
+    enforcement:
+      method: review
+      detail: 审查代替产物写入决策队列的命令（如 marketing ask）：产物中只有决策 id，状态由选项比较推导，写入顺序与失败时的 changedPaths 正确，过期未决定的决策被替换而不是新增。
+    examples:
+      good:
+        - 'marketing.yaml 只有 headline_decision: dec-1，marketing show 按 dec-1 的选项与当前候选推导 headlineState'
+      bad:
+        - 'marketing.yaml 另存 headline: h2，作者在决策队列中改选后两处不一致'
+  pack-text-in-deliverables:
+    strength: MUST
+    statement: 规范包等第三方提供、会原样写进交付文件（导出的 Markdown、front matter、HTML）的文字（如 ai_disclosure_template）必须由 Schema 限制为一行并设长度上限，只能含声明的占位符，占位符用纯文字替换；写进 YAML 时只能经 YAML 编码器（不得用字符串拼接），写进 HTML 时只能作为模板的文字节点。
+    rationale: 规范包是第三方数据：多行文字可以在 Markdown 文末插入标题、分隔线或伪造的 front matter，拼接进 YAML 会破坏结构；一行、有上限、占位符固定，并且只经编码器或模板输出，使这类文字只能是文字。
+    enforcement:
+      method: test
+      detail: internal/cli 的 TestAIDisclosureTemplateRules 断言多行、过长、空白与未知占位符的模板被 validate 与 config resolved 拒绝；front matter 由 yaml.Marshal 生成，公众号 HTML 中的说明是文字节点。
+    examples:
+      good:
+        - ai_disclosure_template 的 Schema：pattern ^(?:[^{}\r\n]|\{(?:ai_percent|ai_paragraphs|paragraphs)\})+$，maxLength 500
+      bad:
+        - doc += "\n---\n\n" + pack.Template，模板可以含换行与 ---

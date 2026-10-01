@@ -4,6 +4,7 @@ description: 讲清楚怎样用连接复用降低接口延迟
 genre: tech-blog
 units: [pool]
 accepted_at: "2026-10-01T09:30:00Z"
+ai_disclosure: 本文在 AI 辅助下完成：约 100% 的内容由 AI 起草，均经作者审阅确认。
 ---
 
 # 用连接池把接口延迟降下来
@@ -38,3 +39,7 @@ _, err = io.Copy(io.Discard, resp.Body)
 ```
 
 调整之后，接口的 P99 延迟降低了 40%。完整的说明见 [net/http 文档](https://pkg.go.dev/net/http)。
+
+---
+
+本文在 AI 辅助下完成：约 100% 的内容由 AI 起草，均经作者审阅确认。

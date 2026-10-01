@@ -122,7 +122,8 @@ func TestExportEdges(t *testing.T) {
 		!hasNext(d, "wa-cli review show my-post/intro") || res.ChangedPaths[0] != "dist" || res.ChangedPaths[1] != "dist/post.md" {
 		t.Fatalf("export with skipped unit: code = %d, %+v %v", code, res.Diagnostics, res.ChangedPaths)
 	}
-	if got := readFile(t, filepath.Join(dir, "dist", "post.md")); got != reviewDraft {
+	// 正文由 Agent 写入：文末带 AI 参与说明（ai-disclosure）。
+	if got := readFile(t, filepath.Join(dir, "dist", "post.md")); got != reviewDraft+"\n---\n\n"+fullAIDisclosure+"\n" {
 		t.Fatalf("export without front matter = %q", got)
 	}
 	for _, tc := range []struct {
@@ -163,7 +164,10 @@ func TestTechBlogGenreAndStrip(t *testing.T) {
 	writeFile(t, filepath.Join(dir, ".writing-anything", "works", "my-post", "draft.md"), "<!-- lint-ignore ai-cliche: 引用原话 -->\n第一段。<!-- @me: 太长 -->\n")
 	mustRunWS(t, dir, "accept", "my-post")
 	mustRunWS(t, dir, "export", "my-post")
-	if got := readFile(t, filepath.Join(dir, ".writing-anything", "exports", "my-post.md")); got != "第一段。\n" {
+	if got := readFile(t, filepath.Join(dir, ".writing-anything", "exports", "my-post.md")); got != "第一段。\n\n---\n\n"+fullAIDisclosure+"\n" {
 		t.Fatalf("stripped export = %q", got)
 	}
 }
+
+// fullAIDisclosure 是全部段落出自 Agent（或 Agent 起草、作者改过）时的内置 AI 参与说明。
+const fullAIDisclosure = "本文在 AI 辅助下完成：约 100% 的内容由 AI 起草，均经作者审阅确认。"

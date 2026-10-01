@@ -94,6 +94,26 @@ categories:
       status: active
       occurrences: 1
       path: .strict-spec-driven/lessons/coding/lesson-234cd1.yaml
+    lesson-74afa7:
+      title: 可以被参数配置成什么也不检查的规则，会让检查静默通过
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/coding/lesson-74afa7.yaml
+    lesson-ff5a78:
+      title: 提问内容改变后另建决策，会留下作者无法撤回、一直阻塞单元的旧决策
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/coding/lesson-ff5a78.yaml
+    lesson-b1071b:
+      title: 先插入带第三方样式的标签再对整串做正则替换，第三方取值能改写标签结构
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/coding/lesson-b1071b.yaml
+    ai-3e00aa:
+      title: 把出处推导的任何问题都当作写入记录损坏，会把作者写的正文误标为 AI 参与
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/coding/ai-3e00aa.yaml
   documentation:
     must-must-6af326:
       title: 修改一条 MUST 需求时，要检查同一规格里相邻的 MUST 是否因此冲突
@@ -106,3 +126,8 @@ categories:
       status: active
       occurrences: 1
       path: .strict-spec-driven/lessons/testing/json-9d7a25.yaml
+    feedback-watch-watch-7d2b50:
+      title: 在后台启动 feedback watch 后立刻写入反馈，watch 可能把它当作启动时已有的反馈而不输出
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/testing/feedback-watch-watch-7d2b50.yaml

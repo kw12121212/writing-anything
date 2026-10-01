@@ -233,6 +233,9 @@ func TestValidatePacksAndReferences(t *testing.T) {
 				if d := diag(t, res, tt.code); code != 1 || d.Path != rel || d.Field != tt.field || len(res.Diagnostics) != 1 {
 					t.Errorf("%v: exit code = %d, diagnostics = %+v", args, code, res.Diagnostics)
 				}
+				if d := res.Diagnostics[0]; name == "typo" && !strings.Contains(d.Message, "ad-compliance") {
+					t.Errorf("unknown-rule-type: message %q lacks ad-compliance", d.Message)
+				}
 				if d := res.Diagnostics[0]; name == "tagged" && !strings.Contains(d.Message, "第 4 行") {
 					t.Errorf("custom-tag: message %q lacks the line number", d.Message)
 				}

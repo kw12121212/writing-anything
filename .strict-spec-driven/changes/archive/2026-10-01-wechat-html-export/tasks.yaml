@@ -1,0 +1,49 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: wechat-html-export
+sections:
+  Implementation:
+    theme:
+      text: internal/catalog、internal/schema 与 internal/resolve：规范包 html_theme 字段、元素名与安全取值校验、内置默认主题、合并结果 htmlTheme（value 与 source）
+      status: complete
+    renderer:
+      text: internal/export：Markdown 子集到内联样式 HTML 的渲染器（块与行内、转义、去掉 HTML 注释、配图占位、脚注链接与参考链接）
+      status: complete
+    export-format:
+      text: internal/export：已验收单元的选择抽成共用函数；WechatHTML 导出、配图清单文件、两份输出的路径检查与写入顺序
+      status: complete
+    cli:
+      text: internal/cli：export --format wechat-html、默认路径、--front-matter 冲突、输出字段 images 与 imageList；config resolved 的 htmlTheme
+      status: complete
+    docs:
+      text: wa-publish 技能说明 wechat-html 导出与配图清单；docs/GLOSSARY.md 新增样式主题（HTML Theme）
+      status: complete
+  Testing:
+    lint:
+      text: gofmt 检查本变更的 Go 文件
+      status: complete
+      command: test -z "$(gofmt -l internal/export internal/catalog internal/resolve internal/schema internal/cli/export.go internal/cli/export_test.go internal/cli/marketing_test.go internal/cli/resolved_test.go)"
+    unit-tests:
+      text: 单元测试：渲染器（各种块与行内写法、转义、允许的标签与属性、配图、链接）；主题合并与校验；CLI：wechat-html 场景、配图清单、--front-matter 冲突、Markdown 导出不变；wechat-marketing 端到端测试加上 wechat-html 导出
+      status: complete
+      command: go test ./internal/...
+    full-regression:
+      text: 运行完整回归命令，覆盖率不低于 80%
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    spec-alignment:
+      text: 对照 export 与 genres-and-packs delta spec 的每个场景确认实现与测试覆盖，并按实际实现修正
+      status: complete
+    strict-ready:
+      text: 运行 strict-spec-cli ready 与 strict-spec-cli verify，确认变更产物有效
+      status: complete
+      command: strict-spec-cli ready wechat-html-export && strict-spec-cli verify wechat-html-export
+    archive-readiness:
+      text: 确认 delta spec 能合并，归档后路线图中的 wechat-html-export 标记为完成
+      status: complete
+testing_gates:
+  validation_task: full-regression
+  unit_test_task: unit-tests

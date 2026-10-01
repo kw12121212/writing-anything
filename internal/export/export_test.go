@@ -60,23 +60,23 @@ func TestFirstHeading(t *testing.T) {
 func TestOutputPath(t *testing.T) {
 	for _, bad := range []string{"/tmp/x.md", "../x.md", "a/../../x.md", ".", "dir/", `a\b.md`, ".writing-anything/config.yaml",
 		".writing-anything/works/my-post/draft.md", ".writing-anything", ".writing-anything/exports", ".Writing-Anything/config.yaml", ".WRITING-ANYTHING/Works/x/draft.md"} {
-		if _, p := cleanOutput(bad); p == nil || p.Code != CodeInvalidOutput {
+		if _, p := cleanOutput(bad, CodeInvalidOutput); p == nil || p.Code != CodeInvalidOutput {
 			t.Errorf("%q accepted", bad)
 		}
 	}
 	for in, want := range map[string]string{"./out/../dist/post.md": "dist/post.md", ".writing-anything/exports/a/b.md": ".writing-anything/exports/a/b.md"} {
-		if rel, p := cleanOutput(in); p != nil || rel != want {
+		if rel, p := cleanOutput(in, CodeInvalidOutput); p != nil || rel != want {
 			t.Fatalf("clean(%q) = %q %v", in, rel, p)
 		}
 	}
 	root := t.TempDir()
-	if created, ps := ensureParents(root, "dist/blog/post.md"); len(ps) > 0 || len(created) != 2 {
+	if created, ps := ensureParents(root, "dist/blog/post.md", CodeInvalidOutput); len(ps) > 0 || len(created) != 2 {
 		t.Fatalf("created: %v %v", created, ps)
 	}
 	// 按文件身份复查：即使路径绕过了字符串比较（不区分大小写的文件系统上换个大小写），途经工作区目录时也只能写到 exports 下。
 	os.MkdirAll(filepath.Join(root, ".writing-anything", "works"), 0o755)
 	for rel, ok := range map[string]bool{".writing-anything/config.yaml": false, ".writing-anything/works/x.md": false, ".writing-anything/exports/a/b.md": true, ".writing-anything/EXPORTS/c.md": false} {
-		if _, ps := ensureParents(root, rel); (len(ps) == 0) != ok {
+		if _, ps := ensureParents(root, rel, CodeInvalidOutput); (len(ps) == 0) != ok {
 			t.Errorf("ensureParents(%q) = %+v", rel, ps)
 		}
 	}
@@ -84,11 +84,11 @@ func TestOutputPath(t *testing.T) {
 	if err := os.Symlink(outside, filepath.Join(root, "link")); err != nil {
 		t.Skip("symlink not supported:", err)
 	}
-	if _, ps := ensureParents(root, "link/post.md"); len(ps) != 1 || ps[0].Code != CodeInvalidOutput || ps[0].Path != "link" {
+	if _, ps := ensureParents(root, "link/post.md", CodeInvalidOutput); len(ps) != 1 || ps[0].Code != CodeInvalidOutput || ps[0].Path != "link" {
 		t.Fatalf("symlinked dir: %+v", ps)
 	}
 	os.Symlink(filepath.Join(outside, "f.md"), filepath.Join(root, "dist", "f.md"))
-	if _, ps := ensureParents(root, "dist/f.md"); len(ps) != 1 {
+	if _, ps := ensureParents(root, "dist/f.md", CodeInvalidOutput); len(ps) != 1 {
 		t.Fatalf("symlinked file: %+v", ps)
 	}
 }

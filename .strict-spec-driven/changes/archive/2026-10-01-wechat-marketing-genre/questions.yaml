@@ -1,0 +1,42 @@
+schema: strict-spec-driven/question-list/v1
+schema_version: 1
+artifact_type: question_list
+schema_file: templates/strict-spec-driven/schemas/question-list.yaml
+change: wechat-marketing-genre
+open: []
+resolved:
+  - id: requirement-problem
+    question: What is concretely going wrong today, and for whom?
+    context: 'Why this is asked: the change is planned against a need, and the need lives only with the requester. What it changes: this becomes the proposal''s why.'
+    answer: 据里程碑 wechat-marketing-and-mcp 与规划变更 wechat-marketing-genre：目前只有技术博客文体，Agent 无法按规范协助完成公众号营销文章；标题、摘要、钩子与行动号召没有结构化产物，标题也没有由作者选定的记录。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-outcome
+    question: What observable difference proves the problem is solved?
+    context: 'Why this is asked: without a success condition, nobody can tell afterwards whether the change worked. What it changes: this becomes the delta spec''s scenarios.'
+    answer: 据里程碑 done_criteria：公众号文章端到端测试通过；命中极限词时 lint 以非零退出；选用 AIDA 或 PAS 写作法时大纲缺少对应段落会被 validate 报告；标题候选按 4U 标题法的评分项审稿。规划变更：端到端测试覆盖从写作简报到验收的全流程，标题选择记为决策。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-trigger
+    question: Why now — what forced this?
+    context: 'Why this is asked: work that nothing forced is the work most often thrown away later.'
+    answer: 据路线图：依赖的 tech-blog-genre-and-export 与 writing-method-templates 已归档；roadmap-recommend 推荐本变更为下一项；wechat-html-export 与 ai-content-disclosure 依赖它；ad-compliance-rules 把在本文体默认启用极限词检查交给本变更。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-non-goals
+    question: What must explicitly not change?
+    context: 'Why this is asked: the requester knows which nearby behavior other people depend on. What it changes: these become the proposal''s unchanged_behavior items.'
+    answer: 据里程碑 scope：不直接调用公众号 API 发布、不生成图片；HTML 导出与 AI 生成内容标识由其他规划变更负责；已有文体、写作法与决策行为不变。已写入 proposal 的 out 与 unchanged。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-interpretation
+    question: Which reading of the request is intended, where more than one is possible?
+    context: 'Why this is asked: a short request usually admits several readings. What it changes: this fixes the scope boundary before any code is written.'
+    answer: 据规划变更 details：标题候选、摘要、钩子与 CTA 是通过 wa-cli 命名参数写入的结构化产物；多个候选由作者选定，选择记为决策；AIDA、PAS 是文章类模板，4U 是标题候选的评分标准。产物位置、标题决策的推导、必需阶段与字段命名写在 design 的决策中。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap

@@ -211,3 +211,41 @@ func TestDecidedAtFormat(t *testing.T) {
 		t.Errorf("decided_at = %s", *d.DecidedAt)
 	}
 }
+
+func TestReplace(t *testing.T) {
+	root := t.TempDir()
+	os.MkdirAll(filepath.Join(root, ".writing-anything"), 0o755)
+	if _, ps := Replace(root, "dec-1", []string{"a"}, "", ""); len(ps) != 1 || ps[0].Code != CodeNotFound {
+		t.Fatalf("not found: %+v", ps)
+	}
+	if _, ps := Add(root, Input{Question: "用哪个？", Options: []string{"甲", "乙"}, Recommend: "a", Rationale: "短", Units: []string{"post"}}, func(string) []workspace.Problem { return nil }); ps != nil {
+		t.Fatal(ps)
+	}
+	d, ps := Replace(root, "dec-1", []string{"丙", "丁", "戊"}, "c", "")
+	if ps != nil || len(d.Options) != 3 || d.Options[2].ID != "c" || *d.Recommendation != "c" || d.Rationale != nil || d.Question != "用哪个？" || d.Units[0] != "post" {
+		t.Fatalf("replace: %+v %+v", d, ps)
+	}
+	for name, tc := range map[string]struct {
+		options   []string
+		recommend string
+		code      string
+	}{
+		"bad recommend": {[]string{"甲"}, "b", CodeUnknownOption},
+		"too many":      {make([]string, MaxOptions+1), "", "artifact.schema-violation"},
+	} {
+		if _, ps := Replace(root, "dec-1", tc.options, tc.recommend, ""); len(ps) != 1 || ps[0].Code != tc.code {
+			t.Errorf("%s: %+v", name, ps)
+		}
+	}
+	if _, ps := Decide(root, "dec-1", "a", "", "作者：甲", time.Now()); ps != nil {
+		t.Fatal(ps)
+	}
+	if _, ps := Replace(root, "dec-1", []string{"甲"}, "", ""); len(ps) != 1 || ps[0].Code != CodeAlreadyDecided {
+		t.Fatalf("decided: %+v", ps)
+	}
+	// 选项经由锚点得到时不修改。
+	os.WriteFile(filepath.Join(root, filepath.FromSlash(Path)), []byte("schema_version: 1\ndecisions:\n  - id: dec-1\n    question: q\n    options: &o [{id: a, text: 甲}]\n    blocking: true\n    units: []\n    status: open\n"), 0o644)
+	if _, ps := Replace(root, "dec-1", []string{"乙"}, "", ""); len(ps) != 1 || ps[0].Code != CodeAnchoredValue {
+		t.Fatalf("anchored: %+v", ps)
+	}
+}

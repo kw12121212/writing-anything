@@ -1,0 +1,49 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: local-review-preview
+sections:
+  Implementation:
+    export-output:
+      text: internal/export：把输出路径校验、逐级目录检查与原子写入抽成 WriteOutput(root, out, data, code)，Markdown 改用它（行为与错误码不变）
+      status: complete
+    preview-package:
+      text: internal/preview：单元数据（阶段、段落与出处、文本检查与审稿发现项、说明）与 Render（html/template；静态页无脚本、样式内联；serve 页内联提交意见的脚本）
+      status: complete
+    preview-command:
+      text: internal/cli：preview 命令登记（args、flags、outputKeys、sampleArgs 与 mutatingSamples）；静态输出与默认路径；参数检查（--port、--max、--output 与 --serve 的组合）
+      status: complete
+    preview-serve:
+      text: internal/cli：serve 模式——127.0.0.1 监听、随机令牌、Host 与令牌校验、安全响应头、GET /、POST /feedback（64 KiB 上限、mark 映射、feedback.Add）、逐行信封输出、--max 后优雅关闭、preview.listen-failed
+      status: complete
+    skill-doc:
+      text: internal/skills：wa-revise 技能说明作者想边读边提意见时运行 wa-cli preview <单元> --serve --json 并把 url 交给作者；确认 docs/GLOSSARY.md 已有阅读页与阅读卡点
+      status: complete
+  Testing:
+    lint:
+      text: gofmt 检查本变更的 Go 文件
+      status: complete
+      command: test -z "$(gofmt -l internal/preview internal/export internal/draft/paragraph.go internal/cli/sources.go internal/cli/preview.go internal/cli/preview_test.go internal/cli/cli_test.go internal/cli/registry.go)"
+    unit-tests:
+      text: 单元测试：preview 包（转义、段落与发现项归属、无正文、过大正文、说明）；export WriteOutput 回归；CLI：静态页场景、无效输出、参数组合、serve 的 URL 与响应头、拒绝无令牌/错误令牌/错误 Host、选中提交、快捷标记、歧义引用、feedback watch 看到页面反馈、--max 结束
+      status: complete
+      command: go test ./internal/...
+    full-regression:
+      text: 运行完整回归命令，覆盖率不低于 80%
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    spec-alignment:
+      text: 对照 preview delta spec 与 cli-contract delta tech 的每个场景与规则确认实现与测试覆盖，并按实际实现修正
+      status: complete
+    strict-ready:
+      text: 运行 strict-spec-cli ready 与 strict-spec-cli verify，确认变更产物有效
+      status: complete
+      command: strict-spec-cli ready local-review-preview && strict-spec-cli verify local-review-preview
+    archive-readiness:
+      text: 确认 preview 新主规格与 cli-contract delta tech 能合并，归档后路线图中的 local-review-preview 标记为完成
+      status: complete
+testing_gates:
+  validation_task: full-regression
+  unit_test_task: unit-tests

@@ -1,0 +1,19 @@
+schema: strict-spec-driven/lesson/v1
+schema_version: 1
+artifact_type: lesson
+schema_file: templates/strict-spec-driven/schemas/lesson.yaml
+lesson:
+  id: feedback-watch-watch-7d2b50
+  title: 在后台启动 feedback watch 后立刻写入反馈，watch 可能把它当作启动时已有的反馈而不输出
+category: testing
+status: active
+created_at: '2026-10-01T12:17:38.639Z'
+updated_at: '2026-10-01T12:17:38.639Z'
+context: local-review-preview 的测试在 goroutine 中启动 feedback watch（不带 --all），随后立即通过阅读页提交一条反馈，期望 watch 输出它。
+observation: 单独运行时总是通过，完整回归中 4 次失败 2 次：负载下 watch 的首次扫描晚于提交，新反馈被记为启动时已有、不再输出，watch 等到超时。
+takeaway: 测试 watch 类命令时先写一条哨兵反馈，用 --all 启动并等输出中出现哨兵（证明首次扫描已完成），再写入待观测的反馈；不要假定 goroutine 启动后扫描已经发生。
+applies_when: 测试中在后台启动 feedback watch 或其他按启动时快照判断新增的轮询命令，并在同一测试中写入期望被观测到的数据
+occurrences:
+  - origin: local-review-preview
+    date: '2026-10-01'
+    evidence: internal/cli/preview_test.go TestPreviewServe 改用 watchBuf 加 --all 与哨兵 waitFor；修复前 go test ./internal/... 4 次中 2 次失败

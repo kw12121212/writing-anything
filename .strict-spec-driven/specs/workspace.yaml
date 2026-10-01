@@ -196,7 +196,7 @@ requirements:
         - THEN: valid 为 false，diagnostics 中有一条错误码为 workspace.not-found 的诊断，退出码为 1
   config-set:
     strength: MUST
-    statement: wa-cli config set <key> <value> 必须把工作区 config.yaml 中的 key 设为 value，并保留其他字段与 YAML 注释。key 只能是 language、default_genre、packs、gate_level、context_budget；packs 的 value 按逗号分隔，空字符串表示空数组；default_genre 与 context_budget 的 value 为空字符串时删除该字段；context_budget 的 value 为十进制整数时写为整数，不是正整数时按 Schema 报告 artifact.schema-violation（field 为 context_budget）。写入成功时退出码为 0，changedPaths 为 .writing-anything/config.yaml，--json 输出的 config 字段为修改后的配置；新值与原值相同时不写文件，changedPaths 为空数组。新值不符合 Schema 时必须报告 artifact.schema-violation 并保持文件不变，退出码为 1；key 不在上述范围内时必须报告错误码 config.unknown-key，退出码为 1；key 当前的值带有 YAML 锚点时必须报告错误码 config.anchored-value 并保持文件不变，退出码为 1；修改后的文档无法重新解析时不得写入；未找到工作区时按 workspace-not-found 处理。
+    statement: wa-cli config set <key> <value> 必须把工作区 config.yaml 中的 key 设为 value，并保留其他字段与 YAML 注释。key 只能是 language、default_genre、packs、gate_level、context_budget、ai_disclosure；ai_disclosure 的 value 为 footer、metadata 或 both（见 export 主规格的 ai-disclosure），为空字符串时删除该字段（即默认的 both）；packs 的 value 按逗号分隔，空字符串表示空数组；default_genre 与 context_budget 的 value 为空字符串时删除该字段；context_budget 的 value 为十进制整数时写为整数，不是正整数时按 Schema 报告 artifact.schema-violation（field 为 context_budget）。写入成功时退出码为 0，changedPaths 为 .writing-anything/config.yaml，--json 输出的 config 字段为修改后的配置；新值与原值相同时不写文件，changedPaths 为空数组。新值不符合 Schema 时必须报告 artifact.schema-violation 并保持文件不变，退出码为 1；key 不在上述范围内时必须报告错误码 config.unknown-key，退出码为 1；key 当前的值带有 YAML 锚点时必须报告错误码 config.anchored-value 并保持文件不变，退出码为 1；修改后的文档无法重新解析时不得写入；未找到工作区时按 workspace-not-found 处理。
     scenarios:
       set-gate-level:
         - GIVEN: 刚初始化的工作区 D，作者在 config.yaml 中加了一行注释
@@ -238,3 +238,7 @@ requirements:
         - GIVEN: 刚初始化的工作区 D
         - WHEN: 运行 wa-cli config set context_budget 0 --dir D --json
         - THEN: diagnostics 中有一条错误码为 artifact.schema-violation、field 为 context_budget 的诊断，config.yaml 不变，退出码为 1
+      set-ai-disclosure:
+        - GIVEN: 已初始化的工作区
+        - WHEN: 运行 wa-cli config set ai_disclosure footer --dir D --json，再运行 wa-cli config set ai_disclosure never --dir D --json
+        - THEN: 第一次 config.yaml 的 ai_disclosure 为 footer、退出码为 0；第二次报告 artifact.schema-violation（field 为 ai_disclosure），文件不变，退出码为 1

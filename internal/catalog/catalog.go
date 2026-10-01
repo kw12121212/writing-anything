@@ -43,7 +43,7 @@ const (
 const DefaultPack = "default"
 
 // RuleTypes 是已知的规则类型（Rule Type）。规则的 params 结构由规则引擎定义，这里不校验。
-var RuleTypes = []string{"cjk-typography", "ai-cliche", "banned-terms", "term-consistency", "length-range", "paragraph-length", "required-sections", "claim-sources", "claim-candidates", "code-block-language", "link-format", "reference-sources"}
+var RuleTypes = []string{"cjk-typography", "ai-cliche", "banned-terms", "term-consistency", "length-range", "paragraph-length", "required-sections", "claim-sources", "claim-candidates", "code-block-language", "link-format", "reference-sources", "ad-compliance"}
 
 //go:embed builtin
 var builtin embed.FS
@@ -129,6 +129,10 @@ type Pack struct {
 	Path        string
 	// ContextBudget 是规范包声明的上下文预算；0 表示未声明。
 	ContextBudget int
+	// HTMLTheme 是规范包声明的样式主题（HTML Theme）：元素名 → CSS 声明；nil 表示未声明。
+	HTMLTheme map[string]string
+	// DisclosureTemplate 是规范包声明的 AI 参与说明模板；空表示未声明。
+	DisclosureTemplate string
 }
 
 // 文件格式：字段名与 YAML 一致。与公开类型只差结构体标签，可以直接转换。
@@ -156,17 +160,19 @@ type (
 		Method      string          `json:"default_method"`
 	}
 	packFile struct {
-		ID          string          `json:"id"`
-		Title       string          `json:"title"`
-		Description string          `json:"description"`
-		Style       []string        `json:"style"`
-		Glossary    []Term          `json:"glossary"`
-		BannedTerms []BannedTerm    `json:"banned_terms"`
-		Rules       map[string]Rule `json:"rules"`
-		Waivers     []Waiver        `json:"waivers"`
-		Rubric      []RubricItem    `json:"rubric"`
-		Methods     []Method        `json:"methods"`
-		Budget      int             `json:"context_budget"`
+		ID          string            `json:"id"`
+		Title       string            `json:"title"`
+		Description string            `json:"description"`
+		Style       []string          `json:"style"`
+		Glossary    []Term            `json:"glossary"`
+		BannedTerms []BannedTerm      `json:"banned_terms"`
+		Rules       map[string]Rule   `json:"rules"`
+		Waivers     []Waiver          `json:"waivers"`
+		Rubric      []RubricItem      `json:"rubric"`
+		Methods     []Method          `json:"methods"`
+		Budget      int               `json:"context_budget"`
+		Theme       map[string]string `json:"html_theme"`
+		Disclosure  string            `json:"ai_disclosure_template"`
 	}
 )
 
@@ -334,7 +340,7 @@ func loadPack(doc *yaml.Node, origin, rel string) (*Pack, []workspace.Problem) {
 	var f packFile
 	Decode(doc, &f)
 	p := &Pack{ID: f.ID, Title: f.Title, Description: f.Description, Style: f.Style, Glossary: f.Glossary, BannedTerms: f.BannedTerms,
-		Rules: f.Rules, Waivers: f.Waivers, Rubric: f.Rubric, Methods: f.Methods, Origin: origin, Path: rel, ContextBudget: f.Budget}
+		Rules: f.Rules, Waivers: f.Waivers, Rubric: f.Rubric, Methods: f.Methods, Origin: origin, Path: rel, ContextBudget: f.Budget, HTMLTheme: f.Theme, DisclosureTemplate: f.Disclosure}
 	return p, checkPack(p)
 }
 

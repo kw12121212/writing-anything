@@ -65,7 +65,7 @@ func runSrc(t *testing.T, dir, input string, args ...string) (int, sourceResult)
 		switch v := v.(type) {
 		case map[string]any:
 			for k, c := range v {
-				if c == nil && !slices.Contains([]string{"source", "draft", "provenance", "claim", "removed", "title", "defaultGenre", "contextBudget"}, k) {
+				if c == nil && !slices.Contains([]string{"source", "draft", "provenance", "claim", "removed", "title", "defaultGenre", "contextBudget", "aiDisclosure"}, k) {
 					t.Errorf("%s.%s is null", path, k)
 				}
 				walk(c, path+"."+k)

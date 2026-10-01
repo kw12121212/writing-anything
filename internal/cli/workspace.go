@@ -12,6 +12,7 @@ import (
 	"github.com/kw12121212/writing-anything/internal/decision"
 	"github.com/kw12121212/writing-anything/internal/draft"
 	"github.com/kw12121212/writing-anything/internal/feedback"
+	"github.com/kw12121212/writing-anything/internal/marketing"
 	"github.com/kw12121212/writing-anything/internal/outline"
 	"github.com/kw12121212/writing-anything/internal/resolve"
 	"github.com/kw12121212/writing-anything/internal/review"
@@ -64,10 +65,10 @@ var statusCommand = &command{
 
 var configSetCommand = &command{
 	name:    "config set",
-	summary: "修改工作区配置中的一项：language、default_genre、packs、gate_level 或 context_budget",
+	summary: "修改工作区配置中的一项：language、default_genre、packs、gate_level、context_budget 或 ai_disclosure",
 	args: []argSpec{
-		{"key", "配置项：language、default_genre、packs、gate_level 或 context_budget（上下文预算（Context Budget），字符数）", true},
-		{"value", "新取值；packs 用逗号分隔，空字符串表示清空；default_genre 与 context_budget 为空字符串时删除该项", true},
+		{"key", "配置项：language、default_genre、packs、gate_level、context_budget（上下文预算（Context Budget），字符数）或 ai_disclosure（AI 参与说明（AI-generated Content Label）的放置位置：footer、metadata 或 both）", true},
+		{"value", "新取值；packs 用逗号分隔，空字符串表示清空；default_genre、context_budget 与 ai_disclosure 为空字符串时删除该项", true},
 	},
 	flags:      []flagSpec{dirFlag},
 	outputKeys: []outputKey{{"config", "修改后（未修改时为当前）的配置摘要；配置无法解析时为 null"}},
@@ -182,6 +183,8 @@ func runValidate(inv *invocation) int {
 					_, problems = decision.Check(dir, unitExists(dir))
 				case "review", "acceptance":
 					problems = append(problems, review.CheckArtifact(dir, checked[0])...)
+				case "marketing":
+					problems = append(problems, marketing.CheckArtifact(dir, checked[0])...)
 				}
 			}
 		} else {
@@ -228,6 +231,9 @@ func runStatus(inv *invocation) int {
 			fmt.Fprintf(&b, "语言：%s\n默认文体（Genre）：%s\n规范包（Pack）：%s\n关卡强度（Gate Level）：%s\n", c.Language, genre, packs, c.GateLevel)
 			if c.ContextBudget != nil {
 				fmt.Fprintf(&b, "上下文预算（Context Budget）：%d 字符\n", *c.ContextBudget)
+			}
+			if c.AIDisclosure != nil {
+				fmt.Fprintf(&b, "AI 参与说明（AI-generated Content Label）：%s\n", *c.AIDisclosure)
 			}
 		}
 		fmt.Fprintf(&b, "素材（Source）：%d\n作品（Work）：%d\n", res.Sources, res.Works)
@@ -316,6 +322,14 @@ func resolvedText(r *resolve.Resolved) string {
 		fmt.Fprintf(&b, "  %s（%s）\n", p.ID, where)
 	}
 	fmt.Fprintf(&b, "上下文预算（Context Budget）：%v 字符%s\n", r.ContextBudget.Value, from(r.ContextBudget.Source))
+	fmt.Fprintf(&b, "AI 参与说明（AI-generated Content Label）：放在 %v%s；模板：%v%s\n", r.AIDisclosure.Placement.Value, from(r.AIDisclosure.Placement.Source),
+		r.AIDisclosure.Template.Value, from(r.AIDisclosure.Template.Source))
+	b.WriteString("样式主题（HTML Theme）：\n")
+	for _, k := range catalog.HTMLThemeKeys {
+		if v, ok := r.HTMLTheme[k]; ok {
+			fmt.Fprintf(&b, "  %s：%v%s\n", k, v.Value, from(v.Source))
+		}
+	}
 	section := func(title string, n int) bool {
 		if n == 0 {
 			fmt.Fprintf(&b, "%s：无\n", title)
@@ -421,9 +435,10 @@ func checkWorkspace(dir string) (checked []string, works []*work.Work, problems 
 	ochecked, ops := outline.CheckUnitArtifacts(dir, dirs, q, func(d string) string { return defaults[d] })
 	fchecked, fps := feedback.CheckUnitArtifacts(dir, works)
 	rchecked, rps := review.CheckUnitArtifacts(dir, dirs)
+	mchecked, mps := marketing.CheckUnitArtifacts(dir, dirs)
 	dchecked, dps := decision.Check(dir, unitExists(dir))
-	checked = slices.Concat(checked, more, wchecked, schecked, uchecked, bchecked, ochecked, fchecked, rchecked, dchecked)
-	return checked, works, slices.Concat(problems, ps, wps, sps, ups, bps, ops, fps, rps, dps)
+	checked = slices.Concat(checked, more, wchecked, schecked, uchecked, bchecked, ochecked, fchecked, rchecked, mchecked, dchecked)
+	return checked, works, slices.Concat(problems, ps, wps, sps, ups, bps, ops, fps, rps, mps, dps)
 }
 
 // defaultMethodOf 返回单元产物 rel 所在作品的文体的默认写作法；作品无法加载时为空（其问题由作品校验报告）。
@@ -523,7 +538,7 @@ func next(p workspace.Problem, dir string) []string {
 			// 作品目录中缺少 work.yaml：init 不会补齐它，作品只能用 wa-cli new 创建。
 			return []string{"wa-cli help new --json", validateAll}
 		}
-		if k := schema.KindFor(p.Path); k != nil && (k.Name == "brief" || k.Name == "outline" || k.Name == "review" || k.Name == "acceptance") {
+		if k := schema.KindFor(p.Path); k != nil && (k.Name == "brief" || k.Name == "outline" || k.Name == "review" || k.Name == "acceptance" || k.Name == "marketing") {
 			// brief.yaml 途经符号链接或不是普通文件：需要作者把它换成普通文件，init 不会修复它。
 			return []string{status, validateAll}
 		}
@@ -535,7 +550,7 @@ func next(p workspace.Problem, dir string) []string {
 	case source.CodeModified:
 		return []string{validateAll}
 	case decision.CodeBlocking, brief.CodeMissingField, brief.CodeUnsourcedMessage, brief.CodeUnconfirmedMessage, brief.CodeInvalid,
-		outline.CodeInvalid, outline.CodeUncoveredMessage, outline.CodeMissingReason:
+		outline.CodeInvalid, outline.CodeUncoveredMessage, outline.CodeMissingReason, marketing.CodeInvalid, marketing.CodeMissingField, marketing.CodeTooManyHeadlines, marketing.CodeHeadlineUnasked, marketing.CodeHeadlineStale:
 		return blockerNext(dir, p.Code, p.Path)
 	case outline.CodeMissingPart, outline.CodeMethodOrder, outline.CodeUnknownRole:
 		// 写作法缺口：查看大纲与写作法的章节或节拍，再用 outline set --role 修复。参数引起的（不填 path）由命令改写 next。

@@ -1,0 +1,31 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: wechat-html-export
+approach:
+  - 图片 ![替代文字](地址 "标题") 渲染为编号的占位块（独占一段时为块级，否则为行内的「【配图 n：替代文字】」），并收集到配图清单；链接 [文字](地址) 渲染为文字加 sup 脚注编号，文末一个参考链接段落按编号列出地址文字。配图清单写到导出文件同目录、去掉 .html 后缀加 .images.md，只有存在配图时才写；两个文件的路径都经 export 的输出路径校验，全部检查完成后才写入。
+  - html_theme 是规范包的新字段：键为固定的元素名（wrapper、h1、h2、h3、h4、p、strong、em、code、pre、blockquote、ul、ol、li、hr、figure、caption、footnote、references），值为 CSS 声明，由 pack.schema.json 的 propertyNames 与 pattern 校验；内置默认主题在 internal/catalog 中，internal/resolve 按 默认 → 规范包顺序 逐个元素覆盖并记录来源（默认为 default），导出只读合并结果（workspace-artifacts/resolved-sources）。
+  - 在 internal/export 中把选择已验收单元、读取并去掉过程注释的逻辑抽成共用函数 collect，Markdown 与 wechat-html 共用。wechat-html 的渲染分两步：先把正文解析成节点树（块：围栏代码块、ATX 标题、引用块（至多 8 层）、一层列表、分隔线、段落与配图；行内：行内代码、图片、链接、加粗与斜体，强调按预先算好的结束位置二分查找、至多 16 层），再由 html/template 按节点种类输出固定的标签，文字由模板转义，style 为通过 catalog.SafeCSS 的 template.CSS。不对已生成的标记做替换，也不在文字中插入标记字符；行与行之间的软换行、硬换行在节点上处理。
+decisions:
+  stdlib-renderer:
+    decision: 自写一个只覆盖常用写法的 Markdown 解析器，生成节点树后用标准库 html/template 输出，不引入第三方 Markdown 库
+    rationale: go-project-structure 要求优先使用标准库；节点树加模板满足 generated-html，输出的标签由模板固定、文字由模板转义；第一版用字符串拼接与正则替换，审查复现了经样式取值注入属性与平方级耗时，因此改为节点树
+  links-as-footnotes:
+    decision: 链接不输出 a 标签，改为文字加脚注编号，文末列出参考链接
+    rationale: '公众号正文不支持外部链接（会被过滤或无法点击），脚注保留了出处；不输出 href 也排除了 javascript: 等危险地址'
+  image-list-file:
+    decision: 配图清单写成导出文件旁的 <名称>.images.md，并在 --json 输出 images 与 imageList
+    rationale: 作者需要按清单逐张上传配图，单独的清单文件便于对照；JSON 字段供 Agent 读取
+  theme-in-packs:
+    decision: 样式主题只能由规范包的 html_theme 覆盖，文体与 config.yaml 不提供
+    rationale: 规划变更要求样式主题来自规范包；主题是可复用的数据，放在规范包中可以在团队或作品之间共用
+  safe-css-values:
+    decision: '主题取值用字符白名单：属性名为小写字母与连字符，值只能由英文字母、数字、空格与 # % . , ( ) + - 组成，且不含 url(、expression、javascript；Schema 校验一次，渲染时 catalog.SafeCSS 再检查一次'
+    rationale: 规范包是第三方数据，取值会写进 style 属性；白名单排除了引号、尖括号、注释、转义、正则替换模板字符与私用区字符，同时足够表达字号、颜色、边距等排版
+alternatives:
+  - option: 引入 goldmark 渲染 Markdown 后清洗输出
+    reason: 引入第三方依赖，并且需要另写 HTML 清洗与样式注入，清洗规则出错会放过被禁止的标签或属性
+risks:
+  - 公众号编辑器对 HTML 的过滤规则可能变化；测试只保证输出符合本规格的允许列表
+  - 自写渲染器不支持的 Markdown 写法（表格、嵌套列表）按段落文字输出，排版可能不理想

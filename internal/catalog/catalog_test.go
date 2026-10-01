@@ -55,7 +55,7 @@ func TestBuiltinsAreValid(t *testing.T) {
 			t.Errorf("pack %s: ok = %v, pack = %+v, problems = %+v", id, ok, p, ps)
 		}
 	}
-	if len(BuiltinMethods()) != 7 {
+	if len(BuiltinMethods()) != 9 {
 		t.Errorf("builtin methods = %v", BuiltinMethods())
 	}
 	for _, id := range BuiltinMethods() {

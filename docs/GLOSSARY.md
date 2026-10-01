@@ -134,12 +134,13 @@
 | 锚点 | Anchor | 锚点 | 反馈指向的原文片段及其前后文，正文修改后用于重新定位 |
 | 失去锚点 | Orphaned Anchor | 失去锚点 | 正文修改后无法重新定位的反馈，需要作者处理 |
 | 阅读卡点 | Sticking Point | 阅读卡点 | 作者阅读时标记的"读不下去"的位置 |
-| 阅读页 | Reading View | 阅读页 | `wa-cli preview --serve` 提供的本地阅读与反馈页面 |
+| 阅读页 | Reading View | 阅读页 | `wa-cli preview` 生成的逐段阅读页面：默认为可离线打开的静态 HTML；加 `--serve` 时为本地服务提供、可以选中文字提交反馈的页面 |
+| 令牌 | Token | 令牌 | `wa-cli preview --serve` 每次运行生成的随机字符串，访问本地阅读页必须携带，防止本机其他网页或程序冒用 |
 | 人工编辑保护 | Human Edit Protection | 人工编辑保护 | 人改过的正文不被 Agent 覆盖 |
 | 上下文包 | Context Pack | 上下文包 | 只包含当前单元所需信息的输入集合 |
 | 上下文预算 | Context Budget | 上下文预算 | 上下文包的大小上限，以字符数近似度量 |
 | 相邻节 | Neighbor Section | 相邻节 | 单元在父单元中的前一个与后一个兄弟单元，上下文包给出其大纲标题与正文节选 |
-| AI 生成内容标识 | AI-generated Content Label | AI 标识 | 导出时说明 AI 参与情况的文字或元数据 |
+| AI 参与说明 | AI-generated Content Label | AI 参与说明 | 导出时按段落出处说明 AI 参与情况的文字或元数据，也称「AI 生成内容标识」；放置位置由 `ai_disclosure` 决定 |
 | 文风画像 | Style Profile | 文风画像 | 从作者样文归纳的写作风格特征 |
 | 作者偏好 | Author Preference | 作者偏好 | 从作者修改中归纳的习惯，如"不用排比句" |
 | 交接记录 | Handoff Note | 交接记录 | 会话结束时记录的进展与待办，供新会话接续 |
@@ -198,7 +199,10 @@
 
 | 中文 | English | 常用写法 | 说明 |
 |---|---|---|---|
-| 标题候选 | Headline Candidates | 标题候选 | 供作者挑选的多个标题 |
+| 营销要素 | Marketing Elements | 营销要素 | 营销文章的标题候选、文章摘要、开头钩子与行动号召，记录在单元目录下的 `marketing.yaml` |
+| 标题候选 | Headline Candidates | 标题候选 | 供作者挑选的多个标题；作者通过标题决策选定 |
+| 文章摘要 | Digest | 文章摘要 | 公众号文章在分享卡片与消息列表中显示的简介；不同于供上下文使用的「摘要（Summary）」 |
+| 标题决策 | Headline Decision | 标题决策 | 由 `wa-cli marketing ask` 登记、请作者从标题候选中选定标题的阻塞决策 |
 | 标题党 | Clickbait | 标题党 | 标题夸大或与内容不符，应避免 |
 | 开头钩子 | Hook | 钩子 | 吸引读者读下去的开头 |
 | 行动号召 | Call to Action | CTA | 引导读者关注、购买、报名等的结尾 |
@@ -212,6 +216,8 @@
 | 封面图 | Cover Image | 封面图 | |
 | 配图 | Illustration | 配图 | 正文中的图片 |
 | 内联样式 | Inline Style | 内联样式 | 直接写在 HTML 标签上的样式，公众号编辑器要求 |
+| 样式主题 | HTML Theme | 样式主题 | HTML 导出时各元素的内联样式，规范包用 `html_theme` 覆盖内置默认主题 |
+| 配图清单 | Image List | 配图清单 | 公众号 HTML 导出时与导出文件一起写出的配图列表，供作者按编号替换配图占位 |
 | 原创声明 | Originality Declaration | 原创声明 | 公众号对原创内容的标注 |
 | 敏感词 | Sensitive Words | 敏感词 | 平台限制或需谨慎使用的词语 |
 

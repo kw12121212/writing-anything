@@ -1,0 +1,30 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: ai-content-disclosure
+  status: proposed
+summary:
+  what:
+    - 导出时按导出单元的段落出处（Provenance）汇总 AI 参与情况：出处为 agent 或 agent-draft-human-edited 的段落算作 AI 参与；有这类段落时生成 AI 参与说明（AI-generated Content Label），没有时不生成。说明文字来自规范包的 ai_disclosure_template（可用 {ai_percent}、{ai_paragraphs}、{paragraphs} 占位），没有规范包声明时用内置模板。
+    - 放置位置由 config.yaml 的 ai_disclosure 决定：footer（文末声明）、metadata（写入导出元数据）或 both（两者都用，默认），可用 wa-cli config set ai_disclosure 设置。Markdown 导出：footer 在文末追加分隔线与说明，metadata 在 --front-matter 时写入 ai_disclosure 字段；wechat-html 导出：footer 在文末追加说明段落。两种格式的 --json 输出都含 export.disclosure（说明文字、位置、AI 参与段落数、段落数与比例，没有 AI 参与时为 null）。
+  why:
+    - 里程碑 wechat-marketing-and-mcp 的完成标准要求：段落出处包含 agent 时，导出结果带 AI 参与说明；不包含时不生成。规划变更要求说明可放在文末、写入导出元数据或两者都用，模板来自规范包，Markdown 与 wechat-html 两种导出都支持。
+    - 平台与读者要求标明 AI 生成内容；wa-cli 已记录逐段出处，可以如实、可核查地生成说明，而不是由 Agent 自行判断要不要写。
+scope:
+  in:
+    - internal/export：按导出单元的出处汇总、生成说明文字、两种格式的放置与 front matter 字段
+    - internal/schema、internal/catalog、internal/workspace、internal/resolve：config.yaml 的 ai_disclosure（config set 可设置）、规范包的 ai_disclosure_template（占位符校验）、合并结果 aiDisclosure（placement 与 template，各带 source）
+    - internal/cli：export 输出 disclosure、出处无法推导时的 warning；config resolved 输出 aiDisclosure
+    - 修改 export 主规格的 export-markdown 与 wechat-html-export，新增 ai-disclosure；修改 workspace 的 config-set 与 genres-and-packs 的 config-resolved；更新 tech-blog 端到端的期望导出文件
+    - 测试：有无 AI 段落、作者改过的段落、三种放置、模板与占位符、出处无法推导、两种格式；wa-publish 技能说明 AI 参与说明
+  out:
+    - 判断内容是否「由 AI 生成」的法律含义或平台的具体标注规则：说明只陈述出处统计
+    - 按单元或按段落在正文中逐处标注
+unchanged_behavior:
+  - 没有 AI 参与段落（全部出自作者，或没有写入记录）的导出内容与输出不变（disclosure 为 null）
+  - 出处的推导规则、导出的单元选择与路径规则不变
+roadmap:
+  milestone: wechat-marketing-and-mcp
+  planned_change: ai-content-disclosure

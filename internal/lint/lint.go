@@ -57,6 +57,7 @@ const (
 	kindBool kind = iota
 	kindPositiveInt
 	kindPositiveNumber
+	kindString // 非空字符串
 	kindStrings
 	kindNonEmptyStrings // 至少一项的 kindStrings
 )
@@ -107,6 +108,7 @@ var ruleTypes = map[string]ruleType{
 	"link-format":         {params: []param{{"schemes", kindStrings, false}}, check: checkLinks},
 	"reference-sources":   {params: []param{{"source_types", kindNonEmptyStrings, false}, {"versions", kindBool, false}, {"apis", kindBool, false}}, check: checkReferences},
 	"claim-candidates":    {params: []param{{"pronouns", kindStrings, false}, {"experience_markers", kindStrings, false}, {"data", kindBool, false}, {"cover_kinds", kindStrings, false}}, check: checkCandidates},
+	"ad-compliance":       {params: []param{{"terms", kindStrings, false}, {"builtin", kindBool, false}, {"basis", kindString, false}}, check: checkAdCompliance},
 }
 
 // Run 对正文 content 执行 r 中的全部生效规则，按行、列、规则 id 排序发现项，并应用单处豁免。problems 为规则参数问题
@@ -240,6 +242,14 @@ func validate(id string, rt ruleType, rule *resolve.Rule, r *resolve.Resolved) (
 			bad("", rule.Params["max"].Source, fmt.Sprintf("min %d 大于 max %d", lo, hi))
 		}
 	}
+	if len(out) == 0 && fmt.Sprint(rule.Type.Value) == "ad-compliance" && !p.bool("builtin", true) && len(p.strings("terms")) == 0 {
+		// 不用内置词表又没有追加词的合规规则什么也不检查，不能让它静默通过。
+		source := rule.Type.Source
+		if v, ok := rule.Params["builtin"]; ok {
+			source = v.Source
+		}
+		bad(".terms", source, "builtin 为 false 时 terms 至少要有一项，否则这条规则什么也不检查")
+	}
 	return p, out
 }
 
@@ -262,7 +272,7 @@ func layerOf(r *resolve.Resolved, source string) (path, origin string) {
 	return "", ""
 }
 
-var kindNames = map[kind]string{kindBool: "布尔值", kindPositiveInt: "正整数", kindPositiveNumber: "正数", kindStrings: "非空字符串的数组", kindNonEmptyStrings: "至少一项、每项都是非空字符串的数组"}
+var kindNames = map[kind]string{kindBool: "布尔值", kindPositiveInt: "正整数", kindPositiveNumber: "正数", kindString: "非空字符串", kindStrings: "非空字符串的数组", kindNonEmptyStrings: "至少一项、每项都是非空字符串的数组"}
 
 // convert 把合并结果中的参数取值（YAML 解码得到的 bool、float64、[]any 等）转换为参数类型。
 func convert(k kind, v any) (any, bool) {
@@ -292,6 +302,9 @@ func convert(k kind, v any) (any, bool) {
 			return nil, false
 		}
 		return int(f), true
+	case kindString:
+		s, ok := v.(string)
+		return s, ok && strings.TrimSpace(s) != ""
 	default:
 		items, ok := v.([]any)
 		if !ok || k == kindNonEmptyStrings && len(items) == 0 {

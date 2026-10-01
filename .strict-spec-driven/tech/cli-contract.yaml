@@ -105,11 +105,11 @@ rules:
         - 写前复查失败时返回 path 为 brief.yaml 的诊断，next 为 wa-cli validate brief.yaml，复查报告 valid 为 true
   streaming-envelopes:
     strength: MUST
-    statement: 持续输出事件的流式命令（如 feedback watch）在 --json 模式下每个事件输出一行完整的输出信封（valid、diagnostics、changedPaths 与声明的输出键），不得输出不带信封的裸对象；流式命令必须提供使其在输出指定条数后结束的参数（如 --max）与轮询间隔参数，以便在进程内测试并登记样例调用。
-    rationale: Agent 与 MCP 用同一方式解析所有命令的输出，逐行信封让流式事件也符合 shared-envelope；可结束的参数让 TestRegistryConsistency 与行为测试不必启动子进程或依赖超时。
+    statement: 持续输出事件的流式命令（如 feedback watch、preview --serve）在 --json 模式下每个事件输出一行完整的输出信封（valid、diagnostics、changedPaths 与声明的输出键），不得输出不带信封的裸对象；流式命令必须提供使其在输出指定条数后结束的参数（如 --max），按间隔轮询的流式命令另须提供轮询间隔参数（如 --interval），以便在进程内测试并登记样例调用；事件驱动、没有轮询的命令（如本地服务）不需要间隔参数。
+    rationale: Agent 与 MCP 用同一方式解析所有命令的输出，逐行信封让流式事件也符合 shared-envelope；可结束的参数让 TestRegistryConsistency 与行为测试不必启动子进程或依赖超时；间隔参数只对轮询命令有意义，事件驱动的服务按请求即时响应。
     enforcement:
       method: test
-      detail: internal/cli 的 TestRegistryConsistency 以 --all --max 1 调用 feedback watch 并断言输出为一行信封；TestFeedbackWatch 在并发追加反馈时断言每行都是信封。
+      detail: internal/cli 的 TestRegistryConsistency 以 --all --max 1 调用 feedback watch 并断言输出为一行信封；TestFeedbackWatch 在并发追加反馈时断言每行都是信封；preview --serve --max 的测试断言首行与每条反馈行都是信封。
     examples:
       good:
         - feedback watch --max 1 --json 输出一行 {"valid":true,"diagnostics":[],"changedPaths":[],"feedback":{...}}
@@ -138,3 +138,15 @@ rules:
         - draft.Precheck 通过后才调用 feedback.ImportComments，再调用 draft.Write
       bad:
         - 先记入批注，draft.Write 发现现有正文过大后返回 draft.too-large
+  loopback-only-server:
+    strength: MUST
+    statement: 'wa-cli 中监听网络的命令（如 preview --serve）只能监听回环地址 127.0.0.1，不得监听 0.0.0.0 或其他网卡，给出的访问地址必须取自实际监听的套接字；必须为每次运行生成至少 128 位的随机令牌，并对每个请求在读取或修改任何产物之前校验令牌（常量时间比较）与 Host 头（端口为 80 时同时接受不带端口的写法），不符合时返回 403；响应必须带 Cache-Control: no-store 与 Referrer-Policy: no-referrer，服务只在命令运行期间存在，不作为常驻服务；请求体必须限制大小，服务端日志写到命令的标准错误。测试必须断言访问地址是回环地址，并覆盖拒绝无令牌、令牌错误与 Host 不符的请求。'
+    rationale: 本地阅读页是项目中唯一的网络监听，同一台机器上的其他网页或进程也能访问回环地址：令牌防止伪造提交，Host 校验防 DNS 重绑定，no-referrer 防止令牌随 Referer 外泄，限制请求体防止占满内存；地址取自实际套接字，测试才能发现误改为监听全部网卡。
+    enforcement:
+      method: test
+      detail: internal/cli 的 TestPreviewServe 断言首行地址的主机为 127.0.0.1 且是回环地址，并对无令牌、令牌错误与错误 Host 的 GET 与 POST 断言 403 且 feedback.yaml 不变。
+    examples:
+      good:
+        - ln, _ := net.Listen("tcp", "127.0.0.1:0")；url 由 ln.Addr() 生成；请求先经 authorized(r) 校验 Host 与令牌
+      bad:
+        - http.ListenAndServe(":8080", mux)；或地址写死为 "http://127.0.0.1:" 加端口；或只在 POST 上校验令牌

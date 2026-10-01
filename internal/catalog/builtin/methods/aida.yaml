@@ -1,0 +1,19 @@
+# AIDA：营销文案的经典结构，依次引起注意、激发兴趣、唤起欲望、促成行动。
+schema_version: 1
+id: aida
+title: AIDA
+description: 注意（Attention）→ 兴趣（Interest）→ 欲望（Desire）→ 行动（Action），适合推介产品、活动或观点的营销文章。
+kind: article
+sections:
+  - id: attention
+    title: 注意
+    description: 用读者关心的场景、反常识的事实或痛点抓住注意力。
+  - id: interest
+    title: 兴趣
+    description: 展开问题与相关信息，让读者想继续读下去。
+  - id: desire
+    title: 欲望
+    description: 用卖点、案例与证据让读者想要这个结果。
+  - id: action
+    title: 行动
+    description: 给出明确、低门槛的下一步，即行动号召（CTA）。

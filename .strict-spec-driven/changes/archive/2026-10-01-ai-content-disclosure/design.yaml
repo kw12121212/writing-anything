@@ -1,0 +1,26 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: ai-content-disclosure
+approach:
+  - export 在选出已验收单元后，对每个导出单元调用 draft.Provenance：把出处为 agent 与 agent-draft-human-edited 的段落数与字数累加为 AI 参与，全部段落累加为总数；单元有写入记录但无法推导出处时给出 warning export.unknown-provenance，并把该单元的全部段落算作 AI 参与（宁可多说明）。AI 参与段落数为 0 时不生成说明。
+  - 说明文字由合并结果中的模板替换占位符得到：{ai_percent} 为 AI 参与字数占比（四舍五入到整数），{ai_paragraphs} 与 {paragraphs} 为段落数；模板只能含这三个占位符（Schema 校验），替换是纯文字替换，不执行规范包中的任何内容。放置位置取 config.yaml 的 ai_disclosure（默认 both）：Markdown 的 footer 在正文末尾追加「---」与说明，metadata 在 --front-matter 时于 accepted_at 之后写入 ai_disclosure；wechat-html 的 footer 在参考链接之后追加一个说明段落（样式同 references），metadata 不改动 HTML（公众号片段没有元数据）。两种格式的 --json 都输出 disclosure。
+decisions:
+  edited-counts-as-ai:
+    decision: 作者改过的 Agent 段落（agent-draft-human-edited）也算 AI 参与
+    rationale: 这些段落最初由 Agent 起草，作者的修改不改变 AI 参与的事实；只统计 agent 会让作者稍作改动就不再说明，违背如实标注的目的
+  default-both:
+    decision: ai_disclosure 未设置时为 both，不提供关闭说明的取值
+    rationale: 里程碑要求出处包含 agent 时导出结果带说明；默认两处都写最稳妥，作者可以改为只放文末或只写元数据，但不能静默关闭
+  placeholders-only:
+    decision: 规范包模板只允许 {ai_percent}、{ai_paragraphs}、{paragraphs} 三个占位符，其他花括号由 Schema 拒绝
+    rationale: 规范包只能是数据；固定的占位符与纯文字替换不会执行任何内容，未知占位符在 validate 时就能发现，而不是在导出结果中留下 {xxx}
+  unknown-provenance-conservative:
+    decision: 无法推导出处的单元全部算作 AI 参与，并给出 warning
+    rationale: 写入记录损坏时无法证明没有 AI 参与，宁可多说明；warning 提示作者修复写入记录
+alternatives: []
+risks:
+  - tech-blog 端到端测试的期望导出文件会多出说明（正文由 Agent 写入），需要同步更新
+  - AI 参与比例按字数计算，只是统计，不代表内容的原创程度；说明文字由模板决定措辞
+  - 规范包模板限制为一行、至多 500 个字符，避免在 Markdown 文末插入额外的结构；front matter 经 YAML 编码，不受模板内容影响

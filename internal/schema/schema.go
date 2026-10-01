@@ -60,6 +60,7 @@ var kinds = []*Kind{
 	newKind("review", "review.schema.json", ".writing-anything/works/*/review.yaml", ".writing-anything/works/*/units/*/review.yaml"),
 	newKind("review-input", "review-input.schema.json"),
 	newKind("acceptance", "acceptance.schema.json", ".writing-anything/works/*/acceptance.yaml", ".writing-anything/works/*/units/*/acceptance.yaml"),
+	newKind("marketing", "marketing.schema.json", ".writing-anything/works/*/marketing.yaml", ".writing-anything/works/*/units/*/marketing.yaml"),
 }
 
 func newKind(name, file string, patterns ...string) *Kind {

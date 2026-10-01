@@ -1,0 +1,42 @@
+schema: strict-spec-driven/question-list/v1
+schema_version: 1
+artifact_type: question_list
+schema_file: templates/strict-spec-driven/schemas/question-list.yaml
+change: ai-content-disclosure
+open: []
+resolved:
+  - id: requirement-problem
+    question: What is concretely going wrong today, and for whom?
+    context: 'Why this is asked: the change is planned against a need, and the need lives only with the requester. What it changes: this becomes the proposal''s why.'
+    answer: 据里程碑 wechat-marketing-and-mcp 与规划变更 ai-content-disclosure：导出的成稿不说明 AI 参与情况，作者要自己判断和撰写说明；wa-cli 已有逐段出处，却没有用于导出。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-outcome
+    question: What observable difference proves the problem is solved?
+    context: 'Why this is asked: without a success condition, nobody can tell afterwards whether the change worked. What it changes: this becomes the delta spec''s scenarios.'
+    answer: 据里程碑 done_criteria：段落出处包含 agent 时，导出结果带 AI 参与说明；不包含时不生成。规划变更：文末声明、导出元数据或两者都用，模板来自规范包，Markdown 与 wechat-html 都支持。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-trigger
+    question: Why now — what forced this?
+    context: 'Why this is asked: work that nothing forced is the work most often thrown away later.'
+    answer: 据路线图：依赖的 wechat-html-export 与 author-sources-and-provenance 已归档；roadmap-recommend 推荐本变更为里程碑的最后一项。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-non-goals
+    question: What must explicitly not change?
+    context: 'Why this is asked: the requester knows which nearby behavior other people depend on. What it changes: these become the proposal''s unchanged_behavior items.'
+    answer: 据规划变更：没有 agent 段落时不生成说明，导出内容不变；出处推导与导出规则不变。已写入 proposal 的 out 与 unchanged。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-interpretation
+    question: Which reading of the request is intended, where more than one is possible?
+    context: 'Why this is asked: a short request usually admits several readings. What it changes: this fixes the scope boundary before any code is written.'
+    answer: 据规划变更 details：按段落出处汇总，根据项目配置把说明放在文末、导出元数据或两者；说明模板来自规范包。作者改过的 Agent 段落是否算 AI 参与、默认放置、占位符与无法推导出处时的处理写在 design 的决策中。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap

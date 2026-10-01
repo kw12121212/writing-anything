@@ -1,0 +1,32 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: local-review-preview
+approach:
+  - '新增 internal/preview 包：Build 按单元树先序为每个单元收集阶段、段落（draft.Provenance；无法推导出处时用 draft.Split 并说明原因）、文本检查结果与 review.yaml，Render 用 html/template 生成单个 HTML 文档（样式内联，正文按段落转义并以 white-space: pre-wrap 保留换行）。静态页不含任何 script 元素与外部资源，出处着色用复选框加 CSS 兄弟选择器实现；serve 模式的页面额外内联一段脚本，读取选区、提交意见。文本检查复用 internal/cli 的 runUnitLint，由命令层把结果传给 preview 包，preview 包不 import internal/cli。'
+  - serve 模式由 net/http 在 127.0.0.1:<port> 上提供 GET / 与 POST /feedback：每个请求先校验 Host 头与令牌（crypto/rand 生成 32 字节、十六进制，crypto/subtle 常量时间比较），不符合时返回 403；POST 的请求体用 http.MaxBytesReader 限制为 64 KiB，解析后调用 feedback.Add（与 wa-cli feedback add 相同），以互斥锁串行化写入与标准输出。保存 --max 条反馈后通过 http.Server.Shutdown 优雅关闭（等最后一个响应发出），命令返回 0。
+decisions:
+  quick-mark-kinds:
+    decision: 快捷标记映射为反馈类型：stuck（阅读卡点）→ must-fix，默认文字「阅读卡点：这里读不下去了」；good（好）→ praise，默认文字「好」；question（疑问）→ question，默认文字「疑问」。作者同时写了文字时为「阅读卡点：」「好：」「疑问：」加文字
+    rationale: 作者标记读不下去说明这一处必须改，must-fix 让 Agent 优先处理；文字前缀保留了标记的含义，feedback list 与 watch 不需要新字段
+  raw-paragraphs:
+    decision: 阅读页逐段展示 Markdown 原文，不渲染为富文本
+    rationale: 选中的文字必须与 draft.md 中的原文一致，才能按 feedback add 的规则定位锚点；渲染后的文字会丢掉标记，使引用对不上原文。富文本是 wechat-html-export 的职责
+  static-output-rules:
+    decision: 静态阅读页默认写到 .writing-anything/exports/<work>.preview.html（子单元为 <work>.<unit-id>.preview.html），--output 复用 export 的路径校验与原子写入，错误码为 preview.invalid-output
+    rationale: exports/ 是工作区中唯一允许命令写出交付文件的目录，复用同一校验避免再实现一套防符号链接与防覆盖工作区产物的逻辑；独立错误码让诊断指向 preview 的帮助
+  host-and-token:
+    decision: '除令牌外还校验 Host 头只能是 127.0.0.1:<port> 或 localhost:<port>，并加 Referrer-Policy: no-referrer、X-Frame-Options: DENY、Content-Security-Policy 与 Cache-Control: no-store'
+    rationale: 本地服务是项目中唯一的网络监听：Host 校验防 DNS 重绑定，no-referrer 防止 URL 中的令牌外泄，禁止嵌入防点击劫持；令牌防止同机其他网页伪造提交
+  streaming-rule-scope:
+    decision: 修改 cli-contract 的 streaming-envelopes：结束参数（如 --max）对所有流式命令都是必需的，轮询间隔参数只对按间隔轮询的命令必需；preview 的 serve 模式是事件驱动的服务，不提供 --interval
+    rationale: 该规则要求间隔参数是为了让轮询命令能在进程内快速测试；服务按请求即时响应，没有轮询，间隔参数没有含义。按 MUST 规则的流程以 delta tech 修改标准，而不是违反它
+alternatives:
+  - option: 阅读页用 JavaScript 在浏览器端渲染 Markdown
+    reason: 需要引入第三方脚本或自写渲染器，离线静态页也就不能不含脚本，且选区与原文的对应更难保证
+  - option: 选中的文字在正文中出现多次时由服务按段落自动加长引用
+    reason: 会改变 feedback add 的锚点语义；直接返回 feedback.ambiguous-quote 让作者多选几个字，与命令行行为一致
+risks:
+  - 本地服务是项目中唯一的网络监听，必须只监听回环地址并校验令牌，测试覆盖拒绝无令牌与错误 Host 的请求
+  - 浏览器选区的换行与原文可能不同（如跨段选择），此时按 feedback.quote-not-found 提示作者在一段之内选择

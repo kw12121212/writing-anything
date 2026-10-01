@@ -1,0 +1,21 @@
+schema: strict-spec-driven/delta-spec/v1
+schema_version: 1
+artifact_type: delta_spec
+schema_file: templates/strict-spec-driven/schemas/delta-spec.yaml
+target_spec: methods
+operations:
+  ADDED: {}
+  MODIFIED:
+    method-data:
+      strength: MUST
+      statement: 写作法模板（Method Template）必须是纯数据，含 id、title、可选的 description、kind 与可选的 rubric（评分标准（Rubric）条目，字段同文体的 rubric）：kind 为 article（文章类，必须有 sections：按顺序排列的必需章节，每项含 id、title 与可选的 description）、structure（结构类，必须有 beats：节拍，每项另含 position.min 与 position.max，取值 0 到 1，表示按字数比例在全文中的位置范围）或 planning（规划类，必须有 steps：规划步骤）；三种列表只能出现与 kind 对应的一种，不得有其他字段。wa-cli 必须随二进制提供内置写作法：pyramid-scqa（金字塔原理与 SCQA）、general-specific-general（总分总）、inverted-pyramid（倒金字塔）、diataxis-tutorial、diataxis-how-to、diataxis-reference 与 diataxis-explanation（Diátaxis 的教程、操作指南、参考与解释），以及营销写作法 aida（AIDA：注意、兴趣、欲望、行动）与 pas（PAS：问题、放大、解决），都是文章类。规范包（Pack）可以在 methods 中定义写作法；文体（Genre）可以在 default_method 中声明默认写作法，取值必须是内置写作法（否则报告 genre.unknown-method）。同一个规范包中写作法 id 重复，或同一个写作法中章节、节拍、步骤或评分项的 id 重复时报告 artifact.duplicate-id；节拍的 position.min 大于 max 时报告 method.invalid-position；写作法 id 为 none（写作简报中表示不用写作法）时报告 method.reserved-id；这些问题由 wa-cli validate 报告，field 指向出错的位置（如 methods[0].beats[1].position）。
+      scenarios:
+        pack-method-problem:
+          - GIVEN: '工作区规范包 house 的 methods[0] 是结构类写作法，第二个节拍的 position 为 {min: 0.9, max: 0.1}，config.yaml 的 packs 为 [house]'
+          - WHEN: 运行 wa-cli validate --dir D --json
+          - THEN: diagnostics 中有一条错误码为 method.invalid-position、field 为 methods[0].beats[1].position 的诊断，退出码为 1
+        builtin-marketing-methods:
+          - GIVEN: 已初始化的工作区
+          - WHEN: 运行 wa-cli method show aida --dir D --json 与 wa-cli method show pas --dir D --json
+          - THEN: aida 为文章类，sections 依次为 attention、interest、desire、action；pas 为文章类，sections 依次为 problem、agitate、solution；source 都为 builtin，退出码为 0
+  REMOVED: {}

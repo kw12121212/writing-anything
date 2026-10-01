@@ -98,7 +98,20 @@ type Resolved struct {
 	Rubric      []RubricItem     `json:"rubric"`
 	// ContextBudget 是上下文预算（Context Budget）的最终取值与来源；没有配置层声明时为 DefaultContextBudget，来源为 default。
 	ContextBudget Value `json:"contextBudget"`
+	// HTMLTheme 是 HTML 导出的样式主题（HTML Theme）：元素名 → CSS 声明与来源；没有规范包覆盖的元素来自内置默认主题，来源为 default。
+	HTMLTheme map[string]Value `json:"htmlTheme"`
+	// AIDisclosure 是 AI 参与说明的放置位置（项目配置的 ai_disclosure，默认 both）与模板（规范包的 ai_disclosure_template，默认为内置模板）。
+	AIDisclosure Disclosure `json:"aiDisclosure"`
 }
+
+// Disclosure 是 AI 参与说明（AI-generated Content Label）的合并结果。
+type Disclosure struct {
+	Placement Value `json:"placement"`
+	Template  Value `json:"template"`
+}
+
+// DefaultDisclosurePlacement 是项目配置没有 ai_disclosure 时的放置位置。
+const DefaultDisclosurePlacement = "both"
 
 // DefaultContextBudget 是没有任何配置层声明 context_budget 时的上下文预算（字符数）。
 const DefaultContextBudget = 12000
@@ -122,6 +135,7 @@ type projectFile struct {
 	Rules        map[string]catalog.Rule `json:"rules"`
 	Waivers      []catalog.Waiver        `json:"waivers"`
 	Budget       int                     `json:"context_budget"`
+	Disclosure   string                  `json:"ai_disclosure"`
 }
 
 // Resolve 读取 root 下的工作区配置并合并。存在 error 级问题时返回 nil。
@@ -205,7 +219,11 @@ func merge(root string, doc *yaml.Node, genre string) (*Resolved, []workspace.Pr
 	}
 	r := &Resolved{Packs: []Ref{}, UnitTypes: []UnitType{}, Stages: []Stage{}, Rules: map[string]*Rule{},
 		Glossary: []Term{}, BannedTerms: []BannedTerm{}, Style: []Style{}, Rubric: []RubricItem{},
-		ContextBudget: Value{DefaultContextBudget, SourceDefault}}
+		ContextBudget: Value{DefaultContextBudget, SourceDefault}, HTMLTheme: map[string]Value{},
+		AIDisclosure: Disclosure{Placement: Value{DefaultDisclosurePlacement, SourceDefault}, Template: Value{catalog.DefaultDisclosureTemplate, SourceDefault}}}
+	for _, k := range catalog.HTMLThemeKeys {
+		r.HTMLTheme[k] = Value{catalog.DefaultHTMLTheme[k], SourceDefault}
+	}
 	budget := func(v int, source string) {
 		if v > 0 {
 			r.ContextBudget = Value{v, source}
@@ -284,6 +302,12 @@ func merge(root string, doc *yaml.Node, genre string) (*Resolved, []workspace.Pr
 		}
 		addRubric(p.Rubric, source)
 		budget(p.ContextBudget, source)
+		for k, v := range p.HTMLTheme {
+			r.HTMLTheme[k] = Value{v, source}
+		}
+		if p.DisclosureTemplate != "" {
+			r.AIDisclosure.Template = Value{p.DisclosureTemplate, source}
+		}
 		layers = append(layers, layer{source: source, path: p.Path, origin: catalog.ProblemOrigin(p), rules: p.Rules, waivers: p.Waivers})
 	}
 
@@ -292,6 +316,9 @@ func merge(root string, doc *yaml.Node, genre string) (*Resolved, []workspace.Pr
 		problems = append(problems, q)
 	}
 	budget(cfg.Budget, SourceProject)
+	if cfg.Disclosure != "" {
+		r.AIDisclosure.Placement = Value{cfg.Disclosure, SourceProject}
+	}
 	layers = append(layers, layer{source: SourceProject, path: workspace.ConfigPath, rules: cfg.Rules, waivers: cfg.Waivers})
 
 	for _, l := range layers {

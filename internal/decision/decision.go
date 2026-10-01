@@ -258,17 +258,9 @@ func Add(root string, in Input, resolve func(ref string) []workspace.Problem) (*
 		}}}}
 	}
 	id := in.ID
-	seen := map[string]bool{}
-	for _, d := range existing {
-		seen[d.ID] = true
-	}
 	if id == "" {
-		for n := len(existing) + 1; ; n++ {
-			if id = fmt.Sprintf("dec-%d", n); !seen[id] {
-				break
-			}
-		}
-	} else if seen[id] {
+		id = NextID(existing)
+	} else if slices.ContainsFunc(existing, func(d Decision) bool { return d.ID == id }) {
 		return nil, []workspace.Problem{errorAt(catalog.CodeDuplicateID, "id", "决策队列中已有决策 "+id)}
 	}
 	seq, ok := value(doc.Content[0], "decisions")
@@ -305,6 +297,19 @@ func Add(root string, in Input, resolve func(ref string) []workspace.Problem) (*
 		return nil, ps
 	}
 	return &saved[index], nil
+}
+
+// NextID 返回 decision add 省略 --id 时新决策的 id：dec-<n>，n 从已有决策数加一开始递增到不重复。
+func NextID(existing []Decision) string {
+	seen := map[string]bool{}
+	for _, d := range existing {
+		seen[d.ID] = true
+	}
+	for n := len(existing) + 1; ; n++ {
+		if id := fmt.Sprintf("dec-%d", n); !seen[id] {
+			return id
+		}
+	}
 }
 
 func optionIDs(n int) []string {
@@ -377,6 +382,66 @@ func Decide(root, id, option, answer, confirmation string, now time.Time) (*Deci
 		return nil, ps
 	}
 	return &saved[index], nil
+}
+
+// Replace 替换尚未决定的决策 id 的选项、推荐与理由（recommend 与 rationale 为空时删除），id、问题、关联单元与其他字段不变；
+// 用于提问的内容在决定前改变的情况（如营销要素的标题候选改过）。决策不存在时报告 decision.not-found，已决定时报告
+// decision.already-decided，目标节点经由锚点、别名或合并键得到时报告 decision.anchored-value；出错时不修改文件。
+func Replace(root, id string, options []string, recommend, rationale string) (*Decision, []workspace.Problem) {
+	if len(options) > MaxOptions {
+		return nil, []workspace.Problem{errorAt(schema.CodeSchemaViolation, "options", fmt.Sprintf("最多允许 %d 个选项，实际为 %d 个", MaxOptions, len(options)))}
+	}
+	doc, ds, ps := load(root)
+	if len(ps) > 0 {
+		return nil, ps
+	}
+	index := slices.IndexFunc(ds, func(d Decision) bool { return d.ID == id })
+	switch {
+	case index < 0:
+		return nil, []workspace.Problem{errorAt(CodeNotFound, "", "决策队列中没有决策 "+id)}
+	case ds[index].Status == StatusDecided:
+		return nil, []workspace.Problem{errorAt(CodeAlreadyDecided, fmt.Sprintf("decisions[%d].status", index), "决策 "+id+" 已经决定，不能再修改选项")}
+	case recommend != "" && !slices.Contains(optionIDs(len(options)), recommend):
+		d := Decision{ID: id}
+		for i := range options {
+			d.Options = append(d.Options, Option{ID: optionID(i)})
+		}
+		return nil, []workspace.Problem{errorAt(CodeUnknownOption, "recommendation", unknownOption(d, recommend))}
+	}
+	seq, ok := value(doc.Content[0], "decisions")
+	if !ok || seq == nil || index >= len(seq.Content) {
+		return nil, []workspace.Problem{anchored("decisions")}
+	}
+	item := seq.Content[index]
+	field := fmt.Sprintf("decisions[%d]", index)
+	opts := &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq"}
+	for i, text := range options {
+		opts.Content = append(opts.Content, &yaml.Node{Kind: yaml.MappingNode, Style: yaml.FlowStyle, Content: []*yaml.Node{str("id"), str(optionID(i)), str("text"), str(text)}})
+	}
+	order := []string{"id", "question", "options", "recommendation", "rationale", "blocking", "units", "status"}
+	for _, kv := range []struct {
+		key string
+		v   *yaml.Node
+	}{{"options", opts}, {"recommendation", optionalStr(recommend)}, {"rationale", optionalStr(rationale)}} {
+		if _, ok := value(item, kv.key); !ok {
+			return nil, []workspace.Problem{anchored(field + "." + kv.key)}
+		}
+		if f, ok := workspace.SetKey(item, order, kv.key, kv.v); !ok {
+			return nil, []workspace.Problem{anchored(field + "." + f)}
+		}
+	}
+	saved, ps := save(root, doc, index)
+	if len(ps) > 0 {
+		return nil, ps
+	}
+	return &saved[index], nil
+}
+
+func optionalStr(v string) *yaml.Node {
+	if v == "" {
+		return nil
+	}
+	return str(v)
 }
 
 // Blocking 返回关联单元引用 ref 的未决定阻塞决策；决策队列存在但无法加载时 invalid 为 true。

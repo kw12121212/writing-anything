@@ -1,0 +1,55 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: wechat-marketing-genre
+sections:
+  Implementation:
+    catalog:
+      text: internal/catalog/builtin：wechat-marketing 文体，aida 与 pas 写作法；内置产物校验测试覆盖它们
+      status: complete
+    schema:
+      text: internal/schema：marketing.schema.json 与产物类型登记（单元目录下的 marketing.yaml）
+      status: complete
+    decision-next-id:
+      text: internal/decision：导出 NextID（与 decision add 相同的 id 规则），Add 改用它
+      status: complete
+    marketing-package:
+      text: internal/marketing：Load、校验（标题 id 唯一）、Set（结构化修改与写前复查）、Questions、标题决策状态推导、Check 关卡、Ask 的预检查与写入
+      status: complete
+    work-gate:
+      text: internal/work：Work.Blockers 在必需产物含 marketing 时加入营销要素阻塞项
+      status: complete
+    cli-commands:
+      text: internal/cli：marketing set、marketing show、marketing ask（注册表、样例调用、诊断 next）；next 与 advance 的阻塞项命令与说明；validate 整体与按路径校验 marketing.yaml
+      status: complete
+    docs:
+      text: docs/GLOSSARY.md 新增营销要素（Marketing Elements）与文章摘要（Digest）；wa-draft 技能说明营销要素、marketing ask 与作者选定标题
+      status: complete
+  Testing:
+    lint:
+      text: gofmt 检查本变更的 Go 文件
+      status: complete
+      command: test -z "$(gofmt -l internal/marketing internal/decision internal/work internal/schema internal/catalog internal/cli/marketing.go internal/cli/marketing_test.go internal/cli/units.go internal/cli/workspace.go internal/cli/e2e_test.go internal/cli/cli_test.go internal/cli/registry.go)"
+    unit-tests:
+      text: 单元测试：marketing 包（校验、修改、问题、标题状态、关卡、ask 预检查）；catalog 内置文体与写作法；CLI：marketing set/show/ask 场景、关卡与 next、validate、ad-compliance 在 wechat-marketing 中生效；端到端：一篇公众号文章从写作简报到验收与导出
+      status: complete
+      command: go test ./internal/...
+    full-regression:
+      text: 运行完整回归命令，覆盖率不低于 80%
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    spec-alignment:
+      text: 对照 marketing、genres-and-packs、methods 与 units-and-lifecycle delta spec 的每个场景确认实现与测试覆盖，并按实际实现修正
+      status: complete
+    strict-ready:
+      text: 运行 strict-spec-cli ready 与 strict-spec-cli verify，确认变更产物有效
+      status: complete
+      command: strict-spec-cli ready wechat-marketing-genre && strict-spec-cli verify wechat-marketing-genre
+    archive-readiness:
+      text: 确认 delta spec 能合并（marketing 为新主规格，MODIFIED 的需求存在），归档后路线图中的 wechat-marketing-genre 标记为完成
+      status: complete
+testing_gates:
+  validation_task: full-regression
+  unit_test_task: unit-tests

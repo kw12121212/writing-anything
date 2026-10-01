@@ -14,7 +14,7 @@ milestones:
   wechat-marketing-and-mcp:
     title: 营销/公众号（Marketing & WeChat）
     path: roadmap/milestones/wechat-marketing-and-mcp.yaml
-    status: proposed
+    status: complete
   mcp-integration:
     title: MCP 集成（MCP Integration）
     path: roadmap/milestones/mcp-integration.yaml

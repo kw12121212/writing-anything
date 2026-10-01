@@ -319,7 +319,7 @@ func TestRegistryConsistency(t *testing.T) {
 }
 
 // mutatingSamples 列出只能通过变更产物才能成功的命令；它们的样例在临时工作区中变更产物。
-var mutatingSamples = map[string]bool{"new": true, "unit add": true, "advance": true, "source add": true, "claim add": true, "claim remove": true, "review record": true, "accept": true, "export": true, "skills install": true, "feedback add": true, "decision add": true, "decide": true, "outline remove": true}
+var mutatingSamples = map[string]bool{"new": true, "unit add": true, "advance": true, "source add": true, "claim add": true, "claim remove": true, "review record": true, "accept": true, "export": true, "preview": true, "marketing ask": true, "skills install": true, "feedback add": true, "decision add": true, "decide": true, "outline remove": true}
 
 // sampleArgs 返回命令的一次成功调用：除 mutatingSamples 中的命令外都不变更任何产物；工作区命令在已初始化的
 // 临时工作区中运行。
@@ -369,6 +369,22 @@ func sampleArgs(t *testing.T, name string) []string {
 		run(t, "feedback", "add", "my-post", "--text", "x", "--dir", dir)
 		run(t, "feedback", "resolve", "my-post", "fb-1", "--dir", dir)
 		return []string{"feedback", "resolve", "my-post", "fb-1", "--dir", dir, "--json"}
+	case "marketing set":
+		// 取值未变时不变更产物。
+		dir := newWork(t)
+		writeFile(t, filepath.Join(dir, ".writing-anything", "works", "my-post", "marketing.yaml"), "schema_version: 1\ndigest: 一篇短文\n")
+		return []string{"marketing", "set", "my-post", "--digest", "一篇短文", "--dir", dir, "--json"}
+	case "marketing show":
+		dir := newWork(t)
+		run(t, "marketing", "set", "my-post", "--digest", "一篇短文", "--dir", dir)
+		return []string{"marketing", "show", "my-post", "--dir", dir, "--json"}
+	case "marketing ask":
+		dir := newWork(t)
+		run(t, "marketing", "set", "my-post", "--headline", "h1", "--headline-text", "甲", "--dir", dir)
+		run(t, "marketing", "set", "my-post", "--headline", "h2", "--headline-text", "乙", "--dir", dir)
+		return []string{"marketing", "ask", "my-post", "--dir", dir, "--json"}
+	case "preview":
+		return []string{"preview", "my-post", "--dir", newWork(t), "--json"}
 	case "feedback watch":
 		dir := newWork(t)
 		run(t, "feedback", "add", "my-post", "--text", "x", "--dir", dir)

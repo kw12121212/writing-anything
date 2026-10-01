@@ -1,12 +1,14 @@
 package schema
 
 import (
+	"encoding/json"
 	"fmt"
 	"math/big"
 	"os"
 	"path"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -334,6 +336,8 @@ func TestKindForSourcesAndUnitArtifacts(t *testing.T) {
 		".writing-anything/works/my-post/units/intro/brief.yaml":      "brief",
 		".writing-anything/works/my-post/outline.yaml":                "outline",
 		".writing-anything/works/my-post/units/intro/outline.yaml":    "outline",
+		".writing-anything/works/my-post/marketing.yaml":              "marketing",
+		".writing-anything/works/my-post/units/intro/marketing.yaml":  "marketing",
 	} {
 		if k := KindFor(rel); k == nil || k.Name != want {
 			t.Errorf("KindFor(%q) = %+v, want %s", rel, k, want)
@@ -364,5 +368,42 @@ func TestPatternsMatchOneKind(t *testing.T) {
 				t.Errorf("%s matches %d patterns, KindFor = %v, want only %s", rel, n, KindFor(rel), k.Name)
 			}
 		}
+	}
+}
+
+// 工作区产物的字段名不能与可执行内容检查保留的字段名相同，否则合法的产物会被报告为 artifact.executable-content
+// （workspace-artifacts/artifact-field-names）。
+func TestFieldNamesAvoidExecutableKeys(t *testing.T) {
+	files, _ := filepath.Glob(filepath.Join("schemas", "*.schema.json"))
+	for _, f := range files {
+		data, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var doc any
+		if err := json.Unmarshal(data, &doc); err != nil {
+			t.Fatalf("%s: %v", f, err)
+		}
+		var walk func(v any, path string)
+		walk = func(v any, path string) {
+			switch n := v.(type) {
+			case map[string]any:
+				if props, ok := n["properties"].(map[string]any); ok {
+					for name := range props {
+						if slices.ContainsFunc(ExecutableKeys, func(k string) bool { return strings.EqualFold(k, name) }) {
+							t.Errorf("%s: field %s%s is a reserved executable key", f, path, name)
+						}
+					}
+				}
+				for k, c := range n {
+					walk(c, path+k+".")
+				}
+			case []any:
+				for _, c := range n {
+					walk(c, path)
+				}
+			}
+		}
+		walk(doc, "")
 	}
 }

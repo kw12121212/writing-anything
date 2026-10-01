@@ -328,9 +328,6 @@ func runDraftWrite(inv *invocation) int {
 	})
 }
 
-// originNames 是出处取值的人读名称。
-var originNames = map[string]string{draft.OriginHuman: "作者", draft.OriginAgent: "Agent", draft.OriginEdited: "Agent 起草、作者修改"}
-
 func runProvenance(inv *invocation) int {
 	dir := projectDir(inv)
 	res := &provenanceResult{}
@@ -359,7 +356,7 @@ func runProvenance(inv *invocation) int {
 		var b strings.Builder
 		fmt.Fprintf(&b, "单元（Unit）%s 的正文 %s：%d 个段落，%d 个字符\n", v.Unit, v.Path, v.TotalParagraphs, v.TotalChars)
 		for _, s := range v.Summary {
-			fmt.Fprintf(&b, "  %s（%s）：%d 段，%d 字符，占 %.2f%%\n", originNames[s.Origin], s.Origin, s.Paragraphs, s.Chars, s.Ratio*100)
+			fmt.Fprintf(&b, "  %s（%s）：%d 段，%d 字符，占 %.2f%%\n", draft.OriginNames[s.Origin], s.Origin, s.Paragraphs, s.Chars, s.Ratio*100)
 		}
 		for _, p := range v.Paragraphs {
 			fmt.Fprintf(&b, "  第 %d 段（第 %d 行）：%s\n", p.Index, p.Line, p.Origin)
