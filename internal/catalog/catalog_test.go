@@ -55,13 +55,28 @@ func TestBuiltinsAreValid(t *testing.T) {
 			t.Errorf("pack %s: ok = %v, pack = %+v, problems = %+v", id, ok, p, ps)
 		}
 	}
+	if len(BuiltinMethods()) != 7 {
+		t.Errorf("builtin methods = %v", BuiltinMethods())
+	}
+	for _, id := range BuiltinMethods() {
+		m, ps, ok := LoadMethod(id)
+		if !ok || m == nil || len(ps) > 0 || m.Kind != MethodArticle || len(m.Parts()) == 0 {
+			t.Errorf("method %s: ok = %v, method = %+v, problems = %+v", id, ok, m, ps)
+		}
+	}
+	if _, _, ok := LoadMethod("nope"); ok {
+		t.Error("unknown method loaded")
+	}
 	g, _, _ := LoadGenre("minimal")
 	if s := g.Stages[0]; s.ID != "brief" || !slices.Equal(s.RequiredArtifacts, []string{"brief"}) {
 		t.Errorf("minimal stages[0] = %+v", s)
 	}
-	// 省略的 children 记为空数组而不是 nil，输出中不出现 null。
-	if u := g.UnitTypes[1]; u.ID != "section" || u.Children == nil {
+	// 省略的 children 与 brief_required 记为空数组而不是 nil，输出中不出现 null。
+	if u := g.UnitTypes[1]; u.ID != "section" || u.Children == nil || u.BriefRequired == nil || len(u.BriefRequired) != 0 {
 		t.Errorf("minimal unit_types[1] = %#v", u)
+	}
+	if u := g.UnitTypes[0]; !slices.Equal(u.BriefRequired, []string{"audience", "purpose"}) {
+		t.Errorf("minimal article brief_required = %v", u.BriefRequired)
 	}
 }
 
@@ -125,9 +140,11 @@ func TestCheckGenre(t *testing.T) {
 		Stages:    []Stage{{ID: "s"}, {ID: "s"}},
 		Rubric:    []RubricItem{{ID: "r"}, {ID: "r"}},
 		Rules:     map[string]Rule{"z": {Type: "nope"}},
+		// 默认写作法必须是内置写作法。
+		DefaultMethod: "nope",
 	}
 	ps := checkGenre(g)
-	want := []string{"artifact.duplicate-id", "genre.unknown-unit-type", "artifact.duplicate-id", "artifact.duplicate-id", "rule.unknown-type"}
+	want := []string{"artifact.duplicate-id", "genre.unknown-unit-type", "artifact.duplicate-id", "artifact.duplicate-id", "genre.unknown-method", "rule.unknown-type"}
 	if !slices.Equal(codes(ps), want) {
 		t.Fatalf("codes = %v, want %v", codes(ps), want)
 	}
@@ -157,5 +174,55 @@ func TestCheckWorkspacePacks(t *testing.T) {
 	}
 	if checked, ps := CheckWorkspacePacks(t.TempDir()); checked != nil || ps != nil {
 		t.Fatalf("without packs/: checked = %v, problems = %+v", checked, ps)
+	}
+}
+
+// 规范包中的写作法：id 重复、部分 id 重复与节拍位置范围（method-validation）；结构类与规划类写作法的 Parts。
+func TestPackMethods(t *testing.T) {
+	p := &Pack{ID: "house", Origin: OriginWorkspace, Path: ".writing-anything/packs/house.yaml", Methods: []Method{
+		{ID: "m", Kind: MethodStructure, Beats: []MethodPart{{ID: "a", Position: &Position{Min: 0.8, Max: 0.2}}, {ID: "a"}}, Rubric: []RubricItem{{ID: "r"}, {ID: "r"}}},
+		{ID: "m", Kind: MethodPlanning, Steps: []MethodPart{{ID: "s"}}},
+	}}
+	got := codes(checkPack(p))
+	want := []string{"artifact.duplicate-id", "artifact.duplicate-id", "method.invalid-position", "artifact.duplicate-id"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("codes = %v, want %v", got, want)
+	}
+	if len(p.Methods[0].Parts()) != 2 || p.Methods[1].Parts() != nil {
+		t.Fatalf("parts: %v %v", p.Methods[0].Parts(), p.Methods[1].Parts())
+	}
+}
+
+// MethodSet.Pick：写作简报的取值优先，空时用文体默认，none 不用写作法，不存在时返回其 id；规范包中保留 id none 的写作法不列出。
+func TestMethodSetPick(t *testing.T) {
+	root := t.TempDir()
+	pack := "schema_version: 1\nid: house\ntitle: 团队\nmethods:\n  - {id: none, title: 保留, kind: planning, steps: [{id: a, title: 甲}]}\n  - {id: mine, title: 自有, kind: planning, steps: [{id: a, title: 甲}]}\n"
+	for rel, content := range map[string]string{".writing-anything/config.yaml": "schema_version: 1\nlanguage: zh-CN\npacks: [house]\ngate_level: standard\n", ".writing-anything/packs/house.yaml": pack} {
+		p := filepath.Join(root, filepath.FromSlash(rel))
+		os.MkdirAll(filepath.Dir(p), 0o755)
+		os.WriteFile(p, []byte(content), 0o644)
+	}
+	set := LoadMethods(root)
+	if slices.Contains(set.IDs(), "none") || !slices.Contains(set.IDs(), "mine") || !slices.Contains(set.IDs(), "pyramid-scqa") {
+		t.Fatalf("ids = %v", set.IDs())
+	}
+	for _, tc := range []struct{ raw, def, want, missing string }{
+		{"mine", "pyramid-scqa", "mine", ""},
+		{"", "pyramid-scqa", "pyramid-scqa", ""},
+		{"none", "pyramid-scqa", "", ""},
+		{"", "", "", ""},
+		{"gone", "", "", "gone"},
+	} {
+		m, missing := set.Pick(tc.raw, tc.def)
+		got := ""
+		if m != nil {
+			got = m.ID
+		}
+		if got != tc.want || missing != tc.missing {
+			t.Errorf("Pick(%q, %q) = %q, %q", tc.raw, tc.def, got, missing)
+		}
+	}
+	if _, ok := set.Find("nope"); ok {
+		t.Error("found unknown method")
 	}
 }

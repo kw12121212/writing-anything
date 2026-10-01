@@ -1,0 +1,92 @@
+schema: strict-spec-driven/main-spec/v1
+schema_version: 1
+artifact_type: main_spec
+schema_file: templates/strict-spec-driven/schemas/main-spec.yaml
+spec:
+  id: context
+  title: 上下文包（Context Pack）
+requirements:
+  context-command:
+    strength: MUST
+    statement: wa-cli context <unit> 必须只读地输出该单元的上下文包（Context Pack），不创建或修改任何文件，changedPaths 为空数组。--json 输出的 context 字段含 unit（单元引用）、type、stage、genre、budget（value 与 source）、used、brief、outline、section、feedback、decisions、norms、sources、neighbors 与 trimmed；内容见 context-content，裁剪见 context-trim。不加 --json 时以 Markdown 输出同样的内容：先是单元信息头（单元、类型、阶段、文体与上下文预算），然后按优先级顺序输出保留的各内容项，最后列出被裁剪的内容。单元不存在时按 units-and-lifecycle 主规格的 unit-reference 处理；所用的写作简报、大纲、反馈文件或决策队列不通过校验，或合并配置有 error 级问题时报告其诊断，context 为 null，退出码为 1；否则退出码为 0，并以 severity 为 warning 的诊断报告不妨碍组装的问题（见 context-content）。
+    scenarios:
+      context-json:
+        - GIVEN: 作品 my-post 的 brief.yaml 与 outline.yaml 合法
+        - WHEN: 运行 wa-cli context my-post --dir D --json
+        - THEN: 'valid 为 true，context.unit 为 my-post，context.budget 为 {value: 12000, source: genre:minimal}，changedPaths 为空数组，工作区内文件不变，退出码为 0'
+      context-markdown:
+        - GIVEN: 同上
+        - WHEN: 运行 wa-cli context my-post --dir D
+        - THEN: 标准输出是以「# 上下文包（Context Pack）」开头的 Markdown，含「## 写作简报（Brief）」一节，退出码为 0
+      context-invalid-brief:
+        - GIVEN: 作品 my-post 的 brief.yaml 不通过校验
+        - WHEN: 运行 wa-cli context my-post --dir D --json
+        - THEN: diagnostics 中有该 brief.yaml 的诊断，context 为 null，退出码为 1
+  context-content:
+    strength: MUST
+    statement: '上下文包必须只含当前单元写作所需的内容：brief 为单元自己的写作简报，单元目录下没有 brief.yaml 时依次取父单元与更上层祖先单元的，含 unit（写作简报所在的单元）、audience、purpose、length、avoid 与 keyMessages（id 与 text），都没有时为 null；outline 为单元自己的大纲（sections，每节含 id、title、covers 与 reason），没有 outline.yaml 时为 null；section 为父单元 outline.yaml 中 id 等于本单元 id 的大纲节，含 id、title、reason、uses 与 keyMessages（该节 covers 的核心观点的 id 与 text，取自父单元可用的写作简报），根单元或没有该节时为 null；feedback 为本单元未处理完（open 或 accepted）的作者反馈（字段同 wa-cli feedback list）；decisions 为 units 含本单元引用的 open 决策，每项含 id、question、options 与 blocking；norms 为按作品文体合并的生效规范要点：rules（未被豁免的规则的 id、type、severity 与 params 取值）、glossary、bannedTerms 与 style；sources 为引用素材的原文，每项含 id、type、title、text 与 truncated：有 section 时为该节 uses 与其覆盖的核心观点在父单元写作简报中的 sources（即使本单元有自己的写作简报），否则为写作简报的 sources、全部核心观点的 sources 与本单元大纲各节的 uses，去重后按首次出现的顺序，只含内容为 UTF-8 文本、且与登记时的 SHA-256 一致的素材：存档文件缺失、途经符号链接、不是普通文件或不是 UTF-8 文本的素材以 context.source-skipped 报告，原文被改写的素材以 source.modified 报告，两者都是 warning 且不放入 sources；neighbors 为子单元在父单元 units 中的前一个与后一个兄弟单元，每项含 unit、position（previous 或 next）、title（父单元大纲中同 id 节的标题，没有时为 null）与 excerpt（其 draft.md 去掉 HTML 注释（包括作者批注）后第一个不是 Markdown 标题（1 至 6 个 # 后接空白）的段落，换行换成空格，取前 200 个字符；没有 draft.md 或 draft.md 途经符号链接时为 null），根单元为空数组。大纲中 covers、uses 的悬空引用（见 workspace-artifacts 标准的 cross-artifact-references）不妨碍组装，以 severity 为 warning 的诊断报告。'
+    scenarios:
+      inherit-brief:
+        - GIVEN: 作品 my-post 的根单元有写作简报，子单元 why 没有 brief.yaml，父单元 outline.yaml 有覆盖 km-1、使用 src-a 的节 why
+        - WHEN: 运行 wa-cli context my-post/why --dir D --json
+        - THEN: context.brief.unit 为 my-post，context.section.id 为 why，section.keyMessages 含 km-1，sources 只含 src-a 且 text 为其原文，退出码为 0
+      root-sources:
+        - GIVEN: 作品 my-post 的写作简报 sources 为 [src-b]，核心观点 km-1 的 sources 为 [src-a]
+        - WHEN: 运行 wa-cli context my-post --dir D --json
+        - THEN: context.section 为 null，sources 依次为 src-b 与 src-a，neighbors 为空数组
+      feedback-and-decisions:
+        - GIVEN: 作品 my-post 有 open 的反馈 fb-1 与 resolved 的反馈 fb-2，决策队列有关联 my-post 的 open 决策 dec-1 与已决定的 dec-2
+        - WHEN: 运行 wa-cli context my-post --dir D --json
+        - THEN: context.feedback 只含 fb-1，context.decisions 只含 dec-1
+      neighbors:
+        - GIVEN: 作品 my-post 的子单元依次为 intro、why、how，how 有 draft.md，父单元大纲中 how 的标题为「怎么做」
+        - WHEN: 运行 wa-cli context my-post/why --dir D --json
+        - THEN: neighbors 依次为 unit 为 my-post/intro、position 为 previous 与 unit 为 my-post/how、position 为 next、title 为「怎么做」、excerpt 为其 draft.md 第一段开头的两项
+      norms:
+        - GIVEN: 工作区启用内置 default 规范包，config.yaml 豁免了一条规则
+        - WHEN: 运行 wa-cli context my-post --dir D --json
+        - THEN: context.norms.rules 不含被豁免的规则，含其他生效规则的 type 与 severity
+      section-sources-own-brief:
+        - GIVEN: 作品 my-post 的根单元核心观点 km-1 的 sources 为 [src-a]，父单元大纲的节 why 覆盖 km-1，子单元 why 有自己的 brief.yaml
+        - WHEN: 运行 wa-cli context my-post/why --dir D --json
+        - THEN: context.brief.unit 为 my-post/why，sources 含 src-a，退出码为 0
+      modified-source:
+        - GIVEN: 素材 src-a 的存档原文在登记后被改写
+        - WHEN: 运行 wa-cli context my-post/why --dir D --json
+        - THEN: valid 为 true，diagnostics 中有一条错误码为 source.modified、severity 为 warning 的诊断，sources 不含 src-a，退出码为 0
+  context-trim:
+    strength: MUST
+    statement: 上下文包必须把内容控制在上下文预算（Context Budget，见 context-budget）之内：每个内容项按其 Markdown 文本的字符数（Unicode 码点）计入预算，按以下优先级从高到低依次放入：写作简报、本单元大纲、本节大纲条目、每条作者反馈、每个决策、规范要点的规则、术语表、禁用词、文风、每份素材原文、每个相邻节；单元信息头与裁剪报告不计入预算。放入某项会超出预算时：素材原文在剩余预算大于其标题行所占字符数加 1 时截断到剩余字符数（truncated 为 true，截断后的内容仍以换行结尾），否则与其他项一样整项裁剪，继续尝试之后的项。used 为保留的内容项字符数之和，不超过预算；trimmed 为被裁剪或截断的项，按优先级顺序，每项含 part（brief、outline、section、feedback、decision、rules、glossary、bannedTerms、style、source 或 neighbor）、id（反馈、决策、素材与相邻节的 id 或单元引用，其他为 null）、chars（原字符数）与 keptChars（保留的字符数，整项裁剪时为 0）；被整项裁剪的内容不出现在 context 的对应字段中（对应字段为 null 或不含该项）。
+    scenarios:
+      within-budget:
+        - GIVEN: 上下文预算为 12000，全部内容不超过预算
+        - WHEN: 运行 wa-cli context my-post --dir D --json
+        - THEN: trimmed 为空数组，used 等于各内容项字符数之和，退出码为 0
+      truncate-source:
+        - GIVEN: config.yaml 的 context_budget 为 300，素材 src-a 的原文有 5000 字
+        - WHEN: 运行 wa-cli context my-post --dir D --json
+        - THEN: used 不超过 300；sources 中 src-a 的 truncated 为 true；trimmed 含 part 为 source、id 为 src-a、chars 大于 keptChars 的一项，退出码为 0
+      drop-low-priority:
+        - GIVEN: 上下文预算很小，只放得下写作简报
+        - WHEN: 运行 wa-cli context my-post/why --dir D --json
+        - THEN: context.brief 非 null；被裁剪的反馈、规范要点与相邻节出现在 trimmed 中且 keptChars 为 0，退出码为 0
+  context-budget:
+    strength: MUST
+    statement: 上下文预算（Context Budget）为不超过 100000000 的正整数字符数，由配置项 context_budget 给出：文体（Genre）、规范包（Pack）与项目配置 config.yaml 都可以声明，按 文体默认值 → 规范包（按 config.yaml 中 packs 的顺序）→ 项目配置 合并，后者覆盖前者；都没有声明时为 12000，来源为 default。wa-cli config resolved 必须输出 contextBudget（value 与 source，source 为 genre:<id>、pack:<id>、project 或 default）。wa-cli context 使用单元所在作品的文体作为文体层，而不是 default_genre。context_budget 不是这一范围内的整数时，文体、规范包与 config.yaml 的校验报告 artifact.schema-violation（field 为 context_budget）。内置 minimal 文体声明 context_budget 为 12000。
+    scenarios:
+      resolved-budget:
+        - GIVEN: default_genre 为 minimal 的工作区 D
+        - WHEN: 运行 wa-cli config resolved --dir D --json
+        - THEN: 'resolved.contextBudget 为 {value: 12000, source: genre:minimal}'
+      project-overrides:
+        - GIVEN: 同上，已运行 wa-cli config set context_budget 5000 --dir D
+        - WHEN: 运行 wa-cli config resolved --dir D --json
+        - THEN: 'resolved.contextBudget 为 {value: 5000, source: project}'
+      default-budget:
+        - GIVEN: 未设置 default_genre、没有任何配置层声明 context_budget 的工作区 D
+        - WHEN: 运行 wa-cli config resolved --dir D --json
+        - THEN: 'resolved.contextBudget 为 {value: 12000, source: default}'
+      work-genre:
+        - GIVEN: config.yaml 未设置 default_genre，作品 my-post 的文体为 minimal
+        - WHEN: 运行 wa-cli context my-post --dir D --json
+        - THEN: context.budget.source 为 genre:minimal

@@ -1,0 +1,36 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: rule-engine-and-lint
+  status: proposed
+summary:
+  what:
+    - 新增只读命令 wa-cli lint <unit>：对单元的 draft.md 执行按作品文体合并的生效规则（Rule），输出发现项（Finding），每项含规则 id、规则类型、severity、规则来源（定义该规则的配置层：genre:<id>、pack:<id> 或 project）、正文位置（行、列，全文级发现项为 null）、命中的原文、说明与建议；有 severity 为 error 的发现项时以退出码 1 退出，诊断给出改写正文与复查的命令。
+    - 规则引擎（Rule Engine）实现七种内置规则类型，参数由 YAML 给出并在执行前校验：cjk-typography（中文排版：中英文或数字之间的空格、中文后的半角标点）、ai-cliche（AI 腔（AI Cliché）词表与破折号密度）、banned-terms（禁用词，含规范包的 banned_terms）、term-consistency（术语一致：术语表中 avoid 的写法）、length-range（字数范围）、paragraph-length（段落长度）、required-sections（必需章节）。检查跳过代码块、行内代码、HTML 注释与链接地址，不发起网络请求。
+    - '单处豁免（Waiver）：正文注释 <!-- lint-ignore <rule-id>: 理由 --> 豁免所在段落（注释单独成段时为下一段）中该规则的发现项，必须写明理由；被豁免的发现项列在 waived 中。规则级的关闭沿用已有的 waivers。'
+    - 内置 default 规范包：ai-cliche 的 severity 改为 error，新增 banned-terms（error）与 term-consistency（warning）规则，使规范包的禁用词与术语表默认生效。
+    - 单处豁免须由作者写入：注释所在段落的出处（Provenance）为 agent 时不生效并给出 lint.agent-waiver；写入记录无法推导出处时所有豁免都不生效。正文超过 2 MiB 时报告 lint.too-large，单条规则命中超过 1000 处时截断并给出 lint.truncated。
+  why:
+    - 里程碑 tech-blog-workflow 的完成标准要求命中禁用词或 AI 腔词表时对应命令以非零退出并给出可执行修复命令；目前规则只能被声明与合并，没有任何命令执行它们。
+    - Agent 写出的正文常见 AI 腔、中英文混排不规范与术语不一致，需要确定性的文本检查（Lint）在审稿前发现，作者也需要能对个别位置写明理由后豁免。
+scope:
+  in:
+    - internal/cli：新增 lint 命令（注册表、sampleArgs、JSON 与人读输出）；error 级发现项的汇总诊断与下一步命令
+    - internal/catalog/builtin/packs/default.yaml：ai-cliche 改为 error，新增 banned-terms 与 term-consistency 规则
+    - 新增 lint 主规格；docs/GLOSSARY.md 新增屏蔽区域（Masked Region）与破折号密度
+    - internal/lint：正文模型（行、散文段落、代码与注释屏蔽，一遍线性算出）、七种规则类型的参数校验与检查（多词匹配用 Aho-Corasick 自动机）、单处豁免解析、发现项排序与截断；读取 draft.md、合并结果与段落出处（provenance.yaml 的推导结果）
+  out:
+    - validate 与 config resolved 校验规则参数：本变更只在 lint 执行规则前校验并报告 rule.invalid-params
+    - 自动修复正文；lint 只给出建议，改写由 Agent 通过 wa-cli draft write 完成
+    - 论断出处检查（claim-source-check）、审稿与评分标准（review-and-acceptance）、写作法要求的章节（writing-method-templates）
+    - 英文拼写与语法检查；ai-cliche 只按词表匹配
+unchanged_behavior:
+  - 输出信封字段与退出码约定不变；已发布错误码的含义不变；lint 只读，不创建或修改任何文件
+  - 规则的声明、合并与规则级豁免（config resolved）的行为不变，只有内置 default 规范包的规则内容变化
+  - '作者批注 <!-- @me: ... --> 的解析不变；lint-ignore 注释不是作者反馈'
+  - 仓库根目录不创建 .writing-anything/；产品二进制不依赖 internal/tools/** 与 strict-spec-driven；wa-cli 不联网、不调用 LLM
+roadmap:
+  milestone: tech-blog-workflow
+  planned_change: rule-engine-and-lint

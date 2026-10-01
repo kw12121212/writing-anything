@@ -1,0 +1,5 @@
+schema_version: 1
+language: zh-CN
+packs: []
+gate_level: standard
+context_budget: 100000001

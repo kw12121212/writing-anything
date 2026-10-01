@@ -1,0 +1,49 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: outline-coverage
+sections:
+  Implementation:
+    schema:
+      text: internal/schema：新增 outline.schema.json 与产物类型 outline；testdata 补充合法与不合法的大纲夹具
+      status: complete
+    outline-package:
+      text: internal/outline：Load/校验（Schema、节 id 唯一、covers 引用写作简报中的核心观点、uses 引用已登记素材、符号链接按 brief 的方式处理）、Set（按节新增或修改、--after/--before 移动、保留注释、锚点拒绝、写前复查、取值未变不写）、Remove、Coverage 与 Gaps；错误码 outline.*
+      status: complete
+    gate:
+      text: internal/work：Blockers 在当前阶段要求 outline 时加入大纲阻塞项（outline.invalid、outline.uncovered-message、outline.missing-reason），位于写作简报阻塞项之后、决策阻塞项之前
+      status: complete
+    cli-commands:
+      text: internal/cli：新增 outline set、outline remove、outline show（注册表、sampleArgs、人读输出）；validate 整体与单个产物校验 outline.yaml 并报告覆盖缺口；advance、next 与 status 为大纲阻塞项给出下一步命令
+      status: complete
+    docs:
+      text: docs/GLOSSARY.md 新增大纲节（Outline Section）与覆盖缺口（Coverage Gap）
+      status: complete
+  Testing:
+    lint:
+      text: gofmt 检查本变更的 Go 文件
+      status: complete
+      command: test -z "$(gofmt -l internal/outline internal/work internal/schema internal/brief internal/workspace/edit.go internal/workspace/edit_test.go internal/cli/outline.go internal/cli/outline_test.go internal/cli/units.go internal/cli/workspace.go)"
+    unit-tests:
+      text: 单元测试：outline 包的加载、校验、Set（新增、修改、移动、清空、锚点、取值未变）、Remove、覆盖与缺口；work 的大纲阻塞项（测试文体含 outline 阶段）；cli 的 outline set/remove/show、validate 报告缺口与 next、符号链接；断言使用规格中的字面量
+      status: complete
+      command: go test ./internal/...
+    full-regression:
+      text: 运行完整回归命令，覆盖率不低于 80%
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    spec-alignment:
+      text: 对照 outline、units-and-lifecycle 与 workspace delta spec 的每个场景确认实现与测试覆盖，并按实际实现修正 delta spec
+      status: complete
+    strict-ready:
+      text: 运行 strict-spec-cli ready 与 strict-spec-cli verify，确认变更产物有效
+      status: complete
+      command: strict-spec-cli ready outline-coverage && strict-spec-cli verify outline-coverage
+    archive-readiness:
+      text: 确认 delta spec 能合并进主规格（新建 outline 主规格），归档后路线图中的 outline-coverage 标记为完成
+      status: complete
+testing_gates:
+  validation_task: full-regression
+  unit_test_task: unit-tests

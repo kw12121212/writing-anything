@@ -106,6 +106,13 @@ func TestConfigResolvedLayers(t *testing.T) {
 	if children, ok := get(r["unitTypes"].([]any)[1], "children").([]any); !ok || len(children) != 0 {
 		t.Errorf("section children = %v, want []", get(r["unitTypes"].([]any)[1], "children"))
 	}
+	// resolved-brief-required：article 声明 [audience, purpose]，section 为空数组。
+	if req, ok := get(r["unitTypes"].([]any)[0], "briefRequired").([]any); !ok || len(req) != 2 || req[0] != "audience" || req[1] != "purpose" {
+		t.Errorf("article briefRequired = %v", get(r["unitTypes"].([]any)[0], "briefRequired"))
+	}
+	if req, ok := get(r["unitTypes"].([]any)[1], "briefRequired").([]any); !ok || len(req) != 0 {
+		t.Errorf("section briefRequired = %v, want []", get(r["unitTypes"].([]any)[1], "briefRequired"))
+	}
 	writePack(t, dir, "house", housePack)
 	mustRunWS(t, dir, "config", "set", "packs", "house")
 	_, res = runWS(t, dir, "config", "resolved")

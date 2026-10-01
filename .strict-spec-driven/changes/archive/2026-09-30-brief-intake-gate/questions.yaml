@@ -1,0 +1,42 @@
+schema: strict-spec-driven/question-list/v1
+schema_version: 1
+artifact_type: question_list
+schema_file: templates/strict-spec-driven/schemas/question-list.yaml
+change: brief-intake-gate
+open: []
+resolved:
+  - id: requirement-problem
+    question: What is concretely going wrong today, and for whom?
+    context: 'Why this is asked: the change is planned against a need, and the need lives only with the requester. A "problem" here means what someone does or suffers today — not a feature that is missing. If the answer names a button, a field, a page, or an endpoint, it is a solution, and the underlying problem is still unstated. What a sufficient answer contains: who is affected, what they do today instead, and how often. Worked example: "every Monday one person spends forty minutes copying order rows into a spreadsheet to send the weekly report". What it changes: this becomes the proposal''s why, and it decides whether the change is worth making.'
+    answer: 据里程碑 tech-blog-workflow 与规划变更 brief-intake-gate：目前 brief 阶段只检查 brief.yaml 或 brief.md 是否存在，Agent 可以不向作者提问就写一个空简报并推进，受众、目的与核心观点都可能出自 Agent 自己的理解；受影响的是需要 Agent 按自己意图写作的作者。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-outcome
+    question: What observable difference proves the problem is solved?
+    context: 'Why this is asked: without a success condition, nobody can tell afterwards whether the change worked. "Observable" means someone outside the system can check it without reading the code. What a sufficient answer contains: what a person will see, or no longer have to do, once this is done. Worked example: "the report is in the manager''s inbox on Monday morning without anyone assembling it". What it changes: this becomes the delta spec''s scenarios and the acceptance evidence at review time.'
+    answer: 据规划变更 details：wa-cli brief set 用命名参数写入受众、写作目的、带 id 的核心观点、字数范围、禁区与关联素材；写作简报缺少文体声明的必填项时 advance 被阻塞，诊断列出需要向作者提问的问题；每个核心观点都标注作者原话的素材 id 或作者的确认记录。具体场景写在 brief 等 delta spec 中。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-trigger
+    question: Why now — what forced this?
+    context: 'Why this is asked: work that nothing forced is the work most often thrown away later. This question catches a request that sounds reasonable but has no real driver behind it. What a sufficient answer contains: the concrete event, deadline, incident, or cost that made this surface now, or an honest statement that nothing did. Worked example: "the report was missed last month and it was raised with the team". What it changes: a change with no trigger is a candidate for deferral, and the answer is weighed at review before archive.'
+    answer: 据路线图：依赖的 unit-tree-and-lifecycle 与 author-sources-and-provenance 已归档，outline-coverage 与 writing-method-templates 依赖本变更；roadmap-recommend 推荐它为下一项。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-non-goals
+    question: What must explicitly not change?
+    context: 'Why this is asked: the requester knows which nearby behavior other people depend on, and the agent does not. A "non-goal" is something the change must leave alone even though it sits close to the work. What a sufficient answer contains: the behavior, setting, or output that must survive untouched, and who relies on it. Worked example: "do not change the saved filters — several people rely on their own". What it changes: these become the proposal''s unchanged_behavior items, which review checks the finished result against.'
+    answer: 据里程碑 scope 与规划变更：写作法模板、大纲覆盖追踪与 tech-blog 文体由其他规划变更处理；wa-cli 不调用 LLM；输出信封与退出码约定不变。已写入 proposal 的 out 与 unchanged。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-interpretation
+    question: Which reading of the request is intended, where more than one is possible?
+    context: 'Why this is asked: a short request usually admits several readings, and building the wrong one is indistinguishable from building nothing. What a sufficient answer contains: the reading that is meant, stated plainly enough to rule the others out — or a statement that only one reading exists and what it is. Worked example: "export means the version sent to the manager, not the one I read myself". What it changes: this fixes the scope boundary before any code is written, and settles disputes about what was asked for.'
+    answer: 据规划变更 details：brief set 写入 details 列出的六类字段；必填项由文体声明；关卡阻塞 advance 并在诊断中给出问题；观点出处为素材 id 或确认记录。按单元类型声明必填项、复用决策队列的确认记录、一次一个观点的参数形式、minimal 的必填项等取舍写在 design 的决策中。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap

@@ -1,0 +1,52 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: brief-intake-gate
+sections:
+  Implementation:
+    schemas:
+      text: internal/schema：新增 brief.schema.json 与产物类型 brief；genre.schema.json 的 unit_types 新增 brief_required（字段枚举、不重复）；testdata 补充合法与不合法的写作简报夹具
+      status: complete
+    catalog:
+      text: internal/catalog：UnitType 新增 BriefRequired（输出为 briefRequired，省略时为空数组）；minimal 文体的 article 声明 brief_required [audience, purpose]
+      status: complete
+    brief-package:
+      text: internal/brief：Load/Check（Schema、观点 id 唯一、素材已登记、决策存在、length 的 min 不大于 max）、Set（按字段修改、观点新增/合并/删除、写前复查、保留注释、按需创建单元目录）、Gaps（必填项缺失、观点无出处或未确认）与内置提问文字；错误码 brief.*
+      status: complete
+    gate:
+      text: internal/work：Blockers 在要求 brief 的阶段加入写作简报阻塞项（brief.invalid、brief.missing-field、brief.unsourced-message、brief.unconfirmed-message），位于缺失产物之后、决策阻塞项之前
+      status: complete
+    cli-commands:
+      text: internal/cli：新增 brief set 与 brief show（注册表、sampleArgs、mutatingSamples、人读输出）；advance 与 next 为写作简报阻塞项给出下一步命令；validate 整体与 validate <path> 校验 brief.yaml
+      status: complete
+    fixtures-and-docs:
+      text: '把现有测试中 ''k: v'' 的 brief.yaml 夹具改为合法且齐备的写作简报；docs/GLOSSARY.md 新增写作目的、禁区、简报必填项'
+      status: complete
+  Testing:
+    lint:
+      text: gofmt 检查新增与修改的 Go 文件
+      status: complete
+      command: test -z "$(gofmt -l internal/brief internal/work internal/catalog internal/schema internal/cli/brief.go internal/cli/brief_test.go internal/cli/units.go internal/cli/workspace.go)"
+    unit-tests:
+      text: 单元测试：brief 包的加载、校验、修改（新增字段、删除字段、观点新增/合并/删除、注释保留、锚点拒绝）、Gaps 与提问文字；work 的写作简报阻塞项；cli 的 brief set/show、advance 与 next 的阻塞与下一步命令、validate 的 brief 校验、config resolved 的 briefRequired；断言使用规格中的字面量
+      status: complete
+      command: go test ./internal/...
+    full-regression:
+      text: 运行完整回归命令，覆盖率不低于 80%
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    spec-alignment:
+      text: 对照 brief、units-and-lifecycle 与 decisions delta spec 的每个场景确认实现与测试覆盖，并按实际实现修正 delta spec
+      status: complete
+    strict-ready:
+      text: 运行 strict-spec-cli ready 与 strict-spec-cli verify，确认变更产物有效
+      status: complete
+      command: strict-spec-cli ready brief-intake-gate && strict-spec-cli verify brief-intake-gate
+    archive-readiness:
+      text: 确认 delta spec 能合并进主规格（新建 brief 主规格），归档后路线图中的 brief-intake-gate 标记为完成
+      status: complete
+testing_gates:
+  validation_task: full-regression
+  unit_test_task: unit-tests

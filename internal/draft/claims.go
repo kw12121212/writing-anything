@@ -2,6 +2,8 @@ package draft
 
 import (
 	"fmt"
+	"reflect"
+	"slices"
 	"strings"
 
 	"github.com/kw12121212/writing-anything/internal/catalog"
@@ -61,6 +63,49 @@ func loadClaims(root, rel string) (*yaml.Node, *claimsFile, []workspace.Problem)
 	var f claimsFile
 	catalog.Decode(doc, &f)
 	return doc, &f, nil
+}
+
+// LoadClaims 读取并校验单元 u 的 claims.yaml（Schema、论断 id 唯一、引用的素材已登记）；不存在时返回 nil 与 nil。
+func LoadClaims(root string, w *work.Work, u *work.Unit) ([]Claim, []workspace.Problem) {
+	rel := w.UnitDir(u) + "/" + ClaimsName
+	_, f, ps := loadClaims(root, rel)
+	if f == nil {
+		return nil, ps
+	}
+	if ps := checkClaims(root, rel, *f); len(ps) > 0 {
+		return nil, ps
+	}
+	return f.Claims, nil
+}
+
+// ListClaims 读取单元 u 的 claims.yaml 并返回全部论断：Schema 或 id 唯一性不通过时返回 nil 与其问题；引用未登记素材的
+// 论断照常返回，其问题降为 warning（workspace-artifacts/cross-artifact-references）。不存在时返回 nil 与 nil。
+func ListClaims(root string, w *work.Work, u *work.Unit) ([]Claim, []workspace.Problem) {
+	rel := w.UnitDir(u) + "/" + ClaimsName
+	_, f, ps := loadClaims(root, rel)
+	if f == nil {
+		return nil, ps
+	}
+	errs, warns := danglingAsWarnings(checkClaims(root, rel, *f))
+	if len(errs) > 0 {
+		return nil, errs
+	}
+	return f.Claims, warns
+}
+
+// danglingAsWarnings 把已有论断引用未登记素材的问题（claim.unknown-source，字段以 claims 开头）降为 warning，
+// 其余问题原样作为 error 返回。修改或列出论断时，一个论断的悬空引用不应阻止处理其他论断。
+func danglingAsWarnings(ps []workspace.Problem) (errs, warns []workspace.Problem) {
+	for _, p := range ps {
+		if p.Code == CodeUnknownSource && strings.HasPrefix(p.Field, "claims[") {
+			p.Severity = workspace.SeverityWarning
+			p.Message += "；请用 wa-cli claim set 把该论断改为关联已登记的素材"
+			warns = append(warns, p)
+			continue
+		}
+		errs = append(errs, p)
+	}
+	return errs, warns
 }
 
 // AddClaim 在单元 u 的 claims.yaml 末尾追加论断。id 为空时取 claim-<n>，n 从已有论断数加一开始递增到不重复；
@@ -209,4 +254,145 @@ func CheckArtifact(root, rel string) []workspace.Problem {
 		return ps
 	}
 	return checkClaims(root, rel, *f)
+}
+
+// CodeClaimNotFound 表示单元中没有给定 id 的论断。已发布的错误码不得改名或复用。
+const CodeClaimNotFound = "claim.not-found"
+
+// claimOrder 是论断中字段的固定顺序。
+var claimOrder = []string{"id", "kind", "text", "sources"}
+
+// editClaims 读取单元 u 的 claims.yaml，找到论断 id 并交给 edit 修改，写前复查后写出；修改后的取值与原有取值相同时
+// 不写文件，changed 为空。edit 返回的问题原样返回。参数引起的问题（写前复查中新出现的）不填路径，字段为参数名。
+// 修改后仍引用未登记素材的论断以 warning 报告，不阻止写入（workspace-artifacts/cross-artifact-references）；
+// 成功时返回的问题只含这些 warning。
+func editClaims(root string, w *work.Work, u *work.Unit, id string, edit func(claims *yaml.Node, at int, rel string) *workspace.Problem) (*claimsFile, int, []string, []workspace.Problem) {
+	rel := w.UnitDir(u) + "/" + ClaimsName
+	doc, _, ps := loadClaims(root, rel)
+	if len(ps) > 0 {
+		return nil, 0, nil, ps
+	}
+	notFound := []workspace.Problem{errorAt(CodeClaimNotFound, "", "", "单元 "+u.Ref+" 中没有论断（Claim）"+id)}
+	if doc == nil {
+		return nil, 0, nil, notFound
+	}
+	claims := claimsNode(doc)
+	if claims == nil {
+		return nil, 0, nil, []workspace.Problem{errorAt(CodeAnchoredValue, rel, "claims", "claims 经由 YAML 锚点、别名或合并键得到，wa-cli 无法只修改一项；请先去掉锚点、别名与合并键")}
+	}
+	at := workspace.IndexByID(claims, id)
+	if at < 0 {
+		return nil, 0, nil, notFound
+	}
+	before := schema.Decode(doc)
+	if p := edit(claims, at, rel); p != nil {
+		return nil, 0, nil, []workspace.Problem{*p}
+	}
+	data, err := workspace.Encode(doc)
+	if err != nil {
+		return nil, 0, nil, []workspace.Problem{errorAt(workspace.CodeWriteFailed, rel, "", "生成论断失败："+err.Error())}
+	}
+	written, p := schema.Parse(data)
+	if p != nil {
+		p.Line = 0
+		return nil, 0, nil, workspace.FromSchema(rel, []schema.Problem{*p})
+	}
+	if ps := schema.Named("claims").ValidateNode(written); len(ps) > 0 {
+		out := workspace.FromSchema(rel, ps)
+		prefix := fmt.Sprintf("claims[%d].", at)
+		for i := range out {
+			out[i].Path, out[i].Line, out[i].Field = "", 0, strings.TrimPrefix(out[i].Field, prefix)
+		}
+		return nil, 0, nil, out
+	}
+	var saved claimsFile
+	catalog.Decode(written, &saved)
+	errs, warns := danglingAsWarnings(checkClaims(root, rel, saved))
+	if len(errs) > 0 {
+		return nil, 0, nil, errs
+	}
+	if reflect.DeepEqual(before, schema.Decode(written)) {
+		return &saved, at, nil, warns
+	}
+	if err := workspace.WriteFile(root, rel, data); err != nil {
+		return nil, 0, nil, []workspace.Problem{errorAt(workspace.CodeWriteFailed, rel, "", "写入论断失败："+err.Error())}
+	}
+	return &saved, at, []string{rel}, warns
+}
+
+// SetClaim 修改单元 u 中论断 id 的 kind、text 与 sources（nil 表示不修改；sources 整体替换），保留其他内容与注释。
+// sources 中的素材必须已登记。返回修改后的论断与变更的路径（取值未变时为空）；出错时不修改文件。
+func SetClaim(root string, w *work.Work, u *work.Unit, id string, kind, text *string, sources *[]string) (*Claim, []string, []workspace.Problem) {
+	if sources != nil {
+		for i, s := range *sources {
+			if !source.Registered(root, s) {
+				return nil, nil, []workspace.Problem{errorAt(CodeUnknownSource, "", fmt.Sprintf("sources[%d]", i), unknownSource(s))}
+			}
+		}
+	}
+	f, at, changed, ps := editClaims(root, w, u, id, func(claims *yaml.Node, at int, rel string) *workspace.Problem {
+		item := claims.Content[at]
+		field := fmt.Sprintf("claims[%d]", at)
+		if !plain(item) || workspace.HasMerge(item) {
+			return &workspace.Problem{Code: CodeAnchoredValue, Severity: workspace.SeverityError, Path: rel, Field: field,
+				Message: "该论断经由 YAML 锚点、别名或合并键得到，wa-cli 无法只修改它；请先去掉锚点、别名与合并键"}
+		}
+		for _, kv := range []struct {
+			key string
+			n   *yaml.Node
+		}{{"kind", strNode(kind)}, {"text", strNode(text)}, {"sources", seqNode(sources)}} {
+			if kv.n == nil {
+				continue
+			}
+			if f, ok := workspace.SetKey(item, claimOrder, kv.key, kv.n); !ok {
+				return &workspace.Problem{Code: CodeAnchoredValue, Severity: workspace.SeverityError, Path: rel, Field: field + "." + f,
+					Message: "该处经由 YAML 锚点、别名或合并键得到，wa-cli 无法只修改这一处；请先去掉锚点、别名与合并键"}
+			}
+		}
+		return nil
+	})
+	if f == nil {
+		return nil, nil, ps
+	}
+	c := f.Claims[at]
+	if c.Sources == nil {
+		c.Sources = []string{}
+	}
+	return &c, changed, ps
+}
+
+// RemoveClaim 删除单元 u 中的论断 id，保留其他内容与注释。返回是否已删除、变更的路径与问题（成功时只含其他论断悬空
+// 引用的 warning）；出错时不修改文件。
+func RemoveClaim(root string, w *work.Work, u *work.Unit, id string) (bool, []string, []workspace.Problem) {
+	f, _, changed, ps := editClaims(root, w, u, id, func(claims *yaml.Node, at int, rel string) *workspace.Problem {
+		if workspace.HasAnchor(claims.Content[at]) {
+			return &workspace.Problem{Code: CodeAnchoredValue, Severity: workspace.SeverityError, Path: rel, Field: fmt.Sprintf("claims[%d]", at),
+				Message: "该论断中有 YAML 锚点、别名或合并键，删除会改变其他取值；请先去掉锚点、别名与合并键"}
+		}
+		claims.Content = slices.Delete(claims.Content, at, at+1)
+		return nil
+	})
+	if f == nil {
+		return false, nil, ps
+	}
+	return true, changed, ps
+}
+
+func strNode(v *string) *yaml.Node {
+	if v == nil {
+		return nil
+	}
+	return str(*v)
+}
+
+// seqNode 返回 sources 的流式序列节点；空数组也写出为 []（sources 是必需字段）。
+func seqNode(v *[]string) *yaml.Node {
+	if v == nil {
+		return nil
+	}
+	n := &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq", Style: yaml.FlowStyle}
+	for _, s := range *v {
+		n.Content = append(n.Content, str(s))
+	}
+	return n
 }

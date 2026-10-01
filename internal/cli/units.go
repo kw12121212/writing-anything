@@ -3,9 +3,14 @@ package cli
 import (
 	"fmt"
 	"io"
+	"slices"
 	"strings"
 
+	"github.com/kw12121212/writing-anything/internal/brief"
 	"github.com/kw12121212/writing-anything/internal/catalog"
+	"github.com/kw12121212/writing-anything/internal/decision"
+	"github.com/kw12121212/writing-anything/internal/outline"
+	"github.com/kw12121212/writing-anything/internal/review"
 	"github.com/kw12121212/writing-anything/internal/schema"
 	"github.com/kw12121212/writing-anything/internal/work"
 	"github.com/kw12121212/writing-anything/internal/workspace"
@@ -285,23 +290,62 @@ func step(dir string, w *work.Work, u *work.Unit) stepView {
 // progress 返回单元的阻塞项与可以直接运行的下一步命令，next 与 status 共用；数组永不为 nil。
 func progress(dir string, w *work.Work, u *work.Unit) ([]blockerView, []string) {
 	blockers, commands := []blockerView{}, []string{}
-	byDecision := false
 	for _, b := range w.Blockers(dir, u) {
 		v := blockerView{Code: b.Code, Artifact: b.Artifact, Path: b.Path, Message: b.Message}
 		if b.Decision != "" {
 			v.Decision = &b.Decision
 		}
-		byDecision = byDecision || strings.HasPrefix(b.Code, "decision.")
 		blockers = append(blockers, v)
+		// 被缺失产物阻塞时只能列出为该产物登记的生成命令（见 artifactNext）。
+		cmds := blockerNext(dir, b.Code, b.Path)
+		if b.Code == work.CodeMissingArtifact {
+			cmds = artifactNext(dir, b.Artifact, b.Path)
+		}
+		for _, c := range cmds {
+			if !slices.Contains(commands, c) {
+				commands = append(commands, c)
+			}
+		}
 	}
-	// 被缺失产物阻塞时只能列出为该产物登记的生成命令；目前还没有产物登记生成命令。被决策阻塞时给出查看决策队列的命令。
-	switch {
-	case u.Stage != catalog.StageDone && len(blockers) == 0:
+	if u.Stage != catalog.StageDone && len(blockers) == 0 {
 		commands = append(commands, shellCommand("wa-cli", "advance", u.Ref, "--dir", dir, "--json"))
-	case byDecision:
-		commands = append(commands, shellCommand("wa-cli", "decisions", "--dir", dir, "--json"))
 	}
 	return blockers, commands
+}
+
+// blockerNext 返回解除一个阻塞项的下一步命令（brief-gate、decision-blocking）；缺失产物没有登记的命令。advance 的诊断
+// （经 next）与 next、status 的 commands 都由它给出；path 为阻塞项的路径。
+func blockerNext(dir, code, path string) []string {
+	switch code {
+	case brief.CodeInvalid:
+		return []string{shellCommand("wa-cli", "validate", path, "--dir", dir, "--json")}
+	case brief.CodeMissingField, brief.CodeUnsourcedMessage:
+		ref := work.RefOf(path[:strings.LastIndex(path, "/")])
+		return []string{shellCommand("wa-cli", "brief", "show", ref, "--dir", dir, "--json"), "wa-cli help brief set --json"}
+	case outline.CodeInvalid:
+		return []string{shellCommand("wa-cli", "validate", path, "--dir", dir, "--json"), shellCommand("wa-cli", "validate", "--dir", dir, "--json")}
+	case outline.CodeUncoveredMessage, outline.CodeMissingReason, outline.CodeMissingPart, outline.CodeMethodOrder, outline.CodeUnknownRole:
+		ref := work.RefOf(path[:strings.LastIndex(path, "/")])
+		return []string{shellCommand("wa-cli", "outline", "show", ref, "--dir", dir, "--json"), "wa-cli help outline set --json"}
+	case brief.CodeUnconfirmedMessage, decision.CodeBlocking, decision.CodeInvalidQueue:
+		return []string{shellCommand("wa-cli", "decisions", "--dir", dir, "--json")}
+	case review.CodeAcceptanceStale, review.CodeAcceptanceInvalid, review.CodeAcceptanceWeakerGate:
+		// 验收记录在单元目录下；重新审稿与验收后，review show 与 advance 能复查它。
+		ref := work.RefOf(path[:strings.LastIndex(path, "/")])
+		return []string{shellCommand("wa-cli", "review", "show", ref, "--dir", dir, "--json"), "wa-cli help accept --json"}
+	}
+	return nil
+}
+
+// artifactNext 返回为必需产物登记的生成命令：审稿（review）与验收（acceptance）；其他产物还没有登记命令。
+func artifactNext(dir, artifact, unitDir string) []string {
+	switch artifact {
+	case "review":
+		return []string{"wa-cli help review record --json", shellCommand("wa-cli", "provenance", work.RefOf(unitDir), "--dir", dir, "--json")}
+	case "acceptance":
+		return []string{shellCommand("wa-cli", "review", "show", work.RefOf(unitDir), "--dir", dir, "--json"), "wa-cli help accept --json"}
+	}
+	return nil
 }
 
 // action 以人读文字说明单元的下一步。
@@ -310,7 +354,7 @@ func action(w *work.Work, u *work.Unit, blockers []blockerView) string {
 	case u.Stage == catalog.StageDone:
 		return "已走完全部阶段"
 	case len(blockers) > 0:
-		var missing, decisions []string
+		var missing, decisions, questions, gaps, accepts []string
 		broken := false
 		for _, b := range blockers {
 			switch {
@@ -318,6 +362,17 @@ func action(w *work.Work, u *work.Unit, blockers []blockerView) string {
 				decisions = append(decisions, *b.Decision)
 			case strings.HasPrefix(b.Code, "decision."):
 				broken = true
+			case b.Code == brief.CodeInvalid:
+				todo := "修复不通过校验的写作简报（Brief）" + b.Path
+				questions = append(questions, todo)
+			case strings.HasPrefix(b.Code, "brief."):
+				questions = append(questions, strings.TrimSuffix(b.Message, "。"))
+			case strings.HasPrefix(b.Code, "acceptance."):
+				accepts = append(accepts, strings.TrimSuffix(b.Message, "。"))
+			case b.Code == outline.CodeInvalid:
+				gaps = append(gaps, "修复不通过校验的大纲（Outline）或写作简报")
+			case strings.HasPrefix(b.Code, "outline."):
+				gaps = append(gaps, strings.TrimSuffix(b.Message, "。"))
 			default:
 				missing = append(missing, fmt.Sprintf("%s（在 %s/ 下写入 %s.yaml 或 %s.md）", b.Artifact, b.Path, b.Artifact, b.Artifact))
 			}
@@ -325,6 +380,15 @@ func action(w *work.Work, u *work.Unit, blockers []blockerView) string {
 		var todo []string
 		if len(missing) > 0 {
 			todo = append(todo, "产出必需产物（Required Artifact）"+strings.Join(missing, "、"))
+		}
+		if len(questions) > 0 {
+			todo = append(todo, "向作者确认写作简报（Brief）："+strings.Join(questions, "；"))
+		}
+		if len(gaps) > 0 {
+			todo = append(todo, "补齐大纲（Outline）的覆盖："+strings.Join(gaps, "；"))
+		}
+		if len(accepts) > 0 {
+			todo = append(todo, "重新审稿（Review）并用 wa-cli accept 验收（Acceptance）："+strings.Join(accepts, "；"))
 		}
 		if len(decisions) > 0 {
 			todo = append(todo, "请作者决定阻塞决策（Blocking）"+strings.Join(decisions, "、"))

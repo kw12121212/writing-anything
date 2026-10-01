@@ -16,7 +16,7 @@ requirements:
         - THEN: valid 为 true，resolved.genre.id 为 minimal，resolved.unitTypes 与 resolved.stages 非空且每项的 source 为 genre:minimal，退出码为 0
   config-resolved:
     strength: MUST
-    statement: wa-cli config resolved 必须按 文体默认 → 规范包（按 config.yaml 中 packs 的顺序）→ 项目配置 的顺序合并 --dir 下工作区生效的设置，只读取、不修改任何产物，changedPaths 为空数组。--json 输出的 resolved 字段包含 genre（生效文体的 id 与 origin；未设置 default_genre 时为 null）、packs（按应用顺序的规范包，每项含 id、origin（builtin 或 workspace），工作区规范包另含 path）、unitTypes、stages、rules、glossary、bannedTerms、style 与 rubric。每项设置都必须带 source 字段，取值为 genre:<id>、pack:<id> 或 project，指明最终值来自哪个配置层（Config Layer）；rules 以规则 id 为键，其中 type、severity 与 params 的每个顶层键都各自带 value 与 source，任何配置层都没有给出 severity 时为 warning，来源为定义该规则的配置层。glossary 与 bannedTerms 按 term、rubric 按 id 合并，后面的配置层整项替换前面的同名项并保留其位置；style 按配置层顺序追加。存在 error 级诊断时 resolved 为 null，退出码为 1。未加 --json 时以人读文本输出同样的信息。未找到工作区时按 workspace-not-found 处理。
+    statement: wa-cli config resolved 必须按 文体默认 → 规范包（按 config.yaml 中 packs 的顺序）→ 项目配置 的顺序合并 --dir 下工作区生效的设置，只读取、不修改任何产物，changedPaths 为空数组。--json 输出的 resolved 字段包含 genre（生效文体的 id 与 origin；未设置 default_genre 时为 null）、packs（按应用顺序的规范包，每项含 id、origin（builtin 或 workspace），工作区规范包另含 path）、unitTypes、stages、rules、glossary、bannedTerms、style、rubric 与 contextBudget（见 context 主规格的 context-budget）。每项设置都必须带 source 字段，取值为 genre:<id>、pack:<id> 或 project（没有任何配置层给出 contextBudget 时，其来源为 default），指明最终值来自哪个配置层（Config Layer）；rules 以规则 id 为键，其中 type、severity 与 params 的每个顶层键都各自带 value 与 source，任何配置层都没有给出 severity 时为 warning，来源为定义该规则的配置层。glossary 与 bannedTerms 按 term、rubric 按 id 合并，后面的配置层整项替换前面的同名项并保留其位置；style 按配置层顺序追加。存在 error 级诊断时 resolved 为 null，退出码为 1。未加 --json 时以人读文本输出同样的信息。未找到工作区时按 workspace-not-found 处理。
     scenarios:
       later-pack-wins:
         - GIVEN: packs 为 [a, b]，a 与 b 都在 glossary 中定义词条「规范包」但写法不同
@@ -84,7 +84,7 @@ requirements:
         - THEN: diagnostics 中有一条错误码为 artifact.executable-content、field 指向该 script 字段的诊断，valid 为 false，退出码为 1
   known-rule-types:
     strength: MUST
-    statement: 规则的 type 必须是已知规则类型（Rule Type）之一：cjk-typography、ai-cliche、banned-terms、term-consistency、length-range、paragraph-length、required-sections。出现其他 type 时，wa-cli validate 与 wa-cli config resolved 必须报告错误码 rule.unknown-type（field 为该规则的 type，message 列出已知类型），以退出码 1 退出。
+    statement: 规则的 type 必须是已知规则类型（Rule Type）之一：cjk-typography、ai-cliche、banned-terms、term-consistency、length-range、paragraph-length、required-sections、claim-sources、claim-candidates、code-block-language、link-format、reference-sources。出现其他 type 时，wa-cli validate 与 wa-cli config resolved 必须报告错误码 rule.unknown-type（field 为该规则的 type，message 列出已知类型），以退出码 1 退出。
     scenarios:
       unknown-rule-type:
         - GIVEN: house 规范包定义规则 r9，type 为 run-shell
@@ -126,3 +126,11 @@ requirements:
         - GIVEN: .writing-anything/packs/house.yaml 的 glossary 中「规范包」出现两次
         - WHEN: 运行 wa-cli validate --dir D --json
         - THEN: diagnostics 中有一条错误码为 artifact.duplicate-id、field 为 glossary[1].term 的诊断，退出码为 1
+  tech-blog-genre:
+    strength: MUST
+    statement: 'wa-cli 必须随二进制提供内置的 tech-blog 文体（技术博客（Tech Blog））：单元类型 article（子单元类型 section，简报必填项为 audience、purpose 与 key_messages）与 section；阶段依次为 brief（必需产物 brief）、outline（outline）、draft（draft）与 review（review 与 acceptance）；默认写作法为 pyramid-scqa；规则 claims（claim-sources，error）、claim-candidates（warning）、code-language（code-block-language，error）、links（link-format，error）、references（reference-sources，warning）与 length（length-range，warning，800 到 8000 字）；评分标准为 accuracy（技术准确，blocking: true）、reproducible（可复现）、audience-fit（受众匹配）与 doc-type（文档类型明确：属于 Diátaxis 的教程、操作指南、参考或解释之一）；上下文预算为 16000。它与其他内置文体一样通过文体的校验。'
+    scenarios:
+      new-tech-blog:
+        - GIVEN: 刚用 wa-cli init --dir D 初始化的工作区
+        - WHEN: 运行 wa-cli new tech-blog post --dir D --json，再运行 wa-cli config resolved --dir D --json（config.yaml 的 default_genre 为 tech-blog）
+        - THEN: work.yaml 的 genre 为 tech-blog、type 为 article、stage 为 brief；resolved.rules 含 code-language、links 与 references，resolved.rubric 含 accuracy 且 blocking 为 true，退出码都为 0

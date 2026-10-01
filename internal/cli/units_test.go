@@ -34,8 +34,15 @@ func artifact(t *testing.T, dir, work, unit, name string) {
 	if err := os.MkdirAll(d, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	writeFile(t, filepath.Join(d, name), "k: v\n")
+	content := "k: v\n"
+	if name == "brief.yaml" {
+		content = completeBrief
+	}
+	writeFile(t, filepath.Join(d, name), content)
 }
+
+// completeBrief 是 minimal 文体中填齐必填项（audience 与 purpose）的写作简报。
+const completeBrief = "schema_version: 1\naudience: 后端工程师\npurpose: 讲清楚为什么要做连接池\n"
 
 // unitResult 是单元命令 --json 输出中测试关心的部分。
 type unitResult struct {
@@ -69,7 +76,7 @@ func noNulls(t *testing.T, v any, path string) {
 	switch v := v.(type) {
 	case map[string]any:
 		for k, c := range v {
-			if c == nil && !slices.Contains([]string{"parent", "work", "unit", "config", "defaultGenre", "note", "quote", "line", "paragraph", "decision", "recommendation", "rationale", "choice", "answer", "confirmation", "decidedAt", "text", "recorded", "diff"}, k) {
+			if c == nil && !slices.Contains([]string{"parent", "work", "unit", "config", "defaultGenre", "note", "quote", "line", "paragraph", "decision", "recommendation", "rationale", "choice", "answer", "confirmation", "decidedAt", "text", "recorded", "diff", "brief", "audience", "purpose", "length", "outline", "reason", "keyMessage", "section", "contextBudget", "method", "role"}, k) {
 				t.Errorf("%s.%s is null", path, k)
 			}
 			noNulls(t, c, path+"."+k)
@@ -283,6 +290,8 @@ func TestAdvance(t *testing.T) {
 		t.Fatalf("markdown-artifact: exit code = %d, result = %+v", code, res)
 	}
 	artifact(t, dir, "my-post", "", "review.yaml")
+	// 验收记录的正文 SHA-256 与当前正文一致时才能推进（acceptance-stage）。
+	writeFile(t, filepath.Join(dir, ".writing-anything", "works", "my-post", "acceptance.yaml"), acceptanceFor(t, dir, "my-post"))
 	if code, res := runUnits(t, dir, "advance", "my-post"); code != 0 || res.Unit["stage"] != "done" {
 		t.Fatalf("advance-to-done: exit code = %d, result = %+v", code, res)
 	}
@@ -399,7 +408,7 @@ func TestNext(t *testing.T) {
 	if code != 0 || !strings.Contains(stdout, "other（阶段 brief）") || !strings.Contains(stdout, "阻塞项：") {
 		t.Fatalf("text: exit code = %d, stdout = %q", code, stdout)
 	}
-	artifact(t, dir, "other", "", "brief.md")
+	artifact(t, dir, "other", "", "brief.yaml")
 	if _, stdout, _ := run(t, "next", "other", "--dir", dir); !strings.Contains(stdout, "下一步：wa-cli advance other") {
 		t.Fatalf("text unblocked: stdout = %q", stdout)
 	}

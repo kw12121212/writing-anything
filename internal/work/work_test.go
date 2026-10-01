@@ -1,6 +1,7 @@
 package work
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/kw12121212/writing-anything/internal/catalog"
 	"github.com/kw12121212/writing-anything/internal/decision"
+	"github.com/kw12121212/writing-anything/internal/review"
 	"github.com/kw12121212/writing-anything/internal/schema"
 	"github.com/kw12121212/writing-anything/internal/workspace"
 )
@@ -47,33 +49,37 @@ func put(t *testing.T, root, rel, content string) {
 	}
 }
 
-// genres 在内置文体之外提供 testdata/genres/book.yaml 中的测试文体 book。
+// genres 在内置文体之外提供 testdata/genres/ 中的测试文体 book 与 essay。
 func genres(t *testing.T) genreLookup {
 	t.Helper()
-	doc, p := schema.Parse(read(t, filepath.Join("testdata", "genres", "book.yaml")))
-	if p != nil {
-		t.Fatal(p)
-	}
-	// 测试文体同样要通过文体的 Schema，夹具写错时及早失败。
-	if ps := schema.Named("genre").ValidateNode(doc); len(ps) > 0 {
-		t.Fatalf("testdata genre book: %+v", ps)
-	}
-	var f struct {
-		ID        string             `json:"id"`
-		UnitTypes []catalog.UnitType `json:"unit_types"`
-		Stages    []struct {
-			ID                string   `json:"id"`
-			RequiredArtifacts []string `json:"required_artifacts"`
-		} `json:"stages"`
-	}
-	catalog.Decode(doc, &f)
-	book := &catalog.Genre{ID: f.ID, UnitTypes: f.UnitTypes}
-	for _, s := range f.Stages {
-		book.Stages = append(book.Stages, catalog.Stage{ID: s.ID, RequiredArtifacts: s.RequiredArtifacts})
+	test := map[string]*catalog.Genre{}
+	for _, id := range []string{"book", "essay"} {
+		doc, p := schema.Parse(read(t, filepath.Join("testdata", "genres", id+".yaml")))
+		if p != nil {
+			t.Fatal(p)
+		}
+		// 测试文体同样要通过文体的 Schema，夹具写错时及早失败。
+		if ps := schema.Named("genre").ValidateNode(doc); len(ps) > 0 {
+			t.Fatalf("testdata genre %s: %+v", id, ps)
+		}
+		var f struct {
+			ID        string             `json:"id"`
+			UnitTypes []catalog.UnitType `json:"unit_types"`
+			Stages    []struct {
+				ID                string   `json:"id"`
+				RequiredArtifacts []string `json:"required_artifacts"`
+			} `json:"stages"`
+		}
+		catalog.Decode(doc, &f)
+		g := &catalog.Genre{ID: f.ID, UnitTypes: f.UnitTypes}
+		for _, s := range f.Stages {
+			g.Stages = append(g.Stages, catalog.Stage{ID: s.ID, RequiredArtifacts: s.RequiredArtifacts})
+		}
+		test[id] = g
 	}
 	return func(id string) (*catalog.Genre, []workspace.Problem, bool) {
-		if id == "book" {
-			return book, nil, true
+		if g, ok := test[id]; ok {
+			return g, nil, true
 		}
 		return catalog.LoadGenre(id)
 	}
@@ -262,7 +268,7 @@ func TestAdvance(t *testing.T) {
 		t.Fatal("work.yaml changed although advance was refused")
 	}
 	// 根单元的 brief.yaml 不满足子单元的必需产物。
-	put(t, root, ".writing-anything/works/my-post/brief.yaml", "k: v\n")
+	put(t, root, ".writing-anything/works/my-post/brief.yaml", completeBrief)
 	if _, _, _, ps := Advance(root, "my-post/intro"); !slices.Equal(codes(ps), []string{"lifecycle.missing-artifact"}) || ps[0].Path != ".writing-anything/works/my-post/units/intro" {
 		t.Fatalf("child without brief: %+v", ps)
 	}
@@ -276,6 +282,27 @@ func TestAdvance(t *testing.T) {
 	}
 	// body 在最后一个阶段 review，推进后为 done；再推进报告 lifecycle.already-done。
 	put(t, root, ".writing-anything/works/my-post/units/body/review.md", "ok\n")
+	// 手写的 acceptance.md 不算验收；验收记录的正文 SHA-256 与当前正文不同时报告 acceptance.stale。
+	put(t, root, ".writing-anything/works/my-post/units/body/acceptance.md", "ok\n")
+	if _, _, _, ps := Advance(root, "my-post/body"); !slices.Equal(codes(ps), []string{"acceptance.invalid"}) {
+		t.Fatalf("acceptance.md: %+v", ps)
+	}
+	put(t, root, ".writing-anything/works/my-post/units/body/draft.md", "正文\n")
+	accepted := "schema_version: 1\ngate_level: fast\ndraft_sha256: %s\nconfirmed_by_author: false\naccepted_at: \"2026-10-01T00:00:00Z\"\n"
+	put(t, root, ".writing-anything/works/my-post/units/body/acceptance.yaml", fmt.Sprintf(accepted, strings.Repeat("a", 64)))
+	if _, _, _, ps := Advance(root, "my-post/body"); !slices.Equal(codes(ps), []string{"acceptance.stale"}) {
+		t.Fatalf("stale acceptance: %+v", ps)
+	}
+	put(t, root, ".writing-anything/works/my-post/units/body/acceptance.yaml", "schema_version: 1\n")
+	if _, _, _, ps := Advance(root, "my-post/body"); !slices.Equal(codes(ps), []string{"acceptance.invalid"}) {
+		t.Fatalf("invalid acceptance: %+v", ps)
+	}
+	// 验收时的关卡强度（fast）比工作区当前的（standard）宽松时报告 acceptance.weaker-gate。
+	put(t, root, ".writing-anything/works/my-post/units/body/acceptance.yaml", fmt.Sprintf(accepted, review.SHA256([]byte("正文\n"))))
+	if _, _, _, ps := Advance(root, "my-post/body"); !slices.Equal(codes(ps), []string{"acceptance.weaker-gate"}) {
+		t.Fatalf("weaker gate: %+v", ps)
+	}
+	put(t, root, ".writing-anything/works/my-post/units/body/acceptance.yaml", strings.Replace(fmt.Sprintf(accepted, review.SHA256([]byte("正文\n"))), "fast", "standard", 1))
 	if _, u, _, ps := Advance(root, "my-post/body"); len(ps) > 0 || u.Stage != "done" {
 		t.Fatalf("to done: %+v %+v", u, ps)
 	}
@@ -303,7 +330,7 @@ func TestAnchoredEdits(t *testing.T) {
 			if dir != "" {
 				unitDir += "/units/" + dir
 			}
-			put(t, root, unitDir+"/brief.yaml", "k: v\n")
+			put(t, root, unitDir+"/brief.yaml", completeBrief)
 			var ps []workspace.Problem
 			if tc.op == "advance" {
 				_, _, _, ps = Advance(root, tc.ref)
@@ -388,7 +415,7 @@ func TestSymlinkedWorkDir(t *testing.T) {
 	root := project(t)
 	outside := t.TempDir()
 	put(t, outside, "work.yaml", "schema_version: 1\nid: evil\ngenre: minimal\ntype: article\nstage: brief\n")
-	put(t, outside, "brief.yaml", "k: v\n")
+	put(t, outside, "brief.yaml", completeBrief)
 	if err := os.Symlink(outside, abs(root, Dir("evil"))); err != nil {
 		t.Skip("symlinks unavailable:", err)
 	}
@@ -434,7 +461,7 @@ func TestDecisionBlockers(t *testing.T) {
 	if _, _, ps := Create(root, "minimal", "my-post"); len(ps) > 0 {
 		t.Fatal(ps)
 	}
-	put(t, root, Dir("my-post")+"/brief.yaml", "k: v\n")
+	put(t, root, Dir("my-post")+"/brief.yaml", completeBrief)
 	put(t, root, decision.Path, "schema_version: 1\ndecisions:\n"+
 		"  - {id: dec-1, question: 标题, options: [], blocking: true, units: [my-post], status: open}\n"+
 		"  - {id: dec-2, question: 字数, options: [], blocking: false, units: [my-post], status: open}\n")
@@ -466,3 +493,145 @@ func TestDecisionBlockers(t *testing.T) {
 		t.Fatalf("advance without queue = %v", ps)
 	}
 }
+
+// 当前阶段要求 brief 时，写作简报的问题是阻塞项，排在缺失产物之后、决策阻塞项之前（brief-gate）。
+func TestBriefBlockers(t *testing.T) {
+	root := project(t, "my-post")
+	w, u, _ := Resolve(root, "my-post")
+	if bs := w.Blockers(root, u); len(bs) != 1 || bs[0].Code != "lifecycle.missing-artifact" {
+		t.Fatalf("no brief: %+v", bs)
+	}
+	summary := func(bs []Blocker) []string {
+		var out []string
+		for _, b := range bs {
+			out = append(out, b.Code+" "+b.Artifact+" "+b.Path)
+		}
+		return out
+	}
+	briefPath := Dir("my-post") + "/brief.yaml"
+	put(t, root, briefPath, "schema_version: 1\naudience: 读者\nkey_messages:\n  - {id: km-1, text: 没有出处}\n  - {id: km-2, text: 待确认, decision: dec-1}\n")
+	put(t, root, decision.Path, "schema_version: 1\ndecisions:\n  - {id: dec-1, question: 观点, options: [], blocking: true, units: [my-post], status: open}\n")
+	w, u, _ = Resolve(root, "my-post")
+	want := []string{"brief.missing-field brief " + briefPath, "brief.unsourced-message brief " + briefPath, "brief.unconfirmed-message brief " + briefPath, "decision.blocking decisions .writing-anything/decisions.yaml"}
+	bs := w.Blockers(root, u)
+	if got := summary(bs); !slices.Equal(got, want) {
+		t.Fatalf("blockers = %v, want %v", got, want)
+	}
+	if !strings.Contains(bs[0].Message, "purpose") || bs[0].Decision != "" || bs[2].Decision != "" {
+		t.Fatalf("blockers = %+v", bs)
+	}
+	if _, _, _, ps := Advance(root, "my-post"); len(ps) != 4 || ps[0].Code != "brief.missing-field" || ps[0].Path != briefPath {
+		t.Fatalf("advance = %+v", ps)
+	}
+
+	put(t, root, briefPath, "k: v\n")
+	w, u, _ = Resolve(root, "my-post")
+	if bs := w.Blockers(root, u); bs[0].Code != "brief.invalid" || bs[0].Path != briefPath || !strings.Contains(bs[0].Message, "未定义的字段 k") {
+		t.Fatalf("invalid brief: %+v", bs)
+	}
+
+	os.Remove(abs(root, briefPath))
+	os.Remove(abs(root, decision.Path))
+	put(t, root, Dir("my-post")+"/brief.md", "自由文本的简报\n")
+	w, u, _ = Resolve(root, "my-post")
+	if got := summary(w.Blockers(root, u)); !slices.Equal(got, []string{"brief.missing-field brief " + Dir("my-post") + "/brief.md", "brief.missing-field brief " + Dir("my-post") + "/brief.md"}) {
+		t.Fatalf("brief.md = %v", got)
+	}
+
+	// section 没有必填项：合法的写作简报即可推进；不要求 brief 的阶段不检查写作简报。
+	put(t, root, Dir("my-post")+"/units/intro/brief.yaml", "schema_version: 1\n")
+	if _, u, _, ps := Advance(root, "my-post/intro"); len(ps) != 0 || u.Stage != "draft" {
+		t.Fatalf("advance intro = %+v", ps)
+	}
+	put(t, root, Path("my-post"), strings.Replace(string(read(t, abs(root, Path("my-post")))), "stage: brief", "stage: draft", 1))
+	put(t, root, Dir("my-post")+"/draft.md", "正文\n")
+	if _, u, _, ps := Advance(root, "my-post"); len(ps) != 0 || u.Stage != "review" {
+		t.Fatalf("advance from draft = %+v", ps)
+	}
+}
+
+// 当前阶段要求 outline 时，覆盖缺口是阻塞项，排在写作简报阻塞项之后、决策阻塞项之前（outline-gate）。
+func TestOutlineBlockers(t *testing.T) {
+	root := project(t)
+	put(t, root, Path("post"), "schema_version: 1\nid: post\ngenre: essay\ntype: essay\nstage: outline\nunits: []\n")
+	g := genres(t)
+	blockers := func() []Blocker {
+		t.Helper()
+		w, ps := load(root, "post", g)
+		if w == nil {
+			t.Fatal(ps)
+		}
+		return w.Blockers(root, w.Root)
+	}
+	summary := func(bs []Blocker) []string {
+		var out []string
+		for _, b := range bs {
+			out = append(out, b.Code+" "+b.Artifact+" "+b.Path)
+		}
+		return out
+	}
+	dir := Dir("post")
+	if got := summary(blockers()); !slices.Equal(got, []string{"lifecycle.missing-artifact outline " + dir}) {
+		t.Fatalf("no outline: %v", got)
+	}
+	put(t, root, dir+"/brief.yaml", "schema_version: 1\nkey_messages:\n  - {id: km-1, text: 甲, decision: dec-1}\n  - {id: km-2, text: 乙, decision: dec-1}\n")
+	put(t, root, decision.Path, "schema_version: 1\ndecisions:\n  - {id: dec-1, question: 观点, options: [], blocking: true, units: [post], status: open}\n")
+	put(t, root, dir+"/outline.yaml", "schema_version: 1\nsections:\n  - {id: why, title: 为什么, covers: [km-1]}\n  - {id: bg, title: 背景}\n")
+	rel := dir + "/outline.yaml"
+	bs := blockers()
+	if got := summary(bs); !slices.Equal(got, []string{"outline.uncovered-message outline " + rel, "outline.missing-reason outline " + rel, "decision.blocking decisions " + decision.Path}) {
+		t.Fatalf("gaps: %v", got)
+	}
+	if !strings.Contains(bs[0].Message, "km-2") || !strings.Contains(bs[1].Message, "bg") || bs[0].Decision != "" {
+		t.Fatalf("messages: %+v", bs)
+	}
+	if _, _, _, ps := advance(root, "post", g); len(ps) != 3 || ps[0].Code != "outline.uncovered-message" || ps[0].Path != rel {
+		t.Fatalf("advance = %+v", ps)
+	}
+
+	// 大纲或写作简报不通过校验时只有一条 outline.invalid。
+	put(t, root, rel, "schema_version: 1\nsections:\n  - {id: why, title: 为什么, covers: [km-9]}\n")
+	if got := summary(blockers()); got[0] != "outline.invalid outline "+rel || len(got) != 2 {
+		t.Fatalf("invalid outline: %v", got)
+	}
+	put(t, root, dir+"/brief.yaml", "k: v\n")
+	if bs := blockers(); bs[0].Code != "outline.invalid" || bs[0].Path != dir+"/brief.yaml" || !strings.Contains(bs[0].Message, "brief.yaml") {
+		t.Fatalf("invalid brief: %+v", bs)
+	}
+
+	// 只有 outline.md 时视为没有任何节；全部覆盖后可以推进。
+	os.Remove(abs(root, decision.Path))
+	put(t, root, dir+"/brief.yaml", "schema_version: 1\nkey_messages:\n  - {id: km-1, text: 甲, sources: []}\n")
+	os.Remove(abs(root, rel))
+	put(t, root, dir+"/outline.md", "自由文本\n")
+	if got := summary(blockers()); !slices.Equal(got, []string{"outline.uncovered-message outline " + dir + "/outline.md"}) {
+		t.Fatalf("outline.md: %v", got)
+	}
+	os.Remove(abs(root, dir+"/outline.md"))
+	put(t, root, rel, "schema_version: 1\nsections:\n  - {id: why, title: 为什么, covers: [km-1]}\n")
+	// 文体的默认写作法（总分总）要求的章节缺失时同样阻塞推进（method-outline-check）；写作简报选 none 时不检查。
+	g2 := func(id string) (*catalog.Genre, []workspace.Problem, bool) {
+		gen, ps, ok := g(id)
+		if gen != nil {
+			c := *gen
+			c.DefaultMethod = "general-specific-general"
+			gen = &c
+		}
+		return gen, ps, ok
+	}
+	if _, _, _, ps := advance(root, "post", g2); len(ps) != 3 || ps[0].Code != "outline.missing-method-part" || ps[0].Path != rel {
+		t.Fatalf("default method: %+v", ps)
+	}
+	// 选用的写作法不存在时，大纲关卡为一条 outline.invalid，path 为 brief.yaml。
+	put(t, root, dir+"/brief.yaml", "schema_version: 1\nkey_messages:\n  - {id: km-1, text: 甲, sources: []}\nmethod: gone\n")
+	if _, _, _, ps := advance(root, "post", g2); len(ps) != 1 || ps[0].Code != "outline.invalid" || ps[0].Path != dir+"/brief.yaml" || !strings.Contains(ps[0].Message, "gone") {
+		t.Fatalf("dangling method: %+v", ps)
+	}
+	put(t, root, dir+"/brief.yaml", "schema_version: 1\nkey_messages:\n  - {id: km-1, text: 甲, sources: []}\nmethod: none\n")
+	if _, u, _, ps := advance(root, "post", g2); len(ps) != 0 || u.Stage != "draft" {
+		t.Fatalf("covered: %+v", ps)
+	}
+}
+
+// completeBrief 是 minimal 文体中填齐必填项（audience 与 purpose）的写作简报。
+const completeBrief = "schema_version: 1\naudience: 后端工程师\npurpose: 讲清楚为什么要做连接池\n"

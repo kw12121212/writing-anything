@@ -364,7 +364,7 @@ func TestNextListsFeedback(t *testing.T) {
 		t.Errorf("text next: %q", stdout)
 	}
 	// 未处理的反馈不阻止推进。
-	writeFile(t, wsPath(dir, ".writing-anything/works/my-post/brief.yaml"), "k: v\n")
+	writeFile(t, wsPath(dir, ".writing-anything/works/my-post/brief.yaml"), completeBrief)
 	if code, res := runUnits(t, dir, "advance", "my-post"); code != 0 || res.Unit["stage"] != "draft" {
 		t.Errorf("advance with pending feedback: code = %d, %v", code, res.Diagnostics)
 	}

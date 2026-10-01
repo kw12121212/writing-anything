@@ -7,11 +7,14 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/kw12121212/writing-anything/internal/brief"
 	"github.com/kw12121212/writing-anything/internal/catalog"
 	"github.com/kw12121212/writing-anything/internal/decision"
 	"github.com/kw12121212/writing-anything/internal/draft"
 	"github.com/kw12121212/writing-anything/internal/feedback"
+	"github.com/kw12121212/writing-anything/internal/outline"
 	"github.com/kw12121212/writing-anything/internal/resolve"
+	"github.com/kw12121212/writing-anything/internal/review"
 	"github.com/kw12121212/writing-anything/internal/schema"
 	"github.com/kw12121212/writing-anything/internal/source"
 	"github.com/kw12121212/writing-anything/internal/work"
@@ -61,10 +64,10 @@ var statusCommand = &command{
 
 var configSetCommand = &command{
 	name:    "config set",
-	summary: "修改工作区配置中的一项：language、default_genre、packs 或 gate_level",
+	summary: "修改工作区配置中的一项：language、default_genre、packs、gate_level 或 context_budget",
 	args: []argSpec{
-		{"key", "配置项：language、default_genre、packs 或 gate_level", true},
-		{"value", "新取值；packs 用逗号分隔，空字符串表示清空；default_genre 为空字符串时删除该项", true},
+		{"key", "配置项：language、default_genre、packs、gate_level 或 context_budget（上下文预算（Context Budget），字符数）", true},
+		{"value", "新取值；packs 用逗号分隔，空字符串表示清空；default_genre 与 context_budget 为空字符串时删除该项", true},
 	},
 	flags:      []flagSpec{dirFlag},
 	outputKeys: []outputKey{{"config", "修改后（未修改时为当前）的配置摘要；配置无法解析时为 null"}},
@@ -169,10 +172,16 @@ func runValidate(inv *invocation) int {
 					problems = append(problems, source.CheckArtifact(dir, checked[0])...)
 				case "claims":
 					problems = append(problems, draft.CheckArtifact(dir, checked[0])...)
+				case "brief":
+					problems = append(problems, brief.CheckArtifact(dir, checked[0])...)
+				case "outline":
+					problems = append(problems, outline.CheckArtifact(dir, checked[0], defaultMethodOf(dir, checked[0]))...)
 				case "feedback":
 					problems = append(problems, feedback.CheckArtifact(dir, checked[0])...)
 				case "decisions":
 					_, problems = decision.Check(dir, unitExists(dir))
+				case "review", "acceptance":
+					problems = append(problems, review.CheckArtifact(dir, checked[0])...)
 				}
 			}
 		} else {
@@ -217,6 +226,9 @@ func runStatus(inv *invocation) int {
 				packs = strings.Join(c.Packs, "、")
 			}
 			fmt.Fprintf(&b, "语言：%s\n默认文体（Genre）：%s\n规范包（Pack）：%s\n关卡强度（Gate Level）：%s\n", c.Language, genre, packs, c.GateLevel)
+			if c.ContextBudget != nil {
+				fmt.Fprintf(&b, "上下文预算（Context Budget）：%d 字符\n", *c.ContextBudget)
+			}
 		}
 		fmt.Fprintf(&b, "素材（Source）：%d\n作品（Work）：%d\n", res.Sources, res.Works)
 		if len(res.Units) > 0 {
@@ -303,6 +315,7 @@ func resolvedText(r *resolve.Resolved) string {
 		}
 		fmt.Fprintf(&b, "  %s（%s）\n", p.ID, where)
 	}
+	fmt.Fprintf(&b, "上下文预算（Context Budget）：%v 字符%s\n", r.ContextBudget.Value, from(r.ContextBudget.Source))
 	section := func(title string, n int) bool {
 		if n == 0 {
 			fmt.Fprintf(&b, "%s：无\n", title)
@@ -384,17 +397,41 @@ func resolvedText(r *resolve.Resolved) string {
 }
 
 // checkWorkspace 校验整个工作区：工作区结构与配置，规范包文件、文体与规范包引用和合并问题，每个作品，
-// 素材库中的每个素材，以及单元目录中的写入记录与论断。同时返回能加载的作品。
+// 素材库中的每个素材，以及单元目录中的写入记录、论断、写作简报、大纲与反馈。同时返回能加载的作品。
 func checkWorkspace(dir string) (checked []string, works []*work.Work, problems []workspace.Problem) {
 	checked, problems = workspace.Check(dir)
 	more, ps := resolve.Check(dir)
 	works, wchecked, wps := work.LoadAll(dir)
 	_, schecked, sps := source.LoadAll(dir)
 	uchecked, ups := draft.CheckUnitArtifacts(dir, works)
+	var dirs []string
+	for _, w := range works {
+		for _, u := range w.Units() {
+			dirs = append(dirs, w.UnitDir(u))
+		}
+	}
+	q := brief.LoadQueue(dir) // 写作简报与大纲共用一次加载的决策队列
+	bchecked, bps := brief.CheckUnitArtifacts(dir, dirs, q)
+	defaults := map[string]string{} // 单元目录 → 所在作品的文体的默认写作法
+	for _, w := range works {
+		for _, u := range w.Units() {
+			defaults[w.UnitDir(u)] = w.Genre.DefaultMethod
+		}
+	}
+	ochecked, ops := outline.CheckUnitArtifacts(dir, dirs, q, func(d string) string { return defaults[d] })
 	fchecked, fps := feedback.CheckUnitArtifacts(dir, works)
+	rchecked, rps := review.CheckUnitArtifacts(dir, dirs)
 	dchecked, dps := decision.Check(dir, unitExists(dir))
-	checked = slices.Concat(checked, more, wchecked, schecked, uchecked, fchecked, dchecked)
-	return checked, works, slices.Concat(problems, ps, wps, sps, ups, fps, dps)
+	checked = slices.Concat(checked, more, wchecked, schecked, uchecked, bchecked, ochecked, fchecked, rchecked, dchecked)
+	return checked, works, slices.Concat(problems, ps, wps, sps, ups, bps, ops, fps, rps, dps)
+}
+
+// defaultMethodOf 返回单元产物 rel 所在作品的文体的默认写作法；作品无法加载时为空（其问题由作品校验报告）。
+func defaultMethodOf(dir, rel string) string {
+	if w, _, _ := work.Resolve(dir, work.RefOf(rel[:strings.LastIndex(rel, "/")])); w != nil {
+		return w.Genre.DefaultMethod
+	}
+	return ""
 }
 
 // unitExists 返回检查单元引用能否解析的函数，供决策队列检查关联单元；每个作品只解析一次。
@@ -486,6 +523,10 @@ func next(p workspace.Problem, dir string) []string {
 			// 作品目录中缺少 work.yaml：init 不会补齐它，作品只能用 wa-cli new 创建。
 			return []string{"wa-cli help new --json", validateAll}
 		}
+		if k := schema.KindFor(p.Path); k != nil && (k.Name == "brief" || k.Name == "outline" || k.Name == "review" || k.Name == "acceptance") {
+			// brief.yaml 途经符号链接或不是普通文件：需要作者把它换成普通文件，init 不会修复它。
+			return []string{status, validateAll}
+		}
 		if inSources {
 			// 素材目录不完整：init 不会补齐它，素材只能用 wa-cli source add 登记。
 			return []string{"wa-cli help source add --json", validateAll}
@@ -493,8 +534,33 @@ func next(p workspace.Problem, dir string) []string {
 		return []string{initCmd}
 	case source.CodeModified:
 		return []string{validateAll}
-	case decision.CodeBlocking:
-		return []string{shellCommand("wa-cli", "decisions", "--dir", dir, "--json")}
+	case decision.CodeBlocking, brief.CodeMissingField, brief.CodeUnsourcedMessage, brief.CodeUnconfirmedMessage, brief.CodeInvalid,
+		outline.CodeInvalid, outline.CodeUncoveredMessage, outline.CodeMissingReason:
+		return blockerNext(dir, p.Code, p.Path)
+	case outline.CodeMissingPart, outline.CodeMethodOrder, outline.CodeUnknownRole:
+		// 写作法缺口：查看大纲与写作法的章节或节拍，再用 outline set --role 修复。参数引起的（不填 path）由命令改写 next。
+		if p.Path != "" {
+			return append(blockerNext(dir, p.Code, p.Path), shellCommand("wa-cli", "method", "list", "--dir", dir, "--json"))
+		}
+	case outline.CodeBeatPosition:
+		return []string{shellCommand("wa-cli", "lint", work.RefOf(strings.TrimSuffix(p.Path, "/"+draft.FileName)), "--dir", dir, "--json")}
+	case brief.CodeUnknownMethod:
+		if p.Path != "" {
+			return []string{shellCommand("wa-cli", "method", "list", "--dir", dir, "--json"), validate}
+		}
+	case outline.CodeUnknownMessage:
+		// 引用写作简报中的核心观点，涉及两个产物，用整体校验复查；参数引起的（不填 path）由命令改写 next。
+		if i := strings.LastIndex(p.Path, "/"); i > 0 {
+			return []string{shellCommand("wa-cli", "brief", "show", work.RefOf(p.Path[:i]), "--dir", dir, "--json"), validateAll}
+		}
+		return []string{validateAll}
+	case outline.CodeUnknownSource:
+		return []string{shellCommand("wa-cli", "source", "list", "--dir", dir, "--json"), validateAll}
+	case brief.CodeUnknownSource:
+		// 素材引用涉及多个产物，用整体校验复查。
+		return []string{shellCommand("wa-cli", "source", "list", "--dir", dir, "--json"), validateAll}
+	case brief.CodeUnknownDecision, brief.CodeUnrelatedDecision:
+		return []string{shellCommand("wa-cli", "decisions", "--all", "--dir", dir, "--json"), validateAll}
 	case decision.CodeInvalidQueue:
 		// wa-cli decisions 会报出决策队列的具体问题，整体校验同样能复查。
 		return []string{shellCommand("wa-cli", "decisions", "--dir", dir, "--json"), validateAll}
@@ -511,7 +577,7 @@ func next(p workspace.Problem, dir string) []string {
 		// 素材引用涉及多个产物，用整体校验复查。
 		return []string{shellCommand("wa-cli", "source", "list", "--dir", dir, "--json"), validateAll}
 	case catalog.CodeDuplicateID:
-		if strings.HasSuffix(p.Path, "/"+draft.ClaimsName) {
+		if strings.HasSuffix(p.Path, "/"+draft.ClaimsName) || strings.HasSuffix(p.Path, "/"+brief.FileName) || strings.HasSuffix(p.Path, "/"+outline.FileName) {
 			return []string{validateAll}
 		}
 	case workspace.CodeNotFound, workspace.CodeMissingDirectory:
@@ -520,6 +586,10 @@ func next(p workspace.Problem, dir string) []string {
 		return []string{status}
 	case work.CodeMissingArtifact:
 		return []string{shellCommand("wa-cli", "next", work.RefOf(p.Path), "--dir", dir, "--json")}
+	case review.CodeAcceptanceStale, review.CodeAcceptanceInvalid, review.CodeAcceptanceWeakerGate:
+		return blockerNext(dir, p.Code, p.Path)
+	case review.CodeDuplicateVerdict:
+		return []string{validate}
 	case schema.CodeSchemaViolation:
 		var out []string
 		switch key := configKey(p); key {

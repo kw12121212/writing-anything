@@ -1,0 +1,4 @@
+rubric:
+  - {item: clarity, verdict: pass, evidence: 结论先行, paragraphs: [1]}
+findings:
+  - {paragraph: 1, message: 可以更短}

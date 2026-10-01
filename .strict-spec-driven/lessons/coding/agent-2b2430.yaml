@@ -1,0 +1,19 @@
+schema: strict-spec-driven/lesson/v1
+schema_version: 1
+artifact_type: lesson
+schema_file: templates/strict-spec-driven/schemas/lesson.yaml
+lesson:
+  id: agent-2b2430
+  title: 由 Agent 写入正文就能解除的关卡，等于没有关卡
+category: coding
+status: active
+created_at: '2026-09-30T16:33:42.596Z'
+updated_at: '2026-09-30T16:33:42.596Z'
+context: 'rule-engine-and-lint 允许正文注释 <!-- lint-ignore <规则>: 理由 --> 单处豁免 error 级发现项，而 Agent 通过 wa-cli draft write 写入正文。'
+observation: fresh-context 审查指出：Agent 可以在自己写入的正文中加上豁免注释，让命中 AI 腔与禁用词的 error 不再阻塞，全程不需要作者参与，与「验收需记录作者确认」的约定冲突；测试只验证了豁免能生效。
+takeaway: 凡是能降低关卡强度的正文标记或配置，都要能区分是作者还是 Agent 写入：复用段落出处（Provenance），出自 agent 的段落中的豁免不生效并给出提示，作者改写后才生效；测试要覆盖 Agent 写入的情况。
+applies_when: 新增允许在正文或产物中写明豁免、跳过、确认等会解除关卡或降低检查强度的机制时
+occurrences:
+  - origin: rule-engine-and-lint
+    date: '2026-09-30'
+    evidence: internal/lint 的 waivers 接收 Origin，出处为 agent 时报告 lint.agent-waiver；internal/cli/lint_test.go 的 TestLintAgentWaiver。

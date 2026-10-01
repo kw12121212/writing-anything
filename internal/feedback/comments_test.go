@@ -131,6 +131,14 @@ func TestCommentBoundaries(t *testing.T) {
 	if cs := Comments([]byte("A。<!-- @me: 未闭合\n```\n代码 -->\n```\n"), nil); len(cs) != 0 {
 		t.Errorf("comment ending inside a fence = %v", cs)
 	}
+	// 围栏与行内代码的识别与文本检查一致：四个反引号的围栏中的写法不是批注；双反引号的行内代码之后的是批注。
+	got = nil
+	for _, c := range Comments([]byte("````markdown\n```html\n<!-- @me: 演示批注 -->\n```\n````\n用 ``a`b`` 表示。<!-- @me: 要改 -->\n"), nil) {
+		got = append(got, c.Text)
+	}
+	if !slices.Equal(got, []string{"要改"}) {
+		t.Fatalf("fence and code span = %q", got)
+	}
 	c := Comments([]byte(body), nil)[0]
 	if got := string(removeComment([]byte(body), c)); !strings.Contains(got, "作者的重要段落。") || !strings.Contains(got, "```html\n<!-- @me: 示例 -->\n```") {
 		t.Errorf("removal damaged the text:\n%s", got)

@@ -1,0 +1,36 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: binary-release-and-install
+  status: proposed
+summary:
+  what:
+    - 发布工具：go run ./internal/tools/release 以交叉编译（Cross-compilation）产出 linux、darwin、windows 的 amd64 与 arm64 版 wa-cli 二进制（CGO_ENABLED=0、-trimpath），构建时注入版本号与提交信息，并生成 SHA-256 校验文件 SHA256SUMS。
+    - wa-cli version 输出版本号与提交信息：文本为一行 'wa-cli <version> (commit <commit>)'，--json 新增 commit 字段；未注入时回退到 Go 构建信息（go install 的模块版本、源码目录构建的 vcs.revision），都没有时为 dev 与 unknown。
+    - 安装脚本（Install Script）install.sh 与 install.ps1：识别操作系统与 CPU 架构，下载对应的发布产物（Release Asset）与 SHA256SUMS，校验哈希后安装到用户级 bin 目录，不需要 root 或管理员权限；支持指定版本、安装目录与下载地址。
+    - GitHub Actions 发布流程：推送 v* 标签时运行发布工具并把二进制与 SHA256SUMS 上传到 GitHub Release；docs/INSTALL.md 说明脚本安装与 go install 安装。
+  why:
+    - 里程碑 tech-blog-workflow 的完成标准要求发布产物覆盖 linux、macOS、Windows 的 amd64 与 arm64 二进制并附 SHA-256 校验文件，安装脚本能下载、校验并安装 wa-cli；目前只能从源码构建，第三方 Agent 与作者无法便捷安装。
+    - wa-cli version 只输出版本号，无法区分同一版本号下的不同构建；go install 安装时版本号恒为 dev，排查问题时缺少依据。
+scope:
+  in:
+    - internal/version：新增 Commit 注入变量与 Resolve，按 ldflags 注入值 → Go 构建信息 → dev/unknown 的顺序确定版本与提交
+    - internal/cli：version 文本输出附带提交信息，--json 输出新增 commit，help 的 outputKeys 新增 commit
+    - internal/tools/release：发布工具，交叉编译 6 个目标、注入版本与提交、生成 SHA256SUMS；可用 -targets 限定目标
+    - 仓库根目录 install.sh（POSIX sh）与 install.ps1（PowerShell）；识别平台、下载、校验、安装到用户级目录
+    - .github/workflows/release.yml：v* 标签触发发布并上传产物
+    - docs/INSTALL.md 安装说明；docs/GLOSSARY.md 新增交叉编译、发布产物、安装脚本、校验文件
+    - 修改 cli 主规格的 version-command，新增 release-artifacts 与 install-script 需求（delta spec）
+  out:
+    - 代码签名、公证（notarization）、Homebrew/Scoop 等包管理器分发
+    - wa-cli 自更新命令
+    - 压缩包格式的发布产物；发布产物为裸二进制
+unchanged_behavior:
+  - 输出信封字段与退出码约定不变；version 的用法错误行为不变
+  - 产品二进制不依赖 internal/tools/**，不调用网络，不依赖 strict-spec-driven
+  - go build ./... 与 go install 仍可直接构建 wa-cli
+roadmap:
+  milestone: tech-blog-workflow
+  planned_change: binary-release-and-install

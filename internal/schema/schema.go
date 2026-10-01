@@ -48,12 +48,18 @@ var kinds = []*Kind{
 	newKind("config", "config.schema.json", ".writing-anything/config.yaml"),
 	newKind("pack", "pack.schema.json", ".writing-anything/packs/*.yaml"),
 	newKind("genre", "genre.schema.json"),
+	newKind("method", "method.schema.json"),
 	newKind("work", "work.schema.json", ".writing-anything/works/*/work.yaml"),
 	newKind("source", "source.schema.json", ".writing-anything/sources/*/source.yaml"),
 	newKind("provenance", "provenance.schema.json", ".writing-anything/works/*/provenance.yaml", ".writing-anything/works/*/units/*/provenance.yaml"),
 	newKind("claims", "claims.schema.json", ".writing-anything/works/*/claims.yaml", ".writing-anything/works/*/units/*/claims.yaml"),
 	newKind("decisions", "decisions.schema.json", ".writing-anything/decisions.yaml"),
+	newKind("brief", "brief.schema.json", ".writing-anything/works/*/brief.yaml", ".writing-anything/works/*/units/*/brief.yaml"),
+	newKind("outline", "outline.schema.json", ".writing-anything/works/*/outline.yaml", ".writing-anything/works/*/units/*/outline.yaml"),
 	newKind("feedback", "feedback.schema.json", ".writing-anything/works/*/feedback.yaml", ".writing-anything/works/*/units/*/feedback.yaml"),
+	newKind("review", "review.schema.json", ".writing-anything/works/*/review.yaml", ".writing-anything/works/*/units/*/review.yaml"),
+	newKind("review-input", "review-input.schema.json"),
+	newKind("acceptance", "acceptance.schema.json", ".writing-anything/works/*/acceptance.yaml", ".writing-anything/works/*/units/*/acceptance.yaml"),
 }
 
 func newKind(name, file string, patterns ...string) *Kind {

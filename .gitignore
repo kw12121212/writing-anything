@@ -2,3 +2,5 @@
 coverage.out
 /wa-cli
 /wa-cli.exe
+/dist/
+*.test

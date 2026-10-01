@@ -1,0 +1,21 @@
+schema: strict-spec-driven/delta-tech/v1
+schema_version: 1
+artifact_type: delta_tech
+schema_file: templates/strict-spec-driven/schemas/delta-tech.yaml
+target_standard: workspace-artifacts
+operations:
+  ADDED:
+    cross-artifact-references:
+      strength: SHOULD
+      statement: 引用另一个可独立编辑产物中 id 的产物（如 outline.yaml 的 covers 引用 brief.yaml 的核心观点、brief.yaml 引用素材与决策），校验时把跨产物引用问题与产物自身的合法性问题（解析、Schema、id 唯一）分开：validate 与关卡照常把引用问题报告为 error；修改与查看该产物的命令只因自身的合法性问题拒绝，已有的悬空引用照常报告（修改成功时为 warning）但不阻止修复，本次参数给出的引用仍须合法。
+      rationale: 上游产物（如写作简报）可以独立修改；若编辑命令因下游的悬空引用拒绝，Agent 只能手工编辑结构化产物，违反结构化产物只通过 wa-cli 变更的约定（outline-coverage 的审查复现）。
+      enforcement:
+        method: test
+        detail: internal/cli 的 TestOutlineDanglingMessage 在 brief set --remove-message 之后用 outline show、set、remove 修复大纲并断言 warning；internal/outline 的 TestDanglingReferences 断言 LoadLenient 与 Set、Remove 的行为。
+      examples:
+        good:
+          - outline.LoadLenient 返回 fatal 与 refs，outline set 只在 fatal 非空时拒绝
+        bad:
+          - outline set 用完整校验加载 outline.yaml，covers 指向已删除的核心观点时拒绝一切修改
+  MODIFIED: {}
+  REMOVED: {}

@@ -222,3 +222,43 @@ requirements:
         - GIVEN: Agent 写入三段 A、B、C 后，作者在 A 与 B 之间插入了 X
         - WHEN: 运行 wa-cli diff my-post --dir D --json
         - THEN: changes 只含 {added, at 2, text X}，退出码为 0
+  claim-edit:
+    strength: MUST
+    statement: wa-cli claim set <unit> <claim> 必须修改单元 claims.yaml 中 id 为 <claim> 的论断（Claim）：--kind 与 --text 替换对应字段，--sources（逗号分隔的素材 id，给出空值时为空数组）整体替换所关联的素材，省略的参数不修改；只改动这些字段，保留其他内容与 YAML 注释。成功时退出码为 0，--json 输出的 claim 字段含修改后论断的 unit、id、kind、text 与 sources，changedPaths 为 [claims.yaml]；取值与原有取值相同时不写文件，changedPaths 为空数组。wa-cli claim remove <unit> <claim> 必须删除该论断并保留其他内容与注释，成功时 removed 为论断 id，changedPaths 为 [claims.yaml]。两个命令在单元没有 claims.yaml 或其中没有该 id 时报告 claim.not-found（next 包含 wa-cli claim list <unit> --dir <dir> --json）；sources 中的素材未登记时报告 claim.unknown-source（field 为 sources[i]），kind 不在取值范围内或 text 为空时报告 artifact.schema-violation（field 为 kind 或 text），这些由参数引起的诊断的 next 包含 wa-cli help claim set --json 与 wa-cli source list；已有 claims.yaml 不通过 Schema 校验或论断 id 重复时报告其诊断；修改或删除后仍有其他论断引用未登记的素材时照常写入，这些引用以 warning 级 claim.unknown-source 报告（field 为 claims[i].sources[j]，message 提示用 wa-cli claim set 修复）；要修改或删除的论断经由 YAML 锚点、别名或合并键得到时报告 claim.anchored-value（next 包含对应命令的 help）；这些情况都不修改文件，退出码为 1。
+    scenarios:
+      set-sources:
+        - GIVEN: 作品 my-post 的 claims.yaml 有论断 claim-1（experience，只关联 reference 素材 doc），claims 上方有作者的注释；已登记 interview 素材 talk
+        - WHEN: 运行 wa-cli claim set my-post claim-1 --sources talk,doc --dir D --json
+        - THEN: claim.sources 为 [talk, doc]，kind 与 text 不变；changedPaths 为 [.writing-anything/works/my-post/claims.yaml]，作者的注释保留，退出码为 0
+      set-unchanged:
+        - GIVEN: 同上
+        - WHEN: 再次运行 wa-cli claim set my-post claim-1 --sources talk,doc --dir D --json
+        - THEN: changedPaths 为空数组，退出码为 0
+      claim-not-found:
+        - GIVEN: 作品 my-post 的 claims.yaml 中没有 claim-9
+        - WHEN: 运行 wa-cli claim set my-post claim-9 --kind data --dir D --json 或 wa-cli claim remove my-post claim-9 --dir D --json
+        - THEN: diagnostics 中有一条错误码为 claim.not-found 的诊断，其 next 为 wa-cli claim list my-post --dir D --json；claims.yaml 不变，退出码为 1
+      set-unknown-source:
+        - GIVEN: 没有登记素材 nope
+        - WHEN: 运行 wa-cli claim set my-post claim-1 --sources nope --dir D --json
+        - THEN: diagnostics 中有一条错误码为 claim.unknown-source、field 为 sources[0] 的诊断，其 next 包含 wa-cli help claim set --json；claims.yaml 不变，退出码为 1
+      remove-claim:
+        - GIVEN: 作品 my-post 的 claims.yaml 有 claim-1 与 claim-2，claims 上方有作者的注释
+        - WHEN: 运行 wa-cli claim remove my-post claim-1 --dir D --json
+        - THEN: removed 为 claim-1，claims.yaml 只剩 claim-2 且注释保留，changedPaths 为 [.writing-anything/works/my-post/claims.yaml]，退出码为 0
+  claim-list:
+    strength: MUST
+    statement: wa-cli claim list <unit> 必须按 claims.yaml 中的顺序输出单元的论断（Claim）：--json 输出的 claims 为数组，每项含 unit、id、kind、text 与 sources；单元没有 claims.yaml 时为空数组；claims.yaml 不通过 Schema 校验或论断 id 重复时报告其诊断，claims 为空数组，退出码为 1；论断引用未登记的素材时照常列出全部论断，这些引用以 warning 级 claim.unknown-source 报告。该命令只读，changedPaths 为空数组。
+    scenarios:
+      list-claims:
+        - GIVEN: 作品 my-post 的 claims.yaml 有 claim-1（case）与 claim-2（opinion）
+        - WHEN: 运行 wa-cli claim list my-post --dir D --json
+        - THEN: claims 依次为 claim-1 与 claim-2，每项的 unit 为 my-post，changedPaths 为空数组，退出码为 0
+      dangling-source:
+        - GIVEN: 作品 my-post 的 claims.yaml 中 claim-2 引用的素材 src-b 已被删除，已登记素材 src-a
+        - WHEN: 运行 wa-cli claim set my-post claim-1 --sources src-a --dir D --json 与 wa-cli claim list my-post --dir D --json
+        - THEN: 两者退出码都为 0：claim set 写入 claims.yaml，claim list 列出全部论断；diagnostics 中各有一条 severity 为 warning、错误码为 claim.unknown-source、field 为 claims[1].sources[0] 的诊断
+      list-empty:
+        - GIVEN: 作品 my-post 没有 claims.yaml
+        - WHEN: 运行 wa-cli claim list my-post --dir D --json
+        - THEN: claims 为空数组，退出码为 0

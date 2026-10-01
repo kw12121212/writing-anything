@@ -1,0 +1,132 @@
+schema: strict-spec-driven/main-spec/v1
+schema_version: 1
+artifact_type: main_spec
+schema_file: templates/strict-spec-driven/schemas/main-spec.yaml
+spec:
+  id: outline
+  title: 大纲（Outline）
+requirements:
+  outline-artifact:
+    strength: MUST
+    statement: 单元目录下的 outline.yaml 是大纲（Outline）：含 schema_version（1）与按顺序排列的 sections；每个大纲节（Outline Section）含 id 与非空的 title，以及可选的 covers（覆盖的核心观点（Key Message）id，不重复）、uses（使用的素材（Source）id，不重复）、reason（不覆盖任何核心观点的理由，非空文本）与 role（承担的写作法章节或节拍 id，见 methods 主规格的 method-outline-check）。wa-cli validate 整体校验时，必须对每个可加载作品的每个单元目录中存在的 outline.yaml 做 Schema 校验并计入 checked，且满足：节 id 在文件内唯一，否则报告 artifact.duplicate-id（field 为 sections[i].id）；covers 中的每个 id 都是同一单元目录下 brief.yaml 中的核心观点，否则报告 outline.unknown-message（field 为 sections[i].covers[j]；没有 brief.yaml 时任何 covers 都不存在，brief.yaml 不通过校验时不做此项检查）；uses 中的素材都已登记，否则报告 outline.unknown-source（field 为 sections[i].uses[j]）。这些检查都通过时，validate 还必须把每个覆盖缺口（Coverage Gap，见 outline-show）报告为一条 error 级诊断：outline.uncovered-message（path 为 outline.yaml，不填 field，message 含核心观点的 id 与内容）与 outline.missing-reason（field 为 sections[i]），next 为 wa-cli outline show <unit> --dir <dir> --json 与 wa-cli help outline set --json；以及单元选用写作法时的写作法缺口（outline.missing-method-part、outline.method-order 与 outline.unknown-role，见 methods 主规格的 method-outline-check），next 另含 wa-cli method list --dir <dir> --json。wa-cli validate <path> 对该位置的 outline.yaml 执行同样的检查。outline.yaml 存在但途经符号链接或不是普通文件时，validate、outline set、outline remove 与 outline show 都报告 artifact.not-found（path 为该 outline.yaml），不读取也不覆盖它。
+    scenarios:
+      validate-covered:
+        - GIVEN: 作品 my-post 的 brief.yaml 有核心观点 km-1 与 km-2，outline.yaml 有覆盖 km-1 的节 why 与覆盖 km-2、使用已登记素材 src-a 的节 how
+        - WHEN: 运行 wa-cli validate --dir D --json
+        - THEN: valid 为 true，checked 含 .writing-anything/works/my-post/outline.yaml，退出码为 0
+      validate-uncovered:
+        - GIVEN: 同上，但节 how 的 covers 为空、reason 为「交代背景」
+        - WHEN: 运行 wa-cli validate --dir D --json
+        - THEN: diagnostics 中有一条错误码为 outline.uncovered-message、path 为 .writing-anything/works/my-post/outline.yaml 的诊断，message 含 km-2，next 含 wa-cli outline show my-post 与 wa-cli help outline set --json，退出码为 1
+      validate-missing-reason:
+        - GIVEN: outline.yaml 的第二节 how 既没有 covers 也没有 reason
+        - WHEN: 运行 wa-cli validate .writing-anything/works/my-post/outline.yaml --dir D --json
+        - THEN: diagnostics 中有一条错误码为 outline.missing-reason、field 为 sections[1] 的诊断，退出码为 1
+      validate-unknown-message:
+        - GIVEN: outline.yaml 的第一节 covers 为 [km-9]，brief.yaml 中没有 km-9
+        - WHEN: 运行 wa-cli validate --dir D --json
+        - THEN: diagnostics 中有一条错误码为 outline.unknown-message、field 为 sections[0].covers[0] 的诊断，退出码为 1
+      validate-unknown-source:
+        - GIVEN: outline.yaml 的第一节 uses 为 [src-nope]，src-nope 未登记
+        - WHEN: 运行 wa-cli validate --dir D --json
+        - THEN: diagnostics 中有一条错误码为 outline.unknown-source、field 为 sections[0].uses[0] 的诊断，退出码为 1
+      validate-duplicate-section:
+        - GIVEN: outline.yaml 中有两个 id 为 why 的节
+        - WHEN: 运行 wa-cli validate --dir D --json
+        - THEN: diagnostics 中有一条错误码为 artifact.duplicate-id、field 为 sections[1].id 的诊断，退出码为 1
+  outline-set:
+    strength: MUST
+    statement: wa-cli outline set <unit> <section> 必须按节 id 新增或修改单元目录下 outline.yaml 中的一节：section 不存在时新增一节，此时必须给出 --title，省略 --after 与 --before 时追加在末尾；section 已存在时只修改给出的字段，位置不变。--title 设置标题；--covers 与 --uses 为逗号分隔的 id，整体替换；--reason 设置不覆盖任何核心观点的理由；--role 设置承担的写作法章节或节拍 id；--covers、--uses、--reason 与 --role 取值为空字符串时删除该字段。--after <id> 或 --before <id> 把该节放到指定节之后或之前。outline.yaml 不存在时创建，含 schema_version 1 与 sections，子单元的单元目录不存在时先创建；已存在时只修改涉及的节，保留其他内容与 YAML 注释。修改后的取值与原有取值相同时不写文件，changedPaths 为空数组；否则 changedPaths 为新建的单元目录（如有）与 outline.yaml。成功时退出码为 0，--json 输出的 outline、coverage 与 gaps 同 outline-show；覆盖缺口不阻止写入；修改后大纲中仍存在的 covers、uses 引用问题以 severity 为 warning 的诊断报告，valid 仍为 true。section 或 --role 不符合 id 格式时报告 artifact.schema-violation（field 为 section 或 role）；单元选用了文章类或结构类写作法且 --role 不是它的章节或节拍时报告 outline.unknown-role（field 为 role）；写作简报选用的写作法不可用时照常修改，并以 warning 报告 brief.unknown-method；新节缺少 --title、--title 为空字符串、--title 或 --reason 的取值非空但只含空白、--after 或 --before 为空字符串、--covers 或 --uses 中有重复的 id、同时给出 --after 与 --before、--after 或 --before 指向该节本身、节已存在而没有给出任何修改参数时报告 input.invalid-value；--after 或 --before 指向的节不存在时报告 outline.section-not-found；covers 中的核心观点不在写作简报中时报告 outline.unknown-message（field 为 covers[i]），给出 --covers 而写作简报不通过校验时报告写作简报的诊断；uses 中的素材未登记时报告 outline.unknown-source（field 为 uses[i]）；已有的 outline.yaml 有解析、Schema 或节 id 重复问题时报告其诊断（其中 covers、uses 的引用问题不阻止修改，以便写作简报删除核心观点后用本命令修复大纲，但本次给出的 --covers、--uses 必须合法）；要修改之处经由 YAML 锚点、别名或合并键得到时报告 outline.anchored-value。由参数引起的诊断不填 path，field 为参数名或为空，next 含 wa-cli help outline set --json。这些情况都不修改任何文件，退出码为 1。
+    scenarios:
+      set-first-section:
+        - GIVEN: 作品 my-post 的 brief.yaml 有核心观点 km-1 与 km-2，没有 outline.yaml
+        - WHEN: 运行 wa-cli outline set my-post why --title 为什么需要连接池 --covers km-1 --dir D --json
+        - THEN: outline.yaml 含一节 why（covers 为 [km-1]）；changedPaths 为 [.writing-anything/works/my-post/outline.yaml]；gaps 只有一项 code 为 outline.uncovered-message、keyMessage 为 km-2；valid 为 true，退出码为 0
+      set-before:
+        - GIVEN: outline.yaml 依次有节 why 与 how
+        - WHEN: 运行 wa-cli outline set my-post intro --title 引子 --reason 引出问题 --before why --dir D --json
+        - THEN: sections 依次为 intro、why、how，退出码为 0
+      set-modify:
+        - GIVEN: outline.yaml 的节 how 有 title、covers [km-2] 与作者写的注释
+        - WHEN: 运行 wa-cli outline set my-post how --uses src-a --dir D --json
+        - THEN: how 的 title 与 covers 不变，uses 为 [src-a]，注释保留，退出码为 0
+      set-move:
+        - GIVEN: outline.yaml 依次有节 intro、why、how
+        - WHEN: 运行 wa-cli outline set my-post intro --after how --dir D --json
+        - THEN: sections 依次为 why、how、intro，退出码为 0
+      set-clear:
+        - GIVEN: outline.yaml 的节 how 有 covers [km-2] 与 reason
+        - WHEN: 运行 wa-cli outline set my-post how --reason= --dir D --json
+        - THEN: how 没有 reason，covers 不变，退出码为 0
+      set-unchanged:
+        - GIVEN: outline.yaml 的节 why 的 title 为「为什么需要连接池」
+        - WHEN: 运行 wa-cli outline set my-post why --title 为什么需要连接池 --dir D --json
+        - THEN: changedPaths 为空数组，outline.yaml 与运行前逐字节相同，退出码为 0
+      set-new-without-title:
+        - GIVEN: outline.yaml 没有节 end
+        - WHEN: 运行 wa-cli outline set my-post end --reason 总结 --dir D --json
+        - THEN: diagnostics 中有一条错误码为 input.invalid-value、没有 path 的诊断，message 指出缺少 --title，next 含 wa-cli help outline set --json；outline.yaml 不变，退出码为 1
+      set-unknown-message:
+        - GIVEN: brief.yaml 中没有 km-9
+        - WHEN: 运行 wa-cli outline set my-post why --covers km-9 --dir D --json
+        - THEN: diagnostics 中有一条错误码为 outline.unknown-message、field 为 covers[0] 的诊断，没有新建或修改文件，退出码为 1
+      set-missing-anchor:
+        - GIVEN: outline.yaml 没有节 nope
+        - WHEN: 运行 wa-cli outline set my-post why --after nope --dir D --json
+        - THEN: diagnostics 中有一条错误码为 outline.section-not-found 的诊断，outline.yaml 不变，退出码为 1
+      set-repair-dangling:
+        - GIVEN: 作品 my-post 的节 how 覆盖 km-2，之后作者用 wa-cli brief set my-post --remove-message km-2 删除了该核心观点
+        - WHEN: 运行 wa-cli outline set my-post how --covers= --reason 交代背景 --dir D --json
+        - THEN: how 没有 covers、reason 为「交代背景」，退出码为 0；此后 wa-cli validate --dir D 不再报告 outline.unknown-message
+  outline-remove:
+    strength: MUST
+    statement: wa-cli outline remove <unit> <section> 必须删除单元目录下 outline.yaml 中 id 为 section 的节，保留其他内容与 YAML 注释；成功时 changedPaths 为 outline.yaml，--json 输出的 outline、coverage 与 gaps 同 outline-show，删除后大纲中仍存在的 covers、uses 引用问题以 severity 为 warning 的诊断报告，退出码为 0。没有 outline.yaml 或其中没有该节时报告 outline.section-not-found（next 含 wa-cli outline show <unit> --dir <dir> --json）；该节或其中的值带有 YAML 锚点、别名或合并键时报告 outline.anchored-value；已有的 outline.yaml 有解析、Schema 或节 id 重复问题时报告其诊断（covers、uses 的引用问题不阻止删除）；这些情况都不修改任何文件，退出码为 1。
+    scenarios:
+      remove-section:
+        - GIVEN: outline.yaml 依次有节 intro、why、how
+        - WHEN: 运行 wa-cli outline remove my-post intro --dir D --json
+        - THEN: sections 依次为 why、how，changedPaths 为 [.writing-anything/works/my-post/outline.yaml]，退出码为 0
+      remove-missing:
+        - GIVEN: outline.yaml 没有节 nope
+        - WHEN: 运行 wa-cli outline remove my-post nope --dir D --json
+        - THEN: diagnostics 中有一条错误码为 outline.section-not-found 的诊断，其 next 含 wa-cli outline show my-post；outline.yaml 不变，退出码为 1
+  outline-show:
+    strength: MUST
+    statement: wa-cli outline show <unit> 必须只读地输出单元的大纲与覆盖情况：--json 输出 outline、coverage 与 gaps。outline 含 unit、path（outline.yaml 路径）与 sections（按大纲顺序，每项含 id、title、covers 与 uses（数组）以及 reason 与 role（未设置时为 null））；单元目录下没有 outline.yaml 时 outline 为 null。coverage 按写作简报中的顺序为该单元 brief.yaml 的每个核心观点列一项，含 keyMessage（核心观点 id）、text 与 sections（covers 含该核心观点的节 id，按大纲顺序）；没有 brief.yaml 时为空数组。gaps 为覆盖缺口（Coverage Gap）数组，每项含 code、keyMessage、section 与 message：先按写作简报的顺序列出每个没有被任何一节覆盖的核心观点（code 为 outline.uncovered-message，section 为 null），再按大纲的顺序列出每个既没有 covers 也没有 reason 的节（code 为 outline.missing-reason，keyMessage 为 null），最后是单元选用写作法时的写作法缺口（见 methods 主规格的 method-outline-check）；写作简报选用的写作法不可用时不列写作法缺口，并以 warning 报告 brief.unknown-method；没有 outline.yaml 时每个核心观点都是 outline.uncovered-message。changedPaths 为空数组；brief.yaml 不通过校验，或 outline.yaml 有解析、Schema 或节 id 重复问题时报告其诊断，outline 为 null，valid 为 false，退出码为 1；outline.yaml 只有 covers、uses 的引用问题时照常输出 outline、coverage 与 gaps，同时报告这些诊断，valid 为 false，退出码为 1；否则即使有覆盖缺口，valid 也为 true、退出码为 0。不加 --json 时以人读文本输出同样的信息。
+    scenarios:
+      show-coverage:
+        - GIVEN: 作品 my-post 的 brief.yaml 有 km-1 与 km-2，outline.yaml 有覆盖 km-1 的节 why 与没有 covers 和 reason 的节 how
+        - WHEN: 运行 wa-cli outline show my-post --dir D --json
+        - THEN: coverage 依次为 km-1（sections 为 [why]）与 km-2（sections 为空数组）；gaps 依次为 keyMessage 为 km-2 的 outline.uncovered-message 与 section 为 how 的 outline.missing-reason；changedPaths 为空数组，退出码为 0
+      show-empty:
+        - GIVEN: 作品 my-post 的 brief.yaml 有 km-1，没有 outline.yaml
+        - WHEN: 运行 wa-cli outline show my-post --dir D --json
+        - THEN: outline 为 null，gaps 只有 keyMessage 为 km-1 的 outline.uncovered-message，退出码为 0
+      show-dangling:
+        - GIVEN: 作品 my-post 的节 how 的 covers 为 [km-2]，写作简报中已没有 km-2
+        - WHEN: 运行 wa-cli outline show my-post --dir D --json
+        - THEN: outline 列出节 how；diagnostics 中有一条错误码为 outline.unknown-message、field 为 sections[1].covers[0] 的诊断，退出码为 1
+  outline-gate:
+    strength: MUST
+    statement: 单元当前阶段的 required_artifacts 含 outline，且单元目录下存在 outline.yaml 或 outline.md 时，大纲问题必须是该单元的阻塞项（Blocker），artifact 为 outline、decision 为 null：outline.yaml 或 brief.yaml 不通过校验（覆盖缺口除外）时只有一条 code 为 outline.invalid 的阻塞项，path 为不通过校验的产物（outline.yaml 或 brief.yaml）；否则 outline-show 的 gaps 中每一项都是一条阻塞项，code 与该缺口相同，path 为 outline.yaml（单元只有 outline.md 时为 outline.md，并视为没有任何节），message 与该缺口的 message 相同。两者都不存在时只有 lifecycle.missing-artifact。wa-cli advance 因这些阻塞项拒绝推进时，为每个阻塞项给出一条错误码为其 code、path 为其 path 的诊断，next 为：覆盖缺口给出 wa-cli outline show <unit> --dir <dir> --json 与 wa-cli help outline set --json；outline.invalid 给出 wa-cli validate <不通过校验的产物路径> --dir <dir> --json 与 wa-cli validate --dir <dir> --json。
+    scenarios:
+      gate-uncovered:
+        - GIVEN: 作品的文体在单元当前阶段要求 outline，brief.yaml 有 km-1 与 km-2，outline.yaml 只覆盖 km-1
+        - WHEN: 运行 wa-cli advance my-post --dir D --json
+        - THEN: valid 为 false，diagnostics 中有一条错误码为 outline.uncovered-message、path 为 outline.yaml 的诊断，message 含 km-2，next 含 wa-cli outline show my-post；work.yaml 不变，退出码为 1
+      gate-passes:
+        - GIVEN: 同上，outline.yaml 覆盖 km-1 与 km-2，每节都有 covers 或 reason
+        - WHEN: 运行 wa-cli advance my-post --dir D --json
+        - THEN: 单元推进到下一阶段，退出码为 0
+      gate-outline-md:
+        - GIVEN: 作品的文体在单元当前阶段要求 outline，brief.yaml 有 km-1，单元只有 outline.md
+        - WHEN: 运行 wa-cli advance my-post --dir D --json
+        - THEN: diagnostics 中有一条错误码为 outline.uncovered-message、path 为 outline.md 的诊断，退出码为 1
+      gate-other-stage:
+        - GIVEN: minimal 文体的作品 my-post（没有要求 outline 的阶段），outline.yaml 有覆盖缺口，brief.yaml 含 audience 与 purpose
+        - WHEN: 运行 wa-cli advance my-post --dir D --json
+        - THEN: work.yaml 的 stage 为 draft，退出码为 0
+      gate-invalid-brief:
+        - GIVEN: 作品的文体在单元当前阶段要求 outline，outline.yaml 合法，brief.yaml 不通过校验
+        - WHEN: 运行 wa-cli advance my-post --dir D --json
+        - THEN: diagnostics 中只有一条错误码为 outline.invalid 的大纲诊断，path 为 .writing-anything/works/my-post/brief.yaml，next 含 wa-cli validate .writing-anything/works/my-post/brief.yaml 命令，退出码为 1

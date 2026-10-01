@@ -10,7 +10,7 @@ milestones:
   tech-blog-workflow:
     title: 技术博客工作流（Tech Blog Workflow）
     path: roadmap/milestones/tech-blog-workflow.yaml
-    status: proposed
+    status: complete
   wechat-marketing-and-mcp:
     title: 营销/公众号（Marketing & WeChat）
     path: roadmap/milestones/wechat-marketing-and-mcp.yaml

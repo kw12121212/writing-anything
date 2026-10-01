@@ -1,0 +1,42 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: context-pack
+approach:
+  - 新增领域包 internal/ctxpack（不 import internal/cli）：Build 收集单元信息与各部分内容，每项先渲染为 Markdown 文本并计字符数（Unicode 码点）；Fit 按优先级依次放入，放不下的项记入 trimmed；Render 拼接 Markdown。internal/cli 负责参数、JSON 视图与诊断。
+  - 预算只计内容项，不计单元信息头与裁剪报告：used 为保留的内容项字符数之和，因此 used 不超过预算，Markdown 中各内容项的文本之和等于 used。
+decisions:
+  priority:
+    decision: 内容项的优先级从高到低为：写作简报、本单元大纲、本节大纲条目、作者反馈（每条一项）、决策（每条一项）、规范要点（规则、术语表、禁用词、文风各一项）、素材原文（每份一项）、相邻节（每个一项）。单元信息头总是保留。
+    rationale: 作者确认的意图与反馈最能决定写作是否对题；素材原文与相邻节体积大且可按需再取，放在最后。
+  brief-inheritance:
+    decision: 写作简报取单元自己的 brief.yaml，没有时依次取父单元、祖先单元的，并在 brief.unit 中给出来源单元；本节大纲条目为父单元 outline.yaml 中 id 等于本单元 id 的节。
+    rationale: 节通常没有独立的写作简报，文章的写作简报与大纲就是节的依据；大纲节与子单元以 id 对应，无需在 work.yaml 中另建关联。
+  sources-scope:
+    decision: 素材原文的范围：本节大纲条目的 uses 与它覆盖的核心观点的 sources；根单元（或没有本节条目时）为写作简报的 sources、全部核心观点的 sources 与本单元大纲各节的 uses，去重后按首次出现的顺序。只放入 UTF-8 文本素材。
+    rationale: 只给当前单元引用的素材，符合有界上下文的目标。
+  budget-setting:
+    decision: context_budget 为正整数，文体、规范包与 config.yaml 都可以给出，按配置层顺序后者覆盖前者；都没有给出时为 12000，来源记为 default。wa-cli context 使用单元所在作品的文体（而不是 default_genre）参与合并。
+    rationale: planned change 要求预算按文体默认值 → 规范包 → 项目配置合并并能在 config resolved 中看到来源；作品的文体才是写作时生效的文体。
+  neighbors:
+    decision: 相邻节为子单元在父单元 units 中的前一个与后一个兄弟单元：unit、title（父单元大纲中同 id 节的标题，没有时为 null）与 excerpt（其 draft.md 去掉 HTML 注释后第一个不是 Markdown 标题的段落，换行换成空格，取前 200 个字符；没有正文时为 null）；根单元没有相邻节。
+    rationale: 没有摘要产物时，大纲标题与正文开头足以帮助衔接；作者批注与标题不是正文内容；不调用 LLM。
+  streamed-sources:
+    decision: 素材原文流式读取：只在内存中保留前「预算」个字符，同时计算全文字符数与 SHA-256；原文与登记的哈希不一致时不放入并以 source.modified（warning）报告，缺失、途经符号链接或不是 UTF-8 时以 context.source-skipped（warning）报告。
+    rationale: 审查实测 180MB 的素材只输出 12000 字符时 RSS 达 626MB（input-limits）；改写过的原文不应当作作者素材交给 Agent，而 validate 已能检出 source.modified。
+  section-sources-parent:
+    decision: 有本节条目时，素材取该节 uses 与其覆盖的核心观点在父单元写作简报中的 sources，与本单元是否有自己的写作简报无关。
+    rationale: 审查复现：用继承到的写作简报查找父单元大纲覆盖的核心观点会找错写作简报，丢失或误给素材。
+  merge-next:
+    decision: context 按作品文体合并时出现的 rule.* 问题，next 为 wa-cli context <unit> --dir <dir> --json。
+    rationale: 整体校验按 default_genre 合并，未必能重新检出按作品文体合并时的冲突（cli-contract/next-rechecks-problem）。
+  truncate-sources:
+    decision: 素材原文放不下时，只要剩余预算大于其标题行所占字符数加 1，就截断到剩余字符数并标记 truncated（截断后仍以换行结尾）；否则整项裁剪。被裁剪或截断的项记入 trimmed（part、id、chars、keptChars），chars 不计原文末尾的换行。
+    rationale: 截断后至少保留一个原文字符与结尾换行才有意义；截断的原文仍有用，整项裁剪结构化条目可以避免半条信息。
+alternatives:
+  - option: 按 token 计算预算
+    reason: 需要分词器且与模型相关；planned change 要求以字符数近似度量。
+risks:
+  - 字符数只是 token 的近似，中文与英文的比例不同，实际输入模型的长度可能偏离预算。
+  - 规范要点整项裁剪时，Agent 可能看不到禁用词；它们排在素材原文之前以降低这种可能。

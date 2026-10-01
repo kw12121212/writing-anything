@@ -181,7 +181,7 @@ func TestDecide(t *testing.T) {
 
 func TestDecisionBlocksAdvance(t *testing.T) {
 	dir := newWork(t)
-	writeFile(t, wsPath(dir, ".writing-anything/works/my-post/brief.yaml"), "k: v\n")
+	writeFile(t, wsPath(dir, ".writing-anything/works/my-post/brief.yaml"), completeBrief)
 	runDec(t, dir, "decision", "add", "--question", "非阻塞", "--unit", "my-post")
 	runDec(t, dir, "decision", "add", "--question", "标题", "--option", "甲", "--blocking", "--unit", "my-post")
 	before := readFile(t, workFile(dir, "my-post"))

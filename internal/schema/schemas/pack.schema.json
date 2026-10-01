@@ -29,15 +29,13 @@
         "type": "object",
         "additionalProperties": false,
         "required": ["term"],
-        "properties": {
-          "term": {"$ref": "common.schema.json#/$defs/text"},
-          "reason": {"type": "string"},
-          "replacement": {"type": "string"}
-        }
+        "properties": {"term": {"$ref": "common.schema.json#/$defs/text"}, "reason": {"type": "string"}, "replacement": {"type": "string"}}
       }
     },
     "rules": {"$ref": "common.schema.json#/$defs/rules"},
     "waivers": {"$ref": "common.schema.json#/$defs/waivers"},
-    "rubric": {"$ref": "common.schema.json#/$defs/rubric"}
+    "rubric": {"$ref": "common.schema.json#/$defs/rubric"},
+    "context_budget": {"$ref": "common.schema.json#/$defs/budget"},
+    "methods": {"type": "array", "items": {"$ref": "common.schema.json#/$defs/methodBody", "unevaluatedProperties": false}}
   }
 }

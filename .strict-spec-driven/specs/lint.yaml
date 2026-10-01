@@ -1,0 +1,212 @@
+schema: strict-spec-driven/main-spec/v1
+schema_version: 1
+artifact_type: main_spec
+schema_file: templates/strict-spec-driven/schemas/main-spec.yaml
+spec:
+  id: lint
+  title: 文本检查（Lint）
+requirements:
+  lint-command:
+    strength: MUST
+    statement: wa-cli lint <unit> 必须只读地对单元目录下的 draft.md 执行按作品文体合并（文体 → 规范包 → 项目配置）的全部生效规则（Rule）：被规则级 waivers 豁免（enabled 为 false）的规则不执行。--json 输出 findings、waived 与 chars：findings 为未被豁免的发现项（Finding），waived 为被单处豁免的发现项（另含 reason），两者按行、列、规则 id 排序（全文级发现项排在最前）；每项含 rule（规则 id）、type（规则类型）、severity、source（定义该规则类型的配置层：genre:<id>、pack:<id> 或 project）、line 与 column（从 1 开始，列按 Unicode 字符计；全文级发现项为 null）、text（命中的原文；全文级为 null）、message 与 suggestion（建议的写法，没有时为 null）；chars 为正文字数（见 lint-text-model）。changedPaths 为空数组，不创建或修改任何文件，不发起网络请求。findings 中有 severity 为 error 的发现项时，必须给出一条错误码为 lint.findings、severity 为 error 的诊断（path 为 draft.md，message 含 error 级发现项的条数，next 为 wa-cli help draft write --json 与 wa-cli lint <unit> --dir <dir> --json），valid 为 false，退出码为 1；否则 valid 为 true、退出码为 0。单元没有可读取的 draft.md（不存在、途经符号链接或不是普通文件）时报告 draft.not-found；draft.md 超过 2 MiB（2097152 字节）时报告 lint.too-large（输入规模上限）；一条规则的词表命中超过 1000 处时只列出前 1000 处，并给出一条 severity 为 warning、错误码为 lint.truncated 的诊断；合并配置有 error 级问题时报告其诊断；两种情况 findings 与 waived 为空数组，退出码为 1。合并后有禁用词或术语表中要避免的写法、却没有生效的 banned-terms 或 term-consistency 规则时，给出一条 severity 为 warning、错误码为 lint.inactive-terms 的诊断。不加 --json 时以人读文本逐条列出发现项（位置、规则、说明与建议）。
+    scenarios:
+      lint-error:
+        - GIVEN: draft.md 含「值得注意的是，连接池很重要。」，default 规范包生效
+        - WHEN: 运行 wa-cli lint my-post --dir D --json
+        - THEN: findings 含一项 rule 为 ai-cliche、severity 为 error、source 为 pack:default、line 为 1、column 为 1、text 为「值得注意的是」的发现项；diagnostics 中有一条错误码为 lint.findings 的诊断，next 含 wa-cli help draft write --json；valid 为 false，退出码为 1
+      lint-warning-only:
+        - GIVEN: draft.md 为「使用Go语言。」
+        - WHEN: 运行 wa-cli lint my-post --dir D --json
+        - THEN: findings 含 rule 为 cjk-typography、severity 为 warning 的发现项，valid 为 true，退出码为 0
+      lint-no-draft:
+        - GIVEN: 作品 my-post 没有 draft.md
+        - WHEN: 运行 wa-cli lint my-post --dir D --json
+        - THEN: diagnostics 中有一条错误码为 draft.not-found 的诊断，退出码为 1
+      lint-waived-rule:
+        - GIVEN: config.yaml 用 waivers 豁免了 ai-cliche，draft.md 含「值得注意的是」
+        - WHEN: 运行 wa-cli lint my-post --dir D --json
+        - THEN: findings 中没有 rule 为 ai-cliche 的发现项，退出码为 0
+      lint-clean:
+        - GIVEN: 作品 my-post（minimal）的 draft.md 为「连接池可以降低延迟。」
+        - WHEN: 运行 wa-cli lint my-post --dir D --json
+        - THEN: findings 只有一项 rule 为 length、severity 为 warning、line 为 null 的字数不足发现项，waived 为空数组，chars 为 10，valid 为 true，changedPaths 为空数组，退出码为 0
+      inactive-terms:
+        - GIVEN: config.yaml 的 packs 为 [house]（不含 default），house 的 banned_terms 含「赋能」
+        - WHEN: 运行 wa-cli lint my-post --dir D --json
+        - THEN: findings 中没有 banned-terms 发现项，diagnostics 中有一条错误码为 lint.inactive-terms、severity 为 warning 的诊断
+  lint-text-model:
+    strength: MUST
+    statement: '文本检查（Lint）必须去掉开头的 BOM、把 CRLF 与单独的 CR 规范为 LF 后按行检查，并跳过屏蔽区域（Masked Region）：围栏代码块（行首至多 3 个空格后为至少 3 个反引号或 ~，反引号围栏其后不含反引号；到同一字符、长度不短于开头、其后只有空白的结束行，未闭合时到正文末尾）、行内代码（n 个反引号到其后第一个恰好 n 个反引号，没有结束时不是行内代码）、已闭合的 HTML 注释（<!-- 到其后第一个 -->，包括作者批注：行首的 <!-- 可以跨越空行，不在行首的 <!-- 不能跨越空行；没有对应 --> 的 <!-- 按普通文字检查）、URL（http:// 或 https:// 开始，到空白或全角标点（，。；：、！？）」』】》“”‘’…—）为止，路径中的汉字属于 URL）与 Markdown 链接地址（](...) 中的地址）。散文段落（Prose Paragraph）为由空行或围栏代码块分隔、含屏蔽区域之外文字的连续行；首尾只含屏蔽区域的行不属于散文段落，只含屏蔽区域（如单独一行的注释）的块不成段。字数为屏蔽区域之外、去掉行首 Markdown 标题标记（1 至 6 个 # 与其后的空白）后的非空白 Unicode 字符个数；段落字数同理按段落计。'
+    scenarios:
+      skip-code:
+        - GIVEN: draft.md 的围栏代码块中与行内代码中都含「值得注意的是」
+        - WHEN: 运行 wa-cli lint my-post --dir D --json
+        - THEN: findings 中没有 rule 为 ai-cliche 的发现项
+      skip-url:
+        - GIVEN: draft.md 含「见 https://example.com/值得注意的是」
+        - WHEN: 运行 wa-cli lint my-post --dir D --json
+        - THEN: findings 中没有 ai-cliche 发现项，也没有与该 URL 有关的 cjk-typography 发现项
+      url-before-punctuation:
+        - GIVEN: draft.md 含「见 https://example.com，值得注意的是」
+        - WHEN: 运行 wa-cli lint my-post --dir D --json
+        - THEN: findings 含一项 ai-cliche 发现项，没有与该 URL 有关的 cjk-typography 发现项
+      inline-comment-bound:
+        - GIVEN: draft.md 为「正文 <!-- 未闭合」、空行、「值得注意的是」、空行、「<!-- 注释 -->」
+        - WHEN: 运行 wa-cli lint my-post --dir D --json
+        - THEN: findings 含一项 ai-cliche 发现项（不在行首的 <!-- 不跨越空行）
+  rule-types:
+    strength: MUST
+    statement: '规则引擎（Rule Engine）必须按规则的 type 执行以下检查，参数取自合并后的 params：cjk-typography（参数 spacing 与 punctuation，布尔，默认 true）：spacing 为 true 时，汉字与 ASCII 字母或数字直接相邻处各报告一项，text 为相邻的两个字符，suggestion 为中间加一个空格；punctuation 为 true 时，汉字之后紧跟的半角 , . : ; ! ? 各报告一项（其后紧跟 ASCII 字母、数字或同一标点时不报告，如 .env、...），suggestion 为对应的全角标点（，。：；！？）。ai-cliche（参数 terms，字符串数组，默认为空；max_dashes_per_1000，正数，可选）：terms 中每个词的每处出现报告一项；给出 max_dashes_per_1000 且每千字的破折号数（连续的 — 记为一个）超过它时报告一项全文级发现项。banned-terms（参数 terms，字符串数组，可选）：terms 与合并后的 bannedTerms 中每个词的每处出现报告一项，bannedTerms 给出 replacement 时 suggestion 为它，message 含 reason。term-consistency（无参数）：合并后 glossary 中每个词条 avoid 里的写法每处出现报告一项，suggestion 为该词条的 term；落在标准写法某处出现范围内的命中（如「大语言模型」中的「语言模型」）不报告。同一个词在词表中出现多次时只报告一次。length-range（参数 min 与 max，正整数，至少给出一个）：字数小于 min 或大于 max 时报告一项全文级发现项。paragraph-length（参数 max，正整数，必需）：字数超过 max 的散文段落各报告一项，位置为段落首行首列。required-sections（参数 sections，非空字符串数组，必需）：正文中（屏蔽区域之外）没有文字等于该项的 Markdown 标题（1 至 6 个 # 开头的行）时，每项报告一项全文级发现项。词的匹配区分大小写；只由 ASCII 字母、数字与连字符组成的词要求前后都不是 ASCII 字母、数字或连字符，其他词按子串匹配。'
+    scenarios:
+      cjk-spacing:
+        - GIVEN: draft.md 为「使用Go语言」
+        - WHEN: 运行 wa-cli lint my-post --dir D --json
+        - THEN: findings 依次为 column 为 2、text 为「用G」与 column 为 4、text 为「o语」的两项 cjk-typography 发现项，suggestion 分别为「用 G」与「o 语」
+      cjk-punctuation:
+        - GIVEN: draft.md 为「你好,世界」
+        - WHEN: 运行 wa-cli lint my-post --dir D --json
+        - THEN: findings 含一项 cjk-typography 发现项，text 为「,」，suggestion 为「，」
+      banned-term:
+        - GIVEN: '工作区规范包的 banned_terms 含 {term: 赋能, replacement: 帮助, reason: 空泛}，config.yaml 的 packs 为 [house, default]，draft.md 含「赋能团队」'
+        - WHEN: 运行 wa-cli lint my-post --dir D --json
+        - THEN: findings 含一项 rule 为 banned-terms、severity 为 error、text 为「赋能」、suggestion 为「帮助」的发现项，message 含「空泛」，退出码为 1
+      term-consistency:
+        - GIVEN: '规范包的 glossary 含 {term: 规范包, avoid: [配置包]}，draft.md 含「配置包」'
+        - WHEN: 运行 wa-cli lint my-post --dir D --json
+        - THEN: findings 含一项 rule 为 term-consistency、suggestion 为「规范包」的发现项
+      length-range:
+        - GIVEN: 'minimal 文体的 length 规则为 {min: 300, max: 5000}，draft.md 只有 10 个字'
+        - WHEN: 运行 wa-cli lint my-post --dir D --json
+        - THEN: findings 含一项 rule 为 length、line 为 null 的全文级发现项，message 含 10 与 300
+      paragraph-length:
+        - GIVEN: '项目配置定义 rules.para {type: paragraph-length, params: {max: 5}}，draft.md 的第二段有 8 个字'
+        - WHEN: 运行 wa-cli lint my-post --dir D --json
+        - THEN: findings 含一项 rule 为 para、line 为第二段首行、column 为 1 的发现项
+      required-sections:
+        - GIVEN: '项目配置定义 rules.sections {type: required-sections, params: {sections: [背景, 结论]}}，draft.md 只有标题「## 背景」'
+        - WHEN: 运行 wa-cli lint my-post --dir D --json
+        - THEN: findings 含一项 rule 为 sections、line 为 null、message 含「结论」的全文级发现项
+      dash-density:
+        - GIVEN: 项目配置把 ai-cliche 的 max_dashes_per_1000 设为 1，draft.md 的 100 个字中有两处破折号
+        - WHEN: 运行 wa-cli lint my-post --dir D --json
+        - THEN: findings 含一项 rule 为 ai-cliche、line 为 null、message 含破折号密度的全文级发现项
+      word-boundary:
+        - GIVEN: 规范包的 banned_terms 含 Go，draft.md 为「Google 与 Go 语言」
+        - WHEN: 运行 wa-cli lint my-post --dir D --json
+        - THEN: banned-terms 只报告 Go 一处，column 为 10
+  rule-params:
+    strength: MUST
+    statement: wa-cli lint 执行规则前必须按规则类型校验合并后的 params：出现该类型没有声明的参数、参数类型不符（布尔、正整数、正数、字符串数组）、必需参数缺失或 length-range 的 min 与 max 都没有给出、min 大于 max 时，报告一条错误码为 rule.invalid-params、severity 为 error 的诊断（field 为 rules.<id>.params 或 rules.<id>.params.<name>，message 说明原因与给出该参数的配置层；path 为该配置层的产物：config.yaml 或工作区规范包文件，内置文体与规范包不填 path、以出处开头说明），该规则不执行，其他规则照常执行，valid 为 false，退出码为 1；next 为 wa-cli lint <unit> --dir <dir> --json 与 wa-cli config resolved --dir <dir> --json（validate 不校验规则参数）。
+    scenarios:
+      invalid-params:
+        - GIVEN: '项目配置定义 rules.para {type: paragraph-length, params: {max: many}}'
+        - WHEN: 运行 wa-cli lint my-post --dir D --json
+        - THEN: diagnostics 中有一条错误码为 rule.invalid-params、field 为 rules.para.params.max 的诊断，findings 中没有 rule 为 para 的发现项，退出码为 1
+      missing-param:
+        - GIVEN: '项目配置定义 rules.sections {type: required-sections}'
+        - WHEN: 运行 wa-cli lint my-post --dir D --json
+        - THEN: diagnostics 中有一条错误码为 rule.invalid-params、field 为 rules.sections.params.sections 的诊断，退出码为 1
+  inline-waiver:
+    strength: MUST
+    statement: '正文中的注释 <!-- lint-ignore <rule-id>: 理由 -->（冒号可为全角，理由为冒号之后去掉首尾空白的文字）必须豁免它所在的散文段落中规则 rule-id 的发现项；注释不在散文段落中（单独成段或跨越空行）时，豁免注释结束之后的第一个散文段落。被豁免的发现项移入 waived，每项另含 reason。单处豁免不作用于全文级发现项。以 lint-ignore 开头的注释格式不对（缺少冒号等）或理由为空时豁免无效，给出一条 severity 为 warning、错误码为 lint.invalid-waiver 的诊断；注释开始行所在段落的出处（Provenance，见 sources-and-provenance 主规格的 provenance-derivation）为 agent 时豁免无效（Agent 不能替作者豁免），给出一条 severity 为 warning、错误码为 lint.agent-waiver 的诊断，作者修改该段后出处变为 agent-draft-human-edited，豁免生效；单元有写入记录但无法推导出处（写入记录不通过校验）时，所有豁免都不生效，写入记录的问题以 severity 为 warning 的诊断报告；rule-id 不是任何生效规则的 id 时给出一条 severity 为 warning、错误码为 lint.unknown-waiver-rule 的诊断；两者的 path 为 draft.md，message 含注释所在的行号，next 为 wa-cli help lint --json 与 wa-cli provenance <unit> --dir <dir> --json。lint-ignore 注释不是作者反馈。'
+    scenarios:
+      waive-paragraph:
+        - GIVEN: 'draft.md 为「值得注意的是，这是作者原话。<!-- lint-ignore ai-cliche: 引用作者原话 -->」'
+        - WHEN: 运行 wa-cli lint my-post --dir D --json
+        - THEN: findings 中没有 ai-cliche 发现项，waived 含一项 rule 为 ai-cliche、reason 为「引用作者原话」的发现项，valid 为 true，退出码为 0
+      waive-next-paragraph:
+        - GIVEN: 'draft.md 第一段只有注释 <!-- lint-ignore ai-cliche: 原话 -->，第二段与第三段都含「值得注意的是」'
+        - WHEN: 运行 wa-cli lint my-post --dir D --json
+        - THEN: 第二段的命中在 waived 中，第三段的命中仍在 findings 中，退出码为 1
+      waiver-without-reason:
+        - GIVEN: draft.md 为「值得注意的是。<!-- lint-ignore ai-cliche -->」
+        - WHEN: 运行 wa-cli lint my-post --dir D --json
+        - THEN: ai-cliche 的命中仍在 findings 中；diagnostics 中有一条错误码为 lint.invalid-waiver、severity 为 warning 的诊断，退出码为 1
+      agent-waiver:
+        - GIVEN: 'Agent 用 wa-cli draft write 写入含 <!-- lint-ignore ai-cliche: 作者原话 --> 的段落'
+        - WHEN: 运行 wa-cli lint my-post --dir D --json
+        - THEN: ai-cliche 的命中仍在 findings 中，diagnostics 中有一条错误码为 lint.agent-waiver、severity 为 warning 的诊断，退出码为 1；作者直接改写该段后再次运行，该命中移入 waived
+  default-pack-rules:
+    strength: MUST
+    statement: 内置 default 规范包必须声明 cjk-typography（severity 为 warning）、ai-cliche（severity 为 error，terms 为「值得注意的是、不难看出、总而言之、综上所述、在当今时代」）、banned-terms（severity 为 error）与 term-consistency（severity 为 warning）四条规则。
+    scenarios:
+      default-rules:
+        - GIVEN: packs 为空数组的工作区 D
+        - WHEN: 运行 wa-cli config resolved --dir D --json
+        - THEN: 'resolved.rules 含 cjk-typography、ai-cliche、banned-terms 与 term-consistency，ai-cliche 与 banned-terms 的 severity 为 {value: error, source: pack:default}'
+  claim-rule-types:
+    strength: MUST
+    statement: '合并结果中有生效的 claim-sources 或 claim-candidates 规则时，wa-cli lint 必须读取单元目录下的 claims.yaml（不存在时没有已登记的论断；不通过校验时报告其诊断并以退出码 1 退出，论断相关的规则不执行）与所引素材的类型，并按规则的 type 执行以下检查；两种规则都未生效时不读取 claims.yaml。论断文字的比较对象是去掉首尾空白、句末的 。！？；… 与右引号或右括号后的 text，在围栏代码块之外的原文（含行内代码与链接的原文）中查找；同一结束位置只取最长的论断文字。claim-sources（参数 kinds，字符串数组，默认 [experience, opinion, case, data]；source_types，字符串数组，默认 [author-note, interview, transcript]）：kind 在 kinds 中的每个论断（Claim）必须关联至少一份类型在 source_types 中的素材，否则报告一项发现项：没有关联素材时 message 说明缺少作者素材，只关联了其他类型的素材时 message 列出这些素材及其类型；两种 message 都含论断 id、wa-cli source add 与 wa-cli claim set <unit> <论断 id> --sources 的做法；位置为论断文字第一次出现处（text 为该文字），找不到时为全文级发现项。有 error 级 claim-sources 发现项时，lint.findings 诊断的 next 另含 wa-cli help source add --json、wa-cli help claim set --json 与 wa-cli claim list <unit> --dir <dir> --json。claim-candidates（参数 pronouns，默认 [我, 我们]；experience_markers，默认 [曾, 曾经, 当时, 那时, 那次, 去年, 前年, 上个月, 上周, 第一次, 亲自, 亲眼, 遇到, 经历过, 踩过, 做过, 参与, 负责]；data，布尔，默认 true；cover_kinds，字符串数组，默认 [experience, opinion, case, data]）：把散文段落中每行的可见文字在 。！？；… 与行尾处切分为句子；除标题行与引用块行（只检测数据）之外，句子中出现 experience_markers 中的词且其前有 pronouns 中的词时为亲历候选，每个标记词与它之前最近的代词组成一个亲历区间（从该代词到标记词所在分句的末尾，即下一个 ，、：；,;: 或句末标点之前，不含末尾空白）；同一分句的亲历区间中任一被覆盖即视为该分句的亲历已登记，句子中每个含亲历区间的分句都已登记时该句的亲历才算已登记，data 为 true 且句子的可见文字中有数字（含全角数字）后接 %、％、倍、个百分点、万或亿，或有「百分之」加数字、中文数字加「倍」时为数据候选（区间为该数据）。kind 在 cover_kinds 中的已登记论断的文字出现处覆盖候选区间时，该候选视为已登记；有未被覆盖的候选区间时报告一项发现项，位置为句子首个非空白字符，text 为句子的原文，message 说明未覆盖的候选种类并提示用 wa-cli claim add <unit> 登记并关联作者素材。发现项超过 MaxHits（1000）时只报告前 1000 项并报告 lint.truncated。'
+    scenarios:
+      claim-without-source:
+        - GIVEN: 作品 my-post（minimal）的 claims.yaml 有 kind 为 experience、sources 为空、text 为「我们去年把连接池调到 50」的论断 claim-1，正文含这句话
+        - WHEN: 运行 wa-cli lint my-post --dir D --json
+        - THEN: findings 含一项 rule 为 claims、severity 为 error 的发现项，line 与 column 为该句在正文中的位置，message 含 claim-1 与 wa-cli claim set my-post claim-1；lint.findings 的 next 含 wa-cli help claim set --json 与 wa-cli claim list my-post；valid 为 false，退出码为 1
+      claim-with-reference-only:
+        - GIVEN: 论断 claim-1 只关联了类型为 reference 的素材 src-r
+        - WHEN: 运行 wa-cli lint my-post --dir D --json
+        - THEN: findings 含一项 rule 为 claims 的发现项，message 含 src-r 与 reference
+      claim-with-author-source:
+        - GIVEN: 用 wa-cli claim set my-post claim-1 --sources src-a 让论断 claim-1 关联类型为 interview 的素材 src-a
+        - WHEN: 运行 wa-cli lint my-post --dir D --json
+        - THEN: findings 中没有 rule 为 claims 的发现项
+      fact-claim-not-required:
+        - GIVEN: 论断 claim-2 的 kind 为 fact、没有关联素材
+        - WHEN: 运行 wa-cli lint my-post --dir D --json
+        - THEN: findings 中没有关于 claim-2 的 claims 发现项
+      experience-candidate:
+        - GIVEN: 正文含「我曾经在生产环境踩过这个坑。」，没有已登记的论断
+        - WHEN: 运行 wa-cli lint my-post --dir D --json
+        - THEN: findings 含一项 rule 为 claim-candidates、severity 为 warning、text 为该句的发现项，退出码不因它变为 1
+      generic-we:
+        - GIVEN: 正文为「我们可以看到连接池的作用。」
+        - WHEN: 运行 wa-cli lint my-post --dir D --json
+        - THEN: findings 中没有 claim-candidates 发现项
+      data-candidate:
+        - GIVEN: 正文含「延迟降低了 90%。」
+        - WHEN: 运行 wa-cli lint my-post --dir D --json
+        - THEN: findings 含一项 claim-candidates 发现项，message 说明为数据
+      covered-candidate:
+        - GIVEN: 正文含「我曾经在生产环境踩过这个坑。」，claims.yaml 有 kind 为 experience、text 为「我曾经在生产环境踩过这个坑」的论断，关联了 author-note 素材
+        - WHEN: 运行 wa-cli lint my-post --dir D --json
+        - THEN: findings 中没有 claim-candidates 与 claims 发现项
+      partial-cover:
+        - GIVEN: 正文为「我曾经负责迁移，延迟降低了 90%。」，只登记了 kind 为 experience、text 为「我曾经负责迁移」的论断
+        - WHEN: 运行 wa-cli lint my-post --dir D --json
+        - THEN: findings 含一项 claim-candidates 发现项，message 说明为数据而不含亲历；登记的论断 kind 为 fact、文字只覆盖「迁移」或只是「我曾」时，message 同时说明亲历与数据
+      heading-and-quote:
+        - GIVEN: 正文的标题行为「## 我曾经踩过的坑」，引用块行为「> 我们去年增长了 50%。」
+        - WHEN: 运行 wa-cli lint my-post --dir D --json
+        - THEN: 标题行没有 claim-candidates 发现项；引用块行有一项 message 说明为数据而不含亲历的发现项
+      nearest-pronoun:
+        - GIVEN: 正文为「我们知道，我曾经踩过这个坑。」，登记了 kind 为 experience、text 为「我曾经踩过这个坑」的论断
+        - WHEN: 运行 wa-cli lint my-post --dir D --json
+        - THEN: findings 中没有 claim-candidates 发现项
+      invalid-claims:
+        - GIVEN: claims.yaml 不通过校验
+        - WHEN: 运行 wa-cli lint my-post --dir D --json
+        - THEN: diagnostics 中有该 claims.yaml 的诊断，退出码为 1
+      claim-rules-inactive:
+        - GIVEN: claims.yaml 不通过校验，项目配置豁免了 claims 与 claim-candidates 两条规则
+        - WHEN: 运行 wa-cli lint my-post --dir D --json
+        - THEN: diagnostics 为空，退出码为 0
+  techblog-rule-types:
+    strength: MUST
+    statement: wa-cli lint 必须按规则的 type 执行以下技术写作检查，只检查正文、不访问网络。code-block-language（无参数）：每个开头的围栏（``` 或 ~~~）之后没有信息字符串的围栏代码块报告一项发现项，位置为开头的围栏行，message 提示写明语言。link-format（参数 schemes，字符串数组，默认 [http, https, mailto]）：围栏之外、不在行内代码与已闭合的 HTML 注释中的每个行内链接 [文字](地址) 与图片 ![替代文字](地址)，链接文字为空（图片除外）、地址为空、地址中含空白（尖括号包住的地址与带引号的标题除外）、协议不在 schemes 中、http 或 https 地址没有主机名时各报告一项发现项，位置为链接开头，text 为整个链接；不在链接地址中的裸 URL 没有主机名时同样报告。reference-sources（参数 source_types，至少一项的字符串数组，默认 [reference]，给出空数组时报告 rule.invalid-params；versions 与 apis，布尔，默认 true）：散文段落中的版本号（v 加数字与点，如 v2.3.1；三段及以上的数字版本，如 1.2.3；紧跟英文名称的两段版本，如 Go 1.22，在可见文字中查找）与 API 说法（内容为函数调用形式、不在 HTML 注释中的行内代码，如 http.Get(url)）必须被已登记论断的文字在原文中的出现处覆盖，且该论断关联至少一份类型在 source_types 中的素材；否则在提及处报告一项发现项，text 为该版本号或 API 说法，message 给出 wa-cli source add 与 wa-cli claim add <unit> 的做法。claims.yaml 不通过校验时 reference-sources 不执行；合并结果中有生效的 reference-sources 规则时 lint 读取 claims.yaml。
+    scenarios:
+      code-without-language:
+        - GIVEN: 作品 my-post 的文体启用 code-block-language，正文含一个开头为 ``` 的代码块
+        - WHEN: 运行 wa-cli lint my-post --dir D --json
+        - THEN: findings 含一项该规则的发现项，line 为开头的围栏行
+      bad-links:
+        - GIVEN: 文体启用 link-format，正文含 [](https://go.dev)、[空]()、[坏](javascript:void) 与裸链接 https://
+        - WHEN: 运行 wa-cli lint my-post --dir D --json
+        - THEN: findings 分别报告链接文字为空、地址为空、不允许的协议与缺少主机名；行内代码、围栏代码块与 HTML 注释中的链接不报告
+      version-needs-reference:
+        - GIVEN: 文体启用 reference-sources，正文含「从 Go 1.22 开始」与 `http.Get(url)`，没有登记论断
+        - WHEN: 运行 wa-cli lint my-post --dir D --json
+        - THEN: findings 含 text 为 Go 1.22 与 http.Get(url) 的两项发现项，message 含 wa-cli claim add my-post
+      version-covered:
+        - GIVEN: 同上，登记了文字含「从 Go 1.22 开始」的论断并关联 reference 类型的素材
+        - WHEN: 运行 wa-cli lint my-post --dir D --json
+        - THEN: findings 中没有 text 为 Go 1.22 的发现项

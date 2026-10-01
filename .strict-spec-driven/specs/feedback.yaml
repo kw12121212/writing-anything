@@ -100,7 +100,7 @@ requirements:
         - THEN: diagnostics 中有一条错误码为 artifact.duplicate-id、path 为 .writing-anything/works/my-post/feedback.yaml、field 为 feedback[1].id 的诊断，退出码为 1
   comment-feedback:
     strength: MUST
-    statement: 'draft.md 中的每个批注（Comment）<!-- @me: 文本 --> 或 <!-- @me(kind): 文本 -->（kind 为 must-fix、suggestion、question、praise 之一）都必须被解析为该单元的一条作者反馈。批注可以跨行，但不能跨越空行、不能包含另一个 <!--，开头与结尾都不能位于围栏代码块内，开头不能位于行内代码中（同一行中其前的反引号为奇数个）；不满足这些条件的（如漏写 --> 的）不是批注，也不会被移除。id 为 cm- 加「kind、换行、去掉首尾空白的文本」的 SHA-256 前 8 个十六进制字符，同一正文中 kind 与文本都相同的批注依次加 -2、-3，编号时跳过 feedback.yaml 中已关闭（resolved 或 rejected）的记录的 id，使已关闭的记录不再占用正文中仍然存在的批注；kind 省略时为 suggestion；status 为 open；text 为去掉首尾空白的批注文本；source 为 comment；锚点的 quote 为整个批注，定位结果为批注开始的行与所在段落。尚未记入 feedback.yaml 的批注反馈由 feedback list、feedback watch 与 wa-cli next 按 feedback-list 的顺序与已记入的反馈一起列出；feedback.yaml 中已有同 id 记录时只列出该记录。wa-cli draft write 写入正文之前把当前正文中尚未记入的批注反馈记入 feedback.yaml，feedback resolve 处理批注反馈时先记入（见 feedback-resolve）；读取命令不写文件。一个单元的正文最多解析 1000 个批注：超过时 feedback list 与 wa-cli next 只列出前 1000 个并报告 feedback.too-many-comments，draft write 报告 feedback.too-many-comments 并不修改任何文件。'
+    statement: 'draft.md 中的每个批注（Comment）<!-- @me: 文本 --> 或 <!-- @me(kind): 文本 -->（kind 为 must-fix、suggestion、question、praise 之一）都必须被解析为该单元的一条作者反馈。批注可以跨行，但不能跨越空行、不能包含另一个 <!--，开头与结尾都不能位于围栏代码块内，开头不能位于行内代码中（围栏代码块与行内代码的识别与文本检查一致：围栏的结束行为同一字符、长度不短于开头；行内代码为 n 个反引号到之后恰好 n 个反引号）；不满足这些条件的（如漏写 --> 的）不是批注，也不会被移除。id 为 cm- 加「kind、换行、去掉首尾空白的文本」的 SHA-256 前 8 个十六进制字符，同一正文中 kind 与文本都相同的批注依次加 -2、-3，编号时跳过 feedback.yaml 中已关闭（resolved 或 rejected）的记录的 id，使已关闭的记录不再占用正文中仍然存在的批注；kind 省略时为 suggestion；status 为 open；text 为去掉首尾空白的批注文本；source 为 comment；锚点的 quote 为整个批注，定位结果为批注开始的行与所在段落。尚未记入 feedback.yaml 的批注反馈由 feedback list、feedback watch 与 wa-cli next 按 feedback-list 的顺序与已记入的反馈一起列出；feedback.yaml 中已有同 id 记录时只列出该记录。wa-cli draft write 写入正文之前把当前正文中尚未记入的批注反馈记入 feedback.yaml，feedback resolve 处理批注反馈时先记入（见 feedback-resolve）；读取命令不写文件。一个单元的正文最多解析 1000 个批注：超过时 feedback list 与 wa-cli next 只列出前 1000 个并报告 feedback.too-many-comments，draft write 报告 feedback.too-many-comments 并不修改任何文件。'
     scenarios:
       parse-comment:
         - GIVEN: '作品 my-post 的 draft.md 第 3 行为「第二段。<!-- @me(must-fix): 这里要给数据 -->」'
@@ -130,3 +130,7 @@ requirements:
         - GIVEN: 'draft.md 为「在正文里写 `<!-- @me: 文本 -->` 即可。」'
         - WHEN: 运行 wa-cli feedback list my-post --dir D --json
         - THEN: feedback 为空数组
+      fence-and-code-span:
+        - GIVEN: '正文中四个反引号的围栏内有 <!-- @me: 演示批注 -->，另有一行「用 ``a`b`` 表示。<!-- @me: 要改 -->」'
+        - WHEN: 运行 wa-cli feedback list my-post --dir D --json
+        - THEN: 只列出一条 text 为「要改」的批注反馈

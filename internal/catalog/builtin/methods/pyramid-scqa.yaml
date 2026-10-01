@@ -1,0 +1,26 @@
+# 金字塔原理（Pyramid Principle）与 SCQA：先交代情境、冲突与问题，再给出答案（结论先行），最后分组给出论据。
+schema_version: 1
+id: pyramid-scqa
+title: 金字塔原理与 SCQA
+description: 用情境（Situation）、冲突（Complication）、问题（Question）引出答案（Answer），答案即全文结论，其后按组给出支撑论据。
+kind: article
+sections:
+  - id: situation
+    title: 情境
+    description: 读者已知、认同的背景。
+  - id: complication
+    title: 冲突
+    description: 打破现状的变化或难题。
+  - id: question
+    title: 问题
+    description: 冲突引出的、读者关心的问题。
+  - id: answer
+    title: 答案
+    description: 全文的核心结论，结论先行。
+  - id: support
+    title: 论据
+    description: 按逻辑分组支撑答案的论据，每组只说一件事。
+rubric:
+  - id: conclusion-first
+    title: 结论先行
+    description: 答案在论据之前明确给出，读者读完答案一节就知道全文结论。

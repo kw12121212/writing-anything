@@ -1,0 +1,36 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: review-and-acceptance
+  status: proposed
+summary:
+  what:
+    - 新增审稿（Review）产物 review.yaml 与 wa-cli review record：Agent 的审稿作为 AI 预审（Pre-review）写入，按合并后的评分标准（Rubric）逐项给出结论（pass 或 fail）、证据与正文段落引用，并列出发现项（Finding，每项引用具体段落，可附引文与建议）；wa-cli 校验每个评分项恰有一个结论、段落与引文存在于当前正文，并记录审稿所依据的正文 SHA-256。
+    - 新增 wa-cli review show（只读）：汇总审稿结论与发现项、文本检查（Lint）结果、未处理的作者反馈与该单元的决策，把未处理的审稿发现项与作者反馈列为修订任务（Revision Task），并按工作区的关卡强度（Gate Level）给出验收是否就绪与全部阻塞项；新增 wa-cli review resolve 把审稿发现项标为 resolved 或 waived（waived 须写明理由）。
+    - '新增 wa-cli accept 与验收（Acceptance）产物 acceptance.yaml：所有关卡强度下，文本检查的 error 级发现项与阻塞决策都阻塞验收；standard 与 strict 另要求审稿存在且基于当前正文、修订任务全部解决或豁免；strict 另要求规范包显式声明为阻塞（blocking: true）的评分项不为 fail，并要求 --confirmed-by-author 与作者确认原话摘要（确认记录（Confirmation Record））。验收记录关卡强度、正文 SHA-256、是否经作者确认与原话摘要。'
+    - 内置 minimal 文体的审稿阶段的必需产物增加 acceptance；评分项可声明 blocking；验收后正文被改动时，advance 与 next 报告 acceptance.stale 阻塞项；缺少审稿或验收产物时 next 给出对应的命令。
+  why:
+    - 里程碑 tech-blog-workflow 的完成标准要求：没有作者确认记录时 strict 关卡下 accept 被拒绝；审稿发现项与作者反馈都转为修订任务，未全部解决或豁免前 standard 与 strict 关卡下不能验收。目前审稿阶段只要求存在 review 文件，没有结构、校验与验收关卡。
+    - 帮 Agent 规范地协助人写作：Agent 的审稿只是预审，默认不阻塞，由作者做最终判断；验收必须留下作者确认的记录。
+scope:
+  in:
+    - internal/review（新包）：review.yaml 与 acceptance.yaml 的 Schema、加载与校验、审稿记录、发现项处理、修订任务与验收关卡
+    - internal/cli：review record、review show、review resolve 与 accept 命令；lint 的核心逻辑抽成可复用的函数；advance、next 与 validate 接入审稿与验收产物
+    - internal/schema：review、review-input 与 acceptance 三个 Schema；评分项新增可选的 blocking 字段
+    - internal/catalog：minimal 文体的审稿阶段必需产物为 [review, acceptance]
+    - 新增 review 主规格；修改 units-and-lifecycle 的 advance-stage 与 next-steps；docs/GLOSSARY.md 新增修订任务（Revision Task）
+  out:
+    - 指标类发现项的指标数据、锚定评分与校准：后续变更处理
+    - 审稿发现项自动进入决策队列：需要作者判断的发现项由 Agent 用 wa-cli decision add 登记，review show 汇总该单元的决策
+    - tech-blog 文体的评分标准与阶段配置：由 tech-blog-genre-and-export 处理
+    - 按单元设置不同的关卡强度：关卡强度取工作区配置 gate_level
+unchanged_behavior:
+  - 输出信封字段与退出码约定不变；已发布错误码的含义不变
+  - 不含 acceptance 必需产物的阶段的 advance 行为不变；写作简报、大纲与决策阻塞项不变
+  - wa-cli lint 的输出与退出码不变；feedback 与 decisions 命令不变
+  - 仓库根目录不创建 .writing-anything/；产品二进制不依赖 internal/tools/** 与 strict-spec-driven；wa-cli 不联网、不调用 LLM
+roadmap:
+  milestone: tech-blog-workflow
+  planned_change: review-and-acceptance

@@ -256,3 +256,31 @@ func TestCheck(t *testing.T) {
 		t.Fatalf("fresh workspace: problems = %+v", ps)
 	}
 }
+
+// 上下文预算按 文体 → 规范包 → 项目配置 合并，都没有声明时为默认值；ForGenre 以给定文体作为文体层。
+func TestContextBudget(t *testing.T) {
+	if r := mustResolve(t, setup(t, config("", "[]", ""), nil)); r.ContextBudget != (Value{DefaultContextBudget, SourceDefault}) {
+		t.Fatalf("default: %+v", r.ContextBudget)
+	}
+	if r := mustResolve(t, setup(t, config("minimal", "[]", ""), nil)); r.ContextBudget != (Value{12000, "genre:minimal"}) {
+		t.Fatalf("genre: %+v", r.ContextBudget)
+	}
+	packed := map[string]string{"house": house + "context_budget: 8000\n"}
+	if r := mustResolve(t, setup(t, config("minimal", "[house]", ""), packed)); r.ContextBudget != (Value{8000, "pack:house"}) {
+		t.Fatalf("pack: %+v", r.ContextBudget)
+	}
+	root := setup(t, config("", "[]", "context_budget: 500\n"), nil)
+	if r := mustResolve(t, root); r.ContextBudget != (Value{500, "project"}) {
+		t.Fatalf("project: %+v", r.ContextBudget)
+	}
+	r, ps := ForGenre(root, "minimal")
+	if r == nil || ps != nil || r.Genre.ID != "minimal" || r.ContextBudget != (Value{500, "project"}) {
+		t.Fatalf("ForGenre: %+v %+v", r, ps)
+	}
+	if r, ps := ForGenre(setup(t, "k: [\n", nil), "minimal"); r != nil || len(ps) == 0 {
+		t.Fatalf("broken config: %+v %+v", r, ps)
+	}
+	if r, ps := ForGenre(setup(t, "schema_version: 2\n", nil), "minimal"); r != nil || len(ps) == 0 {
+		t.Fatalf("invalid config: %+v %+v", r, ps)
+	}
+}

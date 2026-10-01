@@ -8,7 +8,7 @@ lesson:
 category: coding
 status: active
 created_at: '2026-09-30T12:34:33.352Z'
-updated_at: '2026-09-30T12:56:36.721Z'
+updated_at: '2026-10-01T03:21:50.100Z'
 context: author-sources-and-provenance 为 draft write 的写入路径检查了 units/ 与单元目录是否为真实目录，读取 draft.md、provenance.yaml、claims.yaml 时只对最后一级文件做 Lstat。
 observation: fresh-context 审查把 units/intro 换成指向外部目录的符号链接后，wa-cli provenance 输出了外部 draft.md 的段落统计，validate 校验了外部的 claims.yaml；全部测试通过，因为测试只覆盖了写入路径的符号链接。
 takeaway: 按参数定位的目录在读和写两条路径上都要逐级 Lstat 确认是真实目录；把检查放进统一的读取辅助函数，并为 provenance、validate、draft write 各写一条途经符号链接的测试。
@@ -20,3 +20,12 @@ occurrences:
   - origin: author-feedback
     date: '2026-09-30'
     evidence: fresh-context 审查发现 validate <path> 通过 workspace.ValidateArtifact 直接 os.ReadFile，穿过符号链接的单元目录读取外部 feedback.yaml 并报告 valid 为 true，而整体校验已正确跳过；internal/workspace.ValidateArtifact 增加逐级 Lstat，TestValidateArtifactSymlinks 与 TestFeedbackSymlinkedUnitDir 覆盖。
+  - origin: brief-intake-gate
+    date: '2026-09-30'
+    evidence: brief.yaml 为指向外部文件的符号链接时，brief show 说没有简报、validate 跳过、advance 报 brief.invalid、brief set 静默替换链接；审查后 internal/brief 的 load 在 Lstat 存在但非普通文件时统一报告 artifact.not-found，internal/cli/brief_test.go 的 TestBriefSymlink 覆盖 show、set、validate 与 advance。
+  - origin: review-and-acceptance
+    date: '2026-10-01'
+    evidence: review 与 acceptance 产物起初用 ReadRegular 判断存在：换成符号链接的 acceptance.yaml 被 advance 的 isFile 视为存在、被 AcceptanceBlockers 视为不存在，于是 advance 直接推进到 done。internal/review 的 loadDoc 改用 os.Lstat 判断存在并报告 artifact.not-found；internal/cli/review_test.go 的 TestReviewArtifactSymlinks 覆盖 advance、next、validate、review show 与 review resolve。
+  - origin: agent-skills-package
+    date: '2026-10-01'
+    evidence: skills install 起初从每个技能的子目录开始向上检查：技能目录本身是符号链接、链接目标中已有 wa-auto/ 时检查通过，技能写进了项目之外。改为先检查技能目录与每个技能目录本身，再写入；internal/skills 的 TestInstall 覆盖预建子目录的符号链接目标。

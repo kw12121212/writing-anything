@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/kw12121212/writing-anything/internal/draft"
+	"github.com/kw12121212/writing-anything/internal/mdscan"
 	"github.com/kw12121212/writing-anything/internal/work"
 	"github.com/kw12121212/writing-anything/internal/workspace"
 	"go.yaml.in/yaml/v3"
@@ -44,24 +45,21 @@ type Comment struct {
 	Start, End int    // 批注在正文原始字节中的位置
 }
 
-// fenced 返回 content 中围栏代码块覆盖的字节区间，规则与段落切分一致：去掉行首空白后以 ``` 或 ~~~ 开头的行开启
-// 围栏，直到同样开头的行结束，未闭合的围栏延续到正文末尾。
+// fenced 返回 content 中围栏代码块覆盖的字节区间，按升序；围栏的识别与文本检查一致（见 mdscan.FenceLines）。
 func fenced(content string) [][2]int {
+	lines := strings.SplitAfter(content, "\n")
+	in := mdscan.FenceLines(lines)
 	var out [][2]int
-	fence, start, off := "", 0, 0
-	for _, line := range strings.SplitAfter(content, "\n") {
-		lead := strings.TrimLeft(line, " \t")
-		switch {
-		case fence != "" && strings.HasPrefix(lead, fence):
-			out = append(out, [2]int{start, off + len(line)})
-			fence = ""
-		case fence == "" && (strings.HasPrefix(lead, "```") || strings.HasPrefix(lead, "~~~")):
-			fence, start = lead[:3], off
+	off := 0
+	for i, line := range lines {
+		if in[i] {
+			if n := len(out); n > 0 && out[n-1][1] == off {
+				out[n-1][1] = off + len(line)
+			} else {
+				out = append(out, [2]int{off, off + len(line)})
+			}
 		}
 		off += len(line)
-	}
-	if fence != "" {
-		out = append(out, [2]int{start, len(content)})
 	}
 	return out
 }
@@ -127,20 +125,18 @@ func Comments(content []byte, closed func(id string) bool) []Comment {
 // blankLine 匹配空行：批注不能跨越它。
 var blankLine = regexp.MustCompile(`\n[ \t\r]*\n`)
 
-// inCodeSpan 报告偏移 off 是否位于其所在行的行内代码中：同一行中它之前的反引号为奇数个。
+// inCodeSpan 报告偏移 off 是否位于其所在行的行内代码中（行内代码的识别与文本检查一致，见 mdscan.CodeSpans）。
 func inCodeSpan(s string, off int) bool {
 	lineStart := strings.LastIndex(s[:off], "\n") + 1
-	return strings.Count(s[lineStart:off], "`")%2 == 1
+	lineEnd := len(s)
+	if i := strings.Index(s[off:], "\n"); i >= 0 {
+		lineEnd = off + i
+	}
+	return mdscan.InSpans(mdscan.CodeSpans(s[lineStart:lineEnd]), off-lineStart)
 }
 
-func inside(blocks [][2]int, off int) bool {
-	for _, b := range blocks {
-		if off >= b[0] && off < b[1] {
-			return true
-		}
-	}
-	return false
-}
+// inside 报告偏移 off 是否在某个围栏代码块的字节区间中。
+func inside(blocks [][2]int, off int) bool { return mdscan.InSpans(blocks, off) }
 
 // closedIDs 返回已关闭（resolved 或 rejected）的记录 id 的检查函数。
 func closedIDs(recorded []Feedback) func(string) bool {

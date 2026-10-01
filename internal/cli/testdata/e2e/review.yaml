@@ -1,0 +1,8 @@
+rubric:
+  - {item: accuracy, verdict: pass, evidence: 连接复用的条件与 net/http 文档一致, paragraphs: [9]}
+  - {item: reproducible, verdict: pass, evidence: 示例代码完整，可以直接运行, paragraphs: [12]}
+  - {item: audience-fit, verdict: pass, evidence: 面向后端工程师，没有展开 TCP 基础知识, paragraphs: [3]}
+  - {item: doc-type, verdict: pass, evidence: 属于操作指南，聚焦一个具体问题, paragraphs: [1]}
+  - {item: conclusion-first, verdict: pass, evidence: 结论一节先给出答案, paragraphs: [9]}
+findings:
+  - {paragraph: 13, quote: 降低了 40%, message: 数据最好注明压测条件, suggestion: 补充并发数与时长}

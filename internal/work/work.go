@@ -14,8 +14,11 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/kw12121212/writing-anything/internal/brief"
 	"github.com/kw12121212/writing-anything/internal/catalog"
 	"github.com/kw12121212/writing-anything/internal/decision"
+	"github.com/kw12121212/writing-anything/internal/outline"
+	"github.com/kw12121212/writing-anything/internal/review"
 	"github.com/kw12121212/writing-anything/internal/schema"
 	"github.com/kw12121212/writing-anything/internal/workspace"
 	"go.yaml.in/yaml/v3"
@@ -68,7 +71,9 @@ type Work struct {
 	Genre     *catalog.Genre
 	Root      *Unit
 	doc       *yaml.Node
-	decisions *loadedQueue // 决策队列，首次计算阻塞项时加载
+	decisions *loadedQueue       // 决策队列，首次计算阻塞项时加载
+	gateLevel string             // 工作区配置的关卡强度（Gate Level），首次需要时读取
+	methods   *catalog.MethodSet // 写作法目录，首次计算大纲阻塞项时加载
 }
 
 // loadedQueue 是一次加载的决策队列。
@@ -290,9 +295,7 @@ func (w *Work) UnitDir(u *Unit) string {
 }
 
 // RefOf 返回单元目录 dir（UnitDir 的结果）对应的单元引用。
-func RefOf(dir string) string {
-	return strings.Replace(strings.TrimPrefix(dir, workspace.WorksPath+"/"), "/units/", "/", 1)
-}
+func RefOf(dir string) string { return workspace.UnitRef(dir) }
 
 // Blocker 是阻止单元推进的一个阻塞项（Blocker）。
 type Blocker struct {
@@ -304,8 +307,8 @@ type Blocker struct {
 }
 
 // Blockers 返回单元 u 在当前阶段的全部阻塞项；advance、next 与 status 都只通过它得到阻塞项。
-// 阻塞来源依次为：缺失的必需产物（Required Artifact），即单元目录下既没有 <a>.yaml 也没有 <a>.md；关联该单元的
-// 未决定阻塞决策；决策队列无法加载时，偏安全地给出一条 decision.invalid-queue。
+// 阻塞来源依次为：缺失的必需产物（Required Artifact），即单元目录下既没有 <a>.yaml 也没有 <a>.md；当前阶段要求 brief
+// 时的写作简报问题（brief-gate）；当前阶段要求 outline 时的覆盖缺口（outline-gate）；决策队列无法加载时，偏安全地给出一条 decision.invalid-queue；关联该单元的未决定阻塞决策。
 func (w *Work) Blockers(root string, u *Unit) []Blocker {
 	s := w.stage(u.Stage)
 	if s == nil {
@@ -321,6 +324,19 @@ func (w *Work) Blockers(root string, u *Unit) []Blocker {
 			Message: fmt.Sprintf("阶段 %s 的必需产物（Required Artifact）%s 缺失：%s/ 下没有 %s.yaml 或 %s.md", u.Stage, a, dir, a, a)})
 	}
 	all, invalid := w.queue(root)
+	q := brief.Queue{Decisions: all, Invalid: invalid}
+	if slices.Contains(s.RequiredArtifacts, "brief") {
+		out = append(out, w.briefBlockers(root, u, q)...)
+	}
+	if slices.Contains(s.RequiredArtifacts, "outline") {
+		out = append(out, w.outlineBlockers(root, u, q)...)
+	}
+	if slices.Contains(s.RequiredArtifacts, "acceptance") {
+		// 验收后正文又被修改，或验收记录不通过校验：原来的验收不再有效。
+		for _, b := range review.AcceptanceBlockers(root, dir, w.level(root)) {
+			out = append(out, Blocker{Code: b.Code, Artifact: "acceptance", Path: b.Path, Message: b.Message})
+		}
+	}
 	ds := decision.BlockingIn(all, u.Ref)
 	if invalid {
 		out = append(out, Blocker{Code: decision.CodeInvalidQueue, Artifact: "decisions", Path: decision.Path,
@@ -333,7 +349,75 @@ func (w *Work) Blockers(root string, u *Unit) []Blocker {
 	return out
 }
 
+// briefBlockers 返回单元 u 的写作简报（Brief）阻塞项：brief.yaml 不通过校验时一条 brief.invalid，否则每个
+// 仍需向作者提问的问题一条；单元目录下没有 brief.yaml 与 brief.md 时没有（由缺失产物报告）。
+func (w *Work) briefBlockers(root string, u *Unit, q brief.Queue) []Blocker {
+	dir := w.UnitDir(u)
+	g := brief.Check(root, dir, isFile(root, brief.Path(dir)), isFile(root, dir+"/"+brief.MDName), w.briefRequired(u), q)
+	if g == nil {
+		return nil
+	}
+	if len(g.Invalid) > 0 {
+		return []Blocker{{Code: brief.CodeInvalid, Artifact: "brief", Path: g.Path,
+			Message: fmt.Sprintf("写作简报（Brief）%s 不通过校验（%s），无法确认必填项与核心观点的出处；请先修复", g.Path, g.Invalid[0].Message)}}
+	}
+	var out []Blocker
+	for _, q := range g.Questions {
+		out = append(out, Blocker{Code: q.Code, Artifact: "brief", Path: g.Path, Message: q.Message})
+	}
+	return out
+}
+
+// outlineBlockers 返回单元 u 的大纲（Outline）阻塞项：大纲或写作简报不通过校验时一条 outline.invalid，否则每个覆盖缺口
+// （Coverage Gap）一条；单元目录下没有 outline.yaml 与 outline.md 时没有（由缺失产物报告）。
+func (w *Work) outlineBlockers(root string, u *Unit, q brief.Queue) []Blocker {
+	dir := w.UnitDir(u)
+	g := outline.Check(root, dir, isFile(root, outline.Path(dir)), isFile(root, dir+"/"+outline.MDName), q, w.picker(root))
+	if g == nil {
+		return nil
+	}
+	if len(g.Invalid) > 0 {
+		// path 为不通过校验的产物（outline.yaml 或 brief.yaml），复查命令才能重新检出问题。
+		return []Blocker{{Code: outline.CodeInvalid, Artifact: "outline", Path: g.Invalid[0].Path,
+			Message: fmt.Sprintf("%s 不通过校验（%s），无法检查大纲（Outline）的覆盖；请先修复", g.Invalid[0].Path, g.Invalid[0].Message)}}
+	}
+	var out []Blocker
+	for _, gap := range g.Gaps {
+		out = append(out, Blocker{Code: gap.Code, Artifact: "outline", Path: g.Path, Message: gap.Message})
+	}
+	return out
+}
+
+// briefRequired 返回单元 u 的类型声明的简报必填项（Required Brief Field）。
+func (w *Work) briefRequired(u *Unit) []string {
+	for _, t := range w.Genre.UnitTypes {
+		if t.ID == u.Type {
+			return t.BriefRequired
+		}
+	}
+	return nil
+}
+
 // queue 返回决策队列与它是否无法加载；同一个作品只加载一次，逐单元计算阻塞项时不重复读取与校验。
+// level 返回工作区配置的关卡强度；每个作品只读取一次配置，读取失败时按默认的 standard 处理。
+func (w *Work) level(root string) string {
+	if w.gateLevel == "" {
+		w.gateLevel = workspace.DefaultGateLevel
+		if cfg, _ := workspace.Load(root); cfg != nil && cfg.GateLevel != "" {
+			w.gateLevel = cfg.GateLevel
+		}
+	}
+	return w.gateLevel
+}
+
+// picker 返回为大纲关卡选出写作法的 Picker；每个作品只加载一次写作法目录。
+func (w *Work) picker(root string) outline.Picker {
+	if w.methods == nil {
+		w.methods = catalog.LoadMethods(root)
+	}
+	return outline.Picker{Methods: w.methods, Default: w.Genre.DefaultMethod}
+}
+
 func (w *Work) queue(root string) ([]decision.Decision, bool) {
 	if w.decisions == nil {
 		ds, _, ps := decision.Load(root)

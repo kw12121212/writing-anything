@@ -8,16 +8,24 @@ spec:
 requirements:
   version-command:
     strength: MUST
-    statement: wa-cli version 必须在标准输出打印当前 wa-cli 版本并以退出码 0 退出；加 --json 时必须输出统一的 JSON 输出信封，并在其中包含 version 字段。
+    statement: wa-cli version 必须在标准输出打印一行 'wa-cli <version> (commit <commit>)' 并以退出码 0 退出；加 --json 时必须输出统一的 JSON 输出信封，并在其中包含 version 与 commit 字段。version 与 commit 优先取构建时注入的值；未注入时取 Go 构建信息中的主模块版本（为空或为 (devel) 时视为缺失）与源码提交（构建时源码有未提交的修改则加 -dirty 后缀）；仍缺失时 version 为 dev、commit 为 unknown。
     scenarios:
       version-text:
-        - GIVEN: 已构建的 wa-cli 二进制
+        - GIVEN: 构建时注入版本 v1.2.3 与提交 abc1234 的 wa-cli 二进制
         - WHEN: 运行 wa-cli version
-        - THEN: 标准输出为一行 'wa-cli <version>'，退出码为 0
+        - THEN: 标准输出为一行 'wa-cli v1.2.3 (commit abc1234)'，退出码为 0
       version-json:
-        - GIVEN: 已构建的 wa-cli 二进制
+        - GIVEN: 构建时注入版本 v1.2.3 与提交 abc1234 的 wa-cli 二进制
         - WHEN: 运行 wa-cli version --json
-        - THEN: 标准输出是可解析的 JSON 对象，valid 为 true，diagnostics 与 changedPaths 为空数组，version 字段为当前版本字符串，退出码为 0
+        - THEN: 标准输出是可解析的 JSON 对象，valid 为 true，diagnostics 与 changedPaths 为空数组，version 为 v1.2.3，commit 为 abc1234，退出码为 0
+      version-go-install:
+        - GIVEN: 用 go install github.com/kw12121212/writing-anything/cmd/wa-cli@v1.2.3 安装、未注入版本的 wa-cli
+        - WHEN: 运行 wa-cli version --json
+        - THEN: version 为 v1.2.3；构建信息中没有源码提交时 commit 为 unknown
+      version-unstamped:
+        - GIVEN: 未注入版本且 Go 构建信息中既没有模块版本也没有源码提交的 wa-cli
+        - WHEN: 运行 wa-cli version
+        - THEN: 标准输出为一行 'wa-cli dev (commit unknown)'，退出码为 0
   usage-error:
     strength: MUST
     statement: 未提供命令、命令未知、参数未知、参数缺少取值、不接受取值的参数带了取值、缺少必需的位置参数或位置参数多余时，wa-cli 必须以退出码 2 退出；未加 --json 时必须把用法说明写到标准错误；加 --json 时必须在标准输出写出 valid 为 false、含 usage 领域错误码诊断的 JSON 输出信封。写出用法错误本身失败时按 exit-codes 以退出码 1 退出。
@@ -146,3 +154,67 @@ requirements:
         - GIVEN: 已构建的 wa-cli 二进制
         - WHEN: 运行 wa-cli help config nope --json
         - THEN: valid 为 false，诊断错误码为 usage.unknown-command，退出码为 2
+  release-artifacts:
+    strength: MUST
+    statement: 发布工具 go run ./internal/tools/release -version <version> 必须在输出目录（默认 dist）为 linux、darwin、windows 各自的 amd64 与 arm64 生成 wa-cli 二进制，命名为 wa-cli-<os>-<arch>，windows 的加 .exe 后缀，并生成 SHA256SUMS 校验文件：每个本次生成的二进制一行，格式为 '<小写 SHA-256 十六进制>  <文件名>'，可被 sha256sum -c 校验。构建前先删除输出目录中旧的 SHA256SUMS 与全部目标的旧发布产物，输出目录中的其他文件保留。每个二进制的 wa-cli version 报告 -version 给出的版本与 -commit 给出的提交（未给 -commit 时为仓库当前的 git 提交）；-version 与 -commit 只允许字母、数字与 ._+-。-targets 可用逗号分隔的 <os>/<arch> 限定目标。缺少 -version、取值含不允许的字符、目标不受支持或构建失败时以非零退出，并且不写出 SHA256SUMS。
+    scenarios:
+      all-targets:
+        - GIVEN: 仓库源码
+        - WHEN: 运行 go run ./internal/tools/release -version v1.2.3 -commit abc1234 -out D
+        - THEN: D 中恰有 wa-cli-linux-amd64、wa-cli-linux-arm64、wa-cli-darwin-amd64、wa-cli-darwin-arm64、wa-cli-windows-amd64.exe、wa-cli-windows-arm64.exe 与 SHA256SUMS；SHA256SUMS 有 6 行，每行的哈希与对应文件的 SHA-256 一致，退出码为 0
+      stamped-binary:
+        - GIVEN: 用 -version v1.2.3 -commit abc1234 -targets 为本机平台生成的二进制
+        - WHEN: 运行该二进制的 version --json
+        - THEN: version 为 v1.2.3，commit 为 abc1234
+      missing-version:
+        - GIVEN: 仓库源码
+        - WHEN: 不带 -version 运行 go run ./internal/tools/release -out D
+        - THEN: 以非零退出，标准错误指出缺少 -version，D 中没有 SHA256SUMS
+      unsupported-target:
+        - GIVEN: 仓库源码
+        - WHEN: 运行 go run ./internal/tools/release -version v1.2.3 -targets plan9/mips -out D
+        - THEN: 以非零退出，标准错误指出不支持的目标 plan9/mips，D 中没有 SHA256SUMS
+      invalid-stamp:
+        - GIVEN: 仓库源码
+        - WHEN: 运行 go run ./internal/tools/release -version 'v1 -X x=y' -out D
+        - THEN: 以非零退出，标准错误指出 -version 含有不允许的字符，D 中没有 SHA256SUMS
+      stale-assets:
+        - GIVEN: D 中有旧的 SHA256SUMS、wa-cli-windows-arm64.exe 与 notes.txt
+        - WHEN: 运行 go run ./internal/tools/release -version v1.2.3 -targets linux/amd64 -out D
+        - THEN: D 中的 SHA256SUMS 只有 wa-cli-linux-amd64 一行，wa-cli-windows-arm64.exe 已被删除，notes.txt 保留
+  install-script:
+    strength: MUST
+    statement: 安装脚本（Install Script）install.sh（Linux 与 macOS）与 install.ps1（Windows）必须按当前操作系统与 CPU 架构（amd64 或 arm64）下载对应的发布产物 wa-cli-<os>-<arch>[.exe] 与 SHA256SUMS，校验该产物的 SHA-256 与 SHA256SUMS 中的记录一致后，才把它安装为安装目录下的 wa-cli（Windows 为 wa-cli.exe），不需要 root 或管理员权限。默认下载地址为 https://github.com/kw12121212/writing-anything/releases 的最新版本；环境变量 WA_VERSION 指定版本（下载 <base>/download/<version>/<文件>，未指定时下载 <base>/latest/download/<文件>），WA_BASE_URL 覆盖 <base>，WA_INSTALL_DIR 覆盖安装目录（install.sh 默认 $HOME/.local/bin，install.ps1 默认 %LOCALAPPDATA%\Programs\wa-cli 并加入用户级 PATH）。平台不受支持、下载失败、SHA256SUMS 中没有该产物、哈希不一致或安装目标是目录时，脚本必须以非零退出并说明原因，且不改动安装目录中已有的 wa-cli，也不在安装目录中留下临时文件。安装成功后打印安装路径；安装目录不在 PATH 中（install.ps1 为指定了 WA_INSTALL_DIR 时）打印把它加入 PATH 的提示。install.ps1 以 irm <url> | iex 运行时与以 -File 运行时行为相同，并且不在调用者的会话中留下设置、变量或函数。
+    scenarios:
+      install-linux-amd64:
+        - GIVEN: uname -s 为 Linux、uname -m 为 x86_64，WA_BASE_URL 指向提供产物与 SHA256SUMS 的地址，WA_INSTALL_DIR 为 I
+        - WHEN: 运行 sh install.sh
+        - THEN: I/wa-cli 的内容与 wa-cli-linux-amd64 相同且可执行，标准输出含安装路径，退出码为 0
+      install-darwin-arm64:
+        - GIVEN: uname -s 为 Darwin、uname -m 为 arm64，其余同上
+        - WHEN: 运行 sh install.sh
+        - THEN: I/wa-cli 的内容与 wa-cli-darwin-arm64 相同，退出码为 0
+      install-version:
+        - GIVEN: WA_VERSION 为 v1.2.3
+        - WHEN: 运行 sh install.sh
+        - THEN: 脚本从 <base>/download/v1.2.3/ 下载产物与 SHA256SUMS
+      checksum-mismatch:
+        - GIVEN: SHA256SUMS 中该产物的哈希与下载内容不一致，I/wa-cli 为旧版本
+        - WHEN: 运行 sh install.sh
+        - THEN: 以非零退出，标准错误指出校验失败，I/wa-cli 仍为旧版本
+      unsupported-platform:
+        - GIVEN: uname -s 为 FreeBSD 或 uname -m 为 i686
+        - WHEN: 运行 sh install.sh
+        - THEN: 以非零退出，标准错误指出不支持的操作系统或架构，I 中没有新文件
+      install-windows:
+        - GIVEN: Windows 上 PROCESSOR_ARCHITECTURE 为 AMD64，WA_BASE_URL 与 WA_INSTALL_DIR 同上
+        - WHEN: 运行 install.ps1
+        - THEN: I\wa-cli.exe 的内容与 wa-cli-windows-amd64.exe 相同，退出码为 0
+      install-iex:
+        - GIVEN: Windows 上 PROCESSOR_ARCHITECTURE 为 AMD64，WA_BASE_URL 与 WA_INSTALL_DIR 同上
+        - WHEN: 把按 UTF-8 解码的 install.ps1 内容交给 Invoke-Expression 运行
+        - THEN: I\wa-cli.exe 的内容与 wa-cli-windows-amd64.exe 相同，标准错误为空；之后调用者会话中的 $ErrorActionPreference 不变，也没有脚本定义的函数
+      target-is-directory:
+        - GIVEN: I/wa-cli 是一个目录
+        - WHEN: 运行 sh install.sh
+        - THEN: 以非零退出，标准错误指出目标是目录，I/wa-cli 目录中没有新文件

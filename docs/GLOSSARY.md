@@ -40,12 +40,18 @@
 | 关卡强度 | Gate Level | 关卡强度 | `strict` 严格 / `standard` 标准 / `fast` 快速 |
 | 写作简报 | Brief | 写作简报 | 受众、目的、核心观点、字数、禁区 |
 | 核心观点 | Key Message | 核心观点 | 文章必须传达的观点，由作者提供 |
+| 写作目的 | Purpose | 写作目的 | 读者读完后应该知道、相信或去做什么；写作简报的 `purpose` 字段 |
+| 禁区 | Off-limits | 禁区 | 文章不能写或需要回避的内容；写作简报的 `avoid` 字段 |
+| 简报必填项 | Required Brief Field | 简报必填项 | 文体为单元类型声明、推进前必须在写作简报中填写的字段（`brief_required`） |
 | 大纲 | Outline | 大纲 | 章节结构及其覆盖的核心观点 |
+| 大纲节 | Outline Section | 大纲节 | 大纲中的一节：`covers` 覆盖的核心观点、`uses` 使用的素材，或 `reason` 不覆盖的理由；`role` 为它承担的写作法章节或节拍 |
 | 草稿 | Draft | 草稿 | 尚未验收的正文 |
 | 审稿 | Review | 审稿 | 文本检查加按评分标准的评审 |
 | 修订 | Revision | 修订 | 根据批注与审稿发现项修改正文 |
+| 修订任务 | Revision Task | 修订任务 | 尚未处理的审稿发现项或作者反馈；standard 与 strict 关卡强度下全部解决或豁免后才能验收 |
 | 验收 | Acceptance | 验收 | 作者确认单元达到要求 |
 | 导出 | Export | 导出 | 生成 Markdown、HTML 等交付格式 |
+| 文件头元数据 | Front Matter | front matter | 导出文件开头的 YAML 元数据块（标题、描述、文体、单元与验收时间），供博客平台读取 |
 | 组稿 | Assembly | 组稿 | 把已验收单元按顺序合成完整书稿 |
 
 ## 内容与出处
@@ -55,6 +61,7 @@
 | 素材 | Source | 素材 | 作者笔记、访谈、转写稿、参考资料、过往文章 |
 | 素材库 | Source Library | 素材库 | 原文存档的素材集合 |
 | 论断 | Claim | 论断 | 需要出处支撑的事实、数据、经历或观点 |
+| 疑似论断 | Claim Candidate | 疑似论断 | 文本检查按启发式规则发现、尚未登记为论断的亲历或数据句子 |
 | 出处 | Provenance | 出处 | 内容来自人、Agent，还是 Agent 起草后经人修改；段落出处取值为 `human`（作者）、`agent`（Agent）、`agent-draft-human-edited`（Agent 起草、作者修改） |
 | 段落 | Paragraph | 段落 | 正文中由空行分隔的连续非空行，围栏代码块整体算一段；出处的最小粒度 |
 | 写入记录 | Draft Record | 写入记录 | `wa-cli draft write` 在单元目录留下的 `provenance.yaml`：整篇正文与每个段落的哈希及出处，用于推导段落出处 |
@@ -83,8 +90,13 @@
 | 规则引擎 | Rule Engine | 规则引擎 | 执行声明式规则的组件 |
 | 规则 | Rule | 规则 | 一条可配置的检查，如禁用词、字数范围 |
 | 文本检查 | Lint | 文本检查 | 确定性的自动检查，类似代码的 lint |
+| 屏蔽区域 | Masked Region | 屏蔽区域 | 文本检查跳过的正文部分：代码块、行内代码、HTML 注释、URL 与链接地址 |
+| 信息字符串 | Info String | 信息字符串 | 围栏代码块开头的 ``` 或 ~~~ 之后的文字，通常写明代码的语言 |
+| 破折号密度 | Dash Density | 破折号密度 | 每千字中破折号（——）的个数，AI 腔的一种信号 |
+| 散文段落 | Prose Paragraph | 散文段落 | 文本检查中由空行分隔、含屏蔽区域之外文字的连续行；单处豁免以它为作用范围 |
 | 发现项 | Finding | 发现项 | 检查或审稿发现的一个问题 |
 | 豁免 | Waiver | 豁免 | 对某条规则在某处不适用的显式声明，须写明理由 |
+| 单处豁免 | Inline Waiver | 单处豁免 | 正文注释 `<!-- lint-ignore <规则 id>: 理由 -->`，豁免一个散文段落中该规则的发现项；须由作者写入 |
 | 规则类型 | Rule Type | 规则类型 | 规则的检查方式，如 `length-range`、`banned-terms`；只能取已知类型 |
 | 禁用词 | Banned Term | 禁用词 | 规范包中不允许出现的词语，可附理由与替换写法 |
 | 评分标准 | Rubric | 评分标准 | 审稿时逐项评判的标准 |
@@ -92,6 +104,7 @@
 | 中文排版 | CJK Typography | 中文排版 | 中英文间空格、全角/半角标点等排版规范 |
 | 术语表 | Glossary | 术语表 | 标准写法与错误写法的对照 |
 | 覆盖追踪 | Coverage Tracing | 覆盖追踪 | 检查每个核心观点都被大纲的某一节覆盖 |
+| 覆盖缺口 | Coverage Gap | 覆盖缺口 | 没有被任何大纲节覆盖的核心观点，或既不覆盖也没写理由的大纲节；选用写作法时，还包括没有大纲节承担的写作法章节或节拍、顺序颠倒的章节与不属于写作法的 `role` |
 | 连续性审查 | Continuity Review | 连续性审查 | 检查新正文与设定集、前文是否矛盾 |
 | 审查任务包 | Review Task Packet | 审查任务包 | 只含一段正文、相关台账切片与检查清单的小型审查任务 |
 | 影响传播 | Ripple Analysis | 影响传播 | 修改早期内容后，找出受影响、需复查的后续内容 |
@@ -111,6 +124,7 @@
 |---|---|---|---|
 | 作者 | Author | 作者 | 内容来源与最终决策者 |
 | 智能体 | Agent | Agent | 接入本工具、协助作者写作的 AI 程序 |
+| 决策 | Decision | 决策 | 需要作者决定的一个问题；决定后的原话即为作者的确认记录 |
 | 决策队列 | Decision Queue | 决策队列 | 等待作者决定的事项列表 |
 | 阻塞 | Blocking | 阻塞 | 未解决前禁止继续推进 |
 | 阻塞项 | Blocker | 阻塞项 | 阻止单元推进的具体原因，如缺失的必需产物、未决定的阻塞决策，由 `wa-cli next` 与 `wa-cli status` 列出 |
@@ -124,6 +138,7 @@
 | 人工编辑保护 | Human Edit Protection | 人工编辑保护 | 人改过的正文不被 Agent 覆盖 |
 | 上下文包 | Context Pack | 上下文包 | 只包含当前单元所需信息的输入集合 |
 | 上下文预算 | Context Budget | 上下文预算 | 上下文包的大小上限，以字符数近似度量 |
+| 相邻节 | Neighbor Section | 相邻节 | 单元在父单元中的前一个与后一个兄弟单元，上下文包给出其大纲标题与正文节选 |
 | AI 生成内容标识 | AI-generated Content Label | AI 标识 | 导出时说明 AI 参与情况的文字或元数据 |
 | 文风画像 | Style Profile | 文风画像 | 从作者样文归纳的写作风格特征 |
 | 作者偏好 | Author Preference | 作者偏好 | 从作者修改中归纳的习惯，如"不用排比句" |
@@ -268,6 +283,8 @@
 | 倒金字塔 | Inverted Pyramid | 倒金字塔 | 最重要的信息放在最前面，常用于新闻与资讯 |
 | Diátaxis | Diátaxis | Diátaxis | 技术文档四分类：教程、操作指南、参考、解释 |
 | 操作指南 | How-to Guide | 操作指南 | Diátaxis 中解决具体问题的步骤说明 |
+| 参考 | Reference | 参考 | Diátaxis 中准确、完整描述接口、命令或配置的查阅型文档 |
+| 解释 | Explanation | 解释 | Diátaxis 中讨论背景、原理与取舍的理解型文档 |
 | AIDA | Attention–Interest–Desire–Action | AIDA | 注意 → 兴趣 → 欲望 → 行动的营销文案结构 |
 | PAS | Problem–Agitate–Solution | PAS | 问题 → 放大 → 解决的营销文案结构 |
 | 4U 标题法 | 4U Headline Formula | 4U 标题法 | 有用（Useful）、紧迫（Urgent）、独特（Unique）、具体（Ultra-specific） |
@@ -283,7 +300,7 @@
 | 中文 | English | 常用写法 | 说明 |
 |---|---|---|---|
 | 命令行工具 | Command-Line Interface | CLI | 本项目为 `wa-cli` |
-| 技能 | Skill | Skill | Agent Skills 格式的操作说明包 |
+| 技能 | Skill | 技能 | Agent Skills 格式的操作说明包；wa-cli 内置的技能用 wa-cli skills install 安装 |
 | 模型上下文协议 | Model Context Protocol | MCP | Agent 调用外部工具的开放协议 |
 | 大语言模型 | Large Language Model | LLM | Agent 背后的 AI 模型；`wa-cli` 本身不调用 |
 | MCP 服务 | MCP Server | MCP 服务 | 由 `wa-cli mcp` 提供 |
@@ -300,6 +317,9 @@
 | 回归测试 | Regression Test | 回归测试 | 每次变更后运行的完整测试 |
 | 覆盖率 | Coverage | 覆盖率 | 测试执行到的代码比例 |
 | 交叉编译 | Cross-compilation | 交叉编译 | 在一个平台上编译出其他平台的二进制 |
+| 发布产物 | Release Asset | 发布产物 | 随版本发布的文件：各平台的 `wa-cli-<os>-<arch>` 二进制与 `SHA256SUMS` |
+| 校验文件 | Checksum File | 校验文件 | 记录每个发布产物 SHA-256 的 `SHA256SUMS`，格式与 `sha256sum` 兼容 |
+| 安装脚本 | Install Script | 安装脚本 | `install.sh`（Linux、macOS）与 `install.ps1`（Windows）：下载、校验并把 `wa-cli` 安装到用户级目录 |
 | 锁定文件 | Lock File | 锁定文件 | 记录已安装规范包确切版本的文件 |
 | 全文检索 | Full-text Search | 全文检索 | 按关键词查找正文中的出现位置 |
 | 倒排索引 | Inverted Index | 倒排索引 | 从词到出现位置的索引结构，用于全文检索 |

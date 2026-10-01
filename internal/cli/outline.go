@@ -1,0 +1,386 @@
+package cli
+
+import (
+	"fmt"
+	"io"
+	"slices"
+	"strings"
+
+	"github.com/kw12121212/writing-anything/internal/brief"
+	"github.com/kw12121212/writing-anything/internal/catalog"
+	"github.com/kw12121212/writing-anything/internal/draft"
+	"github.com/kw12121212/writing-anything/internal/outline"
+	"github.com/kw12121212/writing-anything/internal/schema"
+	"github.com/kw12121212/writing-anything/internal/work"
+	"github.com/kw12121212/writing-anything/internal/workspace"
+)
+
+var outlineKeys = []outputKey{
+	{"outline", "大纲（Outline）：unit、path 与 sections（id、title、role、covers、uses、reason）；没有 outline.yaml 或失败时为 null"},
+	{"coverage", "写作简报中每个核心观点（Key Message）的覆盖情况：keyMessage、text 与 sections（覆盖它的节）"},
+	{"gaps", "覆盖缺口（Coverage Gap）数组，每项含 code、keyMessage、section 与 message"},
+}
+
+var outlineSetCommand = &command{
+	name:    "outline set",
+	summary: "按 id 新增或修改大纲（Outline）中的一节；覆盖缺口（Coverage Gap）不阻止写入，在 gaps 中列出",
+	args: []argSpec{
+		{"unit", unitRefHelp, true},
+		{"section", "大纲节（Outline Section）id；不存在时新增，此时必须给出 --title", true},
+	},
+	flags: []flagSpec{
+		dirFlag,
+		{"title", flagString, "节的标题"},
+		{"role", flagString, "该节承担的写作法模板（Method Template）章节或节拍 id（见 wa-cli method show）；空字符串时删除"},
+		{"covers", flagString, "该节覆盖的核心观点（Key Message）id，用逗号分隔；整体替换，空字符串时删除"},
+		{"uses", flagString, "该节使用的素材（Source）id，用逗号分隔；整体替换，空字符串时删除"},
+		{"reason", flagString, "该节不覆盖任何核心观点的理由；空字符串时删除"},
+		{"after", flagString, "把该节放到这一节之后"},
+		{"before", flagString, "把该节放到这一节之前"},
+	},
+	outputKeys: outlineKeys,
+	exitCodes:  standardExitCodes,
+	run:        runOutlineSet,
+}
+
+var outlineRemoveCommand = &command{
+	name:    "outline remove",
+	summary: "删除大纲（Outline）中的一节",
+	args: []argSpec{
+		{"unit", unitRefHelp, true},
+		{"section", "要删除的大纲节（Outline Section）id", true},
+	},
+	flags:      []flagSpec{dirFlag},
+	outputKeys: outlineKeys,
+	exitCodes:  standardExitCodes,
+	run:        runOutlineRemove,
+}
+
+var outlineShowCommand = &command{
+	name:       "outline show",
+	summary:    "列出单元（Unit）的大纲（Outline）、每个核心观点的覆盖情况与覆盖缺口（Coverage Gap）",
+	args:       []argSpec{{"unit", unitRefHelp, true}},
+	flags:      []flagSpec{dirFlag},
+	outputKeys: outlineKeys,
+	exitCodes:  standardExitCodes,
+	run:        runOutlineShow,
+}
+
+type sectionView struct {
+	ID     string   `json:"id"`
+	Title  string   `json:"title"`
+	Role   *string  `json:"role"`
+	Covers []string `json:"covers"`
+	Uses   []string `json:"uses"`
+	Reason *string  `json:"reason"`
+}
+
+type outlineView struct {
+	Unit     string        `json:"unit"`
+	Path     string        `json:"path"`
+	Sections []sectionView `json:"sections"`
+}
+
+type coverView struct {
+	KeyMessage string   `json:"keyMessage"`
+	Text       string   `json:"text"`
+	Sections   []string `json:"sections"`
+}
+
+type gapView struct {
+	Code       string  `json:"code"`
+	KeyMessage *string `json:"keyMessage"`
+	Section    *string `json:"section"`
+	Message    string  `json:"message"`
+}
+
+type outlineResult struct {
+	Result
+	Outline  *outlineView `json:"outline"`
+	Coverage []coverView  `json:"coverage"`
+	Gaps     []gapView    `json:"gaps"`
+}
+
+// fill 以大纲 o（可为 nil）与核心观点 ms 填写输出中的 outline、coverage 与 gaps。
+func (res *outlineResult) fill(ref string, o *outline.Outline, ms outline.Messages) {
+	if o != nil {
+		v := &outlineView{Unit: ref, Path: o.Path, Sections: []sectionView{}}
+		for _, s := range o.Sections {
+			v.Sections = append(v.Sections, sectionView{ID: s.ID, Title: s.Title, Role: optional(s.Role), Covers: nonNilStrings(s.Covers), Uses: nonNilStrings(s.Uses), Reason: optional(s.Reason)})
+		}
+		res.Outline = v
+	}
+	for _, c := range outline.Coverage(o, ms) {
+		res.Coverage = append(res.Coverage, coverView{KeyMessage: c.KeyMessage, Text: c.Text, Sections: nonNilStrings(c.Sections)})
+	}
+	for _, g := range outline.Gaps(o, ms) {
+		res.Gaps = append(res.Gaps, gapView{Code: g.Code, KeyMessage: optional(g.KeyMessage), Section: optional(g.Section), Message: g.Message})
+	}
+}
+
+func newOutlineResult() *outlineResult {
+	return &outlineResult{Coverage: []coverView{}, Gaps: []gapView{}}
+}
+
+// outlineEdit 把 outline set 的参数转换为修改；参数取值不合法时返回 input.invalid-value 或 artifact.schema-violation。
+// existing 为已有的大纲（可为 nil），用于判断是否新增。
+func outlineEdit(inv *invocation, existing *outline.Outline) (outline.Edit, []workspace.Problem) {
+	id := inv.args[1]
+	e := outline.Edit{ID: id, After: inv.values["after"], Before: inv.values["before"]}
+	if !brief.ValidID(id) {
+		return e, []workspace.Problem{{Code: schema.CodeSchemaViolation, Severity: workspace.SeverityError, Field: "section",
+			Message: fmt.Sprintf("大纲节 id %q 不合法：应以小写字母开头，由小写字母、数字与连字符组成", id)}}
+	}
+	str := func(name string) *string {
+		if v, ok := inv.values[name]; ok {
+			return &v
+		}
+		return nil
+	}
+	e.Title, e.Reason, e.Role = str("title"), str("reason"), str("role")
+	if e.Role != nil && *e.Role != "" && !brief.ValidID(*e.Role) {
+		return e, []workspace.Problem{{Code: schema.CodeSchemaViolation, Severity: workspace.SeverityError, Field: "role",
+			Message: fmt.Sprintf("role %q 不合法：应为写作法的章节或节拍 id，以小写字母开头，由小写字母、数字与连字符组成", *e.Role)}}
+	}
+	if e.Title != nil && *e.Title == "" {
+		return e, []workspace.Problem{invalidValue("title", "", "大纲节必须有标题，--title 不能为空")}
+	}
+	for _, name := range []string{"after", "before"} {
+		if v, ok := inv.values[name]; ok && v == "" {
+			return e, []workspace.Problem{invalidValue(name, v, "应为大纲中已有节的 id")}
+		}
+	}
+	for _, name := range []string{"title", "reason"} {
+		if v, ok := inv.values[name]; ok && v != "" && strings.TrimSpace(v) == "" {
+			return e, []workspace.Problem{invalidValue(name, v, "不能只含空白")}
+		}
+	}
+	for _, name := range []string{"covers", "uses"} {
+		v, ok := inv.values[name]
+		if !ok {
+			continue
+		}
+		list := splitIDs(v)
+		for i, x := range list {
+			if slices.Contains(list[:i], x) {
+				return e, []workspace.Problem{invalidValue(name, v, "id "+x+" 重复")}
+			}
+		}
+		if name == "covers" {
+			e.Covers = &list
+		} else {
+			e.Uses = &list
+		}
+	}
+	switch {
+	case e.After != "" && e.Before != "":
+		return e, []workspace.Problem{invalidValue("before", e.Before, "--after 与 --before 只能给出一个")}
+	case e.After == id:
+		return e, []workspace.Problem{invalidValue("after", id, "不能相对该节本身放置")}
+	case e.Before == id:
+		return e, []workspace.Problem{invalidValue("before", id, "不能相对该节本身放置")}
+	}
+	exists := existing != nil && slices.ContainsFunc(existing.Sections, func(s outline.Section) bool { return s.ID == id })
+	if !exists && e.Title == nil {
+		return e, []workspace.Problem{invalidValue("title", inv.values["title"], "新增大纲节时必须给出 --title")}
+	}
+	if exists && e.Title == nil && e.Role == nil && e.Covers == nil && e.Uses == nil && e.Reason == nil && e.After == "" && e.Before == "" {
+		return e, []workspace.Problem{{Code: codeInvalidValue, Severity: workspace.SeverityError,
+			Message: "没有给出要修改的内容；至少给出 --title、--role、--covers、--uses、--reason、--after 或 --before 之一"}}
+	}
+	return e, nil
+}
+
+// remainingRefs 返回修改成功后大纲中仍然存在的引用问题，作为 warning 报告，提示 Agent 大纲还没有修复完。
+func remainingRefs(dir, unitDir string, ms outline.Messages) []workspace.Problem {
+	_, _, refs := outline.LoadLenient(dir, unitDir, ms)
+	for i := range refs {
+		refs[i].Severity = workspace.SeverityWarning
+	}
+	return append(refs, methodWarning(ms)...)
+}
+
+// methodWarning 把写作简报选用的写作法不存在的问题作为 warning 返回：查看与修改大纲照常执行，写作法缺口暂不检查。
+func methodWarning(ms outline.Messages) []workspace.Problem {
+	if ms.MethodProblem == nil {
+		return nil
+	}
+	p := *ms.MethodProblem
+	p.Severity = workspace.SeverityWarning
+	p.Message += "；在写作简报改选写作法之前，大纲不按写作法检查"
+	return []workspace.Problem{p}
+}
+
+// outlineParamNext 为参数引起的问题（不填 path）给出用法与相关的查看命令；已有产物中的问题保留默认的复查命令。
+func outlineParamNext(res *outlineResult, dir, ref string) {
+	for i, d := range res.Diagnostics {
+		if d.Path != "" {
+			continue
+		}
+		next := []string{"wa-cli help outline set --json"}
+		switch d.Code {
+		case outline.CodeUnknownMessage:
+			next = append(next, shellCommand("wa-cli", "brief", "show", ref, "--dir", dir, "--json"))
+		case outline.CodeUnknownSource:
+			next = append(next, shellCommand("wa-cli", "source", "list", "--dir", dir, "--json"))
+		case outline.CodeSectionNotFound:
+			next = append(next, shellCommand("wa-cli", "outline", "show", ref, "--dir", dir, "--json"))
+		}
+		res.Diagnostics[i].Next = next
+	}
+}
+
+func runOutlineSet(inv *invocation) int {
+	dir := projectDir(inv)
+	res := newOutlineResult()
+	problems := workspace.Require(dir)
+	edit := false
+	if problems == nil {
+		var w *work.Work
+		var u *work.Unit
+		if w, u, problems = work.Resolve(dir, inv.args[0]); u != nil {
+			unitDir := w.UnitDir(u)
+			ms := outline.LoadMessages(dir, unitDir, brief.LoadQueue(dir), outline.Picker{Methods: catalog.LoadMethods(dir), Default: w.Genre.DefaultMethod})
+			var existing *outline.Outline
+			// 已有大纲中的引用问题不妨碍修改：写作简报删除核心观点后，要能用 outline set 修复大纲。
+			if existing, problems, _ = outline.LoadLenient(dir, unitDir, ms); problems == nil {
+				var e outline.Edit
+				if e, problems = outlineEdit(inv, existing); problems == nil {
+					var o *outline.Outline
+					var changed []string
+					ensure := func() ([]string, []workspace.Problem) { return draft.EnsureUnitDir(dir, w, u) }
+					if o, changed, problems = outline.Set(dir, unitDir, e, ms, ensure); o != nil {
+						res.fill(u.Ref, o, ms)
+						res.ChangedPaths = changed
+						problems = remainingRefs(dir, unitDir, ms)
+					}
+				}
+				edit = true
+			}
+		}
+	}
+	res.Diagnostics = diagnostics(problems, dir)
+	if edit {
+		outlineParamNext(res, dir, inv.args[0])
+		for i, d := range res.Diagnostics {
+			if d.Code == outline.CodeAnchoredValue {
+				res.Diagnostics[i].Next = []string{"wa-cli help outline set --json"}
+			}
+		}
+	}
+	return finish(inv, res, func(out io.Writer) error {
+		if res.Outline == nil {
+			return nil
+		}
+		verb := "已更新"
+		if len(res.ChangedPaths) == 0 {
+			verb = "取值未变，没有修改"
+		}
+		_, err := io.WriteString(out, fmt.Sprintf("大纲（Outline）%s：%s\n", verb, res.Outline.Path)+outlineText(res))
+		return err
+	})
+}
+
+func runOutlineRemove(inv *invocation) int {
+	dir := projectDir(inv)
+	res := newOutlineResult()
+	problems := workspace.Require(dir)
+	if problems == nil {
+		var w *work.Work
+		var u *work.Unit
+		if w, u, problems = work.Resolve(dir, inv.args[0]); u != nil {
+			unitDir := w.UnitDir(u)
+			ms := outline.LoadMessages(dir, unitDir, brief.LoadQueue(dir), outline.Picker{Methods: catalog.LoadMethods(dir), Default: w.Genre.DefaultMethod})
+			var o *outline.Outline
+			var changed []string
+			if o, changed, problems = outline.Remove(dir, unitDir, inv.args[1], ms); o != nil {
+				res.fill(u.Ref, o, ms)
+				res.ChangedPaths = changed
+				problems = remainingRefs(dir, unitDir, ms)
+			}
+		}
+	}
+	res.Diagnostics = diagnostics(problems, dir)
+	for i, d := range res.Diagnostics {
+		switch d.Code {
+		case outline.CodeSectionNotFound:
+			res.Diagnostics[i].Next = []string{shellCommand("wa-cli", "outline", "show", inv.args[0], "--dir", dir, "--json")}
+		case outline.CodeAnchoredValue:
+			res.Diagnostics[i].Next = []string{"wa-cli help outline remove --json"}
+		}
+	}
+	return finish(inv, res, func(out io.Writer) error {
+		if res.Outline == nil {
+			return nil
+		}
+		_, err := io.WriteString(out, fmt.Sprintf("已从大纲（Outline）删除节 %s：%s\n", inv.args[1], res.Outline.Path)+outlineText(res))
+		return err
+	})
+}
+
+func runOutlineShow(inv *invocation) int {
+	dir := projectDir(inv)
+	res := newOutlineResult()
+	problems := workspace.Require(dir)
+	if problems == nil {
+		var w *work.Work
+		var u *work.Unit
+		if w, u, problems = work.Resolve(dir, inv.args[0]); u != nil {
+			unitDir := w.UnitDir(u)
+			ms := outline.LoadMessages(dir, unitDir, brief.LoadQueue(dir), outline.Picker{Methods: catalog.LoadMethods(dir), Default: w.Genre.DefaultMethod})
+			if problems = ms.Problems; problems == nil {
+				// 引用问题照常报告，但仍输出大纲与覆盖情况，便于据此修复。
+				o, fatal, refs := outline.LoadLenient(dir, unitDir, ms)
+				if problems = append(append(fatal, refs...), methodWarning(ms)...); len(fatal) == 0 {
+					res.fill(u.Ref, o, ms)
+				}
+			}
+		}
+	}
+	res.Diagnostics = diagnostics(problems, dir)
+	return finish(inv, res, func(out io.Writer) error {
+		if hasError(res.Diagnostics) && res.Outline == nil {
+			return nil
+		}
+		text := "单元（Unit）" + inv.args[0] + " 还没有大纲（Outline）\n"
+		if res.Outline != nil {
+			text = "大纲（Outline）" + res.Outline.Path + "\n"
+		}
+		_, err := io.WriteString(out, text+outlineText(res))
+		return err
+	})
+}
+
+// outlineText 以人读文字列出大纲的节、核心观点的覆盖情况与覆盖缺口。
+func outlineText(res *outlineResult) string {
+	var s strings.Builder
+	if res.Outline != nil {
+		for i, sec := range res.Outline.Sections {
+			detail := "覆盖 " + strings.Join(sec.Covers, "、")
+			if len(sec.Covers) == 0 {
+				detail = "不覆盖核心观点"
+				if sec.Reason != nil {
+					detail += "：" + *sec.Reason
+				}
+			}
+			if len(sec.Uses) > 0 {
+				detail += "；素材 " + strings.Join(sec.Uses, "、")
+			}
+			if sec.Role != nil {
+				detail += "；承担写作法的 " + *sec.Role
+			}
+			fmt.Fprintf(&s, "  %d. %s %s（%s）\n", i+1, sec.ID, sec.Title, detail)
+		}
+	}
+	for _, c := range res.Coverage {
+		where := "未覆盖"
+		if len(c.Sections) > 0 {
+			where = "由 " + strings.Join(c.Sections, "、") + " 覆盖"
+		}
+		fmt.Fprintf(&s, "  核心观点（Key Message）%s：%s（%s）\n", c.KeyMessage, c.Text, where)
+	}
+	for _, g := range res.Gaps {
+		fmt.Fprintf(&s, "  覆盖缺口：%s\n", g.Message)
+	}
+	return s.String()
+}

@@ -1,0 +1,7 @@
+schema_version: 1
+id: zong-fen-zong
+title: 总分总
+kind: article
+sections:
+  - {id: overview, title: 总述}
+  - {id: summary, title: 总结}

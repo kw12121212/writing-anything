@@ -1,0 +1,17 @@
+schema: strict-spec-driven/delta-spec/v1
+schema_version: 1
+artifact_type: delta_spec
+schema_file: templates/strict-spec-driven/schemas/delta-spec.yaml
+target_spec: genres-and-packs
+operations:
+  ADDED: {}
+  MODIFIED:
+    known-rule-types:
+      strength: MUST
+      statement: 规则的 type 必须是已知规则类型（Rule Type）之一：cjk-typography、ai-cliche、banned-terms、term-consistency、length-range、paragraph-length、required-sections、claim-sources、claim-candidates。出现其他 type 时，wa-cli validate 与 wa-cli config resolved 必须报告错误码 rule.unknown-type（field 为该规则的 type，message 列出已知类型），以退出码 1 退出。
+      scenarios:
+        unknown-rule-type:
+          - GIVEN: house 规范包定义规则 r9，type 为 run-shell
+          - WHEN: 运行 wa-cli validate --dir D --json
+          - THEN: diagnostics 中有一条错误码为 rule.unknown-type、field 为 rules.r9.type 的诊断，message 列出已知的规则类型，退出码为 1
+  REMOVED: {}

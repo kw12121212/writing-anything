@@ -1,0 +1,42 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: brief-intake-gate
+approach:
+  - 新增领域包 internal/brief（不 import internal/cli）：Load 读取并校验单元目录下的 brief.yaml，Set 以 yaml.Node 按字段修改（保留注释），Check 给出 validate 用的领域问题，Gaps 给出必填项缺失与观点出处问题及对应的提问文字。internal/work 的 Blockers 调用 brief 包计算写作简报阻塞项；为避免循环依赖，brief 包只接收单元目录、单元类型声明的必填项与决策队列，不 import internal/work。
+  - 写作简报字段的顺序固定为 schema_version、audience、purpose、key_messages、length、avoid、sources；brief set 新增字段时按该顺序插入，已有字段原地修改。空字符串取值表示删除该字段（--audience=、--purpose=、--length=、--message-decision=），--avoid 与 --sources 给出时整体替换，单个空值表示清空。
+  - 提问文字按字段内置在 internal/brief 中（中文），以 questions 数组输出（field、message、question），阻塞项的 message 也写出同一问题，Agent 据此向作者提问后再用 brief set 写入。
+decisions:
+  message-flags:
+    decision: 核心观点在 brief set 中以一组参数表达：--message <id> 打开一个观点，--message-text、--message-sources、--message-decision 修改它；一次调用最多修改一个观点，按 id 新增或合并；--remove-message 可重复。
+    rationale: planned change 要求 brief set 用命名参数写入带 id 的核心观点；命令注册表只支持 bool、string 与 list 参数，一次一个观点避免了多组参数的位置配对。
+  provenance-rule:
+    decision: 核心观点的出处为 sources（已登记的素材 id）或 decision（决策队列中的决策 id）：有素材即视为有出处；只有决策时，决策 decided 才算作者的确认记录，open 时为 brief.unconfirmed-message；两者都没有时为 brief.unsourced-message。brief set 允许暂存没有出处的观点，由关卡阻塞推进。
+    rationale: planned change 要求每个核心观点标注作者原话的素材 id 或作者的确认记录；wa-cli decide 已产生带原话摘要与时间的确认记录，复用它不另造确认机制；允许暂存便于 Agent 分步与作者对齐。
+  required-per-unit-type:
+    decision: 必填项声明在文体的 unit_types[].brief_required 上，而不是整个文体或阶段上；内置 minimal 的 article 声明 [audience, purpose]，section 不声明。
+    rationale: 文章需要完整的写作简报，而节通常由大纲约束；按单元类型声明可以让 tech-blog 只要求根单元填写。minimal 只要求两项，现有测试夹具只需补两行，同时内置文体就能观察到关卡。
+  gate-scope:
+    decision: 写作简报检查只在单元当前阶段的 required_artifacts 含 brief、且单元目录下存在 brief.yaml 或 brief.md 时进行：两者都不存在时仍只报告 lifecycle.missing-artifact；只有 brief.md 时视为没有任何字段；brief.yaml 不通过校验时只给一条 brief.invalid。
+    rationale: 避免对同一缺失重复报告；brief.md 是自由文本，无法确定性地检查字段。
+  next-commands:
+    decision: 写作简报阻塞项的下一步命令为 wa-cli brief show <unit> --dir <dir> --json 与 wa-cli help brief set --json；brief.unconfirmed-message 为 wa-cli decisions --dir <dir> --json；brief.invalid 为 wa-cli validate <brief.yaml> --dir <dir> --json。缺失 brief 产物时 next 的 commands 仍为空数组。
+    rationale: runnable-next 要求命令可以直接运行、不含占位符；需要作者给出取值时 next 给出 help。缺失产物的行为已写在 next-steps 场景中，保持不变。
+  linked-confirmation:
+    decision: 核心观点关联的决策必须存在且其 units 含本单元的单元引用，否则 brief set 与 validate 报告 brief.unrelated-decision；决策队列无法加载时 brief set 拒绝 --message-decision（decision.invalid-queue），validate 不检查决策。
+    rationale: 审查指出任何已决定的决策都能充当确认记录，Agent 可以挂到无关决策（如标题选择）上绕过关卡；要求关联本单元，确认记录才对应到这个单元的作者确认点。
+  symlink-consistency:
+    decision: brief.yaml 存在但途经符号链接或不是普通文件时，validate、brief set 与 brief show 都报告 artifact.not-found（next 为 status 与整体校验），关卡报告 brief.invalid；不读取外部内容，也不替换链接。
+    rationale: validated-path-segments 要求同一产物在所有入口上对符号链接的处理一致；审查发现 show 说没有简报、关卡说简报无效，set 还会静默替换链接。
+  param-diagnostics:
+    decision: 参数取值只有空白、禁区有空值、id 重复与 --message 没有修改内容，都在修改前报告 input.invalid-value；写前复查才发现的问题（原文件合法时）不填 path，字段改为参数名。
+    rationale: 否则诊断指向 brief.yaml，next 给出的 validate 复查会报通过，Agent 无从得知要改参数（lesson-ccfda7）。
+alternatives:
+  - option: 新增独立的 wa-cli brief message 子命令管理核心观点
+    reason: planned change 明确由 brief set 写入核心观点；多一条命令增加 Agent 的学习负担。
+  - option: 只由 tech-blog 文体声明必填项，minimal 不声明
+    reason: tech-blog 文体在后续变更中才提供，届时之前关卡无法从内置文体观察，规格场景也无法用 minimal 表达。
+risks:
+  - 修改 minimal 的必填项会改变现有 advance、next、decisions 场景的前提（brief.yaml 需含 audience 与 purpose），需要同步修改这些规格场景与测试夹具。
+  - config resolved 的 unitTypes 输出新增 briefRequired 字段，依赖精确键集合的调用方需要适配。

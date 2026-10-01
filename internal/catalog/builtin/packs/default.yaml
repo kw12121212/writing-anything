@@ -2,7 +2,7 @@
 schema_version: 1
 id: default
 title: 默认规范包
-description: 通用的中文写作规范：中文排版与常见 AI 腔。
+description: 通用的中文写作规范：中文排版、常见 AI 腔、禁用词与术语一致。
 style:
   - 结论先行，先说结果再说过程。
   - 用具体的事实、数据和例子代替空泛的形容词。
@@ -12,6 +12,12 @@ rules:
     severity: warning
   ai-cliche:
     type: ai-cliche
-    severity: warning
+    severity: error
     params:
       terms: [值得注意的是, 不难看出, 总而言之, 综上所述, 在当今时代]
+  banned-terms:
+    type: banned-terms
+    severity: error
+  term-consistency:
+    type: term-consistency
+    severity: warning

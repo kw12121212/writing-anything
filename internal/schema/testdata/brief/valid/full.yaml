@@ -1,0 +1,13 @@
+schema_version: 1
+audience: 后端工程师
+purpose: 讲清楚为什么要做连接池
+key_messages:
+  - id: km-1
+    text: 连接池能显著降低延迟
+    sources: [src-a]
+  - id: km-2
+    text: 连接数不是越多越好
+    decision: dec-1
+length: {min: 1500, max: 3000}
+avoid: [不点名批评同事]
+sources: [src-a, src-b]

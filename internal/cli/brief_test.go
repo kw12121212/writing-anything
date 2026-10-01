@@ -1,0 +1,382 @@
+package cli
+
+import (
+	"encoding/json"
+	"os"
+	"slices"
+	"strings"
+	"testing"
+)
+
+// briefOut 是 brief 命令 --json 输出中测试关心的部分。
+type briefOut struct {
+	result
+	Brief     map[string]any   `json:"brief"`
+	Questions []map[string]any `json:"questions"`
+}
+
+func runBrief(t *testing.T, dir string, args ...string) (int, briefOut) {
+	t.Helper()
+	code, res := runUnits(t, dir, args...)
+	var out briefOut
+	if err := json.Unmarshal([]byte(res.stdout), &out); err != nil {
+		t.Fatal(err)
+	}
+	out.result = res.result
+	return code, out
+}
+
+const briefRel = ".writing-anything/works/my-post/brief.yaml"
+
+// briefWork 返回含作品 my-post、已登记素材 src-a 的工作区。
+func briefWork(t *testing.T) string {
+	t.Helper()
+	dir := newWork(t)
+	if code, stdout, _ := runIn(t, "作者的原话", "source", "add", "--type", "author-note", "--id", "src-a", "--dir", dir); code != 0 {
+		t.Fatalf("source add: %s", stdout)
+	}
+	return dir
+}
+
+func questionSummary(qs []map[string]any) []string {
+	var out []string
+	for _, q := range qs {
+		out = append(out, q["code"].(string)+" "+q["field"].(string))
+	}
+	return out
+}
+
+func TestBriefSet(t *testing.T) {
+	dir := briefWork(t)
+	// set-creates
+	code, res := runBrief(t, dir, "brief", "set", "my-post", "--audience", "后端工程师", "--purpose", "讲清楚为什么要做连接池",
+		"--message", "km-1", "--message-text", "连接池能显著降低延迟", "--message-sources", "src-a")
+	if code != 0 || !res.Valid || !slices.Equal(res.ChangedPaths, []string{briefRel}) || len(res.Questions) != 0 {
+		t.Fatalf("set-creates: exit code = %d, result = %+v", code, res)
+	}
+	km := res.Brief["keyMessages"].([]any)[0].(map[string]any)
+	if km["id"] != "km-1" || km["sources"].([]any)[0] != "src-a" || km["decision"] != nil || res.Brief["unit"] != "my-post" || res.Brief["path"] != briefRel {
+		t.Fatalf("set-creates: brief = %v", res.Brief)
+	}
+	if got := readFile(t, wsPath(dir, briefRel)); !strings.Contains(got, "schema_version: 1") || !strings.Contains(got, "audience: 后端工程师") {
+		t.Fatalf("brief.yaml =\n%s", got)
+	}
+
+	// set-merges：保留注释与未涉及的字段。
+	writeFile(t, wsPath(dir, briefRel), "# 作者的注释\n"+readFile(t, wsPath(dir, briefRel)))
+	runWS(t, dir, "decision", "add", "--question", "这是你的观点吗", "--unit", "my-post")
+	code, res = runBrief(t, dir, "brief", "set", "my-post", "--message", "km-1", "--message-decision", "dec-1", "--length", "1500-3000")
+	km = res.Brief["keyMessages"].([]any)[0].(map[string]any)
+	if code != 0 || km["text"] != "连接池能显著降低延迟" || km["decision"] != "dec-1" || len(km["sources"].([]any)) != 1 ||
+		get(res.Brief, "length.min") != 1500.0 || get(res.Brief, "length.max") != 3000.0 || res.Brief["audience"] != "后端工程师" {
+		t.Fatalf("set-merges: exit code = %d, brief = %v", code, res.Brief)
+	}
+	if got := readFile(t, wsPath(dir, briefRel)); !strings.Contains(got, "# 作者的注释") {
+		t.Fatalf("comment lost:\n%s", got)
+	}
+
+	// 取值未变时不写文件。
+	if code, res := runBrief(t, dir, "brief", "set", "my-post", "--audience", "后端工程师"); code != 0 || len(res.ChangedPaths) != 0 {
+		t.Fatalf("unchanged: exit code = %d, result = %+v", code, res)
+	}
+
+	// set-clears
+	runBrief(t, dir, "brief", "set", "my-post", "--avoid", "不点名", "--avoid", "不贴代码")
+	code, res = runBrief(t, dir, "brief", "set", "my-post", "--purpose=", "--avoid=")
+	if got := readFile(t, wsPath(dir, briefRel)); code != 0 || res.Brief["purpose"] != nil || len(res.Brief["avoid"].([]any)) != 0 || strings.Contains(got, "purpose") || strings.Contains(got, "avoid") {
+		t.Fatalf("set-clears: exit code = %d, brief = %v\n%s", code, res.Brief, got)
+	}
+	if !slices.Equal(questionSummary(res.Questions), []string{"brief.missing-field purpose"}) {
+		t.Fatalf("set-clears: questions = %v", res.Questions)
+	}
+
+	// set-remove-message
+	runBrief(t, dir, "brief", "set", "my-post", "--message", "km-2", "--message-text", "连接数不是越多越好")
+	code, res = runBrief(t, dir, "brief", "set", "my-post", "--remove-message", "km-1")
+	if msgs := res.Brief["keyMessages"].([]any); code != 0 || len(msgs) != 1 || msgs[0].(map[string]any)["id"] != "km-2" {
+		t.Fatalf("set-remove-message: exit code = %d, brief = %v", code, res.Brief)
+	}
+	// 删除后以同一 id 重新追加需要 --message-text。
+	if code, res := runBrief(t, dir, "brief", "set", "my-post", "--remove-message", "km-2", "--message", "km-2", "--message-sources", "src-a"); code != 1 || diag(t, res.result, "input.invalid-value").Field != "" {
+		t.Fatalf("re-add without text: exit code = %d", code)
+	}
+
+	// set-child-unit
+	runWS(t, dir, "unit", "add", "my-post", "section", "intro")
+	code, res = runBrief(t, dir, "brief", "set", "my-post/intro", "--purpose", "引出问题")
+	if want := []string{".writing-anything/works/my-post/units/intro", ".writing-anything/works/my-post/units/intro/brief.yaml"}; code != 0 || !slices.Equal(res.ChangedPaths, want) || len(res.Questions) != 0 {
+		t.Fatalf("set-child-unit: exit code = %d, result = %+v", code, res)
+	}
+
+	code, stdout, _ := run(t, "brief", "set", "my-post", "--audience", "工程师", "--dir", dir)
+	if code != 0 || !strings.Contains(stdout, "写作简报（Brief）已更新") || !strings.Contains(stdout, "受众：工程师") || !strings.Contains(stdout, "待提问：") {
+		t.Fatalf("text: exit code = %d, stdout = %q", code, stdout)
+	}
+	if _, stdout, _ := run(t, "brief", "set", "my-post", "--audience", "工程师", "--dir", dir); !strings.Contains(stdout, "取值未变") {
+		t.Fatalf("text unchanged: stdout = %q", stdout)
+	}
+}
+
+func TestBriefSetRejects(t *testing.T) {
+	dir := briefWork(t)
+	runBrief(t, dir, "brief", "set", "my-post", "--audience", "读者", "--message", "km-1", "--message-text", "观点")
+	runWS(t, dir, "decision", "add", "--question", "与本单元无关的决策")
+	before := readFile(t, wsPath(dir, briefRel))
+	tests := []struct {
+		name  string
+		args  []string
+		code  string
+		field string
+		next  string
+	}{
+		{"set-no-flags", nil, "input.invalid-value", "", "wa-cli help brief set --json"},
+		{"set-new-message-without-text", []string{"--message", "km-2", "--message-sources", "src-a"}, "input.invalid-value", "", "wa-cli help brief set --json"},
+		{"message flag without message", []string{"--message-text", "x"}, "input.invalid-value", "", "wa-cli help brief set --json"},
+		{"invalid message id", []string{"--message", "KM", "--message-text", "x"}, "artifact.schema-violation", "message", "wa-cli help brief set --json"},
+		{"set-unknown-source", []string{"--sources", "src-nope"}, "brief.unknown-source", "sources[0]", "wa-cli source list"},
+		{"unknown decision", []string{"--message", "km-1", "--message-decision", "dec-9"}, "brief.unknown-decision", "message-decision", "wa-cli decisions --all"},
+		{"set-bad-length", []string{"--length", "3000-1500"}, "input.invalid-value", "", "wa-cli help brief set --json"},
+		{"set-remove-missing", []string{"--remove-message", "km-9"}, "brief.message-not-found", "remove-message[0]", "wa-cli brief show my-post"},
+		// 参数问题在修改前报告，诊断不指向 brief.yaml（否则按 next 复查会得到「通过」）。
+		{"blank message text", []string{"--message", "km-1", "--message-text", " "}, "input.invalid-value", "", "wa-cli help brief set --json"},
+		{"blank audience", []string{"--audience", "  "}, "input.invalid-value", "", "wa-cli help brief set --json"},
+		{"blank avoid", []string{"--avoid", "a", "--avoid", ""}, "input.invalid-value", "", "wa-cli help brief set --json"},
+		{"duplicate message sources", []string{"--message", "km-1", "--message-sources", "src-a,src-a"}, "input.invalid-value", "", "wa-cli help brief set --json"},
+		{"message without changes", []string{"--message", "km-1"}, "input.invalid-value", "", "wa-cli help brief set --json"},
+		{"unrelated decision", []string{"--message", "km-1", "--message-decision", "dec-1"}, "brief.unrelated-decision", "message-decision", "wa-cli decisions --all"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			code, res := runBrief(t, dir, append([]string{"brief", "set", "my-post"}, tt.args...)...)
+			d := diag(t, res.result, tt.code)
+			if code != 1 || res.Valid || d.Field != tt.field || d.Path != "" || !hasNext(d, tt.next) || res.Brief != nil || len(res.ChangedPaths) != 0 {
+				t.Fatalf("exit code = %d, diagnostic = %+v", code, d)
+			}
+			if readFile(t, wsPath(dir, briefRel)) != before {
+				t.Fatal("brief.yaml changed")
+			}
+		})
+	}
+	if _, res := runBrief(t, dir, "brief", "set", "my-post", "--message", "km-2", "--message-sources", "src-a"); !strings.Contains(diag(t, res.result, "input.invalid-value").Message, "--message-text") {
+		t.Fatal("set-new-message-without-text: message does not mention --message-text")
+	}
+	// 决策队列无法加载时不能关联决策。
+	queue := wsPath(dir, ".writing-anything/decisions.yaml")
+	good := readFile(t, queue)
+	writeFile(t, queue, "decisions: [\n")
+	if code, res := runBrief(t, dir, "brief", "set", "my-post", "--message", "km-1", "--message-decision", "dec-9"); code != 1 || !hasNext(diag(t, res.result, "decision.invalid-queue"), "wa-cli decisions") || readFile(t, wsPath(dir, briefRel)) != before {
+		t.Fatalf("invalid queue: exit code = %d", code)
+	}
+	writeFile(t, queue, good)
+	// 已有 brief.yaml 不通过校验时报告其诊断，下一步是复查该文件。
+	writeFile(t, wsPath(dir, briefRel), "schema_version: 1\ntone: x\n")
+	code, res := runBrief(t, dir, "brief", "set", "my-post", "--audience", "a")
+	if d := diag(t, res.result, "artifact.schema-violation"); code != 1 || d.Path != briefRel || !hasNext(d, "wa-cli validate "+briefRel) {
+		t.Fatalf("invalid existing: exit code = %d, diagnostic = %+v", code, d)
+	}
+	writeFile(t, wsPath(dir, briefRel), "schema_version: 1\naudience: &a 读者\npurpose: *a\n")
+	code, res = runBrief(t, dir, "brief", "set", "my-post", "--purpose", "p")
+	if d := diag(t, res.result, "brief.anchored-value"); code != 1 || d.Field != "purpose" || !hasNext(d, "wa-cli help brief set --json") {
+		t.Fatalf("anchored: exit code = %d, diagnostic = %+v", code, d)
+	}
+	if code, res := runBrief(t, dir, "brief", "set", "nope", "--audience", "a"); code != 1 || diag(t, res.result, "work.not-found").Code == "" {
+		t.Fatalf("unknown work: exit code = %d", code)
+	}
+}
+
+func TestBriefShow(t *testing.T) {
+	dir := briefWork(t)
+	// show-empty
+	code, res := runBrief(t, dir, "brief", "show", "my-post")
+	if code != 0 || res.Brief != nil || len(res.ChangedPaths) != 0 || !slices.Equal(questionSummary(res.Questions), []string{"brief.missing-field audience", "brief.missing-field purpose"}) {
+		t.Fatalf("show-empty: exit code = %d, result = %+v", code, res)
+	}
+	for _, q := range res.Questions {
+		if q["question"] == "" || !strings.Contains(q["message"].(string), q["question"].(string)) {
+			t.Errorf("question = %v", q)
+		}
+	}
+	// show-unsourced
+	runBrief(t, dir, "brief", "set", "my-post", "--audience", "读者", "--purpose", "目的", "--message", "km-1", "--message-text", "观点")
+	_, res = runBrief(t, dir, "brief", "show", "my-post")
+	if !slices.Equal(questionSummary(res.Questions), []string{"brief.unsourced-message key_messages[0]"}) || !strings.Contains(res.Questions[0]["message"].(string), "km-1") {
+		t.Fatalf("show-unsourced: questions = %v", res.Questions)
+	}
+	// show-unconfirmed：决定前后各一次。
+	runWS(t, dir, "decision", "add", "--question", "这是你的观点吗", "--unit", "my-post")
+	runBrief(t, dir, "brief", "set", "my-post", "--message", "km-1", "--message-decision", "dec-1")
+	if _, res = runBrief(t, dir, "brief", "show", "my-post"); !slices.Equal(questionSummary(res.Questions), []string{"brief.unconfirmed-message key_messages[0]"}) {
+		t.Fatalf("show-unconfirmed before: questions = %v", res.Questions)
+	}
+	mustRunWS(t, dir, "decide", "dec-1", "--answer", "是", "--confirmation", "我确认这个观点")
+	if _, res = runBrief(t, dir, "brief", "show", "my-post"); len(res.Questions) != 0 {
+		t.Fatalf("show-unconfirmed after: questions = %v", res.Questions)
+	}
+	code, stdout, _ := run(t, "brief", "show", "my-post", "--dir", dir)
+	if code != 0 || !strings.Contains(stdout, "核心观点 km-1：观点（决策 dec-1）") {
+		t.Fatalf("text: stdout = %q", stdout)
+	}
+	runBrief(t, dir, "brief", "set", "my-post", "--message", "km-1", "--message-sources", "src-a", "--length", "10-20", "--avoid", "x", "--sources", "src-a")
+	if _, stdout, _ := run(t, "brief", "show", "my-post", "--dir", dir); !strings.Contains(stdout, "（素材 src-a）") || !strings.Contains(stdout, "字数范围：10-20") || !strings.Contains(stdout, "禁区：x") || !strings.Contains(stdout, "关联素材：src-a") {
+		t.Fatalf("text full: stdout = %q", stdout)
+	}
+	writeFile(t, wsPath(dir, briefRel), "k: v\n")
+	if code, res := runBrief(t, dir, "brief", "show", "my-post"); code != 1 || res.Valid || diag(t, res.result, "artifact.schema-violation").Path != briefRel {
+		t.Fatalf("invalid: exit code = %d", code)
+	}
+	if code, _, _ := run(t, "brief", "show", "my-post", "--dir", dir); code != 1 {
+		t.Fatalf("invalid text: exit code = %d", code)
+	}
+	if _, stdout, _ := run(t, "brief", "show", "my-post/nope", "--dir", dir); stdout != "" {
+		t.Fatalf("unknown unit text: stdout = %q", stdout)
+	}
+	empty := newWork(t)
+	if _, stdout, _ := run(t, "brief", "show", "my-post", "--dir", empty); !strings.Contains(stdout, "还没有写作简报") {
+		t.Fatalf("text empty: stdout = %q", stdout)
+	}
+}
+
+func TestBriefGate(t *testing.T) {
+	dir := briefWork(t)
+	before := readFile(t, workFile(dir, "my-post"))
+	// gate-missing-field
+	writeFile(t, wsPath(dir, briefRel), "schema_version: 1\naudience: 读者\n")
+	code, res := runUnits(t, dir, "advance", "my-post")
+	d := diag(t, res.result, "brief.missing-field")
+	if code != 1 || res.Valid || d.Path != briefRel || !strings.Contains(d.Message, "purpose") || !strings.Contains(d.Message, "请向作者提问") ||
+		!hasNext(d, "wa-cli brief show my-post") || !hasNext(d, "wa-cli help brief set --json") || readFile(t, workFile(dir, "my-post")) != before {
+		t.Fatalf("gate-missing-field: exit code = %d, diagnostic = %+v", code, d)
+	}
+	// next-blocked-by-brief
+	_, res = runUnits(t, dir, "next", "my-post")
+	s := res.Steps[0]
+	b := s["blockers"].([]any)[0].(map[string]any)
+	if len(s["blockers"].([]any)) != 1 || b["code"] != "brief.missing-field" || b["artifact"] != "brief" || b["path"] != briefRel || b["decision"] != nil ||
+		!slices.Equal(commands(s), []string{"wa-cli brief show my-post --dir " + dir + " --json", "wa-cli help brief set --json"}) || !strings.Contains(s["action"].(string), "请向作者提问") {
+		t.Fatalf("next-blocked-by-brief: step = %v", s)
+	}
+	// gate-unsourced
+	writeFile(t, wsPath(dir, briefRel), completeBrief+"key_messages:\n  - {id: km-1, text: 观点}\n")
+	code, res = runUnits(t, dir, "advance", "my-post")
+	if d := diag(t, res.result, "brief.unsourced-message"); code != 1 || !strings.Contains(d.Message, "km-1") {
+		t.Fatalf("gate-unsourced: exit code = %d, diagnostic = %+v", code, d)
+	}
+	// 只关联 open 决策：下一步是决策队列；与阻塞决策的命令去重。
+	runWS(t, dir, "decision", "add", "--question", "是你的观点吗", "--unit", "my-post", "--blocking")
+	writeFile(t, wsPath(dir, briefRel), completeBrief+"key_messages:\n  - {id: km-1, text: 观点, decision: dec-1}\n")
+	code, res = runUnits(t, dir, "advance", "my-post")
+	if d := diag(t, res.result, "brief.unconfirmed-message"); code != 1 || !hasNext(d, "wa-cli decisions --dir") {
+		t.Fatalf("unconfirmed: exit code = %d, diagnostic = %+v", code, d)
+	}
+	_, res = runUnits(t, dir, "next", "my-post")
+	if got := blockerCodes(res.Steps[0]); !slices.Equal(got, []string{"brief.unconfirmed-message", "decision.blocking"}) || !slices.Equal(commands(res.Steps[0]), []string{"wa-cli decisions --dir " + dir + " --json"}) {
+		t.Fatalf("unconfirmed next: blockers = %v, commands = %v", got, commands(res.Steps[0]))
+	}
+	mustRunWS(t, dir, "decide", "dec-1", "--answer", "是", "--confirmation", "是我的观点")
+	// gate-invalid
+	writeFile(t, wsPath(dir, briefRel), "k: v\n")
+	code, res = runUnits(t, dir, "advance", "my-post")
+	if d := diag(t, res.result, "brief.invalid"); code != 1 || !hasNext(d, "wa-cli validate "+briefRel) || readFile(t, workFile(dir, "my-post")) != before {
+		t.Fatalf("gate-invalid: exit code = %d, diagnostic = %+v", code, d)
+	}
+	if _, res = runUnits(t, dir, "next", "my-post"); !slices.Equal(commands(res.Steps[0]), []string{"wa-cli validate " + briefRel + " --dir " + dir + " --json"}) || !strings.Contains(res.Steps[0]["action"].(string), "修复不通过校验的写作简报") {
+		t.Fatalf("gate-invalid next: step = %v", res.Steps[0])
+	}
+	// gate-brief-md
+	os.Remove(wsPath(dir, briefRel))
+	writeFile(t, wsPath(dir, ".writing-anything/works/my-post/brief.md"), "自由文本\n")
+	code, res = runUnits(t, dir, "advance", "my-post")
+	if code != 1 || len(res.Diagnostics) != 2 || res.Diagnostics[0].Code != "brief.missing-field" || res.Diagnostics[1].Path != ".writing-anything/works/my-post/brief.md" {
+		t.Fatalf("gate-brief-md: exit code = %d, diagnostics = %+v", code, res.Diagnostics)
+	}
+	// gate-passes
+	os.Remove(wsPath(dir, ".writing-anything/works/my-post/brief.md"))
+	writeFile(t, wsPath(dir, briefRel), completeBrief+"key_messages:\n  - {id: km-1, text: 观点, sources: [src-a]}\n")
+	if code, res := runUnits(t, dir, "advance", "my-post"); code != 0 || res.Unit["stage"] != "draft" {
+		t.Fatalf("gate-passes: exit code = %d, result = %+v", code, res)
+	}
+	// gate-later-stage
+	writeFile(t, wsPath(dir, briefRel), "schema_version: 1\naudience: 读者\n")
+	artifact(t, dir, "my-post", "", "draft.md")
+	if code, res := runUnits(t, dir, "advance", "my-post"); code != 0 || res.Unit["stage"] != "review" {
+		t.Fatalf("gate-later-stage: exit code = %d, result = %+v", code, res)
+	}
+	// gate-section
+	runWS(t, dir, "unit", "add", "my-post", "section", "intro")
+	os.MkdirAll(wsPath(dir, ".writing-anything/works/my-post/units/intro"), 0o755)
+	writeFile(t, wsPath(dir, ".writing-anything/works/my-post/units/intro/brief.yaml"), "schema_version: 1\n")
+	if code, res := runUnits(t, dir, "advance", "my-post/intro"); code != 0 || res.Unit["stage"] != "draft" {
+		t.Fatalf("gate-section: exit code = %d, result = %+v", code, res)
+	}
+}
+
+func TestBriefValidate(t *testing.T) {
+	dir := briefWork(t)
+	// validate-brief
+	writeFile(t, wsPath(dir, briefRel), completeBrief+"key_messages:\n  - {id: km-1, text: 观点, sources: [src-a]}\n")
+	if code, res := runWS(t, dir, "validate"); code != 0 || !slices.Contains(res.Checked, briefRel) {
+		t.Fatalf("validate-brief: exit code = %d, result = %+v", code, res)
+	}
+	tests := []struct {
+		name, content, code, field, next string
+	}{
+		{"duplicate-message", "schema_version: 1\nkey_messages:\n  - {id: km-1, text: a}\n  - {id: km-1, text: b}\n", "artifact.duplicate-id", "key_messages[1].id", "wa-cli validate --dir"},
+		{"unknown-source", "schema_version: 1\nsources: [src-nope]\n", "brief.unknown-source", "sources[0]", "wa-cli source list"},
+		{"unknown-decision", "schema_version: 1\nkey_messages:\n  - {id: km-1, text: a, decision: dec-9}\n", "brief.unknown-decision", "key_messages[0].decision", "wa-cli decisions"},
+		{"invalid-length", "schema_version: 1\nlength: {min: 3000, max: 1500}\n", "brief.invalid-length", "length", "wa-cli validate " + briefRel},
+		{"schema-violation", "schema_version: 1\ntone: 轻松\n", "artifact.schema-violation", "tone", "wa-cli validate " + briefRel},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			writeFile(t, wsPath(dir, briefRel), tt.content)
+			for _, args := range [][]string{{"validate"}, {"validate", briefRel}} {
+				code, res := runWS(t, dir, args...)
+				d := diag(t, res, tt.code)
+				if code != 1 || d.Path != briefRel || d.Field != tt.field || !hasNext(d, tt.next) {
+					t.Fatalf("%v: exit code = %d, diagnostic = %+v", args, code, d)
+				}
+			}
+		})
+	}
+}
+
+// 途经符号链接的 brief.yaml 在所有入口都按同一问题处理：不读取外部内容，也不覆盖链接（validated-path-segments）。
+func TestBriefSymlink(t *testing.T) {
+	dir := briefWork(t)
+	outside := wsPath(t.TempDir(), "brief.yaml")
+	writeFile(t, outside, completeBrief)
+	if err := os.Symlink(outside, wsPath(dir, briefRel)); err != nil {
+		t.Skip("symlinks unavailable:", err)
+	}
+	for _, args := range [][]string{{"brief", "show", "my-post"}, {"brief", "set", "my-post", "--audience", "x"}, {"validate"}} {
+		code, res := runWS(t, dir, args...)
+		if d := diag(t, res, "artifact.not-found"); code != 1 || d.Path != briefRel || !hasNext(d, "wa-cli status") {
+			t.Fatalf("%v: exit code = %d, diagnostic = %+v", args, code, d)
+		}
+	}
+	if code, res := runWS(t, dir, "advance", "my-post"); code != 1 || diag(t, res, "brief.invalid").Path != briefRel {
+		t.Fatalf("advance: exit code = %d", code)
+	}
+	if info, err := os.Lstat(wsPath(dir, briefRel)); err != nil || info.Mode()&os.ModeSymlink == 0 || readFile(t, outside) != completeBrief {
+		t.Fatal("symlink or outside file changed")
+	}
+
+	// 单元目录本身是指向外部的符号链接：不读取外部的 brief.yaml，也不向其中写入。
+	runWS(t, dir, "unit", "add", "my-post", "section", "intro")
+	outDir := t.TempDir()
+	writeFile(t, wsPath(outDir, "brief.yaml"), completeBrief)
+	os.MkdirAll(wsPath(dir, ".writing-anything/works/my-post/units"), 0o755)
+	if err := os.Symlink(outDir, wsPath(dir, ".writing-anything/works/my-post/units/intro")); err != nil {
+		t.Fatal(err)
+	}
+	if code, res := runWS(t, dir, "brief", "show", "my-post/intro"); code != 1 || diag(t, res, "artifact.not-found").Path != ".writing-anything/works/my-post/units/intro/brief.yaml" {
+		t.Fatalf("symlinked unit dir show: exit code = %d", code)
+	}
+	os.Remove(wsPath(outDir, "brief.yaml"))
+	if code, res := runWS(t, dir, "brief", "set", "my-post/intro", "--purpose", "p"); code != 1 || len(res.Diagnostics) == 0 {
+		t.Fatalf("symlinked unit dir set: exit code = %d", code)
+	}
+	if entries, _ := os.ReadDir(outDir); len(entries) != 0 {
+		t.Fatalf("wrote into the symlinked unit dir: %v", entries)
+	}
+}

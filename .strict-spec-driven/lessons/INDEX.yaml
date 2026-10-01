@@ -27,7 +27,7 @@ categories:
     lesson-db34bd:
       title: 只在写入路径防符号链接不够，读取单元产物也会被途经的符号链接带出项目目录
       status: active
-      occurrences: 2
+      occurrences: 5
       path: .strict-spec-driven/lessons/coding/lesson-db34bd.yaml
     yaml-v3-a5c850:
       title: 向流式序列追加元素改为块式时，yaml.v3 会丢掉挂在序列上的行尾注释
@@ -37,13 +37,63 @@ categories:
     lesson-ccfda7:
       title: 按「字段不以产物路径开头」判断参数问题，会把已有产物的根级问题误当作参数问题
       status: active
-      occurrences: 1
+      occurrences: 2
       path: .strict-spec-driven/lessons/coding/lesson-ccfda7.yaml
     wa-cli-f2cd1e:
       title: wa-cli 会据以删除作者正文的解析规则，必须把边界限死在最小范围
       status: active
-      occurrences: 1
+      occurrences: 2
       path: .strict-spec-driven/lessons/coding/wa-cli-f2cd1e.yaml
+    irm-iex-powershell-bom-iex-4cdfc3:
+      title: 通过 irm | iex 分发的 PowerShell 脚本不能带 BOM，测试必须走 iex 路径
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/coding/irm-iex-powershell-bom-iex-4cdfc3.yaml
+    lesson-1da63c:
+      title: 引用其他产物的产物，编辑命令不能因已有的悬空引用拒绝修改
+      status: active
+      occurrences: 3
+      path: .strict-spec-driven/lessons/coding/lesson-1da63c.yaml
+    id-2ef97e:
+      title: 组合多个单元的产物时，按引用所属的产物解析 id，不要用继承得到的那份
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/coding/id-2ef97e.yaml
+    lesson-fdf0c2:
+      title: 从每个开头标记向后查找结束标记，在结束标记缺失时是平方级的
+      status: active
+      occurrences: 2
+      path: .strict-spec-driven/lessons/coding/lesson-fdf0c2.yaml
+    agent-2b2430:
+      title: 由 Agent 写入正文就能解除的关卡，等于没有关卡
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/coding/agent-2b2430.yaml
+    lesson-65573d:
+      title: 启发式检查的「已登记」判断必须按触发区间覆盖，不能按句子包含子串
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/coding/lesson-65573d.yaml
+    lesson-660304:
+      title: 按错误码挑选下一步命令，会漏掉保留原错误码的阻塞项
+      status: active
+      occurrences: 2
+      path: .strict-spec-driven/lessons/coding/lesson-660304.yaml
+    lesson-65fb6a:
+      title: 记录关卡结论的产物要记下关卡强度，强度提高后旧结论不再有效
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/coding/lesson-65fb6a.yaml
+    lesson-a9dd44:
+      title: 按字符串前缀限制写入位置，在不区分大小写的文件系统上会被绕过
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/coding/lesson-a9dd44.yaml
+    lesson-234cd1:
+      title: 安装到第三方工具的目录前，要按其官方文档核对目录约定
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/coding/lesson-234cd1.yaml
   documentation:
     must-must-6af326:
       title: 修改一条 MUST 需求时，要检查同一规格里相邻的 MUST 是否因此冲突

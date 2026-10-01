@@ -1,0 +1,11 @@
+# 测试文体：写作简报之后要求大纲（Outline）的文章，只在 internal/work 的测试中使用。
+schema_version: 1
+id: essay
+title: 测试文章
+unit_types:
+  - {id: essay, title: 文章, children: [part]}
+  - {id: part, title: 节}
+stages:
+  - {id: brief, title: 写作简报, required_artifacts: [brief]}
+  - {id: outline, title: 大纲, required_artifacts: [outline]}
+  - {id: draft, title: 草稿, required_artifacts: [draft]}

@@ -1,0 +1,16 @@
+# Diátaxis 解释（Explanation）：以理解为目的，讨论背景、原理与取舍。
+schema_version: 1
+id: diataxis-explanation
+title: Diátaxis 解释
+description: 面向理解的文档：讨论一个主题的背景、原理与设计取舍，帮助读者建立整体认识。
+kind: article
+sections:
+  - id: context
+    title: 背景
+    description: 主题出现的背景与要解决的问题。
+  - id: discussion
+    title: 原理
+    description: 机制与原理的讨论。
+  - id: tradeoffs
+    title: 取舍
+    description: 可选方案与各自的取舍。

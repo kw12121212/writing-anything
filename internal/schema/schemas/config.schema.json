@@ -15,6 +15,7 @@
     },
     "gate_level": {"enum": ["strict", "standard", "fast"]},
     "rules": {"$ref": "common.schema.json#/$defs/rules"},
-    "waivers": {"$ref": "common.schema.json#/$defs/waivers"}
+    "waivers": {"$ref": "common.schema.json#/$defs/waivers"},
+    "context_budget": {"$ref": "common.schema.json#/$defs/budget"}
   }
 }

@@ -1,0 +1,5 @@
+schema_version: 1
+draft_sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+rubric: []
+findings:
+  - {id: rf-1, paragraph: 0, message: x, status: done}

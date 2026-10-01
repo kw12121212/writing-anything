@@ -1,0 +1,29 @@
+schema: strict-spec-driven/delta-spec/v1
+schema_version: 1
+artifact_type: delta_spec
+schema_file: templates/strict-spec-driven/schemas/delta-spec.yaml
+target_spec: lint
+operations:
+  ADDED:
+    techblog-rule-types:
+      strength: MUST
+      statement: wa-cli lint 必须按规则的 type 执行以下技术写作检查，只检查正文、不访问网络。code-block-language（无参数）：每个开头的围栏（``` 或 ~~~）之后没有信息字符串的围栏代码块报告一项发现项，位置为开头的围栏行，message 提示写明语言。link-format（参数 schemes，字符串数组，默认 [http, https, mailto]）：围栏之外、不在行内代码与已闭合的 HTML 注释中的每个行内链接 [文字](地址) 与图片 ![替代文字](地址)，链接文字为空（图片除外）、地址为空、地址中含空白（尖括号包住的地址与带引号的标题除外）、协议不在 schemes 中、http 或 https 地址没有主机名时各报告一项发现项，位置为链接开头，text 为整个链接；不在链接地址中的裸 URL 没有主机名时同样报告。reference-sources（参数 source_types，至少一项的字符串数组，默认 [reference]，给出空数组时报告 rule.invalid-params；versions 与 apis，布尔，默认 true）：散文段落中的版本号（v 加数字与点，如 v2.3.1；三段及以上的数字版本，如 1.2.3；紧跟英文名称的两段版本，如 Go 1.22，在可见文字中查找）与 API 说法（内容为函数调用形式、不在 HTML 注释中的行内代码，如 http.Get(url)）必须被已登记论断的文字在原文中的出现处覆盖，且该论断关联至少一份类型在 source_types 中的素材；否则在提及处报告一项发现项，text 为该版本号或 API 说法，message 给出 wa-cli source add 与 wa-cli claim add <unit> 的做法。claims.yaml 不通过校验时 reference-sources 不执行；合并结果中有生效的 reference-sources 规则时 lint 读取 claims.yaml。
+      scenarios:
+        code-without-language:
+          - GIVEN: 作品 my-post 的文体启用 code-block-language，正文含一个开头为 ``` 的代码块
+          - WHEN: 运行 wa-cli lint my-post --dir D --json
+          - THEN: findings 含一项该规则的发现项，line 为开头的围栏行
+        bad-links:
+          - GIVEN: 文体启用 link-format，正文含 [](https://go.dev)、[空]()、[坏](javascript:void) 与裸链接 https://
+          - WHEN: 运行 wa-cli lint my-post --dir D --json
+          - THEN: findings 分别报告链接文字为空、地址为空、不允许的协议与缺少主机名；行内代码、围栏代码块与 HTML 注释中的链接不报告
+        version-needs-reference:
+          - GIVEN: 文体启用 reference-sources，正文含「从 Go 1.22 开始」与 `http.Get(url)`，没有登记论断
+          - WHEN: 运行 wa-cli lint my-post --dir D --json
+          - THEN: findings 含 text 为 Go 1.22 与 http.Get(url) 的两项发现项，message 含 wa-cli claim add my-post
+        version-covered:
+          - GIVEN: 同上，登记了文字含「从 Go 1.22 开始」的论断并关联 reference 类型的素材
+          - WHEN: 运行 wa-cli lint my-post --dir D --json
+          - THEN: findings 中没有 text 为 Go 1.22 的发现项
+  MODIFIED: {}
+  REMOVED: {}

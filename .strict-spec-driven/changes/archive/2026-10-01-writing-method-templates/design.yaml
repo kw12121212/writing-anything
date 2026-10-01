@@ -1,0 +1,40 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: writing-method-templates
+approach:
+  - 节拍位置：结构类写作法的每个节拍取承担它的第一个大纲节，在正文中找标题文字相同的第一个 Markdown 标题行，以该行之前的字符数占全文字符数的比例作为位置；lint（runUnitLint）把超出范围的节拍作为 warning 报告，review show 与 accept 一并展示，不影响关卡。
+  - 写作法模板是纯数据：内置写作法放在 internal/catalog/builtin/methods/<id>.yaml，按 method Schema 校验，嵌入二进制、只解析一次；规范包在 methods 中内联定义，与内置写作法共用 common.schema.json 的 methodBody（使用处以 unevaluatedProperties 禁止其他字段）。catalog.LoadMethods 汇总内置写作法与 config.yaml 的 packs 按顺序定义的写作法（同 id 由后出现的来源覆盖，保留 id none 不列出），得到每条命令加载一次的 MethodSet。
+  - 单元选用的写作法由 MethodSet.Pick(写作简报 method 的原始取值, 文体的 default_method) 选出：空取值用默认，none 不用，不存在时返回其 id。outline.LoadMessages 经 outline.Picker（写作法目录与文体默认）选出 Messages.Method，不存在时记为 Messages.MethodProblem；大纲关卡（work.Blockers）、validate 与 outline 命令都经由它，写作法缺口与已有覆盖缺口一起由 outline.Gaps 给出。审稿的 unitMethod 用 brief.MethodOf 与 Pick，与大纲关卡选出同一个写作法。
+decisions:
+  role-field:
+    decision: 大纲节用 role 声明承担的写作法章节或节拍 id；一个章节可以由多节承担，按第一次出现的位置比较顺序；节没有 role 时不承担任何章节。
+    rationale: 大纲节 id 与标题由作者自由命名，不能要求与写作法章节同名；显式的 role 让 wa-cli 确定性地检查必需章节与顺序，不需要语义判断。
+  method-selection:
+    decision: 写作简报 method 取写作法 id 或 none；省略时用文体的 default_method（文体声明的默认写作法必须是内置写作法）。不选写作法（none，或省略且文体没有默认）时不做写作法检查。
+    rationale: 规划变更：文体提供默认模板，作者在写作简报中选择其他模板，也可以不用；完成标准：不选写作法时不做该检查。显式的 none 让作者在有默认写作法的文体中也能不用写作法。
+  method-gaps-block:
+    decision: 缺少写作法章节或节拍、文章类章节顺序颠倒与未知 role 都是覆盖缺口（error），与已有覆盖缺口一样阻塞 advance 并使 validate 失败；节拍位置只在成稿后给出 warning，不阻塞。
+    rationale: 里程碑完成标准要求缺失章节时 validate 与 advance 以非零退出；规划变更要求节拍位置超出范围只提示不阻塞。
+  planning-data-only:
+    decision: 规划类写作法在本变更中只提供数据与 method show；大纲不承担规划步骤，规划步骤的分步产出与作者确认留给小说类里程碑。
+    rationale: 里程碑 tech-blog-workflow 只要求内置文章类写作法；规划类流程需要新的规划产物与逐步确认关卡，属于雪花写作法等小说类工作。
+  method-rubric:
+    decision: 单元选用的写作法附带的评分项加入审稿的评分标准（与合并结果中已有 id 相同的不重复加入），review record 与验收关卡都按它检查。
+    rationale: 规划变更：每个模板可以附带评分标准条目；按写作法审稿才能检查方法是否落实（如金字塔原理的结论先行）。
+  method-set-once:
+    decision: 写作法目录（catalog.MethodSet）每条命令加载一次：validate 在写作简报与大纲的整体校验中各加载一次，work.Work 在第一次计算大纲阻塞项时加载并缓存，命令层在需要时加载一次；内置写作法嵌入二进制，只解析一次。
+    rationale: workspace-artifacts/load-once-per-command：避免按单元重复读取并校验配置与规范包文件。
+  reserved-none:
+    decision: 写作法 id none 保留为写作简报中「不用写作法」的取值，规范包定义该 id 时报告 method.reserved-id。
+    rationale: 与文体保留阶段 id done 的做法一致；否则该写作法永远无法被选中。
+  dangling-method:
+    decision: 写作简报的 method 是对写作法的引用，不属于写作简报自身的合法性：brief show、brief set、outline show、outline set、review show 与 accept 照常执行，并以 warning 报告 brief.unknown-method（审稿的评分标准暂不包含写作法的评分项）；validate 报告 error，大纲关卡把它作为 outline.invalid 阻塞项；context 不涉及写作法，不报告。
+    rationale: workspace-artifacts/cross-artifact-references：已有的悬空引用照常报告（修改与查看时为 warning），但不阻止查看与用 wa-cli 修复；移除规范包后作者仍需要查看写作简报并用 brief set --method 改选。
+alternatives:
+  - option: 按大纲节标题与写作法章节标题匹配
+    reason: 作者的节标题不必与模板标题一致，按标题匹配会误报，也无法区分多个承担同一章节的节。
+risks:
+  - role 由 Agent 设置，wa-cli 只检查结构，不能判断节的内容是否真的承担了该章节；由审稿与作者确认兜底。
+  - 节拍位置按标题行定位，正文没有与节标题相同的标题行时不核对。

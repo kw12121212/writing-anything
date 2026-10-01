@@ -36,7 +36,9 @@ type sourceResult struct {
 		TotalParagraphs int `json:"totalParagraphs"`
 		TotalChars      int `json:"totalChars"`
 	} `json:"provenance"`
-	Claim map[string]any `json:"claim"`
+	Claim   map[string]any   `json:"claim"`
+	Claims  []map[string]any `json:"claims"`
+	Removed *string          `json:"removed"`
 }
 
 // runSrc 以 input 作为标准输入、以 --json 运行命令，复用 runWSIn 的路径与 next 断言，并断言输出中只有允许为
@@ -63,7 +65,7 @@ func runSrc(t *testing.T, dir, input string, args ...string) (int, sourceResult)
 		switch v := v.(type) {
 		case map[string]any:
 			for k, c := range v {
-				if c == nil && !slices.Contains([]string{"source", "draft", "provenance", "claim", "title", "defaultGenre"}, k) {
+				if c == nil && !slices.Contains([]string{"source", "draft", "provenance", "claim", "removed", "title", "defaultGenre", "contextBudget"}, k) {
 					t.Errorf("%s.%s is null", path, k)
 				}
 				walk(c, path+"."+k)
@@ -247,7 +249,7 @@ func TestDraftWrite(t *testing.T) {
 		t.Error("draft.md or provenance.yaml is wrong")
 	}
 	// draft.md 满足 draft 阶段的必需产物。
-	writeFile(t, wsPath(dir, ".writing-anything/works/my-post/brief.yaml"), "k: v\n")
+	writeFile(t, wsPath(dir, ".writing-anything/works/my-post/brief.yaml"), completeBrief)
 	runWS(t, dir, "advance", "my-post")
 	if _, res := runUnits(t, dir, "next", "my-post"); len(res.Steps) != 1 || len(res.Steps[0]["blockers"].([]any)) != 0 {
 		t.Errorf("next after draft write = %v", res.Steps)
@@ -439,6 +441,119 @@ func TestClaimAdd(t *testing.T) {
 	}
 }
 
+// claim set、claim list 与 claim remove（claim-edit）。
+func TestClaimSetListRemove(t *testing.T) {
+	dir := newWork(t)
+	runSrc(t, dir, "访谈", "source", "add", "--type", "interview", "--id", "talk")
+	runSrc(t, dir, "资料", "source", "add", "--type", "reference", "--id", "doc")
+	rel := ".writing-anything/works/my-post/claims.yaml"
+	if code, res := runSrc(t, dir, "", "claim", "list", "my-post"); code != 0 || res.Claims == nil || len(res.Claims) != 0 {
+		t.Fatalf("empty list: code = %d, %+v", code, res)
+	}
+	mustRunWS(t, dir, "claim", "add", "my-post", "--kind", "experience", "--text", "我负责迁移", "--sources", "doc")
+	mustRunWS(t, dir, "claim", "add", "my-post", "--kind", "opinion", "--text", "观点")
+	// 作者的注释在修改与删除后保留。
+	writeFile(t, wsPath(dir, rel), strings.Replace(readFile(t, wsPath(dir, rel)), "claims:", "# 作者的注释\nclaims:", 1))
+	code, res := runSrc(t, dir, "", "claim", "set", "my-post", "claim-1", "--sources", "talk, doc")
+	if code != 0 || !slices.Equal(res.ChangedPaths, []string{rel}) || res.Claim["text"] != "我负责迁移" || res.Claim["kind"] != "experience" ||
+		len(res.Claim["sources"].([]any)) != 2 || res.Claim["sources"].([]any)[0] != "talk" {
+		t.Fatalf("set sources: code = %d, %+v", code, res)
+	}
+	code, res = runSrc(t, dir, "", "claim", "set", "my-post", "claim-1", "--kind", "case", "--text", "我主导了迁移")
+	if code != 0 || res.Claim["kind"] != "case" || res.Claim["text"] != "我主导了迁移" || strings.Contains(readFile(t, wsPath(dir, rel)), "我负责迁移") {
+		t.Fatalf("set kind and text: code = %d, %+v\n%s", code, res, readFile(t, wsPath(dir, rel)))
+	}
+	// 取值未变时不写文件。
+	if code, res = runSrc(t, dir, "", "claim", "set", "my-post", "claim-1", "--kind", "case"); code != 0 || len(res.ChangedPaths) != 0 {
+		t.Errorf("unchanged: code = %d, changed = %v", code, res.ChangedPaths)
+	}
+	code, res = runSrc(t, dir, "", "claim", "set", "my-post", "claim-2", "--sources", "")
+	if code != 0 || len(res.Claim["sources"].([]any)) != 0 {
+		t.Errorf("clear sources: code = %d, %+v", code, res)
+	}
+	before := readFile(t, wsPath(dir, rel))
+	// 参数问题给出用法与素材列表；找不到论断时给出论断列表。
+	for _, args := range [][]string{{"claim-1", "--kind", "rumor"}, {"claim-1", "--sources", "nope"}, {"claim-1", "--kind", ""}, {"claim-1", "--text", ""}} {
+		code, res = runSrc(t, dir, "", append([]string{"claim", "set", "my-post"}, args...)...)
+		if code != 1 || res.Claim != nil || res.Diagnostics[0].Next[0] != "wa-cli help claim set --json" {
+			t.Errorf("%v: code = %d, %+v", args, code, res.Diagnostics)
+		}
+	}
+	listNext := shellCommand("wa-cli", "claim", "list", "my-post", "--dir", dir, "--json")
+	for _, args := range [][]string{{"set", "my-post", "claim-9", "--kind", "data"}, {"remove", "my-post", "claim-9"}} {
+		code, res = runSrc(t, dir, "", append([]string{"claim"}, args...)...)
+		if d := diag(t, res.result, "claim.not-found"); code != 1 || !slices.Equal(d.Next, []string{listNext}) {
+			t.Errorf("%v: code = %d, %+v", args, code, d)
+		}
+	}
+	if readFile(t, wsPath(dir, rel)) != before {
+		t.Error("rejected edits changed claims.yaml")
+	}
+	code, res = runSrc(t, dir, "", "claim", "list", "my-post")
+	if code != 0 || len(res.Claims) != 2 || res.Claims[0]["id"] != "claim-1" || res.Claims[0]["unit"] != "my-post" || res.Claims[1]["kind"] != "opinion" {
+		t.Fatalf("list: code = %d, %+v", code, res.Claims)
+	}
+	code, res = runSrc(t, dir, "", "claim", "remove", "my-post", "claim-1")
+	if code != 0 || res.Removed == nil || *res.Removed != "claim-1" || !slices.Equal(res.ChangedPaths, []string{rel}) {
+		t.Fatalf("remove: code = %d, %+v", code, res)
+	}
+	if got := readFile(t, wsPath(dir, rel)); !strings.Contains(got, "# 作者的注释") || strings.Contains(got, "claim-1") || !strings.Contains(got, "claim-2") {
+		t.Errorf("after remove:\n%s", got)
+	}
+	// 途经锚点的论断不修改；claims.yaml 不存在时找不到论断。
+	writeFile(t, wsPath(dir, rel), "schema_version: 1\nclaims:\n  - &c {id: claim-1, kind: fact, text: 事实, sources: []}\n")
+	for _, args := range [][]string{{"set", "my-post", "claim-1", "--kind", "data"}, {"remove", "my-post", "claim-1"}} {
+		code, res = runSrc(t, dir, "", append([]string{"claim"}, args...)...)
+		if d := diag(t, res.result, "claim.anchored-value"); code != 1 || d.Next[0] != "wa-cli help claim "+args[0]+" --json" {
+			t.Errorf("anchored %v: code = %d, %+v", args, code, d)
+		}
+	}
+	writeFile(t, wsPath(dir, rel), "claims: [\n")
+	if code, res = runSrc(t, dir, "", "claim", "list", "my-post"); code != 1 || len(res.Claims) != 0 {
+		t.Errorf("invalid claims.yaml: code = %d, %+v", code, res)
+	}
+	os.Remove(wsPath(dir, rel))
+	if code, res = runSrc(t, dir, "", "claim", "remove", "my-post", "claim-1"); code != 1 || diag(t, res.result, "claim.not-found").Path != "" {
+		t.Errorf("missing claims.yaml: code = %d, %+v", code, res.Diagnostics)
+	}
+}
+
+// 其他论断引用的素材被删除时，claim set、claim list 与 claim remove 照常处理，悬空引用以 warning 报告
+// （workspace-artifacts/cross-artifact-references）。
+func TestClaimEditDanglingSource(t *testing.T) {
+	dir := newWork(t)
+	runSrc(t, dir, "访谈", "source", "add", "--type", "interview", "--id", "src-a")
+	runSrc(t, dir, "资料", "source", "add", "--type", "interview", "--id", "src-b")
+	mustRunWS(t, dir, "claim", "add", "my-post", "--kind", "opinion", "--text", "观点")
+	mustRunWS(t, dir, "claim", "add", "my-post", "--kind", "data", "--text", "数据", "--sources", "src-b")
+	mustRunWS(t, dir, "claim", "add", "my-post", "--kind", "case", "--text", "案例")
+	os.RemoveAll(wsPath(dir, ".writing-anything/sources/src-b"))
+	dangling := func(res sourceResult) bool {
+		for _, d := range res.Diagnostics {
+			if d.Code == "claim.unknown-source" && d.Severity == "warning" && d.Field == "claims[1].sources[0]" && strings.Contains(d.Message, "wa-cli claim set") {
+				return true
+			}
+		}
+		return false
+	}
+	if code, res := runSrc(t, dir, "", "claim", "set", "my-post", "claim-1", "--sources", "src-a"); code != 0 || !res.Valid || len(res.ChangedPaths) != 1 || !dangling(res) {
+		t.Fatalf("set: code = %d, %+v", code, res.Diagnostics)
+	}
+	if code, res := runSrc(t, dir, "", "claim", "list", "my-post"); code != 0 || len(res.Claims) != 3 || !dangling(res) {
+		t.Fatalf("list: code = %d, %d claims, %+v", code, len(res.Claims), res.Diagnostics)
+	}
+	if code, res := runSrc(t, dir, "", "claim", "remove", "my-post", "claim-1"); code != 0 || res.Removed == nil || len(res.Diagnostics) != 1 {
+		t.Fatalf("remove: code = %d, %+v", code, res.Diagnostics)
+	}
+	// 修复悬空引用本身：改为已登记的素材后不再有 warning；validate 对悬空引用仍报告 error。
+	if code, res := runSrc(t, dir, "", "validate"); code != 1 || diag(t, res.result, "claim.unknown-source").Severity != "error" {
+		t.Fatalf("validate: code = %d, %+v", code, res.Diagnostics)
+	}
+	if code, res := runSrc(t, dir, "", "claim", "set", "my-post", "claim-2", "--sources", "src-a"); code != 0 || len(res.Diagnostics) != 0 {
+		t.Fatalf("repair: code = %d, %+v", code, res.Diagnostics)
+	}
+}
+
 func TestSourceCommandsText(t *testing.T) {
 	dir := newWork(t)
 	for _, tc := range []struct {
@@ -454,6 +569,12 @@ func TestSourceCommandsText(t *testing.T) {
 		{"", []string{"provenance", "my-post"}, "Agent（agent）：1 段"},
 		{"", []string{"claim", "add", "my-post", "--kind", "case", "--text", "某客户", "--sources", "talk"}, "关联素材 talk"},
 		{"", []string{"claim", "add", "my-post", "--kind", "case", "--text", "另一客户"}, "尚未关联素材"},
+		{"", []string{"claim", "set", "my-post", "claim-2", "--sources", "talk"}, "已修改单元（Unit）my-post 的论断（Claim）claim-2"},
+		{"", []string{"claim", "set", "my-post", "claim-2", "--sources", "talk"}, "取值未变，未修改"},
+		{"", []string{"claim", "list", "my-post"}, "claim-1（case）某客户：关联素材 talk"},
+		{"", []string{"claim", "remove", "my-post", "claim-2"}, "已删除单元（Unit）my-post 的论断（Claim）claim-2"},
+		{"", []string{"new", "minimal", "other"}, ""},
+		{"", []string{"claim", "list", "other"}, "单元（Unit）other 还没有登记论断（Claim）"},
 	} {
 		code, stdout, stderr := runIn(t, tc.input, append(tc.args, "--dir", dir)...)
 		if code != 0 || !strings.Contains(stdout, tc.want) || stderr != "" {

@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/kw12121212/writing-anything/internal/schema"
@@ -53,7 +54,7 @@ const (
 var GateLevels = []string{"strict", "standard", "fast"}
 
 // SettableKeys 是 config set 可以设置的配置项，按 config.yaml 中的顺序排列。
-var SettableKeys = []string{"language", "default_genre", "packs", "gate_level"}
+var SettableKeys = []string{"language", "default_genre", "packs", "gate_level", "context_budget"}
 
 // Problem 是工作区中的一个问题。Path 相对项目目录、以 / 分隔。
 type Problem struct {
@@ -72,6 +73,8 @@ type Config struct {
 	DefaultGenre *string  `json:"defaultGenre"`
 	Packs        []string `json:"packs"`
 	GateLevel    string   `json:"gateLevel"`
+	// ContextBudget 是项目配置层的上下文预算（Context Budget）；未设置时为 nil。
+	ContextBudget *int `json:"contextBudget"`
 }
 
 func errorAt(code, path, msg string) Problem {
@@ -283,6 +286,44 @@ func Load(root string) (*Config, []Problem) {
 	return summarize(schema.Decode(doc)), fromSchema(ConfigPath, configKind().ValidateNode(doc))
 }
 
+// UnitRef 返回单元目录 dir（works/<work> 或 works/<work>/units/<unit-id>，相对项目目录）对应的单元引用
+// （<work> 或 <work>/<unit-id>）。
+func UnitRef(dir string) string {
+	return strings.Replace(strings.TrimPrefix(dir, WorksPath+"/"), "/units/", "/", 1)
+}
+
+// ReadRegular 读取工作区中的普通文件 rel；工作区目录之下途经的每一级都必须是真实目录、文件本身必须是普通文件，
+// 否则（包括不存在、途经符号链接）返回 nil 与 false，避免跟随符号链接读取项目目录之外的文件
+// （workspace-artifacts/validated-path-segments）。
+func ReadRegular(root, rel string) ([]byte, bool, error) {
+	if !regular(root, rel) {
+		return nil, false, nil
+	}
+	data, err := os.ReadFile(abs(root, rel))
+	return data, err == nil, err
+}
+
+// OpenRegular 与 ReadRegular 做同样的检查，但打开文件供调用方流式读取；不是普通文件时返回 nil 与 false。
+func OpenRegular(root, rel string) (*os.File, bool, error) {
+	if !regular(root, rel) {
+		return nil, false, nil
+	}
+	f, err := os.Open(abs(root, rel))
+	return f, err == nil, err
+}
+
+// regular 报告 rel 是否为工作区中途经真实目录的普通文件。
+func regular(root, rel string) bool {
+	segs := strings.Split(rel, "/")
+	for i := 2; i <= len(segs); i++ {
+		info, err := os.Lstat(abs(root, strings.Join(segs[:i], "/")))
+		if err != nil || i < len(segs) && !info.IsDir() || i == len(segs) && !info.Mode().IsRegular() {
+			return false
+		}
+	}
+	return true
+}
+
 // Read 读取并解析 root 下的产物 rel；失败时返回 nil 与问题。
 func Read(root, rel string) (*yaml.Node, []Problem) { return read(root, rel) }
 
@@ -312,6 +353,17 @@ func summarize(v any) *Config {
 	c.GateLevel, _ = m["gate_level"].(string)
 	if g, ok := m["default_genre"].(string); ok {
 		c.DefaultGenre = &g
+	}
+	switch n := m["context_budget"].(type) {
+	case int:
+		c.ContextBudget = &n
+	case int64:
+		v := int(n)
+		c.ContextBudget = &v
+	case float64:
+		if v := int(n); float64(v) == n {
+			c.ContextBudget = &v
+		}
 	}
 	ps, _ := m["packs"].([]any)
 	for _, p := range ps {
@@ -471,8 +523,13 @@ func configValue(key, v string) *yaml.Node {
 	switch {
 	case key == "packs":
 		return packs(v)
-	case key == "default_genre" && v == "":
+	case (key == "default_genre" || key == "context_budget") && v == "":
 		return nil
+	case key == "context_budget":
+		// 十进制整数写为整数，交给 Schema 检查是否为正整数；其他取值写为字符串，由 Schema 报告类型错误。
+		if n, err := strconv.Atoi(v); err == nil {
+			return Int(n)
+		}
 	}
 	return str(v)
 }

@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "大纲",
+  "description": "单元的大纲（Outline）：按顺序排列的大纲节，每节声明覆盖的核心观点、使用的素材或不覆盖的理由。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "sections"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "sections": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "title"],
+        "properties": {
+          "id": {"$ref": "common.schema.json#/$defs/id"},
+          "title": {"type": "string", "pattern": "\\S"},
+          "covers": {"$ref": "common.schema.json#/$defs/ids"},
+          "uses": {"$ref": "common.schema.json#/$defs/ids"},
+          "reason": {"type": "string", "pattern": "\\S"},
+          "role": {"$ref": "common.schema.json#/$defs/id", "description": "该节承担的写作法章节或节拍 id"}
+        }
+      }
+    }
+  }
+}

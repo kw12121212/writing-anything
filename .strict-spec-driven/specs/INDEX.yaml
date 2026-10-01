@@ -3,18 +3,42 @@ schema_version: 1
 artifact_type: spec_index
 schema_file: ../schemas/spec-index.yaml
 specs:
+  - id: brief
+    title: 写作简报（Brief）
+    path: .strict-spec-driven/specs/brief.yaml
   - id: cli
     title: 命令行工具（CLI）
     path: .strict-spec-driven/specs/cli.yaml
+  - id: context
+    title: 上下文包（Context Pack）
+    path: .strict-spec-driven/specs/context.yaml
   - id: decisions
     title: 决策队列（Decision Queue）
     path: .strict-spec-driven/specs/decisions.yaml
+  - id: export
+    title: 导出（Export）
+    path: .strict-spec-driven/specs/export.yaml
   - id: feedback
     title: 作者反馈（Feedback）
     path: .strict-spec-driven/specs/feedback.yaml
   - id: genres-and-packs
     title: 文体与规范包（Genre and Pack）
     path: .strict-spec-driven/specs/genres-and-packs.yaml
+  - id: lint
+    title: 文本检查（Lint）
+    path: .strict-spec-driven/specs/lint.yaml
+  - id: methods
+    title: 写作法模板（Method Template）
+    path: .strict-spec-driven/specs/methods.yaml
+  - id: outline
+    title: 大纲（Outline）
+    path: .strict-spec-driven/specs/outline.yaml
+  - id: review
+    title: 审稿与验收（Review and Acceptance）
+    path: .strict-spec-driven/specs/review.yaml
+  - id: skills
+    title: 技能（Skill）
+    path: .strict-spec-driven/specs/skills.yaml
   - id: sources-and-provenance
     title: 素材与出处（Sources and Provenance）
     path: .strict-spec-driven/specs/sources-and-provenance.yaml

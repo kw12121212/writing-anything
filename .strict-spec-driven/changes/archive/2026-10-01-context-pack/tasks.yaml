@@ -1,0 +1,46 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: context-pack
+sections:
+  Implementation:
+    budget-setting:
+      text: Schema：genre、pack、config 新增 context_budget；catalog 读取文体与规范包的 context_budget；minimal 声明 12000；resolve 合并 contextBudget 并新增按指定文体合并；workspace 的 config set 支持 context_budget，配置摘要新增 contextBudget
+      status: complete
+    ctxpack:
+      text: internal/ctxpack：收集单元信息、写作简报（含祖先继承）、本单元大纲、本节大纲条目与覆盖的核心观点、未处理的反馈、关联的未决定决策、规范要点、素材原文、相邻节；按优先级与预算放入、截断素材原文、记录 trimmed；渲染 Markdown
+      status: complete
+    cli-context:
+      text: internal/cli：新增 context 命令（注册表、sampleArgs、JSON 视图与 Markdown 输出）；config resolved 输出 contextBudget；status 与 config set 的 config 含 contextBudget
+      status: complete
+    docs:
+      text: docs/GLOSSARY.md 新增相邻节（Neighbor Section）
+      status: complete
+  Testing:
+    lint:
+      text: gofmt 检查本变更的 Go 文件
+      status: complete
+      command: test -z "$(gofmt -l internal/ctxpack internal/resolve internal/catalog internal/workspace internal/cli/context.go internal/cli/context_test.go)"
+    unit-tests:
+      text: 单元测试：预算合并与来源（文体、规范包、项目、默认）、config set context_budget；上下文包各部分内容、写作简报继承、本节条目、素材范围与非 UTF-8 素材、相邻节节选；按优先级裁剪与截断、used 与 trimmed、Markdown 字符数不超过预算；错误路径（单元不存在、产物不通过校验）
+      status: complete
+      command: go test ./internal/...
+    full-regression:
+      text: 运行完整回归命令，覆盖率不低于 80%
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    spec-alignment:
+      text: 对照 context、genres-and-packs 与 workspace delta spec 的每个场景确认实现与测试覆盖，并按实际实现修正 delta spec
+      status: complete
+    strict-ready:
+      text: 运行 strict-spec-cli ready 与 strict-spec-cli verify，确认变更产物有效
+      status: complete
+      command: strict-spec-cli ready context-pack && strict-spec-cli verify context-pack
+    archive-readiness:
+      text: 确认 delta spec 能合并进主规格（新建 context 主规格），归档后路线图中的 context-pack 标记为完成
+      status: complete
+testing_gates:
+  validation_task: full-regression
+  unit_test_task: unit-tests

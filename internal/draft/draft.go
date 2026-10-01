@@ -52,19 +52,8 @@ func errorAt(code, path, field, msg string) workspace.Problem {
 
 func abs(root, rel string) string { return filepath.Join(root, filepath.FromSlash(rel)) }
 
-// readRegular 读取工作区中的普通文件 rel；工作区目录之下途经的每一级都必须是真实目录、文件本身必须是普通文件，
-// 否则（包括不存在、途经符号链接）返回 nil 与 false，避免跟随符号链接读取项目目录之外的文件。
-func readRegular(root, rel string) ([]byte, bool, error) {
-	segs := strings.Split(rel, "/")
-	for i := 2; i <= len(segs); i++ {
-		info, err := os.Lstat(abs(root, strings.Join(segs[:i], "/")))
-		if err != nil || i < len(segs) && !info.IsDir() || i == len(segs) && !info.Mode().IsRegular() {
-			return nil, false, nil
-		}
-	}
-	data, err := os.ReadFile(abs(root, rel))
-	return data, err == nil, err
-}
+// readRegular 读取工作区中的普通文件 rel，不跟随符号链接，见 workspace.ReadRegular。
+func readRegular(root, rel string) ([]byte, bool, error) { return workspace.ReadRegular(root, rel) }
 
 // record 是一份已加载的写入记录。
 type record struct {

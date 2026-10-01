@@ -1,0 +1,38 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: brief-intake-gate
+  status: proposed
+summary:
+  what:
+    - 新增写作简报（Brief）产物 brief.yaml（单元目录下）：audience（受众）、purpose（写作目的）、key_messages（核心观点（Key Message），每项含 id、text、sources 与 decision）、length（字数范围 min/max）、avoid（禁区）与 sources（关联素材）；由 JSON Schema 约束，validate 整体校验与 validate <path> 都校验它。
+    - 新增 wa-cli brief set <unit>：用命名参数写入或修改写作简报的字段，一次可新增或修改一个核心观点（--message <id> 与 --message-text、--message-sources、--message-decision），也可用 --remove-message 删除；引用的素材必须已登记、决策必须存在；保留 brief.yaml 中的其他内容与注释。新增只读的 wa-cli brief show <unit>。两者都输出写作简报与仍需向作者提问的问题（questions）。
+    - 文体可以在 unit_types[].brief_required 中声明该类型单元的写作简报必填项（audience、purpose、key_messages、length、avoid、sources）；内置 minimal 文体的 article 声明 [audience, purpose]。
+    - 提问关卡：单元处于要求 brief 产物的阶段时，写作简报缺少必填项（brief.missing-field）、核心观点既没有素材也没有决策（brief.unsourced-message）、核心观点只关联尚未决定的决策（brief.unconfirmed-message）或 brief.yaml 不通过校验（brief.invalid）都是阻塞项：advance 拒绝推进，诊断与 next 的 message 写出需要向作者提问的问题。
+  why:
+    - 里程碑 tech-blog-workflow 要求 Agent 在写作前先与作者对齐受众、目的与核心观点；目前 brief 阶段只检查 brief.yaml 或 brief.md 是否存在，任何内容都能通过，Agent 可能跳过提问直接按自己的理解写作，违背「帮 Agent 规范地协助人写作，而不是替人写作」。
+    - 核心观点是后续大纲覆盖追踪（outline-coverage）与写作法模板的基础，必须带 id 且出自作者：作者原话的素材或作者的确认记录（Confirmation Record）。
+scope:
+  in:
+    - internal/brief：写作简报的加载、校验（Schema、观点 id 唯一、素材已登记、决策存在、length 的 min 不大于 max）、按字段修改与写出、必填项与观点出处检查；返回结构化问题
+    - internal/schema：新增 brief.schema.json 与产物类型 brief（works/*/brief.yaml、works/*/units/*/brief.yaml）；genre.schema.json 的 unit_types 新增 brief_required
+    - internal/catalog：UnitType 新增 BriefRequired（config resolved 的 unitTypes 输出新增 briefRequired）；内置 minimal 文体的 article 声明 brief_required [audience, purpose]
+    - internal/work：Blockers 在要求 brief 的阶段加入写作简报阻塞项（在缺失产物之后、决策阻塞项之前）
+    - internal/cli：新增 brief set 与 brief show（登记注册表与 sampleArgs）；advance 与 next 为写作简报阻塞项给出下一步命令；validate 整体与单个产物校验 brief.yaml
+    - 新增 brief 主规格；修改 units-and-lifecycle 的 advance-stage、independent-units、next-steps 与 decisions 的 decision-blocking（场景中的 brief.yaml 需含必填项）；docs/GLOSSARY.md 新增写作目的、禁区、简报必填项
+    - '更新现有测试中写入 ''k: v'' 作为 brief.yaml 的夹具为合法且齐备的写作简报'
+  out:
+    - 写作法模板（--method）、大纲与覆盖追踪：分别由 writing-method-templates 与 outline-coverage 处理
+    - tech-blog 文体本身及其必填项：由 tech-blog-genre-and-export 处理
+    - wa-cli 调用 LLM 生成问题或判断回答质量；问题文字由 wa-cli 按字段内置给出
+    - brief.md 的结构化解析：只有 brief.md 时视为没有任何字段
+unchanged_behavior:
+  - 输出信封字段与退出码约定不变；已发布错误码的含义不变
+  - 不要求 brief 产物的阶段、没有 brief.yaml 与 brief.md 时的 lifecycle.missing-artifact、决策阻塞项的行为不变；section 等未声明 brief_required 的单元类型只要求写作简报合法且观点有出处
+  - next 对缺失的必需产物仍不列出生成命令（commands 为空数组）
+  - 仓库根目录不创建 .writing-anything/；产品二进制不依赖 internal/tools/** 与 strict-spec-driven；wa-cli 不联网、不调用 LLM
+roadmap:
+  milestone: tech-blog-workflow
+  planned_change: brief-intake-gate

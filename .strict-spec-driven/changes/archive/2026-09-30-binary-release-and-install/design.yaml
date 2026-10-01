@@ -1,0 +1,37 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: binary-release-and-install
+approach:
+  - 版本信息集中在 internal/version：Version 与 Commit 为 ldflags 注入点，Resolve(info *debug.BuildInfo) 是纯函数，按注入值优先、构建信息回退的顺序得出 (version, commit)，便于用构造的构建信息做单元测试。
+  - 发布工具放在 internal/tools/release（package main，不计入覆盖率，产品二进制不依赖它），用 os/exec 调用 go build 交叉编译，产物命名为 wa-cli-<os>-<arch>[.exe]，SHA256SUMS 采用 sha256sum 兼容格式（'<hex>  <文件名>'）。
+  - install.sh 只用 POSIX sh 与常见工具（uname、curl 或 wget、sha256sum 或 shasum）；install.ps1 使用 PowerShell 内置的 Invoke-WebRequest 与 Get-FileHash。两者通过环境变量 WA_VERSION、WA_INSTALL_DIR、WA_BASE_URL 配置，默认从 GitHub Release 的 latest 下载。
+  - 安装脚本的测试放在 internal/tools/release 的 Go 测试中：用 httptest 提供伪造的发布产物与 SHA256SUMS，用放在 PATH 前面的假 uname 模拟不同平台，断言安装的是对应平台的文件、哈希不符与不支持的平台以非零退出且不安装；再用发布工具构建本机目标跑一次端到端安装并运行 wa-cli version。install.ps1 的测试在本机没有 pwsh 时跳过。
+decisions:
+  raw-binary-assets:
+    decision: 发布产物为裸二进制加 SHA256SUMS，不打压缩包。
+    rationale: 安装脚本无需解压工具即可下载校验，Windows 上也不依赖 tar；单文件 Go 二进制压缩收益有限。
+  buildinfo-fallback:
+    decision: 未注入版本时回退到 runtime/debug.ReadBuildInfo：Main.Version 非空且不为 (devel) 时作为版本，vcs.revision 作为提交，vcs.modified 为 true 时提交后缀 -dirty。
+    rationale: go install ...@vX.Y.Z 不经过 ldflags，回退后仍能报告真实版本，满足 planned change 对 go install 安装的支持。
+  version-text-format:
+    decision: 文本输出改为 'wa-cli <version> (commit <commit>)'，仍为一行。
+    rationale: 保留原有前缀便于脚本按空格取第二列得到版本号，同时给出提交信息。
+  user-level-install:
+    decision: install.sh 默认安装到 $HOME/.local/bin，install.ps1 默认安装到 %LOCALAPPDATA%\Programs\wa-cli 并把该目录加入用户级 PATH；目录不在 PATH 时 install.sh 只打印提示。
+    rationale: 不需要 root 或管理员权限，符合 planned change 的要求；install.sh 不改写 shell 配置文件，避免意外修改作者环境。
+  ps1-no-bom-scriptblock:
+    decision: install.ps1 不带 BOM，全部逻辑放在 & { } 脚本块中，失败用 throw 报告；Windows 的推荐安装方式是 irm | iex，下载后用 -File 运行时需使用 PowerShell 7（pwsh）。
+    rationale: 审查实测 irm 不会去掉 BOM，带 BOM 时 iex 把 U+FEFF 当作命令报错；脚本块避免 $ErrorActionPreference 等设置、变量与函数留在作者会话中；Windows PowerShell 5.1 以 -File 运行无 BOM 的 UTF-8 脚本会按系统代码页误读中文，而 irm 按响应的 charset=utf-8 解码不受影响。
+  user-path-registry:
+    decision: install.ps1 通过 HKCU:\Environment 读取未展开的用户级 PATH，追加后以 REG_EXPAND_SZ 写回，再借 SetEnvironmentVariable 广播设置变更。
+    rationale: '[Environment]::GetEnvironmentVariable 返回展开后的值，写回会固化 %USERPROFILE% 等引用并把类型改成 REG_SZ。'
+alternatives:
+  - option: 用 goreleaser 生成发布产物
+    reason: 引入外部工具与配置，违背 stdlib-first；需求只有 6 个目标与一个校验文件，几十行 Go 即可完成。
+  - option: 只提供 go install 安装
+    reason: 要求作者安装 Go 工具链，不满足里程碑中安装脚本下载校验二进制的完成标准。
+risks:
+  - install.ps1 已在 Linux 上的 PowerShell 7.6 中以模拟的 Windows 环境变量测试（ubuntu-latest 自带 pwsh，CI 同样会运行）；写入用户级 PATH 的分支依赖 Windows 注册表，没有自动化测试，Windows PowerShell 5.1 也未实测。
+  - GitHub Actions 发布流程只能在推送标签后于 GitHub 上验证；Action 按主版本标签引用。

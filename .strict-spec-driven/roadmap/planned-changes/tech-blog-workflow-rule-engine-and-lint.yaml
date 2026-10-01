@@ -5,7 +5,7 @@ schema_file: ../../templates/strict-spec-driven/schemas/planned-change.yaml
 planned_change:
   id: rule-engine-and-lint
   milestone: tech-blog-workflow
-status: planned
+status: complete
 summary: 声明式规则引擎（Rule Engine）与通用文本检查（Lint）规则
 details: 内置规则类型由 YAML 传参：cjk-typography（中文排版：中英文之间的空格、全角/半角标点）、ai-cliche（AI 腔 AI Cliché 词表，含破折号密度）、banned-terms（禁用词）、term-consistency（术语一致，依据术语表）、length-range（字数范围）、paragraph-length（段落长度）、required-sections（必需章节）。wa-cli lint <unit> 输出发现项（Finding），每项包含规则 id、规则来源（文体 / 规范包 / 项目）、正文位置和建议。支持在规范包中关闭规则，以及用正文注释对单处豁免（Waiver）并写明理由。文本检查不发起网络请求。
 depends_on:

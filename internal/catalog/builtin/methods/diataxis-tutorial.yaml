@@ -1,0 +1,23 @@
+# Diátaxis 教程（Tutorial）：以学习为目的，带读者一步步完成一件事。
+schema_version: 1
+id: diataxis-tutorial
+title: Diátaxis 教程
+description: 面向学习的文档：带读者从零开始一步步完成一个具体的小项目，每一步都有可见的结果。
+kind: article
+sections:
+  - id: goal
+    title: 学习目标
+    description: 读者完成后能做到什么。
+  - id: prerequisites
+    title: 准备
+    description: 开始前需要的环境与知识。
+  - id: steps
+    title: 步骤
+    description: 按顺序的操作步骤，每一步都给出预期结果。
+  - id: result
+    title: 成果与下一步
+    description: 回顾完成的成果，指出继续学习的方向。
+rubric:
+  - id: reproducible
+    title: 可复现
+    description: 读者按步骤操作就能得到与文中一致的结果。

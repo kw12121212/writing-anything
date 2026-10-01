@@ -5,7 +5,7 @@ schema_file: ../../templates/strict-spec-driven/schemas/planned-change.yaml
 planned_change:
   id: review-and-acceptance
   milestone: tech-blog-workflow
-status: planned
+status: complete
 summary: 审稿（Review）产物、AI 预审（Pre-review）、关卡强度与带确认记录的验收（Acceptance）
 details: Agent 的审稿作为 AI 预审：wa-cli review record 写入按评分标准（Rubric）逐项的结论、证据和正文位置，wa-cli 校验每个评分项都有结论、每个发现项都引用具体段落（后续引入的指标类发现项还要附带指标数据）。审稿汇总文本检查结果、评分结论、未处理的作者反馈和决策，并把发现项转为修订（Revision）任务。预审发现项默认不阻塞，只进入修订建议与决策队列，由作者最终判断；阻塞验收的只有确定性硬规则，以及规范包在严格模式下显式声明为阻塞的项目。关卡强度分为 strict（严格）、standard（标准）、fast（快速）。wa-cli accept 需要 --confirmed-by-author 和作者确认原话摘要；strict 模式下缺少确认记录会被拒绝。
 depends_on:

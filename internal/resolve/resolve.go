@@ -96,7 +96,15 @@ type Resolved struct {
 	BannedTerms []BannedTerm     `json:"bannedTerms"`
 	Style       []Style          `json:"style"`
 	Rubric      []RubricItem     `json:"rubric"`
+	// ContextBudget 是上下文预算（Context Budget）的最终取值与来源；没有配置层声明时为 DefaultContextBudget，来源为 default。
+	ContextBudget Value `json:"contextBudget"`
 }
+
+// DefaultContextBudget 是没有任何配置层声明 context_budget 时的上下文预算（字符数）。
+const DefaultContextBudget = 12000
+
+// SourceDefault 是没有任何配置层给出取值时的来源标识。
+const SourceDefault = "default"
 
 // layer 是参与合并的一个配置层。
 type layer struct {
@@ -113,6 +121,7 @@ type projectFile struct {
 	Packs        []string                `json:"packs"`
 	Rules        map[string]catalog.Rule `json:"rules"`
 	Waivers      []catalog.Waiver        `json:"waivers"`
+	Budget       int                     `json:"context_budget"`
 }
 
 // Resolve 读取 root 下的工作区配置并合并。存在 error 级问题时返回 nil。
@@ -124,7 +133,19 @@ func Resolve(root string) (*Resolved, []workspace.Problem) {
 	if ps := schema.KindFor(workspace.ConfigPath).ValidateNode(doc); len(ps) > 0 {
 		return nil, workspace.FromSchema(workspace.ConfigPath, ps)
 	}
-	return merge(root, doc)
+	return merge(root, doc, "")
+}
+
+// ForGenre 与 Resolve 相同，但以文体 genre 作为文体层，而不是 config.yaml 的 default_genre：作品按其自己的文体写作。
+func ForGenre(root, genre string) (*Resolved, []workspace.Problem) {
+	doc, problems := workspace.Read(root, workspace.ConfigPath)
+	if doc == nil {
+		return nil, problems
+	}
+	if ps := schema.KindFor(workspace.ConfigPath).ValidateNode(doc); len(ps) > 0 {
+		return nil, workspace.FromSchema(workspace.ConfigPath, ps)
+	}
+	return merge(root, doc, genre)
 }
 
 // Check 做工作区整体校验中与文体、规范包有关的部分：校验 packs/ 下的每个规范包；config.yaml 本身
@@ -135,7 +156,7 @@ func Check(root string) (checked []string, problems []workspace.Problem) {
 	if doc == nil || len(ps) > 0 || len(schema.KindFor(workspace.ConfigPath).ValidateNode(doc)) > 0 {
 		return checked, problems
 	}
-	_, ps = merge(root, doc)
+	_, ps = merge(root, doc, "")
 	for _, p := range ps {
 		// 被引用的工作区规范包已在上面校验过，不重复报告。
 		if !slices.Contains(problems, p) {
@@ -168,9 +189,13 @@ func CheckArtifact(root, rel string) []workspace.Problem {
 	return nil
 }
 
-func merge(root string, doc *yaml.Node) (*Resolved, []workspace.Problem) {
+// merge 合并各配置层；genre 非空时以它作为文体层，否则用 config.yaml 的 default_genre。
+func merge(root string, doc *yaml.Node, genre string) (*Resolved, []workspace.Problem) {
 	var cfg projectFile
 	catalog.Decode(doc, &cfg)
+	if genre != "" {
+		cfg.DefaultGenre = genre
+	}
 	var problems []workspace.Problem
 	errorAt := func(code, path, field, msg string) {
 		problems = append(problems, workspace.Problem{Code: code, Severity: workspace.SeverityError, Path: path, Field: field, Message: msg})
@@ -179,7 +204,13 @@ func merge(root string, doc *yaml.Node) (*Resolved, []workspace.Problem) {
 		problems = append(problems, workspace.Problem{Code: code, Severity: workspace.SeverityError, Path: l.path, Field: field, Origin: l.origin, Message: msg})
 	}
 	r := &Resolved{Packs: []Ref{}, UnitTypes: []UnitType{}, Stages: []Stage{}, Rules: map[string]*Rule{},
-		Glossary: []Term{}, BannedTerms: []BannedTerm{}, Style: []Style{}, Rubric: []RubricItem{}}
+		Glossary: []Term{}, BannedTerms: []BannedTerm{}, Style: []Style{}, Rubric: []RubricItem{},
+		ContextBudget: Value{DefaultContextBudget, SourceDefault}}
+	budget := func(v int, source string) {
+		if v > 0 {
+			r.ContextBudget = Value{v, source}
+		}
+	}
 	var layers []layer
 	rubric := map[string]int{}
 	addRubric := func(items []catalog.RubricItem, source string) {
@@ -210,6 +241,7 @@ func merge(root string, doc *yaml.Node) (*Resolved, []workspace.Problem) {
 				r.Stages = append(r.Stages, Stage{s, source})
 			}
 			addRubric(g.Rubric, source)
+			budget(g.ContextBudget, source)
 			layers = append(layers, layer{source: source, origin: "内置文体 " + g.ID, rules: g.Rules})
 		}
 	}
@@ -251,6 +283,7 @@ func merge(root string, doc *yaml.Node) (*Resolved, []workspace.Problem) {
 			r.BannedTerms = append(r.BannedTerms, BannedTerm{t, source})
 		}
 		addRubric(p.Rubric, source)
+		budget(p.ContextBudget, source)
 		layers = append(layers, layer{source: source, path: p.Path, origin: catalog.ProblemOrigin(p), rules: p.Rules, waivers: p.Waivers})
 	}
 
@@ -258,6 +291,7 @@ func merge(root string, doc *yaml.Node) (*Resolved, []workspace.Problem) {
 		q.Path = workspace.ConfigPath
 		problems = append(problems, q)
 	}
+	budget(cfg.Budget, SourceProject)
 	layers = append(layers, layer{source: SourceProject, path: workspace.ConfigPath, rules: cfg.Rules, waivers: cfg.Waivers})
 
 	for _, l := range layers {

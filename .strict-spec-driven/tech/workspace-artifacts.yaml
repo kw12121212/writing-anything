@@ -74,7 +74,7 @@ rules:
       detail: internal/catalog 的测试遍历 embed 目录中的每个文件并断言无问题。
   resolved-sources:
     strength: MUST
-    statement: 合并结果中的每项设置都必须记录来源层（genre:<id>、pack:<id>、project），由 internal/resolve 统一产生；消费合并结果的命令（如后续的 lint）必须使用 internal/resolve 的结果，不得自行读取文体或规范包重新合并。
+    statement: 合并结果中的每项设置都必须记录来源层（genre:<id>、pack:<id>、project；没有任何配置层给出取值、使用内核默认值时为 default，如 contextBudget），由 internal/resolve 统一产生；消费合并结果的命令（如 context、后续的 lint）必须使用 internal/resolve 的结果（按作品文体合并时用 resolve.ForGenre），不得自行读取文体或规范包重新合并。
     rationale: 规则来源必须在 config resolved 与后续发现项中保持一致；只有一个合并实现才能避免多处合并逻辑分叉。
     enforcement:
       method: review
@@ -124,3 +124,27 @@ rules:
     enforcement:
       method: test
       detail: internal/draft 的 TestRebaseline 与 internal/feedback 的 TestResolveComment 覆盖正文未改与已改两种情况。
+  cross-artifact-references:
+    strength: SHOULD
+    statement: 引用另一个可独立编辑产物中 id 的产物（如 outline.yaml 的 covers 引用 brief.yaml 的核心观点、brief.yaml 引用素材与决策），校验时把跨产物引用问题与产物自身的合法性问题（解析、Schema、id 唯一）分开：validate 与关卡照常把引用问题报告为 error；修改与查看该产物的命令只因自身的合法性问题拒绝，已有的悬空引用照常报告（修改成功时为 warning）但不阻止修复，本次参数给出的引用仍须合法。
+    rationale: 上游产物（如写作简报）可以独立修改；若编辑命令因下游的悬空引用拒绝，Agent 只能手工编辑结构化产物，违反结构化产物只通过 wa-cli 变更的约定（outline-coverage 的审查复现）。
+    enforcement:
+      method: test
+      detail: internal/cli 的 TestOutlineDanglingMessage 在 brief set --remove-message 之后用 outline show、set、remove 修复大纲并断言 warning；internal/outline 的 TestDanglingReferences 断言 LoadLenient 与 Set、Remove 的行为。
+    examples:
+      good:
+        - outline.LoadLenient 返回 fatal 与 refs，outline set 只在 fatal 非空时拒绝
+      bad:
+        - outline set 用完整校验加载 outline.yaml，covers 指向已删除的核心观点时拒绝一切修改
+  author-only-gate-markers:
+    strength: MUST
+    statement: 允许在正文或产物中写入、从而解除关卡或降低检查强度的标记（如 lint-ignore 单处豁免），只有出自作者的才生效：按段落出处（Provenance）判断，出处为 agent 的段落中的标记不生效并给出 warning 诊断，作者改写该段后生效；写入记录存在但无法推导出处时一律不生效。没有写入记录时按作者写入处理。
+    rationale: Agent 通过 wa-cli draft write 写入正文；若 Agent 能自己写入豁免标记，error 级关卡形同虚设，违反作者的编辑优先于 Agent、验收需要作者确认的约定（rule-engine-and-lint 的审查复现）。
+    enforcement:
+      method: test
+      detail: internal/cli 的 TestLintAgentWaiver 用 draft write 写入豁免注释，断言 lint.agent-waiver 且不生效，作者改写后生效，写入记录损坏时不生效；internal/lint 的 TestWaiverScope 用 Origin 覆盖 agent 与 agent-draft-human-edited。
+    examples:
+      good:
+        - lint.Run 接收按行查询段落出处的 Origin，出处为 agent 时报告 lint.agent-waiver
+      bad:
+        - 只要正文中出现 lint-ignore 注释就豁免，不区分作者还是 Agent 写入

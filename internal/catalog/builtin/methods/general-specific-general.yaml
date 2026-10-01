@@ -1,0 +1,20 @@
+# 总分总：先总述观点，再分述展开，最后总结呼应。
+schema_version: 1
+id: general-specific-general
+title: 总分总
+description: 开头总述全文观点，中间分几个方面展开，结尾总结并呼应开头。
+kind: article
+sections:
+  - id: overview
+    title: 总述
+    description: 开门见山地提出全文观点。
+  - id: details
+    title: 分述
+    description: 分几个方面展开论述，各方面之间并列或递进。
+  - id: summary
+    title: 总结
+    description: 归纳全文并呼应开头的观点。
+rubric:
+  - id: echo
+    title: 首尾呼应
+    description: 总结一节回到总述的观点，而不是引入新观点。

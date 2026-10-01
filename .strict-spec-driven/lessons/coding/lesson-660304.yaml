@@ -1,0 +1,22 @@
+schema: strict-spec-driven/lesson/v1
+schema_version: 1
+artifact_type: lesson
+schema_file: templates/strict-spec-driven/schemas/lesson.yaml
+lesson:
+  id: lesson-660304
+  title: 按错误码挑选下一步命令，会漏掉保留原错误码的阻塞项
+category: coding
+status: active
+created_at: '2026-10-01T02:01:23.637Z'
+updated_at: '2026-10-01T02:29:59.527Z'
+context: review-and-acceptance 的 accept 先把关卡的阻塞项转成 Problem，再在诊断层按 accept.* 错误码挑选需要 review show 的诊断。
+observation: fresh-context 审查复现：decision.blocking、decision.invalid-queue、review.yaml 的 Schema 诊断与文本检查无法完成的问题保留了原错误码，走默认的 next 映射，缺少 spec 要求的复查命令 wa-cli review show；测试只抽查了部分错误码。
+takeaway: 一组来源相同的诊断需要共同的下一步时，在构造诊断处按来源（如关卡阻塞项）统一给出 next，不要事后按错误码白名单挑选；测试遍历全部 error 级诊断断言共同的 next。
+applies_when: 一个命令汇总多个来源的阻塞项并转成诊断，且这些诊断要求共同的复查命令时
+occurrences:
+  - origin: review-and-acceptance
+    date: '2026-10-01'
+    evidence: internal/cli/review.go 的 accept 返回 (problems, gate)，runAccept 为 gate 的每条诊断调用 gateNext；TestAcceptGateRechecks 遍历全部 error 级诊断。
+  - origin: writing-method-templates
+    date: '2026-10-01'
+    evidence: 新增的 outline.missing-method-part、outline.method-order、outline.unknown-role 与 outline.beat-position 没有加入 blockerNext 与 next 的错误码分支，next 为空或落到 validate config.yaml；补上分支并在 TestMethodDanglingAndNext 与 TestMethodBeatsAndRubric 中断言 next。

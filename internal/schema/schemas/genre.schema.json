@@ -19,7 +19,12 @@
         "properties": {
           "id": {"$ref": "common.schema.json#/$defs/id"},
           "title": {"$ref": "common.schema.json#/$defs/text"},
-          "children": {"$ref": "common.schema.json#/$defs/ids"}
+          "children": {"$ref": "common.schema.json#/$defs/ids"},
+          "brief_required": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {"enum": ["audience", "purpose", "key_messages", "length", "avoid", "sources"]}
+          }
         }
       }
     },
@@ -38,6 +43,8 @@
       }
     },
     "rules": {"$ref": "common.schema.json#/$defs/rules"},
-    "rubric": {"$ref": "common.schema.json#/$defs/rubric"}
+    "rubric": {"$ref": "common.schema.json#/$defs/rubric"},
+    "context_budget": {"$ref": "common.schema.json#/$defs/budget"},
+    "default_method": {"$ref": "common.schema.json#/$defs/id", "description": "默认写作法模板（Method Template）的 id：写作简报没有选择写作法时使用"}
   }
 }

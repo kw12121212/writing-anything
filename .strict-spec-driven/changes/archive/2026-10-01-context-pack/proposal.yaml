@@ -1,0 +1,35 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: context-pack
+  status: proposed
+summary:
+  what:
+    - 新增只读命令 wa-cli context <unit>：输出有界上下文包（Context Pack），只含当前单元写作所需的内容：单元信息、写作简报（Brief）摘要（单元自己的 brief.yaml，没有时取最近的祖先单元的）、本单元的大纲（Outline）与本节在父单元大纲中的条目及其覆盖的核心观点、未处理的作者反馈（Feedback）、关联本单元的未决定决策、生效的规范要点（规则、术语表、禁用词、文风）、引用素材（Source）的原文、相邻节。不加 --json 时输出 Markdown，加 --json 时输出结构化的 context。
+    - '新增设置上下文预算（Context Budget）context_budget（字符数）：文体、规范包与项目配置 config.yaml 都可以给出，按 文体默认值 → 规范包 → 项目配置 合并，都没有给出时为 12000；wa-cli config resolved 输出 contextBudget 的最终取值与来源；wa-cli config set 支持 context_budget。内置 minimal 文体声明 context_budget: 12000。'
+    - 上下文包按固定优先级依次放入各项内容，每项按其 Markdown 文本的字符数计入预算；放不下的项被裁剪，素材原文可以截断；输出实际占用 used 与被裁剪的内容 trimmed。
+  why:
+    - 里程碑 tech-blog-workflow 要求 wa-cli context 提供有界上下文包；Agent 目前要自己从多个产物中拼凑写作所需的信息，容易遗漏作者反馈、决策与素材原文，也容易一次读入过多内容。
+    - 上下文包是 Agent 按节写作的统一入口，后续写作法模板与 tech-blog 文体会在其中加入写作法要求。
+scope:
+  in:
+    - internal/ctxpack：组装上下文包、按优先级与预算裁剪、渲染 Markdown；读取 work、brief、outline、feedback、decision、source 与 resolve 的结果
+    - internal/resolve：新增按指定文体合并（上下文包使用单元所在作品的文体）；合并 context_budget 并输出 contextBudget
+    - internal/schema：genre、pack 与 config 的 Schema 新增可选的 context_budget（正整数）；internal/catalog 读取文体与规范包的 context_budget；内置 minimal 文体声明 12000
+    - internal/workspace：config set 支持 context_budget（正整数，空字符串时删除）；配置摘要新增 contextBudget
+    - internal/cli：新增 context 命令（注册表、sampleArgs、Markdown 与 JSON 输出）；config resolved 与 status 输出新增字段
+    - 新增 context 主规格；修改 genres-and-packs 的 config-resolved 与 workspace 的 config-set；docs/GLOSSARY.md 新增相邻节
+  out:
+    - 写作法模板对本节的要求：由 writing-method-templates 在上下文包中加入
+    - 按 token 计算预算、调用 LLM 摘要相邻节；相邻节只给出大纲条目与正文开头的节选
+    - 二进制素材的内容；非 UTF-8 的素材原文不放入上下文包
+unchanged_behavior:
+  - 输出信封字段与退出码约定不变；已发布错误码的含义不变
+  - context 只读，不创建或修改任何文件
+  - 未设置 context_budget 的配置、文体与规范包的校验结果不变；config set 已有配置项的行为不变
+  - 仓库根目录不创建 .writing-anything/；产品二进制不依赖 internal/tools/** 与 strict-spec-driven；wa-cli 不联网、不调用 LLM
+roadmap:
+  milestone: tech-blog-workflow
+  planned_change: context-pack

@@ -43,7 +43,7 @@ const (
 const DefaultPack = "default"
 
 // RuleTypes 是已知的规则类型（Rule Type）。规则的 params 结构由规则引擎定义，这里不校验。
-var RuleTypes = []string{"cjk-typography", "ai-cliche", "banned-terms", "term-consistency", "length-range", "paragraph-length", "required-sections"}
+var RuleTypes = []string{"cjk-typography", "ai-cliche", "banned-terms", "term-consistency", "length-range", "paragraph-length", "required-sections", "claim-sources", "claim-candidates", "code-block-language", "link-format", "reference-sources"}
 
 //go:embed builtin
 var builtin embed.FS
@@ -66,13 +66,15 @@ type RubricItem struct {
 	ID          string `json:"id"`
 	Title       string `json:"title"`
 	Description string `json:"description,omitempty"`
+	Blocking    bool   `json:"blocking,omitempty"` // strict 关卡强度下结论为 fail 时阻塞验收
 }
 
-// UnitType 是文体声明的单元类型。
+// UnitType 是文体声明的单元类型。BriefRequired 是该类型单元的简报必填项（Required Brief Field）。
 type UnitType struct {
-	ID       string   `json:"id"`
-	Title    string   `json:"title"`
-	Children []string `json:"children"`
+	ID            string   `json:"id"`
+	Title         string   `json:"title"`
+	Children      []string `json:"children"`
+	BriefRequired []string `json:"briefRequired"`
 }
 
 // Stage 是文体声明的生命周期阶段（Stage）。
@@ -105,6 +107,10 @@ type Genre struct {
 	Stages      []Stage
 	Rules       map[string]Rule
 	Rubric      []RubricItem
+	// ContextBudget 是文体声明的上下文预算（Context Budget）；0 表示未声明。
+	ContextBudget int
+	// DefaultMethod 是文体的默认写作法模板（Method Template）id；写作简报没有选择写作法时使用。空表示没有默认。
+	DefaultMethod string
 }
 
 // Pack 是一个规范包。Path 是工作区规范包相对项目目录的路径，内置规范包为空。
@@ -118,12 +124,21 @@ type Pack struct {
 	Rules       map[string]Rule
 	Waivers     []Waiver
 	Rubric      []RubricItem
+	Methods     []Method // 规范包自有的写作法模板（如企业内容 SOP）
 	Origin      string
 	Path        string
+	// ContextBudget 是规范包声明的上下文预算；0 表示未声明。
+	ContextBudget int
 }
 
 // 文件格式：字段名与 YAML 一致。与公开类型只差结构体标签，可以直接转换。
 type (
+	unitTypeFile struct {
+		ID            string   `json:"id"`
+		Title         string   `json:"title"`
+		Children      []string `json:"children"`
+		BriefRequired []string `json:"brief_required"`
+	}
 	stageFile struct {
 		ID                string   `json:"id"`
 		Title             string   `json:"title"`
@@ -133,10 +148,12 @@ type (
 		ID          string          `json:"id"`
 		Title       string          `json:"title"`
 		Description string          `json:"description"`
-		UnitTypes   []UnitType      `json:"unit_types"`
+		UnitTypes   []unitTypeFile  `json:"unit_types"`
 		Stages      []stageFile     `json:"stages"`
 		Rules       map[string]Rule `json:"rules"`
 		Rubric      []RubricItem    `json:"rubric"`
+		Budget      int             `json:"context_budget"`
+		Method      string          `json:"default_method"`
 	}
 	packFile struct {
 		ID          string          `json:"id"`
@@ -148,6 +165,8 @@ type (
 		Rules       map[string]Rule `json:"rules"`
 		Waivers     []Waiver        `json:"waivers"`
 		Rubric      []RubricItem    `json:"rubric"`
+		Methods     []Method        `json:"methods"`
+		Budget      int             `json:"context_budget"`
 	}
 )
 
@@ -192,8 +211,11 @@ func readBuiltin(dir, id string) (*yaml.Node, []workspace.Problem, bool) {
 
 // builtinOrigin 是内置产物的出处说明；内置产物没有工作区路径，诊断用它指明问题出在哪里。
 func builtinOrigin(dir, id string) string {
-	if dir == "genres" {
+	switch dir {
+	case "genres":
 		return "内置文体 " + id
+	case "methods":
+		return "内置写作法 " + id
 	}
 	return "内置规范包 " + id
 }
@@ -216,11 +238,11 @@ func LoadGenre(id string) (g *Genre, problems []workspace.Problem, ok bool) {
 	}
 	var f genreFile
 	Decode(doc, &f)
-	g = &Genre{ID: f.ID, Title: f.Title, Description: f.Description, Rules: f.Rules, Rubric: f.Rubric}
-	// 输出中的数组不得为 null：省略的 children 与 required_artifacts 记为空数组。
+	g = &Genre{ID: f.ID, Title: f.Title, Description: f.Description, Rules: f.Rules, Rubric: f.Rubric, ContextBudget: f.Budget, DefaultMethod: f.Method}
+	// 输出中的数组不得为 null：省略的 children、brief_required 与 required_artifacts 记为空数组。
 	for _, u := range f.UnitTypes {
-		u.Children = nonNil(u.Children)
-		g.UnitTypes = append(g.UnitTypes, u)
+		u.Children, u.BriefRequired = nonNil(u.Children), nonNil(u.BriefRequired)
+		g.UnitTypes = append(g.UnitTypes, UnitType(u))
 	}
 	for _, s := range f.Stages {
 		s.RequiredArtifacts = nonNil(s.RequiredArtifacts)
@@ -266,6 +288,9 @@ func checkGenre(g *Genre) []workspace.Problem {
 	for _, d := range duplicates(len(g.Rubric), func(i int) string { return g.Rubric[i].ID }) {
 		add(CodeDuplicateID, fmt.Sprintf("rubric[%d].id", d), "评分项 "+g.Rubric[d].ID+" 重复")
 	}
+	if g.DefaultMethod != "" && !slices.Contains(BuiltinMethods(), g.DefaultMethod) {
+		add(CodeUnknownMethod, "default_method", fmt.Sprintf("默认写作法 %s 不是内置写作法（%s）", g.DefaultMethod, strings.Join(BuiltinMethods(), "、")))
+	}
 	out = append(out, CheckRuleTypes(g.Rules)...)
 	return withOrigin(out, builtinOrigin("genres", g.ID))
 }
@@ -309,7 +334,7 @@ func loadPack(doc *yaml.Node, origin, rel string) (*Pack, []workspace.Problem) {
 	var f packFile
 	Decode(doc, &f)
 	p := &Pack{ID: f.ID, Title: f.Title, Description: f.Description, Style: f.Style, Glossary: f.Glossary, BannedTerms: f.BannedTerms,
-		Rules: f.Rules, Waivers: f.Waivers, Rubric: f.Rubric, Origin: origin, Path: rel}
+		Rules: f.Rules, Waivers: f.Waivers, Rubric: f.Rubric, Methods: f.Methods, Origin: origin, Path: rel, ContextBudget: f.Budget}
 	return p, checkPack(p)
 }
 
@@ -334,6 +359,12 @@ func checkPack(p *Pack) []workspace.Problem {
 	}
 	for _, d := range duplicates(len(p.Rubric), func(i int) string { return p.Rubric[i].ID }) {
 		add(CodeDuplicateID, fmt.Sprintf("rubric[%d].id", d), "评分项 "+p.Rubric[d].ID+" 重复")
+	}
+	for _, d := range duplicates(len(p.Methods), func(i int) string { return p.Methods[i].ID }) {
+		add(CodeDuplicateID, fmt.Sprintf("methods[%d].id", d), "写作法 "+p.Methods[d].ID+" 重复")
+	}
+	for i, m := range p.Methods {
+		checkMethod(m, fmt.Sprintf("methods[%d].", i), add)
 	}
 	for _, q := range CheckRuleTypes(p.Rules) {
 		q.Path, q.Origin = p.Path, ProblemOrigin(p)

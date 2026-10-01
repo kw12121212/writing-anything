@@ -1,0 +1,32 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: tech-blog-genre-and-export
+approach:
+  - tech-blog 是纯数据的内置文体文件，规则、评分标准与默认写作法都在其中声明；Diátaxis 分类以评分项「文档类型明确」体现，作者也可以改选 diataxis-* 写作法。
+  - 三种规则类型在 internal/lint/techblog.go 中实现：code-block-language 读取 text 在 maskFences 时记录的围栏开头行与信息字符串；link-format 逐行扫描围栏之外的原文，跳过行内代码，用正则找出行内链接与裸 URL；reference-sources 在散文段落的可见文字中找版本号、在原文的行内代码中找函数调用形式的 API 说法，用关联了 source_types 类型素材的论断文字在原文中的覆盖判断是否已有出处。都只检查正文，不访问网络。
+  - export 按单元树先序遍历作品，用 review.AcceptanceBlockers 与 LoadAcceptance 判断验收是否有效（基于当前正文、通过校验、关卡强度不低于当前配置），去掉写作过程注释后拼接；输出路径必须在项目目录之内，逐级用 os.Lstat 确认是真实目录、输出文件不是符号链接，缺少的目录逐级创建，原子写入。
+decisions:
+  default-method:
+    decision: tech-blog 的默认写作法为 pyramid-scqa（结论先行）；Diátaxis 分类通过评分项 doc-type 要求文章属于教程、操作指南、参考或解释之一，作者可以改选 diataxis-tutorial 等写作法。
+    rationale: 规划变更：默认写作法为 Diátaxis 分类加金字塔原理（结论先行），作者可以改选。写作法模型一次只选一个写作法，金字塔原理决定章节结构，Diátaxis 分类是文档类型的判断，适合作为评分项。
+  reference-heuristics:
+    decision: reference-sources 只检测两类说法：版本号（v1.2、1.2.3，以及紧跟英文名称的 1.22，如 Go 1.22）与函数调用形式的行内代码（如 http.Get(url)）；关联 reference 类型素材的论断文字覆盖提及处时视为有出处。tech-blog 以 warning 启用，作者可以单处豁免。
+    rationale: 版本号与 API 说法是技术文章最常出错、需要资料出处的内容；启发式会误报（如普通小数旁的英文词），以 warning 提示而不阻塞。
+  export-accepted-only:
+    decision: export 只导出验收记录有效的单元，其余单元各以 warning 级 export.unaccepted 报告并跳过；没有任何可导出的单元时报告 export.nothing-accepted、不写文件。导出去掉作者批注与单处豁免注释（写作过程的产物），保留其他 HTML 注释与代码块原样。
+    rationale: 规划变更：wa-cli export 只导出已验收的单元；导出物是交付给读者的，写作过程的注释不应出现。
+  export-output:
+    decision: 输出路径（--output）为相对项目目录的路径，默认 .writing-anything/exports/<work>.md；绝对路径、离开项目目录、途经符号链接或指向符号链接的输出报告 export.invalid-output。front matter 含 title（第一个一级标题，没有时为作品 id）、description（根单元写作简报的 purpose）、genre、units 与 accepted_at（导出单元中最晚的验收时间）。
+    rationale: workspace-artifacts/validated-path-segments：写入不得跟随符号链接离开项目目录；front matter 只用确定性的数据，同样的输入得到同样的输出，便于端到端测试与版本管理。
+  strip-boundaries:
+    decision: 导出去注释与写作过程的其他部分共用同一套边界：围栏代码块与行内代码由新包 internal/mdscan 识别（与文本检查的规则一致），导出与作者反馈的批注识别都使用它；作者批注沿用作者反馈的批注格式（不跨空行、不含另一个 <!--、有非空文字），单处豁免沿用文本检查的注释边界（到其后第一个 -->，行首的可以跨空行）与 lint-ignore 格式；不满足的写法原样保留。所有位置一次预先算好，每个 <!-- 做对数时间的查找。
+    rationale: 导出物交付给读者，宁可留下一处注释也不能删掉作者的文字；文本检查认作生效的豁免、作者反馈认作批注的写法，导出都去掉，其余保留，作者在各个命令中看到的是同一组注释（workspace-artifacts/input-limits 要求耗时与正文长度成线性）。作者反馈原先按反引号奇偶判断行内代码、按前三个字符判断围栏，与文本检查不一致，本变更一并改为共用的识别。
+  export-not-into-workspace:
+    decision: 导出路径落在工作区 .writing-anything/ 中时只能在 exports/ 之下：先按不区分大小写的字符串比较，写入前逐级 Lstat 时再按文件身份（os.SameFile）确认途经的工作区目录之下只能是 exports 目录；正文超过 2 MiB 的单元不导出。
+    rationale: 结构化产物与正文只能由对应的 wa-cli 命令修改，导出不能覆盖 config.yaml、draft.md 等产物；macOS 与 Windows 的默认文件系统不区分大小写，只比较字符串会被换大小写绕过；输入上限与正文写入一致。
+alternatives: []
+risks:
+  - 版本号的正则会误报或漏报；以 warning 提示，可以用 reference-sources 的 versions 与 apis 参数关闭。
+  - link-format 只检查格式，不检查链接是否可达。

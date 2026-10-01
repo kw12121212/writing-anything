@@ -1,0 +1,33 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: outline-coverage
+approach:
+  - 新增领域包 internal/outline（import internal/brief 读取同一单元目录的核心观点，不 import internal/work），结构与 internal/brief 一致：Load 读取并校验 outline.yaml（Schema 与引用检查），Set/Remove 以 yaml.Node 按节修改，Gaps 计算覆盖缺口；internal/work 的 Blockers 调用它，internal/cli 负责参数转换与下一步命令。
+  - 覆盖缺口不是产物的合法性问题：outline set 允许写出尚有缺口的大纲，以便逐节搭建，并在输出的 gaps 中列出；validate 把缺口报告为 error 级诊断（与合法性问题一起），advance 只在当前阶段要求 outline 时把缺口作为阻塞项。
+decisions:
+  separate-artifact:
+    decision: 大纲存放在单元目录的 outline.yaml 中，大纲节不是单元树中的子单元。
+    rationale: planned change 只要求大纲节声明 covers、uses 或理由；把大纲节做成子单元会让每节都走完整生命周期，并把规划结构写进 work.yaml；需要按节成稿的文体可以在后续变更中关联二者。
+  coverage-source:
+    decision: 覆盖的对象是同一单元目录下 brief.yaml 的 key_messages；brief.yaml 不存在时没有需要覆盖的核心观点，brief.yaml 不通过校验时不检查 covers 引用与覆盖（由写作简报自己的诊断报告），但只有 outline.md 时视为没有任何节。
+    rationale: 核心观点只在写作简报中定义；写作简报损坏时再报覆盖问题会重复且误导。
+  set-upsert:
+    decision: outline set 按节 id 新增或修改：新增时必须给出 --title；--covers、--uses 为逗号分隔并整体替换，--reason 与这些参数取值为空字符串时删除；--after/--before 把节放到指定节之后或之前（新增与已有的节都适用），省略时新增的节追加在末尾、已有的节位置不变。
+    rationale: 与 brief set 的参数风格一致，减少 Agent 的学习成本；增删改由 set 与 remove 两条命令完成。
+  validate-reports-gaps:
+    decision: validate 整体校验与 validate <path> 都把覆盖缺口报告为 error：outline.uncovered-message（path 为 outline.yaml，message 含核心观点 id 与内容）与 outline.missing-reason（field 为 sections[i]），next 为 wa-cli outline show <unit> 与 wa-cli help outline set --json。
+    rationale: planned change 要求 validate 与 advance 以非零退出并给出补齐覆盖的命令；不同的节应由 Agent 与作者决定，无法生成不含占位符的具体修复命令，因此给出查看覆盖与用法。
+  lenient-references:
+    decision: outline set、outline remove 与 outline show 以宽松方式读取已有大纲：covers、uses 的引用问题不阻止修改与查看（show 仍报告它们并以非零退出），只有解析、Schema 与节 id 重复问题阻止；本次给出的 --covers、--uses 仍须合法。
+    rationale: 审查复现：写作简报删除核心观点后，引用它的大纲无法再用 wa-cli 修改，只能手工编辑，违反结构化产物只通过 wa-cli 变更的约定，也与「核心观点的增删不受大纲限制」冲突。
+  invalid-blocker-path:
+    decision: outline.invalid 阻塞项的 path 为真正不通过校验的产物（outline.yaml 或 brief.yaml），next 先复查该产物再给整体校验。
+    rationale: 审查复现：只有 brief.yaml 不通过校验时，复查 outline.yaml 会报告通过；只有 outline.md 时复查 outline.md 会报告 artifact.unknown-kind（cli-contract/next-rechecks-problem）。
+alternatives:
+  - option: 把 covers/uses 写在 work.yaml 的子单元上
+    reason: 混淆单元树与规划；work.yaml 的 Schema 与编辑逻辑需要大改。
+risks:
+  - 内置 minimal 文体没有要求 outline 的阶段，advance 的大纲关卡要到 tech-blog 文体才能从内置文体观察；本变更在 internal/work 中用测试文体覆盖该路径。
+  - 修改写作简报删除核心观点后，引用它的大纲节使 validate 报告 outline.unknown-message；Agent 可用 outline set 或 outline remove 修复。

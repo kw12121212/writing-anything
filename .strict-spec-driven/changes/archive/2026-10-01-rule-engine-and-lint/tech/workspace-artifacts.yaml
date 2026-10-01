@@ -1,0 +1,21 @@
+schema: strict-spec-driven/delta-tech/v1
+schema_version: 1
+artifact_type: delta_tech
+schema_file: templates/strict-spec-driven/schemas/delta-tech.yaml
+target_standard: workspace-artifacts
+operations:
+  ADDED:
+    author-only-gate-markers:
+      strength: MUST
+      statement: 允许在正文或产物中写入、从而解除关卡或降低检查强度的标记（如 lint-ignore 单处豁免），只有出自作者的才生效：按段落出处（Provenance）判断，出处为 agent 的段落中的标记不生效并给出 warning 诊断，作者改写该段后生效；写入记录存在但无法推导出处时一律不生效。没有写入记录时按作者写入处理。
+      rationale: Agent 通过 wa-cli draft write 写入正文；若 Agent 能自己写入豁免标记，error 级关卡形同虚设，违反作者的编辑优先于 Agent、验收需要作者确认的约定（rule-engine-and-lint 的审查复现）。
+      enforcement:
+        method: test
+        detail: internal/cli 的 TestLintAgentWaiver 用 draft write 写入豁免注释，断言 lint.agent-waiver 且不生效，作者改写后生效，写入记录损坏时不生效；internal/lint 的 TestWaiverScope 用 Origin 覆盖 agent 与 agent-draft-human-edited。
+      examples:
+        good:
+          - lint.Run 接收按行查询段落出处的 Origin，出处为 agent 时报告 lint.agent-waiver
+        bad:
+          - 只要正文中出现 lint-ignore 注释就豁免，不区分作者还是 Agent 写入
+  MODIFIED: {}
+  REMOVED: {}

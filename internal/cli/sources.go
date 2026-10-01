@@ -82,6 +82,41 @@ var claimAddCommand = &command{
 	run:        runClaimAdd,
 }
 
+var claimSetCommand = &command{
+	name:    "claim set",
+	summary: "修改单元（Unit）中一个论断（Claim）的类型、内容或关联的素材（Source），保留其他内容与注释",
+	args:    []argSpec{{"unit", unitRefHelp, true}, {"claim", "论断 id", true}},
+	flags: []flagSpec{
+		dirFlag,
+		{"kind", flagString, "论断类型：experience、opinion、case、data 或 fact；省略时不修改"},
+		{"text", flagString, "论断内容；省略时不修改"},
+		{"sources", flagString, "关联的素材 id，用逗号分隔，整体替换原有关联；给出空值时清空；省略时不修改"},
+	},
+	outputKeys: []outputKey{{"claim", "修改后的论断：unit、id、kind、text 与 sources；失败时为 null"}},
+	exitCodes:  standardExitCodes,
+	run:        runClaimSet,
+}
+
+var claimListCommand = &command{
+	name:       "claim list",
+	summary:    "列出单元（Unit）中登记的论断（Claim）",
+	args:       []argSpec{{"unit", unitRefHelp, true}},
+	flags:      []flagSpec{dirFlag},
+	outputKeys: []outputKey{{"claims", "按登记顺序排列的论断数组，每项含 unit、id、kind、text 与 sources"}},
+	exitCodes:  standardExitCodes,
+	run:        runClaimList,
+}
+
+var claimRemoveCommand = &command{
+	name:       "claim remove",
+	summary:    "删除单元（Unit）中的一个论断（Claim），保留其他内容与注释",
+	args:       []argSpec{{"unit", unitRefHelp, true}, {"claim", "论断 id", true}},
+	flags:      []flagSpec{dirFlag},
+	outputKeys: []outputKey{{"removed", "被删除的论断 id；失败时为 null"}},
+	exitCodes:  standardExitCodes,
+	run:        runClaimRemove,
+}
+
 type sourceView struct {
 	ID     string  `json:"id"`
 	Type   string  `json:"type"`
@@ -149,6 +184,16 @@ type claimView struct {
 type claimAddResult struct {
 	Result
 	Claim *claimView `json:"claim"`
+}
+
+type claimListResult struct {
+	Result
+	Claims []claimView `json:"claims"`
+}
+
+type claimRemoveResult struct {
+	Result
+	Removed *string `json:"removed"`
 }
 
 // readInput 读取 --file 指定的文件（相对 dir 解析），省略 --file 时读取标准输入。返回内容与输入文件的文件名
@@ -333,12 +378,7 @@ func runClaimAdd(inv *invocation) int {
 		var w *work.Work
 		var u *work.Unit
 		if w, u, problems = work.Resolve(dir, inv.args[0]); u != nil {
-			var sources []string
-			for _, s := range strings.Split(inv.values["sources"], ",") {
-				if s = strings.TrimSpace(s); s != "" {
-					sources = append(sources, s)
-				}
-			}
+			sources := splitSources(inv.values["sources"])
 			var c *draft.Claim
 			var changed []string
 			if c, changed, problems = draft.AddClaim(dir, w, u, inv.values["kind"], inv.values["text"], inv.values["id"], sources); c != nil {
@@ -349,30 +389,164 @@ func runClaimAdd(inv *invocation) int {
 	}
 	res.Diagnostics = diagnostics(problems, dir)
 	if edit {
-		// 新论断参数引起的问题：论断尚未写入，整体校验检不出，给出用法与素材列表。已有 claims.yaml 中的问题
-		// （字段以 claims 开头）保留默认的复查命令。
-		var own []Diagnostic
-		var idx []int
-		for i, d := range res.Diagnostics {
-			if d.Code == draft.CodeAnchoredValue || paramField(d.Field, "id", "kind", "text", "sources") {
-				own, idx = append(own, d), append(idx, i)
-			}
-		}
-		helpNext(own, "claim add", []string{schema.CodeSchemaViolation, draft.CodeUnknownSource, catalog.CodeDuplicateID, draft.CodeAnchoredValue},
-			shellCommand("wa-cli", "source", "list", "--dir", dir, "--json"))
-		for k, i := range idx {
-			res.Diagnostics[i] = own[k]
-		}
+		claimParamNext(res.Diagnostics, "claim add", dir)
 	}
 	return finish(inv, res, func(w io.Writer) error {
 		if res.Claim == nil {
 			return nil
 		}
-		srcs := "尚未关联素材"
-		if len(res.Claim.Sources) > 0 {
-			srcs = "关联素材 " + strings.Join(res.Claim.Sources, "、")
+		_, err := fmt.Fprintf(w, "已在单元（Unit）%s 登记论断（Claim）%s（%s）：%s\n", res.Claim.Unit, res.Claim.ID, res.Claim.Kind, claimSourcesText(res.Claim.Sources))
+		return err
+	})
+}
+
+// splitSources 把逗号分隔的素材 id 切开，去掉空白与空项；结果不为 nil。
+func splitSources(v string) []string {
+	out := []string{}
+	for _, s := range strings.Split(v, ",") {
+		if s = strings.TrimSpace(s); s != "" {
+			out = append(out, s)
 		}
-		_, err := fmt.Fprintf(w, "已在单元（Unit）%s 登记论断（Claim）%s（%s）：%s\n", res.Claim.Unit, res.Claim.ID, res.Claim.Kind, srcs)
+	}
+	return out
+}
+
+func claimSourcesText(sources []string) string {
+	if len(sources) == 0 {
+		return "尚未关联素材"
+	}
+	return "关联素材 " + strings.Join(sources, "、")
+}
+
+// claimParamNext 把论断参数引起的问题（参数尚未写入，整体校验检不出）的下一步改为查看 name 的用法与素材列表。
+// 已有 claims.yaml 中的问题（字段以 claims 开头）保留默认的复查命令。
+func claimParamNext(ds []Diagnostic, name, dir string) {
+	var own []Diagnostic
+	var idx []int
+	for i, d := range ds {
+		if d.Code == draft.CodeAnchoredValue || paramField(d.Field, "id", "kind", "text", "sources") {
+			own, idx = append(own, d), append(idx, i)
+		}
+	}
+	helpNext(own, name, []string{schema.CodeSchemaViolation, draft.CodeUnknownSource, catalog.CodeDuplicateID, draft.CodeAnchoredValue},
+		shellCommand("wa-cli", "source", "list", "--dir", dir, "--json"))
+	for k, i := range idx {
+		ds[i] = own[k]
+	}
+}
+
+// claimNotFoundNext 把 claim.not-found 的下一步改为列出该单元已有的论断。
+func claimNotFoundNext(ds []Diagnostic, ref, dir string) {
+	for i := range ds {
+		if ds[i].Code == draft.CodeClaimNotFound {
+			ds[i].Next = []string{shellCommand("wa-cli", "claim", "list", ref, "--dir", dir, "--json")}
+		}
+	}
+}
+
+func runClaimList(inv *invocation) int {
+	dir := projectDir(inv)
+	res := &claimListResult{Claims: []claimView{}}
+	problems := workspace.Require(dir)
+	if problems == nil {
+		var w *work.Work
+		var u *work.Unit
+		if w, u, problems = work.Resolve(dir, inv.args[0]); u != nil {
+			var cs []draft.Claim
+			cs, problems = draft.ListClaims(dir, w, u)
+			for _, c := range cs {
+				if c.Sources == nil {
+					c.Sources = []string{}
+				}
+				res.Claims = append(res.Claims, claimView{Unit: u.Ref, Claim: c})
+			}
+		}
+	}
+	res.Diagnostics = diagnostics(problems, dir)
+	return finish(inv, res, func(w io.Writer) error {
+		var b strings.Builder
+		if len(res.Claims) == 0 && !hasError(res.Diagnostics) {
+			fmt.Fprintf(&b, "单元（Unit）%s 还没有登记论断（Claim）\n", inv.args[0])
+		}
+		for _, c := range res.Claims {
+			fmt.Fprintf(&b, "%s（%s）%s：%s\n", c.ID, c.Kind, c.Text, claimSourcesText(c.Sources))
+		}
+		_, err := io.WriteString(w, b.String())
+		return err
+	})
+}
+
+func runClaimSet(inv *invocation) int {
+	dir := projectDir(inv)
+	res := &claimAddResult{}
+	problems := workspace.Require(dir)
+	edit := false
+	if problems == nil {
+		var w *work.Work
+		var u *work.Unit
+		if w, u, problems = work.Resolve(dir, inv.args[0]); u != nil {
+			var kind, text *string
+			var sources *[]string
+			if v, ok := inv.values["kind"]; ok {
+				kind = &v
+			}
+			if v, ok := inv.values["text"]; ok {
+				text = &v
+			}
+			if v, ok := inv.values["sources"]; ok {
+				s := splitSources(v)
+				sources = &s
+			}
+			var c *draft.Claim
+			var changed []string
+			if c, changed, problems = draft.SetClaim(dir, w, u, inv.args[1], kind, text, sources); c != nil {
+				res.Claim, res.ChangedPaths = &claimView{Unit: u.Ref, Claim: *c}, changed
+			}
+			edit = true
+		}
+	}
+	res.Diagnostics = diagnostics(problems, dir)
+	if edit {
+		claimParamNext(res.Diagnostics, "claim set", dir)
+		claimNotFoundNext(res.Diagnostics, inv.args[0], dir)
+	}
+	return finish(inv, res, func(w io.Writer) error {
+		if res.Claim == nil {
+			return nil
+		}
+		verb := "已修改"
+		if len(res.ChangedPaths) == 0 {
+			verb = "取值未变，未修改"
+		}
+		_, err := fmt.Fprintf(w, "%s单元（Unit）%s 的论断（Claim）%s（%s）：%s\n", verb, res.Claim.Unit, res.Claim.ID, res.Claim.Kind, claimSourcesText(res.Claim.Sources))
+		return err
+	})
+}
+
+func runClaimRemove(inv *invocation) int {
+	dir := projectDir(inv)
+	res := &claimRemoveResult{}
+	problems := workspace.Require(dir)
+	if problems == nil {
+		var w *work.Work
+		var u *work.Unit
+		if w, u, problems = work.Resolve(dir, inv.args[0]); u != nil {
+			var changed []string
+			var ok bool
+			if ok, changed, problems = draft.RemoveClaim(dir, w, u, inv.args[1]); ok {
+				id := inv.args[1]
+				res.Removed, res.ChangedPaths = &id, changed
+			}
+		}
+	}
+	res.Diagnostics = diagnostics(problems, dir)
+	claimNotFoundNext(res.Diagnostics, inv.args[0], dir)
+	helpNext(res.Diagnostics, "claim remove", []string{draft.CodeAnchoredValue})
+	return finish(inv, res, func(w io.Writer) error {
+		if res.Removed == nil {
+			return nil
+		}
+		_, err := fmt.Fprintf(w, "已删除单元（Unit）%s 的论断（Claim）%s\n", inv.args[0], *res.Removed)
 		return err
 	})
 }

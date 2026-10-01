@@ -1,0 +1,40 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: claim-source-check
+approach:
+  - 规则引擎的 Run 改为接收 Input：Origin（段落出处，单处豁免用）与 Claims（单元 claims.yaml 中的论断，每项含 id、kind、text 与所关联素材的类型）。internal/cli 读取 claims.yaml（经 draft.LoadClaims）与素材元数据后填入；lint 包仍只依赖 resolve 与 workspace。
+  - claim-candidates 按散文段落中除标题与引用块之外每行的可见文字切分句子（在 。！？；… 与行尾处结束），用多词匹配器一遍找出代词、经历标记词，用正则找出数据，得到亲历区间（代词到其后的标记词）与数据区间；kind 在 cover_kinds 中的论断文字在围栏之外的原文中的出现处覆盖某个区间时，该区间视为已登记，只报告未被覆盖的候选种类。发现项的 text 取原文，最多 MaxHits 项。
+  - claim-sources 把所有需要报告的论断文字放进同一个多词匹配器，一遍扫描围栏之外的原文，得到每个论断第一次出现的位置；每个结束位置只取最长的论断，耗时与正文长度成线性，与论断数无关。
+  - 新增 wa-cli claim set、claim list 与 claim remove：internal/draft 的 SetClaim 与 RemoveClaim 复用 workspace 的结构化编辑（SetKey、IndexByID、HasAnchor），写前复查 Schema 与领域检查，保留注释，取值未变时不写文件；claim-sources 的 message 给出 wa-cli source add 与 wa-cli claim set <unit> <id> --sources 的做法，lint.findings 的 next 另含这些命令的 help 与 claim list。
+decisions:
+  two-rule-types:
+    decision: 拆为 claim-sources（确定性，检查已登记的论断）与 claim-candidates（启发式，检测疑似未登记的论断）两种规则类型，各自有 severity。
+    rationale: planned change 要求既报告缺少素材的已登记论断，又用启发式检测未登记的论断；前者确定，适合 error 阻塞；后者会误报，适合 warning 提示；拆开后文体可以分别启用、关闭或调整。
+  claim-sources-params:
+    decision: claim-sources 参数：kinds（需要作者素材的论断类型，默认 [experience, opinion, case, data]）与 source_types（算作作者素材的素材类型，默认 [author-note, interview, transcript]）。论断的位置为其 text 在正文可见文字中第一次出现的位置，找不到时为全文级发现项。
+    rationale: planned change 列出亲历、观点、案例与数据必须关联作者素材（author-note、interview、transcript）；reference 与 past-article 不是作者本人对该论断的陈述。
+  minimal-rules:
+    decision: 内置 minimal 文体声明 claims（type claim-sources，severity error）与 claim-candidates（type claim-candidates，severity warning）。
+    rationale: 规则按文体启用；minimal 用于验证内核，让内置文体就能观察到论断检查；tech-blog 文体在后续变更中声明自己的配置。
+  claim-edit-commands:
+    decision: 在本变更中新增 claim set（kind、text、sources 整体替换）、claim list 与 claim remove，而不要求 Agent 手工编辑 claims.yaml 或重新登记论断。
+    rationale: claim-sources 报告缺少作者素材时必须给出可执行的修复命令（cli-contract/runnable-next）；结构化产物只能通过 wa-cli 变更，claim add 不能修改已有论断（重复 id 被拒绝），没有编辑命令就无法修复。claim list 让 claim.not-found 的下一步能列出可用的 id。
+  claims-loaded-on-demand:
+    decision: 只有 claim-sources 或 claim-candidates 规则生效时 lint 才读取 claims.yaml 与素材元数据；每份素材在一次命令中只读取一次。
+    rationale: 关闭论断规则的文体（如小说）不应因 claims.yaml 的问题而 lint 失败（workspace-artifacts/load-once-per-command）。
+  candidates-warning:
+    decision: 未登记的疑似论断只以 warning 报告，不阻塞；后续文体或验收门禁可以把 claim-candidates 的 severity 提高到 error。
+    rationale: 启发式会误报，error 会让泛指的句子阻塞写作；已登记论断缺少作者素材是确定的，以 error 阻塞。
+alternatives:
+  - option: 只检查已登记的论断
+    reason: Agent 可以不登记论断来绕过检查；启发式候选至少提示遗漏。
+risks:
+  - 启发式会误报（如泛指的数据、引用他人的数字）或漏报（没有标记词的亲历）；以 warning 提示，并可单处豁免或调整词表。
+  - 论断文字与正文原文逐字比较，Agent 改写正文后可能不再匹配，候选与定位会重新出现或变为全文级。
+  - 素材类型由登记素材的一方声明，Agent 可以把自己的文字登记为 author-note；wa-cli 无法核实素材是否真的出自作者，由验收环节的作者确认兜底。
+  - 未登记的亲历只以 warning 提示，Agent 可以忽略；缓解：warning 出现在每次 lint 输出中，文体可以提高 severity。
+  - 一个论断的文字恰为另一个论断的后缀且两者在同一处结束时，只按较长者定位，较短者定位到其下一处单独的出现或成为全文级发现项。
+  - 句子在行尾处切分：作者硬换行的一句话被拆成两个句子，跨行登记的论断文字无法覆盖候选；此时应按单行文字分别登记论断或单处豁免。
+  - 论断的 kind 由 Agent 声明：把 experience 改为 fact 可以绕过 claim-sources 的 error；与素材类型一样由验收时的作者确认兜底，后续 review-and-acceptance 在确认时应列出 fact 类论断与各论断所关联素材的类型。

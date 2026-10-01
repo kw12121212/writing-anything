@@ -1,0 +1,49 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: tech-blog-genre-and-export
+sections:
+  Implementation:
+    genre:
+      text: internal/catalog：内置 tech-blog 文体；RuleTypes 新增 code-block-language、link-format、reference-sources
+      status: complete
+    rules:
+      text: internal/lint：text 记录围栏开头行；三种规则类型的检查与参数；internal/cli 的 lint 在 reference-sources 生效时读取论断
+      status: complete
+    export:
+      text: internal/export：Markdown 导出、注释去除、输出路径校验与 front matter；internal/cli：export 命令（登记、样例调用、诊断的下一步）
+      status: complete
+    e2e:
+      text: testdata/e2e 夹具与端到端测试：tech-blog 从写作简报到 Markdown 导出
+      status: complete
+    docs:
+      text: docs/GLOSSARY.md 新增文件头元数据（Front Matter）
+      status: complete
+  Testing:
+    lint:
+      text: gofmt 检查本变更的 Go 文件
+      status: complete
+      command: test -z "$(gofmt -l internal/lint internal/export internal/mdscan internal/feedback internal/catalog internal/cli/export.go internal/cli/e2e_test.go internal/cli/lint.go internal/cli/registry.go internal/cli/cli_test.go)"
+    unit-tests:
+      text: 单元测试：三种规则类型（命中、豁免情形、参数）；export（注释去除、输出路径与符号链接）；CLI（导出边界情形、样例调用）与端到端测试
+      status: complete
+      command: go test ./internal/...
+    full-regression:
+      text: 运行完整回归命令，覆盖率不低于 80%
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    spec-alignment:
+      text: 对照 lint、genres-and-packs 与 export delta spec 的每个场景确认实现与测试覆盖，并按实际实现修正 delta spec
+      status: complete
+    strict-ready:
+      text: 运行 strict-spec-cli ready 与 strict-spec-cli verify，确认变更产物有效
+      status: complete
+      command: strict-spec-cli ready tech-blog-genre-and-export && strict-spec-cli verify tech-blog-genre-and-export
+    archive-readiness:
+      text: 确认 delta spec 能合并进主规格（export 为新主规格），归档后路线图中的 tech-blog-genre-and-export 标记为完成
+      status: complete
+testing_gates:
+  validation_task: full-regression
+  unit_test_task: unit-tests

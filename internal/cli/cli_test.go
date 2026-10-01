@@ -57,7 +57,8 @@ func TestVersionText(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit code = %d, want 0; stderr: %s", code, stderr)
 	}
-	if want := "wa-cli " + version.Version + "\n"; stdout != want {
+	v, c := version.Info()
+	if want := "wa-cli " + v + " (commit " + c + ")\n"; stdout != want {
 		t.Fatalf("stdout = %q, want %q", stdout, want)
 	}
 	if stderr != "" {
@@ -70,11 +71,12 @@ func TestVersionJSON(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit code = %d, want 0", code)
 	}
-	if want := []string{"changedPaths", "diagnostics", "valid", "version"}; !slices.Equal(keys(got), want) {
+	if want := []string{"changedPaths", "commit", "diagnostics", "valid", "version"}; !slices.Equal(keys(got), want) {
 		t.Fatalf("keys = %v, want %v", keys(got), want)
 	}
-	if got["valid"] != true || got["version"] != version.Version {
-		t.Fatalf("got %v, want valid true and version %q", got, version.Version)
+	v, c := version.Info()
+	if got["valid"] != true || got["version"] != v || got["commit"] != c {
+		t.Fatalf("got %v, want valid true, version %q and commit %q", got, v, c)
 	}
 	for _, k := range []string{"diagnostics", "changedPaths"} {
 		if arr, ok := got[k].([]any); !ok || len(arr) != 0 {
@@ -317,7 +319,7 @@ func TestRegistryConsistency(t *testing.T) {
 }
 
 // mutatingSamples 列出只能通过变更产物才能成功的命令；它们的样例在临时工作区中变更产物。
-var mutatingSamples = map[string]bool{"new": true, "unit add": true, "advance": true, "source add": true, "claim add": true, "feedback add": true, "decision add": true, "decide": true}
+var mutatingSamples = map[string]bool{"new": true, "unit add": true, "advance": true, "source add": true, "claim add": true, "claim remove": true, "review record": true, "accept": true, "export": true, "skills install": true, "feedback add": true, "decision add": true, "decide": true, "outline remove": true}
 
 // sampleArgs 返回命令的一次成功调用：除 mutatingSamples 中的命令外都不变更任何产物；工作区命令在已初始化的
 // 临时工作区中运行。
@@ -330,7 +332,7 @@ func sampleArgs(t *testing.T, name string) []string {
 		return []string{"unit", "add", "my-post", "section", "intro", "--dir", newWork(t), "--json"}
 	case "advance":
 		dir := newWork(t)
-		writeFile(t, filepath.Join(dir, ".writing-anything", "works", "my-post", "brief.yaml"), "k: v\n")
+		writeFile(t, filepath.Join(dir, ".writing-anything", "works", "my-post", "brief.yaml"), completeBrief)
 		return []string{"advance", "my-post", "--dir", dir, "--json"}
 	case "next":
 		return []string{"next", "--dir", newWork(t), "--json"}
@@ -381,8 +383,72 @@ func sampleArgs(t *testing.T, name string) []string {
 		dir := newWork(t)
 		run(t, "decision", "add", "--question", "q", "--option", "甲", "--dir", dir)
 		return []string{"decide", "dec-1", "--option", "a", "--confirmation", "作者同意", "--dir", dir, "--json"}
+	case "brief set":
+		// 取值未变时不变更产物（cli-contract/sample-invocation）。
+		dir := newWork(t)
+		writeFile(t, filepath.Join(dir, ".writing-anything", "works", "my-post", "brief.yaml"), completeBrief)
+		return []string{"brief", "set", "my-post", "--audience", "后端工程师", "--dir", dir, "--json"}
+	case "brief show":
+		return []string{"brief", "show", "my-post", "--dir", newWork(t), "--json"}
+	case "outline set":
+		// 取值未变时不变更产物。
+		dir := newWork(t)
+		writeFile(t, filepath.Join(dir, ".writing-anything", "works", "my-post", "outline.yaml"), "schema_version: 1\nsections:\n  - {id: why, title: 为什么, reason: 引出问题}\n")
+		return []string{"outline", "set", "my-post", "why", "--title", "为什么", "--dir", dir, "--json"}
+	case "outline remove":
+		dir := newWork(t)
+		writeFile(t, filepath.Join(dir, ".writing-anything", "works", "my-post", "outline.yaml"), "schema_version: 1\nsections:\n  - {id: why, title: 为什么, reason: 引出问题}\n")
+		return []string{"outline", "remove", "my-post", "why", "--dir", dir, "--json"}
+	case "outline show":
+		return []string{"outline", "show", "my-post", "--dir", newWork(t), "--json"}
+	case "lint":
+		dir := newWork(t)
+		writeFile(t, filepath.Join(dir, ".writing-anything", "works", "my-post", "draft.md"), "正文。")
+		return []string{"lint", "my-post", "--dir", dir, "--json"}
+	case "context":
+		return []string{"context", "my-post", "--dir", newWork(t), "--json"}
 	case "claim add":
 		return []string{"claim", "add", "my-post", "--kind", "opinion", "--text", "观点", "--dir", newWork(t), "--json"}
+	case "claim set":
+		// 取值未变时不变更产物。
+		dir := newWork(t)
+		run(t, "claim", "add", "my-post", "--kind", "opinion", "--text", "观点", "--dir", dir)
+		return []string{"claim", "set", "my-post", "claim-1", "--kind", "opinion", "--dir", dir, "--json"}
+	case "claim list":
+		return []string{"claim", "list", "my-post", "--dir", newWork(t), "--json"}
+	case "claim remove":
+		dir := newWork(t)
+		run(t, "claim", "add", "my-post", "--kind", "opinion", "--text", "观点", "--dir", dir)
+		return []string{"claim", "remove", "my-post", "claim-1", "--dir", dir, "--json"}
+	case "method list":
+		return []string{"method", "list", "--dir", newWorkspace(t), "--json"}
+	case "method show":
+		return []string{"method", "show", "pyramid-scqa", "--dir", newWorkspace(t), "--json"}
+	case "review record":
+		dir := reviewWork(t)
+		writeFile(t, filepath.Join(dir, "review-input.yaml"), goodReview)
+		return []string{"review", "record", "my-post", "--file", "review-input.yaml", "--dir", dir, "--json"}
+	case "review show":
+		return []string{"review", "show", "my-post", "--dir", reviewWork(t), "--json"}
+	case "review resolve":
+		// 取值未变时不变更产物。
+		dir := reviewWork(t)
+		runIn(t, goodReview, "review", "record", "my-post", "--dir", dir)
+		run(t, "review", "resolve", "my-post", "rf-1", "--dir", dir)
+		return []string{"review", "resolve", "my-post", "rf-1", "--dir", dir, "--json"}
+	case "accept":
+		dir := reviewWork(t)
+		run(t, "config", "set", "gate_level", "fast", "--dir", dir)
+		return []string{"accept", "my-post", "--confirmed-by-author", "--confirmation", "作者：可以", "--dir", dir, "--json"}
+	case "export":
+		dir := reviewWork(t)
+		run(t, "config", "set", "gate_level", "fast", "--dir", dir)
+		run(t, "accept", "my-post", "--dir", dir)
+		return []string{"export", "my-post", "--dir", dir, "--json"}
+	case "skills list":
+		return []string{"skills", "list", "--json"}
+	case "skills install":
+		return []string{"skills", "install", "--agent", "claude-code", "--dir", t.TempDir(), "--json"}
 	case "help", "version":
 		return []string{name, "--json"}
 	case "init", "validate", "status":

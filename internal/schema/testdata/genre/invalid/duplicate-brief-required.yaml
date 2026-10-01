@@ -1,0 +1,10 @@
+schema_version: 1
+id: essay
+title: 随笔
+unit_types:
+  - id: article
+    title: 文章
+    brief_required: [audience, audience]
+stages:
+  - id: brief
+    title: 写作简报

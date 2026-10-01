@@ -1,0 +1,7 @@
+schema_version: 1
+draft_sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+rubric:
+  - {item: clarity, verdict: fail, evidence: 第二段没有给出结论, paragraphs: [2]}
+findings:
+  - {id: rf-1, rubric: clarity, paragraph: 2, quote: 可能, message: 结论不明确, suggestion: 先写结论, status: open}
+  - {id: rf-2, paragraph: 1, message: 标题太长, status: waived, note: 作者坚持}

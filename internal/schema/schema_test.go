@@ -251,7 +251,7 @@ func TestKindForWorks(t *testing.T) {
 	if k := KindFor(".writing-anything/works/my-post/work.yaml"); k == nil || k.Name != "work" {
 		t.Fatalf("KindFor(works/my-post/work.yaml) = %+v", k)
 	}
-	for _, rel := range []string{".writing-anything/works/work.yaml", ".writing-anything/works/a/b/work.yaml", ".writing-anything/works/my-post/brief.yaml"} {
+	for _, rel := range []string{".writing-anything/works/work.yaml", ".writing-anything/works/a/b/work.yaml"} {
 		if k := KindFor(rel); k != nil {
 			t.Errorf("KindFor(%q) = %s, want nil", rel, k.Name)
 		}
@@ -330,6 +330,10 @@ func TestKindForSourcesAndUnitArtifacts(t *testing.T) {
 		".writing-anything/works/my-post/units/intro/provenance.yaml": "provenance",
 		".writing-anything/works/my-post/claims.yaml":                 "claims",
 		".writing-anything/works/my-post/units/intro/claims.yaml":     "claims",
+		".writing-anything/works/my-post/brief.yaml":                  "brief",
+		".writing-anything/works/my-post/units/intro/brief.yaml":      "brief",
+		".writing-anything/works/my-post/outline.yaml":                "outline",
+		".writing-anything/works/my-post/units/intro/outline.yaml":    "outline",
 	} {
 		if k := KindFor(rel); k == nil || k.Name != want {
 			t.Errorf("KindFor(%q) = %+v, want %s", rel, k, want)

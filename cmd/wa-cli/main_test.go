@@ -13,13 +13,28 @@ import (
 
 const module = "github.com/kw12121212/writing-anything"
 
+// TestUnstampedBinary 构建未注入版本、也不带 VCS 信息的 wa-cli，验证版本回退为 dev 与 unknown。
+func TestUnstampedBinary(t *testing.T) {
+	if testing.Short() {
+		t.Skip("构建二进制较慢，-short 时跳过")
+	}
+	bin := filepath.Join(t.TempDir(), "wa-cli")
+	if out, err := exec.Command("go", "build", "-buildvcs=false", "-o", bin, ".").CombinedOutput(); err != nil {
+		t.Fatalf("go build: %v\n%s", err, out)
+	}
+	out, err := exec.Command(bin, "version").Output()
+	if want := "wa-cli dev (commit unknown)\n"; err != nil || string(out) != want {
+		t.Fatalf("version = %q (err %v), want %q", out, err, want)
+	}
+}
+
 // TestBinary 构建注入版本号的 wa-cli 二进制，验证其输出与退出码。
 func TestBinary(t *testing.T) {
 	if testing.Short() {
 		t.Skip("构建二进制较慢，-short 时跳过")
 	}
 	bin := filepath.Join(t.TempDir(), "wa-cli")
-	build := exec.Command("go", "build", "-ldflags", "-X "+module+"/internal/version.Version=v9.9.9-test", "-o", bin, ".")
+	build := exec.Command("go", "build", "-ldflags", "-X "+module+"/internal/version.Version=v9.9.9-test -X "+module+"/internal/version.Commit=abc1234", "-o", bin, ".")
 	if out, err := build.CombinedOutput(); err != nil {
 		t.Fatalf("go build: %v\n%s", err, out)
 	}
@@ -30,8 +45,8 @@ func TestBinary(t *testing.T) {
 		wantStdout string
 		wantStderr string
 	}{
-		{[]string{"version"}, 0, "wa-cli v9.9.9-test\n", ""},
-		{[]string{"version", "--json"}, 0, "{\"valid\":true,\"diagnostics\":[],\"changedPaths\":[],\"version\":\"v9.9.9-test\"}\n", ""},
+		{[]string{"version"}, 0, "wa-cli v9.9.9-test (commit abc1234)\n", ""},
+		{[]string{"version", "--json"}, 0, "{\"valid\":true,\"diagnostics\":[],\"changedPaths\":[],\"version\":\"v9.9.9-test\",\"commit\":\"abc1234\"}\n", ""},
 		{nil, 2, "", "用法：wa-cli"},
 		{[]string{"nope"}, 2, "", "未知命令：nope"},
 		{[]string{"version", "--unknown"}, 2, "", "未知参数：--unknown"},

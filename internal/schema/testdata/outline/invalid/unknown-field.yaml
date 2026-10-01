@@ -1,0 +1,5 @@
+schema_version: 1
+sections:
+  - id: why
+    title: t
+    note: x

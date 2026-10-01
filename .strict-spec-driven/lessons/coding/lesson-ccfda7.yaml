@@ -8,7 +8,7 @@ lesson:
 category: coding
 status: active
 created_at: '2026-09-30T13:12:03.507Z'
-updated_at: '2026-09-30T13:12:03.507Z'
+updated_at: '2026-09-30T15:00:30.029Z'
 context: claim add、decision add 等追加命令把由本次参数引起的问题的 next 改写为 wa-cli help <command>，已有产物中的问题保留默认的复查命令，最初用「field 不以 claims / decisions 开头」区分。
 observation: '已有文件的根级问题（schema_version 取值错误、未定义的字段）field 为 schema_version、foo 或空，同样不以产物数组路径开头，被误改写成查看用法，Agent 无法复查；测试只用了 claims: {} 这类 field 恰好以产物路径开头的坏文件，两次变更都是 fresh-context 审查才发现。'
 takeaway: 按参数名白名单判断问题来源（internal/cli 的 paramField），测试要覆盖已有产物的根级字段问题（错误的 schema_version、未定义的根键）。
@@ -17,3 +17,6 @@ occurrences:
   - origin: decision-queue
     date: '2026-09-30'
     evidence: internal/cli/decisions.go paramField；TestDecisionAdd 与 TestClaimAdd 的根级字段用例
+  - origin: brief-intake-gate
+    date: '2026-09-30'
+    evidence: brief set 起初只在修改前检查部分参数，空白文本、重复 id 等要到写前复查才发现，诊断带上 brief.yaml 路径，next 的 validate 复查会报通过；审查后在 internal/cli/brief.go 的 briefEdit 中提前拒绝这些参数，并让 brief.Set 把写前复查问题的 path 清空、字段映射为参数名（paramOf）。

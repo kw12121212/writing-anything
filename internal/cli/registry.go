@@ -23,7 +23,7 @@ const (
 // command 是命令注册表（Command Registry）中的一条命令声明。
 // 参数解析、help 文本与 help --json 都只从这些声明派生。
 type command struct {
-	name       string      // 命令名；命令组中的命令由组名与子命令两个词组成，如 config set
+	name       string // 命令名；命令组中的命令由组名与子命令两个词组成，如 config set
 	summary    string
 	args       []argSpec   // 位置参数，按顺序匹配；必需参数排在可选参数之前
 	flags      []flagSpec  // 命令专属参数；--json 与 --help 由框架附加
@@ -77,8 +77,10 @@ type commandSet []*command
 
 // registry 登记 wa-cli 的全部命令。
 var registry = commandSet{helpCommand, versionCommand, initCommand, validateCommand, statusCommand, configSetCommand, configResolvedCommand,
-	newCommand, unitAddCommand, advanceCommand, nextCommand,
-	sourceAddCommand, sourceListCommand, draftWriteCommand, diffCommand, provenanceCommand, claimAddCommand,
+	newCommand, unitAddCommand, advanceCommand, nextCommand, briefSetCommand, briefShowCommand,
+	outlineSetCommand, outlineRemoveCommand, outlineShowCommand, contextCommand, lintCommand,
+	sourceAddCommand, sourceListCommand, draftWriteCommand, diffCommand, provenanceCommand, claimAddCommand, claimSetCommand, claimListCommand, claimRemoveCommand,
+	methodListCommand, methodShowCommand, reviewRecordCommand, reviewShowCommand, reviewResolveCommand, acceptCommand, exportCommand, skillsListCommand, skillsInstallCommand,
 	feedbackAddCommand, feedbackListCommand, feedbackResolveCommand, feedbackWatchCommand,
 	decisionAddCommand, decisionsCommand, decideCommand}
 
