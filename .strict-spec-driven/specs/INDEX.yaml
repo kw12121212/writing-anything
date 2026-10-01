@@ -30,6 +30,9 @@ specs:
   - id: marketing
     title: 营销要素（Marketing Elements）
     path: .strict-spec-driven/specs/marketing.yaml
+  - id: mcp
+    title: MCP 服务（MCP Server）
+    path: .strict-spec-driven/specs/mcp.yaml
   - id: methods
     title: 写作法模板（Method Template）
     path: .strict-spec-driven/specs/methods.yaml

@@ -1,0 +1,159 @@
+package mcpinstall
+
+import (
+	"encoding/json"
+	"errors"
+	"os"
+	"path/filepath"
+	"slices"
+	"strings"
+	"testing"
+)
+
+// fakeEnv 记录运行的命令；fail 中的子命令（如 "mcp add"）以错误结束，missing 中的可执行文件找不到。
+type fakeEnv struct {
+	calls   [][]string
+	dirs    []string
+	fail    string
+	missing string
+}
+
+func (f *fakeEnv) env() Env {
+	return Env{
+		LookPath: func(name string) (string, error) {
+			if name == f.missing {
+				return "", errors.New("not found")
+			}
+			return "/bin/" + name, nil
+		},
+		Run: func(dir, name string, args ...string) (string, error) {
+			f.calls = append(f.calls, append([]string{name}, args...))
+			f.dirs = append(f.dirs, dir)
+			if f.fail != "" && strings.Join(args[:2], " ") == f.fail {
+				return "已存在同名条目", errors.New("exit status 1")
+			}
+			return "", nil
+		},
+	}
+}
+
+func req(client, scope string) Request {
+	return Request{Client: client, Scope: scope, Name: "writing-anything", Dir: "/proj", Command: "/usr/bin/wa-cli"}
+}
+
+func TestClaudeCode(t *testing.T) {
+	for _, scope := range []string{ScopeProject, ScopeUser} {
+		f := &fakeEnv{fail: "mcp remove"} // 没有同名条目时移除失败，忽略
+		res, ps := Install(f.env(), req(ClientClaudeCode, scope))
+		want := [][]string{
+			{"/bin/claude", "mcp", "remove", "--scope", scope, "writing-anything"},
+			{"/bin/claude", "mcp", "add", "--scope", scope, "writing-anything", "--", "/usr/bin/wa-cli", "mcp", "--dir", "/proj"},
+		}
+		if ps != nil || res.Status != StatusRegistered || len(f.calls) != 2 || !slices.Equal(f.calls[0], want[0]) || !slices.Equal(f.calls[1], want[1]) || f.dirs[1] != "/proj" {
+			t.Fatalf("%s: %+v %+v %q", scope, res, ps, f.calls)
+		}
+	}
+	f := &fakeEnv{fail: "mcp add"}
+	res, ps := Install(f.env(), req(ClientClaudeCode, ScopeProject))
+	if res.Status != StatusFailed || len(ps) != 1 || ps[0].Code != CodeClientFailed || ps[0].Severity != "error" || !strings.Contains(ps[0].Message, "已存在同名条目") ||
+		!strings.Contains(ps[0].Message, "已被移除") {
+		t.Fatalf("add failed: %+v %+v", res, ps)
+	}
+	f = &fakeEnv{missing: "claude"}
+	res, ps = Install(f.env(), req(ClientClaudeCode, ScopeProject))
+	if res.Status != StatusSkipped || len(ps) != 1 || ps[0].Code != CodeClientNotFound || ps[0].Severity != "warning" || len(f.calls) != 0 {
+		t.Fatalf("not found: %+v %+v", res, ps)
+	}
+}
+
+func TestCodex(t *testing.T) {
+	f := &fakeEnv{}
+	res, ps := Install(f.env(), req(ClientCodex, ScopeUser))
+	if ps != nil || res.Status != StatusRegistered || !slices.Equal(f.calls[1], []string{"/bin/codex", "mcp", "add", "writing-anything", "--", "/usr/bin/wa-cli", "mcp", "--dir", "/proj"}) ||
+		!slices.Equal(f.calls[0], []string{"/bin/codex", "mcp", "remove", "writing-anything"}) {
+		t.Fatalf("codex: %+v %+v %q", res, ps, f.calls)
+	}
+	f = &fakeEnv{}
+	if res, ps := Install(f.env(), req(ClientCodex, ScopeProject)); res.Status != StatusFailed || len(ps) != 1 || ps[0].Code != CodeUnsupportedScope || len(f.calls) != 0 {
+		t.Fatalf("project scope: %+v %+v", res, ps)
+	}
+}
+
+func TestJSONConfig(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "sub", "mcp.json")
+	r := req(ClientJSON, ScopeProject)
+	r.Config = path
+	// 文件不存在：创建，含目录。
+	res, ps := Install(Env{}, r)
+	if ps != nil || res.Status != StatusUpdated || res.Changed != path {
+		t.Fatalf("create: %+v %+v", res, ps)
+	}
+	var doc map[string]map[string]map[string]any
+	data, _ := os.ReadFile(path)
+	if json.Unmarshal(data, &doc) != nil || doc["mcpServers"]["writing-anything"]["command"] != "/usr/bin/wa-cli" {
+		t.Fatalf("created: %s", data)
+	}
+	// 已有其他条目与其他键：保留；第二次不写。
+	os.WriteFile(path, []byte(`{"theme":"dark","mcpServers":{"other":{"command":"x","args":["y"]}}}`), 0o600)
+	os.Chmod(path, 0o600) // 写入后保留已有文件的权限
+	if res, ps := Install(Env{}, r); ps != nil || res.Status != StatusUpdated {
+		t.Fatalf("merge: %+v %+v", res, ps)
+	}
+	data, _ = os.ReadFile(path)
+	var merged map[string]any
+	json.Unmarshal(data, &merged)
+	servers := merged["mcpServers"].(map[string]any)
+	if merged["theme"] != "dark" || servers["other"].(map[string]any)["command"] != "x" || servers["writing-anything"] == nil {
+		t.Fatalf("merged: %s", data)
+	}
+	if info, _ := os.Stat(path); info.Mode().Perm() != 0o600 {
+		t.Fatalf("mode: %v", info.Mode())
+	}
+	before, _ := os.ReadFile(path)
+	if res, ps := Install(Env{}, r); ps != nil || res.Status != StatusUnchanged || res.Changed != "" {
+		t.Fatalf("idempotent: %+v %+v", res, ps)
+	}
+	if after, _ := os.ReadFile(path); string(after) != string(before) {
+		t.Fatal("unchanged config was rewritten")
+	}
+	// 不合法的配置：不是对象、mcpServers 不是对象、符号链接、目录。
+	for name, content := range map[string]string{"array": "[1]", "servers": `{"mcpServers":[1]}`, "broken": "{"} {
+		os.WriteFile(path, []byte(content), 0o644)
+		if res, ps := Install(Env{}, r); res.Status != StatusFailed || len(ps) != 1 || ps[0].Code != CodeInvalidConfig {
+			t.Errorf("%s: %+v %+v", name, res, ps)
+		}
+	}
+	os.WriteFile(path, []byte(""), 0o644) // 空文件从空对象开始
+	if res, ps := Install(Env{}, r); ps != nil || res.Status != StatusUpdated {
+		t.Fatalf("empty: %+v %+v", res, ps)
+	}
+	link := filepath.Join(dir, "link.json")
+	if err := os.Symlink(path, link); err == nil {
+		r.Config = link
+		if res, ps := Install(Env{}, r); res.Status != StatusFailed || ps[0].Code != CodeInvalidConfig {
+			t.Errorf("symlink: %+v %+v", res, ps)
+		}
+	}
+	r.Config = filepath.Join(path, "x.json") // 上级是文件，无法创建目录
+	if res, ps := Install(Env{}, r); res.Status != StatusFailed || len(ps) != 1 {
+		t.Errorf("write failure: %+v %+v", res, ps)
+	}
+}
+
+func TestSystemEnv(t *testing.T) {
+	env := System()
+	if _, err := env.LookPath("definitely-not-a-command-wa"); err == nil {
+		t.Fatal("LookPath found a missing command")
+	}
+	sh, err := env.LookPath("sh")
+	if err != nil {
+		t.Skip(err)
+	}
+	if out, err := env.Run(t.TempDir(), sh, "-c", "echo out; echo oops >&2; exit 3"); err == nil || !strings.Contains(out, "oops") || !strings.Contains(out, "out") {
+		t.Fatalf("run: %q %v", out, err)
+	}
+	if out, err := env.Run(t.TempDir(), sh, "-c", "head -c 9000 /dev/zero | tr '\\0' x"); err != nil || len(out) > maxOutput+10 {
+		t.Fatalf("truncate: %d %v", len(out), err)
+	}
+}

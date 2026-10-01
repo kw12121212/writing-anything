@@ -13,8 +13,10 @@ writing-anything 帮 Agent 规范地协助作者写作，而不是替作者写�
 2. 问作者作品（Work）的短名（小写字母、数字与连字符），运行 `wa-cli new <文体> <作品> --json`。
 3. 请作者提供素材（Source）：亲历的笔记、访谈记录、参考资料。每份素材用 `wa-cli source add --type <author-note|interview|transcript|reference|past-article> --file <文件> --json` 登记；用 `wa-cli source list --json` 查看已登记的素材。
 4. 运行 `wa-cli next <作品> --json`，按 `commands` 与 `action` 继续，通常转到 wa-brief。
+5. 作者想在只支持 MCP 的客户端中使用时，运行 `wa-cli mcp install --client <claude-code|codex|json> --scope <project|user> --json` 注册 MCP 服务（json 另加 `--config <配置文件>`）；重复运行结果相同，不影响客户端已有的其他服务。
 
 ## 必须停下来问作者
 
 - 选择文体、作品短名与关卡强度（Gate Level）。
+- 是否把 MCP 服务注册到客户端、注册到项目级还是用户级。
 - 素材从哪里来：不要编造素材，也不要把自己写的文字登记为作者笔记。

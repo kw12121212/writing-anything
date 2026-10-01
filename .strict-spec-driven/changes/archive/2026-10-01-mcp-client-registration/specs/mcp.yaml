@@ -1,0 +1,61 @@
+schema: strict-spec-driven/delta-spec/v1
+schema_version: 1
+artifact_type: delta_spec
+schema_file: templates/strict-spec-driven/schemas/delta-spec.yaml
+target_spec: mcp
+operations:
+  ADDED:
+    mcp-install:
+      strength: MUST
+      statement: wa-cli mcp install 必须把 MCP 服务注册到 --client 给出的每个客户端（可重复，取 claude-code、codex 或 json；至少一个，重复的只注册一次）：注册的命令为 wa-cli 可执行文件的绝对路径（PATH 中的 wa-cli 与当前可执行文件是同一个文件时用 PATH 中的路径，否则用当前可执行文件），参数为 mcp --dir <项目目录（--dir，必须是已存在的目录）的绝对路径>；名称为 --name（id 格式，默认 writing-anything）；--scope 为 project（默认）或 user。claude-code：在项目目录中依次运行 claude mcp remove --scope <scope> <name>（失败忽略）与 claude mcp add --scope <scope> <name> -- <命令> mcp --dir <路径>；project 作用域的 installs path 为 .mcp.json。codex：只支持 user，依次运行 codex mcp remove <name>（失败忽略）与 codex mcp add <name> -- <命令> mcp --dir <路径>；--scope 为 project 时报告 mcp.unsupported-scope，next 为改用 --scope user 的同一命令。外部命令不经 shell 运行，不连接 wa-cli 的标准输入输出，超过 2 分钟未结束视为失败。json：把 --config（相对 --dir 或绝对路径，json 必需）指向的 JSON 文件中 mcpServers.<name> 的 command 与 args 设为注册的命令与参数，保留该条目的其他字段（如 env）、文件中其他的键与 mcpServers 的其他条目，不转义 HTML 字符；文件不存在、为空或为 null 时从空对象开始，取值未变时不写文件，写入时先写同目录的临时文件再重命名并保留原文件的权限；文件不是 JSON 对象、mcpServers 或该条目不是对象、文件是符号链接时报告 mcp.invalid-config。找不到 claude 或 codex 可执行文件时跳过该客户端，给出 warning 级 mcp.client-not-found；官方 CLI 以非 0 退出或超时时报告 mcp.client-failed（message 含其输出，移除已成功时说明已有的同名条目已被移除）；这两者的 next 含 wa-cli help mcp install --json 与同一客户端、作用域、名称的重试命令，claude-code 的 project 作用域另含改用 --client json --config .mcp.json 的命令。--json 输出的 installs 按 --client 顺序列出每个客户端的 client、scope、name、command、args、status（registered、updated、unchanged 或 skipped；失败时为 failed）、path（json 的配置文件或 claude-code 项目级的 .mcp.json，在项目目录之内时为相对路径，否则为绝对路径；其他为 null）与 message；changedPaths 为写入的、在项目目录之内的 json 配置文件（相对 --dir 的路径）；项目目录之外的配置文件（如用户级配置）只在 installs 的 path 与 message 中给出，其诊断不填 path。--config 不能在工作区 .writing-anything/ 中（按文件身份比较途经的每一级目录，符号链接与大小写不同的写法都不能绕过；报告 input.invalid-value）。mcp install 不是 MCP tool（见 mcp-tools）。有 error 级诊断时退出码为 1，其他客户端照常处理。重复执行结果相同。没有 --client、--client 或 --scope 取值不合法、--name 不是 id 格式、json 缺少 --config、--dir 不存在时报告 input.invalid-value（next 为 wa-cli help mcp install --json），不注册任何客户端。不需要工作区。
+      scenarios:
+        claude-project:
+          - GIVEN: PATH 中有 claude
+          - WHEN: 运行 wa-cli mcp install --client claude-code --dir D --json
+          - THEN: 在 D 中依次运行 claude mcp remove --scope project writing-anything 与 claude mcp add --scope project writing-anything -- <wa-cli> mcp --dir <D 的绝对路径>；installs[0].status 为 registered，退出码为 0
+        codex-user:
+          - GIVEN: PATH 中有 codex
+          - WHEN: 运行 wa-cli mcp install --client codex --scope user --dir D --json，再以 --scope project 运行
+          - THEN: 第一次运行 codex mcp add writing-anything -- <wa-cli> mcp --dir <路径>，status 为 registered；第二次报告 mcp.unsupported-scope，退出码为 1
+        json-idempotent:
+          - GIVEN: 'D/mcp.json 已有 {"mcpServers": {"other": {"command": "x"}}, "theme": "dark"}'
+          - WHEN: 运行两次 wa-cli mcp install --client json --config mcp.json --dir D --json
+          - THEN: '第一次 status 为 updated，文件中 other 与 theme 保留，mcpServers.writing-anything 为 {command: <wa-cli>, args: [mcp, --dir, <D 的绝对路径>]}，changedPaths 为 [mcp.json]；第二次 status 为 unchanged，changedPaths 为空数组，文件不变'
+        client-not-found:
+          - GIVEN: PATH 中没有 claude
+          - WHEN: 运行 wa-cli mcp install --client claude-code --client json --config mcp.json --dir D --json
+          - THEN: installs[0].status 为 skipped，diagnostics 中有一条 warning 级 mcp.client-not-found；json 照常写入，退出码为 0
+        client-failed:
+          - GIVEN: PATH 中的 claude 在 mcp add 时以退出码 1 结束并在标准输出中输出错误
+          - WHEN: 运行 wa-cli mcp install --client claude-code --name my-wa --dir D --json
+          - THEN: diagnostics 中有一条错误码为 mcp.client-failed、message 含该错误并说明已有的同名条目已被移除的诊断，next 含 --client claude-code --scope project --name my-wa 的重试命令与 --client json --config .mcp.json 的命令，status 为 failed，退出码为 1
+        json-merge-entry:
+          - GIVEN: 'D/env.json 中 mcpServers.writing-anything 已有 {"command": "old", "env": {"A": "1"}}，另一个键的取值含 & < >'
+          - WHEN: 运行 wa-cli mcp install --client json --config env.json --dir D --json
+          - THEN: command 与 args 改为注册的命令与参数，env 保留，& < > 原样保留；内容为 null 的配置文件从空对象开始，mcpServers 为 null 时报告 mcp.invalid-config
+        install-guards:
+          - GIVEN: D 中的 ws 是指向 .writing-anything 的符号链接
+          - WHEN: 运行 wa-cli mcp install --client json --config ws/evil.json --dir D --json，或以不存在的目录作为 --dir 运行
+          - THEN: 都报告 input.invalid-value 且不写入任何文件、不创建目录
+  MODIFIED:
+    mcp-tools:
+      strength: MUST
+      statement: tools/list 必须为命令注册表中除 mcp、mcp install 与 feedback watch 外的每条命令返回一个 tool（mcp install 会写项目目录之外的客户端配置，请在命令行中运行；feedback watch 会一直等待作者操作，以订阅 wa://feedback 代替）：name 为命令名中的空格换成下划线（如 feedback_add），description 为命令摘要，inputSchema 为对象：每个位置参数为同名字符串属性（必需的位置参数列入 required），每个命名参数按类型为布尔、字符串或字符串数组属性，但不含 --dir、--json、--help、--file（可以指向项目之外；读取 --file 或标准输入的命令改为字符串属性 input，作为标准输入的内容）、skills install 的 --target（可以写到项目之外）与 preview 的 --serve、--port、--max（需要常驻的本地服务）；additionalProperties 为 false。tools/call 必须在进程内运行同一条 wa-cli 命令：位置参数按顺序、命名参数写作 --name=value（布尔为 --name，数组的每一项一个），命令接受 --dir 时加上 --dir <dir>，并加上 --json；每次调用都不等待作者或其他外部事件即结束；结果的 structuredContent 为命令的输出信封，content 为一项 type 为 text、内容为标准输出的文字，命令的退出码不为 0 时 isError 为 true。tool 不存在、参数不是 inputSchema 允许的类型、出现未声明的参数或位置参数以 - 开头时返回错误 -32602，不运行命令。同一操作经 MCP 与 CLI（同样的参数加 --dir 与 --json）调用，产物与输出信封相同。测试按每条命令登记的样例调用（cli-contract/sample-invocation）逐一调用对应的 tool，结果的 isError 都为 false。
+      scenarios:
+        same-as-cli:
+          - GIVEN: 两个相同的工作区 D1 与 D2，各有作品 my-post
+          - WHEN: '经 MCP 在 D1 调用 feedback_add {unit: my-post, text: 太长}，在 D2 运行 wa-cli feedback add my-post --text 太长 --dir D2 --json'
+          - THEN: 两者的输出信封相同（路径不含 --dir），两个工作区的 feedback.yaml 内容相同
+        tool-errors:
+          - GIVEN: wa-cli mcp --dir D 正在运行
+          - WHEN: 调用不存在的 tool、给 feedback_add 传入未声明的参数 color，或调用 unit_add 时命令以退出码 1 结束
+          - THEN: 前两者返回错误 -32602；后者返回结果且 isError 为 true
+        every-tool:
+          - GIVEN: 每条命令在注册表测试中登记的样例调用
+          - WHEN: 把样例的参数转换为 tool 参数（--file 的内容作为 input），在样例的工作区中调用对应的 tool
+          - THEN: 每个 tool 的结果 isError 都为 false；version、help 与 skills_list 不带 --dir 调用
+        tool-per-command:
+          - GIVEN: wa-cli mcp --dir D 正在运行
+          - WHEN: 发送 tools/list
+          - THEN: 命令注册表中除 mcp、mcp install 与 feedback watch 外的每条命令都有一个对应的 tool，名称为命令名的空格换成下划线
+  REMOVED: {}

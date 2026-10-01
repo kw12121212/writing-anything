@@ -1,0 +1,29 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: mcp-client-registration
+approach:
+  - 新建 internal/mcpinstall：每个客户端一个函数（claudeCode、codex、jsonConfig），共用一个 Env（查找可执行文件、在指定目录运行外部命令、当前可执行文件的路径），测试可以替换。claude-code：先运行 claude mcp remove --scope <scope> <name>（忽略失败），再运行 claude mcp add --scope <scope> <name> -- <wa-cli> mcp --dir <绝对路径>，工作目录为项目目录（project 作用域写入其中的 .mcp.json）。codex：只支持 user，先 codex mcp remove <name>（忽略失败）再 codex mcp add <name> -- <wa-cli> mcp --dir <绝对路径>。json：读取 --config（相对 --dir 或绝对路径；不存在时从空对象开始，必须是 JSON 对象且 mcpServers 是对象，不能是符号链接），设置 mcpServers.<name> 为 {command, args}，内容不变时不写，否则先写同目录临时文件再重命名。
+  - 命令层把每个客户端的结果收集为 installs 数组（client、scope、name、command、args、status：registered、unchanged、updated 或 skipped、path 与 message），找不到官方 CLI 的客户端为 skipped 并给出 warning；作用域不支持、外部命令失败或 json 文件不合法为 error，退出码为 1，但其他客户端照常注册。
+decisions:
+  official-cli:
+    decision: claude-code 与 codex 只通过官方 CLI 注册，移除后再添加以保证幂等
+    rationale: 官方 CLI 负责各自配置文件的格式与已有条目，wa-cli 不需要解析 ~/.claude.json 或 TOML；移除再添加不依赖解析人读的 get 输出
+  codex-user-only:
+    decision: codex 只支持 user 作用域；--scope project 时报告 mcp.unsupported-scope
+    rationale: codex mcp add 只写用户级的 config.toml；项目级 .codex/config.toml 只能手工编辑 TOML，标准库没有 TOML 解析，按 stdlib-first 不引入依赖
+  absolute-command:
+    decision: 注册的命令为当前 wa-cli 可执行文件的绝对路径与项目目录的绝对路径
+    rationale: MCP 客户端启动服务时的工作目录与 PATH 不可靠；wa-cli mcp 本身要求显式的 --dir
+  json-generic:
+    decision: 'json 客户端写入通用的 { mcpServers: { <name>: { command, args } } }：只改自己条目中的 command 与 args，保留该条目的其他字段、其他键与其他条目；不转义 HTML 字符（重新编码时对象的键按字母排序）'
+    rationale: 这是多数客户端（Claude Desktop、Cursor 等）共用的格式；作者给出要写的文件，wa-cli 只改自己负责的字段，作者加的 env 等设置不会丢失
+  stable-executable:
+    decision: PATH 中的 wa-cli 与当前可执行文件是同一个文件时注册 PATH 中的路径；外部命令有 2 分钟的时长上限
+    rationale: 包管理器的链接在升级后仍然有效，而版本化的实际路径会失效；官方 CLI 首次运行的引导或自动更新可能卡住，不能让 wa-cli 一直等待
+alternatives: []
+risks:
+  - 官方 CLI 的参数可能变化：各客户端的命令行集中在各自的函数中，测试断言命令行，便于单独更新
+  - json 文件重新编码会改变键的顺序与缩进，但不改变内容
+  - 官方 CLI 没有原子的替换操作：先移除再添加时若添加失败，已有的同名条目已被移除；诊断说明这一点并给出重试命令

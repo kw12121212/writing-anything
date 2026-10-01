@@ -31,6 +31,6 @@ dependencies:
   - tech-blog-workflow
 risks:
   - MCP 协议与各客户端的配置格式仍在变化，注册逻辑需要按客户端隔离，便于单独更新
-status: proposed
+status: complete
 notes: []
 details: MCP 服务内置于 wa-cli 二进制，只做命令注册表到 MCP 的映射。放在营销文体之后，是因为 CLI 接口到这时已经过两个文体验证，比较稳定，映射的返工最少。后续里程碑新增的命令自动获得对应 tool，不需要单独修改 MCP 服务。

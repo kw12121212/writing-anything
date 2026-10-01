@@ -1,0 +1,28 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: mcp-client-registration
+  status: proposed
+summary:
+  what:
+    - 新增 wa-cli mcp install：把 wa-cli 的 MCP 服务（命令为当前 wa-cli 可执行文件的绝对路径，参数为 mcp --dir <项目目录的绝对路径>）注册到 MCP 客户端。--client（可重复）取 claude-code、codex 或 json；--scope 取 project（默认）或 user；--name 为注册的名称（默认 writing-anything）。
+    - claude-code 与 codex 调用各自的官方 CLI 注册（claude mcp add、codex mcp add），注册前先移除同名条目，重复执行结果相同；找不到官方 CLI 时跳过该客户端并给出 warning。codex 的官方 CLI 只写用户级配置，--scope project 时报告不支持。json 把条目写入 --config 指定的 JSON 文件的 mcpServers，保留文件中已有的其他内容，取值未变时不写文件。
+  why:
+    - 里程碑 mcp-integration 的目标要求 MCP 服务能一条命令注册到常见客户端；完成标准要求 wa-cli mcp install 重复执行结果幂等，并保留客户端配置中已有的其他条目。
+    - MCP 客户端的配置格式各不相同且仍在变化；用官方 CLI 注册不必解析各客户端的配置文件，各客户端的注册逻辑相互隔离，便于单独更新。
+scope:
+  in:
+    - internal/mcpinstall：各客户端的注册（相互隔离）、可注入的命令执行与查找、json 配置文件的合并与原子写入
+    - internal/cli：mcp install 命令（注册表、样例调用、输出 installs、诊断与 next）
+    - mcp 主规格新增 mcp-install；docs/GLOSSARY.md 与 wa-init 技能说明注册方法
+    - 测试：各客户端的命令行、幂等、保留已有条目、找不到官方 CLI、作用域不支持、外部命令失败、json 文件不合法或是符号链接；用 PATH 中的假 claude 与 codex 验证实际执行
+  out:
+    - 直接编辑 claude-code 与 codex 的配置文件（只通过官方 CLI）；codex 的项目级配置
+    - 其他客户端的专用格式：用 json 写入通用的 mcpServers 配置
+unchanged_behavior:
+  - wa-cli mcp 的行为不变；已有命令不变
+roadmap:
+  milestone: mcp-integration
+  planned_change: mcp-client-registration

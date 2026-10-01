@@ -12,6 +12,7 @@ description: 用 wa-cli next 驱动整篇文章从写作简报走到导出，在
 3. 单元有未处理的作者反馈（Feedback，见输出的 `feedback`）时先用 wa-revise 处理。
 4. 每推进一步都重新运行 `wa-cli next --json`，直到 `steps` 为空（所有单元都已走完全部阶段），再用 wa-publish 导出。
 5. 遇到看不懂的诊断时运行 `wa-cli help <命令> --json` 查看用法。
+6. 只能使用 MCP 的 Agent 可以通过 `wa-cli mcp --dir <项目目录>` 接入：每条命令对应一个 tool（命令名的空格换成下划线，如 `feedback_add`），结果与加 `--json` 运行命令相同；订阅资源 wa://feedback 可以即时收到作者的新反馈。
 
 ## 必须停下来问作者
 

@@ -1,0 +1,42 @@
+schema: strict-spec-driven/question-list/v1
+schema_version: 1
+artifact_type: question_list
+schema_file: templates/strict-spec-driven/schemas/question-list.yaml
+change: mcp-server
+open: []
+resolved:
+  - id: requirement-problem
+    question: What is concretely going wrong today, and for whom?
+    context: 'Why this is asked: the change is planned against a need, and the need lives only with the requester. What it changes: this becomes the proposal''s why.'
+    answer: 据里程碑 mcp-integration 与规划变更 mcp-server：只支持 MCP 的 Agent 无法使用 wa-cli，只能执行 shell 命令的 Agent 才能接入。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-outcome
+    question: What observable difference proves the problem is solved?
+    context: 'Why this is asked: without a success condition, nobody can tell afterwards whether the change worked. What it changes: this becomes the delta spec''s scenarios.'
+    answer: 据里程碑 done_criteria：每个命令都有对应的 MCP tool 且测试逐一校验；同一操作经 MCP 与 CLI 调用的产物与 --json 输出一致；作者提交新反馈后订阅了反馈资源的客户端收到资源更新通知。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-trigger
+    question: Why now — what forced this?
+    context: 'Why this is asked: work that nothing forced is the work most often thrown away later.'
+    answer: 据路线图：依赖的 agent-skills-package 与 author-feedback 已归档，CLI 接口经两个文体验证后稳定；roadmap-recommend 推荐本变更为下一项。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-non-goals
+    question: What must explicitly not change?
+    context: 'Why this is asked: the requester knows which nearby behavior other people depend on. What it changes: these become the proposal''s unchanged_behavior items.'
+    answer: 据里程碑 scope：不做 HTTP / SSE 等远程传输，不在 MCP 服务中实现 CLI 之外的业务逻辑；客户端注册由 mcp-client-registration 负责。已写入 proposal 的 out 与 unchanged。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-interpretation
+    question: Which reading of the request is intended, where more than one is possible?
+    context: 'Why this is asked: a short request usually admits several readings. What it changes: this fixes the scope boundary before any code is written.'
+    answer: 作者在本次会话中明确要求：MCP 服务使用最新版协议（2026-07-28），主流 Agent 都支持。据规划变更 details：stdio、必须显式指定项目根目录、tools 由命令注册表生成、resources 暴露产物、生效的规范包与作者反馈并在新反馈时通知订阅者、prompts 对应各 Skill。
+    status: resolved
+    kind: requirement
+    answered_by: human

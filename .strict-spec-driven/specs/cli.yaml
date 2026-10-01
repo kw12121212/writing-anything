@@ -60,7 +60,7 @@ requirements:
         - THEN: valid 为 false，diagnostics 中有一条错误码为 usage.missing-argument 的诊断，message 指出缺少 <value>，next 包含 wa-cli help config set --json，退出码为 2
   json-output-envelope:
     strength: MUST
-    statement: 所有 wa-cli 命令都必须接受 --json；加 --json 时标准输出必须恰好是一个 JSON 对象，即输出信封（Output Envelope），包含 valid（布尔值）、diagnostics（数组）与 changedPaths（数组）字段，命令专属字段与之并列放在顶层；没有诊断或没有变更的产物时对应字段为空数组而不是 null。
+    statement: 所有 wa-cli 命令都必须接受 --json；加 --json 时标准输出必须恰好是一个 JSON 对象，即输出信封（Output Envelope）（例外：流式命令如 feedback watch 与 preview --serve 每个事件输出一行信封；wa-cli mcp 的标准输出是 MCP 协议消息，--json 时只在退出前多写一行汇总信封，见 mcp 主规格），包含 valid（布尔值）、diagnostics（数组）与 changedPaths（数组）字段，命令专属字段与之并列放在顶层；没有诊断或没有变更的产物时对应字段为空数组而不是 null。
     scenarios:
       envelope-on-success:
         - GIVEN: 已构建的 wa-cli 二进制

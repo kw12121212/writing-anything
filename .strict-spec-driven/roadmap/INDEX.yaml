@@ -18,7 +18,7 @@ milestones:
   mcp-integration:
     title: MCP 集成（MCP Integration）
     path: roadmap/milestones/mcp-integration.yaml
-    status: proposed
+    status: complete
   packs-and-series:
     title: 规范包、文风量化与系列文章（Packs, Style Metrics & Series）
     path: roadmap/milestones/packs-and-series.yaml

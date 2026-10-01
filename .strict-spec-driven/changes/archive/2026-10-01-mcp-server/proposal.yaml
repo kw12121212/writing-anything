@@ -1,0 +1,30 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: mcp-server
+  status: proposed
+summary:
+  what:
+    - 新增 wa-cli mcp --dir <dir>：以 stdio 方式运行 MCP 服务（MCP Server），实现 MCP 2026-07-28 版协议（无状态：每个请求在 _meta 中带协议版本与客户端能力，服务实现 server/discover，结果带 resultType 与服务身份）；必须显式给出项目根目录。
+    - tools 由命令注册表（Command Registry）自动生成：除 mcp 本身外的每条命令对应一个 tool（名称为命令名的空格换成下划线），参数从注册表的位置参数与命名参数生成，调用时在进程内运行同一条 wa-cli 命令（自动加上 --dir 与 --json），结果即其输出信封；后续新增的命令自动获得 tool。
+    - resources 暴露工作区产物（只读，不跟随符号链接）、生效配置（含规范包，wa://resolved）与作者反馈（wa://feedback）；subscriptions/listen 订阅资源后，资源变化（如作者提交新反馈）时发送 notifications/resources/updated。prompts 对应各内置技能（Skill）的流程说明。
+  why:
+    - 里程碑 mcp-integration 的目标：只支持 MCP 的 Agent 能通过 wa-cli mcp 使用 wa-cli 的全部已有能力，结果与直接调用 CLI 一致；完成标准要求每个命令都有对应 tool 并逐一校验、同一操作经 MCP 与 CLI 调用结果一致、作者提交新反馈后订阅了反馈资源的客户端收到更新通知。
+    - 作者要求使用最新版协议（2026-07-28），主流 Agent 都已支持；无状态的协议也更适合每次调用都在进程内运行一条 CLI 命令的实现。
+scope:
+  in:
+    - internal/mcp：JSON-RPC 2.0 stdio 服务、2026-07-28 的请求校验与版本错误、server/discover、tools/list 与 tools/call、resources/list 与 resources/read、subscriptions/listen（确认、更新通知、取消）、prompts/list 与 prompts/get；不 import internal/cli，命令信息与执行函数由命令层传入
+    - internal/cli：mcp 命令（--dir 必需、--interval 轮询间隔、--json 时退出前输出汇总信封）；从注册表生成 tool 规格（stdin 输入、流式命令的调整）
+    - 新增 mcp 主规格；修改 cli 主规格的 json-output-envelope（流式命令与 mcp 的例外）；cli-contract 技术标准新增 MCP 薄封装规则
+    - 测试：每个命令都有 tool、MCP 与 CLI 调用结果一致、协议错误、资源读取与订阅通知、prompts；wa-auto 技能说明 MCP 接入
+  out:
+    - 旧版协议（2025-11-25 及之前的 initialize 握手）与 HTTP 等远程传输
+    - wa-cli mcp install 客户端注册：由 mcp-client-registration 负责
+    - 在 MCP 服务中实现 CLI 之外的业务逻辑；工具列表变化通知（工具在运行期间不变）
+unchanged_behavior:
+  - 所有已有命令的行为、输出与错误码不变；MCP 只是调用它们
+roadmap:
+  milestone: mcp-integration
+  planned_change: mcp-server

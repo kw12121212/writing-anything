@@ -87,7 +87,7 @@ categories:
     lesson-a9dd44:
       title: 按字符串前缀限制写入位置，在不区分大小写的文件系统上会被绕过
       status: active
-      occurrences: 1
+      occurrences: 2
       path: .strict-spec-driven/lessons/coding/lesson-a9dd44.yaml
     lesson-234cd1:
       title: 安装到第三方工具的目录前，要按其官方文档核对目录约定
@@ -114,6 +114,11 @@ categories:
       status: active
       occurrences: 1
       path: .strict-spec-driven/lessons/coding/ai-3e00aa.yaml
+    json-map-null-nil-map-676fe1:
+      title: 把 JSON 解码进 map 后直接赋值，内容为 null 的文件会让 nil map 崩溃
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/coding/json-map-null-nil-map-676fe1.yaml
   documentation:
     must-must-6af326:
       title: 修改一条 MUST 需求时，要检查同一规格里相邻的 MUST 是否因此冲突
@@ -131,3 +136,8 @@ categories:
       status: active
       occurrences: 1
       path: .strict-spec-driven/lessons/testing/feedback-watch-watch-7d2b50.yaml
+    lesson-a5269b:
+      title: 自动生成的接口只检查存在、不逐个调用，会漏掉参数映射错误
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/testing/lesson-a5269b.yaml

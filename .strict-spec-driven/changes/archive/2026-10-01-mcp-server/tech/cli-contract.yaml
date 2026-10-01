@@ -1,0 +1,21 @@
+schema: strict-spec-driven/delta-tech/v1
+schema_version: 1
+artifact_type: delta_tech
+schema_file: templates/strict-spec-driven/schemas/delta-tech.yaml
+target_standard: cli-contract
+operations:
+  ADDED:
+    mcp-thin-wrapper:
+      strength: MUST
+      statement: MCP 服务只做命令注册表到 MCP 的映射：每个 tool 由注册表中的命令生成，tools/call 在进程内运行同一条 wa-cli 命令（命令接受 --dir 时加 --dir，并加 --json）并原样返回其输出信封，资源只读取产物或运行只读命令；internal/mcp 不 import internal/cli 与任何领域包，命令信息与执行函数由命令层传入。新增命令时不得为 MCP 单独编写逻辑。每次 tools/call 必须不等待作者或其他外部事件即结束（会一直等待的命令不对应 tool）；tool 的参数不得让客户端读写项目目录之外的文件（路径类参数只能经已有的输出路径检查，否则不作为 tool 参数）；协议错误码按所实现的协议版本的规范选用。测试逐一调用每个 tool（按命令登记的样例），断言成功，并断言同一操作经 MCP 与 CLI 调用的结果一致。wa-cli mcp 的标准输出只写 MCP 消息，不受输出信封规则约束。
+      rationale: wa-cli 是唯一真相来源：MCP 与 CLI 共用一份实现，结果天然一致，后续命令自动获得 tool；依赖方向让协议层无法另写业务逻辑。只检查 tool 存在而不调用会漏掉参数映射错误（本变更的审查发现 version、help、skills list 的 tool 都会失败）；一直等待的调用会阻塞整个服务；只用 MCP 的 Agent 往往没有文件系统权限，路径参数会扩大它的能力。
+      enforcement:
+        method: test
+        detail: internal/cli 的 TestMCPEveryTool 按样例调用每个 tool 并断言 isError 为 false，TestMCPToolPerCommand 断言 tool 与命令一一对应、隐藏的参数不出现，TestMCPSameAsCLI 比较 MCP 与 CLI 的输出与产物；internal/mcp 的 TestNoInternalImports 确认协议层不依赖 wa-cli 的其他包。
+      examples:
+        good:
+          - tools/call feedback_add → Run([feedback add my-post --text=太长 --dir D --json])；version → Run([version --json])
+        bad:
+          - 在 internal/mcp 中直接调用 feedback.Add；或给每个 tool 都加 --dir，使不接受它的命令总是失败
+  MODIFIED: {}
+  REMOVED: {}

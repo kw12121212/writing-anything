@@ -1,0 +1,49 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: mcp-server
+sections:
+  Implementation:
+    protocol:
+      text: internal/mcp：stdio 读写（8 MiB 上限、逐行输出、写锁）、JSON-RPC 2.0 分派、2026-07-28 的 _meta 校验与 -32022、结果的 resultType 与 serverInfo、server/discover
+      status: complete
+    tools:
+      text: internal/mcp：tools/list 与 tools/call（参数校验、转换为命令行、进程内执行并串行化、structuredContent 与 isError、流式命令的 events）
+      status: complete
+    resources:
+      text: internal/mcp：resources/list、resources/read（-32002）、subscriptions/listen（确认、轮询、更新通知、取消与结束响应）、prompts/list 与 prompts/get
+      status: complete
+    cli:
+      text: internal/cli：mcp 命令（--dir 必需、--interval、--json 汇总）、从注册表生成 tool 规格（input、feedback watch 与 preview 的调整）、资源与 prompts 的提供函数；注册表与样例调用
+      status: complete
+    docs:
+      text: wa-auto 技能与 docs/GLOSSARY.md：MCP 接入说明与新术语
+      status: complete
+  Testing:
+    lint:
+      text: gofmt 检查本变更的 Go 文件
+      status: complete
+      command: test -z "$(gofmt -l internal/mcp internal/cli/mcp.go internal/cli/mcp_test.go internal/cli/registry.go internal/cli/cli_test.go)"
+    unit-tests:
+      text: 单元测试：internal/mcp 的协议处理（版本、错误码、分派、订阅、取消、超长消息）；CLI：每个命令都有 tool、MCP 与 CLI 结果一致、参数错误、资源读取与越界 URI、反馈订阅通知、prompts、mcp 命令的启动错误与 --json 汇总
+      status: complete
+      command: go test ./internal/...
+    full-regression:
+      text: 运行完整回归命令，覆盖率不低于 80%
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    spec-alignment:
+      text: 对照 mcp 与 cli delta spec、cli-contract delta tech 的每个场景与规则确认实现与测试覆盖，并按实际实现修正
+      status: complete
+    strict-ready:
+      text: 运行 strict-spec-cli ready 与 strict-spec-cli verify，确认变更产物有效
+      status: complete
+      command: strict-spec-cli ready mcp-server && strict-spec-cli verify mcp-server
+    archive-readiness:
+      text: 确认 mcp 新主规格与 delta tech 能合并，归档后路线图中的 mcp-server 标记为完成
+      status: complete
+testing_gates:
+  validation_task: full-regression
+  unit_test_task: unit-tests

@@ -1,0 +1,19 @@
+schema: strict-spec-driven/lesson/v1
+schema_version: 1
+artifact_type: lesson
+schema_file: templates/strict-spec-driven/schemas/lesson.yaml
+lesson:
+  id: lesson-a5269b
+  title: 自动生成的接口只检查存在、不逐个调用，会漏掉参数映射错误
+category: testing
+status: active
+created_at: '2026-10-01T15:17:31.641Z'
+updated_at: '2026-10-01T15:17:31.641Z'
+context: mcp-server 从命令注册表生成 MCP tool，测试只断言每条命令都有同名 tool。
+observation: 独立审查发现：服务给每次调用都加 --dir，而 version、help、skills list 不接受它，这三个 tool 每次调用都以用法错误失败；feedback watch 的 tool 还会一直等待作者操作，阻塞整个服务。
+takeaway: 由注册表或模式自动生成的接口，测试要按每个条目登记的样例真正调用一遍并断言成功；生成规则中的例外（不接受的参数、会长时间等待的命令）要在生成处显式处理。
+applies_when: 从命令注册表、Schema 或其他清单自动生成工具、接口或命令映射（如 MCP tools、HTTP 路由、Skill 命令列表）
+occurrences:
+  - origin: mcp-server
+    date: '2026-10-01'
+    evidence: internal/cli/mcp_test.go TestMCPEveryTool；internal/cli/mcp.go 的 mcpExcluded 与 Tool.Dir

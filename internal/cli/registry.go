@@ -82,7 +82,7 @@ var registry = commandSet{helpCommand, versionCommand, initCommand, validateComm
 	sourceAddCommand, sourceListCommand, draftWriteCommand, diffCommand, provenanceCommand, claimAddCommand, claimSetCommand, claimListCommand, claimRemoveCommand,
 	methodListCommand, methodShowCommand, reviewRecordCommand, reviewShowCommand, reviewResolveCommand, acceptCommand, exportCommand, previewCommand, skillsListCommand, skillsInstallCommand,
 	feedbackAddCommand, feedbackListCommand, feedbackResolveCommand, feedbackWatchCommand,
-	decisionAddCommand, decisionsCommand, decideCommand}
+	decisionAddCommand, decisionsCommand, decideCommand, mcpCommand, mcpInstallCommand}
 
 func (s commandSet) lookup(name string) *command {
 	for _, c := range s {

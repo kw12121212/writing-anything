@@ -1,0 +1,27 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: mcp-server
+approach:
+  - internal/mcp 是协议层：逐行读取标准输入（单条消息至多 8 MiB），解析 JSON-RPC 2.0，按方法分派，结果与通知经同一把锁写到标准输出（每条一行）。它不知道 wa-cli 的命令：命令层传入每个 tool 的规格（名称、说明、inputSchema、如何转换为命令行参数）与一个执行函数（等同 cli.Run），以及资源与 prompts 的提供函数。tools/call 把参数转换为命令行（命名参数一律写作 --name=value，位置参数不能以 - 开头），在进程内运行该命令（加 --dir 与 --json），标准输出解析为 structuredContent，退出码非 0 时 isError 为 true；执行串行化。
+  - 资源：工作区中 internal/schema 登记的产物与单元正文 draft.md（经 workspace.ReadRegular 读取，不跟随符号链接），URI 为 wa://file/<相对路径>；虚拟资源 wa://resolved 与 wa://feedback 分别运行 config resolved 与 feedback list 得到。subscriptions/listen 先发 notifications/subscriptions/acknowledged，之后后台按 --interval 轮询订阅的资源内容，变化时发送带 subscriptionId 的 notifications/resources/updated；notifications/cancelled 指向该请求时结束并回复 resultType complete。
+decisions:
+  latest-protocol-only:
+    decision: 只实现 MCP 2026-07-28 版协议；收到其他版本或缺少 _meta 版本的请求时分别报告 -32022（data 列出支持的版本）与 -32602
+    rationale: 作者明确要求使用最新版协议，主流 Agent 都已支持；只实现一个版本让每个请求的处理都是无状态的，测试也只需覆盖一套报文
+  registry-driven-tools:
+    decision: tool 由命令注册表生成并在进程内运行同一条命令，mcp 包不 import internal/cli
+    rationale: 满足「wa-cli 是唯一真相来源、MCP 只做薄封装」：MCP 与 CLI 的结果天然一致，新命令自动获得 tool；依赖方向保证 mcp 包无法另写业务逻辑
+  stdout-is-protocol:
+    decision: wa-cli mcp 的标准输出只写 MCP 消息；--json 只影响启动失败时的诊断，并在标准输入结束、退出前多写一行汇总信封（mcp 字段含处理的请求数），供注册表的样例调用与脚本检查
+    rationale: MCP 客户端把标准输出的每一行当作协议消息；注册时不会带 --json，汇总只用于诊断与测试
+  no-outside-paths:
+    decision: 命令的 file 参数与 skills install 的 target 参数不作为 tool 参数，读取标准输入的命令改用 input
+    rationale: 只用 MCP 的 Agent 往往没有文件系统权限；这些参数接受绝对路径，会让它读写项目目录之外的文件
+alternatives:
+  - option: 同时实现 2025-11-25 的 initialize 握手以兼容旧客户端
+    reason: 作者要求使用最新版；两套协议并存会让每个方法都要按会话状态分支，增加测试与维护成本
+risks:
+  - MCP 协议仍在演进，协议层集中在 internal/mcp，便于按版本更新
+  - 轮询订阅有间隔延迟（默认 1000 毫秒），对作者反馈的即时性足够
