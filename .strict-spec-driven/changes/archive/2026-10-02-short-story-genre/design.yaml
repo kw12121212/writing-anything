@@ -1,0 +1,27 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: short-story-genre
+approach:
+  - '内置文体照 tech-blog/wechat-marketing 的模式新增 internal/catalog/builtin/genres/short-story.yaml：单元类型 story（children: [scene]，brief_required: [premise, pov, length, key_messages]）与 scene（无必填项）；阶段 brief→outline→draft→review 与既有文体一致，全部由既有生命周期机制驱动，不新增阶段逻辑。文体不声明 claims/claim-candidates 规则（论断出处检查对虚构内容在数据层关闭），声明 length（length-range，warning，1000 到 20000 字）；rubric 为 conflict、pacing、motivation（均不 blocking，虚构质量判断留给作者）；context_budget 为 16000；不声明 default_method（结构类写作法由后续变更提供）。'
+  - 'brief 与 outline 的 Schema 各新增可选字段，向后兼容：brief.yaml 增加 premise（{text 非空, sources?: 素材 id 数组, decision?: 决策 id}）、theme（非空文本）与 pov（{person: first|second|third, character?: 非空文本}）；genre Schema 的 brief_required 枚举增加 premise、theme、pov。brief set 增加 --premise、--premise-sources、--premise-decision、--theme、--pov-person、--pov-character（空值删除字段），brief show 输出对应字段并把未关联素材且无决策的前提列为 brief.unsourced-premise、只关联未决定决策的前提列为 brief.unconfirmed-premise，与核心观点的 unsourced/unconfirmed 提问同序；两者经既有 brief 关卡成为阻塞项。'
+  - 情节节拍与场景契约都落在现有 outline 产物上：故事根单元 outline.yaml 的节即情节节拍（沿用 id/title/covers/uses，covers 指向关键转折复用覆盖检查）；outline 节新增可选契约字段 characters（非空文本数组，出场人物名）、beats（id 数组，须为同一作品根单元大纲的节 id，否则 outline.unknown-beat）与 reveal（非空文本，揭示边界）。场景单元在 outline 阶段用同一 outline.yaml 声明契约（outline set 增加 --characters、--beats、--reveal），字段命名与结构为长篇扩展（因果链、状态变化、伏笔）预留同一形态，不新建产物类型。
+decisions:
+  turning-points-as-key-messages:
+    decision: 关键转折（Key Turning Point）复用写作简报的 key_messages 条目（id、text、sources、decision），不新增独立条目类型。
+    rationale: key_messages 已具备「无 sources 且无 decision 阻塞、决策未决定阻塞」的完整提问、关卡与决策联动；里程碑完成标准只要求前提与关键转折关联作者素材或确认记录，复用可零新增机制地满足，且 avoid/scope 不引入第二套同类 gating。
+  contract-in-outline:
+    decision: 场景契约作为 outline 节的可选字段（characters、beats、reveal），存放在场景单元自己的 outline.yaml，不新建 scene.yaml 产物。
+    rationale: required_artifacts 是文体级数据、全单元共享，新增产物类型会迫使 story 根单元同样提供；场景的 outline 阶段本来就要求 outline.yaml，契约放那里不新增必需产物，且 outline set/show/校验管线可直接复用；beats 引用根单元大纲节 id 形成单一真相源，后续 novel 在同位置扩展字段即可。
+  premise-gate-codes:
+    decision: 前提的出处阻塞复用核心观点的提问/关卡形态，新增错误码 brief.unsourced-premise 与 brief.unconfirmed-premise，field 为 premise。
+    rationale: 核心观点的 unsourced/unconfirmed 已是作者确认点的一等公民（brief-gate、next-steps 均接线）；对称的新码避免把前提塞进 key_messages 的诊断 field，语义与 next 命令都能按字段给出，且不影响已发布错误码。
+alternatives:
+  - option: 新建 scene.yaml 场景契约产物并由阶段 required_artifacts 要求
+    reason: required_artifacts 按文体声明、对全部单元生效，story 根也会被要求提供；且新增产物类型要同步 schema 登记、validate、关卡与 next 命令，违背轻量契约的定位。
+  - option: 场景契约放在故事根单元大纲节上（节=场景）
+    reason: 大纲节同时充当情节节拍与场景会让「承担的节拍」失去被引用的对象，且场景是独立推进的单元，契约应在场景自己的产物里随其生命周期校验。
+risks:
+  - beats 跨单元引用（场景 outline 引用根单元 outline 的节 id）是 outline 校验第一次跨越单元目录，需注意根单元大纲缺失或非法时的降级行为（不阻断场景自身其他校验，引用检查按 warning/顺序与 covers 一致处理）。
+  - premise/pov 等新字段进入共享 brief Schema 后，所有文体的 brief set/show/help 都要同步文档与测试，避免只按 short-story 测试造成行为漂移。

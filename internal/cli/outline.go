@@ -16,7 +16,7 @@ import (
 )
 
 var outlineKeys = []outputKey{
-	{"outline", "大纲（Outline）：unit、path 与 sections（id、title、role、covers、uses、reason）；没有 outline.yaml 或失败时为 null"},
+	{"outline", "大纲（Outline）：unit、path 与 sections（id、title、role、covers、uses、reason、characters、beats、reveal）；没有 outline.yaml 或失败时为 null"},
 	{"coverage", "写作简报中每个核心观点（Key Message）的覆盖情况：keyMessage、text 与 sections（覆盖它的节）"},
 	{"gaps", "覆盖缺口（Coverage Gap）数组，每项含 code、keyMessage、section 与 message"},
 }
@@ -35,6 +35,9 @@ var outlineSetCommand = &command{
 		{"covers", flagString, "该节覆盖的核心观点（Key Message）id，用逗号分隔；整体替换，空字符串时删除"},
 		{"uses", flagString, "该节使用的素材（Source）id，用逗号分隔；整体替换，空字符串时删除"},
 		{"reason", flagString, "该节不覆盖任何核心观点的理由；空字符串时删除"},
+		{"characters", flagString, "场景契约（Scene Contract）：本场景出场的人物，用逗号分隔；整体替换，空字符串时删除"},
+		{"beats", flagString, "场景契约：本场景承担的情节节拍（Story Beat）id，用逗号分隔，指向故事根单元大纲的节；整体替换，空字符串时删除"},
+		{"reveal", flagString, "场景契约：揭示边界（Reveal Boundary），本场景不能提前透露的信息；空字符串时删除"},
 		{"after", flagString, "把该节放到这一节之后"},
 		{"before", flagString, "把该节放到这一节之前"},
 	},
@@ -67,12 +70,15 @@ var outlineShowCommand = &command{
 }
 
 type sectionView struct {
-	ID     string   `json:"id"`
-	Title  string   `json:"title"`
-	Role   *string  `json:"role"`
-	Covers []string `json:"covers"`
-	Uses   []string `json:"uses"`
-	Reason *string  `json:"reason"`
+	ID         string   `json:"id"`
+	Title      string   `json:"title"`
+	Role       *string  `json:"role"`
+	Covers     []string `json:"covers"`
+	Uses       []string `json:"uses"`
+	Reason     *string  `json:"reason"`
+	Characters []string `json:"characters"`
+	Beats      []string `json:"beats"`
+	Reveal     *string  `json:"reveal"`
 }
 
 type outlineView struct {
@@ -106,7 +112,8 @@ func (res *outlineResult) fill(ref string, o *outline.Outline, ms outline.Messag
 	if o != nil {
 		v := &outlineView{Unit: ref, Path: o.Path, Sections: []sectionView{}}
 		for _, s := range o.Sections {
-			v.Sections = append(v.Sections, sectionView{ID: s.ID, Title: s.Title, Role: optional(s.Role), Covers: nonNilStrings(s.Covers), Uses: nonNilStrings(s.Uses), Reason: optional(s.Reason)})
+			v.Sections = append(v.Sections, sectionView{ID: s.ID, Title: s.Title, Role: optional(s.Role), Covers: nonNilStrings(s.Covers), Uses: nonNilStrings(s.Uses), Reason: optional(s.Reason),
+				Characters: nonNilStrings(s.Characters), Beats: nonNilStrings(s.Beats), Reveal: optional(s.Reveal)})
 		}
 		res.Outline = v
 	}
@@ -137,7 +144,7 @@ func outlineEdit(inv *invocation, existing *outline.Outline) (outline.Edit, []wo
 		}
 		return nil
 	}
-	e.Title, e.Reason, e.Role = str("title"), str("reason"), str("role")
+	e.Title, e.Reason, e.Role, e.Reveal = str("title"), str("reason"), str("role"), str("reveal")
 	if e.Role != nil && *e.Role != "" && !brief.ValidID(*e.Role) {
 		return e, []workspace.Problem{{Code: schema.CodeSchemaViolation, Severity: workspace.SeverityError, Field: "role",
 			Message: fmt.Sprintf("role %q 不合法：应为写作法的章节或节拍 id，以小写字母开头，由小写字母、数字与连字符组成", *e.Role)}}
@@ -150,12 +157,29 @@ func outlineEdit(inv *invocation, existing *outline.Outline) (outline.Edit, []wo
 			return e, []workspace.Problem{invalidValue(name, v, "应为大纲中已有节的 id")}
 		}
 	}
-	for _, name := range []string{"title", "reason"} {
+	for _, name := range []string{"title", "reason", "reveal"} {
 		if v, ok := inv.values[name]; ok && v != "" && strings.TrimSpace(v) == "" {
 			return e, []workspace.Problem{invalidValue(name, v, "不能只含空白")}
 		}
 	}
-	for _, name := range []string{"covers", "uses"} {
+	// 场景契约（Scene Contract）：出场人物与承担的节拍；重复或空白取值在修改前报告，空字符串删除字段。
+	if v, ok := inv.values["characters"]; ok {
+		var list []string
+		if v != "" {
+			for _, c := range strings.Split(v, ",") {
+				c = strings.TrimSpace(c)
+				if c == "" {
+					return e, []workspace.Problem{invalidValue("characters", v, "出场人物不能为空；只给出一个空值表示删除全部出场人物")}
+				}
+				if slices.Contains(list, c) {
+					return e, []workspace.Problem{invalidValue("characters", v, "出场人物 "+c+" 重复")}
+				}
+				list = append(list, c)
+			}
+		}
+		e.Characters = &list
+	}
+	for _, name := range []string{"covers", "uses", "beats"} {
 		v, ok := inv.values[name]
 		if !ok {
 			continue
@@ -166,10 +190,13 @@ func outlineEdit(inv *invocation, existing *outline.Outline) (outline.Edit, []wo
 				return e, []workspace.Problem{invalidValue(name, v, "id "+x+" 重复")}
 			}
 		}
-		if name == "covers" {
+		switch name {
+		case "covers":
 			e.Covers = &list
-		} else {
+		case "uses":
 			e.Uses = &list
+		default:
+			e.Beats = &list
 		}
 	}
 	switch {
@@ -184,9 +211,9 @@ func outlineEdit(inv *invocation, existing *outline.Outline) (outline.Edit, []wo
 	if !exists && e.Title == nil {
 		return e, []workspace.Problem{invalidValue("title", inv.values["title"], "新增大纲节时必须给出 --title")}
 	}
-	if exists && e.Title == nil && e.Role == nil && e.Covers == nil && e.Uses == nil && e.Reason == nil && e.After == "" && e.Before == "" {
+	if exists && e.Title == nil && e.Role == nil && e.Covers == nil && e.Uses == nil && e.Reason == nil && e.Characters == nil && e.Beats == nil && e.Reveal == nil && e.After == "" && e.Before == "" {
 		return e, []workspace.Problem{{Code: codeInvalidValue, Severity: workspace.SeverityError,
-			Message: "没有给出要修改的内容；至少给出 --title、--role、--covers、--uses、--reason、--after 或 --before 之一"}}
+			Message: "没有给出要修改的内容；至少给出 --title、--role、--covers、--uses、--reason、--characters、--beats、--reveal、--after 或 --before 之一"}}
 	}
 	return e, nil
 }
@@ -223,6 +250,11 @@ func outlineParamNext(res *outlineResult, dir, ref string) {
 			next = append(next, shellCommand("wa-cli", "brief", "show", ref, "--dir", dir, "--json"))
 		case outline.CodeUnknownSource:
 			next = append(next, shellCommand("wa-cli", "source", "list", "--dir", dir, "--json"))
+		case outline.CodeUnknownBeat:
+			if work, _, found := strings.Cut(ref, "/"); found {
+				ref = work
+			}
+			next = append(next, shellCommand("wa-cli", "outline", "show", ref, "--dir", dir, "--json"))
 		case outline.CodeSectionNotFound:
 			next = append(next, shellCommand("wa-cli", "outline", "show", ref, "--dir", dir, "--json"))
 		}
@@ -368,6 +400,15 @@ func outlineText(res *outlineResult) string {
 			}
 			if sec.Role != nil {
 				detail += "；承担写作法的 " + *sec.Role
+			}
+			if len(sec.Characters) > 0 {
+				detail += "；出场人物 " + strings.Join(sec.Characters, "、")
+			}
+			if len(sec.Beats) > 0 {
+				detail += "；承担节拍 " + strings.Join(sec.Beats, "、")
+			}
+			if sec.Reveal != nil {
+				detail += "；不提前透露：" + *sec.Reveal
 			}
 			fmt.Fprintf(&s, "  %d. %s %s（%s）\n", i+1, sec.ID, sec.Title, detail)
 		}

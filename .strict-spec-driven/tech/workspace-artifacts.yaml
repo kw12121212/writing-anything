@@ -243,3 +243,15 @@ rules:
     enforcement:
       method: test
       detail: internal/cli 的 TestSeriesSourcesOrderAndRobustness 让系列规范包与文体规则冲突，断言 validate 报告 rule.type-conflict。
+  structural-path-parsing:
+    strength: SHOULD
+    statement: 从产物路径推导同作品其他产物位置（如「单元目录所在作品根单元的目录」）时，必须以固定结构前缀（如 workspace.WorksPath）逐段解析：作品 id 是去掉 works 前缀后的第一段；不得在完整路径中用子串搜索 /units/ 等结构分隔符定位层级，测试需构造与结构段同名的 id（如作品 id 为 units）作为回归夹具。
+    rationale: short-story-genre 审查发现 RootDir 用 strings.Index(dir, "/units/") 定位根单元目录：作品 id 本身可以叫 units（合法 id），此时解析错位、outline.unknown-beat 校验静默跳过。结构段与可变 id 段同名是可构造输入，固定前缀逐段解析不受其影响。
+    enforcement:
+      method: test
+      detail: internal/outline 的 TestSceneContractBeats 已含作品 id 为 units 的夹具，断言 outline.unknown-beat 仍被报告；代码审查时检查同类推导是否走固定前缀。
+    examples:
+      good:
+        - rest := strings.TrimPrefix(dir, workspace.WorksPath+"/"); work := rest[:strings.Index(rest, "/")]
+      bad:
+        - if i := strings.Index(dir, "/units/"); i >= 0 { root = dir[:i] }

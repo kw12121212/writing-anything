@@ -1,0 +1,11 @@
+schema_version: 1
+id: story-form
+title: 故事体
+unit_types:
+  - id: story
+    title: 故事
+    children: [scene]
+    brief_required: [premise, viewpoint]
+stages:
+  - id: brief
+    title: 写作简报

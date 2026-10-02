@@ -81,6 +81,48 @@ func TestBuiltinsAreValid(t *testing.T) {
 	}
 }
 
+// short-story 文体：以场景为单元，论断出处检查对虚构内容关闭（不声明论断类规则），
+// 评分标准覆盖冲突、节奏与人物动机（genres-and-packs 主规格的 short-story-genre）。
+func TestShortStoryGenre(t *testing.T) {
+	g, ps, ok := LoadGenre("short-story")
+	if !ok || g == nil || len(ps) > 0 {
+		t.Fatalf("LoadGenre(short-story) = %+v, %+v, %v", g, ps, ok)
+	}
+	if u := g.UnitTypes[0]; u.ID != "story" || !slices.Equal(u.Children, []string{"scene"}) ||
+		!slices.Equal(u.BriefRequired, []string{"premise", "pov", "length", "key_messages"}) {
+		t.Errorf("short-story story = %#v", u)
+	}
+	if u := g.UnitTypes[1]; u.ID != "scene" || len(u.BriefRequired) != 0 || u.Children == nil {
+		t.Errorf("short-story scene = %#v", u)
+	}
+	if len(g.Stages) != 4 {
+		t.Fatalf("short-story stages = %+v", g.Stages)
+	}
+	for _, s := range g.Stages {
+		if s.ID == "outline" && !slices.Equal(s.RequiredArtifacts, []string{"outline"}) {
+			t.Errorf("short-story outline stage = %+v", s)
+		}
+	}
+	for _, id := range []string{"claims", "claim-candidates"} {
+		if _, has := g.Rules[id]; has {
+			t.Errorf("short-story declares fiction-inapplicable rule %s", id)
+		}
+	}
+	if r := g.Rules["length"]; r.Type != "length-range" || r.Severity != "warning" {
+		t.Errorf("short-story length rule = %+v", r)
+	}
+	var rubric []string
+	for _, r := range g.Rubric {
+		rubric = append(rubric, r.ID)
+	}
+	if !slices.Equal(rubric, []string{"conflict", "pacing", "motivation"}) {
+		t.Errorf("short-story rubric = %v", rubric)
+	}
+	if g.ContextBudget != 16000 || g.DefaultMethod != "" {
+		t.Errorf("short-story budget = %d, default method = %q", g.ContextBudget, g.DefaultMethod)
+	}
+}
+
 func TestUnknownGenre(t *testing.T) {
 	if g, ps, ok := LoadGenre("no-such-genre"); ok || g != nil || ps != nil {
 		t.Fatalf("LoadGenre(no-such-genre) = %+v, %+v, %v", g, ps, ok)

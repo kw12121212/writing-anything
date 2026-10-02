@@ -2,6 +2,7 @@ package cli
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -101,6 +102,140 @@ func TestTechBlogEndToEnd(t *testing.T) {
 	}
 	if want := fixture(t, "export.md"); got != want {
 		t.Fatalf("export.md =\n%s\nwant:\n%s", got, want)
+	}
+	if code, res := runWS(t, dir, "validate"); code != 0 {
+		t.Fatalf("validate after export: %+v", res.Diagnostics)
+	}
+}
+
+// 端到端：short-story 文体。前提与关键转折关联作者素材，场景以情节节拍与轻量场景契约（Scene Contract）推进，
+// 前提或关键转折没有出处时 advance 被阻塞（short-story-genre、brief-gate、outline-artifact）。
+func TestShortStoryEndToEnd(t *testing.T) {
+	dir := t.TempDir()
+	step := func(input string, args ...string) result {
+		t.Helper()
+		code, res := runWSIn(t, dir, input, args...)
+		if code != 0 || !res.Valid {
+			t.Fatalf("%v: exit code = %d, diagnostics = %+v", args, code, res.Diagnostics)
+		}
+		return res
+	}
+	fail := func(code string, args ...string) Diagnostic {
+		t.Helper()
+		c, res := runWS(t, dir, args...)
+		if c != 1 {
+			t.Fatalf("%v: exit code = %d, diagnostics = %+v", args, c, res.Diagnostics)
+		}
+		return diag(t, res, code)
+	}
+	step("", "init", "--genre", "short-story")
+	step("", "new", "short-story", "lamp")
+	// new-short-story：根单元类型为 story，简报必填项与解析出的规则、评分标准符合文体声明。
+	if code, res := runWS(t, dir, "config", "resolved"); code != 0 {
+		t.Fatalf("resolved: %+v", res.Diagnostics)
+	} else {
+		for _, want := range []string{`"id":"short-story"`, `"briefRequired":["premise","pov","length","key_messages"]`, `"id":"conflict"`, `"id":"pacing"`, `"id":"motivation"`} {
+			if !strings.Contains(res.stdout, want) {
+				t.Errorf("resolved lacks %s", want)
+			}
+		}
+		if strings.Contains(res.stdout, `"claims"`) {
+			t.Error("resolved declares claim rules for fiction")
+		}
+	}
+	step("守灯人笔记：灯里的精灵每撒一次谎，灯就暗一分；它说它说的是真话。", "source", "add", "--type", "author-note", "--id", "idea", "--title", "前提笔记")
+	// 写作简报：前提与视角先不关联素材，关键转折（核心观点）也没有出处。
+	step("", "brief", "set", "lamp", "--premise", "灯里的精灵每撒一次谎，灯就暗一分", "--theme", "善意的谎言",
+		"--pov-person", "third", "--pov-character", "守灯人", "--length", "2000-8000",
+		"--message", "turn-1", "--message-text", "守灯人发现谎言与灯焰的联系")
+	d := fail("brief.unsourced-premise", "advance", "lamp")
+	if d.Path != ".writing-anything/works/lamp/brief.yaml" || !hasNext(d, "wa-cli help brief set --json") ||
+		!hasNext(d, "wa-cli brief show lamp --dir "+dir+" --json") {
+		t.Fatalf("unsourced premise: %+v", d)
+	}
+	if _, res := runWS(t, dir, "next", "lamp"); !strings.Contains(res.stdout, `"brief.unsourced-premise"`) ||
+		!strings.Contains(res.stdout, `"brief.unsourced-message"`) {
+		t.Fatalf("next: %s", res.stdout)
+	}
+	// 只关联未决定决策的前提阻塞推进，下一步命令指向决策队列。
+	step("", "decision", "add", "--question", "这个前提是你的设想吗", "--unit", "lamp", "--blocking")
+	step("", "brief", "set", "lamp", "--premise-decision", "dec-1")
+	if d := fail("brief.unconfirmed-premise", "advance", "lamp"); !hasNext(d, "wa-cli decisions --dir "+dir+" --json") {
+		t.Fatalf("unconfirmed premise: %+v", d)
+	}
+	step("", "decide", "dec-1", "--answer", "是", "--confirmation", "作者：前提出自我的笔记")
+	// 关键转折（核心观点）仍没有出处，关联素材后推进。
+	step("", "brief", "set", "lamp", "--message", "turn-1", "--message-sources", "idea")
+	if res := step("", "advance", "lamp"); !strings.Contains(res.stdout, `"stage":"outline"`) {
+		t.Fatalf("advance to outline: %s", res.stdout)
+	}
+	// 故事大纲：节即情节节拍（Story Beat），节拍覆盖关键转折。
+	step("", "outline", "set", "lamp", "dim", "--title", "灯变暗", "--reason", "建立日常与异常")
+	step("", "outline", "set", "lamp", "clash", "--title", "灯下对峙", "--covers", "turn-1")
+	step("", "advance", "lamp")
+	// 场景：自己的大纲声明场景契约（出场人物、承担的节拍、揭示边界）。
+	step("", "unit", "add", "lamp", "scene", "scene-1")
+	step("", "brief", "set", "lamp/scene-1", "--purpose", "守灯人与精灵在灯下对峙")
+	step("", "advance", "lamp/scene-1")
+	step("", "outline", "set", "lamp/scene-1", "scene-1", "--title", "灯下对峙", "--characters", "守灯人,精灵",
+		"--beats", "clash", "--reveal", "精灵的真实身份", "--reason", "场景契约：承担 clash 节拍，不透露精灵身份")
+	// outline show 的 --json 输出契约字段，人读文本同样列出（show-contract）。
+	if code, res := runWS(t, dir, "outline", "show", "lamp/scene-1"); code != 0 ||
+		!strings.Contains(res.stdout, `"characters":["守灯人","精灵"]`) || !strings.Contains(res.stdout, `"beats":["clash"]`) ||
+		!strings.Contains(res.stdout, `"reveal":"精灵的真实身份"`) {
+		t.Fatalf("outline show contract: exit code = %d, %s", code, res.stdout)
+	}
+	if code, stdout, _ := run(t, "outline", "show", "lamp/scene-1", "--dir", dir); code != 0 ||
+		!strings.Contains(stdout, "出场人物 守灯人、精灵") || !strings.Contains(stdout, "承担节拍 clash") || !strings.Contains(stdout, "不提前透露：精灵的真实身份") {
+		t.Fatalf("outline show text: %q", stdout)
+	}
+	if d := fail("outline.unknown-beat", "outline", "set", "lamp/scene-1", "scene-1", "--beats", "nope"); d.Field != "beats[0]" {
+		t.Fatalf("unknown beat: %+v", d)
+	}
+	if code, res := runWS(t, dir, "validate"); code != 0 {
+		t.Fatalf("validate with contract: %+v", res.Diagnostics)
+	}
+	step("", "advance", "lamp/scene-1")
+	// 场景草稿与审稿：虚构内容不做论断出处检查（没有 claim 类发现项）。
+	scene := "守灯人把油芯拧亮，问精灵为什么灯又暗了。\n\n精灵说它从不说谎，可灯焰抖了一下。\n\n守灯人想起笔记里那句话，没有拆穿。"
+	step(scene, "draft", "write", "lamp/scene-1")
+	code, lint := runWS(t, dir, "lint", "lamp/scene-1")
+	var lr struct {
+		Findings []map[string]any `json:"findings"`
+	}
+	if err := json.Unmarshal([]byte(lint.stdout), &lr); err != nil || lr.Findings == nil {
+		t.Fatalf("lint output: %v %s", err, lint.stdout)
+	}
+	for _, f := range lr.Findings {
+		if f["severity"] == "error" || strings.HasPrefix(fmt.Sprint(f["rule"]), "claim") {
+			t.Errorf("lint finding: %v", f)
+		}
+	}
+	if code != 0 {
+		t.Fatalf("lint: exit code = %d, %+v", code, lint.Diagnostics)
+	}
+	step("", "advance", "lamp/scene-1")
+	step(fixture(t, "story-review.yaml"), "review", "record", "lamp/scene-1")
+	step("", "accept", "lamp/scene-1", "--confirmed-by-author", "--confirmation", "作者：场景可以定稿")
+	if res := step("", "advance", "lamp/scene-1"); !strings.Contains(res.stdout, `"stage":"done"`) {
+		t.Fatalf("scene to done: %s", res.stdout)
+	}
+	// 导出：只导出已验收的场景，根单元以 warning 跳过。
+	res := step("", "export", "lamp")
+	var er struct {
+		Export map[string]any `json:"export"`
+	}
+	if err := json.Unmarshal([]byte(res.stdout), &er); err != nil {
+		t.Fatal(err)
+	}
+	if units := er.Export["units"].([]any); len(units) != 1 || units[0] != "lamp/scene-1" {
+		t.Fatalf("export units: %+v", er.Export)
+	}
+	if skipped := er.Export["skipped"].([]any); len(skipped) != 1 {
+		t.Fatalf("export skipped: %+v", er.Export)
+	}
+	if got := readFile(t, filepath.Join(dir, ".writing-anything", "exports", "lamp.md")); !strings.Contains(got, "守灯人把油芯拧亮") {
+		t.Fatalf("export content = %q", got)
 	}
 	if code, res := runWS(t, dir, "validate"); code != 0 {
 		t.Fatalf("validate after export: %+v", res.Diagnostics)

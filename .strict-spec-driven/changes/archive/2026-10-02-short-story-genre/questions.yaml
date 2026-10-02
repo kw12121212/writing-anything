@@ -1,0 +1,60 @@
+schema: strict-spec-driven/question-list/v1
+schema_version: 1
+artifact_type: question_list
+schema_file: templates/strict-spec-driven/schemas/question-list.yaml
+change: short-story-genre
+open: []
+resolved:
+  - id: requirement-problem
+    question: What is concretely going wrong today, and for whom?
+    context: 'Why this is asked: the change is planned against a need, and the need lives only with the requester. A "problem" here means what someone does or suffers today — not a feature that is missing. If the answer names a button, a field, a page, or an endpoint, it is a solution, and the underlying problem is still unstated. What a sufficient answer contains: who is affected, what they do today instead, and how often. Worked example: "every Monday one person spends forty minutes copying order rows into a spreadsheet to send the weekly report". What it changes: this becomes the proposal''s why, and it decides whether the change is worth making.'
+    answer: 路线图证据：单元树与生命周期目前只承载文章类文体（minimal、tech-blog、wechat-marketing），Agent 无法以场景（Scene）为单元规范地协助短篇小说；写作简报与大纲没有虚构字段，文章阶段的论断出处检查（亲历必须有来源）不适用于虚构内容。受影响的是想写短篇的作者与协助写作的 Agent：今天只能绕过规范或用文章文体硬套。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-outcome
+    question: What observable difference proves the problem is solved?
+    context: 'Why this is asked: without a success condition, nobody can tell afterwards whether the change worked. "Observable" means someone outside the system can check it without reading the code. What a sufficient answer contains: what a person will see, or no longer have to do, once this is done. Worked example: "the report is in the manager''s inbox on Monday morning without anyone assembling it". What it changes: this becomes the delta spec''s scenarios and the acceptance evidence at review time.'
+    answer: 里程碑完成标准与规划变更 details：作者提供前提与关键转折后，Agent 能只用 wa-cli 命令以场景为单元走完 简报→大纲→草稿→审稿→导出；写作简报中的前提与关键转折没有关联作者素材或确认记录时 advance 被阻塞；config resolved 能看到 short-story 文体；场景契约（出场人物、承担的节拍、揭示边界）可写入并校验。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-trigger
+    question: Why now — what forced this?
+    context: 'Why this is asked: work that nothing forced is the work most often thrown away later. This question catches a request that sounds reasonable but has no real driver behind it. What a sufficient answer contains: the concrete event, deadline, incident, or cost that made this surface now, or an honest statement that nothing did. Worked example: "the report was missed last month and it was raised with the team". What it changes: a change with no trigger is a candidate for deferral, and the answer is weighed at review before archive.'
+    answer: 路线图 short-story 里程碑（order 500）当前激活，本规划变更是其中唯一无未完成依赖的一项，且是同里程碑另外 4 个规划变更（人物卡与设定集、场景上下文与小说规则、结构类写作法、情绪与张力曲线）的直接或间接依赖；里程碑风险也明确指出文章阶段出处规则需要按文体关闭或替换。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-non-goals
+    question: What must explicitly not change?
+    context: 'Why this is asked: the requester knows which nearby behavior other people depend on, and the agent does not. A "non-goal" is something the change must leave alone even though it sits close to the work. What a sufficient answer contains: the behavior, setting, or output that must survive untouched, and who relies on it. Worked example: "do not change the saved filters — several people rely on their own". What it changes: these become the proposal''s unchanged_behavior items, which review checks the finished result against.'
+    answer: 已有 minimal、tech-blog、wechat-marketing 文体、已有内置写作法与规则的行为不变（依赖它们的作者与既有作品）；单元树推进、决策队列、素材与出处机制本身不变；论断出处检查的关闭通过 short-story 文体不声明论断类规则实现，不新增机制；人物卡与设定集、场景级上下文、结构类写作法、情绪与张力曲线、纯文本导出与长篇能力分别由后续规划变更负责，本变更不做。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-interpretation
+    question: Which reading of the request is intended, where more than one is possible?
+    context: 'Why this is asked: a short request usually admits several readings, and building the wrong one is indistinguishable from building nothing. What a sufficient answer contains: the reading that is meant, stated plainly enough to rule the others out — or a statement that only one reading exists and what it is. Worked example: "export means the version sent to the manager, not the one I read myself". What it changes: this fixes the scope boundary before any code is written, and settles disputes about what was asked for.'
+    answer: 唯一读法（依据规划变更 details）：「单元类型为场景」指 short-story 文体的根单元类型 story 之下以 scene 为子单元类型；「论断出处检查对虚构内容关闭」通过文体不声明 claims 与 claim-candidates 规则实现；「契约的数据格式与长篇一致」指字段结构为长篇扩展（因果链、状态变化、伏笔）预留同一形态，不是现在实现长篇功能；「大纲扩展为情节节拍」落在故事根单元的大纲节上。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: scene-contract-home
+    question: 轻量场景契约（出场人物、承担的节拍、揭示边界）存放在哪里：本设计选择放在场景单元自己的 outline.yaml（作为大纲节的可选字段 characters/beats/reveal），是否确认？还是希望做成独立的场景契约产物，或挂在故事根单元的大纲节上？
+    context: 路线图只说「每个场景声明轻量场景契约，数据格式与长篇一致」，没有指定存放位置。影响范围：spec delta（outline 主规格 MODIFIED vs 新增产物规格）、实现文件（internal/outline vs 新包 + internal/work 关卡）、测试（outline/schema/e2e）与后续 novel 里程碑的扩展方式。选项：A（推荐，本设计已按此拟定 delta）场景单元的 outline.yaml 新增可选字段——复用现有 outline set/show/校验管线，不新增必需产物，novel 在同位置扩展因果链、状态变化与伏笔；B 新建 scene.yaml 产物——需要新增 Schema 登记、关卡与 next 命令，且 required_artifacts 是文体级数据会迫使 story 根单元同样提供；C 挂在故事大纲节上（节=场景）——与「承担的节拍」引用关系冲突。若作者选 B 或 C，spec delta 与任务需经 strict-spec-modify 调整。
+    answer: 确认选项 A：场景契约作为场景单元自己 outline.yaml 的可选字段（characters、beats、reveal），不新建产物、不挂在故事大纲节上。
+    status: resolved
+    answered_by: human
+  - id: beats-model
+    question: 情节节拍（Story Beat）是否就作为故事根单元大纲的节（本设计选择），场景契约的 beats 字段引用这些节 id？还是节拍应该是独立于大纲的结构（例如由结构类写作法模板提供）？
+    context: 路线图说「大纲扩展为情节节拍」且「每个场景契约声明承担的节拍」，但未定义节拍与大纲节的关系；后续 story-structure-templates 变更会让大纲节通过已有 role 字段承担结构模板的节拍。影响范围：spec delta（outline 主规格 MODIFIED 的措辞与 outline.unknown-beat 校验）、internal/outline 的跨单元引用实现、测试。选项：A（推荐，本设计已按此拟定）故事大纲节=情节节拍，场景契约引用根单元大纲节 id，单一真相源，节拍覆盖关键转折复用 covers；B 节拍独立存储——需要新的产物或字段组，与 story-structure-templates 的 role 机制产生两套节拍来源；C 等结构模板变更再定——本变更的「大纲扩展为情节节拍」就没有落点，e2e 无法覆盖。若作者选 B，需经 strict-spec-modify 重拟 outline 的 delta 与任务。
+    answer: 确认选项 A：情节节拍就是故事根单元大纲的节，场景契约的 beats 字段引用根单元大纲节 id，单一真相源；节拍可用已有 covers 关联关键转折。
+    status: resolved
+    answered_by: human
+  - id: turning-points-as-key-messages
+    question: 关键转折是否复用写作简报的 key_messages 条目（id/text/sources/decision，本设计选择，story 的简报必填项含 key_messages）？还是需要独立于核心观点的「转折点」条目类型？
+    context: 路线图要求「前提与关键转折必须关联作者素材或确认记录，否则推进被阻塞」，但未指定关键转折的载体；key_messages 已有完整的 unsourced/unconfirmed 提问、关卡与决策联动。影响范围：proposal 范围、brief 主规格 delta（新增字段 vs 复用语义）、internal/brief 与 internal/work 的实现与测试、术语（docs/GLOSSARY.md 中核心观点与情节节拍/关键转折的表述）。选项：A（推荐，本设计已按此拟定）复用 key_messages——零新增 gating 机制，e2e 直接覆盖；B 新增 turning_points 条目——需要在 brief Schema、set/show/提问/关卡全套新增一套与 key_messages 几乎相同的机制，且与「情节节拍 covers 转折」的既有覆盖检查需要再打通。若作者选 B，brief 的 delta 与任务需经 strict-spec-modify 调整。
+    answer: 确认选项 A：关键转折复用写作简报的 key_messages 条目（id/text/sources/decision），story 单元类型的简报必填项含 key_messages，不新增独立条目类型。
+    status: resolved
+    answered_by: human

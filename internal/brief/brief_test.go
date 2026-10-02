@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/kw12121212/writing-anything/internal/decision"
+	"github.com/kw12121212/writing-anything/internal/schema"
 	"github.com/kw12121212/writing-anything/internal/workspace"
 )
 
@@ -69,6 +70,9 @@ func TestLoadAndCheck(t *testing.T) {
 		{"duplicate message", "schema_version: 1\nkey_messages:\n  - {id: km-1, text: a}\n  - {id: km-1, text: b}\n", "artifact.duplicate-id", "key_messages[1].id"},
 		{"unknown source", "schema_version: 1\nsources: [src-nope]\n", "brief.unknown-source", "sources[0]"},
 		{"unknown message source", "schema_version: 1\nkey_messages:\n  - {id: km-1, text: a, sources: [src-a, src-nope]}\n", "brief.unknown-source", "key_messages[0].sources[1]"},
+		{"premise unknown source", "schema_version: 1\npremise: {text: 前提, sources: [src-nope]}\n", "brief.unknown-source", "premise.sources[0]"},
+		{"premise unknown decision", "schema_version: 1\npremise: {text: 前提, decision: dec-9}\n", "brief.unknown-decision", "premise.decision"},
+		{"premise unrelated decision", "schema_version: 1\npremise: {text: 前提, decision: dec-2}\n", "brief.unrelated-decision", "premise.decision"},
 		{"unknown decision", "schema_version: 1\nkey_messages:\n  - {id: km-1, text: a, decision: dec-9}\n", "brief.unknown-decision", "key_messages[0].decision"},
 		{"unrelated decision", "schema_version: 1\nkey_messages:\n  - {id: km-1, text: a, decision: dec-2}\n", "brief.unrelated-decision", "key_messages[0].decision"},
 		{"invalid length", "schema_version: 1\nlength: {min: 3000, max: 1500}\n", "brief.invalid-length", "length"},
@@ -183,8 +187,31 @@ func TestQuestions(t *testing.T) {
 	if got := Questions(&Brief{KeyMessages: []Message{{ID: "km-1", Text: "a", Decision: "dec-2"}}}, nil, Queue{Decisions: q.Decisions, Invalid: true}); len(got) != 1 || got[0].Code != "brief.unconfirmed-message" {
 		t.Fatalf("invalid queue: %+v", got)
 	}
+	// 前提（Premise）与核心观点同样要求出处或作者的确认记录。
+	for _, tc := range []struct {
+		premise *Premise
+		code    string
+	}{
+		{&Premise{Text: "守灯人的前提"}, "brief.unsourced-premise"},
+		{&Premise{Text: "守灯人的前提", Decision: "dec-1"}, "brief.unconfirmed-premise"},
+		{&Premise{Text: "守灯人的前提", Sources: []string{"src-a"}}, ""},
+		{&Premise{Text: "守灯人的前提", Decision: "dec-2"}, ""},
+		{&Premise{Text: "守灯人的前提", Sources: []string{"src-a"}, Decision: "dec-1"}, ""},
+	} {
+		got := Questions(&Brief{Premise: tc.premise}, nil, q)
+		if tc.code == "" {
+			if len(got) != 0 {
+				t.Errorf("premise %+v: questions = %+v", tc.premise, got)
+			}
+			continue
+		}
+		if len(got) != 1 || got[0].Code != tc.code || got[0].Field != FieldPremise {
+			t.Errorf("premise %+v: questions = %+v, want %s %s", tc.premise, got, tc.code, FieldPremise)
+		}
+	}
 	for _, f := range Fields {
-		full := &Brief{Audience: "a", Purpose: "p", KeyMessages: []Message{{ID: "k", Text: "t", Sources: []string{"s"}}}, Length: &Length{1, 2}, Avoid: []string{"x"}, Sources: []string{"s"}}
+		full := &Brief{Audience: "a", Purpose: "p", Premise: &Premise{Text: "前提", Sources: []string{"s"}}, Theme: "主题",
+			Pov: &Pov{Person: "third", Character: "守灯人"}, KeyMessages: []Message{{ID: "k", Text: "t", Sources: []string{"s"}}}, Length: &Length{1, 2}, Avoid: []string{"x"}, Sources: []string{"s"}}
 		if got := Questions(full, []string{f}, q); len(got) != 0 {
 			t.Errorf("filled %s: %+v", f, got)
 		}
@@ -288,6 +315,77 @@ func TestSetCreatesAndMerges(t *testing.T) {
 	// 向流式序列追加观点后改为块式。
 	if _, _, ps := Set(root, unitDir, Edit{Message: &MessageEdit{ID: "km-2", Text: ptr("c")}}, q, noEnsure); ps != nil || !strings.Contains(read(t, root, Path(unitDir)), "key_messages:\n  - {id: km-1, text: b}\n  - id: km-2") {
 		t.Fatalf("append: %+v\n%s", ps, read(t, root, Path(unitDir)))
+	}
+}
+
+// 前提（Premise）、主题（Theme）与视角（POV）的写入、子字段修改与删除（brief-set）。
+func TestSetFictionFields(t *testing.T) {
+	root := project(t)
+	q := Queue{Decisions: []decision.Decision{{ID: "dec-1", Status: decision.StatusOpen, Units: []string{"my-post"}}}}
+	b, changed, ps := Set(root, unitDir, Edit{
+		Premise:     &PremiseEdit{Text: ptr("守灯人的前提"), Sources: &[]string{"src-a"}},
+		Theme:       ptr("善意的谎言"),
+		PovPerson:   ptr("third"),
+		PovCharacter: ptr("守灯人"),
+	}, q, noEnsure)
+	if ps != nil || !slices.Equal(changed, []string{Path(unitDir)}) || b.Premise == nil || b.Premise.Text != "守灯人的前提" ||
+		b.Theme != "善意的谎言" || b.Pov == nil || b.Pov.Person != "third" || b.Pov.Character != "守灯人" {
+		t.Fatalf("create: %+v %v %+v", b, changed, ps)
+	}
+	want := "# 写作简报（Brief）；请用 wa-cli brief set 修改。\n\nschema_version: 1\npremise:\n  text: 守灯人的前提\n  sources: [src-a]\ntheme: 善意的谎言\npov:\n  person: third\n  character: 守灯人\n"
+	if got := read(t, root, Path(unitDir)); got != want {
+		t.Fatalf("brief.yaml =\n%s\nwant\n%s", got, want)
+	}
+
+	// 只改子字段：前提关联决策；删除视角人物后 pov 仍有 person。
+	b, changed, ps = Set(root, unitDir, Edit{Premise: &PremiseEdit{Decision: ptr("dec-1")}, PovCharacter: ptr("")}, q, noEnsure)
+	if ps != nil || changed == nil || b.Premise.Decision != "dec-1" || b.Premise.Text != "守灯人的前提" || b.Pov.Character != "" || b.Pov.Person != "third" {
+		t.Fatalf("subfields: %+v %v %+v", b, changed, ps)
+	}
+	// 前提子字段的删除：空 sources 与空 decision 分别删除对应子字段，text 保留。
+	b, _, ps = Set(root, unitDir, Edit{Premise: &PremiseEdit{Sources: &[]string{}, Decision: ptr("")}}, q, noEnsure)
+	if ps != nil || b.Premise.Sources != nil || b.Premise.Decision != "" || b.Premise.Text != "守灯人的前提" {
+		t.Fatalf("clear premise subfields: %+v %+v", b, ps)
+	}
+
+	// 删除前提与视角整体；主题保留。
+	b, changed, ps = Set(root, unitDir, Edit{Premise: &PremiseEdit{Text: ptr("")}, PovPerson: ptr("")}, q, noEnsure)
+	if ps != nil || b.Premise != nil || b.Pov != nil || b.Theme != "善意的谎言" {
+		t.Fatalf("delete: %+v %+v", b, ps)
+	}
+	if got := read(t, root, Path(unitDir)); strings.Contains(got, "premise") || strings.Contains(got, "pov") || !strings.Contains(got, "theme: 善意的谎言") {
+		t.Fatalf("after delete:\n%s", got)
+	}
+
+	// 删除人称而保留视角人物时，写前复查按 Schema 拒绝，诊断指向参数 pov-person。
+	Set(root, unitDir, Edit{PovPerson: ptr("third"), PovCharacter: ptr("守灯人")}, q, noEnsure)
+	_, changed, ps = Set(root, unitDir, Edit{PovPerson: ptr("")}, q, noEnsure)
+	if changed != nil || len(ps) != 1 || ps[0].Code != schema.CodeSchemaViolation || ps[0].Path != "" || ps[0].Field != "pov-person" {
+		t.Fatalf("delete person: %v %+v", changed, ps)
+	}
+
+	// 人称不在取值范围内时，同样由写前复查拒绝。
+	_, changed, ps = Set(root, unitDir, Edit{PovPerson: ptr("omniscient")}, q, noEnsure)
+	if changed != nil || len(ps) != 1 || ps[0].Code != schema.CodeSchemaViolation || ps[0].Field != "pov-person" {
+		t.Fatalf("bad person: %v %+v", changed, ps)
+	}
+
+	// 只给子字段而没有前提时：先建出前提，写前复查报告缺少 text。
+	put(t, root, Path(unitDir), "schema_version: 1\n")
+	_, changed, ps = Set(root, unitDir, Edit{Premise: &PremiseEdit{Sources: &[]string{"src-a"}}}, q, noEnsure)
+	if changed != nil || len(ps) != 1 || ps[0].Code != schema.CodeSchemaViolation || ps[0].Field != "premise" {
+		t.Fatalf("sources without text: %v %+v", changed, ps)
+	}
+
+	// 引用未登记的素材或无关决策时，以参数名为字段拒绝，不写文件。
+	for _, e := range []Edit{
+		{Premise: &PremiseEdit{Text: ptr("前提"), Sources: &[]string{"src-nope"}}},
+		{Premise: &PremiseEdit{Text: ptr("前提"), Decision: ptr("dec-9")}},
+	} {
+		_, changed, ps = Set(root, unitDir, e, q, noEnsure)
+		if changed != nil || len(ps) != 1 || ps[0].Path != "" || (ps[0].Field != "premise-sources[0]" && ps[0].Field != "premise-decision") {
+			t.Fatalf("reject: %v %+v", changed, ps)
+		}
 	}
 }
 

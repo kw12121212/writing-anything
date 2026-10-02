@@ -1,7 +1,8 @@
-// Package brief 管理单元目录下的写作简报（Brief）brief.yaml：受众、写作目的、核心观点（Key Message）、字数范围、
-// 禁区与关联素材。本包加载与校验写作简报、按字段修改它，并按单元类型声明的简报必填项（Required Brief Field）与
-// 核心观点的出处给出仍需向作者提问的问题，供 internal/work 计算提问关卡的阻塞项。本包不 import internal/work
-// 与 internal/draft，单元目录与必填项由调用方传入；只返回结构化的问题，由命令层转换为诊断（Diagnostic）。
+// Package brief 管理单元目录下的写作简报（Brief）brief.yaml：受众、写作目的、前提（Premise）、主题（Theme）、视角（POV）、
+// 核心观点（Key Message）、字数范围、禁区与关联素材。本包加载与校验写作简报、按字段修改它，并按单元类型声明的简报必填项
+// （Required Brief Field）与前提、核心观点的出处给出仍需向作者提问的问题，供 internal/work 计算提问关卡的阻塞项。
+// 本包不 import internal/work 与 internal/draft，单元目录与必填项由调用方传入；只返回结构化的问题，
+// 由命令层转换为诊断（Diagnostic）。
 package brief
 
 import (
@@ -21,17 +22,19 @@ import (
 
 // 写作简报的错误码（Error Code）。已发布的错误码不得改名或复用。
 const (
-	CodeMissingField       = "brief.missing-field"
-	CodeUnsourcedMessage   = "brief.unsourced-message"
-	CodeUnconfirmedMessage = "brief.unconfirmed-message"
-	CodeInvalid            = "brief.invalid"
-	CodeUnknownSource      = "brief.unknown-source"
-	CodeUnknownDecision    = "brief.unknown-decision"
-	CodeUnrelatedDecision  = "brief.unrelated-decision"
-	CodeInvalidLength      = "brief.invalid-length"
-	CodeMessageNotFound    = "brief.message-not-found"
-	CodeAnchoredValue      = "brief.anchored-value"
-	CodeUnknownMethod      = "brief.unknown-method"
+	CodeMissingField        = "brief.missing-field"
+	CodeUnsourcedMessage    = "brief.unsourced-message"
+	CodeUnconfirmedMessage  = "brief.unconfirmed-message"
+	CodeUnsourcedPremise    = "brief.unsourced-premise"
+	CodeUnconfirmedPremise  = "brief.unconfirmed-premise"
+	CodeInvalid             = "brief.invalid"
+	CodeUnknownSource       = "brief.unknown-source"
+	CodeUnknownDecision     = "brief.unknown-decision"
+	CodeUnrelatedDecision   = "brief.unrelated-decision"
+	CodeInvalidLength       = "brief.invalid-length"
+	CodeMessageNotFound     = "brief.message-not-found"
+	CodeAnchoredValue       = "brief.anchored-value"
+	CodeUnknownMethod       = "brief.unknown-method"
 )
 
 // 单元目录中写作简报的文件名：brief.yaml 是结构化的写作简报，brief.md 是自由文本，不含可检查的字段。
@@ -44,6 +47,9 @@ const (
 const (
 	FieldAudience    = "audience"
 	FieldPurpose     = "purpose"
+	FieldPremise     = "premise"
+	FieldTheme       = "theme"
+	FieldPov         = "pov"
 	FieldKeyMessages = "key_messages"
 	FieldLength      = "length"
 	FieldAvoid       = "avoid"
@@ -53,12 +59,15 @@ const (
 )
 
 // Fields 是可以声明为简报必填项的字段，也是 brief.yaml 中字段的固定顺序（schema_version 之后）。
-var Fields = []string{FieldAudience, FieldPurpose, FieldKeyMessages, FieldLength, FieldAvoid, FieldSources}
+var Fields = []string{FieldAudience, FieldPurpose, FieldPremise, FieldTheme, FieldPov, FieldKeyMessages, FieldLength, FieldAvoid, FieldSources}
 
 // fieldTitles 是字段的中文名。
 var fieldTitles = map[string]string{
 	FieldAudience:    "受众",
 	FieldPurpose:     "写作目的",
+	FieldPremise:     "前提",
+	FieldTheme:       "主题",
+	FieldPov:         "视角",
 	FieldKeyMessages: "核心观点",
 	FieldLength:      "字数范围",
 	FieldAvoid:       "禁区",
@@ -69,6 +78,9 @@ var fieldTitles = map[string]string{
 var fieldQuestions = map[string]string{
 	FieldAudience:    "这篇文章写给谁看？他们是什么背景、已经知道什么、最关心什么？",
 	FieldPurpose:     "你希望读者读完后知道什么、相信什么或去做什么？",
+	FieldPremise:     "这个故事的前提（Premise）是什么？请用一两句你自己的话概括核心设想，并说明出自哪份素材或由你确认。",
+	FieldTheme:       "这个故事想让读者体会到什么主题（Theme）？",
+	FieldPov:         "这个故事用哪种人称与视角（POV）叙述？谁可以看到内心？",
 	FieldKeyMessages: "这篇文章必须传达的核心观点有哪些？每条请尽量用你自己的原话说，并说明出自哪份素材。",
 	FieldLength:      "全文大约写多少字？请给出下限和上限。",
 	FieldAvoid:       "有没有不能写、不想写或需要回避的内容？",
@@ -83,6 +95,19 @@ type Message struct {
 	Decision string   `json:"decision"`
 }
 
+// Premise 是前提（Premise）：故事的核心设想，可关联素材与决策作为出处。Decision 为空表示未关联决策。
+type Premise struct {
+	Text     string   `json:"text"`
+	Sources  []string `json:"sources"`
+	Decision string   `json:"decision"`
+}
+
+// Pov 是视角（POV）：人称（first、second、third）与可选的视角人物。Character 为空表示未指定视角人物。
+type Pov struct {
+	Person    string `json:"person"`
+	Character string `json:"character"`
+}
+
 // Length 是字数范围。
 type Length struct {
 	Min int `json:"min"`
@@ -94,6 +119,9 @@ type Brief struct {
 	Path        string    `json:"-"` // brief.yaml 相对项目目录的路径
 	Audience    string    `json:"audience"`
 	Purpose     string    `json:"purpose"`
+	Premise     *Premise  `json:"premise"`
+	Theme       string    `json:"theme"`
+	Pov         *Pov      `json:"pov"`
 	KeyMessages []Message `json:"key_messages"`
 	Length      *Length   `json:"length"`
 	Avoid       []string  `json:"avoid"`
@@ -184,6 +212,22 @@ func check(root, rel string, b *Brief, q Queue) []workspace.Problem {
 			out = append(out, errorAt(CodeUnknownSource, rel, fmt.Sprintf("sources[%d]", i), unknownSource(id)))
 		}
 	}
+	if p := b.Premise; p != nil {
+		for j, id := range p.Sources {
+			if !source.Registered(root, id) {
+				out = append(out, errorAt(CodeUnknownSource, rel, fmt.Sprintf("premise.sources[%d]", j), unknownSource(id)))
+			}
+		}
+		if p.Decision != "" && !q.Invalid {
+			field := "premise.decision"
+			switch d := q.find(p.Decision); {
+			case d == nil:
+				out = append(out, errorAt(CodeUnknownDecision, rel, field, unknownDecision(p.Decision)))
+			case !slices.Contains(d.Units, ref):
+				out = append(out, errorAt(CodeUnrelatedDecision, rel, field, unrelatedPremiseDecision(p.Decision, ref)))
+			}
+		}
+	}
 	seen := map[string]bool{}
 	for i, m := range b.KeyMessages {
 		if seen[m.ID] {
@@ -262,6 +306,11 @@ func unrelatedDecision(id, ref string) string {
 	return fmt.Sprintf("决策 %s 没有关联单元 %s，不能作为该单元核心观点的确认记录；请用 wa-cli decision add --unit %s 登记向作者确认该观点的决策", id, ref, ref)
 }
 
+// unrelatedPremiseDecision 是前提版本的 unrelatedDecision：确认的是作者的前提设想，不是核心观点。
+func unrelatedPremiseDecision(id, ref string) string {
+	return fmt.Sprintf("决策 %s 没有关联单元 %s，不能作为该单元前提（Premise）的确认记录；请用 wa-cli decision add --unit %s 登记向作者确认前提的决策", id, ref, ref)
+}
+
 func unknownDecision(id string) string {
 	return "决策队列（Decision Queue）中没有决策 " + id + "；请先用 wa-cli decision add 登记"
 }
@@ -299,7 +348,7 @@ type Question struct {
 }
 
 // Questions 返回写作简报 b（nil 表示没有可检查的字段）仍需向作者提问的问题：required 中每个未填写的必填项，
-// 然后是每个没有出处或只关联未决定决策的核心观点。
+// 然后是没有出处或只关联未决定决策的前提，最后是每个没有出处或只关联未决定决策的核心观点。
 func Questions(b *Brief, required []string, q Queue) []Question {
 	if b == nil {
 		b = &Brief{}
@@ -311,6 +360,20 @@ func Questions(b *Brief, required []string, q Queue) []Question {
 		}
 		out = append(out, Question{Code: CodeMissingField, Field: f, Question: fieldQuestions[f],
 			Message: fmt.Sprintf("写作简报（Brief）缺少必填项 %s（%s）；请向作者提问：%s", f, fieldTitles[f], fieldQuestions[f])})
+	}
+	if p := b.Premise; p != nil {
+		switch {
+		case len(p.Sources) == 0 && p.Decision == "":
+			question := fmt.Sprintf("前提「%s」出自哪里？请提供包含你原话的素材，或确认这是你的设想。", p.Text)
+			out = append(out, Question{Code: CodeUnsourcedPremise, Field: FieldPremise, Question: question,
+				Message: fmt.Sprintf("前提（Premise）没有出处：既没有关联素材，也没有作者的确认记录（Confirmation Record）；请向作者提问：%s", question)})
+		case len(p.Sources) == 0:
+			if d := q.find(p.Decision); q.Invalid || d == nil || d.Status != decision.StatusDecided {
+				question := fmt.Sprintf("前提「%s」是否是你的设想？请确认决策 %s。", p.Text, p.Decision)
+				out = append(out, Question{Code: CodeUnconfirmedPremise, Field: FieldPremise, Question: question,
+					Message: fmt.Sprintf("前提（Premise）只关联了尚未决定的决策 %s，还没有作者的确认记录；请向作者提问：%s", p.Decision, question)})
+			}
+		}
 	}
 	for i, m := range b.KeyMessages {
 		if len(m.Sources) > 0 {
@@ -339,6 +402,12 @@ func filled(b *Brief, f string) bool {
 		return strings.TrimSpace(b.Audience) != "" // 与 brief set 一致：只含空白（包括全角空格）视为未填写
 	case FieldPurpose:
 		return strings.TrimSpace(b.Purpose) != ""
+	case FieldPremise:
+		return b.Premise != nil && strings.TrimSpace(b.Premise.Text) != ""
+	case FieldTheme:
+		return strings.TrimSpace(b.Theme) != ""
+	case FieldPov:
+		return b.Pov != nil && b.Pov.Person != ""
 	case FieldKeyMessages:
 		return len(b.KeyMessages) > 0
 	case FieldLength:

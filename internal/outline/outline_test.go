@@ -127,6 +127,85 @@ func TestLoadAndCheck(t *testing.T) {
 	}
 }
 
+// 场景契约（Scene Contract）：beats 引用同一作品根单元大纲的节（outline.unknown-beat），根单元没有大纲时不检查。
+func TestSceneContractBeats(t *testing.T) {
+	root := project(t)
+	child := unitDir + "/units/intro"
+	put(t, root, rel, "schema_version: 1\nsections:\n  - {id: b1, title: 灯变暗, reason: r}\n  - {id: clash, title: 灯下对峙, reason: r}\n")
+	put(t, root, child+"/outline.yaml", "schema_version: 1\nsections:\n  - {id: scene-1, title: 灯下对峙, characters: [守灯人, 精灵], beats: [b1, b9], reveal: 精灵的真实身份}\n")
+	o, fatal, refs := LoadLenient(root, child, Messages{})
+	if o == nil || fatal != nil || len(refs) != 1 || refs[0].Code != CodeUnknownBeat || refs[0].Field != "sections[0].beats[1]" || refs[0].Path != child+"/outline.yaml" {
+		t.Fatalf("LoadLenient = %+v, %+v, %+v", o, fatal, refs)
+	}
+	if _, ps := Load(root, child, Messages{}); len(ps) != 1 || ps[0].Code != CodeUnknownBeat {
+		t.Fatalf("Load = %+v", ps)
+	}
+	if s := o.Sections[0]; !slices.Equal(s.Characters, []string{"守灯人", "精灵"}) || !slices.Equal(s.Beats, []string{"b1", "b9"}) || s.Reveal != "精灵的真实身份" {
+		t.Fatalf("section = %+v", s)
+	}
+	// 根单元大纲缺失时不做引用检查。
+	os.Remove(abs(root, rel))
+	if o, fatal, refs = LoadLenient(root, child, Messages{}); o == nil || fatal != nil || refs != nil {
+		t.Fatalf("no root outline: %+v %+v %+v", o, fatal, refs)
+	}
+	// 根单元大纲不合法时同样不检查。
+	put(t, root, rel, "schema_version: 1\nsections:\n  - {id: b1, title: t, note: x}\n")
+	if o, fatal, refs = LoadLenient(root, child, Messages{}); o == nil || fatal != nil || refs != nil {
+		t.Fatalf("invalid root outline: %+v %+v %+v", o, fatal, refs)
+	}
+	// 作品 id 与结构段 units 同名时同样按固定前缀解析（structural-path-parsing）。
+	sameName := ".writing-anything/works/units"
+	put(t, root, sameName+"/outline.yaml", "schema_version: 1\nsections:\n  - {id: b1, title: 灯变暗, reason: r}\n")
+	put(t, root, sameName+"/units/s1/outline.yaml", "schema_version: 1\nsections:\n  - {id: scene-1, title: 灯下对峙, beats: [b9]}\n")
+	if _, fatal, refs := LoadLenient(root, sameName+"/units/s1", Messages{}); fatal != nil || len(refs) != 1 || refs[0].Code != CodeUnknownBeat || refs[0].Field != "sections[0].beats[0]" {
+		t.Fatalf("work named units: %+v %+v", fatal, refs)
+	}
+
+	// 根单元大纲自身的节也可以引用同大纲的节（节拍组）。
+	put(t, root, rel, "schema_version: 1\nsections:\n  - {id: b1, title: 灯变暗, reason: r, beats: [b1]}\n")
+	if o, ps := Load(root, unitDir, messages(t, root)); o == nil || ps != nil {
+		t.Fatalf("self reference: %+v %+v", o, ps)
+	}
+}
+
+// 场景契约字段经 outline set 写入与删除（outline-set）。
+func TestSetSceneContract(t *testing.T) {
+	root := project(t)
+	child := unitDir + "/units/intro"
+	ensure := func() ([]string, []workspace.Problem) { return nil, nil }
+	put(t, root, child+"/brief.yaml", "schema_version: 1\n")
+	put(t, root, rel, "schema_version: 1\nsections:\n  - {id: clash, title: 灯下对峙, reason: r}\n")
+	o, changed, ps := Set(root, child, Edit{ID: "scene-1", Title: ptr("灯下对峙"), Characters: &[]string{"守灯人", "精灵"}, Beats: &[]string{"clash"}, Reveal: ptr("精灵的真实身份")}, Messages{}, ensure)
+	if ps != nil || !slices.Equal(changed, []string{child + "/outline.yaml"}) || o.Sections[0].ID != "scene-1" ||
+		!slices.Equal(o.Sections[0].Characters, []string{"守灯人", "精灵"}) || !slices.Equal(o.Sections[0].Beats, []string{"clash"}) || o.Sections[0].Reveal != "精灵的真实身份" {
+		t.Fatalf("set contract: %+v %v %+v", o, changed, ps)
+	}
+	want := "# 大纲（Outline）；请用 wa-cli outline set 与 wa-cli outline remove 修改。\n\nschema_version: 1\nsections:\n  - id: scene-1\n    title: 灯下对峙\n    characters: [守灯人, 精灵]\n    beats: [clash]\n    reveal: 精灵的真实身份\n"
+	if got := read(t, root, child+"/outline.yaml"); got != want {
+		t.Fatalf("outline.yaml =\n%s\nwant\n%s", got, want)
+	}
+	// 删除契约字段。
+	if o, changed, ps = Set(root, child, Edit{ID: "scene-1", Characters: &[]string{}, Beats: &[]string{}, Reveal: ptr("")}, Messages{}, noEnsure); ps != nil ||
+		o.Sections[0].Characters != nil || o.Sections[0].Beats != nil || o.Sections[0].Reveal != "" || changed == nil {
+		t.Fatalf("clear contract: %+v %v %+v", o, changed, ps)
+	}
+	// 本次参数给出的 beats 引用根单元大纲中不存在的节时拒绝，不写文件。
+	before := read(t, root, child+"/outline.yaml")
+	if _, changed, ps = Set(root, child, Edit{ID: "scene-1", Beats: &[]string{"b9"}}, Messages{}, noEnsure); changed != nil ||
+		len(ps) != 1 || ps[0].Code != CodeUnknownBeat || ps[0].Field != "beats[0]" || ps[0].Path != "" {
+		t.Fatalf("unknown beat: %v %+v", changed, ps)
+	}
+	if got := read(t, root, child+"/outline.yaml"); got != before {
+		t.Fatalf("file changed:\n%s", got)
+	}
+	// 已有节中的悬空 beats 引用不阻止修改其他字段（cross-artifact-references）。
+	put(t, root, child+"/outline.yaml", "schema_version: 1\nsections:\n  - {id: scene-1, title: 灯下对峙, beats: [b9]}\n")
+	if o, changed, ps = Set(root, child, Edit{ID: "scene-1", Beats: &[]string{"clash"}}, Messages{}, noEnsure); ps != nil || changed == nil ||
+		!slices.Equal(o.Sections[0].Beats, []string{"clash"}) {
+		t.Fatalf("repair dangling: %+v %v %+v", o, changed, ps)
+	}
+}
+
 func TestCoverageAndGaps(t *testing.T) {
 	root := project(t)
 	ms := messages(t, root)

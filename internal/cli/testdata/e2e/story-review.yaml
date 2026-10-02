@@ -1,0 +1,4 @@
+rubric:
+  - {item: conflict, verdict: pass, evidence: 对峙围绕灯焰与谎言展开，冲突明确, paragraphs: [1]}
+  - {item: pacing, verdict: pass, evidence: 从日常到对峙再收束，节奏与内容匹配, paragraphs: [1]}
+  - {item: motivation, verdict: pass, evidence: 守灯人问出真相是因为灯快灭了，动机可见, paragraphs: [1]}

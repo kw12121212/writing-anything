@@ -14,25 +14,28 @@ import (
 )
 
 // sectionOrder 是大纲节中字段的固定顺序。
-var sectionOrder = []string{"id", "title", "role", "covers", "uses", "reason"}
+var sectionOrder = []string{"id", "title", "role", "covers", "uses", "reason", "characters", "beats", "reveal"}
 
 // Edit 是一次 outline set 的修改：按 ID 新增或修改一节。指针为 nil 的字段不修改；取值为空（空字符串、空数组）表示删除
 // 该字段。After 或 Before 非空时把该节放到指定节之后或之前。新增时调用方须给出 Title，否则写前复查报告缺少 title。
 type Edit struct {
-	ID            string
-	Title         *string
-	Role          *string // 承担的写作法章节或节拍 id；空字符串表示删除
-	Covers        *[]string
-	Uses          *[]string
-	Reason        *string
+	ID         string
+	Title      *string
+	Role       *string // 承担的写作法章节或节拍 id；空字符串表示删除
+	Covers     *[]string
+	Uses       *[]string
+	Reason     *string
+	Characters *[]string // 场景契约：出场人物；空数组表示删除
+	Beats      *[]string // 场景契约：承担的情节节拍 id；空数组表示删除
+	Reveal     *string   // 场景契约：揭示边界；空字符串表示删除
 	After, Before string
 }
 
 // Set 按 e 修改单元目录 dir 下的 outline.yaml：不存在时创建，已存在时只修改涉及的节，保留其他内容与注释。覆盖缺口不阻止
 // 写入。ensure 在写出前确保单元目录存在，返回新建的单元目录。修改后的取值与原有取值相同时不写文件，changed 为空。由参数
-// 引起的问题不填路径，字段为参数名（covers[i]、uses[i]、title、reason、after、before）；出错时不修改文件。
+// 引起的问题不填路径，字段为参数名（covers[i]、uses[i]、beats[i]、title、reason、reveal、after、before）；出错时不修改文件。
 func Set(root, dir string, e Edit, ms Messages, ensure func() ([]string, []workspace.Problem)) (*Outline, []string, []workspace.Problem) {
-	if ps := checkEdit(root, e, ms); len(ps) > 0 {
+	if ps := checkEdit(root, dir, e, ms); len(ps) > 0 {
 		return nil, nil, ps
 	}
 	// 已有文件中的引用问题不阻止修改（写作简报删除核心观点后，要能用 wa-cli 修复大纲）；本次参数的引用已由 checkEdit 检查。
@@ -127,14 +130,15 @@ func paramOf(field string) string {
 	if !ok || !strings.HasPrefix(field, "sections[") {
 		return ""
 	}
-	if name, _, _ := strings.Cut(rest, "["); slices.Contains([]string{"title", "role", "covers", "uses", "reason"}, name) {
+	if name, _, _ := strings.Cut(rest, "["); slices.Contains([]string{"title", "role", "covers", "uses", "reason", "characters", "beats", "reveal"}, name) {
 		return rest
 	}
 	return ""
 }
 
-// checkEdit 检查修改引用的核心观点在写作简报中、素材已登记；给出 covers 而写作简报不通过校验时返回写作简报的问题。
-func checkEdit(root string, e Edit, ms Messages) []workspace.Problem {
+// checkEdit 检查修改引用的核心观点在写作简报中、素材已登记、承担的节拍在根单元大纲中；给出 covers 而写作简报不通过校验时
+// 返回写作简报的问题。根单元大纲缺失或不通过校验时不检查 beats（引用问题照常由 validate 报告）。
+func checkEdit(root, dir string, e Edit, ms Messages) []workspace.Problem {
 	var out []workspace.Problem
 	if e.Role != nil && *e.Role != "" && ms.Method != nil && ms.Method.Parts() != nil && !slices.ContainsFunc(ms.Method.Parts(), func(p catalog.MethodPart) bool { return p.ID == *e.Role }) {
 		out = append(out, errorAt(CodeUnknownRole, "", "role", fmt.Sprintf("role %s 不是写作法 %s（%s）的章节或节拍；可用的有 %s", *e.Role, ms.Method.ID, ms.Method.Title, partIDs(ms.Method.Parts()))))
@@ -153,6 +157,15 @@ func checkEdit(root string, e Edit, ms Messages) []workspace.Problem {
 		for i, id := range *e.Uses {
 			if !source.Registered(root, id) {
 				out = append(out, errorAt(CodeUnknownSource, "", fmt.Sprintf("uses[%d]", i), unknownSource(id)))
+			}
+		}
+	}
+	if e.Beats != nil && len(*e.Beats) > 0 {
+		if ids, ok := beatIDs(root, RootDir(dir)); ok {
+			for i, id := range *e.Beats {
+				if !slices.Contains(ids, id) {
+					out = append(out, errorAt(CodeUnknownBeat, "", fmt.Sprintf("beats[%d]", i), unknownBeat(id)))
+				}
 			}
 		}
 	}
@@ -191,7 +204,10 @@ func apply(secs *yaml.Node, rel string, e Edit) *workspace.Problem {
 		key  string
 		v    *string
 		list *[]string
-	}{{"title", e.Title, nil}, {"role", e.Role, nil}, {"covers", nil, e.Covers}, {"uses", nil, e.Uses}, {"reason", e.Reason, nil}} {
+	}{
+		{"title", e.Title, nil}, {"role", e.Role, nil}, {"covers", nil, e.Covers}, {"uses", nil, e.Uses}, {"reason", e.Reason, nil},
+		{"characters", nil, e.Characters}, {"beats", nil, e.Beats}, {"reveal", e.Reveal, nil},
+	} {
 		var n *yaml.Node
 		switch {
 		case kv.v != nil:

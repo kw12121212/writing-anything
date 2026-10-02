@@ -7,3 +7,8 @@ sections:
   - id: background
     title: 背景
     reason: 交代背景，不承载核心观点
+  - id: scene-1
+    title: 灯下对峙
+    characters: [守灯人, 精灵]
+    beats: [why]
+    reveal: 精灵的真实身份

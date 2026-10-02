@@ -16,9 +16,20 @@ import (
 	"go.yaml.in/yaml/v3"
 )
 
+// PremiseEdit 修改前提（Premise）：整体或子字段修改，nil 的字段不动；Text 为空字符串表示删除前提整体。
+type PremiseEdit struct {
+	Text     *string
+	Sources  *[]string // 空数组表示删除 sources
+	Decision *string   // 空字符串表示删除 decision
+}
+
 // Edit 是一次 brief set 的修改。指针或 Set* 为零值的字段不修改；取值为空（空字符串、nil 的 Length、空数组）表示删除该字段。
 type Edit struct {
 	Audience, Purpose *string
+	Premise           *PremiseEdit // 前提（含子字段修改）；nil 表示不修改前提
+	Theme             *string
+	PovPerson         *string // 视角的人称（first、second、third）；空字符串表示删除人称（两者都删除后删除 pov）
+	PovCharacter      *string // 视角人物；空字符串表示删除
 	SetLength         bool
 	Length            *Length
 	SetAvoid          bool
@@ -97,8 +108,24 @@ func Set(root, dir string, e Edit, q Queue, ensure func() ([]string, []workspace
 func paramOf(field string) string {
 	head, rest, _ := strings.Cut(field, ".")
 	switch {
-	case head == FieldAudience || head == FieldPurpose || head == FieldMethod || strings.HasPrefix(head, FieldAvoid) || strings.HasPrefix(head, FieldSources):
+	case head == FieldAudience || head == FieldPurpose || head == FieldTheme || head == FieldMethod || strings.HasPrefix(head, FieldAvoid) || strings.HasPrefix(head, FieldSources):
 		return head
+	case head == FieldPremise:
+		switch {
+		case rest == "" || rest == "text":
+			return "premise"
+		case strings.HasPrefix(rest, "sources"):
+			return "premise-" + rest
+		case rest == "decision":
+			return "premise-decision"
+		}
+	case head == FieldPov:
+		switch {
+		case rest == "" || rest == "person":
+			return "pov-person"
+		case rest == "character":
+			return "pov-character"
+		}
 	case strings.HasPrefix(head, FieldLength):
 		return FieldLength
 	case strings.HasPrefix(head, FieldKeyMessages+"["):
@@ -129,6 +156,25 @@ func checkEdit(root, ref string, e Edit, q Queue) []workspace.Problem {
 	for i, id := range e.Sources {
 		if !source.Registered(root, id) {
 			out = append(out, errorAt(CodeUnknownSource, "", fmt.Sprintf("sources[%d]", i), unknownSource(id)))
+		}
+	}
+	if p := e.Premise; p != nil {
+		if p.Sources != nil {
+			for i, id := range *p.Sources {
+				if !source.Registered(root, id) {
+					out = append(out, errorAt(CodeUnknownSource, "", fmt.Sprintf("premise-sources[%d]", i), unknownSource(id)))
+				}
+			}
+		}
+		if p.Decision != nil && *p.Decision != "" {
+			switch d := q.find(*p.Decision); {
+			case q.Invalid:
+				out = append(out, errorAt(decision.CodeInvalidQueue, decision.Path, "", "决策队列（Decision Queue）无法加载，无法确认决策 "+*p.Decision+" 是否存在；请先修复 "+decision.Path))
+			case d == nil:
+				out = append(out, errorAt(CodeUnknownDecision, "", "premise-decision", unknownDecision(*p.Decision)))
+			case !slices.Contains(d.Units, ref):
+				out = append(out, errorAt(CodeUnrelatedDecision, "", "premise-decision", unrelatedPremiseDecision(*p.Decision, ref)))
+			}
 		}
 	}
 	if m := e.Message; m != nil {
@@ -171,6 +217,25 @@ func apply(doc *yaml.Node, rel string, e Edit) *workspace.Problem {
 			n = workspace.Str(*kv.v)
 		}
 		if p := setField(m, rel, kv.key, n); p != nil {
+			return p
+		}
+	}
+	if e.Theme != nil {
+		var n *yaml.Node
+		if *e.Theme != "" {
+			n = workspace.Str(*e.Theme)
+		}
+		if p := setField(m, rel, FieldTheme, n); p != nil {
+			return p
+		}
+	}
+	if e.Premise != nil {
+		if p := applyPremise(m, rel, *e.Premise); p != nil {
+			return p
+		}
+	}
+	if e.PovPerson != nil || e.PovCharacter != nil {
+		if p := applyPov(m, rel, e.PovPerson, e.PovCharacter); p != nil {
 			return p
 		}
 	}
@@ -242,6 +307,99 @@ func apply(doc *yaml.Node, rel string, e Edit) *workspace.Problem {
 	}
 	if msgs != nil && len(msgs.Content) == 0 {
 		return setField(m, rel, FieldKeyMessages, nil)
+	}
+	return nil
+}
+
+// premiseOrder 是前提中子字段的固定顺序。
+var premiseOrder = []string{"text", "sources", "decision"}
+
+// applyPremise 在文档上修改前提：Text 为空字符串时删除前提整体，否则新建或修改前提映射，只改给出的子字段。
+func applyPremise(m *yaml.Node, rel string, p PremiseEdit) *workspace.Problem {
+	if p.Text != nil && *p.Text == "" {
+		return setField(m, rel, FieldPremise, nil)
+	}
+	node, _ := workspace.Lookup(m, FieldPremise)
+	if node == nil {
+		if p.Text == nil {
+			// 只改子字段而没有前提文本：写前复查会因缺少 text 拒绝；这里先建出 premise，让复查报告它。
+			node = &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
+			if _, ok := workspace.SetKey(m, append(append([]string{"schema_version"}, Fields...), FieldMethod), FieldPremise, node); !ok {
+				return anchored(rel, FieldPremise)
+			}
+		} else {
+			node = &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map", Content: []*yaml.Node{workspace.Str("text"), workspace.Str(*p.Text)}}
+			if _, ok := workspace.SetKey(m, append(append([]string{"schema_version"}, Fields...), FieldMethod), FieldPremise, node); !ok {
+				return anchored(rel, FieldPremise)
+			}
+			p.Text = nil // 已写入 text，下面只处理 sources 与 decision
+		}
+	}
+	if !workspace.Plain(node) || workspace.HasMerge(node) {
+		return anchored(rel, FieldPremise)
+	}
+	if p.Text != nil {
+		if _, ok := workspace.SetKey(node, premiseOrder, "text", workspace.Str(*p.Text)); !ok {
+			return anchored(rel, FieldPremise+".text")
+		}
+	}
+	if p.Sources != nil {
+		if _, ok := workspace.SetKey(node, premiseOrder, "sources", workspace.Seq(*p.Sources, true)); !ok {
+			return anchored(rel, FieldPremise+".sources")
+		}
+	}
+	if p.Decision != nil {
+		var n *yaml.Node
+		if *p.Decision != "" {
+			n = workspace.Str(*p.Decision)
+		}
+		if _, ok := workspace.SetKey(node, premiseOrder, "decision", n); !ok {
+			return anchored(rel, FieldPremise+".decision")
+		}
+	}
+	if len(node.Content) == 0 {
+		return setField(m, rel, FieldPremise, nil)
+	}
+	return nil
+}
+
+// applyPov 在文档上修改视角：只改给出的子字段；子字段都删除后删除 pov 整体。
+func applyPov(m *yaml.Node, rel string, person, character *string) *workspace.Problem {
+	node, _ := workspace.Lookup(m, FieldPov)
+	if node == nil {
+		if person == nil || *person == "" {
+			// 没有可设置的视角；命令层在修改前已拒绝只给 --pov-character 的情况。
+			return nil
+		}
+		node = &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map", Content: []*yaml.Node{workspace.Str("person"), workspace.Str(*person)}}
+		if _, ok := workspace.SetKey(m, append(append([]string{"schema_version"}, Fields...), FieldMethod), FieldPov, node); !ok {
+			return anchored(rel, FieldPov)
+		}
+		person = nil // person 已写入，下面只处理 character
+	}
+	if !workspace.Plain(node) || workspace.HasMerge(node) {
+		return anchored(rel, FieldPov)
+	}
+	if person != nil {
+		var n *yaml.Node
+		if *person != "" {
+			n = workspace.Str(*person)
+		}
+		if f, ok := workspace.SetKey(node, []string{"person", "character"}, "person", n); !ok {
+			return anchored(rel, FieldPov+"."+f)
+		}
+	}
+	if character != nil {
+		var n *yaml.Node
+		if *character != "" {
+			n = workspace.Str(*character)
+		}
+		if f, ok := workspace.SetKey(node, []string{"person", "character"}, "character", n); !ok {
+			return anchored(rel, FieldPov+"."+f)
+		}
+	}
+	if len(node.Content) == 0 {
+		return setField(m, rel, FieldPov, nil)
 	}
 	return nil
 }

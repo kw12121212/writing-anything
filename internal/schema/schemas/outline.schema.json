@@ -19,7 +19,15 @@
           "covers": {"$ref": "common.schema.json#/$defs/ids"},
           "uses": {"$ref": "common.schema.json#/$defs/ids"},
           "reason": {"type": "string", "pattern": "\\S"},
-          "role": {"$ref": "common.schema.json#/$defs/id", "description": "该节承担的写作法章节或节拍 id"}
+          "role": {"$ref": "common.schema.json#/$defs/id", "description": "该节承担的写作法章节或节拍 id"},
+          "characters": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {"type": "string", "pattern": "\\S"},
+            "description": "轻量场景契约（Scene Contract）：本场景出场的角色"
+          },
+          "beats": {"$ref": "common.schema.json#/$defs/ids", "description": "轻量场景契约：本场景承担的情节节拍（Story Beat）id，指向同一作品根单元大纲的节"},
+          "reveal": {"type": "string", "pattern": "\\S", "description": "轻量场景契约：揭示边界（Reveal Boundary），本场景不能提前透露的信息"}
         }
       }
     }

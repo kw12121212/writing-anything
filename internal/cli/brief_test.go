@@ -117,6 +117,57 @@ func TestBriefSet(t *testing.T) {
 	}
 }
 
+// 前提（Premise）、主题（Theme）与视角（POV）：写入、关联素材、整体删除与参数拒绝（brief-set、brief-artifact）。
+func TestBriefSetFictionFields(t *testing.T) {
+	dir := briefWork(t)
+	code, res := runBrief(t, dir, "brief", "set", "my-post", "--premise", "灯里的精灵每撒一次谎，灯就暗一分",
+		"--premise-sources", "src-a", "--theme", "善意的谎言", "--pov-person", "third", "--pov-character", "守灯人", "--length", "2000-8000")
+	if code != 0 || !res.Valid {
+		t.Fatalf("set premise: exit code = %d, diagnostics = %+v", code, res.Diagnostics)
+	}
+	p := res.Brief["premise"].(map[string]any)
+	if p["text"] != "灯里的精灵每撒一次谎，灯就暗一分" || p["sources"].([]any)[0] != "src-a" || p["decision"] != nil {
+		t.Fatalf("premise = %v", p)
+	}
+	if res.Brief["theme"] != "善意的谎言" || res.Brief["pov"].(map[string]any)["person"] != "third" ||
+		res.Brief["pov"].(map[string]any)["character"] != "守灯人" {
+		t.Fatalf("brief = %v", res.Brief)
+	}
+	if code, stdout, _ := run(t, "brief", "show", "my-post", "--dir", dir); code != 0 ||
+		!strings.Contains(stdout, "前提：灯里的精灵") || !strings.Contains(stdout, "视角：第三人称（视角人物：守灯人）") {
+		t.Fatalf("show text: %q", stdout)
+	}
+	// 删除视角人物后剩 person；删除人称时整体删除 pov；删除前提整体。
+	runBrief(t, dir, "brief", "set", "my-post", "--pov-character=")
+	if code, res = runBrief(t, dir, "brief", "set", "my-post", "--pov-person=", "--premise="); code != 0 ||
+		res.Brief["pov"] != nil || res.Brief["premise"] != nil {
+		t.Fatalf("delete pov/premise: exit code = %d, brief = %v", code, res.Brief)
+	}
+	// 参数拒绝：人称不在取值范围内；素材未登记；没有前提时只给子字段。
+	for _, tt := range []struct {
+		name  string
+		args  []string
+		code  string
+		field string
+	}{
+		{"bad person", []string{"--pov-person", "omniscient"}, "input.invalid-value", ""},
+		{"character without person", []string{"--pov-character", "守灯人"}, "input.invalid-value", ""},
+		{"unknown premise source", []string{"--premise", "前提", "--premise-sources", "src-nope"}, "brief.unknown-source", "premise-sources[0]"},
+		{"subfield without premise", []string{"--premise-sources", "src-a"}, "input.invalid-value", ""},
+	} {
+		code, res := runBrief(t, dir, append([]string{"brief", "set", "my-post"}, tt.args...)...)
+		if d := diag(t, res.result, tt.code); code != 1 || d.Field != tt.field || !hasNext(d, "wa-cli help brief set --json") {
+			t.Fatalf("%s: exit code = %d, diag = %+v", tt.name, code, d)
+		}
+	}
+	// 前提没有出处时出现在提问中（brief.unsourced-premise）。
+	runBrief(t, dir, "brief", "set", "my-post", "--audience", "读者", "--purpose", "读一个故事", "--premise", "没有出处的前提")
+	if code, res = runBrief(t, dir, "brief", "show", "my-post"); code != 0 ||
+		!slices.Equal(questionSummary(res.Questions), []string{"brief.unsourced-premise premise"}) {
+		t.Fatalf("unsourced premise: exit code = %d, questions = %v", code, res.Questions)
+	}
+}
+
 func TestBriefSetRejects(t *testing.T) {
 	dir := briefWork(t)
 	runBrief(t, dir, "brief", "set", "my-post", "--audience", "读者", "--message", "km-1", "--message-text", "观点")

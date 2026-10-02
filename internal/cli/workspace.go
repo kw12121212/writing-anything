@@ -568,7 +568,8 @@ func next(p workspace.Problem, dir string) []string {
 		return []string{initCmd}
 	case source.CodeModified:
 		return []string{validateAll}
-	case decision.CodeBlocking, brief.CodeMissingField, brief.CodeUnsourcedMessage, brief.CodeUnconfirmedMessage, brief.CodeInvalid,
+	case decision.CodeBlocking, brief.CodeMissingField, brief.CodeUnsourcedMessage, brief.CodeUnconfirmedMessage,
+		brief.CodeUnsourcedPremise, brief.CodeUnconfirmedPremise, brief.CodeInvalid,
 		outline.CodeInvalid, outline.CodeUncoveredMessage, outline.CodeMissingReason, marketing.CodeInvalid, marketing.CodeMissingField, marketing.CodeTooManyHeadlines, marketing.CodeHeadlineUnasked, marketing.CodeHeadlineStale:
 		return blockerNext(dir, p.Code, p.Path)
 	case outline.CodeMissingPart, outline.CodeMethodOrder, outline.CodeUnknownRole:

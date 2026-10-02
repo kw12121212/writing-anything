@@ -23,7 +23,7 @@
           "brief_required": {
             "type": "array",
             "uniqueItems": true,
-            "items": {"enum": ["audience", "purpose", "key_messages", "length", "avoid", "sources"]}
+            "items": {"enum": ["audience", "purpose", "premise", "theme", "pov", "key_messages", "length", "avoid", "sources"]}
           }
         }
       }

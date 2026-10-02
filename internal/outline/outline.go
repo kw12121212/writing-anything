@@ -28,6 +28,7 @@ const (
 	CodeMissingReason    = "outline.missing-reason"
 	CodeUnknownMessage   = "outline.unknown-message"
 	CodeUnknownSource    = "outline.unknown-source"
+	CodeUnknownBeat      = "outline.unknown-beat"
 	CodeSectionNotFound  = "outline.section-not-found"
 	CodeAnchoredValue    = "outline.anchored-value"
 	CodeMissingPart      = "outline.missing-method-part"
@@ -41,14 +42,18 @@ const (
 	MDName   = "outline.md"
 )
 
-// Section 是一个大纲节；未设置的数组为 nil，未设置的 reason 为空字符串。
+// Section 是一个大纲节；未设置的数组为 nil，未设置的 reason 为空字符串。Characters、Beats 与 Reveal 是轻量场景契约
+// （Scene Contract）字段：出场人物、承担的情节节拍（Story Beat）与揭示边界（Reveal Boundary），用于虚构文体。
 type Section struct {
-	ID     string   `json:"id"`
-	Title  string   `json:"title"`
-	Role   string   `json:"role"` // 该节承担的写作法章节或节拍 id；空表示不承担
-	Covers []string `json:"covers"`
-	Uses   []string `json:"uses"`
-	Reason string   `json:"reason"`
+	ID         string   `json:"id"`
+	Title      string   `json:"title"`
+	Role       string   `json:"role"` // 该节承担的写作法章节或节拍 id；空表示不承担
+	Covers     []string `json:"covers"`
+	Uses       []string `json:"uses"`
+	Reason     string   `json:"reason"`
+	Characters []string `json:"characters"`
+	Beats      []string `json:"beats"`
+	Reveal     string   `json:"reveal"`
 }
 
 // Outline 是一份已通过校验的大纲。
@@ -178,9 +183,12 @@ func checkIDs(rel string, o *Outline) []workspace.Problem {
 	return out
 }
 
-// checkRefs 检查 covers 引用写作简报中的核心观点（写作简报不通过校验时不检查）、uses 引用已登记的素材。
+// checkRefs 检查 covers 引用写作简报中的核心观点（写作简报不通过校验时不检查）、uses 引用已登记的素材，
+// 以及场景契约的 beats 引用同一作品根单元大纲的节（根单元没有大纲或不通过校验时不检查）。
 func checkRefs(root, rel string, o *Outline, ms Messages) []workspace.Problem {
 	var out []workspace.Problem
+	var beats []string
+	beatsKnown := false
 	for i, s := range o.Sections {
 		if len(ms.Problems) == 0 {
 			for j, id := range s.Covers {
@@ -194,8 +202,60 @@ func checkRefs(root, rel string, o *Outline, ms Messages) []workspace.Problem {
 				out = append(out, errorAt(CodeUnknownSource, rel, fmt.Sprintf("sections[%d].uses[%d]", i, j), unknownSource(id)))
 			}
 		}
+		if len(s.Beats) > 0 {
+			if !beatsKnown {
+				beats, beatsKnown = beatIDs(root, RootDir(strings.TrimSuffix(rel, "/"+FileName)))
+			}
+			if beatsKnown {
+				for j, id := range s.Beats {
+					if !slices.Contains(beats, id) {
+						out = append(out, errorAt(CodeUnknownBeat, rel, fmt.Sprintf("sections[%d].beats[%d]", i, j), unknownBeat(id)))
+					}
+				}
+			}
+		}
 	}
 	return out
+}
+
+// RootDir 返回单元目录 dir 所在作品根单元的目录：根单元的目录是它本身，子单元目录形如 <作品>/units/<id>。
+// 作品 id 是去掉 works 前缀后的第一段，不能在完整路径中搜索 /units/——作品 id 本身可以叫 units（structural-path-parsing）。
+func RootDir(dir string) string {
+	if !strings.HasPrefix(dir, workspace.WorksPath+"/") {
+		return dir
+	}
+	rest := strings.TrimPrefix(dir, workspace.WorksPath+"/")
+	if i := strings.Index(rest, "/"); i >= 0 {
+		return workspace.WorksPath + "/" + rest[:i]
+	}
+	return dir
+}
+
+// beatIDs 返回作品根单元目录 rootDir 下大纲（Outline）的节 id，即可引用的情节节拍（Story Beat）。根单元没有大纲、
+// 或大纲不通过 Schema 与节 id 唯一性检查时不做引用检查，返回 false。
+func beatIDs(root, rootDir string) ([]string, bool) {
+	rel := Path(rootDir)
+	data, ok, err := workspace.ReadRegular(root, rel)
+	if err != nil || !ok {
+		return nil, false
+	}
+	doc, p := schema.Parse(data)
+	if p != nil {
+		return nil, false
+	}
+	if ps := schema.Named("outline").ValidateNode(doc); len(ps) > 0 {
+		return nil, false
+	}
+	var o Outline
+	catalog.Decode(doc, &o)
+	if len(checkIDs(rel, &o)) > 0 {
+		return nil, false
+	}
+	ids := make([]string, len(o.Sections))
+	for i, s := range o.Sections {
+		ids[i] = s.ID
+	}
+	return ids, true
 }
 
 func unknownMessage(id string) string {
@@ -204,6 +264,10 @@ func unknownMessage(id string) string {
 
 func unknownSource(id string) string {
 	return "素材（Source）" + id + " 未登记；大纲节只能使用已用 wa-cli source add 登记的素材"
+}
+
+func unknownBeat(id string) string {
+	return "情节节拍（Story Beat）" + id + " 不在故事根单元的大纲（Outline）节中；场景契约（Scene Contract）的 beats 只能引用根单元大纲的节 id"
 }
 
 // Cover 是一个核心观点的覆盖情况：Sections 为 covers 含它的节 id，按大纲顺序。

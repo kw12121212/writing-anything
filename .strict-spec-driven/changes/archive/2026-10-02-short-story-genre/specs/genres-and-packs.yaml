@@ -1,0 +1,25 @@
+schema: strict-spec-driven/delta-spec/v1
+schema_version: 1
+artifact_type: delta_spec
+schema_file: templates/strict-spec-driven/schemas/delta-spec.yaml
+target_spec: genres-and-packs
+operations:
+  ADDED:
+    short-story-genre:
+      strength: MUST
+      statement: wa-cli 必须随二进制提供内置的 short-story 文体（短篇小说（Short Story））：单元类型 story（子单元类型 scene，简报必填项为 premise、pov、length 与 key_messages，关键转折复用核心观点条目）与 scene（不声明简报必填项）；阶段依次为 brief（必需产物 brief）、outline（outline）、draft（draft）与 review（review 与 acceptance）；不声明默认写作法，也不声明论断类规则（claims 与 claim-candidates），论断出处检查对虚构内容关闭；规则为 length（length-range，warning，1000 到 20000 字）；评分标准为 conflict（冲突清晰）、pacing（节奏得当）与 motivation（人物动机可信）；上下文预算为 16000。它与其他内置文体一样通过文体的校验。
+      scenarios:
+        new-short-story:
+          - GIVEN: 刚用 wa-cli init --genre short-story --dir D 初始化的工作区
+          - WHEN: 运行 wa-cli new short-story my-story --dir D --json，再运行 wa-cli config resolved --dir D --json
+          - THEN: work.yaml 的 genre 为 short-story、type 为 story、stage 为 brief；resolved.rules 含 length 且不含 claims 与 claim-candidates，resolved.rubric 含 conflict、pacing 与 motivation，unitTypes 中 story 的 briefRequired 为 [premise, pov, length, key_messages]、scene 的为空数组；退出码都为 0
+        fiction-claims-off:
+          - GIVEN: short-story 作品 my-story 的 draft.md 含亲历式叙述，作品没有关联素材的论断
+          - WHEN: 运行 wa-cli lint my-story --dir D --json
+          - THEN: findings 不含 type 为 claim-sources 或 claim-candidates 的发现项，退出码为 0
+        short-story-e2e:
+          - GIVEN: 用 wa-cli init --genre short-story --dir D 初始化的工作区
+          - WHEN: 只用 wa-cli 命令完成：new、source add（作者的前提笔记）、brief set（premise 关联素材、pov、length 与作为关键转折的 key_messages，转折关联素材）、advance、根单元按情节节拍 outline set（节 covers 关键转折）、advance、unit add 场景、场景 brief set、场景 outline set（characters、beats 与 reveal）、advance、draft write、lint（无 error 级与论断类发现项）、advance、review record、accept（给出作者确认）与 advance，最后 export
+          - THEN: 场景 stage 为 done，导出文件只含该场景正文（未验收的根单元以 warning 跳过），validate 通过；前提或关键转折没有关联作者素材或确认记录时 advance 被拒绝
+  MODIFIED: {}
+  REMOVED: {}

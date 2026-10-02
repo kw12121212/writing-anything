@@ -1,0 +1,44 @@
+# 短篇小说（Short Story）：以场景（Scene）为单元推进 简报 → 大纲 → 草稿 → 审稿与验收。虚构内容不做论断出处检查：
+# 前提与关键转折（写作简报中的核心观点）必须关联作者素材或确认记录。故事根单元的大纲节是情节节拍（Story Beat），
+# 每个场景在自己的大纲里声明轻量场景契约（Scene Contract：出场人物、承担的节拍、揭示边界）。默认写作法在后续的
+# 结构类写作法变更中提供，作者可先通过写作简报选用已有的写作法。
+schema_version: 1
+id: short-story
+title: 短篇小说
+description: 以场景为单元的短篇小说：作者提供前提、人物与关键转折，Agent 按场景草拟、审稿并导出；虚构内容不做论断出处检查。
+unit_types:
+  - id: story
+    title: 故事
+    children: [scene]
+    brief_required: [premise, pov, length, key_messages]
+  - id: scene
+    title: 场景
+stages:
+  - id: brief
+    title: 写作简报
+    required_artifacts: [brief]
+  - id: outline
+    title: 大纲
+    required_artifacts: [outline]
+  - id: draft
+    title: 草稿
+    required_artifacts: [draft]
+  - id: review
+    title: 审稿与验收
+    required_artifacts: [review, acceptance]
+rules:
+  length:
+    type: length-range
+    severity: warning
+    params: {min: 1000, max: 20000}
+rubric:
+  - id: conflict
+    title: 冲突清晰
+    description: 每个场景有明确的冲突或张力来源，读者知道人物在争什么。
+  - id: pacing
+    title: 节奏得当
+    description: 情节节拍推进的快慢与内容匹配，没有拖沓或仓促收尾。
+  - id: motivation
+    title: 人物动机可信
+    description: 人物的行动有可见的动机，关键选择不依赖巧合。
+context_budget: 16000
