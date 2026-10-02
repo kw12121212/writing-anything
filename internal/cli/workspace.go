@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/kw12121212/writing-anything/internal/brief"
+	"github.com/kw12121212/writing-anything/internal/canon"
 	"github.com/kw12121212/writing-anything/internal/catalog"
 	"github.com/kw12121212/writing-anything/internal/decision"
 	"github.com/kw12121212/writing-anything/internal/draft"
@@ -177,6 +178,8 @@ func runValidate(inv *invocation) int {
 					problems = append(problems, source.CheckArtifact(dir, checked[0])...)
 				case "claims":
 					problems = append(problems, draft.CheckArtifact(dir, checked[0])...)
+				case "canon":
+					problems = append(problems, canon.CheckArtifact(dir, checked[0])...)
 				case "brief":
 					problems = append(problems, brief.CheckArtifact(dir, checked[0])...)
 				case "outline":
@@ -456,8 +459,9 @@ func checkWorkspace(dir string) (checked []string, works []*work.Work, problems 
 	echecked, eps := draft.CheckEdits(dir, works)
 	tchecked, tps := series.Check(dir)
 	ychecked, yps := series.CheckSummaries(dir, works)
-	checked = slices.Concat(checked, more, wchecked, schecked, uchecked, bchecked, ochecked, fchecked, rchecked, mchecked, dchecked, lchecked, xchecked, cchecked, pchecked, echecked, tchecked, ychecked)
-	return checked, works, slices.Concat(problems, ps, wps, sps, ups, bps, ops, fps, rps, mps, dps, lps, xps, cps, pps, eps, tps, yps)
+	kchecked, kps := canon.CheckWorks(dir, works)
+	checked = slices.Concat(checked, more, wchecked, schecked, uchecked, bchecked, ochecked, fchecked, rchecked, mchecked, dchecked, lchecked, xchecked, cchecked, pchecked, echecked, tchecked, ychecked, kchecked)
+	return checked, works, slices.Concat(problems, ps, wps, sps, ups, bps, ops, fps, rps, mps, dps, lps, xps, cps, pps, eps, tps, yps, kps)
 }
 
 // defaultMethodOf 返回单元产物 rel 所在作品的文体的默认写作法；作品无法加载时为空（其问题由作品校验报告）。
@@ -611,6 +615,18 @@ func next(p workspace.Problem, dir string) []string {
 	case draft.CodeUnknownSource:
 		// 素材引用涉及多个产物，用整体校验复查。
 		return []string{shellCommand("wa-cli", "source", "list", "--dir", dir, "--json"), validateAll}
+	case canon.CodeUnknownSource:
+		// 素材引用涉及多个产物，用整体校验复查（canon-validation）。
+		return []string{shellCommand("wa-cli", "source", "list", "--dir", dir, "--json"), validateAll}
+	case canon.CodeUnknownCharacter:
+		// 人物引用涉及同一设定集的多个条目，用整体校验复查（canon-validation）。
+		if strings.HasSuffix(p.Path, "/"+canon.FileName) {
+			return []string{shellCommand("wa-cli", "canon", "list", work.RefOf(strings.TrimSuffix(p.Path, "/"+canon.FileName)), "--dir", dir, "--json"), validateAll}
+		}
+		return []string{validateAll}
+	case canon.CodeUnknownDecision:
+		// 决策引用涉及多个产物，用整体校验复查（canon-validation）。
+		return []string{shellCommand("wa-cli", "decisions", "--all", "--dir", dir, "--json"), validateAll}
 	case catalog.CodeDuplicateID:
 		if strings.HasSuffix(p.Path, "/"+draft.ClaimsName) || strings.HasSuffix(p.Path, "/"+brief.FileName) || strings.HasSuffix(p.Path, "/"+outline.FileName) {
 			return []string{validateAll}

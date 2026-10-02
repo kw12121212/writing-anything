@@ -25,7 +25,7 @@ rules:
     rationale: Agent 与 MCP 按同一形状解析所有命令输出；逐命令自定义 JSON 会破坏契约，嵌套数组为 null 同样会让按数组遍历的调用方出错。
     enforcement:
       method: test
-      detail: internal/cli 的测试递归遍历 config resolved 的 JSON 输出，断言除可为 null 的对象字段外没有 null。
+      detail: internal/cli 的测试递归遍历 config resolved 的 JSON 输出，断言除可为 null 的对象字段外没有 null；TestRegistryConsistency 另对每条命令登记的样例调用做递归扫描：任何为 null 的字段名都必须登记在测试内的 nullableFields 清单（合法可空的对象字段），数组字段一律不得为 null——逐命令手写断言漏检嵌套数组为 null 的缝隙由此获得统一防线（characters-and-light-canon 的 canon add members:null 即从该缝隙漏出）。
   stable-error-codes:
     strength: MUST
     statement: 诊断（Diagnostic）的错误码（Error Code）采用 <领域>.<kebab-case> 格式，以常量定义在产生它的包中；已发布的错误码不得改名、删除后复用或改变含义，新增错误码不得与已有错误码重名。

@@ -306,3 +306,70 @@ func TestTechBlogGenreAndStrip(t *testing.T) {
 
 // fullAIDisclosure 是全部段落出自 Agent（或 Agent 起草、作者改过）时的内置 AI 参与说明。
 const fullAIDisclosure = "本文在 AI 辅助下完成：约 100% 的内容由 AI 起草，均经作者审阅确认。"
+
+// 端到端：short-story 文体下登记设定集（人物卡、人物关系、作者钦定的世界规则），Agent 修改钦定条目被拒绝并生成
+// 阻塞决策，作者决定允许后携带 --decision 重试成功（characters-and-light-canon）。
+func TestShortStoryCanonEndToEnd(t *testing.T) {
+	dir := t.TempDir()
+	step := func(input string, args ...string) result {
+		t.Helper()
+		code, res := runWSIn(t, dir, input, args...)
+		if code != 0 || !res.Valid {
+			t.Fatalf("%v: exit code = %d, diagnostics = %+v", args, code, res.Diagnostics)
+		}
+		return res
+	}
+	refuse := func(args ...string) (int, result) {
+		t.Helper()
+		code, res := runWSIn(t, dir, "", args...)
+		if code == 0 {
+			t.Fatalf("%v: expected refusal", args)
+		}
+		return code, res
+	}
+	step("", "init", "--genre", "short-story")
+	step("", "new", "short-story", "lighthouse")
+	step("守灯人五十岁，左手有旧伤。精灵只在夜里出现。灯油只能燃烧到黎明。", "source", "add", "--type", "author-note", "--id", "notes")
+	// 设定集：两张人物卡（character 条目）、一条人物关系（relationship 引用人物条目）与一条作者钦定的世界规则。
+	step("", "canon", "add", "lighthouse", "--type", "character", "--name", "守灯人", "--text", "五十岁，左手有旧伤", "--sources", "notes")
+	step("", "canon", "add", "lighthouse", "--type", "character", "--name", "精灵", "--text", "只在夜里出现", "--sources", "notes")
+	step("", "canon", "add", "lighthouse", "--type", "relationship", "--text", "守灯人是精灵的旧识", "--members", "canon-1,canon-2")
+	step("", "canon", "add", "lighthouse", "--type", "world-rule", "--text", "灯油只能燃烧到黎明", "--sources", "notes", "--pin")
+	// 写作简报：前提与关键转折都关联作者素材（short-story 的推进关卡）。
+	step("", "brief", "set", "lighthouse", "--premise", "守灯人必须在天亮前弄清精灵的身份", "--premise-sources", "notes")
+	step("", "brief", "set", "lighthouse", "--pov-person", "third")
+	step("", "brief", "set", "lighthouse", "--length", "2000-8000")
+	step("", "brief", "set", "lighthouse", "--message", "reveal", "--message-text", "精灵就是当年救过守灯人的船长", "--message-sources", "notes")
+	// Agent 试图修改作者钦定的条目：被拒绝，自动生成阻塞决策，canon.yaml 不变。
+	_, res := refuse("canon", "set", "lighthouse", "canon-4", "--text", "灯油能烧两天")
+	var pinned Diagnostic
+	for _, d := range res.Diagnostics {
+		if d.Code == "canon.author-pinned" {
+			pinned = d
+		}
+	}
+	if pinned.Code == "" || !strings.Contains(pinned.Message, "作者钦定") {
+		t.Fatalf("diagnostics = %+v", res.Diagnostics)
+	}
+	if len(res.ChangedPaths) != 1 || res.ChangedPaths[0] != ".writing-anything/decisions.yaml" {
+		t.Fatalf("changedPaths = %v", res.ChangedPaths)
+	}
+	// 阻塞决策阻塞推进（decision.blocking）。
+	if _, res = refuse("advance", "lighthouse"); len(res.Diagnostics) == 0 || res.Diagnostics[0].Code != "decision.blocking" {
+		t.Fatalf("advance diagnostics = %+v", res.Diagnostics)
+	}
+	// 作者决定允许后，携带 --decision 重试成功，条目记录该决策。
+	step("", "decide", "dec-1", "--option", "a", "--confirmation", "作者同意放宽这条世界规则")
+	code, res := runWSIn(t, dir, "", "canon", "set", "lighthouse", "canon-4", "--text", "灯油能烧两天", "--decision", "dec-1")
+	if code != 0 || !res.Valid {
+		t.Fatalf("retry: exit code = %d, diagnostics = %+v", code, res.Diagnostics)
+	}
+	if b, _ := os.ReadFile(filepath.Join(dir, ".writing-anything", "works", "lighthouse", "canon.yaml")); !strings.Contains(string(b), "decision: dec-1") {
+		t.Errorf("canon.yaml:\n%s", b)
+	}
+	// 阻塞解除：推进进入大纲阶段；删除普通条目、列出与整体校验全绿。
+	step("", "advance", "lighthouse")
+	step("", "canon", "remove", "lighthouse", "canon-3")
+	step("", "canon", "list", "lighthouse")
+	step("", "validate")
+}

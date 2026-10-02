@@ -1,0 +1,30 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: characters-and-light-canon
+approach:
+  - canon.yaml 作为作品根单元目录下的新结构化产物，走 internal/schema 统一登记（路径模式 .writing-anything/works/*/canon.yaml，仅作品根目录，子单元目录中的同名文件不识别为该产物类型）；条目结构与论断（Claim）同构：id、type、text、可选 name 与 sources，再加 protection 与 relationship 的 members，人物条目即人物卡（Character Sheet）。canon add/set/remove/list 复用 claims 已验证的追加、局部修改、注释保留、锚点拒绝与取值未变不写管线，错误码形态与 claim.* 对称（canon.unknown-source、canon.not-found、canon.anchored-value 等）。
+  - 作者钦定（Author-pinned）保护落在写路径：protection 为 author-pinned 的条目，canon set/remove（含把 protection 改为 normal）未给出 --decision 时拒绝（canon.author-pinned，不修改 canon.yaml），并在拒绝的同时向决策队列幂等地追加一条阻塞决策——question 为固定格式「是否允许<修改|删除>作者钦定的设定条目 <entry>（<name>）？」，options 为 a 允许、b 保持不变，recommendation 为 b，blocking 为 true，units 为作品根单元；同一条目与同一操作已有 open 的此类决策时不重复追加。作者 wa-cli decide 后，携带 --decision <id> 重试：校验该决策存在、由本命令族生成、已决定且 choice 为 a 时执行，条目的 decision 字段记录该 id。升为钦定（--pin）与新增即钦定不需要决策，只加强保护。
+  - 出处与引用沿用事实库既有语义，不新增关卡：sources 为可选的素材 id 关联（虚构文体已按文体关闭出处阻塞，设定条目的出处由素材或作者钦定本身承载）；relationship 的 members 引用同文件 character 条目，未命中报告 canon.unknown-character；validate 整体校验与 validate <path> 按系列产物的先例在本规格的新增要求中声明 canon.yaml 的检查（条目 id 唯一、sources 已登记、members 合法、decision 引用存在），计入 checked。canon 不进入任何阶段的 required_artifacts，不设推进关卡。
+decisions:
+  canon-in-fact-store:
+    decision: 设定集作为事实库（Fact Store）的扩展，落在作品根单元目录的 canon.yaml，沿用与素材、论断相同的 id、出处与保护级别体系，不新建独立存储。
+    rationale: 这是里程碑 intake 问题 canon-model 的推荐答案；与论断同构的数据模型让 Schema 登记、结构化编辑、注释保留与错误码形态全部复用已有管线；短篇是单作品场景，作品级单一文件即够用，系列级共享由后续里程碑在系列层叠加引用，不动 canon.yaml 的结构。
+  author-pinned-via-decisions:
+    decision: 作者钦定条目的修改与删除授权完全走既有决策队列：拒绝时自动生成阻塞决策，作者 decide 后以 --decision 携带该决策重试，不引入新的授权机制。
+    rationale: 决策队列已是作者确认的一等公民（decide --confirmation 的确认记录、decision-blocking 的阻塞语义、advance 的拒绝接线），自动生成的决策按 decision-add 形态写入即天然阻塞作品根单元的推进；另造一套 --confirmation 或「作者直接改文件」的路径会形成第二个确认载体，且后者失去可追溯的确认记录。
+  no-canon-gating:
+    decision: canon 条目不进入任何阶段的必需产物，也不新增推进关卡，canon.yaml 对所有文体都是可选产物。
+    rationale: 设定在写作简报之前就可能需要登记（作者提供前提与人物时）；设为关卡会强迫不需要设定集的作者与文体；里程碑完成标准只要求保护与命令，不要求关卡；与素材、论断同为事实库的可选产物保持一致。
+alternatives:
+  - option: 独立存储的设定集（工作区顶层 canon/ 目录或系列级共享文件）
+    reason: 系列共享是真实需求，但短篇里程碑先验证单作品模型；跨作品共享需要先解决归属与冲突语义，现在做会提前耦合系列机制，且作品级文件不妨碍后续在系列层叠加引用。
+  - option: 富人物卡：年龄、目标、弧光等结构化字段
+    reason: 轻量设定集的定位与「规范包只能是数据」的数据驱动理念都指向先用自由文本 text 承载描述；结构化字段要等真实校验需求（如连续性审查的数值矛盾检查）出现再加，避免 Schema 与命令参数面提前膨胀。
+  - option: 修改钦定条目用 --confirmation 原话摘要直接授权
+    reason: 与 decide 的确认记录平行形成两套确认载体；且没有决策队列的 open/decided 状态，无法把「哪次修改经作者同意」接入阻塞与解除语义，也难以幂等地记录重复尝试。
+risks:
+  - canon set/remove 拒绝路径上的决策写入是「失败时的写入」：必须幂等（同一作品、条目与操作已有 open 决策不重复生成）并如实出现在 changedPaths，防止反复重试灌满决策队列；决策队列本身无法加载时不追加，报告其诊断。
+  - 决策授权（--decision 参数）的判定依赖自动生成决策的 question 固定格式，格式要在 delta 规格中写死并在测试中逐字断言，避免实现漂移导致授权失效或被误放行。
+  - canon.yaml 只在作品根目录识别：子单元目录中的 canon.yaml 不是已知产物类型，validate <path> 的 kind 判定与 Schema 路径模式必须一致，测试要覆盖该负例。

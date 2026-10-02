@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"slices"
 	"sort"
@@ -248,12 +249,95 @@ func TestHelpJSON(t *testing.T) {
 	}
 }
 
+// nullableFields 是命令样例 --json 输出中允许为 null 的字段名清单（对象字段）；数组字段一律不得为 null，
+// 没有元素时必须是空数组（cli-contract/shared-envelope）。新增合法可空的字段时在此登记。
+var nullableFields = map[string]bool{
+	"acceptance":       true,
+	"aiDisclosure":     true,
+	"answer":           true,
+	"brief":            true,
+	"choice":           true,
+	"column":           true,
+	"commit":           true,
+	"confirmation":     true,
+	"contextBudget":    true,
+	"cta":              true,
+	"decidedAt":        true,
+	"decision":         true,
+	"defaultGenre":     true,
+	"digest":           true,
+	"feedback":         true,
+	"genre":            true,
+	"headline":         true,
+	"headlineDecision": true,
+	"imageList":        true,
+	"key":              true,
+	"length":           true,
+	"line":             true,
+	"lock":             true,
+	"median":           true,
+	"method":           true,
+	"note":             true,
+	"opening":          true,
+	"outline":          true,
+	"paragraph":        true,
+	"path":             true,
+	"pov":              true,
+	"premise":          true,
+	"profile":          true,
+	"quote":            true,
+	"rate":             true,
+	"rationale":        true,
+	"recommendation":   true,
+	"recorded":         true,
+	"ref":              true,
+	"reveal":           true,
+	"review":           true,
+	"role":             true,
+	"rubric":           true,
+	"section":          true,
+	"series":           true,
+	"spread":           true,
+	"stats":            true,
+	"styleProfile":     true,
+	"suggestion":       true,
+	"summary":          true,
+	"text":             true,
+	"theme":            true,
+	"title":            true,
+	"url":              true,
+	"value":            true,
+	"waiver":           true,
+}
+
+// assertNoUnexpectedNulls 递归断言 v 中没有清单之外的 null：数组字段为 null 或未登记的可空字段都会被检出。
+func assertNoUnexpectedNulls(t *testing.T, path string, v any) {
+	t.Helper()
+	switch x := v.(type) {
+	case map[string]any:
+		for k, item := range x {
+			if item == nil {
+				if !nullableFields[k] {
+					t.Errorf("%s.%s = null：数组字段必须为空数组，未登记的可空字段不允许为 null（shared-envelope）", path, k)
+				}
+				continue
+			}
+			assertNoUnexpectedNulls(t, path+"."+k, item)
+		}
+	case []any:
+		for i, item := range x {
+			assertNoUnexpectedNulls(t, fmt.Sprintf("%s[%d]", path, i), item)
+		}
+	}
+}
+
 // TestRegistryConsistency 确认 help --json 的声明与命令的实际行为一致。
 func TestRegistryConsistency(t *testing.T) {
 	for _, d := range helpDocs(t, "help", "--json") {
 		t.Run(d.Name, func(t *testing.T) {
 			// 输出键与 --json 的实际顶层字段一致。
 			code, got := runJSON(t, sampleArgs(t, d.Name)...)
+			assertNoUnexpectedNulls(t, d.Name, got)
 			if code != 0 {
 				t.Fatalf("exit code = %d", code)
 			}
@@ -319,7 +403,7 @@ func TestRegistryConsistency(t *testing.T) {
 }
 
 // mutatingSamples 列出只能通过变更产物才能成功的命令；它们的样例在临时工作区中变更产物。
-var mutatingSamples = map[string]bool{"new": true, "unit add": true, "advance": true, "source add": true, "claim add": true, "claim remove": true, "review record": true, "accept": true, "export": true, "preview": true, "marketing ask": true, "mcp install": true, "skills install": true, "feedback add": true, "decision add": true, "decide": true, "outline remove": true, "pack install": true, "pack remove": true, "metrics record": true, "metrics calibrate": true, "pack learn": true, "series add": true, "series fact": true, "summary set": true, "pack confirm": true, "pack reject": true}
+var mutatingSamples = map[string]bool{"new": true, "unit add": true, "advance": true, "source add": true, "claim add": true, "claim remove": true, "review record": true, "accept": true, "export": true, "preview": true, "marketing ask": true, "mcp install": true, "skills install": true, "feedback add": true, "decision add": true, "decide": true, "outline remove": true, "pack install": true, "pack remove": true, "metrics record": true, "metrics calibrate": true, "pack learn": true, "series add": true, "series fact": true, "summary set": true, "pack confirm": true, "pack reject": true, "canon add": true, "canon remove": true}
 
 // sampleArgs 返回命令的一次成功调用：除 mutatingSamples 中的命令外都不变更任何产物；工作区命令在已初始化的
 // 临时工作区中运行。
@@ -441,6 +525,19 @@ func sampleArgs(t *testing.T, name string) []string {
 		dir := newWork(t)
 		run(t, "claim", "add", "my-post", "--kind", "opinion", "--text", "观点", "--dir", dir)
 		return []string{"claim", "remove", "my-post", "claim-1", "--dir", dir, "--json"}
+	case "canon add":
+		return []string{"canon", "add", "my-post", "--type", "character", "--name", "守灯人", "--text", "五十岁，左手有旧伤", "--dir", newWork(t), "--json"}
+	case "canon set":
+		// 取值未变时不变更产物。
+		dir := newWork(t)
+		run(t, "canon", "add", "my-post", "--type", "character", "--name", "守灯人", "--text", "五十岁", "--dir", dir)
+		return []string{"canon", "set", "my-post", "canon-1", "--text", "五十岁", "--dir", dir, "--json"}
+	case "canon list":
+		return []string{"canon", "list", "my-post", "--dir", newWork(t), "--json"}
+	case "canon remove":
+		dir := newWork(t)
+		run(t, "canon", "add", "my-post", "--type", "world-rule", "--text", "灯油只能燃烧到黎明", "--dir", dir)
+		return []string{"canon", "remove", "my-post", "canon-1", "--dir", dir, "--json"}
 	case "method list":
 		return []string{"method", "list", "--dir", newWorkspace(t), "--json"}
 	case "method show":

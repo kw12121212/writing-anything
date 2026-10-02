@@ -1,0 +1,66 @@
+schema: strict-spec-driven/question-list/v1
+schema_version: 1
+artifact_type: question_list
+schema_file: templates/strict-spec-driven/schemas/question-list.yaml
+change: characters-and-light-canon
+open: []
+resolved:
+  - id: requirement-problem
+    question: What is concretely going wrong today, and for whom?
+    context: 'Why this is asked: the change is planned against a need, and the need lives only with the requester. A "problem" here means what someone does or suffers today — not a feature that is missing. If the answer names a button, a field, a page, or an endpoint, it is a solution, and the underlying problem is still unstated. What a sufficient answer contains: who is affected, what they do today instead, and how often. Worked example: "every Monday one person spends forty minutes copying order rows into a spreadsheet to send the weekly report". What it changes: this becomes the proposal''s why, and it decides whether the change is worth making.'
+    answer: 今天 Agent 协助虚构写作时没有可追溯的设定载体：人物、地点、世界规则与人物关系只能散落在正文或素材里，Agent 无法只读地取得「当前设定」，也无法把作者钦定的设定与 Agent 建议的设定区分开，存在 Agent 覆写作者确定设定的风险。受影响的是写短篇小说的作者与协助的 Agent：今天只能绕过规范或把设定记在工作区之外。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-outcome
+    question: What observable difference proves the problem is solved?
+    context: 'Why this is asked: without a success condition, nobody can tell afterwards whether the change worked. "Observable" means someone outside the system can check it without reading the code. What a sufficient answer contains: what a person will see, or no longer have to do, once this is done. Worked example: "the report is in the manager''s inbox on Monday morning without anyone assembling it". What it changes: this becomes the delta spec''s scenarios and the acceptance evidence at review time.'
+    answer: 里程碑完成标准与规划变更 details：Agent 试图修改作者钦定的设定条目时，命令被拒绝并生成阻塞决策；wa-cli canon 命令完成设定条目（人物、地点、世界规则、人物关系，每条带出处与保护级别）的增删改查；validate 能校验 canon.yaml；人物卡（character 条目）与人物关系（relationship 引用人物条目）可登记与查询。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-trigger
+    question: Why now — what forced this?
+    context: 'Why this is asked: work that nothing forced is the work most often thrown away later. This question catches a request that sounds reasonable but has no real driver behind it. What a sufficient answer contains: the concrete event, deadline, incident, or cost that made this surface now, or an honest statement that nothing did. Worked example: "the report was missed last month and it was raised with the team". What it changes: a change with no trigger is a candidate for deferral, and the answer is weighed at review before archive.'
+    answer: 路线图 short-story 里程碑（order 500）当前激活：依赖的 short-story-genre 已归档（脚手架、虚构字段、场景契约与按文体关闭论断检查已就绪），本规划变更是其直接后继，也是 scene-context-and-fiction-rules（场景级上下文包：出场人物的当前设定）的直接依赖，完成它才能解锁同里程碑剩余工作。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-non-goals
+    question: What must explicitly not change?
+    context: 'Why this is asked: the requester knows which nearby behavior other people depend on, and the agent does not. A "non-goal" is something the change must leave alone even though it sits close to the work. What a sufficient answer contains: the behavior, setting, or output that must survive untouched, and who relies on it. Worked example: "do not change the saved filters — several people rely on their own". What it changes: these become the proposal''s unchanged_behavior items, which review checks the finished result against.'
+    answer: 素材、论断、决策、大纲、场景契约与导出现有行为不变；场景级上下文包与小说专用规则（对话标点、视角一致、小说 AI 腔）由 scene-context-and-fiction-rules 负责；结构类写作法模板由 story-structure-templates 负责；情绪与张力曲线由 emotion-pacing-curve 负责；连续性审查、状态快照与跨作品（系列级）共享设定由 novel 及后续里程碑负责；canon 不接入导出、lint 与上下文包消费方。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-interpretation
+    question: Which reading of the request is intended, where more than one is possible?
+    context: 'Why this is asked: a short request usually admits several readings, and building the wrong one is indistinguishable from building nothing. What a sufficient answer contains: the reading that is meant, stated plainly enough to rule the others out — or a statement that only one reading exists and what it is. Worked example: "export means the version sent to the manager, not the one I read myself". What it changes: this fixes the scope boundary before any code is written, and settles disputes about what was asked for.'
+    answer: 唯一读法（依据规划变更 details 与里程碑 intake 推荐答案）：「在事实库中扩展设定集条目类型」指设定集是事实库（Fact Store）的扩展，沿用同一套 id、出处与保护级别，条目类型为人物、地点、世界规则、人物关系四种；「Agent 侧命令修改或删除被拒绝」指 canon set/remove 写路径的显式授权（wa-cli 无法区分操作者身份）；「增删改查」指 canon add/remove/set/list 命令族；人物卡即 character 类型的设定条目。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: canon-storage-home
+    question: 设定集条目存放在哪里：本设计选择作品根单元目录下的 canon.yaml（作品级单一文件，人物、地点、世界规则与人物关系同文件），是否确认？还是希望做成工作区级共享（.writing-anything/canon.yaml，全工作区一份）或系列级共享？
+    context: 路线图只说「在事实库中扩展设定集条目类型」，里程碑 intake 问题 canon-model 的推荐答案只确定「作为事实库的扩展」，未指定存放层级。影响范围：spec delta 的措辞与路径、internal/schema 的路径模式（works/*/canon.yaml 还是工作区/系列路径）、internal/canon 的加载与校验、validate 的整体与单文件检查、测试，以及后续 novel 里程碑（多作品）与系列小说里程碑（跨作品共享人物）的扩展方式。选项：A（推荐，本设计已按此拟定）作品级 works/<work>/canon.yaml——与 brief.yaml、outline.yaml 同层，短篇（单作品）即够用，系列共享由后续里程碑在系列层叠加引用，不破坏 canon.yaml 结构；B 工作区级共享——所有作品共用一份设定，单作品的作者会被迫看到无关设定，且删除一个作品会留下孤儿条目；C 系列级共享——现在实现需要先解决系列归属、冲突与无系列作品的语义，提前耦合系列机制。若作者选 B 或 C，spec delta、schema 路径模式与任务需经 strict-spec-modify 调整。
+    answer: 确认选项 A：设定集条目存放在作品根单元目录的 canon.yaml（作品级单一文件，人物、地点、世界规则与人物关系同文件）；系列共享由后续里程碑在系列层叠加引用，不改变 canon.yaml 的结构。
+    status: resolved
+    answered_by: human
+  - id: pinned-authorization
+    question: 作者钦定（Author-pinned）条目的合法修改路径是什么：本设计选择「Agent 修改被拒绝并自动生成阻塞决策，作者 wa-cli decide 允许后，Agent 携带 --decision <决策 id> 重试才写入」，是否确认？还是希望作者直接编辑 canon.yaml（CLI 不提供修改钦定条目的途径），或用 --confirmation 原话摘要直接授权？
+    context: 路线图说「Agent 侧命令修改或删除这类条目时被拒绝，并自动生成阻塞决策」，里程碑完成标准同文，但未定义阻塞决策生成之后合法的修改途径。wa-cli 无法区分操作者是 Agent 还是作者，保护必须靠显式的作者确认载体。影响范围：spec delta（canon-protection 要求的措辞与场景）、internal/decision 联动（自动决策的幂等生成与 --decision 授权判定）、internal/cli 参数面（--decision）、测试（拒绝、幂等、decide 后重试）；也涉及 proposal 范围与决策队列语义。选项：A（推荐，本设计已按此拟定）决策队列授权——复用 decide 的确认记录与 decision-blocking 的阻塞/解除语义，修改经作者决定后可追溯地写入条目 decision 字段；B 作者直接编辑 canon.yaml——结构化产物只经 wa-cli 变更的项目约定下不可作为主路径，且没有确认记录；C --confirmation 原话摘要直接授权——与 decide 形成两套确认载体，无 open/decided 状态，重复尝试难以幂等追溯。若作者选 B 或 C，canon-protection 的 delta 与任务需经 strict-spec-modify 调整。
+    answer: 确认选项 A：作者钦定条目的修改与删除授权走既有决策队列——Agent 修改被拒绝（canon.author-pinned）并自动生成阻塞决策，作者 wa-cli decide 允许后携带 --decision <决策 id> 重试才写入，条目记录该决策 id；不引入 --confirmation 直接授权或「作者直接编辑 YAML」的路径。
+    status: resolved
+    answered_by: human
+  - id: entry-model
+    question: 设定条目的字段形态是什么：本设计选择与论断同构的轻量模型（id、type、name、text、sources、protection，relationship 另有 members；描述用自由文本 text），是否确认？还是需要富人物卡（年龄、目标、弧光等结构化字段）？
+    context: 规划变更说「人物卡与轻量设定集」，里程碑范围写「轻量设定集」，但「人物卡」可能被理解为结构化表单。影响范围：internal/schema 的 canon.schema.json、canon add/set 的参数面与错误码、测试，以及后续消费方（scene-context-and-fiction-rules 的场景级上下文包、novel 里程碑的连续性审查）能读到的结构。选项：A（推荐，本设计已按此拟定）轻量同构——人物卡即 character 条目，描述进自由文本 text，连续性审查需要的结构化字段等真实校验需求出现再加；B 富人物卡——现在就要定义各类型条目的字段全集与校验规则，Schema 与命令面显著膨胀，且没有消费方校验这些字段；C 完全自由 key-value——放弃类型与引用校验，members 与人物引用无从谈起。若作者选 B，schema、canon add/set 参数与测试任务需经 strict-spec-modify 扩充。
+    answer: 确认选项 A：轻量同构论断的条目模型——id、type、name、text、sources、protection（relationship 另有 members），描述用自由文本 text；人物卡即 character 类型的设定条目，结构化字段等真实校验需求出现再加。
+    status: resolved
+    answered_by: human
+  - id: genre-scope
+    question: canon 是否对所有文体可用：本设计选择作为内核产物，任何作品（tech-blog、minimal 等）都可以有 canon.yaml，是否确认？还是希望仅对声明使用设定集的文体（如 short-story）开放？
+    context: 规划变更把设定条目定义为事实库（内核）的扩展，但首个消费者是虚构文体；不排除作者希望文章类作品也登记「本项目的历史事实」之类的条目。影响范围：spec delta 的适用范围措辞、internal/schema 的路径模式（是否按文体区分）、validate 对非虚构作品 canon.yaml 的行为、文体数据是否新增开关字段（涉及 genre Schema）。选项：A（推荐，本设计已按此拟定）内核产物、全文体可用——与素材、论断同为事实库的可选产物，validate 对存在的 canon.yaml 一视同仁，不新增文体开关；B 仅虚构文体——需要在 genre Schema 与内置文体数据中新增声明字段，非虚构作品的 canon.yaml 要定义为错误，机制更重且挡住文章类作者登记事实条目的潜在用法。若作者选 B，schema、validate 行为与任务需经 strict-spec-modify 调整。
+    answer: 确认选项 A：canon 作为内核产物，所有文体的作品都可以有 canon.yaml；validate 对存在的 canon.yaml 一视同仁，不在 genre Schema 或内置文体数据中新增开关字段。
+    status: resolved
+    answered_by: human

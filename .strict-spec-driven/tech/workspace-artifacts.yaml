@@ -255,3 +255,15 @@ rules:
         - rest := strings.TrimPrefix(dir, workspace.WorksPath+"/"); work := rest[:strings.Index(rest, "/")]
       bad:
         - if i := strings.Index(dir, "/units/"); i >= 0 { root = dir[:i] }
+  refusal-side-decision-gating:
+    strength: MUST
+    statement: 命令因保护级别（如作者钦定（Author-pinned））拒绝修改产物时，在拒绝路径上向决策队列生成阻塞决策的写入必须幂等：同一对象与同一操作已有 open 决策时不重复追加，作者已选择「保持不变」的已决定决策同样抑制追加，作者选择「允许」后的再次未授权尝试则追加新的决策；给出 --decision 时不追加新决策。追加时 changedPaths 必须如实列出决策队列路径，未追加时为空数组；决策队列无法加载时不追加并原样报告其诊断，目标产物逐字节不变。授权以自动生成决策的固定问题文本识别对象与操作，格式在规格中固定并在测试中逐字断言；授权通过后产物记录该决策 id；--decision 用在不受保护的条目上时按参数错误拒绝，不得把未校验的决策 id 写进产物。
+    rationale: 拒绝是 Agent 协助写作时的常规路径，不是异常：反复重试会灌满决策队列，而 changedPaths 是 Agent 判断副作用的唯一依据。问题文本是授权与幂等识别的契约，实现漂移会让授权失效或被误放行；把未校验的决策 id 写进产物会让一条「成功」命令造出 validate 判为不合法的工作区。novel 里程碑的状态变更提议、连续性豁免会复用同一模式，现在成文可以避免各命令各造一套。
+    enforcement:
+      method: test
+      detail: internal/canon 的 TestPinnedProtection（拒绝、幂等、keep-choice 后重试、阻塞推进）、TestPinnedAuthorize（retry-after-decide、无效 --decision）、TestPinnedQueueUnloadable（队列无法加载时不追加且两文件不变）、TestDecisionFlagOnlyForPinned（普通条目拒绝 --decision）逐分支断言问题文本字面量、changedPaths 与文件不变。
+    examples:
+      good:
+        - canon set 对钦定条目未授权时：报告 canon.author-pinned、changedPaths 为 [.writing-anything/decisions.yaml]、canon.yaml 逐字节不变；作者 decide 允许后携带 --decision 重试成功并把决策 id 记录在条目上。
+      bad:
+        - 每次拒绝都追加一条新的阻塞决策；或拒绝时 changedPaths 为空数组，Agent 因此不知道决策队列已被写入；或 --decision 指向任意已决定决策即放行。

@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "设定集",
+  "description": "作品根单元目录中的设定集（Canon）：人物、地点、世界规则与人物关系条目，每条带出处（Source id）与保护级别。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "entries"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "type", "text", "sources", "protection"],
+        "properties": {
+          "id": {"$ref": "common.schema.json#/$defs/id"},
+          "type": {"enum": ["character", "location", "world-rule", "relationship"]},
+          "name": {"type": "string", "pattern": "\\S"},
+          "text": {"type": "string", "pattern": "\\S"},
+          "sources": {"$ref": "common.schema.json#/$defs/ids"},
+          "protection": {"enum": ["normal", "author-pinned"]},
+          "members": {"$ref": "common.schema.json#/$defs/ids", "minItems": 2},
+          "decision": {"$ref": "common.schema.json#/$defs/id"}
+        },
+        "allOf": [
+          {
+            "if": {"properties": {"type": {"const": "character"}}},
+            "then": {"required": ["name"]}
+          },
+          {
+            "if": {"properties": {"type": {"const": "location"}}},
+            "then": {"required": ["name"]}
+          },
+          {
+            "if": {"properties": {"type": {"const": "relationship"}}},
+            "then": {"required": ["members"]}
+          },
+          {
+            "if": {"properties": {"type": {"enum": ["world-rule", "relationship"]}}},
+            "then": {"not": {"required": ["name"]}}
+          }
+        ]
+      }
+    }
+  }
+}

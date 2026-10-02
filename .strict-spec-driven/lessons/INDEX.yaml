@@ -164,6 +164,11 @@ categories:
       status: active
       occurrences: 1
       path: .strict-spec-driven/lessons/coding/lesson-e6ebe3.yaml
+    lesson-6d8efb:
+      title: 布尔参数表达不了反向取值，需要反向语义时必须单设参数或改用取值参数
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/coding/lesson-6d8efb.yaml
   documentation:
     must-must-6af326:
       title: 修改一条 MUST 需求时，要检查同一规格里相邻的 MUST 是否因此冲突
