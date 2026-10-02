@@ -36,6 +36,78 @@
         }
       }
     },
+    "scoredMetrics": {
+      "type": "array",
+      "description": "AI 评分指标（Metric）：每项为锚定评分（Anchored Scale），scale 内每个整数分值都有说明与示例片段；由 Agent 在独立会话中打分",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "title", "scale", "anchors"],
+        "properties": {
+          "id": {"$ref": "#/$defs/id"},
+          "title": {"$ref": "#/$defs/text"},
+          "description": {"type": "string"},
+          "scale": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["min", "max"],
+            "properties": {"min": {"type": "integer", "minimum": -100, "maximum": 100}, "max": {"type": "integer", "minimum": -100, "maximum": 100}}
+          },
+          "anchors": {
+            "type": "array",
+            "minItems": 2,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["score", "description", "example"],
+              "properties": {"score": {"type": "integer"}, "description": {"type": "string", "pattern": "\\S"}, "example": {"type": "string", "pattern": "\\S"}}
+            }
+          },
+          "sessions": {"type": "integer", "minimum": 1, "maximum": 9, "description": "需要的独立打分会话数，默认 3"},
+          "max_spread": {"type": "integer", "minimum": 0, "description": "分歧阈值：各次打分的最高分减最低分大于它时转为作者决策，默认 1"},
+          "tolerance": {"type": "integer", "minimum": 0, "description": "校准时 AI 中位数与作者打分之差不大于它视为相符，默认 1"},
+          "min_samples": {"type": "integer", "minimum": 1, "maximum": 1000, "description": "判断是否降级为仅供参考所需的最少校准样本数，默认 5"},
+          "min_agreement": {"type": "number", "minimum": 0, "maximum": 1, "description": "一致率（Agreement Rate）阈值，低于它时降级为仅供参考，默认 0.7"}
+        }
+      }
+    },
+    "distribution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["count", "mean", "median", "stdev", "p10", "p90"],
+      "description": "长度分布：count 为个数，其余为非空白字符数的均值、中位数、总体标准差与最近秩分位数",
+      "properties": {
+        "count": {"type": "integer", "minimum": 0},
+        "mean": {"type": "number", "minimum": 0},
+        "median": {"type": "number", "minimum": 0},
+        "stdev": {"type": "number", "minimum": 0},
+        "p10": {"type": "number", "minimum": 0},
+        "p90": {"type": "number", "minimum": 0}
+      }
+    },
+    "styleStats": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["chars", "sentences", "paragraphs", "punctuation", "terms"],
+      "description": "文风统计（Style Stats）：由素材内容确定的句长、段长、标点频率与常用词；规范包的 style_profile 另含 sources",
+      "properties": {
+        "sources": {"$ref": "#/$defs/ids"},
+        "chars": {"type": "integer", "minimum": 0},
+        "sentences": {"$ref": "#/$defs/distribution"},
+        "paragraphs": {"$ref": "#/$defs/distribution"},
+        "punctuation": {"type": "object", "additionalProperties": {"type": "number", "minimum": 0}, "description": "标点 → 每千字的次数"},
+        "terms": {
+          "type": "array",
+          "maxItems": 20,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["term", "count", "per_1000"],
+            "properties": {"term": {"$ref": "#/$defs/text"}, "count": {"type": "integer", "minimum": 1}, "per_1000": {"type": "number", "minimum": 0}}
+          }
+        }
+      }
+    },
     "methodBody": {
       "type": "object",
       "description": "写作法模板（Method Template）：文章类（article）规定必需章节及其顺序，结构类（structure）规定节拍及其位置范围，规划类（planning）规定规划步骤；可附带评分标准条目。用于工作区规范包的 methods 与内置写作法文件，使用处以 unevaluatedProperties 禁止其他字段。",

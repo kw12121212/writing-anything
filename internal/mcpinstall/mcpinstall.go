@@ -61,6 +61,12 @@ type Env struct {
 // Timeout 是一次外部命令的时长上限；官方 CLI 卡住（如首次运行的引导、自动更新）时不让 wa-cli 一直等待。
 const Timeout = 2 * time.Minute
 
+// WaitDelay 是超时杀掉外部命令后等待输出管道关闭的上限：它派生的子进程仍持有管道时，不让 Wait 一直等下去。
+const WaitDelay = 5 * time.Second
+
+// timeout 是 System 使用的时长上限，测试可以缩短。
+var timeout = Timeout
+
 // maxOutput 是诊断中保留的外部命令输出的字节数上限。
 const maxOutput = 4 << 10
 
@@ -69,15 +75,15 @@ func System() Env {
 	return Env{
 		LookPath: exec.LookPath,
 		Run: func(dir, name string, args ...string) (string, error) {
-			ctx, cancel := context.WithTimeout(context.Background(), Timeout)
+			ctx, cancel := context.WithTimeout(context.Background(), timeout)
 			defer cancel()
 			cmd := exec.CommandContext(ctx, name, args...)
-			cmd.Dir = dir
+			cmd.Dir, cmd.WaitDelay = dir, WaitDelay
 			var out bytes.Buffer
 			cmd.Stdout, cmd.Stderr = &out, &out
 			err := cmd.Run()
 			if ctx.Err() != nil {
-				err = fmt.Errorf("超过 %v 没有结束", Timeout)
+				err = fmt.Errorf("超过 %v 没有结束", timeout)
 			}
 			text := out.String()
 			if len(text) > maxOutput {

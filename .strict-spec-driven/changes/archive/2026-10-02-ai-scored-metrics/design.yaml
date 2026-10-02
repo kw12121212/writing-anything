@@ -1,0 +1,42 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: ai-scored-metrics
+approach:
+  - 数据声明：common.schema.json 新增 scored_metrics 定义，genre 与 pack Schema 引用它。每个指标含 id、title、可选 description、scale（min、max 整数，max-min 为 1 到 25）、anchors（每个整数分值恰有一项，含 score、description 与 example）、可选 sessions（默认 3）、max_spread（默认 1）、tolerance（默认 1）、min_samples（默认 5）与 min_agreement（0 到 1，默认 0.7）。internal/catalog 检查 id 重复与锚定分值覆盖；internal/resolve 按 id 合并为 resolved.scoredMetrics，缺省值在合并结果中补齐。
+  - 新增领域包 internal/metrics：按 draft.Split 的段落生成任务；读写单元目录的 metrics.yaml（draft_sha256、sessions、decisions）与工作区的 .writing-anything/calibration.yaml；计算中位数、分歧与一致率；只返回 workspace.Problem。internal/cli 新增 metrics plan、metrics record、metrics show、metrics calibrate 四条命令，指标按作品文体合并（resolve.ForGenre）。
+  - 分歧决策：record 写入后，对会话数达到 sessions、不是仅供参考的指标，每个分歧超过 max_spread 且还没有决策的片段生成一个非阻塞决策（选项为范围内每个分值及其锚定说明，推荐为四舍五入的中位数）；先用 decision.NextID 预算出 id、完成全部检查，再一次性追加决策、最后写 metrics.yaml（workspace-artifacts/author-choice-decisions、cli-contract/precheck-before-side-effects）。
+decisions:
+  segments-are-paragraphs:
+    decision: 打分片段（Segment）是正文的段落，编号与 wa-cli provenance 相同；plan 输出每个片段的 paragraph、text 与 sha256，可用 --metric 只规划部分指标。一次会话可以只给部分指标打分，但给某个指标打分时必须覆盖全部段落。
+    rationale: 段落是现有出处、审稿与反馈共用的定位单位，作者与 Agent 都能直接对应；按指标整体覆盖避免同一指标的中位数混入不同会话数，又允许按指标分批打分以控制单次会话的上下文。
+  sessions-tied-to-draft:
+    decision: metrics.yaml 记录 draft_sha256；record 时正文已改变则丢弃旧会话（给出 warning 级 metrics.sessions-dropped），从本次会话重新开始；同一会话 id 再次记录时整体替换该会话。show 在正文改变后报告 stale。
+    rationale: 分数针对的是具体文字，正文改动后旧分数不再可比；以会话 id 替换便于 Agent 重试同一会话而不重复计数。
+  median-and-spread:
+    decision: 每个片段每个指标的中位数为排序后中间值（偶数个时取中间两值的平均），分歧为最高分减最低分；会话数少于 sessions 时状态为 pending，分歧大于 max_spread 为 disputed，否则为 agreed；disputed 片段的决策已被作者决定时为 decided，值取作者选择的分值。
+    rationale: 中位数对单次离群打分稳健；极差直观且与锚定分值同单位，作者容易理解阈值含义。
+  non-blocking-decisions:
+    decision: '分歧决策为非阻塞（blocking: false），问题写明单元、段落、指标与各次打分；metrics.yaml 的 decisions 只记录 metric、paragraph 与决策 id，状态与选择由决策队列推导。'
+    rationale: 里程碑 intake 问题 metric-blocking 的建议：指标默认不阻塞验收，只进入修订建议与决策队列；遵守 author-choice-decisions，不把选择复制进产物。
+  calibration-store:
+    decision: 校准记录放在工作区级 .writing-anything/calibration.yaml，每条含 metric、source（声明该指标的配置层，如 pack:house）、unit、paragraph、paragraph_sha256、ai_median（记录时该片段的 AI 中位数）、author_score、confirmation 与 recorded_at；calibrate 要求该片段的 AI 打分已完成（会话数足够、正文未改变）并给出非空的 --confirmation。一致率按 (source, metric) 统计 |ai_median − author_score| ≤ tolerance 的比例；样本数达到 min_samples 且一致率低于 min_agreement 时该指标为仅供参考（advisory）。
+    rationale: 降级针对声明该指标的规范包或文体，跨作品累积样本才有统计意义，所以按配置层而不是按单元记录；记录时快照 AI 中位数，之后正文或会话变化不改变已有样本；作者打分属于作者判断，按项目约定记录作者确认。
+  advisory-effect:
+    decision: '仅供参考的指标照常在 show 中列出分数并标 advisory: true，但 record 不再为它生成分歧决策。'
+    rationale: 降级的含义是不再让作者为不可信的维度做决定，同时保留数据供作者参考与继续校准。
+  field-name:
+    decision: 文体与规范包的字段名为 scored_metrics，合并结果为 resolved.scoredMetrics，命令组为 metrics。
+    rationale: 后续 style-metrics-and-drift 会引入由 wa-cli 计算的确定性指标，scored_metrics 明确这是需要打分的指标，避免两类指标共用一个字段造成歧义；命令组 metrics 可以容纳两者。
+  update-open-decisions:
+    decision: 分歧决策的 question 只写单元、段落与指标，各次打分与中位数写在 rationale；尚未决定的决策在分数、推荐或选项改变时用 decision.Replace 原地更新；正文改变时只保留尚未决定的决策记录，同一片段再有分歧时沿用它；作者的选择按选中选项文本中的分值解释。
+    rationale: 遵守 author-choice-decisions：不另建作者无法撤回的过时决策；问题文本不含会变化的分数，替换选项与理由即可保持决策与当前分数一致；按选项文本解释使规范包修改 scale 后不会改变作者已做的选择。
+alternatives:
+  - option: plan 写出打分任务产物，record 只接受与任务匹配的输入
+    reason: 多一个需要保持同步的产物，正文或配置改变时还要处理过期任务；record 直接按当前正文与合并后的指标校验输入即可达到同样的约束
+  - option: 按单元记录校准并只影响该单元
+    reason: 单个单元的样本太少，无法判断一个指标是否可信，也不符合「在该规范包中降级」的要求
+risks:
+  - Agent 可能在同一会话中多次打分冒充独立会话；wa-cli 只能记录会话 id，独立性由 Skill 与 plan 的说明约束
+  - 作者已决定的分歧决策在正文改变后不再沿用，同一片段会新建决策；旧决策保留在队列中作为记录，不阻塞单元

@@ -1,0 +1,6 @@
+schema_version: 1
+draft_sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+sessions:
+  - id: s1
+    scores:
+      - {metric: tension, paragraph: 0, score: 3}

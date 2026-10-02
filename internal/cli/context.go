@@ -16,7 +16,7 @@ var contextCommand = &command{
 	summary:    "输出单元（Unit）的有界上下文包（Context Pack）：不加 --json 时为 Markdown；超出上下文预算（Context Budget）时按优先级裁剪",
 	args:       []argSpec{{"unit", unitRefHelp, true}},
 	flags:      []flagSpec{dirFlag},
-	outputKeys: []outputKey{{"context", "上下文包：unit、type、stage、genre、budget（value、source）、used、brief、outline、section、feedback、decisions、norms、sources、neighbors 与 trimmed；失败时为 null"}},
+	outputKeys: []outputKey{{"context", "上下文包：unit、type、stage、genre、budget（value、source）、used、brief、outline、section、feedback、decisions、norms、sources、neighbors、series（所属系列的 id、title、facts 与前序作品的 summaries：work、text、stale；不属于系列时为 null）与 trimmed；失败时为 null"}},
 	exitCodes:  standardExitCodes,
 	run:        runContext,
 }
@@ -128,7 +128,21 @@ type ctxView struct {
 	Norms     ctxNorms       `json:"norms"`
 	Sources   []ctxSource    `json:"sources"`
 	Neighbors []ctxNeighbor  `json:"neighbors"`
+	Series    *ctxSeries     `json:"series"`
 	Trimmed   []ctxTrim      `json:"trimmed"`
+}
+
+type ctxSeries struct {
+	ID        string          `json:"id"`
+	Title     string          `json:"title"`
+	Facts     []seriesFact    `json:"facts"`
+	Summaries []ctxSummaryRef `json:"summaries"`
+}
+
+type ctxSummaryRef struct {
+	Work  string `json:"work"`
+	Text  string `json:"text"`
+	Stale bool   `json:"stale"`
 }
 
 type contextResult struct {
@@ -188,6 +202,12 @@ func viewContext(p *ctxpack.Pack) *ctxView {
 	for _, n := range p.Neighbors {
 		v.Neighbors = append(v.Neighbors, ctxNeighbor{Unit: n.Unit, Position: n.Position, Title: optional(n.Title), Excerpt: n.Excerpt})
 	}
+	if s := p.Series; s != nil {
+		v.Series = &ctxSeries{ID: s.ID, Title: s.Title, Facts: factsView(s.Facts), Summaries: []ctxSummaryRef{}}
+		for _, x := range s.Summaries {
+			v.Series.Summaries = append(v.Series.Summaries, ctxSummaryRef(x))
+		}
+	}
 	for _, t := range p.Trimmed {
 		v.Trimmed = append(v.Trimmed, ctxTrim{Part: t.Part, ID: optional(t.ID), Chars: t.Chars, KeptChars: t.KeptChars})
 	}
@@ -214,6 +234,8 @@ func runContext(inv *invocation) int {
 		switch {
 		case strings.HasPrefix(d.Code, "rule."):
 			res.Diagnostics[i].Next = []string{shellCommand("wa-cli", "context", inv.args[0], "--dir", dir, "--json")}
+		case d.Code == ctxpack.CodeSummaryMissing:
+			res.Diagnostics[i].Next = []string{"wa-cli help summary set --json", shellCommand("wa-cli", "context", inv.args[0], "--dir", dir, "--json")}
 		case d.Code == ctxpack.CodeSourceSkipped:
 			// 非 UTF-8 的素材整体校验检不出，用本命令复查；素材列表给出可用的素材。
 			res.Diagnostics[i].Next = []string{shellCommand("wa-cli", "source", "list", "--dir", dir, "--json"), shellCommand("wa-cli", "context", inv.args[0], "--dir", dir, "--json")}

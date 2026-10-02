@@ -119,6 +119,10 @@ func TestMCPToolPerCommand(t *testing.T) {
 			t.Errorf("command %s: tool %v", c.name, tools[name])
 		}
 	}
+	// pack install 的来源可以在项目目录之外，不作为 tool（cli-contract/mcp-thin-wrapper）。
+	if tools["pack_install"] != nil || tools["pack_list"] == nil || tools["pack_remove"] == nil {
+		t.Errorf("pack tools: install %v, list %v, remove %v", tools["pack_install"] != nil, tools["pack_list"] != nil, tools["pack_remove"] != nil)
+	}
 	if len(tools) != len(registry)-len(mcpExcluded) {
 		t.Errorf("%d tools for %d commands", len(tools), len(registry))
 	}

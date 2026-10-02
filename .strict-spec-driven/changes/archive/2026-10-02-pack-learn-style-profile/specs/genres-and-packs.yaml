@@ -1,0 +1,17 @@
+schema: strict-spec-driven/delta-spec/v1
+schema_version: 1
+artifact_type: delta_spec
+schema_file: templates/strict-spec-driven/schemas/delta-spec.yaml
+target_spec: genres-and-packs
+operations:
+  ADDED:
+    pack-style-profile:
+      strength: MUST
+      statement: 规范包可以用 style_profile 声明文风画像（Style Profile）：sources（素材 id）、chars、sentences、paragraphs、punctuation 与 terms，结构同 style-profile 主规格的 style-stats；通常由 wa-cli pack confirm 写入。文体与 config.yaml 不能声明。wa-cli config resolved 的 resolved.styleProfile 为 packs 中最后一个声明 style_profile 的规范包的取值，含 value 与 source（pack:<id>）；没有规范包声明时为 null。
+      scenarios:
+        profile-resolved:
+          - GIVEN: packs 为 [a, b]，a 与 b 都声明了 style_profile
+          - WHEN: 运行 wa-cli config resolved --dir D --json
+          - THEN: resolved.styleProfile.source 为 pack:b，value 与 b 的 style_profile 相同；packs 为 [default] 时 styleProfile 为 null
+  MODIFIED: {}
+  REMOVED: {}

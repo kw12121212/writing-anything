@@ -1,0 +1,19 @@
+schema: strict-spec-driven/lesson/v1
+schema_version: 1
+artifact_type: lesson
+schema_file: templates/strict-spec-driven/schemas/lesson.yaml
+lesson:
+  id: filepath-glob-8c2d1f
+  title: filepath.Glob 拼接项目目录，目录名含 [ ] 时整体校验静默跳过文件
+category: coding
+status: active
+created_at: '2026-10-01T17:34:54.996Z'
+updated_at: '2026-10-01T17:34:54.996Z'
+context: 整体 validate 与 pack list 用 filepath.Glob(filepath.Join(root, dir, "*.yaml")) 列举 packs/ 与 proposals/。
+observation: Glob 把 root 中的 [ ] * ? 当成模式；MCP 总是传绝对路径的 --dir，「Project [2026]」这类目录下 Glob 返回空，不合法的规范包与提议都不被检查，validate 报告 valid 为 true。三处代码沿用了同一种写法。
+takeaway: 列举目录一律用 os.ReadDir 后按名称过滤（workspace.YAMLFiles），只在模式本身来自常量、且不拼接用户给出的路径时才用 Glob；测试用含 [ ] 的项目目录名跑整体校验。
+applies_when: 需要列举工作区某个目录下的文件（*.yaml 等），而目录路径由 --dir 或其他用户输入拼接而成时
+occurrences:
+  - origin: pack-learn-style-profile
+    date: '2026-10-01'
+    evidence: internal/workspace.YAMLFiles；catalog.CheckWorkspacePacks、packinstall.List、learn.CheckAll 改用它；internal/cli TestValidateDirWithGlobCharacters

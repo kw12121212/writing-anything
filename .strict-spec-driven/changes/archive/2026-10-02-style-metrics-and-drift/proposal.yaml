@@ -1,0 +1,29 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: style-metrics-and-drift
+  status: proposed
+summary:
+  what:
+    - 新增 wa-cli metrics compute <unit>：不调用模型，为单元及其有正文的子孙单元计算确定性的文风与节奏指标（Metric）：字数、句长与段长、对话占比、用词丰富度、常用虚词、四字词与 AI 腔的密度、标点频率，以及每个段落的平均句长
+    - 把指标与两类基准对比：作者的文风画像（resolved.styleProfile）与同一作品已验收单元的统计；偏离超过阈值（默认 2 个标准差，规范包用 drift_threshold 设置）时输出文风漂移（Style Drift）发现项，附带指标数值、基准与段落位置
+  why:
+    - 里程碑 packs-and-series 要求偏离文风画像超过阈值的单元输出漂移发现项，附带指标数值与段落位置
+    - 作者与 Agent 需要知道新写的单元在节奏与文风上是否偏离作者自己的基准；指标只衡量偏离，不评判好坏
+scope:
+  in:
+    - internal/stylemetric：确定性指标计算（复用文风统计的句子与段落切分，去掉作者批注）、两类基准的统计与漂移判定
+    - wa-cli metrics compute 命令、注册表、help、样例调用与 MCP tool；docs/GLOSSARY.md；wa-review 技能说明查看漂移
+    - pack Schema 的 drift_threshold，internal/resolve 合并为 resolved.driftThreshold（value 与 source，默认 2，来源 default）；内置文体不声明、用户也不能自定义文体，所以文体不提供该字段
+    - internal/lint 导出与 ai-cliche 规则同一口径的 CountTerms，供 AI 腔密度复用
+  out:
+    - 让漂移发现项阻塞验收或进入关卡（默认不阻塞，规范包声明阻塞留待以后）；wa-cli 调用模型；修改 AI 评分指标（scored_metrics）的行为
+unchanged_behavior:
+  - wa-cli lint、accept、advance 的结果不变：漂移只由 metrics compute 报告，不阻塞任何关卡
+  - 没有 drift_threshold 的文体与规范包，config resolved 的其他字段不变；metrics plan、record、show、calibrate 的行为不变
+  - wa-cli 不调用大语言模型
+roadmap:
+  milestone: packs-and-series
+  planned_change: style-metrics-and-drift

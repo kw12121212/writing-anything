@@ -35,7 +35,7 @@ func runContextJSON(t *testing.T, dir string, args ...string) (int, contextOut) 
 func contextNoNulls(t *testing.T, v any, path string) {
 	t.Helper()
 	nullable := []string{"context", "brief", "outline", "section", "audience", "purpose", "length", "reason", "title", "excerpt",
-		"english", "replacement", "note", "quote", "line", "paragraph", "source", "anchor"}
+		"english", "replacement", "note", "quote", "line", "paragraph", "source", "anchor", "series"}
 	switch v := v.(type) {
 	case map[string]any:
 		for k, c := range v {

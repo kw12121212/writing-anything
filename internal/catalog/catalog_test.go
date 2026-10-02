@@ -1,6 +1,7 @@
 package catalog
 
 import (
+	"github.com/kw12121212/writing-anything/internal/schema"
 	"os"
 	"path/filepath"
 	"slices"
@@ -224,5 +225,18 @@ func TestMethodSetPick(t *testing.T) {
 	}
 	if _, ok := set.Find("nope"); ok {
 		t.Error("found unknown method")
+	}
+}
+
+func TestGenreSummaryLength(t *testing.T) {
+	doc, _ := schema.Parse([]byte("schema_version: 1\nid: g\ntitle: g\nunit_types: [{id: article, title: 文章}]\nstages: [{id: draft, title: 草稿, required_artifacts: [draft]}]\nsummary_length: {min: 50, max: 300}\n"))
+	if ps := schema.Named("genre").ValidateNode(doc); len(ps) > 0 {
+		t.Fatal(ps)
+	}
+	if g := genreOf(doc); g.SummaryLength != (Range{Min: 50, Max: 300}) {
+		t.Fatalf("declared = %+v", g.SummaryLength)
+	}
+	if g, _, _ := LoadGenre("minimal"); g.SummaryLength != DefaultSummaryLength {
+		t.Fatalf("default = %+v", g.SummaryLength)
 	}
 }

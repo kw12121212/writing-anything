@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/kw12121212/writing-anything/internal/workspace"
@@ -282,5 +283,110 @@ func TestContextBudget(t *testing.T) {
 	}
 	if r, ps := ForGenre(setup(t, "schema_version: 2\n", nil), "minimal"); r != nil || len(ps) == 0 {
 		t.Fatalf("invalid config: %+v %+v", r, ps)
+	}
+}
+
+func metricPack(id, title, extra string) string {
+	return "schema_version: 1\nid: " + id + "\ntitle: " + id + "\nscored_metrics:\n  - id: tension\n    title: " + title +
+		"\n    scale: {min: 1, max: 3}\n    anchors:\n      - {score: 1, description: 平静, example: 午后。}\n      - {score: 2, description: 隐忧, example: 门外有人。}\n      - {score: 3, description: 危机, example: 门把手转动。}\n" + extra
+}
+
+func TestScoredMetrics(t *testing.T) {
+	r := mustResolve(t, setup(t, config("", "[a, b]", ""), map[string]string{
+		"a": metricPack("a", "紧张度A", "    sessions: 2\n"),
+		"b": metricPack("b", "紧张度B", ""),
+	}))
+	if len(r.ScoredMetrics) != 1 || r.ScoredMetrics[0].Title != "紧张度B" || r.ScoredMetrics[0].Source != "pack:b" || r.ScoredMetrics[0].Sessions != 3 ||
+		r.ScoredMetrics[0].MaxSpread != 1 || r.ScoredMetrics[0].Tolerance != 1 || r.ScoredMetrics[0].MinSamples != 5 || r.ScoredMetrics[0].MinAgreement != 0.7 {
+		t.Fatalf("metrics = %+v", r.ScoredMetrics)
+	}
+	if r := mustResolve(t, setup(t, config("", "[a]", ""), map[string]string{"a": metricPack("a", "x", "    sessions: 2\n    min_agreement: 0.5\n")})); r.ScoredMetrics[0].Sessions != 2 || r.ScoredMetrics[0].MinAgreement != 0.5 {
+		t.Fatalf("declared thresholds: %+v", r.ScoredMetrics)
+	}
+	if r := mustResolve(t, setup(t, "", nil)); r.ScoredMetrics == nil || len(r.ScoredMetrics) != 0 {
+		t.Fatalf("none declared: %#v", r.ScoredMetrics)
+	}
+}
+
+func TestScoredMetricProblems(t *testing.T) {
+	tests := map[string]struct{ pack, code, field string }{
+		"missing-anchor": {strings.Replace(metricPack("a", "x", ""), "      - {score: 2, description: 隐忧, example: 门外有人。}\n", "", 1), "metrics.invalid-anchors", "scored_metrics[0].anchors"},
+		"extra-anchor":   {strings.Replace(metricPack("a", "x", ""), "score: 3,", "score: 4,", 1), "metrics.invalid-anchors", "scored_metrics[0].anchors"},
+		"repeated":       {strings.Replace(metricPack("a", "x", ""), "score: 3,", "score: 2,", 1), "metrics.invalid-anchors", "scored_metrics[0].anchors"},
+		"bad-scale":      {strings.Replace(metricPack("a", "x", ""), "{min: 1, max: 3}", "{min: 3, max: 3}", 1), "metrics.invalid-scale", "scored_metrics[0].scale"},
+		"wide-scale":     {strings.Replace(metricPack("a", "x", ""), "{min: 1, max: 3}", "{min: 0, max: 26}", 1), "metrics.invalid-scale", "scored_metrics[0].scale"},
+		"duplicate":      {metricPack("a", "x", "") + strings.SplitN(metricPack("a", "x", ""), "scored_metrics:\n", 2)[1], "artifact.duplicate-id", "scored_metrics[1].id"},
+	}
+	for name, tt := range tests {
+		_, ps := Resolve(setup(t, config("", "[a]", ""), map[string]string{"a": tt.pack}))
+		if !slices.ContainsFunc(ps, func(p workspace.Problem) bool {
+			return p.Code == tt.code && p.Field == tt.field && p.Path == ".writing-anything/packs/a.yaml"
+		}) {
+			t.Errorf("%s: %+v, want %s at %s", name, ps, tt.code, tt.field)
+		}
+	}
+	if _, ps := Resolve(setup(t, config("", "[a]", ""), map[string]string{"a": strings.Replace(metricPack("a", "x", ""), "score: 2,", "score: 4,", 1)})); !strings.Contains(ps[0].Message, "缺少 2 分") || !strings.Contains(ps[0].Message, "4 分不在 scale 内") {
+		t.Fatalf("message: %+v", ps)
+	}
+}
+
+func TestStyleProfile(t *testing.T) {
+	profile := "style_profile:\n  sources: [a1]\n  chars: 15\n  sentences: {count: 3, mean: 5, median: 5, stdev: 1.63, p10: 3, p90: 7}\n  paragraphs: {count: 1, mean: 15, median: 15, stdev: 0, p10: 15, p90: 15}\n  punctuation: {}\n  terms: []\n"
+	r := mustResolve(t, setup(t, config("", "[a, b, c]", ""), map[string]string{
+		"a": "schema_version: 1\nid: a\ntitle: a\n" + profile,
+		"b": "schema_version: 1\nid: b\ntitle: b\n" + strings.Replace(profile, "chars: 15", "chars: 30", 1),
+		"c": "schema_version: 1\nid: c\ntitle: c\n",
+	}))
+	if r.StyleProfile == nil || r.StyleProfile.Source != "pack:b" || r.StyleProfile.Value.(map[string]any)["chars"] != float64(30) {
+		t.Fatalf("profile = %+v", r.StyleProfile)
+	}
+	if r := mustResolve(t, setup(t, "", nil)); r.StyleProfile != nil {
+		t.Fatalf("default = %+v", r.StyleProfile)
+	}
+}
+
+func TestForWorkLayer(t *testing.T) {
+	pack := func(id, max string) string {
+		return "schema_version: 1\nid: " + id + "\ntitle: " + id + "\nrules:\n  r1: {type: length-range, params: {max: " + max + "}}\nglossary: [{term: 词, english: " + id + "}]\n"
+	}
+	root := setup(t, config("", "[a]", "rules:\n  r1: {params: {min: 1}}\n"), map[string]string{"a": pack("a", "10"), "b": pack("b", "20")})
+	layer := &Layer{Path: ".writing-anything/series/s.yaml", Packs: []string{"b", "a"}}
+	r, ps := ForWork(root, "", layer)
+	if ps != nil {
+		t.Fatal(ps)
+	}
+	// 系列的 b 排在 config.yaml 的 a 之后，覆盖 a；config.yaml 已列出的 a 不重复应用；项目配置最后生效。
+	if got := r.Rules["r1"].Params["max"]; got.Source != "pack:b" || got.Value != float64(20) {
+		t.Fatalf("max = %+v", got)
+	}
+	if got := r.Rules["r1"].Params["min"]; got.Source != "project" {
+		t.Fatalf("min = %+v", got)
+	}
+	var ids []string
+	for _, p := range r.Packs {
+		ids = append(ids, p.ID)
+	}
+	if !slices.Equal(ids, []string{"a", "b"}) || r.Glossary[0].Source != "pack:b" {
+		t.Fatalf("packs = %v, glossary = %+v", ids, r.Glossary)
+	}
+	if r, _ := ForWork(root, "", nil); r.Rules["r1"].Params["max"].Source != "pack:a" {
+		t.Fatal("nil layer differs from ForGenre")
+	}
+	_, ps = ForWork(root, "", &Layer{Path: ".writing-anything/series/s.yaml", Packs: []string{"nope"}})
+	if len(ps) != 1 || ps[0].Code != "config.unknown-pack" || ps[0].Path != ".writing-anything/series/s.yaml" || ps[0].Field != "packs[0]" {
+		t.Fatalf("unknown series pack: %+v", ps)
+	}
+}
+
+func TestDriftThreshold(t *testing.T) {
+	if r := mustResolve(t, setup(t, "", nil)); r.DriftThreshold != (Value{2.0, "default"}) {
+		t.Fatalf("default = %+v", r.DriftThreshold)
+	}
+	r := mustResolve(t, setup(t, config("", "[a, b]", ""), map[string]string{
+		"a": "schema_version: 1\nid: a\ntitle: a\ndrift_threshold: 3\n",
+		"b": "schema_version: 1\nid: b\ntitle: b\ndrift_threshold: 1.5\n",
+	}))
+	if r.DriftThreshold != (Value{1.5, "pack:b"}) {
+		t.Fatalf("declared = %+v", r.DriftThreshold)
 	}
 }

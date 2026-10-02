@@ -186,16 +186,16 @@ rules:
         - marketing.schema.json 声明 hook 字段，合法的营销要素被报告为 artifact.executable-content
   author-choice-decisions:
     strength: SHOULD
-    statement: 产物中需要作者从多个候选中选定的内容（如标题候选）通过决策队列确认：产物只记录决策 id，选定结果与状态（none、open、decided、stale、unknown）由决策推导，不把选择复制进产物；代替产物向决策队列写入时，先完成全部检查并用 decision.NextID 预先算出 id，先写决策队列、再写引用它的产物，后者失败时在 changedPaths 中如实列出决策队列；候选在决定前改变时原地替换该决策的选项（decision.Replace），不另建会继续阻塞单元的新决策。
-    rationale: 决策队列是作者确认的唯一记录，复制选择会产生两个可能不一致的事实来源；预先算出 id 与固定的写入顺序满足 precheck-before-side-effects，原地替换避免作者没有办法撤回的过时阻塞决策。
+    statement: 产物中需要作者从多个候选中选定的内容（如标题候选、分歧片段的分值）通过决策队列确认：产物只记录决策 id，选定结果与状态（none、open、decided、stale、unknown）由决策推导，不把选择复制进产物；作者的选择按决策自己记录的选项解释（如选项文本中的分值），不按当前配置反推选项下标；代替产物向决策队列写入时，先完成全部检查并用 decision.NextID 预先算出 id，先写决策队列、再写引用它的产物，后者失败时在 changedPaths 中如实列出决策队列；一次命令新建多个决策时用 decision.AddAll 只写一次决策队列；候选在决定前改变时原地替换该决策的选项（decision.Replace），不另建会继续阻塞单元或留在队列中的新决策。
+    rationale: 决策队列是作者确认的唯一记录，复制选择会产生两个可能不一致的事实来源；配置（如 scale）在决定后改变时，按下标反推会把作者的选择悄悄换成别的值；预先算出 id、固定的写入顺序与一次写入满足 precheck-before-side-effects，原地替换避免作者没有办法撤回的过时决策。
     enforcement:
       method: review
-      detail: 审查代替产物写入决策队列的命令（如 marketing ask）：产物中只有决策 id，状态由选项比较推导，写入顺序与失败时的 changedPaths 正确，过期未决定的决策被替换而不是新增。
+      detail: 审查代替产物写入决策队列的命令（如 marketing ask、metrics record）：产物中只有决策 id，状态与选择由决策推导，写入顺序与失败时的 changedPaths 正确，过期未决定的决策被替换而不是新增；internal/metrics 的 TestOpenDecisionUpdatedInPlace 与 TestDecidedValueFromOptionText 覆盖原地更新与按选项文本解释。
     examples:
       good:
-        - 'marketing.yaml 只有 headline_decision: dec-1，marketing show 按 dec-1 的选项与当前候选推导 headlineState'
+        - 'metrics.yaml 只记录 {metric: tension, paragraph: 2, decision: dec-1}，metrics show 按 dec-1 选中选项的文本「4：紧迫」得到 4 分'
       bad:
-        - 'marketing.yaml 另存 headline: h2，作者在决策队列中改选后两处不一致'
+        - 按 choice 的字母减去当前 scale.min 反推分值，规范包把 scale 从 -2..2 改为 0..4 后作者选的 -2 变成 0
   pack-text-in-deliverables:
     strength: MUST
     statement: 规范包等第三方提供、会原样写进交付文件（导出的 Markdown、front matter、HTML）的文字（如 ai_disclosure_template）必须由 Schema 限制为一行并设长度上限，只能含声明的占位符，占位符用纯文字替换；写进 YAML 时只能经 YAML 编码器（不得用字符串拼接），写进 HTML 时只能作为模板的文字节点。
@@ -208,3 +208,38 @@ rules:
         - ai_disclosure_template 的 Schema：pattern ^(?:[^{}\r\n]|\{(?:ai_percent|ai_paragraphs|paragraphs)\})+$，maxLength 500
       bad:
         - doc += "\n---\n\n" + pack.Template，模板可以含换行与 ---
+  read-path-invariants:
+    strength: MUST
+    statement: 查看、汇总与统计产物的命令（如 metrics show、review show）不得假定只由写入命令保证、而 Schema 与领域校验都不检查的不变量（如每个会话覆盖全部段落）：wa-cli validate 判为合法的产物，任何命令都不得因它 panic 或给出错误结果；需要依赖这类不变量时，把它加入该产物的领域校验，或在读取路径上把不满足的情况按缺失处理。
+    rationale: 作者可以直接编辑结构化产物，合法但不是 wa-cli 写出的产物一定会出现；只在写入路径保证的不变量在读取路径上失效时，命令会崩溃，作者也无从修复。
+    enforcement:
+      method: test
+      detail: 每种新增产物至少有一条测试用合法但不是 wa-cli 写出的产物运行其查看命令（如 internal/metrics 的 TestSummarizeHandWrittenFile 与 internal/cli 的 TestMetricsWritesNothingOnFailure）。
+  directory-listing:
+    strength: MUST
+    statement: 列举工作区目录中的产物（如 packs/、proposals/）必须用 internal/workspace 的 YAMLFiles（os.ReadDir 后按名称过滤与排序），不得用 filepath.Glob 拼接项目目录：项目目录名中的 [ ] * ? 会被当成通配字符。
+    rationale: MCP 与 CLI 都会收到任意的 --dir；Glob 在目录名含通配字符时静默返回空结果，整体校验因此漏检不合法的产物且报告 valid 为 true。
+    enforcement:
+      method: test
+      detail: internal/cli 的 TestValidateDirWithGlobCharacters 在名为「Project [2026]」的项目目录中校验 packs/ 与 proposals/ 下不合法的文件。
+  yaml-text-utf8:
+    strength: MUST
+    statement: 把正文或作者给出的文字写进 YAML 产物（如写入记录的段落原文、修改记录）之前，必须检查它是合法的 UTF-8；不合法时按规格规定的方式处理（跳过该字段或报告专门的错误码），不得让 YAML 编码器报错，也不得写出 !!binary 等非数据标签。
+    rationale: 正文按字节写入、不保证是 UTF-8；直接写进 YAML 会让原本能成功的命令失败，或产生被可执行内容检查拒绝的产物，作者修好编码之前所有写入都被挡住。
+    enforcement:
+      method: test
+      detail: internal/cli 的 TestDraftWriteEditsPrecheckAndMarkup 用含 \xff 的正文运行 draft write，断言成功且正文逐字节写入。
+  subject-scoped-lookup:
+    strength: SHOULD
+    statement: 命令为当前作品扫描某类全部工作区级产物（如查找所属系列）时，无法加载、且无法判定与当前作品相关的实例应以 warning 报告并按不相关处理，不阻塞当前命令；整体校验仍按 error 报告。确需阻塞时写进规格。
+    rationale: 一个与当前作品无关的坏文件（如复制后忘了改 id 的系列文件）会让工作区中所有作品的 lint、context 与导出都失败，作者无从判断原因。
+    enforcement:
+      method: test
+      detail: internal/series 的 TestOfToleratesUnrelatedBrokenFiles 与 internal/cli 的 TestSeriesSourcesOrderAndRobustness：坏掉的系列文件不阻塞非成员作品的 lint，validate 仍报告 error。
+  per-work-merge-validated:
+    strength: SHOULD
+    statement: 命令按作品合并生效设置时引入的配置层（如所属系列的规范包），整体校验必须按命令实际使用的组合逐个合并一次并报告 error，使 lint、context 等报告的合并问题能被 wa-cli validate --dir 重新检出。
+    rationale: 只按 default_genre 合并的整体校验检不出只在系列成员作品上出现的冲突，诊断的 next 给出的复查命令会报告 valid 为 true（cli-contract/next-rechecks-problem）。
+    enforcement:
+      method: test
+      detail: internal/cli 的 TestSeriesSourcesOrderAndRobustness 让系列规范包与文体规则冲突，断言 validate 报告 rule.type-conflict。

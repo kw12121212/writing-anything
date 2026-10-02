@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "打分会话输入",
+  "description": "wa-cli metrics record 的输入：一次独立打分会话（Scoring Session）的 id 与各片段各指标的分数。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["session", "scores"],
+  "properties": {
+    "session": {"$ref": "common.schema.json#/$defs/id"},
+    "scores": {"$ref": "metrics.schema.json#/$defs/scores"}
+  }
+}

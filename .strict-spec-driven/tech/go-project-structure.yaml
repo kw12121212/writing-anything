@@ -72,3 +72,24 @@ rules:
         - waitFor(t, out, "哨兵") 后再追加反馈
       bad:
         - time.Sleep(200 * time.Millisecond) 后假定 watch 已完成启动扫描
+  failure-tests-assert-code:
+    strength: SHOULD
+    statement: 断言命令或函数失败的测试应当断言具体的错误码（以及需要时的 path 与 field），不只断言「有问题」或退出码为 1；构造失败场景的夹具只应触发被测的那一个问题。
+    rationale: 只断言存在问题的测试会因为夹具中别的错误而通过（如复制的提议 id 与文件名不一致），被测分支实际上没有证据。
+    enforcement:
+      method: review
+      detail: 审查新增的失败场景测试：断言了规格中的错误码字面量，夹具没有附带其他会先报告的问题。
+  float-equality-in-stats:
+    strength: SHOULD
+    statement: 统计判定中「为 0」或「相等」的条件，应先检查样本是否全部相同，或按输出精度舍入后再比较；不得直接对浮点运算结果用 <= 0 或 == 判断。
+    rationale: 完全相同的 0.1 求出的总体标准差是 1.39e-17，直接比较会把「标准差为 0 不判定」绕过去，产生「超过 2 个标准差（标准差 0）」这样自相矛盾的结论。
+    enforcement:
+      method: test
+      detail: internal/stylemetric 的 TestIdenticalBaselineNotJudged 用三个 0.1 作为基准，断言不判定。
+  shared-term-matcher:
+    strength: SHOULD
+    statement: 对正文按词表计数或匹配（AI 腔、禁用词等）时，应复用 internal/lint 的多词匹配器（lint.CountTerms 或规则引擎），一次扫描完成，屏蔽区域与去重口径与 lint 一致；不得对每个词各扫描一次正文。
+    rationale: 词表条数只受节点上限约束，逐词扫描的耗时随词表增长（3 万个词、30 万字时约 6 秒），也会与 lint 的计数口径不一致（重复词、重叠词、代码与注释）。
+    enforcement:
+      method: test
+      detail: internal/lint 的 TestCountTerms 与 internal/stylemetric 的 TestMeasureDetails 断言去重、重叠与屏蔽区域的计数。

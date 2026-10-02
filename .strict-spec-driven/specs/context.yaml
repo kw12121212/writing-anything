@@ -8,7 +8,7 @@ spec:
 requirements:
   context-command:
     strength: MUST
-    statement: wa-cli context <unit> 必须只读地输出该单元的上下文包（Context Pack），不创建或修改任何文件，changedPaths 为空数组。--json 输出的 context 字段含 unit（单元引用）、type、stage、genre、budget（value 与 source）、used、brief、outline、section、feedback、decisions、norms、sources、neighbors 与 trimmed；内容见 context-content，裁剪见 context-trim。不加 --json 时以 Markdown 输出同样的内容：先是单元信息头（单元、类型、阶段、文体与上下文预算），然后按优先级顺序输出保留的各内容项，最后列出被裁剪的内容。单元不存在时按 units-and-lifecycle 主规格的 unit-reference 处理；所用的写作简报、大纲、反馈文件或决策队列不通过校验，或合并配置有 error 级问题时报告其诊断，context 为 null，退出码为 1；否则退出码为 0，并以 severity 为 warning 的诊断报告不妨碍组装的问题（见 context-content）。
+    statement: wa-cli context <unit> 必须只读地输出该单元的上下文包（Context Pack），不创建或修改任何文件，changedPaths 为空数组。--json 输出的 context 字段含 unit（单元引用）、type、stage、genre、budget（value 与 source）、used、brief、outline、section、feedback、decisions、norms、sources、neighbors、series 与 trimmed；内容见 context-content，series 见 series 主规格的 context-series，裁剪见 context-trim。不加 --json 时以 Markdown 输出同样的内容：先是单元信息头（单元、类型、阶段、文体与上下文预算），然后按优先级顺序输出保留的各内容项，最后列出被裁剪的内容。单元不存在时按 units-and-lifecycle 主规格的 unit-reference 处理；所用的写作简报、大纲、反馈文件或决策队列不通过校验，或合并配置有 error 级问题时报告其诊断，context 为 null，退出码为 1；否则退出码为 0，并以 severity 为 warning 的诊断报告不妨碍组装的问题（见 context-content）。
     scenarios:
       context-json:
         - GIVEN: 作品 my-post 的 brief.yaml 与 outline.yaml 合法
@@ -56,7 +56,7 @@ requirements:
         - THEN: valid 为 true，diagnostics 中有一条错误码为 source.modified、severity 为 warning 的诊断，sources 不含 src-a，退出码为 0
   context-trim:
     strength: MUST
-    statement: 上下文包必须把内容控制在上下文预算（Context Budget，见 context-budget）之内：每个内容项按其 Markdown 文本的字符数（Unicode 码点）计入预算，按以下优先级从高到低依次放入：写作简报、本单元大纲、本节大纲条目、每条作者反馈、每个决策、规范要点的规则、术语表、禁用词、文风、每份素材原文、每个相邻节；单元信息头与裁剪报告不计入预算。放入某项会超出预算时：素材原文在剩余预算大于其标题行所占字符数加 1 时截断到剩余字符数（truncated 为 true，截断后的内容仍以换行结尾），否则与其他项一样整项裁剪，继续尝试之后的项。used 为保留的内容项字符数之和，不超过预算；trimmed 为被裁剪或截断的项，按优先级顺序，每项含 part（brief、outline、section、feedback、decision、rules、glossary、bannedTerms、style、source 或 neighbor）、id（反馈、决策、素材与相邻节的 id 或单元引用，其他为 null）、chars（原字符数）与 keptChars（保留的字符数，整项裁剪时为 0）；被整项裁剪的内容不出现在 context 的对应字段中（对应字段为 null 或不含该项）。
+    statement: 上下文包必须把内容控制在上下文预算（Context Budget，见 context-budget）之内：每个内容项按其 Markdown 文本的字符数（Unicode 码点）计入预算，按以下优先级从高到低依次放入：写作简报、本单元大纲、本节大纲条目、每条作者反馈、每个决策、每条系列事实、每份前序作品摘要、规范要点的规则、术语表、禁用词、文风、每份素材原文、每个相邻节；单元信息头与裁剪报告不计入预算。放入某项会超出预算时：素材原文在剩余预算大于其标题行所占字符数加 1 时截断到剩余字符数（truncated 为 true，截断后的内容仍以换行结尾），否则与其他项一样整项裁剪，继续尝试之后的项。used 为保留的内容项字符数之和，不超过预算；trimmed 为被裁剪或截断的项，按优先级顺序，每项含 part（brief、outline、section、feedback、decision、fact、summary、rules、glossary、bannedTerms、style、source 或 neighbor）、id（反馈、决策、事实、素材的 id，摘要的作品 id 与相邻节的单元引用，其他为 null）、chars（原字符数）与 keptChars（保留的字符数，整项裁剪时为 0）；被整项裁剪的内容不出现在 context 的对应字段中（对应字段为 null 或不含该项）。
     scenarios:
       within-budget:
         - GIVEN: 上下文预算为 12000，全部内容不超过预算

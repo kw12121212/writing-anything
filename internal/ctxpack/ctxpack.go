@@ -16,6 +16,7 @@ import (
 	"github.com/kw12121212/writing-anything/internal/feedback"
 	"github.com/kw12121212/writing-anything/internal/outline"
 	"github.com/kw12121212/writing-anything/internal/resolve"
+	"github.com/kw12121212/writing-anything/internal/series"
 	"github.com/kw12121212/writing-anything/internal/work"
 	"github.com/kw12121212/writing-anything/internal/workspace"
 )
@@ -27,6 +28,8 @@ const (
 	PartSection     = "section"
 	PartFeedback    = "feedback"
 	PartDecision    = "decision"
+	PartFact        = "fact"
+	PartSummary     = "summary"
 	PartRules       = "rules"
 	PartGlossary    = "glossary"
 	PartBannedTerms = "bannedTerms"
@@ -104,6 +107,23 @@ type Neighbor struct {
 	Excerpt  *string
 }
 
+// Series 是成员作品所属系列的事实与前序作品的已验收摘要。
+type Series struct {
+	ID, Title string
+	Facts     []series.Fact
+	Summaries []Summary
+}
+
+// Summary 是一个前序作品根单元的摘要；Stale 为摘要之后正文又被修改。
+type Summary struct {
+	Work  string
+	Text  string
+	Stale bool
+}
+
+// CodeSummaryMissing 是前序作品还没有摘要时的 warning 错误码。已发布的错误码不得改名或复用。
+const CodeSummaryMissing = "context.summary-missing"
+
 // Trim 是一个被裁剪或截断的内容项。
 type Trim struct {
 	Part      string
@@ -125,6 +145,7 @@ type Pack struct {
 	Norms                    Norms
 	Sources                  []Source
 	Neighbors                []Neighbor
+	Series                   *Series // 作品不属于系列时为 nil
 	Trimmed                  []Trim
 	items                    []item // 保留的内容项，按优先级顺序，供 Markdown 使用
 }
@@ -149,7 +170,7 @@ func Build(root string, w *work.Work, u *work.Unit) (*Pack, []workspace.Problem)
 		return nil, ps
 	}
 	q := brief.Queue{Decisions: ds}
-	r, warnings := resolve.ForGenre(root, w.Genre.ID)
+	r, s, warnings := series.ForWork(root, w)
 	if r == nil {
 		return nil, warnings
 	}
@@ -225,6 +246,38 @@ func Build(root string, w *work.Work, u *work.Unit) (*Pack, []workspace.Problem)
 		}})
 	}
 
+	// 系列的事实与前序作品的已验收摘要（series 主规格的 context-series）。
+	if s != nil {
+		p.Series = &Series{ID: s.ID, Title: s.Title, Facts: []series.Fact{}, Summaries: []Summary{}}
+		for _, f := range s.Facts {
+			p.Series.Facts = append(p.Series.Facts, f)
+			id := f.ID
+			add(item{part: PartFact, id: id, body: factMarkdown(f), drop: func() {
+				p.Series.Facts = slices.DeleteFunc(p.Series.Facts, func(x series.Fact) bool { return x.ID == id })
+			}})
+		}
+		for _, pr := range series.PrecedingSummaries(root, s, w.ID) {
+			if pr.Problems != nil {
+				// 别的作品的摘要读不出来不让本单元的上下文包失败：降为 warning 并跳过（series 主规格的 context-series）。
+				for _, q := range pr.Problems {
+					q.Severity = workspace.SeverityWarning
+					warnings = append(warnings, q)
+				}
+				continue
+			}
+			if pr.Summary == nil {
+				warnings = append(warnings, workspace.Problem{Code: CodeSummaryMissing, Severity: workspace.SeverityWarning,
+					Message: fmt.Sprintf("系列 %s 中排在前面的作品 %s 还没有已验收摘要；请在它验收后用 wa-cli summary set %s 写入", s.ID, pr.Work, pr.Work)})
+				continue
+			}
+			v := Summary{Work: pr.Work, Text: pr.Summary.Text, Stale: pr.Summary.Stale}
+			p.Series.Summaries = append(p.Series.Summaries, v)
+			add(item{part: PartSummary, id: v.Work, body: v.markdown(), drop: func() {
+				p.Series.Summaries = slices.DeleteFunc(p.Series.Summaries, func(x Summary) bool { return x.Work == v.Work })
+			}})
+		}
+	}
+
 	// 规范要点。
 	p.Norms = normsOf(r)
 	for _, it := range p.Norms.items(&p.Norms) {
@@ -235,6 +288,14 @@ func Build(root string, w *work.Work, u *work.Unit) (*Pack, []workspace.Problem)
 	ids := sectionSources
 	if p.Section == nil {
 		ids = rootSources(b, own)
+	}
+	if s != nil {
+		// 系列素材排在作品自己引用的素材之后：预算不够时先裁剪系列的。
+		for _, id := range s.Sources {
+			if !slices.Contains(ids, id) {
+				ids = append(ids, id)
+			}
+		}
 	}
 	for _, id := range ids {
 		s, t, warn := readSource(root, id, budget)

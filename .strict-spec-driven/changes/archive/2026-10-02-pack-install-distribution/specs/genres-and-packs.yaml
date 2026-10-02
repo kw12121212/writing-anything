@@ -1,0 +1,109 @@
+schema: strict-spec-driven/delta-spec/v1
+schema_version: 1
+artifact_type: delta_spec
+schema_file: templates/strict-spec-driven/schemas/delta-spec.yaml
+target_spec: genres-and-packs
+operations:
+  ADDED:
+    pack-install:
+      strength: MUST
+      statement: wa-cli pack install <source> 必须把规范包（Pack）安装到 --dir 下工作区的 .writing-anything/packs/<id>.yaml（id 取自规范包文件的 id 字段），并在锁定文件（Lock File）中记录来源与版本（见 pack-lock-file）。source 以 https://、http://、ssh://、git:// 或 file:// 开头，或形如 user@host:path 时为 git 地址：wa-cli 调用系统 git 克隆（不递归子模块、不运行仓库中的钩子、不交互提示，超过 2 分钟视为失败），检出 --ref 给出的分支、标签或提交（未给出时为默认分支），读取仓库根目录的 pack.yaml（必须是普通文件，不是符号链接）；其他 source 为相对 --dir 或绝对的本地路径，指向 .yaml 文件时读取该文件，指向目录时读取其中的 pack.yaml。规范包文件大小不超过 1 MiB，内容逐字节复制。写入前必须完成与工作区规范包相同的全部校验（Schema、可执行内容、重复项、已知规则类型），这些问题的诊断不填 path，message 以「规范包来源 <source>：」开头，next 为 wa-cli help pack install --json；任何一项失败都不写入任何文件，changedPaths 为空，退出码为 1。id 与内置规范包相同时报告 pack.id-conflict；packs/<id>.yaml 已存在但没有锁定条目（或不是普通文件）时报告 pack.exists（next 含 wa-cli pack list），不覆盖；已有锁定条目时替换文件与条目；来源、提交与内容都未变时不写入任何文件；工作区目录或 packs/ 不是真实目录（如符号链接）时报告 workspace.write-failed，不经由它写入。source 不是 git 地址、不是已存在的路径，且形如 <owner>/<name> 时报告 pack.registry-unsupported（中心化仓库（Registry）尚未支持）；其他不存在的路径报告 pack.source-not-found；目录中没有 pack.yaml、文件不是 .yaml、不是普通文件或超过大小上限时报告 pack.invalid-source；找不到 git 时报告 pack.git-unavailable；git 以非 0 退出或超时时报告 pack.git-failed，message 含截断后的 git 输出；--ref 只用于 git 地址，以 - 开头、含空白或用于本地路径时报告 input.invalid-value。--json 输出的 pack 含 id、title、path、source（git 与 ref，或 path）、commit（本地路径为 null）、sha256 与 status（installed、updated 或 unchanged），失败时为 null；changedPaths 列出写入的规范包文件与锁定文件。pack install 不修改 config.yaml，启用规范包仍通过 wa-cli config set packs；wa-cli 不执行规范包或其仓库中的任何内容。
+      scenarios:
+        install-from-path:
+          - GIVEN: 工作区 D 之外的 ../house/pack.yaml 是 id 为 house 的合法规范包
+          - WHEN: 运行 wa-cli pack install ../house --dir D --json
+          - THEN: D/.writing-anything/packs/house.yaml 与来源文件逐字节相同；pack.status 为 installed，source.path 为 ../house，commit 为 null，sha256 为该文件的 SHA-256；changedPaths 为 [.writing-anything/packs/house.yaml, .writing-anything/packs.lock.yaml]；config.yaml 不变；退出码为 0
+        install-from-git:
+          - GIVEN: file:// 地址指向的 git 仓库根目录有 id 为 house 的 pack.yaml，标签 v1 指向提交 C
+          - WHEN: 运行 wa-cli pack install file:///repo/house.git --ref v1 --dir D --json
+          - THEN: 'pack.source 为 {git: file:///repo/house.git, ref: v1}，pack.commit 为 C 的完整 40 位提交号，锁定文件中 house 的 commit 与 sha256 与之相同，退出码为 0'
+        install-idempotent:
+          - GIVEN: 已按 install-from-path 安装 house，来源未改变
+          - WHEN: 再运行一次同样的命令
+          - THEN: pack.status 为 unchanged，changedPaths 为空数组，两个文件的内容与修改时间不变，退出码为 0
+        install-update:
+          - GIVEN: 已安装 house，随后来源文件中 title 被修改
+          - WHEN: 再运行同样的 pack install 命令
+          - THEN: pack.status 为 updated，packs/house.yaml 为新内容，锁定条目的 sha256 随之更新，退出码为 0
+        install-invalid-writes-nothing:
+          - GIVEN: 来源规范包某条规则的 params 含 script 字段
+          - WHEN: 运行 wa-cli pack install ../bad --dir D --json
+          - THEN: diagnostics 中有一条错误码为 artifact.executable-content 的诊断，packs/ 与锁定文件都不被创建或修改，changedPaths 为空数组，退出码为 1
+        install-keeps-handwritten:
+          - GIVEN: packs/house.yaml 是作者手写的规范包，锁定文件中没有 house
+          - WHEN: 运行 wa-cli pack install ../house --dir D --json
+          - THEN: diagnostics 中有一条错误码为 pack.exists、path 为 .writing-anything/packs/house.yaml 的诊断，该文件不变，退出码为 1
+        install-builtin-id:
+          - GIVEN: 来源规范包的 id 为 default
+          - WHEN: 运行 wa-cli pack install ../default-copy --dir D --json
+          - THEN: diagnostics 中有一条错误码为 pack.id-conflict 的诊断，不写入任何文件，退出码为 1
+        install-registry-reserved:
+          - GIVEN: 项目目录下不存在路径 acme/house
+          - WHEN: 运行 wa-cli pack install acme/house --dir D --json
+          - THEN: diagnostics 中有一条错误码为 pack.registry-unsupported 的诊断，message 说明需要使用 git 地址或本地路径，退出码为 1
+        install-git-failure:
+          - GIVEN: git 地址指向不存在的仓库
+          - WHEN: 运行 wa-cli pack install file:///nope.git --dir D --json
+          - THEN: diagnostics 中有一条错误码为 pack.git-failed 的诊断，message 含 git 的输出，不写入任何文件，退出码为 1
+    pack-lock-file:
+      strength: MUST
+      statement: 锁定文件 .writing-anything/packs.lock.yaml 必须由 wa-cli pack install 与 wa-cli pack remove 维护：schema_version 为 1，packs 为按 id 排序的锁定条目数组，每项含 id、source（git 来源为 git 与可选的 ref；本地来源为 path：参数给出绝对路径时写规整后的绝对路径，给出相对路径时写规整后相对 --dir 的路径，无法表示为相对路径时写绝对路径）、commit（只有 git 来源有，为 40 位十六进制提交号）与 sha256（已安装规范包文件内容的 SHA-256）。wa-cli validate .writing-anything/packs.lock.yaml 必须按其 JSON Schema 校验该文件，不合法时报告 artifact.schema-violation；条目 id 重复时报告 artifact.duplicate-id（field 为重复的 packs[i].id）；退出码都为 1。修改锁定文件时只改目标条目，保留其他条目与注释；目标条目或 packs 带 YAML 锚点、是别名或含合并键时报告 pack.anchored-value，不写入任何文件。工作区没有锁定文件不是错误；wa-cli init 不创建它。
+      scenarios:
+        lock-entry:
+          - GIVEN: 已从本地路径安装 house、从 git 地址安装 brand
+          - WHEN: 读取 .writing-anything/packs.lock.yaml 并运行 wa-cli validate .writing-anything/packs.lock.yaml --dir D --json
+          - THEN: packs 依次为 brand 与 house；brand 含 source.git、commit 与 sha256，house 含 source.path 与 sha256、没有 commit；validate 的 valid 为 true，退出码为 0
+        lock-schema-violation:
+          - GIVEN: 锁定文件中某个条目的 sha256 不是 64 位十六进制
+          - WHEN: 运行 wa-cli validate --dir D --json
+          - THEN: diagnostics 中有一条错误码为 artifact.schema-violation、path 为 .writing-anything/packs.lock.yaml、field 为 packs[0].sha256 的诊断，退出码为 1
+        lock-duplicate:
+          - GIVEN: 锁定文件中两个条目的 id 都为 a
+          - WHEN: 运行 wa-cli validate .writing-anything/packs.lock.yaml --dir D --json
+          - THEN: diagnostics 中有一条错误码为 artifact.duplicate-id、field 为 packs[1].id 的诊断，退出码为 1
+        lock-keeps-comments:
+          - GIVEN: 锁定文件含作者写的注释与条目 zeta
+          - WHEN: 运行 wa-cli pack install 安装 id 为 house 的规范包
+          - THEN: 锁定文件保留原注释，house 条目排在 zeta 之前
+    pack-lock-verify:
+      strength: MUST
+      statement: 不带位置参数的 wa-cli validate 必须校验锁定文件与已安装规范包的一致性：锁定条目对应的 packs/<id>.yaml 不存在时报告错误码 pack.lock-missing-file，存在但内容的 SHA-256 与锁定的 sha256 不同时报告错误码 pack.lock-mismatch；两者的 path 为 .writing-anything/packs/<id>.yaml（field 为空），next 含按锁定来源重新安装的 wa-cli pack install 命令（git 来源带锁定的提交作为 --ref）与 wa-cli pack remove <id> 命令，退出码为 1。没有锁定条目的工作区规范包不做此检查。
+      scenarios:
+        verify-passes:
+          - GIVEN: 已安装 house，未做修改
+          - WHEN: 运行 wa-cli validate --dir D --json
+          - THEN: valid 为 true，退出码为 0
+        verify-modified:
+          - GIVEN: 已安装 house，随后 packs/house.yaml 被手工修改
+          - WHEN: 运行 wa-cli validate --dir D --json
+          - THEN: diagnostics 中有一条错误码为 pack.lock-mismatch、path 为 .writing-anything/packs/house.yaml 的诊断，next 含 wa-cli pack install 的重新安装命令，退出码为 1
+        verify-missing:
+          - GIVEN: 已安装 house，随后 packs/house.yaml 被删除
+          - WHEN: 运行 wa-cli validate --dir D --json
+          - THEN: diagnostics 中有一条错误码为 pack.lock-missing-file 的诊断，退出码为 1
+    pack-list:
+      strength: MUST
+      statement: wa-cli pack list 必须只读地列出可用的规范包，不修改任何产物，changedPaths 为空数组。--json 输出的 packs 依次为内置规范包（按 id 排序）、工作区中的规范包与锁定文件中有条目但文件缺失的规范包（按 id 排序），每项含 id、title（文件缺失或无法加载时为 null）、origin（builtin 或 workspace）、path（内置为 null）、enabled（是否在 config.yaml 的 packs 中；packs 为空时只有 default 为 true）、status 与 lock（锁定条目的 source、commit 与 sha256；没有锁定条目时为 null）。status 取值 builtin（内置）、local（作者手写、没有锁定条目）、installed（与锁定一致）、modified（内容与锁定的 sha256 不同）与 missing（有锁定条目但文件不存在）；modified 与 missing 各给出一条 warning 级诊断（错误码同 pack-lock-verify），不使命令失败。锁定文件无法解析或不符合 Schema 时报告对应的错误，退出码为 1。未加 --json 时以人读文本输出同样的信息。
+      scenarios:
+        list-statuses:
+          - GIVEN: 工作区有手写的 office、已安装未修改的 house 与已安装后被修改的 brand，config.yaml 的 packs 为 [house]
+          - WHEN: 运行 wa-cli pack list --dir D --json
+          - THEN: packs 依次含 default（status 为 builtin、enabled 为 false）、brand（modified）、house（installed、enabled 为 true、lock 非 null）与 office（local、lock 为 null）；diagnostics 中有一条 warning 级 pack.lock-mismatch，valid 为 true，changedPaths 为空数组，退出码为 0
+    pack-remove:
+      strength: MUST
+      statement: wa-cli pack remove <id> 必须删除已安装规范包的文件 .writing-anything/packs/<id>.yaml 并从锁定文件中移除其条目（文件已缺失时只移除条目），changedPaths 列出两者，退出码为 0。id 不是 id 格式时报告 input.invalid-value；id 没有锁定条目（内置规范包、作者手写的规范包或不存在）时报告错误码 pack.not-installed，不删除任何文件；规范包仍在 config.yaml 的 packs 中时报告错误码 pack.in-use，next 为去掉该 id 后的 wa-cli config set packs 命令，不删除任何文件；这些情况的退出码为 1。
+      scenarios:
+        remove-installed:
+          - GIVEN: 已安装 house，config.yaml 的 packs 为空
+          - WHEN: 运行 wa-cli pack remove house --dir D --json
+          - THEN: packs/house.yaml 不存在，锁定文件中没有 house 条目，changedPaths 含 .writing-anything/packs/house.yaml 与 .writing-anything/packs.lock.yaml，退出码为 0
+        remove-in-use:
+          - GIVEN: 已安装 house，config.yaml 的 packs 为 [default, house]
+          - WHEN: 运行 wa-cli pack remove house --dir D --json
+          - THEN: diagnostics 中有一条错误码为 pack.in-use 的诊断，next 含 wa-cli config set packs default --dir D --json，文件与锁定条目都不变，退出码为 1
+        remove-handwritten:
+          - GIVEN: packs/office.yaml 是作者手写的规范包
+          - WHEN: 运行 wa-cli pack remove office --dir D --json
+          - THEN: diagnostics 中有一条错误码为 pack.not-installed 的诊断，office.yaml 不变，退出码为 1
+  MODIFIED: {}
+  REMOVED: {}

@@ -111,7 +111,20 @@ type Genre struct {
 	ContextBudget int
 	// DefaultMethod 是文体的默认写作法模板（Method Template）id；写作简报没有选择写作法时使用。空表示没有默认。
 	DefaultMethod string
+	// ScoredMetrics 是文体声明的 AI 评分指标（Metric）。
+	ScoredMetrics []ScoredMetric
+	// SummaryLength 是已验收单元摘要（Summary）的字数范围；未声明时为 DefaultSummaryLength。
+	SummaryLength Range
 }
+
+// Range 是一个整数范围。
+type Range struct {
+	Min int `json:"min"`
+	Max int `json:"max"`
+}
+
+// DefaultSummaryLength 是文体没有声明 summary_length 时摘要的字数范围。
+var DefaultSummaryLength = Range{Min: 20, Max: 500}
 
 // Pack 是一个规范包。Path 是工作区规范包相对项目目录的路径，内置规范包为空。
 type Pack struct {
@@ -133,6 +146,12 @@ type Pack struct {
 	HTMLTheme map[string]string
 	// DisclosureTemplate 是规范包声明的 AI 参与说明模板；空表示未声明。
 	DisclosureTemplate string
+	// ScoredMetrics 是规范包声明的 AI 评分指标（Metric）。
+	ScoredMetrics []ScoredMetric
+	// StyleProfile 是规范包声明的文风画像（Style Profile）：与 style_profile 字段相同的结构；nil 表示未声明。
+	StyleProfile map[string]any
+	// DriftThreshold 是规范包声明的文风漂移阈值；0 表示未声明。
+	DriftThreshold float64
 }
 
 // 文件格式：字段名与 YAML 一致。与公开类型只差结构体标签，可以直接转换。
@@ -149,30 +168,35 @@ type (
 		RequiredArtifacts []string `json:"required_artifacts"`
 	}
 	genreFile struct {
-		ID          string          `json:"id"`
-		Title       string          `json:"title"`
-		Description string          `json:"description"`
-		UnitTypes   []unitTypeFile  `json:"unit_types"`
-		Stages      []stageFile     `json:"stages"`
-		Rules       map[string]Rule `json:"rules"`
-		Rubric      []RubricItem    `json:"rubric"`
-		Budget      int             `json:"context_budget"`
-		Method      string          `json:"default_method"`
+		ID          string             `json:"id"`
+		Title       string             `json:"title"`
+		Description string             `json:"description"`
+		UnitTypes   []unitTypeFile     `json:"unit_types"`
+		Stages      []stageFile        `json:"stages"`
+		Rules       map[string]Rule    `json:"rules"`
+		Rubric      []RubricItem       `json:"rubric"`
+		Budget      int                `json:"context_budget"`
+		Method      string             `json:"default_method"`
+		Metrics     []scoredMetricFile `json:"scored_metrics"`
+		Summary     *Range             `json:"summary_length"`
 	}
 	packFile struct {
-		ID          string            `json:"id"`
-		Title       string            `json:"title"`
-		Description string            `json:"description"`
-		Style       []string          `json:"style"`
-		Glossary    []Term            `json:"glossary"`
-		BannedTerms []BannedTerm      `json:"banned_terms"`
-		Rules       map[string]Rule   `json:"rules"`
-		Waivers     []Waiver          `json:"waivers"`
-		Rubric      []RubricItem      `json:"rubric"`
-		Methods     []Method          `json:"methods"`
-		Budget      int               `json:"context_budget"`
-		Theme       map[string]string `json:"html_theme"`
-		Disclosure  string            `json:"ai_disclosure_template"`
+		ID          string             `json:"id"`
+		Title       string             `json:"title"`
+		Description string             `json:"description"`
+		Style       []string           `json:"style"`
+		Glossary    []Term             `json:"glossary"`
+		BannedTerms []BannedTerm       `json:"banned_terms"`
+		Rules       map[string]Rule    `json:"rules"`
+		Waivers     []Waiver           `json:"waivers"`
+		Rubric      []RubricItem       `json:"rubric"`
+		Methods     []Method           `json:"methods"`
+		Budget      int                `json:"context_budget"`
+		Theme       map[string]string  `json:"html_theme"`
+		Disclosure  string             `json:"ai_disclosure_template"`
+		Metrics     []scoredMetricFile `json:"scored_metrics"`
+		Profile     map[string]any     `json:"style_profile"`
+		Drift       float64            `json:"drift_threshold"`
 	}
 )
 
@@ -242,9 +266,19 @@ func LoadGenre(id string) (g *Genre, problems []workspace.Problem, ok bool) {
 	if ps := workspace.FromSchema("", schema.Named("genre").ValidateNode(doc)); len(ps) > 0 {
 		return nil, withOrigin(ps, builtinOrigin("genres", id)), true
 	}
+	g = genreOf(doc)
+	return g, checkGenre(g), true
+}
+
+// genreOf 把已通过 Schema 校验的文体文档转换为 Genre，未声明的取值补默认值。
+func genreOf(doc *yaml.Node) (g *Genre) {
 	var f genreFile
 	Decode(doc, &f)
-	g = &Genre{ID: f.ID, Title: f.Title, Description: f.Description, Rules: f.Rules, Rubric: f.Rubric, ContextBudget: f.Budget, DefaultMethod: f.Method}
+	g = &Genre{ID: f.ID, Title: f.Title, Description: f.Description, Rules: f.Rules, Rubric: f.Rubric, ContextBudget: f.Budget, DefaultMethod: f.Method,
+		ScoredMetrics: scoredMetrics(f.Metrics), SummaryLength: DefaultSummaryLength}
+	if f.Summary != nil {
+		g.SummaryLength = *f.Summary
+	}
 	// 输出中的数组不得为 null：省略的 children、brief_required 与 required_artifacts 记为空数组。
 	for _, u := range f.UnitTypes {
 		u.Children, u.BriefRequired = nonNil(u.Children), nonNil(u.BriefRequired)
@@ -254,7 +288,7 @@ func LoadGenre(id string) (g *Genre, problems []workspace.Problem, ok bool) {
 		s.RequiredArtifacts = nonNil(s.RequiredArtifacts)
 		g.Stages = append(g.Stages, Stage(s))
 	}
-	return g, checkGenre(g), true
+	return g
 }
 
 func nonNil(s []string) []string {
@@ -294,6 +328,7 @@ func checkGenre(g *Genre) []workspace.Problem {
 	for _, d := range duplicates(len(g.Rubric), func(i int) string { return g.Rubric[i].ID }) {
 		add(CodeDuplicateID, fmt.Sprintf("rubric[%d].id", d), "评分项 "+g.Rubric[d].ID+" 重复")
 	}
+	checkScoredMetrics(g.ScoredMetrics, add)
 	if g.DefaultMethod != "" && !slices.Contains(BuiltinMethods(), g.DefaultMethod) {
 		add(CodeUnknownMethod, "default_method", fmt.Sprintf("默认写作法 %s 不是内置写作法（%s）", g.DefaultMethod, strings.Join(BuiltinMethods(), "、")))
 	}
@@ -330,6 +365,24 @@ func LoadPackFile(root, rel string) (*Pack, []workspace.Problem) {
 	return loadPack(doc, OriginWorkspace, rel)
 }
 
+// LoadPackData 校验尚未写入工作区的规范包内容 data（如 pack install 的来源）：按它将要安装到的 packs/<id>.yaml 做与工作区规范包
+// 相同的全部检查。问题不填 path（文件还不在工作区中），Origin 为来源说明 source。
+func LoadPackData(data []byte, source string) (*Pack, []workspace.Problem) {
+	doc, sp := schema.Parse(data)
+	if sp != nil {
+		return nil, withSource(workspace.FromSchema("", []schema.Problem{*sp}), source)
+	}
+	p, ps := loadPack(doc, OriginWorkspace, PackPath(schemaID(doc)))
+	return p, withSource(ps, source)
+}
+
+func withSource(ps []workspace.Problem, source string) []workspace.Problem {
+	for i := range ps {
+		ps[i].Path, ps[i].Origin = "", source
+	}
+	return ps
+}
+
 func loadPack(doc *yaml.Node, origin, rel string) (*Pack, []workspace.Problem) {
 	if ps := workspace.FromSchema(rel, schema.Named("pack").ValidateNode(doc)); len(ps) > 0 {
 		if origin == OriginBuiltin {
@@ -340,7 +393,8 @@ func loadPack(doc *yaml.Node, origin, rel string) (*Pack, []workspace.Problem) {
 	var f packFile
 	Decode(doc, &f)
 	p := &Pack{ID: f.ID, Title: f.Title, Description: f.Description, Style: f.Style, Glossary: f.Glossary, BannedTerms: f.BannedTerms,
-		Rules: f.Rules, Waivers: f.Waivers, Rubric: f.Rubric, Methods: f.Methods, Origin: origin, Path: rel, ContextBudget: f.Budget, HTMLTheme: f.Theme, DisclosureTemplate: f.Disclosure}
+		Rules: f.Rules, Waivers: f.Waivers, Rubric: f.Rubric, Methods: f.Methods, Origin: origin, Path: rel, ContextBudget: f.Budget, HTMLTheme: f.Theme, DisclosureTemplate: f.Disclosure,
+		ScoredMetrics: scoredMetrics(f.Metrics), StyleProfile: f.Profile, DriftThreshold: f.Drift}
 	return p, checkPack(p)
 }
 
@@ -366,6 +420,7 @@ func checkPack(p *Pack) []workspace.Problem {
 	for _, d := range duplicates(len(p.Rubric), func(i int) string { return p.Rubric[i].ID }) {
 		add(CodeDuplicateID, fmt.Sprintf("rubric[%d].id", d), "评分项 "+p.Rubric[d].ID+" 重复")
 	}
+	checkScoredMetrics(p.ScoredMetrics, add)
 	for _, d := range duplicates(len(p.Methods), func(i int) string { return p.Methods[i].ID }) {
 		add(CodeDuplicateID, fmt.Sprintf("methods[%d].id", d), "写作法 "+p.Methods[d].ID+" 重复")
 	}
@@ -431,12 +486,9 @@ func SortedRuleIDs(rules map[string]Rule) []string {
 
 // CheckWorkspacePacks 校验 root 下 packs/ 中的每个 .yaml 文件；packs/ 不存在不是问题。返回已校验的路径。
 func CheckWorkspacePacks(root string) (checked []string, problems []workspace.Problem) {
-	files, _ := filepath.Glob(filepath.Join(root, filepath.FromSlash(workspace.PacksPath), "*.yaml"))
-	for _, f := range files {
-		if strings.HasPrefix(filepath.Base(f), ".") {
-			continue // 隐藏文件（如编辑器的临时文件）不是规范包
-		}
-		rel := workspace.PacksPath + "/" + filepath.Base(f)
+	// 隐藏文件（如编辑器的临时文件）不是规范包。
+	for _, name := range workspace.YAMLFiles(root, workspace.PacksPath) {
+		rel := workspace.PacksPath + "/" + name
 		_, ps := LoadPackFile(root, rel)
 		checked = append(checked, rel)
 		problems = append(problems, ps...)

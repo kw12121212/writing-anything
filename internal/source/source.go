@@ -166,23 +166,29 @@ func Load(root, id string) (*Source, []workspace.Problem) {
 
 // Check 加载素材 id 并校验存档文件存在、是普通文件且内容哈希与记录一致。
 func Check(root, id string) (*Source, []workspace.Problem) {
+	s, _, ps := Read(root, id)
+	return s, ps
+}
+
+// Read 与 Check 做同样的检查，并返回存档文件的内容。
+func Read(root, id string) (*Source, []byte, []workspace.Problem) {
 	s, ps := Load(root, id)
 	if s == nil {
-		return nil, ps
+		return nil, nil, ps
 	}
 	rel := s.FilePath()
 	info, err := os.Lstat(abs(root, rel))
 	if err != nil || !info.Mode().IsRegular() {
-		return nil, []workspace.Problem{errorAt(schema.CodeNotFound, rel, "", "素材的存档文件不存在或不是普通文件")}
+		return nil, nil, []workspace.Problem{errorAt(schema.CodeNotFound, rel, "", "素材的存档文件不存在或不是普通文件")}
 	}
 	data, err := os.ReadFile(abs(root, rel))
 	if err != nil {
-		return nil, []workspace.Problem{errorAt(workspace.CodeReadFailed, rel, "", "读取失败："+err.Error())}
+		return nil, nil, []workspace.Problem{errorAt(workspace.CodeReadFailed, rel, "", "读取失败："+err.Error())}
 	}
 	if Hash(data) != s.SHA256 {
-		return nil, []workspace.Problem{errorAt(CodeModified, rel, "", "素材原文已被改动：内容哈希与登记时记录的 sha256 不一致；素材原文不得改写，需要新版本时请另行登记")}
+		return nil, nil, []workspace.Problem{errorAt(CodeModified, rel, "", "素材原文已被改动：内容哈希与登记时记录的 sha256 不一致；素材原文不得改写，需要新版本时请另行登记")}
 	}
-	return s, nil
+	return s, data, nil
 }
 
 // Registered 报告素材 id 是否已登记：id 合法、素材目录是真实目录且元数据可以加载。

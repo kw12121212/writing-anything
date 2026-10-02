@@ -428,3 +428,12 @@ func TestSuffixTermsAndCoverage(t *testing.T) {
 		t.Fatalf("ascii coverage: %v", summary(res.Findings))
 	}
 }
+
+func TestCountTerms(t *testing.T) {
+	if n := CountTerms("哈哈哈，总而言之。`总而言之`", []string{"总而言之", "总而言之", "哈哈"}); n != 3 {
+		t.Fatalf("count = %d", n) // 「哈哈」在「哈哈哈」中重叠计 2 次，与 ai-cliche 规则相同；行内代码中的不计
+	}
+	if n := CountTerms("任何文字", nil); n != 0 {
+		t.Fatalf("no terms = %d", n)
+	}
+}

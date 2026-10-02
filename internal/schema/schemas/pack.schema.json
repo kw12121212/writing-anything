@@ -82,6 +82,14 @@
     "rubric": {
       "$ref": "common.schema.json#/$defs/rubric"
     },
+    "scored_metrics": {
+      "$ref": "common.schema.json#/$defs/scoredMetrics"
+    },
+    "style_profile": {
+      "$ref": "common.schema.json#/$defs/styleStats",
+      "required": ["sources"]
+    },
+    "drift_threshold": {"type": "number", "exclusiveMinimum": 0, "maximum": 10, "description": "文风漂移（Style Drift）的阈值：标准差的倍数，默认 2"},
     "context_budget": {
       "$ref": "common.schema.json#/$defs/budget"
     },

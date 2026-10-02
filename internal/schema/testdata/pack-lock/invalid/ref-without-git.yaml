@@ -1,0 +1,5 @@
+schema_version: 1
+packs:
+  - id: house
+    source: {path: ../house, ref: v1}
+    sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa

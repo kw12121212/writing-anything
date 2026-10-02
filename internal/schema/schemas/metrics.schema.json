@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AI 评分",
+  "description": "单元的 AI 评分：针对 draft_sha256 所指正文的各次独立打分会话（Scoring Session），以及分歧片段对应的作者决策 id。由 wa-cli metrics record 维护。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "draft_sha256", "sessions"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "draft_sha256": {"$ref": "common.schema.json#/$defs/sha256"},
+    "sessions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "scores"],
+        "properties": {
+          "id": {"$ref": "common.schema.json#/$defs/id"},
+          "scores": {"$ref": "#/$defs/scores"}
+        }
+      }
+    },
+    "decisions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["metric", "paragraph", "decision"],
+        "properties": {
+          "metric": {"$ref": "common.schema.json#/$defs/id"},
+          "paragraph": {"$ref": "review.schema.json#/$defs/paragraph"},
+          "decision": {"$ref": "common.schema.json#/$defs/id"}
+        }
+      }
+    }
+  },
+  "$defs": {
+    "scores": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["metric", "paragraph", "score"],
+        "properties": {
+          "metric": {"$ref": "common.schema.json#/$defs/id"},
+          "paragraph": {"$ref": "review.schema.json#/$defs/paragraph"},
+          "score": {"type": "integer"},
+          "rationale": {"type": "string", "pattern": "\\S"}
+        }
+      }
+    }
+  }
+}

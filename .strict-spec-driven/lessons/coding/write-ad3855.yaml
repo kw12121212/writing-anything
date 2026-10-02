@@ -1,0 +1,19 @@
+schema: strict-spec-driven/lesson/v1
+schema_version: 1
+artifact_type: lesson
+schema_file: templates/strict-spec-driven/schemas/lesson.yaml
+lesson:
+  id: write-ad3855
+  title: 写入命令新增附带产物时，只在 Write 里检查它，会在命令层的其他写入之后才失败
+category: coding
+status: active
+created_at: '2026-10-01T17:58:39.516Z'
+updated_at: '2026-10-01T17:58:39.516Z'
+context: draft write 的命令层在 draft.Precheck 通过后先记入批注写 feedback.yaml，再调用 draft.Write；修改记录 edits.yaml 的读取与锚点检查只放在 Write 中。
+observation: edits.yaml 不合法时，draft write 以 1 退出，但 feedback.yaml 已经写出，changedPaths 只列出它。
+takeaway: 给一条写入命令增加附带写出的产物时，把该产物的全部检查加进命令共用的 Precheck，并补一条「该产物不合法时所有文件（含其他附带产物）逐字节不变」的 CLI 测试。
+applies_when: 给已有的写入命令增加一个附带写出或追加的产物，而命令层在领域包写入前还会写其他文件时
+occurrences:
+  - origin: author-preference-learning
+    date: '2026-10-01'
+    evidence: internal/draft Precheck 中的 loadEdits 与 appendEdits；TestDraftWriteEditsPrecheckAndMarkup 断言四个文件不变

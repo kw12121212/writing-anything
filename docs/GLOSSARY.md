@@ -23,7 +23,7 @@
 | 单元树 | Unit Tree | 单元树 | 单元的层级结构，如 部 → 章 → 场景 |
 | 根单元 | Root Unit | 根单元 | 单元树的顶层单元，即作品本身；类型为文体的第一个单元类型 |
 | 单元引用 | Unit Reference | 单元引用 | 命令中定位单元的写法：`<work>` 表示根单元，`<work>/<unit-id>` 表示任意深度的单元 |
-| 系列 | Series | 系列 | 共享规范与设定的多部作品；文章领域也称"专栏" |
+| 系列 | Series | 系列 | 共享规范与设定的多部作品；文章领域也称"专栏"；定义在 `.writing-anything/series/<id>.yaml`，成员作品继承其规范包、素材与事实 |
 | 作用域 | Scope | 作用域 | 设定或配置生效的范围，如系列级、作品级 |
 | 内置 | Built-in | 内置 | 随 `wa-cli` 二进制提供的文体与规范包，如 `default` 规范包 |
 | 配置层 | Config Layer | 配置层 | 参与合并的一层设置：文体默认、规范包、项目配置，后者覆盖前者；来源写作 `genre:<id>`、`pack:<id>`、`project` |
@@ -69,7 +69,8 @@
 | 设定集 | Canon | 设定集 | 小说的人物、地点、世界规则等既定设定 |
 | 作者钦定 | Author-pinned | 作者钦定 | 由作者确定、受最高级别保护的内容 |
 | 状态变更提议 | State Change Proposal | 状态变更提议 | 场景造成的人物或世界状态变化，待作者确认 |
-| 摘要 | Summary | 摘要 | 已验收单元的简要内容，供后续上下文使用 |
+| 摘要 | Summary | 摘要 | 已验收单元的简要内容，由 Agent 撰写、`wa-cli summary set` 校验并记录正文哈希；正文之后被修改时过期；系列中后面作品的上下文包会带上前序作品的摘要 |
+| 事实 | Fact | 事实 | 系列中带素材出处的共享事实，成员作品的上下文包会带上它 |
 | 分层摘要 | Layered Summary | 分层摘要 | 场景 → 章 → 部 逐层汇总的摘要 |
 | 卷末检查点 | Volume Checkpoint | 卷末检查点 | 每部（卷）结束时汇总新增设定、状态与伏笔变化，供作者抽查确认 |
 | 时间线 | Timeline | 时间线 | 事件的时间与先后顺序 |
@@ -110,10 +111,18 @@
 | 影响传播 | Ripple Analysis | 影响传播 | 修改早期内容后，找出受影响、需复查的后续内容 |
 | 预审 | Pre-review | 预审 | 由 AI 完成的第一遍审稿，默认不阻塞，作者做最终判断 |
 | 指标 | Metric | 指标 | 可计算或可打分的量化数据，如平均句长、紧张度 |
-| 文风漂移 | Style Drift | 文风漂移 | 指标明显偏离作者文风画像或前文基准 |
+| 文风统计 | Style Stats | 文风统计 | 由作者过往文章确定性计算的句长、段长、标点频率与常用词，确认后写为规范包的 `style_profile` |
+| 规范包提议 | Pack Proposal | 提议 | `.writing-anything/proposals/` 中待作者逐项确认的规范包条目；确认前不影响任何规则 |
+| 文风漂移 | Style Drift | 文风漂移 | 指标明显偏离作者文风画像或本作品已验收单元的基准（默认超过 2 个标准差，规范包用 `drift_threshold` 设置）；`wa-cli metrics compute` 列出，只衡量偏离、不评判好坏，不阻塞验收 |
 | 锚定评分 | Anchored Scale | 锚定评分 | 每个分值都附带示例片段的评分方式，减少打分波动 |
 | 校准 | Calibration | 校准 | 用作者打分的样本检验 AI 评分是否可信 |
 | 一致率 | Agreement Rate | 一致率 | AI 评分与作者评分相符的比例 |
+| AI 评分指标 | Scored Metric | AI 评分指标 | 文体或规范包用 `scored_metrics` 声明、由 Agent 在独立会话中按锚定评分打分的指标 |
+| 打分任务 | Scoring Task | 打分任务 | `wa-cli metrics plan` 给出的片段、指标与锚定说明，供 Agent 打分 |
+| 打分会话 | Scoring Session | 打分会话 | 一次全新的、独立的 AI 打分；同一片段需要多个会话的分数才能取中位数 |
+| 片段 | Segment | 片段 | 打分的单位，即正文的一个段落，编号与 `wa-cli provenance` 相同 |
+| 分歧 | Score Disagreement | 分歧 | 同一片段各次打分的最高分减最低分；超过阈值时转为作者决策 |
+| 仅供参考 | Advisory | 仅供参考 | 与作者一致率低于阈值的指标：照常显示分数，但不再产生分歧决策 |
 | 情绪曲线 | Emotion Curve | 情绪曲线 | 按单元顺序排列的情绪评分走势 |
 | 张力曲线 | Tension Curve | 张力曲线 | 按单元顺序排列的紧张度评分走势 |
 | 极限词 | Superlative Claims | 极限词 | 广告法限制的"最""第一"等绝对化用语 |
@@ -142,7 +151,9 @@
 | 相邻节 | Neighbor Section | 相邻节 | 单元在父单元中的前一个与后一个兄弟单元，上下文包给出其大纲标题与正文节选 |
 | AI 参与说明 | AI-generated Content Label | AI 参与说明 | 导出时按段落出处说明 AI 参与情况的文字或元数据，也称「AI 生成内容标识」；放置位置由 `ai_disclosure` 决定 |
 | 文风画像 | Style Profile | 文风画像 | 从作者样文归纳的写作风格特征 |
-| 作者偏好 | Author Preference | 作者偏好 | 从作者修改中归纳的习惯，如"不用排比句" |
+| 作者偏好 | Author Preference | 作者偏好 | 从作者修改与作者反馈中归纳的习惯，如"不用排比句"；以规范包提议的条目出现，作者确认后写入规范包 |
+| 修改记录 | Edit Record | 修改记录 | 单元目录中的 `edits.yaml`：作者对 Agent 段落的修改对，由 `wa-cli draft write` 追加 |
+| 修改对 | Edit Pair | 修改对 | 一段 Agent 原文与作者修改后的文字，是归纳作者偏好的输入 |
 | 交接记录 | Handoff Note | 交接记录 | 会话结束时记录的进展与待办，供新会话接续 |
 | 子 Agent | Subagent | 子 Agent | 由主 Agent 派生、拥有独立全新上下文的 Agent 会话 |
 
@@ -332,7 +343,8 @@
 | 发布产物 | Release Asset | 发布产物 | 随版本发布的文件：各平台的 `wa-cli-<os>-<arch>` 二进制与 `SHA256SUMS` |
 | 校验文件 | Checksum File | 校验文件 | 记录每个发布产物 SHA-256 的 `SHA256SUMS`，格式与 `sha256sum` 兼容 |
 | 安装脚本 | Install Script | 安装脚本 | `install.sh`（Linux、macOS）与 `install.ps1`（Windows）：下载、校验并把 `wa-cli` 安装到用户级目录 |
-| 锁定文件 | Lock File | 锁定文件 | 记录已安装规范包确切版本的文件 |
+| 锁定文件 | Lock File | 锁定文件 | 记录已安装规范包来源、git 提交与内容 SHA-256 的文件 `.writing-anything/packs.lock.yaml`，由 `wa-cli pack install` 与 `wa-cli pack remove` 维护 |
+| 规范包仓库 | Registry | 规范包仓库 | 中心化发布与查找规范包的服务；尚未支持，`<owner>/<name>` 写法为它保留 |
 | 全文检索 | Full-text Search | 全文检索 | 按关键词查找正文中的出现位置 |
 | 倒排索引 | Inverted Index | 倒排索引 | 从词到出现位置的索引结构，用于全文检索 |
 | 向量检索 | Vector Search | 向量检索 | 按语义相似度查找内容，需要嵌入模型；本项目不采用 |

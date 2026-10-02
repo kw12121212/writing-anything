@@ -12,11 +12,15 @@ import (
 	"github.com/kw12121212/writing-anything/internal/decision"
 	"github.com/kw12121212/writing-anything/internal/draft"
 	"github.com/kw12121212/writing-anything/internal/feedback"
+	"github.com/kw12121212/writing-anything/internal/learn"
 	"github.com/kw12121212/writing-anything/internal/marketing"
+	"github.com/kw12121212/writing-anything/internal/metrics"
 	"github.com/kw12121212/writing-anything/internal/outline"
+	"github.com/kw12121212/writing-anything/internal/packinstall"
 	"github.com/kw12121212/writing-anything/internal/resolve"
 	"github.com/kw12121212/writing-anything/internal/review"
 	"github.com/kw12121212/writing-anything/internal/schema"
+	"github.com/kw12121212/writing-anything/internal/series"
 	"github.com/kw12121212/writing-anything/internal/source"
 	"github.com/kw12121212/writing-anything/internal/work"
 	"github.com/kw12121212/writing-anything/internal/workspace"
@@ -185,6 +189,14 @@ func runValidate(inv *invocation) int {
 					problems = append(problems, review.CheckArtifact(dir, checked[0])...)
 				case "marketing":
 					problems = append(problems, marketing.CheckArtifact(dir, checked[0])...)
+				case "series", "summary":
+					problems = append(problems, series.CheckArtifact(dir, checked[0])...)
+				case "pack-proposal":
+					problems = append(problems, learn.CheckArtifact(dir, checked[0])...)
+				case "metrics", "calibration":
+					problems = append(problems, metrics.CheckArtifact(dir, checked[0])...)
+				case "pack-lock":
+					problems = append(problems, packinstall.CheckLockArtifact(dir)...)
 				}
 			}
 		} else {
@@ -437,8 +449,15 @@ func checkWorkspace(dir string) (checked []string, works []*work.Work, problems 
 	rchecked, rps := review.CheckUnitArtifacts(dir, dirs)
 	mchecked, mps := marketing.CheckUnitArtifacts(dir, dirs)
 	dchecked, dps := decision.Check(dir, unitExists(dir))
-	checked = slices.Concat(checked, more, wchecked, schecked, uchecked, bchecked, ochecked, fchecked, rchecked, mchecked, dchecked)
-	return checked, works, slices.Concat(problems, ps, wps, sps, ups, bps, ops, fps, rps, mps, dps)
+	lchecked, lps := packinstall.Check(dir)
+	xchecked, xps := metrics.CheckUnitArtifacts(dir, dirs)
+	cchecked, cps := metrics.CheckCalibration(dir)
+	pchecked, pps := learn.CheckAll(dir)
+	echecked, eps := draft.CheckEdits(dir, works)
+	tchecked, tps := series.Check(dir)
+	ychecked, yps := series.CheckSummaries(dir, works)
+	checked = slices.Concat(checked, more, wchecked, schecked, uchecked, bchecked, ochecked, fchecked, rchecked, mchecked, dchecked, lchecked, xchecked, cchecked, pchecked, echecked, tchecked, ychecked)
+	return checked, works, slices.Concat(problems, ps, wps, sps, ups, bps, ops, fps, rps, mps, dps, lps, xps, cps, pps, eps, tps, yps)
 }
 
 // defaultMethodOf 返回单元产物 rel 所在作品的文体的默认写作法；作品无法加载时为空（其问题由作品校验报告）。
@@ -626,7 +645,15 @@ func next(p workspace.Problem, dir string) []string {
 		}
 		return append(out, shellCommand("wa-cli", "config", "set", "default_genre", "", "--dir", dir, "--json"))
 	case resolve.CodeUnknownPack:
-		return []string{"wa-cli help config set --json", validateAll}
+		if strings.HasPrefix(p.Path, series.Dir+"/") {
+			// 系列文件中的规范包：用 series set 修改，pack list 查看可用的规范包。
+			return []string{"wa-cli help series set --json", shellCommand("wa-cli", "pack", "list", "--dir", dir, "--json"), validateAll}
+		}
+		return []string{"wa-cli help config set --json", shellCommand("wa-cli", "pack", "list", "--dir", dir, "--json"), validateAll}
+	case packinstall.CodeLockMismatch, packinstall.CodeLockMissingFile:
+		return packNext(p, dir)
+	case packinstall.CodeExists, packinstall.CodeNotInstalled:
+		return []string{shellCommand("wa-cli", "pack", "list", "--dir", dir, "--json")}
 	case resolve.CodeMissingRuleType, resolve.CodeRuleTypeConflict, resolve.CodeUnknownWaiverTarget:
 		// 合并问题涉及多个配置层，只有整体校验能重新检出。
 		return []string{validateAll}

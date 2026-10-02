@@ -319,7 +319,7 @@ func TestRegistryConsistency(t *testing.T) {
 }
 
 // mutatingSamples 列出只能通过变更产物才能成功的命令；它们的样例在临时工作区中变更产物。
-var mutatingSamples = map[string]bool{"new": true, "unit add": true, "advance": true, "source add": true, "claim add": true, "claim remove": true, "review record": true, "accept": true, "export": true, "preview": true, "marketing ask": true, "mcp install": true, "skills install": true, "feedback add": true, "decision add": true, "decide": true, "outline remove": true}
+var mutatingSamples = map[string]bool{"new": true, "unit add": true, "advance": true, "source add": true, "claim add": true, "claim remove": true, "review record": true, "accept": true, "export": true, "preview": true, "marketing ask": true, "mcp install": true, "skills install": true, "feedback add": true, "decision add": true, "decide": true, "outline remove": true, "pack install": true, "pack remove": true, "metrics record": true, "metrics calibrate": true, "pack learn": true, "series add": true, "series fact": true, "summary set": true, "pack confirm": true, "pack reject": true}
 
 // sampleArgs 返回命令的一次成功调用：除 mutatingSamples 中的命令外都不变更任何产物；工作区命令在已初始化的
 // 临时工作区中运行。
@@ -478,6 +478,65 @@ func sampleArgs(t *testing.T, name string) []string {
 		return []string{"config", "set", "gate_level", "standard", "--dir", newWorkspace(t), "--json"}
 	case "config resolved":
 		return []string{"config", "resolved", "--dir", newWorkspace(t), "--json"}
+	case "pack install":
+		dir := newWorkspace(t)
+		writeFile(t, filepath.Join(dir, "house.yaml"), "schema_version: 1\nid: house\ntitle: 本团队规范\n")
+		return []string{"pack", "install", "house.yaml", "--dir", dir, "--json"}
+	case "metrics compute":
+		return []string{"metrics", "compute", "my-post", "--dir", metricsWork(t, ""), "--json"}
+	case "metrics plan", "metrics show":
+		return []string{"metrics", strings.Fields(name)[1], "my-post", "--dir", metricsWork(t, ""), "--json"}
+	case "metrics record":
+		dir := metricsWork(t, "")
+		writeFile(t, filepath.Join(dir, "session.yaml"), scoreSession("s1", 3, 3, 3))
+		return []string{"metrics", "record", "my-post", "--file", "session.yaml", "--dir", dir, "--json"}
+	case "metrics calibrate":
+		dir := metricsWork(t, "    sessions: 1\n")
+		runIn(t, scoreSession("s1", 3, 3, 3), "metrics", "record", "my-post", "--dir", dir)
+		return []string{"metrics", "calibrate", "my-post", "--metric", "tension", "--paragraph", "1", "--score", "3", "--confirmation", "作者：3 分", "--dir", dir, "--json"}
+	case "pack learn":
+		return []string{"pack", "learn", "me", "--pack", "mine", "--source", "a1", "--style", "多用短句", "--dir", learnWork(t), "--json"}
+	case "pack prefer":
+		return []string{"pack", "prefer", "prefs", "--pack", "mine", "--dir", newWork(t), "--json"}
+	case "pack confirm", "pack reject":
+		dir := learnWork(t)
+		run(t, "pack", "learn", "me", "--pack", "mine", "--source", "a1", "--dir", dir)
+		if name == "pack reject" {
+			return []string{"pack", "reject", "me", "--item", "baseline", "--dir", dir, "--json"}
+		}
+		return []string{"pack", "confirm", "me", "--item", "baseline", "--confirmation", "作者：可以", "--dir", dir, "--json"}
+	case "series set":
+		// 取值未变时不变更产物。
+		dir := newWorkspace(t)
+		run(t, "series", "set", "guide", "--title", "入门指南", "--dir", dir)
+		return []string{"series", "set", "guide", "--title", "入门指南", "--dir", dir, "--json"}
+	case "series add":
+		dir := newWork(t)
+		run(t, "series", "set", "guide", "--dir", dir)
+		return []string{"series", "add", "guide", "my-post", "--dir", dir, "--json"}
+	case "series fact":
+		dir := newWorkspace(t)
+		run(t, "series", "set", "guide", "--dir", dir)
+		return []string{"series", "fact", "guide", "audience", "--text", "读者是后端工程师", "--dir", dir, "--json"}
+	case "series show":
+		dir := newWork(t)
+		run(t, "series", "set", "guide", "--dir", dir)
+		run(t, "series", "add", "guide", "my-post", "--dir", dir)
+		return []string{"series", "show", "guide", "--dir", dir, "--json"}
+	case "summary set":
+		dir := reviewWork(t)
+		run(t, "config", "set", "gate_level", "fast", "--dir", dir)
+		run(t, "accept", "my-post", "--dir", dir)
+		return []string{"summary", "set", "my-post", "--text", strings.Repeat("这是一篇关于规范包的文章。", 3), "--dir", dir, "--json"}
+	case "summary show":
+		return []string{"summary", "show", "my-post", "--dir", newWork(t), "--json"}
+	case "pack list":
+		return []string{"pack", "list", "--dir", newWorkspace(t), "--json"}
+	case "pack remove":
+		dir := newWorkspace(t)
+		writeFile(t, filepath.Join(dir, "house.yaml"), "schema_version: 1\nid: house\ntitle: 本团队规范\n")
+		run(t, "pack", "install", "house.yaml", "--dir", dir)
+		return []string{"pack", "remove", "house", "--dir", dir, "--json"}
 	}
 	t.Fatalf("no sample invocation for command %q; add one to sampleArgs", name)
 	return nil

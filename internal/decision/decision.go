@@ -232,19 +232,31 @@ type Input struct {
 
 // Add 在决策队列末尾追加一个待决事项。resolve 检查每个关联单元，返回其问题（如 work.not-found）。
 func Add(root string, in Input, resolve func(ref string) []workspace.Problem) (*Decision, []workspace.Problem) {
-	if len(in.Options) > MaxOptions {
-		return nil, []workspace.Problem{errorAt(schema.CodeSchemaViolation, "options", fmt.Sprintf("最多允许 %d 个选项，实际为 %d 个", MaxOptions, len(in.Options)))}
+	ds, ps := AddAll(root, []Input{in}, resolve)
+	if len(ps) > 0 {
+		return nil, ps
 	}
-	if in.Recommend != "" && !slices.Contains(optionIDs(len(in.Options)), in.Recommend) {
-		d := Decision{ID: "新决策"}
-		for i := range in.Options {
-			d.Options = append(d.Options, Option{ID: optionID(i)})
+	return &ds[0], nil
+}
+
+// AddAll 在决策队列末尾依次追加 ins，只写一次决策队列；任一项不合法时都不写。省略 ID 的决策按 NextID 依次编号。
+// 返回新追加的决策。
+func AddAll(root string, ins []Input, resolve func(ref string) []workspace.Problem) ([]Decision, []workspace.Problem) {
+	for _, in := range ins {
+		if len(in.Options) > MaxOptions {
+			return nil, []workspace.Problem{errorAt(schema.CodeSchemaViolation, "options", fmt.Sprintf("最多允许 %d 个选项，实际为 %d 个", MaxOptions, len(in.Options)))}
 		}
-		return nil, []workspace.Problem{errorAt(CodeUnknownOption, "recommendation", unknownOption(d, in.Recommend))}
-	}
-	for _, ref := range in.Units {
-		if ps := resolve(ref); len(ps) > 0 {
-			return nil, ps
+		if in.Recommend != "" && !slices.Contains(optionIDs(len(in.Options)), in.Recommend) {
+			d := Decision{ID: "新决策"}
+			for i := range in.Options {
+				d.Options = append(d.Options, Option{ID: optionID(i)})
+			}
+			return nil, []workspace.Problem{errorAt(CodeUnknownOption, "recommendation", unknownOption(d, in.Recommend))}
+		}
+		for _, ref := range in.Units {
+			if ps := resolve(ref); len(ps) > 0 {
+				return nil, ps
+			}
 		}
 	}
 	doc, existing, ps := load(root)
@@ -257,46 +269,51 @@ func Add(root string, in Input, resolve func(ref string) []workspace.Problem) (*
 			str("decisions"), {Kind: yaml.SequenceNode, Tag: "!!seq"},
 		}}}}
 	}
-	id := in.ID
-	if id == "" {
-		id = NextID(existing)
-	} else if slices.ContainsFunc(existing, func(d Decision) bool { return d.ID == id }) {
-		return nil, []workspace.Problem{errorAt(catalog.CodeDuplicateID, "id", "决策队列中已有决策 "+id)}
-	}
 	seq, ok := value(doc.Content[0], "decisions")
 	if !ok || seq == nil {
 		return nil, []workspace.Problem{anchored("decisions")}
 	}
-	opts := &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq"}
-	if len(in.Options) == 0 {
-		opts.Style = yaml.FlowStyle
-	}
-	for i, text := range in.Options {
-		opts.Content = append(opts.Content, &yaml.Node{Kind: yaml.MappingNode, Style: yaml.FlowStyle, Content: []*yaml.Node{str("id"), str(optionID(i)), str("text"), str(text)}})
-	}
-	units := &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq", Style: yaml.FlowStyle}
-	for i, ref := range in.Units {
-		if !slices.Contains(in.Units[:i], ref) {
-			units.Content = append(units.Content, str(ref))
-		}
-	}
-	item := &yaml.Node{Kind: yaml.MappingNode, Content: []*yaml.Node{str("id"), str(id), str("question"), str(in.Question), str("options"), opts}}
-	if in.Recommend != "" {
-		item.Content = append(item.Content, str("recommendation"), str(in.Recommend))
-	}
-	if in.Rationale != "" {
-		item.Content = append(item.Content, str("rationale"), str(in.Rationale))
-	}
-	item.Content = append(item.Content, str("blocking"), &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!bool", Value: fmt.Sprint(in.Blocking)},
-		str("units"), units, str("status"), str(StatusOpen))
 	index := len(seq.Content)
+	var items []*yaml.Node
+	for _, in := range ins {
+		id := in.ID
+		if id == "" {
+			id = NextID(existing)
+		} else if slices.ContainsFunc(existing, func(d Decision) bool { return d.ID == id }) {
+			return nil, []workspace.Problem{errorAt(catalog.CodeDuplicateID, "id", "决策队列中已有决策 "+id)}
+		}
+		existing = append(existing, Decision{ID: id})
+		opts := &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq"}
+		if len(in.Options) == 0 {
+			opts.Style = yaml.FlowStyle
+		}
+		for i, text := range in.Options {
+			opts.Content = append(opts.Content, &yaml.Node{Kind: yaml.MappingNode, Style: yaml.FlowStyle, Content: []*yaml.Node{str("id"), str(optionID(i)), str("text"), str(text)}})
+		}
+		units := &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq", Style: yaml.FlowStyle}
+		for i, ref := range in.Units {
+			if !slices.Contains(in.Units[:i], ref) {
+				units.Content = append(units.Content, str(ref))
+			}
+		}
+		item := &yaml.Node{Kind: yaml.MappingNode, Content: []*yaml.Node{str("id"), str(id), str("question"), str(in.Question), str("options"), opts}}
+		if in.Recommend != "" {
+			item.Content = append(item.Content, str("recommendation"), str(in.Recommend))
+		}
+		if in.Rationale != "" {
+			item.Content = append(item.Content, str("rationale"), str(in.Rationale))
+		}
+		item.Content = append(item.Content, str("blocking"), &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!bool", Value: fmt.Sprint(in.Blocking)},
+			str("units"), units, str("status"), str(StatusOpen))
+		items = append(items, item)
+	}
 	workspace.BlockSequence(doc.Content[0], "decisions")
-	seq.Content = append(seq.Content, item)
+	seq.Content = append(seq.Content, items...)
 	saved, ps := save(root, doc, index)
 	if len(ps) > 0 {
 		return nil, ps
 	}
-	return &saved[index], nil
+	return saved[index:], nil
 }
 
 // NextID 返回 decision add 省略 --id 时新决策的 id：dec-<n>，n 从已有决策数加一开始递增到不重复。

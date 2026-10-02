@@ -44,7 +44,7 @@ func noNullArrays(t *testing.T, v any, path string) {
 	switch v := v.(type) {
 	case map[string]any:
 		for k, c := range v {
-			if c == nil && k != "genre" && k != "waiver" && k != "resolved" {
+			if c == nil && k != "genre" && k != "waiver" && k != "resolved" && k != "styleProfile" {
 				t.Errorf("%s.%s is null", path, k)
 			}
 			noNullArrays(t, c, path+"."+k)

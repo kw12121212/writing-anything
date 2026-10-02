@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "系列",
+  "description": "系列（Series）：有序的成员作品，以及被成员作品继承的规范包、素材与事实。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "id", "title", "works", "packs", "sources", "facts"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "id": {"$ref": "common.schema.json#/$defs/id"},
+    "title": {"$ref": "common.schema.json#/$defs/text"},
+    "works": {"$ref": "common.schema.json#/$defs/ids"},
+    "packs": {"$ref": "common.schema.json#/$defs/ids"},
+    "sources": {"$ref": "common.schema.json#/$defs/ids"},
+    "facts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "text", "sources"],
+        "properties": {
+          "id": {"$ref": "common.schema.json#/$defs/id"},
+          "text": {"type": "string", "pattern": "\\S"},
+          "sources": {"$ref": "common.schema.json#/$defs/ids"}
+        }
+      }
+    }
+  }
+}

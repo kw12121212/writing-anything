@@ -240,3 +240,14 @@ func dedupe(terms []string) []string {
 	}
 	return out
 }
+
+// CountTerms 返回正文 content 中 terms 的出现次数，口径与 ai-cliche 规则相同：同样的屏蔽区域（代码、HTML 注释与 URL）、去重后的
+// 词表与一次扫描的多词匹配器；超过 MaxHits 时按 MaxHits 计。供不产生发现项的统计（如文风指标）复用，不随词条数多次扫描正文。
+func CountTerms(content string, terms []string) int {
+	terms = dedupe(terms)
+	if len(terms) == 0 {
+		return 0
+	}
+	hits, _ := newMatcher(terms).find(prepare(content))
+	return len(hits)
+}

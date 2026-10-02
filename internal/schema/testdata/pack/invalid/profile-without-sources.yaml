@@ -1,0 +1,9 @@
+schema_version: 1
+id: house
+title: x
+style_profile:
+  chars: 15
+  sentences: {count: 3, mean: 5, median: 5, stdev: 1.63, p10: 3, p90: 7}
+  paragraphs: {count: 1, mean: 15, median: 15, stdev: 0, p10: 15, p90: 15}
+  punctuation: {}
+  terms: []

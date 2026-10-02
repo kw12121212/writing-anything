@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "修改记录",
+  "description": "修改记录（Edit Record）：作者对 Agent 写入的段落所做的修改，由 wa-cli draft write 在覆盖写入记录前追加，供归纳作者偏好（Author Preference）。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "edits"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "edits": {
+      "type": "array",
+      "maxItems": 200,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["before", "after", "recorded_at"],
+        "properties": {
+          "before": {"type": "string", "pattern": "\\S"},
+          "after": {"type": "string", "pattern": "\\S"},
+          "recorded_at": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"}
+        }
+      }
+    }
+  }
+}

@@ -14,6 +14,7 @@ import (
 	"github.com/kw12121212/writing-anything/internal/resolve"
 	"github.com/kw12121212/writing-anything/internal/review"
 	"github.com/kw12121212/writing-anything/internal/schema"
+	"github.com/kw12121212/writing-anything/internal/series"
 	"github.com/kw12121212/writing-anything/internal/work"
 	"github.com/kw12121212/writing-anything/internal/workspace"
 )
@@ -197,7 +198,7 @@ func recordReview(inv *invocation, dir string, w *work.Work, u *work.Unit, res *
 		return []workspace.Problem{{Code: draft.CodeNotFound, Severity: workspace.SeverityError, Path: unitDir + "/" + draft.FileName,
 			Message: "单元 " + u.Ref + " 还没有正文，无法审稿；请先用 wa-cli draft write 写入"}}
 	}
-	r, ps := resolve.ForGenre(dir, w.Genre.ID)
+	r, ps := series.Resolve(dir, w)
 	if r == nil {
 		return ps
 	}

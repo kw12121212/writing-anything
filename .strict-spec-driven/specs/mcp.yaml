@@ -24,7 +24,7 @@ requirements:
         - THEN: diagnostics 中有一条错误码为 mcp.missing-dir 的诊断，退出码为 1
   mcp-tools:
     strength: MUST
-    statement: tools/list 必须为命令注册表中除 mcp、mcp install 与 feedback watch 外的每条命令返回一个 tool（mcp install 会写项目目录之外的客户端配置，请在命令行中运行；feedback watch 会一直等待作者操作，以订阅 wa://feedback 代替）：name 为命令名中的空格换成下划线（如 feedback_add），description 为命令摘要，inputSchema 为对象：每个位置参数为同名字符串属性（必需的位置参数列入 required），每个命名参数按类型为布尔、字符串或字符串数组属性，但不含 --dir、--json、--help、--file（可以指向项目之外；读取 --file 或标准输入的命令改为字符串属性 input，作为标准输入的内容）、skills install 的 --target（可以写到项目之外）与 preview 的 --serve、--port、--max（需要常驻的本地服务）；additionalProperties 为 false。tools/call 必须在进程内运行同一条 wa-cli 命令：位置参数按顺序、命名参数写作 --name=value（布尔为 --name，数组的每一项一个），命令接受 --dir 时加上 --dir <dir>，并加上 --json；每次调用都不等待作者或其他外部事件即结束；结果的 structuredContent 为命令的输出信封，content 为一项 type 为 text、内容为标准输出的文字，命令的退出码不为 0 时 isError 为 true。tool 不存在、参数不是 inputSchema 允许的类型、出现未声明的参数或位置参数以 - 开头时返回错误 -32602，不运行命令。同一操作经 MCP 与 CLI（同样的参数加 --dir 与 --json）调用，产物与输出信封相同。测试按每条命令登记的样例调用（cli-contract/sample-invocation）逐一调用对应的 tool，结果的 isError 都为 false。
+    statement: tools/list 必须为命令注册表中除 mcp、mcp install、pack install 与 feedback watch 外的每条命令返回一个 tool（mcp install 会写项目目录之外的客户端配置，pack install 的来源可以是项目目录之外的本地路径或 file:// 仓库，请在命令行中运行；feedback watch 会一直等待作者操作，以订阅 wa://feedback 代替）：name 为命令名中的空格换成下划线（如 feedback_add），description 为命令摘要，inputSchema 为对象：每个位置参数为同名字符串属性（必需的位置参数列入 required），每个命名参数按类型为布尔、字符串或字符串数组属性，但不含 --dir、--json、--help、--file（可以指向项目之外；读取 --file 或标准输入的命令改为字符串属性 input，作为标准输入的内容）、skills install 的 --target（可以写到项目之外）与 preview 的 --serve、--port、--max（需要常驻的本地服务）；additionalProperties 为 false。tools/call 必须在进程内运行同一条 wa-cli 命令：位置参数按顺序、命名参数写作 --name=value（布尔为 --name，数组的每一项一个），命令接受 --dir 时加上 --dir <dir>，并加上 --json；每次调用都不等待作者或其他外部事件即结束；结果的 structuredContent 为命令的输出信封，content 为一项 type 为 text、内容为标准输出的文字，命令的退出码不为 0 时 isError 为 true。tool 不存在、参数不是 inputSchema 允许的类型、出现未声明的参数或位置参数以 - 开头时返回错误 -32602，不运行命令。同一操作经 MCP 与 CLI（同样的参数加 --dir 与 --json）调用，产物与输出信封相同。测试按每条命令登记的样例调用（cli-contract/sample-invocation）逐一调用对应的 tool，结果的 isError 都为 false。
     scenarios:
       same-as-cli:
         - GIVEN: 两个相同的工作区 D1 与 D2，各有作品 my-post
@@ -41,7 +41,7 @@ requirements:
       tool-per-command:
         - GIVEN: wa-cli mcp --dir D 正在运行
         - WHEN: 发送 tools/list
-        - THEN: 命令注册表中除 mcp、mcp install 与 feedback watch 外的每条命令都有一个对应的 tool，名称为命令名的空格换成下划线
+        - THEN: 命令注册表中除 mcp、mcp install、pack install 与 feedback watch 外的每条命令都有一个对应的 tool，名称为命令名的空格换成下划线；有 pack_list 与 pack_remove，没有 pack_install
   mcp-resources:
     strength: MUST
     statement: resources/list 必须列出工作区中可读取的产物：.writing-anything/ 下由 Schema 登记了产物类型的 YAML 文件与各单元目录下的 draft.md（不跟随符号链接，按路径排序），URI 为 wa://file/<相对项目目录的路径>，mimeType 为 application/yaml 或 text/markdown；另有 wa://resolved（生效配置，即 wa-cli config resolved --json 的输出，含生效的规范包）与 wa://feedback（作者反馈，即 wa-cli feedback list --json 的输出），mimeType 为 application/json。resources/read 返回 contents 数组中的一项（uri、mimeType 与 text）；URI 不是上述资源、文件不存在或途经符号链接（包括 .writing-anything 本身是符号链接）时返回错误 -32602（message 为 Resource not found，data.uri 为该 URI）。资源只读，读取不修改任何文件。

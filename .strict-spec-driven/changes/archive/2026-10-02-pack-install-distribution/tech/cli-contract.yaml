@@ -1,0 +1,16 @@
+schema: strict-spec-driven/delta-tech/v1
+schema_version: 1
+artifact_type: delta_tech
+schema_file: templates/strict-spec-driven/schemas/delta-tech.yaml
+target_standard: cli-contract
+operations:
+  ADDED: {}
+  MODIFIED:
+    external-processes:
+      strength: MUST
+      statement: wa-cli 运行外部程序（MCP 客户端的官方 CLI、pack install 拉取 git 来源时的 git）时必须经可注入的环境接口（查找与执行分离，测试可以替换），用 exec 直接传参数列表、不经 shell，不连接 wa-cli 自己的标准输入与输出，设时长上限（超时视为失败），并设 cmd.WaitDelay，使超时杀掉主进程后即使它派生的子进程仍持有输出管道，调用也在上限加 WaitDelay 内返回；把合并后的标准输出与标准错误截断（不切断多字节字符）后写入诊断；命令层测试用写入 PATH 的假可执行文件断言实际的命令行与工作目录。外部程序只能是固定的客户端 CLI 与 git，参数列表只由固定的子命令与经过校验的参数组成，不得执行来自产物或规范包的命令。调用 git 时必须关闭钩子（-c core.hooksPath 指向空目录）、ext 传输协议（-c protocol.ext.allow=never）与交互提示（GIT_TERMINAL_PROMPT=0）、不递归子模块，在临时目录中操作，用 -- 把来源地址与选项分开，拒绝以 - 开头或含空白的 ref。
+      rationale: stdio 上的 MCP 会话与 --json 输出不能被子进程的输出污染；官方 CLI 首次运行的引导或自动更新会卡住；不少 CLI 把错误写在标准输出；只断言命令行就能独立更新各客户端的参数。输出写到内存缓冲区时 Wait 要等所有持有管道的进程退出，只杀主进程会让超时失效（git 会派生 ssh 与 git-remote-https）。git 拉取的是第三方仓库：关闭钩子、ext 协议与子模块保证不执行仓库内容（规范包只能是数据），关闭交互提示避免等待凭据而卡住会话，-- 与 ref 检查防止参数注入。
+      enforcement:
+        method: test
+        detail: internal/mcpinstall 与 internal/packinstall 的 TestSystemEnv 覆盖合并输出、截断、GIT_TERMINAL_PROMPT 与超时后子进程仍持有管道时按时返回；TestFetchGitCommandLine 断言 git 的参数列表；internal/cli 的 TestMCPInstall* 与 TestPackInstallFakeGit 用 PATH 中的假可执行文件断言命令行、工作目录与失败输出；TestInstallFromGit 与 TestPackInstallFromGit 用真实 git 与 file:// 仓库覆盖克隆与检出。
+  REMOVED: {}

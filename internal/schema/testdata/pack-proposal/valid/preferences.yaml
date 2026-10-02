@@ -1,0 +1,6 @@
+schema_version: 1
+id: prefs
+pack: mine
+sources: []
+items:
+  - {id: avoid-1, kind: banned-term, term: 赋能, status: proposed, key: 'removed:赋能', evidence: [{unit: post, text: 我们需要赋能团队。}]}

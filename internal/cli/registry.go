@@ -77,8 +77,11 @@ type commandSet []*command
 
 // registry 登记 wa-cli 的全部命令。
 var registry = commandSet{helpCommand, versionCommand, initCommand, validateCommand, statusCommand, configSetCommand, configResolvedCommand,
+	packInstallCommand, packListCommand, packRemoveCommand, packLearnCommand, packPreferCommand, packConfirmCommand, packRejectCommand,
 	newCommand, unitAddCommand, advanceCommand, nextCommand, briefSetCommand, briefShowCommand, marketingSetCommand, marketingShowCommand, marketingAskCommand,
 	outlineSetCommand, outlineRemoveCommand, outlineShowCommand, contextCommand, lintCommand,
+	seriesSetCommand, seriesAddCommand, seriesFactCommand, seriesShowCommand, summarySetCommand, summaryShowCommand,
+	metricsPlanCommand, metricsRecordCommand, metricsShowCommand, metricsCalibrateCommand, metricsComputeCommand,
 	sourceAddCommand, sourceListCommand, draftWriteCommand, diffCommand, provenanceCommand, claimAddCommand, claimSetCommand, claimListCommand, claimRemoveCommand,
 	methodListCommand, methodShowCommand, reviewRecordCommand, reviewShowCommand, reviewResolveCommand, acceptCommand, exportCommand, previewCommand, skillsListCommand, skillsInstallCommand,
 	feedbackAddCommand, feedbackListCommand, feedbackResolveCommand, feedbackWatchCommand,

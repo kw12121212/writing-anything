@@ -5,7 +5,7 @@ schema_file: ../../templates/strict-spec-driven/schemas/planned-change.yaml
 planned_change:
   id: author-preference-learning
   milestone: packs-and-series
-status: planned
+status: complete
 summary: 从人工修改与作者反馈中积累作者偏好（Author Preference）提议
 details: 对两类输入做确定性归纳：Agent 写入版本与作者修改版本之间的差异（diff），即反复被删除或替换的词、句式、长度变化；以及作者反馈中反复出现的同类意见，例如多次标注太啰嗦、阅读卡点集中出现在长段落。归纳结果生成带证据片段的偏好提议。作者确认后，偏好转为规范包中的规则参数或文风条目；被拒绝的提议会被记住，不再重复提出。
 depends_on:

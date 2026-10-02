@@ -96,9 +96,10 @@ func runMCP(inv *invocation) int {
 	return exitOK
 }
 
-// mcpExcluded 是不对应 tool 的命令：mcp 本身、注册客户端的 mcp install（会写项目目录之外的客户端配置），以及会一直等待作者操作的
-// feedback watch（用资源订阅 wa://feedback 代替）。
-var mcpExcluded = []string{"mcp", "mcp install", "feedback watch"}
+// mcpExcluded 是不对应 tool 的命令：mcp 本身、注册客户端的 mcp install（会写项目目录之外的客户端配置）、安装规范包的 pack install
+// （来源可以是项目目录之外的本地路径或 file:// 仓库，诊断会带出其中的内容），以及会一直等待作者操作的 feedback watch（用资源订阅
+// wa://feedback 代替）。
+var mcpExcluded = []string{"mcp", "mcp install", "pack install", "feedback watch"}
 
 // mcpHidden 是不作为 tool 参数的命名参数：--dir 由服务给出；file 与 skills install 的 target 可以指向项目目录之外（读取标准输入的
 // 命令改用 input）；preview 的 serve、port 与 max 需要常驻的本地服务。

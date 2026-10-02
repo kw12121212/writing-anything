@@ -1,0 +1,29 @@
+schema: strict-spec-driven/delta-spec/v1
+schema_version: 1
+artifact_type: delta_spec
+schema_file: templates/strict-spec-driven/schemas/delta-spec.yaml
+target_spec: mcp
+operations:
+  ADDED: {}
+  MODIFIED:
+    mcp-tools:
+      strength: MUST
+      statement: tools/list 必须为命令注册表中除 mcp、mcp install、pack install 与 feedback watch 外的每条命令返回一个 tool（mcp install 会写项目目录之外的客户端配置，pack install 的来源可以是项目目录之外的本地路径或 file:// 仓库，请在命令行中运行；feedback watch 会一直等待作者操作，以订阅 wa://feedback 代替）：name 为命令名中的空格换成下划线（如 feedback_add），description 为命令摘要，inputSchema 为对象：每个位置参数为同名字符串属性（必需的位置参数列入 required），每个命名参数按类型为布尔、字符串或字符串数组属性，但不含 --dir、--json、--help、--file（可以指向项目之外；读取 --file 或标准输入的命令改为字符串属性 input，作为标准输入的内容）、skills install 的 --target（可以写到项目之外）与 preview 的 --serve、--port、--max（需要常驻的本地服务）；additionalProperties 为 false。tools/call 必须在进程内运行同一条 wa-cli 命令：位置参数按顺序、命名参数写作 --name=value（布尔为 --name，数组的每一项一个），命令接受 --dir 时加上 --dir <dir>，并加上 --json；每次调用都不等待作者或其他外部事件即结束；结果的 structuredContent 为命令的输出信封，content 为一项 type 为 text、内容为标准输出的文字，命令的退出码不为 0 时 isError 为 true。tool 不存在、参数不是 inputSchema 允许的类型、出现未声明的参数或位置参数以 - 开头时返回错误 -32602，不运行命令。同一操作经 MCP 与 CLI（同样的参数加 --dir 与 --json）调用，产物与输出信封相同。测试按每条命令登记的样例调用（cli-contract/sample-invocation）逐一调用对应的 tool，结果的 isError 都为 false。
+      scenarios:
+        same-as-cli:
+          - GIVEN: 两个相同的工作区 D1 与 D2，各有作品 my-post
+          - WHEN: '经 MCP 在 D1 调用 feedback_add {unit: my-post, text: 太长}，在 D2 运行 wa-cli feedback add my-post --text 太长 --dir D2 --json'
+          - THEN: 两者的输出信封相同（路径不含 --dir），两个工作区的 feedback.yaml 内容相同
+        tool-errors:
+          - GIVEN: wa-cli mcp --dir D 正在运行
+          - WHEN: 调用不存在的 tool、给 feedback_add 传入未声明的参数 color，或调用 unit_add 时命令以退出码 1 结束
+          - THEN: 前两者返回错误 -32602；后者返回结果且 isError 为 true
+        every-tool:
+          - GIVEN: 每条命令在注册表测试中登记的样例调用
+          - WHEN: 把样例的参数转换为 tool 参数（--file 的内容作为 input），在样例的工作区中调用对应的 tool
+          - THEN: 每个 tool 的结果 isError 都为 false；version、help 与 skills_list 不带 --dir 调用
+        tool-per-command:
+          - GIVEN: wa-cli mcp --dir D 正在运行
+          - WHEN: 发送 tools/list
+          - THEN: 命令注册表中除 mcp、mcp install、pack install 与 feedback watch 外的每条命令都有一个对应的 tool，名称为命令名的空格换成下划线；有 pack_list 与 pack_remove，没有 pack_install
+  REMOVED: {}

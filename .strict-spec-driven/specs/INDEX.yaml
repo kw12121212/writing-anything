@@ -36,21 +36,33 @@ specs:
   - id: methods
     title: 写作法模板（Method Template）
     path: .strict-spec-driven/specs/methods.yaml
+  - id: metrics
+    title: AI 评分指标（Scored Metrics）
+    path: .strict-spec-driven/specs/metrics.yaml
   - id: outline
     title: 大纲（Outline）
     path: .strict-spec-driven/specs/outline.yaml
+  - id: preferences
+    title: 作者偏好（Author Preference）
+    path: .strict-spec-driven/specs/preferences.yaml
   - id: preview
     title: 阅读页（Reading View）
     path: .strict-spec-driven/specs/preview.yaml
   - id: review
     title: 审稿与验收（Review and Acceptance）
     path: .strict-spec-driven/specs/review.yaml
+  - id: series
+    title: 系列与摘要（Series and Summary）
+    path: .strict-spec-driven/specs/series.yaml
   - id: skills
     title: 技能（Skill）
     path: .strict-spec-driven/specs/skills.yaml
   - id: sources-and-provenance
     title: 素材与出处（Sources and Provenance）
     path: .strict-spec-driven/specs/sources-and-provenance.yaml
+  - id: style-profile
+    title: 文风画像（Style Profile）
+    path: .strict-spec-driven/specs/style-profile.yaml
   - id: units-and-lifecycle
     title: 单元树与生命周期（Unit Tree and Lifecycle）
     path: .strict-spec-driven/specs/units-and-lifecycle.yaml

@@ -282,3 +282,14 @@ func removeComment(content []byte, c Comment) []byte {
 	}
 	return []byte(s[:c.Start] + s[c.End:])
 }
+
+func init() { draft.StripMarkup = StripComments }
+
+// StripComments 返回去掉全部作者批注后的 text；用于判断作者是否真的改了段落文字。
+func StripComments(text string) string {
+	cs := Comments([]byte(text), func(string) bool { return false })
+	for i := len(cs) - 1; i >= 0; i-- {
+		text = text[:cs[i].Start] + text[cs[i].End:]
+	}
+	return text
+}

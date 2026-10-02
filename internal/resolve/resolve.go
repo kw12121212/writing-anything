@@ -79,6 +79,10 @@ type (
 		catalog.RubricItem
 		Source string `json:"source"`
 	}
+	ScoredMetric struct {
+		catalog.ScoredMetric
+		Source string `json:"source"`
+	}
 	Style struct {
 		Text   string `json:"text"`
 		Source string `json:"source"`
@@ -100,6 +104,12 @@ type Resolved struct {
 	ContextBudget Value `json:"contextBudget"`
 	// HTMLTheme 是 HTML 导出的样式主题（HTML Theme）：元素名 → CSS 声明与来源；没有规范包覆盖的元素来自内置默认主题，来源为 default。
 	HTMLTheme map[string]Value `json:"htmlTheme"`
+	// DriftThreshold 是文风漂移（Style Drift）的阈值：规范包按 packs 的顺序覆盖；都没有声明时为 DefaultDriftThreshold，来源为 default。
+	DriftThreshold Value `json:"driftThreshold"`
+	// StyleProfile 是文风画像（Style Profile）：packs 中最后一个声明 style_profile 的规范包的取值与来源；没有时为 nil。
+	StyleProfile *Value `json:"styleProfile"`
+	// ScoredMetrics 是 AI 评分指标（Metric）：按 id 合并，后面的配置层整项替换前面的同名指标并保留其位置。
+	ScoredMetrics []ScoredMetric `json:"scoredMetrics"`
 	// AIDisclosure 是 AI 参与说明的放置位置（项目配置的 ai_disclosure，默认 both）与模板（规范包的 ai_disclosure_template，默认为内置模板）。
 	AIDisclosure Disclosure `json:"aiDisclosure"`
 }
@@ -112,6 +122,9 @@ type Disclosure struct {
 
 // DefaultDisclosurePlacement 是项目配置没有 ai_disclosure 时的放置位置。
 const DefaultDisclosurePlacement = "both"
+
+// DefaultDriftThreshold 是没有任何配置层声明 drift_threshold 时的文风漂移阈值（标准差的倍数）。
+const DefaultDriftThreshold = 2.0
 
 // DefaultContextBudget 是没有任何配置层声明 context_budget 时的上下文预算（字符数）。
 const DefaultContextBudget = 12000
@@ -147,7 +160,7 @@ func Resolve(root string) (*Resolved, []workspace.Problem) {
 	if ps := schema.KindFor(workspace.ConfigPath).ValidateNode(doc); len(ps) > 0 {
 		return nil, workspace.FromSchema(workspace.ConfigPath, ps)
 	}
-	return merge(root, doc, "")
+	return merge(root, doc, "", nil)
 }
 
 // ForGenre 与 Resolve 相同，但以文体 genre 作为文体层，而不是 config.yaml 的 default_genre：作品按其自己的文体写作。
@@ -159,7 +172,26 @@ func ForGenre(root, genre string) (*Resolved, []workspace.Problem) {
 	if ps := schema.KindFor(workspace.ConfigPath).ValidateNode(doc); len(ps) > 0 {
 		return nil, workspace.FromSchema(workspace.ConfigPath, ps)
 	}
-	return merge(root, doc, genre)
+	return merge(root, doc, genre, nil)
+}
+
+// Layer 是作品额外的规范包层（如所属系列的 packs）：Path 为声明它的产物路径，诊断指向它。
+type Layer struct {
+	Path  string
+	Packs []string
+}
+
+// ForWork 与 ForGenre 相同，并在 config.yaml 的 packs 之后、项目配置之前依次应用 extra 中的规范包（已应用过的不重复）：
+// 系列成员作品继承系列的规范包。extra 为 nil 时与 ForGenre 相同。
+func ForWork(root, genre string, extra *Layer) (*Resolved, []workspace.Problem) {
+	doc, problems := workspace.Read(root, workspace.ConfigPath)
+	if doc == nil {
+		return nil, problems
+	}
+	if ps := schema.KindFor(workspace.ConfigPath).ValidateNode(doc); len(ps) > 0 {
+		return nil, workspace.FromSchema(workspace.ConfigPath, ps)
+	}
+	return merge(root, doc, genre, extra)
 }
 
 // Check 做工作区整体校验中与文体、规范包有关的部分：校验 packs/ 下的每个规范包；config.yaml 本身
@@ -170,7 +202,7 @@ func Check(root string) (checked []string, problems []workspace.Problem) {
 	if doc == nil || len(ps) > 0 || len(schema.KindFor(workspace.ConfigPath).ValidateNode(doc)) > 0 {
 		return checked, problems
 	}
-	_, ps = merge(root, doc, "")
+	_, ps = merge(root, doc, "", nil)
 	for _, p := range ps {
 		// 被引用的工作区规范包已在上面校验过，不重复报告。
 		if !slices.Contains(problems, p) {
@@ -204,7 +236,7 @@ func CheckArtifact(root, rel string) []workspace.Problem {
 }
 
 // merge 合并各配置层；genre 非空时以它作为文体层，否则用 config.yaml 的 default_genre。
-func merge(root string, doc *yaml.Node, genre string) (*Resolved, []workspace.Problem) {
+func merge(root string, doc *yaml.Node, genre string, extra *Layer) (*Resolved, []workspace.Problem) {
 	var cfg projectFile
 	catalog.Decode(doc, &cfg)
 	if genre != "" {
@@ -218,8 +250,8 @@ func merge(root string, doc *yaml.Node, genre string) (*Resolved, []workspace.Pr
 		problems = append(problems, workspace.Problem{Code: code, Severity: workspace.SeverityError, Path: l.path, Field: field, Origin: l.origin, Message: msg})
 	}
 	r := &Resolved{Packs: []Ref{}, UnitTypes: []UnitType{}, Stages: []Stage{}, Rules: map[string]*Rule{},
-		Glossary: []Term{}, BannedTerms: []BannedTerm{}, Style: []Style{}, Rubric: []RubricItem{},
-		ContextBudget: Value{DefaultContextBudget, SourceDefault}, HTMLTheme: map[string]Value{},
+		Glossary: []Term{}, BannedTerms: []BannedTerm{}, Style: []Style{}, Rubric: []RubricItem{}, ScoredMetrics: []ScoredMetric{},
+		ContextBudget: Value{DefaultContextBudget, SourceDefault}, HTMLTheme: map[string]Value{}, DriftThreshold: Value{DefaultDriftThreshold, SourceDefault},
 		AIDisclosure: Disclosure{Placement: Value{DefaultDisclosurePlacement, SourceDefault}, Template: Value{catalog.DefaultDisclosureTemplate, SourceDefault}}}
 	for _, k := range catalog.HTMLThemeKeys {
 		r.HTMLTheme[k] = Value{catalog.DefaultHTMLTheme[k], SourceDefault}
@@ -241,6 +273,17 @@ func merge(root string, doc *yaml.Node, genre string) (*Resolved, []workspace.Pr
 			r.Rubric = append(r.Rubric, RubricItem{it, source})
 		}
 	}
+	metrics := map[string]int{}
+	addMetrics := func(ms []catalog.ScoredMetric, source string) {
+		for _, m := range ms {
+			if i, ok := metrics[m.ID]; ok {
+				r.ScoredMetrics[i] = ScoredMetric{m, source}
+				continue
+			}
+			metrics[m.ID] = len(r.ScoredMetrics)
+			r.ScoredMetrics = append(r.ScoredMetrics, ScoredMetric{m, source})
+		}
+	}
 
 	if cfg.DefaultGenre != "" {
 		g, ps, ok := catalog.LoadGenre(cfg.DefaultGenre)
@@ -259,6 +302,7 @@ func merge(root string, doc *yaml.Node, genre string) (*Resolved, []workspace.Pr
 				r.Stages = append(r.Stages, Stage{s, source})
 			}
 			addRubric(g.Rubric, source)
+			addMetrics(g.ScoredMetrics, source)
 			budget(g.ContextBudget, source)
 			layers = append(layers, layer{source: source, origin: "内置文体 " + g.ID, rules: g.Rules})
 		}
@@ -268,12 +312,27 @@ func merge(root string, doc *yaml.Node, genre string) (*Resolved, []workspace.Pr
 	if len(packs) == 0 {
 		packs = []string{catalog.DefaultPack}
 	}
-	glossary, banned := map[string]int{}, map[string]int{}
+	type use struct {
+		id, path, field string
+	}
+	var uses []use
 	for i, id := range packs {
+		uses = append(uses, use{id, workspace.ConfigPath, fmt.Sprintf("packs[%d]", i)})
+	}
+	if extra != nil {
+		for i, id := range extra.Packs {
+			if !slices.Contains(packs, id) {
+				uses = append(uses, use{id, extra.Path, fmt.Sprintf("packs[%d]", i)})
+			}
+		}
+	}
+	glossary, banned := map[string]int{}, map[string]int{}
+	for _, us := range uses {
+		id := us.id
 		p, ps, ok := catalog.FindPack(root, id)
 		problems = append(problems, ps...)
 		if !ok {
-			errorAt(CodeUnknownPack, workspace.ConfigPath, fmt.Sprintf("packs[%d]", i),
+			errorAt(CodeUnknownPack, us.path, us.field,
 				fmt.Sprintf("规范包 %s 不存在：既不是内置规范包（%s），也没有 %s", id, list(catalog.BuiltinPacks()), catalog.PackPath(id)))
 		}
 		if p == nil {
@@ -301,7 +360,14 @@ func merge(root string, doc *yaml.Node, genre string) (*Resolved, []workspace.Pr
 			r.BannedTerms = append(r.BannedTerms, BannedTerm{t, source})
 		}
 		addRubric(p.Rubric, source)
+		addMetrics(p.ScoredMetrics, source)
+		if p.StyleProfile != nil {
+			r.StyleProfile = &Value{p.StyleProfile, source}
+		}
 		budget(p.ContextBudget, source)
+		if p.DriftThreshold > 0 {
+			r.DriftThreshold = Value{p.DriftThreshold, source}
+		}
 		for k, v := range p.HTMLTheme {
 			r.HTMLTheme[k] = Value{v, source}
 		}

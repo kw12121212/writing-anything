@@ -1,0 +1,48 @@
+schema: strict-spec-driven/main-spec/v1
+schema_version: 1
+artifact_type: main_spec
+schema_file: templates/strict-spec-driven/schemas/main-spec.yaml
+spec:
+  id: preferences
+  title: 作者偏好（Author Preference）
+requirements:
+  edit-record:
+    strength: MUST
+    statement: 修改记录（Edit Record）是单元目录下的 edits.yaml：schema_version 1 与 edits 数组，每项含 before（Agent 写入的段落原文）、after（作者修改后的段落文字）与 recorded_at（UTC，YYYY-MM-DDTHH:MM:SSZ）。wa-cli draft write 覆盖写入记录之前，必须按与 wa-cli diff 相同的对齐，把写入记录中 origin 为 agent 且含 text、与当前正文某段配对、且去掉作者批注（Comment）后文字仍不同的每个段落记为一对 (before, after)（after 为去掉批注、首尾空白后的文字；只差批注的段落不算修改，不是 UTF-8 的段落不记录） 追加到 edits 末尾；已有 before 与 after 都相同的一项时不重复追加；超过 200 项时丢弃最早的项。没有可追加的修改对时不创建也不修改 edits.yaml；已有的 edits.yaml 不通过校验时报告其诊断，edits 或要丢弃的项经由 YAML 锚点、别名或合并键得到时报告 draft.edits-anchored，这些检查在 draft write 修改任何文件（包括记入批注的 feedback.yaml）之前完成，失败时不修改任何文件。wa-cli validate 整体校验时，必须对每个可加载作品的每个单元目录中存在的 edits.yaml 做 Schema 校验并计入 checked；wa-cli validate <path> 按位置识别它。
+    scenarios:
+      edit-not-repeated:
+        - GIVEN: edits.yaml 已含修改对 (A, B)
+        - WHEN: 作者没有再改动，Agent 再次运行 wa-cli draft write（内容不同）
+        - THEN: edits.yaml 不重复追加 (A, B)
+  pack-prefer:
+    strength: MUST
+    statement: wa-cli pack prefer <proposal> 必须对工作区中每个可加载作品的每个单元的修改对（edits.yaml 中的各项，以及当前写入记录与正文之间尚未记入的修改对）与作者反馈（kind 为 must-fix、suggestion 或 question、status 不为 rejected）做确定性归纳（见 preference-rules），把得到的作者偏好（Author Preference）条目合并进规范包提议 .writing-anything/proposals/<proposal>.yaml。提议不存在时必须给出 --pack（目标规范包 id），新建的提议 sources 为空数组、没有 stats 与 baseline 条目；提议已存在时 --pack 省略或与已有的相同（否则报告 proposal.pack-mismatch）。目标规范包的限制同 style-profile 主规格的 pack-learn（内置规范包报告 pack.id-conflict，已安装的报告 proposal.installed-pack）。没有归纳出任何条目、且提议不存在时不新建提议文件。合并时按条目的 key 与 kind：没有同 key 条目时追加（status 为 proposed，style 条目 id 为 style-<n>，banned-term 为 avoid-<n>）；同 key 的 proposed 条目更新文字与证据；confirmed 与 rejected 的条目不改动，同 key 的 rejected 条目给出 warning 级 proposal.previously-rejected。--json 输出的 proposal 同 pack learn（stats 为 null 时表示没有素材统计），observed 含 edits（参与归纳的修改对数）与 feedback（参与归纳的反馈数）；changedPaths 为写入的提议（内容未变时为空数组），退出码为 0。偏好条目经 pack confirm 确认后才写入规范包（style 条目追加到 style，banned-term 条目追加到 banned_terms），未确认时不影响任何规则。wa-cli 不调用模型。
+    scenarios:
+      prefer-creates:
+        - GIVEN: 工作区中三个修改对都删掉了「赋能」，没有反馈
+        - WHEN: 运行 wa-cli pack prefer prefs --pack mine --dir D --json
+        - THEN: proposals/prefs.yaml 被创建，sources 为空数组、stats 为 null；items 含 key 为 removed:赋能、kind 为 banned-term、term 为赋能、status 为 proposed 的条目，evidence 含三个修改前原文片段；observed.edits 为 3；packs/ 与 config resolved 的结果不变，退出码为 0
+      prefer-rejected-remembered:
+        - GIVEN: 提议 prefs 中 key 为 removed:赋能 的条目已被 pack reject 拒绝
+        - WHEN: 又出现一个删掉「赋能」的修改对后再次运行 wa-cli pack prefer prefs --dir D --json
+        - THEN: 该条目仍为 rejected，没有新增同 key 的条目，diagnostics 中有一条 warning 级 proposal.previously-rejected
+      prefer-confirm:
+        - GIVEN: 提议 prefs 含 key 为 feedback:啰嗦 的 style 条目 style-1
+        - WHEN: 运行 wa-cli pack confirm prefs --item style-1 --confirmation 作者：对，我不喜欢啰嗦 --dir D --json
+        - THEN: packs/mine.yaml 的 style 含该条目的文字，条目为 confirmed
+  preference-rules:
+    strength: MUST
+    statement: 偏好归纳必须只由修改对与反馈的内容确定，词的计数与文风统计的常用词相同（汉字连续串中长度 2 到 4 的子串与长度不小于 3 的拉丁字母词，转为小写）：（1）反复被删除的词：一个修改对中 before 的次数多于 after 的词记为该对删除了它，after 多于 before 的记为加入；在不少于 3 个修改对中被删除、且没有在任何修改对中被加入的词，去掉被删除对数相同的更长子串包含的子串，按对数降序、再按字典序取前 10 个，各生成一个 key 为 removed:<词>、kind 为 banned-term 的条目，证据为至多 3 个删除了该词的修改对的 before 片段，片段围绕该词截取。（2）长度变化：修改对不少于 3 个时，after 总字数与 before 总字数（非空白字符）之比不大于 0.8 生成 key 为 length:shorter 的 style 条目，不小于 1.25 生成 length:longer，文字写明变化的百分比，证据为字数变化最大的至多 3 对。（3）反馈主题：在不少于 3 条反馈的文字中出现的词（同样去掉被条数相同的更长子串包含的子串），按条数降序、再按字典序取前 5 个，各生成一个 key 为 feedback:<词> 的 style 条目，文字写明条数。（4）长段落反馈：锚点已定位的反馈不少于 3 条、且其中不少于三分之二位于长度大于所在正文平均段长 1.5 倍的段落时，生成 key 为 feedback:long-paragraphs 的 style 条目。反馈类条目的证据为至多 3 条反馈的单元、id 与文字。每项证据含 unit 与 text：text 至多 80 个字符（前缀与省略号都计入），截断处用「…」表示。
+    scenarios:
+      shorter:
+        - GIVEN: 三个修改对的 before 共 300 字、after 共 180 字
+        - WHEN: 运行 wa-cli pack prefer
+        - THEN: items 含 key 为 length:shorter 的 style 条目，文字含 40%
+      feedback-theme:
+        - GIVEN: 三条 suggestion 反馈的文字分别为「这段太啰嗦」「有点啰嗦」「啰嗦，删掉」
+        - WHEN: 运行 wa-cli pack prefer
+        - THEN: items 含 key 为 feedback:啰嗦 的 style 条目，文字含 3 条，evidence 为这三条反馈
+      below-threshold:
+        - GIVEN: 只有两个修改对删掉了「赋能」
+        - WHEN: 运行 wa-cli pack prefer
+        - THEN: items 中没有 key 为 removed:赋能 的条目

@@ -1,0 +1,36 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: pack-install-distribution
+  status: proposed
+summary:
+  what:
+    - 新增 wa-cli pack install <source>：从 git 地址或本地路径安装规范包（Pack）到 .writing-anything/packs/<id>.yaml，安装前完成与工作区规范包相同的校验（Schema、可执行内容、已知规则类型、id 与内置规范包不冲突）
+    - 新增锁定文件（Lock File）.writing-anything/packs.lock.yaml：为每个已安装规范包记录来源（git 地址与请求的 ref，或本地路径）、解析到的 git 提交与已安装文件的 SHA-256 内容哈希
+    - 新增 wa-cli pack list 列出内置、工作区自有与已安装的规范包及锁定状态；wa-cli pack remove <id> 移除已安装的规范包及其锁定条目
+    - wa-cli validate 校验锁定文件：已安装文件缺失或内容哈希与锁定不一致时报告错误
+  why:
+    - 里程碑 packs-and-series 要求第三方可以通过 git 地址或本地路径安装并锁定规范包；目前作者只能手工复制规范包文件，无法知道它来自哪里、是哪个版本、是否被改过
+    - 后续的 pack-learn-style-profile 与 ai-scored-metrics 都依赖规范包的安装与分发
+scope:
+  in:
+    - 锁定文件 packs.lock.yaml 的 JSON Schema 与产物类型登记；wa-cli validate 的锁定一致性检查
+    - wa-cli pack list 与 wa-cli pack remove（被 config.yaml 的 packs 引用时拒绝移除）
+    - 形如 <owner>/<name> 且不是已存在路径的参数保留给以后的中心化仓库（Registry），现在报告不支持
+    - wa-cli pack install <git-url|path> [--ref <ref>]：git 地址（https、http、ssh、git、file 协议与 user@host:path 形式）调用系统 git 克隆到临时目录并检出，本地路径支持单个 .yaml 文件或根目录含 pack.yaml 的目录；重新安装已锁定的同 id 规范包时更新文件与锁定条目
+    - 命令注册表、help 与样例调用；pack list 与 pack remove 自动成为 MCP tool，pack install 的来源可以在项目目录之外，像 mcp install 一样不作为 MCP tool（修改 mcp 主规格的 mcp-tools）；docs/GLOSSARY.md 的锁定文件与规范包仓库术语，wa-init 技能说明安装与启用
+    - 外部程序超时后等待输出管道关闭设上限（WaitDelay），git 与 MCP 客户端 CLI（internal/mcpinstall）都适用，避免子进程持有管道时超时失效
+  out:
+    - 中心化的规范包仓库（Registry）与托管服务
+    - 按锁定文件重新拉取全部规范包的恢复命令；规范包之间的依赖与版本范围解析
+    - 安装时自动把规范包加入 config.yaml 的 packs（启用仍通过 wa-cli config set packs）
+    - 多文件规范包与仓库子目录选择
+unchanged_behavior:
+  - 作者手写的工作区规范包 .writing-anything/packs/<id>.yaml 照常可用，不需要锁定条目，validate 不因其缺少锁定而报错
+  - config resolved 的合并顺序与结果不变；已安装的规范包与手写的工作区规范包按同样的方式被 packs 引用与合并
+  - 规范包只能是数据：wa-cli 不执行规范包或其仓库中的任何内容，只调用固定的 git 命令拉取
+roadmap:
+  milestone: packs-and-series
+  planned_change: pack-install-distribution

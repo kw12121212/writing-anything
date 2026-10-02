@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/kw12121212/writing-anything/internal/catalog"
 	"github.com/kw12121212/writing-anything/internal/schema"
@@ -127,7 +128,20 @@ func Precheck(root string, w *work.Work, u *work.Unit, content []byte, base stri
 		return ps
 	}
 	// 写入时还要推导现有正文的出处：它超过段落上限或写入记录无法加载都会失败，须在任何写入之前报告。
-	_, _, _, ps := current(root, w.UnitDir(u))
+	dir := w.UnitDir(u)
+	_, paras, _, ps := current(root, dir)
+	if len(ps) > 0 {
+		return ps
+	}
+	// 修改记录同样要在任何写入（包括记入批注）之前检查：已有的 edits.yaml 不合法，或要追加的修改对无法写入。
+	if _, _, _, ps := loadEdits(root, dir); len(ps) > 0 {
+		return ps
+	}
+	rec, ps := loadRecord(root, dir)
+	if len(ps) > 0 {
+		return ps
+	}
+	_, ps = appendEdits(root, dir, pairs(paras, rec))
 	return ps
 }
 
@@ -172,6 +186,15 @@ func Write(root string, w *work.Work, u *work.Unit, content []byte, base string)
 	if len(ps) > 0 {
 		return nil, nil, ps
 	}
+	// 覆盖写入记录之前，把作者对 Agent 段落的修改存进修改记录，否则它们会随旧的写入记录一起丢失。
+	rec, ps := loadRecord(root, dir)
+	if len(ps) > 0 {
+		return nil, nil, ps
+	}
+	editsData, ps := appendEdits(root, dir, pairs(oldParas, rec))
+	if len(ps) > 0 {
+		return nil, nil, ps
+	}
 	kept := map[string]string{}
 	for _, p := range oldParas {
 		if p.Origin != OriginAgent {
@@ -197,6 +220,13 @@ func Write(root string, w *work.Work, u *work.Unit, content []byte, base string)
 		return nil, nil, ps
 	}
 	changed = append(changed, created...)
+	if editsData != nil {
+		rel := dir + "/" + EditsName
+		if err := workspace.WriteFile(root, rel, editsData); err != nil {
+			return nil, changed, []workspace.Problem{errorAt(workspace.CodeWriteFailed, rel, "", "写入失败："+err.Error())}
+		}
+		changed = append(changed, rel)
+	}
 	for _, f := range []struct {
 		rel       string
 		old, data []byte
@@ -205,7 +235,8 @@ func Write(root string, w *work.Work, u *work.Unit, content []byte, base string)
 			continue
 		}
 		if err := workspace.WriteFile(root, f.rel, f.data); err != nil {
-			return nil, nil, []workspace.Problem{errorAt(workspace.CodeWriteFailed, f.rel, "", "写入失败："+err.Error())}
+			// 已经写出的文件（新建的目录、修改记录、正文）如实列在 changedPaths 中。
+			return nil, changed, []workspace.Problem{errorAt(workspace.CodeWriteFailed, f.rel, "", "写入失败："+err.Error())}
 		}
 		changed = append(changed, f.rel)
 	}
@@ -216,8 +247,12 @@ func Write(root string, w *work.Work, u *work.Unit, content []byte, base string)
 func encodeRecord(rel, sum string, paras []Paragraph) ([]byte, []workspace.Problem) {
 	seq := &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq"}
 	for _, p := range paras {
-		seq.Content = append(seq.Content, &yaml.Node{Kind: yaml.MappingNode, Style: yaml.FlowStyle,
-			Content: []*yaml.Node{str("hash"), str(p.Hash), str("origin"), str(p.Origin)}})
+		n := &yaml.Node{Kind: yaml.MappingNode, Style: yaml.FlowStyle, Content: []*yaml.Node{str("hash"), str(p.Hash), str("origin"), str(p.Origin)}}
+		if p.Origin == OriginAgent && utf8.ValidString(p.Text) {
+			// Agent 段落的原文：作者改过之后，用它与修改后的文字归纳作者偏好。不是 UTF-8 的段落无法写进 YAML 文本，不记原文。
+			n.Content = append(n.Content, str("text"), str(p.Text))
+		}
+		seq.Content = append(seq.Content, n)
 	}
 	if len(seq.Content) == 0 {
 		seq.Style = yaml.FlowStyle

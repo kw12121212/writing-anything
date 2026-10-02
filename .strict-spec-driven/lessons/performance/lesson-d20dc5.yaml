@@ -1,0 +1,19 @@
+schema: strict-spec-driven/lesson/v1
+schema_version: 1
+artifact_type: lesson
+schema_file: templates/strict-spec-driven/schemas/lesson.yaml
+lesson:
+  id: lesson-d20dc5
+  title: 按词表计数复用已有匹配器
+category: performance
+status: active
+created_at: '2026-10-02T01:21:21.042Z'
+updated_at: '2026-10-02T01:21:21.042Z'
+context: style-metrics-and-drift 计算 AI 腔密度，需要统计 ai-cliche 规则词表在正文中的出现次数。
+observation: 首版对每个词调用 strings.Count，扫描次数随词表增长（3 万个词、30 万字时约 6 秒），而且与 lint 的 ai-cliche 规则口径不同：重复词被重复计数、代码块与注释里的词也被计入。
+takeaway: 需要对正文按词表计数或匹配时，复用规则引擎已有的多词匹配器（一次扫描、相同的屏蔽与去重口径），不要另写逐词循环。
+applies_when: 新代码要在正文中查找或统计一组词（AI 腔、禁用词、术语等），而 internal/lint 已有同类规则时。
+occurrences:
+  - origin: style-metrics-and-drift
+    date: '2026-10-02'
+    evidence: internal/lint/match.go CountTerms；internal/lint/lint_test.go TestCountTerms

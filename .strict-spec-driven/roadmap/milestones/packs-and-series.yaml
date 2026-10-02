@@ -41,6 +41,6 @@ dependencies:
 risks:
   - 文风学习的效果依赖 Agent 的分析质量，CLI 只负责提议的结构与确认流程
   - 指标一旦被当作目标，写作会变得套路化；指标只用于发现偏离作者基准或规划，不作为绝对的好坏分数
-status: proposed
+status: complete
 notes: []
 details: 系列是后续系列小说共享设定集（Canon）的基础，数据模型按跨作品共享设计。摘要机制在本里程碑首次引入，长篇小说的分层摘要在其上扩展。

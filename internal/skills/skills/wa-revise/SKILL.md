@@ -11,7 +11,9 @@ description: 处理审稿发现项与作者反馈形成的修订任务，修改�
 2. 逐项和作者确认怎么改，修改正文后用 `wa-cli draft write <单元> --file <文件> --json` 写入（作者改过正文时先 `wa-cli diff <单元> --json`）。
 3. 处理完的反馈用 `wa-cli feedback resolve <单元> <反馈 id> --json`；审稿发现项用 `wa-cli review resolve <单元> <发现项 id> --json`，作者决定不改的用 `--status waived --note <作者的理由>`。
 4. 正文改动后审稿过期：回到 wa-review 重新记录审稿；用 `wa-cli lint <单元> --json` 确认没有 error 级发现项。
+5. 一轮修订结束后，运行 `wa-cli pack prefer <提议 id> --pack <作者规范包 id> --json`，从作者的修改与反馈中归纳作者偏好（Author Preference）；把每个条目连同 evidence 交给作者，作者同意的用 `wa-cli pack confirm <提议 id> --item <条目 id> --confirmation <作者原话摘要> --json` 写入规范包，不同意的用 `wa-cli pack reject <提议 id> --item <条目 id> --json` 记下，之后不会再提出。
 
 ## 必须停下来问作者
 
 - 每个修订任务怎么处理、是否豁免，都由作者决定；豁免的理由写作者的原话。
+- 归纳出的作者偏好是否采纳由作者逐项决定，不要代替作者确认。

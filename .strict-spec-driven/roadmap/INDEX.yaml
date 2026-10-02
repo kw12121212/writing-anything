@@ -22,7 +22,7 @@ milestones:
   packs-and-series:
     title: 规范包、文风量化与系列文章（Packs, Style Metrics & Series）
     path: roadmap/milestones/packs-and-series.yaml
-    status: proposed
+    status: complete
   short-story:
     title: 短篇小说（Short Story）
     path: roadmap/milestones/short-story.yaml

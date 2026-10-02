@@ -1,0 +1,76 @@
+schema: strict-spec-driven/main-spec/v1
+schema_version: 1
+artifact_type: main_spec
+schema_file: templates/strict-spec-driven/schemas/main-spec.yaml
+spec:
+  id: style-profile
+  title: 文风画像（Style Profile）
+requirements:
+  pack-learn:
+    strength: MUST
+    statement: wa-cli pack learn <proposal> 必须生成或更新规范包提议（Pack Proposal）.writing-anything/proposals/<proposal>.yaml（proposal 为 id 格式）：首次运行时必须给出 --pack（目标规范包 id，id 格式）与至少一个可重复的 --source（素材 id），之后可以继续追加 --source 与条目，--pack 省略或与已有的相同。素材必须已登记、原文未被改动、type 为 past-article 且内容为 UTF-8 文本，全部素材的非空白字符合计不超过 500000 个。wa-cli 按全部素材计算确定性的文风统计（见 style-stats）写入 stats，并维护条目 items：id 为 baseline、kind 为 baseline 的统计基准（统计改变后 status 回到 proposed）；每个 --style <text> 一个 kind 为 style 的文风描述（id 为 style-<n>）；每个 --avoid <term> 一个 kind 为 banned-term 的禁用写法（id 为 avoid-<n>）。新条目的 status 为 proposed；文字（去掉首尾空白）与已有条目相同时不重复添加，已有条目被拒绝时给出 warning 级 proposal.previously-rejected。--json 输出的 proposal 含 id、path、pack、sources、stats 与 items（每项含 id、kind、text 或 term、status、confirmation 与 decidedAt）；changedPaths 为写入的提议（内容未变时为空数组，文件逐字节不变；只替换取值改变的字段与条目，保留其他内容与注释），退出码为 0。首次运行缺少 --pack 时报告 proposal.missing-pack，缺少 --source 时报告 proposal.no-sources；--pack 与已有提议不同时报告 proposal.pack-mismatch；素材未登记时报告 proposal.unknown-source，type 不是 past-article 时报告 proposal.not-past-article，内容不是 UTF-8 文本时报告 proposal.source-not-text，素材合计超过上限时报告 proposal.too-large；素材原文被改动时报告 source.modified；目标为内置规范包时报告 pack.id-conflict，为已安装（有锁定条目）的规范包时报告 proposal.installed-pack；这些情况不写文件，退出码为 1。提议不影响任何规则：config resolved、lint、context 与审稿都不读取 proposals/。wa-cli 不调用模型。
+    scenarios:
+      learn-creates:
+        - GIVEN: 已登记 type 为 past-article 的素材 a1 与 a2
+        - WHEN: 运行 wa-cli pack learn me --pack mine --source a1 --source a2 --style 多用短句 --avoid 赋能 --dir D --json
+        - THEN: .writing-anything/proposals/me.yaml 被创建，pack 为 mine，sources 为 [a1, a2]；stats 含 sentences、paragraphs、punctuation 与 terms；items 依次为 baseline、style-1（多用短句）与 avoid-1（赋能），status 都为 proposed；packs/ 与 config resolved 的结果不变，退出码为 0
+      learn-wrong-type:
+        - GIVEN: 素材 n1 的 type 为 author-note
+        - WHEN: 运行 wa-cli pack learn me --pack mine --source n1 --dir D --json
+        - THEN: diagnostics 中有一条错误码为 proposal.not-past-article 的诊断，不创建提议，退出码为 1
+      learn-rejected-not-repeated:
+        - GIVEN: 提议 me 的 style-1（多用短句）已被拒绝
+        - WHEN: 运行 wa-cli pack learn me --style 多用短句 --dir D --json
+        - THEN: items 不新增条目，diagnostics 中有一条 warning 级 proposal.previously-rejected，退出码为 0
+      learn-more-sources:
+        - GIVEN: 提议 me 的 baseline 已被确认
+        - WHEN: 运行 wa-cli pack learn me --source a3 --dir D --json
+        - THEN: sources 为 [a1, a2, a3]，stats 按三个素材重新计算，baseline 的 status 回到 proposed
+  style-stats:
+    strength: MUST
+    statement: 文风统计（Style Stats）必须只由素材内容确定：chars 为非空白字符总数；段落按正文的段落模型切分（见 sources-and-provenance 主规格的 paragraph-model），句子在段落内按 。！？!?；;… 与换行切分，句末标点后紧跟的右引号与右括号归入该句，空句不计；sentences 与 paragraphs 各含 count、mean、median、stdev（总体标准差）、p10 与 p90（最近秩分位数），长度为非空白字符数，数值保留两位小数；punctuation 为固定集合 ，。、；：？！…—「」『』“”‘’（）《》,.;:?! 中每个出现过的标点每千字的次数（保留两位小数）；terms 为常用词：汉字连续串中长度 2 到 4 的子串与长度不小于 3 的拉丁字母词（转为小写）中出现次数不少于 3 的，去掉被出现次数相同的更长子串包含的子串，按次数降序、再按字典序取前 20 项，每项含 term、count 与 per_1000。同样的素材内容总是得到同样的统计。
+    scenarios:
+      stats-terms:
+        - GIVEN: 素材中「规范包」出现 4 次，「规范」只出现在这 4 次「规范包」中
+        - WHEN: 计算统计
+        - THEN: 'terms 含 {term: 规范包, count: 4}，不含「规范」与「范包」'
+      stats-sentences:
+        - GIVEN: 素材内容为「今天下雨。我们出门了吗？没有！」
+        - WHEN: 运行 wa-cli pack learn me --pack mine --source a1 --dir D --json
+        - THEN: 'stats.chars 为 15，stats.sentences.count 为 3、mean 为 5、median 为 5；punctuation 为 {。: 66.67, ？: 66.67, ！: 66.67}'
+  pack-confirm:
+    strength: MUST
+    statement: wa-cli pack confirm <proposal> 必须以可重复的 --item <id> 与非空的 --confirmation（作者原话摘要）把提议中的条目写入目标规范包 .writing-anything/packs/<pack>.yaml，并把这些条目的 status 改为 confirmed、记录 confirmation 与 decided_at（UTC，YYYY-MM-DDTHH:MM:SSZ）：style 条目追加到 style（已有相同文字时不重复），banned-term 条目追加到 banned_terms（已有同名词条时不重复），baseline 写为 style_profile（含 sources 与 stats 的各项），替换已有的 style_profile。规范包文件不存在时创建（schema_version 1、id 为 pack、title 为「<pack> 的文风」）；已存在时只修改涉及的字段，保留其他内容与注释。写出前必须完成全部检查，包括写出后的规范包通过工作区规范包的全部校验；先写规范包，再写提议。已确认的条目再次确认时不修改；被拒绝的条目可以再确认。--json 输出的 proposal 同 pack learn，changedPaths 列出写入的规范包与提议，退出码为 0。提议不存在时报告 proposal.not-found；条目不存在时报告 proposal.unknown-item；缺少 --item 或 --confirmation 为空白时报告 input.invalid-value；目标为内置规范包时报告 pack.id-conflict；目标规范包有锁定条目时报告 proposal.installed-pack；目标规范包或提议中要修改的节点带 YAML 锚点、是别名或含合并键时报告 proposal.anchored-value；这些情况不写文件，退出码为 1。
+    scenarios:
+      confirm-writes-pack:
+        - GIVEN: 提议 me 含 baseline、style-1（多用短句）与 avoid-1（赋能），工作区没有 packs/mine.yaml
+        - WHEN: 运行 wa-cli pack confirm me --item baseline --item style-1 --confirmation 作者：就按这个来 --dir D --json
+        - THEN: packs/mine.yaml 被创建，style 含「多用短句」，style_profile 含提议的 sources 与统计，banned_terms 不含「赋能」；两个条目的 status 为 confirmed、confirmation 为给出的原话；config set packs mine 后 config resolved 的 styleProfile.source 为 pack:mine、style 含「多用短句」；changedPaths 含 .writing-anything/packs/mine.yaml 与提议，退出码为 0
+      confirm-installed-pack:
+        - GIVEN: packs/mine.yaml 由 wa-cli pack install 安装，有锁定条目
+        - WHEN: 运行 wa-cli pack confirm me --item style-1 --confirmation 作者确认 --dir D --json
+        - THEN: diagnostics 中有一条错误码为 proposal.installed-pack 的诊断，两个文件都不变，退出码为 1
+  pack-reject:
+    strength: MUST
+    statement: wa-cli pack reject <proposal> 必须把可重复的 --item 给出的条目的 status 改为 rejected 并记录 decided_at，不修改任何规范包；被拒绝的条目之后不会被 pack learn 重复添加（见 pack-learn）。已确认的条目报告 proposal.already-confirmed（它已写入规范包，需要作者直接编辑规范包撤回）；提议或条目不存在时分别报告 proposal.not-found 与 proposal.unknown-item；缺少 --item 时报告 input.invalid-value；这些情况不写文件，退出码为 1。--json 输出同 pack learn，changedPaths 为 [提议]（内容未变时为空数组）。
+    scenarios:
+      reject-item:
+        - GIVEN: 提议 me 的 avoid-1 为 proposed
+        - WHEN: 运行 wa-cli pack reject me --item avoid-1 --dir D --json
+        - THEN: avoid-1 的 status 为 rejected，packs/ 不变，退出码为 0
+  proposal-validation:
+    strength: MUST
+    statement: wa-cli validate 整体校验时，必须对 .writing-anything/proposals/ 下每个不以 . 开头的 .yaml 文件做 Schema 校验并计入 checked：文件内的 id 必须等于文件名（去掉 .yaml），否则报告 proposal.id-mismatch；条目 id 不重复，否则报告 artifact.duplicate-id；id 为 baseline 的条目与 kind 为 baseline 的条目必须是同一个，否则报告 proposal.invalid-baseline（field 为该条目）。整体校验列举 proposals/ 时不受项目目录名中的通配字符影响。wa-cli validate <path> 按位置识别提议并执行相同的检查。
+    scenarios:
+      proposal-id-mismatch:
+        - GIVEN: .writing-anything/proposals/me.yaml 中 id 为 you
+        - WHEN: 运行 wa-cli validate --dir D --json
+        - THEN: diagnostics 中有一条错误码为 proposal.id-mismatch、field 为 id 的诊断，退出码为 1
+  preference-items:
+    strength: MUST
+    statement: 规范包提议的条目可以带 key（偏好的稳定标识）与 evidence（证据数组，每项含 unit 与 text）；由 wa-cli pack prefer 创建的提议 sources 为空数组、没有 stats 与 baseline 条目，--json 输出中 stats 为 null；之后 wa-cli pack learn 可以给同一提议加入素材，此时生成 stats 与 baseline 条目。pack learn 的 --style 与 --avoid 条目没有 key。
+    scenarios:
+      learn-after-prefer:
+        - GIVEN: 提议 prefs 由 pack prefer 创建，没有 stats
+        - WHEN: 运行 wa-cli pack learn prefs --source a1 --dir D --json
+        - THEN: proposal.stats 不为 null，items 新增 baseline 条目，原有的偏好条目不变

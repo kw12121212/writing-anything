@@ -1,0 +1,16 @@
+schema: strict-spec-driven/delta-tech/v1
+schema_version: 1
+artifact_type: delta_tech
+schema_file: templates/strict-spec-driven/schemas/delta-tech.yaml
+target_standard: workspace-artifacts
+operations:
+  ADDED:
+    directory-listing:
+      strength: MUST
+      statement: 列举工作区目录中的产物（如 packs/、proposals/）必须用 internal/workspace 的 YAMLFiles（os.ReadDir 后按名称过滤与排序），不得用 filepath.Glob 拼接项目目录：项目目录名中的 [ ] * ? 会被当成通配字符。
+      rationale: MCP 与 CLI 都会收到任意的 --dir；Glob 在目录名含通配字符时静默返回空结果，整体校验因此漏检不合法的产物且报告 valid 为 true。
+      enforcement:
+        method: test
+        detail: internal/cli 的 TestValidateDirWithGlobCharacters 在名为「Project [2026]」的项目目录中校验 packs/ 与 proposals/ 下不合法的文件。
+  MODIFIED: {}
+  REMOVED: {}

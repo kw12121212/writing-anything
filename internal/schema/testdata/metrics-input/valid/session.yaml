@@ -1,0 +1,3 @@
+session: s1
+scores:
+  - {metric: tension, paragraph: 1, score: 3}

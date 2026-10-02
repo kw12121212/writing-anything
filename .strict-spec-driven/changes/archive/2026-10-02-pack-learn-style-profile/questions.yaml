@@ -1,0 +1,42 @@
+schema: strict-spec-driven/question-list/v1
+schema_version: 1
+artifact_type: question_list
+schema_file: templates/strict-spec-driven/schemas/question-list.yaml
+change: pack-learn-style-profile
+open: []
+resolved:
+  - id: requirement-problem
+    question: What is concretely going wrong today, and for whom?
+    context: 'Why this is asked: the change is planned against a need, and the need lives only with the requester. What it changes: this becomes the proposal''s why.'
+    answer: 据里程碑 packs-and-series 的 goal 与规划变更 pack-learn-style-profile：作者无法从自己的过往文章得到可确认的文风画像，后续的漂移检测也没有作者基准。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-outcome
+    question: What observable difference proves the problem is solved?
+    context: 'Why this is asked: without a success condition, nobody can tell afterwards whether the change worked. What it changes: this becomes the delta spec''s scenarios.'
+    answer: 据里程碑 done_criteria：文风画像与偏好只以提议形式出现，作者确认前不影响规则；据规划变更 details：pack learn 以 past-article 素材为输入计算句长、段长、常用词与标点习惯，Agent 通过命名参数补充定性分析，作者逐项确认后才写入作者自己的规范包。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-trigger
+    question: Why now — what forced this?
+    context: 'Why this is asked: work that nothing forced is the work most often thrown away later.'
+    answer: 据路线图：依赖的 pack-install-distribution 与 author-sources-and-provenance 都已归档，roadmap-recommend 推荐本变更；style-metrics-and-drift 与 author-preference-learning 依赖它。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-non-goals
+    question: What must explicitly not change?
+    context: 'Why this is asked: the requester knows which nearby behavior other people depend on. What it changes: these become the proposal''s unchanged_behavior items.'
+    answer: 据规划变更 details：未确认的提议不影响任何规则；据项目约束：wa-cli 不调用模型、素材原文不被改写。已写入 proposal 的 out 与 unchanged。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-interpretation
+    question: Which reading of the request is intended, where more than one is possible?
+    context: 'Why this is asked: a short request usually admits several readings. What it changes: this fixes the scope boundary before any code is written.'
+    answer: 据规划变更 details：wa-cli pack learn 计算确定性统计（句长、段长、常用词、标点习惯），定性分析由 Agent 通过命名参数写入提议，作者逐项确认后写入作者自己的规范包。统计定义、提议存放位置、确认与拒绝命令等取舍写在 design 的决策中。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap

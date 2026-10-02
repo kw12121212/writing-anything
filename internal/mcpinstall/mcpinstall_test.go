@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 )
 
 // fakeEnv 记录运行的命令；fail 中的子命令（如 "mcp add"）以错误结束，missing 中的可执行文件找不到。
@@ -155,5 +156,15 @@ func TestSystemEnv(t *testing.T) {
 	}
 	if out, err := env.Run(t.TempDir(), sh, "-c", "head -c 9000 /dev/zero | tr '\\0' x"); err != nil || len(out) > maxOutput+10 {
 		t.Fatalf("truncate: %d %v", len(out), err)
+	}
+	// 超时后，仍持有输出管道的子进程不让 Run 一直等待。
+	defer func(d time.Duration) { timeout = d }(timeout)
+	timeout = 200 * time.Millisecond
+	start := time.Now()
+	if _, err := env.Run(t.TempDir(), sh, "-c", "sleep 30 & sleep 30"); err == nil {
+		t.Fatal("timeout not reported")
+	}
+	if d := time.Since(start); d > WaitDelay+5*time.Second {
+		t.Fatalf("Run returned after %v", d)
 	}
 }

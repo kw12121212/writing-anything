@@ -8,6 +8,7 @@ import (
 
 	"github.com/kw12121212/writing-anything/internal/feedback"
 	"github.com/kw12121212/writing-anything/internal/outline"
+	"github.com/kw12121212/writing-anything/internal/series"
 )
 
 // partTitles 是各部分在 Markdown 中的二级标题；标题不计入预算。
@@ -17,6 +18,8 @@ var partTitles = map[string]string{
 	PartSection:     "## 本节大纲条目",
 	PartFeedback:    "## 未处理的作者反馈（Feedback）",
 	PartDecision:    "## 待决的决策（Decision Queue）",
+	PartFact:        "## 系列（Series）",
+	PartSummary:     "## 系列（Series）",
 	PartRules:       "## 规范要点",
 	PartGlossary:    "## 规范要点",
 	PartBannedTerms: "## 规范要点",
@@ -181,6 +184,9 @@ func (p *Pack) Markdown() string {
 		if t := partTitles[it.part]; t != title {
 			fmt.Fprintf(&s, "\n%s\n\n", t)
 			title = t
+			if (it.part == PartFact || it.part == PartSummary) && p.Series != nil {
+				fmt.Fprintf(&s, "本作品属于系列 %s（%s）\n\n", p.Series.ID, oneLine(p.Series.Title))
+			}
 		}
 		s.WriteString(it.body)
 	}
@@ -199,4 +205,25 @@ func (p *Pack) Markdown() string {
 		}
 	}
 	return s.String()
+}
+
+func factMarkdown(f series.Fact) string {
+	src := ""
+	if len(f.Sources) > 0 {
+		src = "（素材 " + strings.Join(f.Sources, "、") + "）"
+	}
+	return fmt.Sprintf("- 事实 %s：%s%s\n", f.ID, oneLine(f.Text), src)
+}
+
+func (s Summary) markdown() string {
+	note := ""
+	if s.Stale {
+		note = "（已过期：正文在摘要之后被修改）"
+	}
+	// 摘要按引用块输出，其中以 # 开头的行不会变成上下文包的标题。
+	var b strings.Builder
+	for _, line := range strings.Split(strings.TrimSpace(s.Text), "\n") {
+		b.WriteString("> " + line + "\n")
+	}
+	return fmt.Sprintf("- 前序作品 %s 的摘要（Summary）%s：\n\n%s\n", s.Work, note, b.String())
 }

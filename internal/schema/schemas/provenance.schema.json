@@ -16,8 +16,11 @@
         "required": ["hash", "origin"],
         "properties": {
           "hash": {"$ref": "common.schema.json#/$defs/sha256"},
-          "origin": {"enum": ["human", "agent", "agent-draft-human-edited"]}
-        }
+          "origin": {"enum": ["human", "agent", "agent-draft-human-edited"]},
+          "text": {"type": "string", "description": "origin 为 agent 的段落的原文，供作者修改后归纳作者偏好"}
+        },
+        "if": {"properties": {"origin": {"const": "agent"}}, "required": ["origin"]},
+        "else": {"properties": {"text": false}}
       }
     }
   }

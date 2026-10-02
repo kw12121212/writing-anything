@@ -249,3 +249,38 @@ func TestReplace(t *testing.T) {
 		t.Fatalf("anchored: %+v", ps)
 	}
 }
+
+func TestAddAll(t *testing.T) {
+	root := newRoot(t)
+	none := func(string) []workspace.Problem { return nil }
+	if _, ps := Add(root, Input{Question: "先有的", Options: []string{"甲"}}, none); len(ps) > 0 {
+		t.Fatal(ps)
+	}
+	ds, ps := AddAll(root, []Input{{Question: "一", Options: []string{"甲", "乙"}, Recommend: "b"}, {Question: "二"}}, none)
+	if len(ps) > 0 || len(ds) != 2 || ds[0].ID != "dec-2" || ds[1].ID != "dec-3" || ds[1].Question != "二" {
+		t.Fatalf("got %+v %+v", ds, ps)
+	}
+	all, _, _ := Load(root)
+	if len(all) != 3 {
+		t.Fatalf("queue = %+v", all)
+	}
+	before := readQueue(t, root)
+	if _, ps := AddAll(root, []Input{{Question: "好"}, {Question: "坏", Options: []string{"甲"}, Recommend: "z"}}, none); len(ps) != 1 || ps[0].Code != "decision.unknown-option" {
+		t.Fatalf("bad recommend: %+v", ps)
+	}
+	if _, ps := AddAll(root, []Input{{ID: "x"}, {ID: "x"}}, none); len(ps) != 1 || ps[0].Code != "artifact.duplicate-id" {
+		t.Fatalf("duplicate in batch: %+v", ps)
+	}
+	if readQueue(t, root) != before {
+		t.Fatal("queue written on failure")
+	}
+}
+
+func readQueue(t *testing.T, root string) string {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join(root, Path))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(data)
+}

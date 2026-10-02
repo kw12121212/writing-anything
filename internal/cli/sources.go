@@ -314,7 +314,7 @@ func runDraftWrite(inv *invocation) int {
 		}
 	}
 	res.Diagnostics = diagnostics(problems, dir)
-	helpNext(res.Diagnostics, "draft write", []string{codeInputReadFailed, draft.CodeEmpty, draft.CodeTooLarge})
+	helpNext(res.Diagnostics, "draft write", []string{codeInputReadFailed, draft.CodeEmpty, draft.CodeTooLarge, draft.CodeEditsAnchored})
 	return finish(inv, res, func(w io.Writer) error {
 		if res.Draft == nil {
 			return nil

@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "校准样本",
+  "description": "校准（Calibration）：作者对片段的打分与记录时的 AI 中位数，按声明指标的配置层统计一致率（Agreement Rate）。由 wa-cli metrics calibrate 维护。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "samples"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "samples": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["metric", "source", "unit", "paragraph", "paragraph_sha256", "ai_median", "author_score", "confirmation", "recorded_at"],
+        "properties": {
+          "metric": {"$ref": "common.schema.json#/$defs/id"},
+          "source": {"type": "string", "pattern": "^(genre|pack):[a-z][a-z0-9]*(-[a-z0-9]+)*$"},
+          "unit": {"type": "string", "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*(/[a-z][a-z0-9]*(-[a-z0-9]+)*)?$"},
+          "paragraph": {"$ref": "review.schema.json#/$defs/paragraph"},
+          "paragraph_sha256": {"$ref": "common.schema.json#/$defs/sha256"},
+          "ai_median": {"type": "number"},
+          "author_score": {"type": "integer"},
+          "confirmation": {"type": "string", "pattern": "\\S"},
+          "recorded_at": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"}
+        }
+      }
+    }
+  }
+}

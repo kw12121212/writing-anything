@@ -1,0 +1,4 @@
+schema_version: 1
+id: bad
+title: x
+drift_threshold: 0

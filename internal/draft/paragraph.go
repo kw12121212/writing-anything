@@ -84,6 +84,7 @@ func paragraph(line int, lines []string) Paragraph {
 type recorded struct {
 	Hash   string `json:"hash"`
 	Origin string `json:"origin"`
+	Text   string `json:"text,omitempty"` // 只有 origin 为 agent 的段落记录原文
 }
 
 // gap 是两个段落序列对齐后，相邻对齐点之间（含开头与结尾）未对齐的一段：cur 与 rec 为各自的下标，next 为其后

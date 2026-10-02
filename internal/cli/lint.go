@@ -12,6 +12,7 @@ import (
 	"github.com/kw12121212/writing-anything/internal/lint"
 	"github.com/kw12121212/writing-anything/internal/outline"
 	"github.com/kw12121212/writing-anything/internal/resolve"
+	"github.com/kw12121212/writing-anything/internal/series"
 	"github.com/kw12121212/writing-anything/internal/source"
 	"github.com/kw12121212/writing-anything/internal/work"
 	"github.com/kw12121212/writing-anything/internal/workspace"
@@ -135,6 +136,26 @@ func lintClaims(dir string, w *work.Work, u *work.Unit) (claims []lint.Claim, in
 // 调用方不必再合并一次。out 为 nil 时文本检查没有运行（没有正文、合并失败等），problems 为其原因；否则 problems 含段落出处、
 // 论断与规则引擎的问题。
 func runUnitLint(dir string, w *work.Work, u *work.Unit) (out *lint.Result, r *resolve.Resolved, content []byte, problems []workspace.Problem) {
+	return runUnitLintWith(dir, w, u, workResolver(dir, w))
+}
+
+// workResolver 返回按作品 w 合并生效设置的函数，结果只计算一次：对同一作品的多个单元运行文本检查（如阅读页）时，系列文件与
+// 规范包只加载一次（workspace-artifacts/load-once-per-command）。
+func workResolver(dir string, w *work.Work) func() (*resolve.Resolved, []workspace.Problem) {
+	var r *resolve.Resolved
+	var ps []workspace.Problem
+	done := false
+	return func() (*resolve.Resolved, []workspace.Problem) {
+		if !done {
+			r, ps = series.Resolve(dir, w)
+			done = true
+		}
+		return r, slices.Clone(ps)
+	}
+}
+
+// runUnitLintWith 与 runUnitLint 相同，合并结果由 resolved 给出。
+func runUnitLintWith(dir string, w *work.Work, u *work.Unit, resolved func() (*resolve.Resolved, []workspace.Problem)) (out *lint.Result, r *resolve.Resolved, content []byte, problems []workspace.Problem) {
 	rel := w.UnitDir(u) + "/" + draft.FileName
 	content, ok, ps := draft.Read(dir, w, u)
 	switch {
@@ -144,7 +165,7 @@ func runUnitLint(dir string, w *work.Work, u *work.Unit) (out *lint.Result, r *r
 		return nil, nil, nil, []workspace.Problem{{Code: draft.CodeNotFound, Severity: workspace.SeverityError, Path: rel,
 			Message: "单元 " + u.Ref + " 没有可读取的正文 draft.md（不存在、途经符号链接或不是普通文件）；请用 wa-cli draft write 写入"}}
 	}
-	r, problems = resolve.ForGenre(dir, w.Genre.ID)
+	r, problems = resolved()
 	if r == nil {
 		return nil, nil, content, problems
 	}

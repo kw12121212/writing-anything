@@ -1,0 +1,23 @@
+schema: strict-spec-driven/delta-tech/v1
+schema_version: 1
+artifact_type: delta_tech
+schema_file: templates/strict-spec-driven/schemas/delta-tech.yaml
+target_standard: workspace-artifacts
+operations:
+  ADDED:
+    subject-scoped-lookup:
+      strength: SHOULD
+      statement: 命令为当前作品扫描某类全部工作区级产物（如查找所属系列）时，无法加载、且无法判定与当前作品相关的实例应以 warning 报告并按不相关处理，不阻塞当前命令；整体校验仍按 error 报告。确需阻塞时写进规格。
+      rationale: 一个与当前作品无关的坏文件（如复制后忘了改 id 的系列文件）会让工作区中所有作品的 lint、context 与导出都失败，作者无从判断原因。
+      enforcement:
+        method: test
+        detail: internal/series 的 TestOfToleratesUnrelatedBrokenFiles 与 internal/cli 的 TestSeriesSourcesOrderAndRobustness：坏掉的系列文件不阻塞非成员作品的 lint，validate 仍报告 error。
+    per-work-merge-validated:
+      strength: SHOULD
+      statement: 命令按作品合并生效设置时引入的配置层（如所属系列的规范包），整体校验必须按命令实际使用的组合逐个合并一次并报告 error，使 lint、context 等报告的合并问题能被 wa-cli validate --dir 重新检出。
+      rationale: 只按 default_genre 合并的整体校验检不出只在系列成员作品上出现的冲突，诊断的 next 给出的复查命令会报告 valid 为 true（cli-contract/next-rechecks-problem）。
+      enforcement:
+        method: test
+        detail: internal/cli 的 TestSeriesSourcesOrderAndRobustness 让系列规范包与文体规则冲突，断言 validate 报告 rule.type-conflict。
+  MODIFIED: {}
+  REMOVED: {}

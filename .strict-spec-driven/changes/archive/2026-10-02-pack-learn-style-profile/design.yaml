@@ -1,0 +1,37 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: pack-learn-style-profile
+approach:
+  - 新增领域包 internal/learn：读取并校验 past-article 素材（复用 internal/source 的登记与哈希检查），计算确定性统计；读写规范包提议 .writing-anything/proposals/<id>.yaml；确认时在作者规范包 packs/<pack>.yaml 的节点树上追加 style、banned_terms 条目或替换 style_profile，写出前按工作区规范包的全部检查校验；只返回 workspace.Problem。
+  - common.schema.json 新增 styleStats 定义，供提议的 stats 与规范包的 style_profile 共用；internal/catalog 读取 style_profile，internal/resolve 按 packs 顺序取最后一个声明的规范包，输出 resolved.styleProfile（value 与 source，没有时为 null）。internal/cli 新增 pack learn、pack confirm、pack reject，登记注册表与样例调用；validate 整体与单个产物校验提议。
+decisions:
+  stats-definition:
+    decision: 统计只用确定性规则：段落按 draft.Split 切分；句子在段落内按 。！？!?；;… 与换行切分，句末标点后紧跟的右引号与右括号归入该句；长度为非空白字符数。句长与段长给出 count、mean、median、stdev（总体标准差）、p10 与 p90（最近秩），保留两位小数。标点频率为固定集合（，。、；：？！…—「」『』“”‘’（）《》,.;:?!）中每个出现过的标点每千字的次数。常用词为汉字连续串中长度 2 到 4 的子串，以及长度不小于 3 的拉丁字母词（转小写），出现次数不少于 3；被出现次数相同的更长子串包含的子串去掉；按次数降序、再按字典序取前 20 项，含 term、count 与 per_1000。
+    rationale: 不分词也能稳定复现，结果只取决于素材内容；标准差与分位数是后续漂移检测（默认 2 个标准差）需要的基准；去掉被包含的子串可以减少「的问」「问题」之类的重叠噪声。
+  proposal-artifact:
+    decision: 提议是工作区级产物 .writing-anything/proposals/<id>.yaml：schema_version 1、id、pack（目标规范包 id）、sources（素材 id）、stats 与 items。条目 kind 为 baseline（统计基准，id 固定为 baseline）、style（文风描述 text）或 banned-term（禁用写法 term）；status 为 proposed、confirmed 或 rejected，确认或拒绝时记录 decided_at，确认时记录 confirmation。
+    rationale: 提议与规范包分开存放，resolve 与规则引擎都不读取 proposals/，未确认的提议自然不影响规则；条目化的状态让作者可以逐项确认，后续的作者偏好提议可以复用同一产物。
+  learn-merge:
+    decision: pack learn 首次运行必须给出 --pack 与至少一个 --source；之后可以追加素材（按给出顺序并入、去重）与条目，--pack 必须与已有的一致。统计每次按全部素材重新计算；统计改变后 baseline 条目回到 proposed。--style 与 --avoid 的文字（去掉首尾空白后）与已有条目相同时不重复添加，已有条目被拒绝时给出 warning 级 proposal.previously-rejected。新条目 id 为 style-<n> 与 avoid-<n>。
+    rationale: 作者常常分批提供样文；重新计算保证统计与素材一致；拒绝过的内容不再出现在待确认列表中，满足「被拒绝的提议会被记住」。
+  confirm-target:
+    decision: pack confirm 只写入作者自己的工作区规范包：目标 id 为内置规范包时报告 pack.id-conflict，packs/<pack>.yaml 有锁定条目（由 pack install 安装）时报告 proposal.installed-pack；文件不存在时创建（title 为「<pack> 的文风」）。style 条目追加到 style、banned-term 条目追加到 banned_terms（已有同名词条时不重复）、baseline 写为 style_profile（含 sources 与统计）。先完成全部检查（含写出后规范包的校验），先写规范包、再写提议。确认必须给出非空的 --confirmation。
+    rationale: 已安装的规范包有内容哈希锁定，改写会使 validate 失败，也违背它来自第三方的事实；作者确认是项目约定的人的确认点；追加与替换都是幂等的，写提议失败后重新确认不会重复写入。
+  profile-merge:
+    decision: resolved.styleProfile 取 packs 中最后一个声明 style_profile 的规范包，含 value（统计）与 source（pack:<id>）；没有时为 null。文体与 config.yaml 不能声明。
+    rationale: 文风画像描述一位作者，按配置层整体替换比逐项合并更符合含义；后续漂移检测只需要一个基准。
+  directory-listing:
+    decision: 列举工作区目录中的产物用 workspace.YAMLFiles（os.ReadDir），不用 filepath.Glob 拼接项目目录；catalog.CheckWorkspacePacks 与 packinstall.List 一并改用它。
+    rationale: Glob 把项目目录名中的 [ ] * ? 当成通配字符，MCP 总是传绝对路径的 --dir，「Project [2026]」这类目录会让整体校验静默跳过不合法的规范包与提议。
+  keep-unchanged-nodes:
+    decision: 写提议时，sources、stats 与每个条目只在解码后的取值改变时替换节点，取值相同的节点（含其中的注释与锚点）原样保留；带锚点的条目只在它本身需要修改时才阻止写入。
+    rationale: 满足 structured-edits「只改目标节点、保留注释、取值未变时不写」；手写提议中无关条目的锚点不应阻止其他条目的确认或拒绝。
+alternatives:
+  - option: 用分词库统计常用词
+    reason: 需要引入第三方依赖与词典，结果随词典版本变化，违背 stdlib-first 与确定性要求
+  - option: 把提议直接写进规范包并标记为未确认
+    reason: 规范包会被合并与 lint 使用，未确认的内容可能影响规则，违背「作者确认前不影响规则」
+risks:
+  - 字串统计对短样文噪声较大；常用词只作为参考，作者确认前不影响规则

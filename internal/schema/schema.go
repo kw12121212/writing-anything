@@ -47,6 +47,7 @@ type Kind struct {
 var kinds = []*Kind{
 	newKind("config", "config.schema.json", ".writing-anything/config.yaml"),
 	newKind("pack", "pack.schema.json", ".writing-anything/packs/*.yaml"),
+	newKind("pack-lock", "pack-lock.schema.json", ".writing-anything/packs.lock.yaml"),
 	newKind("genre", "genre.schema.json"),
 	newKind("method", "method.schema.json"),
 	newKind("work", "work.schema.json", ".writing-anything/works/*/work.yaml"),
@@ -61,6 +62,13 @@ var kinds = []*Kind{
 	newKind("review-input", "review-input.schema.json"),
 	newKind("acceptance", "acceptance.schema.json", ".writing-anything/works/*/acceptance.yaml", ".writing-anything/works/*/units/*/acceptance.yaml"),
 	newKind("marketing", "marketing.schema.json", ".writing-anything/works/*/marketing.yaml", ".writing-anything/works/*/units/*/marketing.yaml"),
+	newKind("metrics", "metrics.schema.json", ".writing-anything/works/*/metrics.yaml", ".writing-anything/works/*/units/*/metrics.yaml"),
+	newKind("metrics-input", "metrics-input.schema.json"),
+	newKind("calibration", "calibration.schema.json", ".writing-anything/calibration.yaml"),
+	newKind("pack-proposal", "proposal.schema.json", ".writing-anything/proposals/*.yaml"),
+	newKind("edits", "edits.schema.json", ".writing-anything/works/*/edits.yaml", ".writing-anything/works/*/units/*/edits.yaml"),
+	newKind("series", "series.schema.json", ".writing-anything/series/*.yaml"),
+	newKind("summary", "summary.schema.json", ".writing-anything/works/*/summary.yaml", ".writing-anything/works/*/units/*/summary.yaml"),
 }
 
 func newKind(name, file string, patterns ...string) *Kind {

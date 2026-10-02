@@ -1,0 +1,15 @@
+schema_version: 1
+id: me
+pack: mine
+sources: [a1]
+stats:
+  sources: [a1]
+  chars: 15
+  sentences: {count: 3, mean: 5, median: 5, stdev: 1.63, p10: 3, p90: 7}
+  paragraphs: {count: 1, mean: 15, median: 15, stdev: 0, p10: 15, p90: 15}
+  punctuation: {"。": 66.67, "？": 66.67}
+  terms: [{term: 规范包, count: 4, per_1000: 3.2}]
+items:
+  - {id: baseline, kind: baseline, status: proposed}
+  - {id: style-1, kind: style, text: 多用短句, status: confirmed, confirmation: 作者同意, decided_at: '2026-10-02T08:00:00Z'}
+  - {id: avoid-1, kind: banned-term, term: 赋能, status: rejected, decided_at: '2026-10-02T08:00:00Z'}

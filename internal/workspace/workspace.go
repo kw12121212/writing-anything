@@ -562,3 +562,16 @@ func BlockSequence(m *yaml.Node, key string) {
 		v.Style &^= yaml.FlowStyle
 	}
 }
+
+// YAMLFiles 返回 root 下目录 rel 中不以 . 开头的 .yaml 文件名，按名称排序；目录不存在时为空。用 os.ReadDir 而不是
+// filepath.Glob：项目目录名中的 [ ] * ? 会被 Glob 当成通配字符，静默漏掉整个目录（workspace-artifacts/directory-listing）。
+func YAMLFiles(root, rel string) []string {
+	entries, _ := os.ReadDir(abs(root, rel))
+	var out []string
+	for _, e := range entries {
+		if !strings.HasPrefix(e.Name(), ".") && strings.HasSuffix(e.Name(), ".yaml") {
+			out = append(out, e.Name())
+		}
+	}
+	return out
+}

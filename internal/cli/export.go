@@ -8,6 +8,7 @@ import (
 
 	"github.com/kw12121212/writing-anything/internal/export"
 	"github.com/kw12121212/writing-anything/internal/resolve"
+	"github.com/kw12121212/writing-anything/internal/series"
 	"github.com/kw12121212/writing-anything/internal/work"
 	"github.com/kw12121212/writing-anything/internal/workspace"
 )
@@ -103,7 +104,7 @@ func runExport(inv *invocation) int {
 				var changed []string
 				opt := export.Options{FrontMatter: frontMatter, Output: inv.values["output"], Level: level}
 				// 样式主题与 AI 参与说明的配置取自按作品文体合并的结果（workspace-artifacts/resolved-sources）。
-				resolved, ps := resolve.ForGenre(dir, w.Genre.ID)
+				resolved, ps := series.Resolve(dir, w)
 				switch {
 				case resolved == nil:
 					problems = ps

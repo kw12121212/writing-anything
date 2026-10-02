@@ -1,0 +1,22 @@
+schema: strict-spec-driven/lesson/v1
+schema_version: 1
+artifact_type: lesson
+schema_file: templates/strict-spec-driven/schemas/lesson.yaml
+lesson:
+  id: yaml-utf-8-aa654e
+  title: 把正文写进 YAML 产物前不检查 UTF-8，原本能成功的写入会失败
+category: coding
+status: active
+created_at: '2026-10-01T17:58:39.178Z'
+updated_at: '2026-10-02T01:03:07.036Z'
+context: 写入记录开始为 agent 段落保存原文，修改记录保存作者改后的文字。
+observation: 正文按字节写入、不保证是 UTF-8；yaml.v3 拒绝把非 UTF-8 编码为 !!str，draft write 因此失败；修改记录里的非 UTF-8 文字被编码成 !!binary，又被可执行内容检查拒绝，诊断指向一个还不存在的文件。
+takeaway: 任何来自正文或作者的文字写进 YAML 前先 utf8.ValidString，不合法时跳过该字段或报专门的错误码；测试用含 \xff 的正文跑一遍写入命令。
+applies_when: 在 YAML 产物中保存正文片段、作者原话或其他未经校验的外部文本时
+occurrences:
+  - origin: author-preference-learning
+    date: '2026-10-01'
+    evidence: internal/draft encodeRecord 与 pairs 的 utf8 检查；TestDraftWriteEditsPrecheckAndMarkup；delta tech workspace-artifacts/yaml-text-utf8
+  - origin: series-shared-context
+    date: '2026-10-02'
+    evidence: summary set、series set --title 与 series fact --text 最初没有检查 UTF-8，非 UTF-8 文字让写入失败或产生 !!binary；审查后在命令层报告 input.invalid-value（internal/cli TestSeriesSummaryEdges、TestSeriesSourcesOrderAndRobustness）

@@ -1,0 +1,55 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: series-shared-context
+sections:
+  Implementation:
+    schema:
+      text: Schema：series.schema.json（.writing-anything/series/*.yaml）、summary.schema.json（单元目录）、genre.schema.json 的 summary_length；产物类型登记与测试夹具
+      status: complete
+    resolve:
+      text: internal/resolve：ForWork 在 config.yaml 的 packs 之后、项目配置之前插入系列 packs；lint、review、export、metrics 与 ctxpack 改为按作品合并
+      status: complete
+    package:
+      text: internal/series：系列文件读写（节点树编辑、写前复查）、成员查找、引用校验；摘要读写、长度与验收检查、过期判断
+      status: complete
+    context:
+      text: internal/ctxpack：series 字段（事实与前序作品摘要、stale）、系列素材并入 sources、裁剪优先级与 Markdown 输出
+      status: complete
+    cli:
+      text: internal/cli：series set、series add、series fact、series show、summary set、summary show 命令，注册表与 sampleArgs；context 输出 series；validate 整体与单个产物校验接入
+      status: complete
+    docs:
+      text: docs/GLOSSARY.md 确认系列、摘要等术语；wa-publish 或 wa-review 技能说明验收后撰写摘要、系列作品的写作使用前序摘要
+      status: complete
+    review-fixes:
+      text: 审查修复：series fact 取值未变不写、只改变化字段并保留注释；标题、事实与摘要的 UTF-8 检查与 --text/--file 冲突；--packs/--sources 重复 id 提前报告；无关的坏系列文件降为 warning；前序摘要读取失败在 context 中降为 warning；每条命令只查一次系列（ctxpack 与阅读页复用合并结果）；整体校验按成员作品合并；Markdown 系列一节与引用块；系列文件中未知规范包的 next；补充合并顺序、继承、验收、摘要与裁剪优先级等测试；delta tech subject-scoped-lookup 与 per-work-merge-validated
+      status: complete
+  Testing:
+    lint:
+      text: gofmt 检查本变更的 Go 文件
+      status: complete
+      command: test -z "$(gofmt -l internal/series internal/resolve internal/ctxpack internal/catalog internal/schema internal/cli/series.go internal/cli/series_test.go internal/cli/workspace.go internal/cli/registry.go internal/cli/cli_test.go internal/cli/context.go)"
+    unit-tests:
+      text: 单元测试：系列文件的创建、修改与注释保留、成员唯一、引用校验；合并顺序与 source；摘要的验收、长度、过期；context 的 series、summaries 与 stale、素材并入与裁剪；CLI 输出、诊断、退出码与 MCP 样例调用
+      status: complete
+      command: go test ./internal/...
+    full-regression:
+      text: 运行完整回归命令，覆盖率不低于 80%
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    spec-alignment:
+      text: 对照 series 与 context delta spec 的每个场景确认实现与测试覆盖，并按实际实现修正
+      status: complete
+    strict-ready:
+      text: 运行 strict-spec-cli ready 与 strict-spec-cli verify，确认变更产物有效
+      status: complete
+      command: strict-spec-cli ready series-shared-context && strict-spec-cli verify series-shared-context
+    archive-readiness:
+      text: 确认 delta spec 能合并（series 为新建主规格，context 两条 MODIFIED），归档后 series-shared-context 标记为完成
+      status: complete
+testing_gates:
+  validation_task: full-regression
+  unit_test_task: unit-tests

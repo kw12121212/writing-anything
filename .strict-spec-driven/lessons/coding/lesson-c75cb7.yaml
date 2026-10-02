@@ -1,0 +1,22 @@
+schema: strict-spec-driven/lesson/v1
+schema_version: 1
+artifact_type: lesson
+schema_file: templates/strict-spec-driven/schemas/lesson.yaml
+lesson:
+  id: lesson-c75cb7
+  title: 每次写入都重新编码整个子树，取值未变也会重写文件并丢掉内部注释
+category: coding
+status: active
+created_at: '2026-10-01T17:34:55.165Z'
+updated_at: '2026-10-02T01:03:06.868Z'
+context: pack learn 等命令在节点树上修改提议：stats、sources 先删再加，每个条目都整体替换成新编码的节点。
+observation: wa-cli 自己写出的文件每次编码结果相同，测试看不出问题；作者手写（流式 stats、条目内带注释）的合法提议在一次无变化的 learn 后被重排、注释全部丢失，changedPaths 也不为空；无关条目上的锚点还会让所有操作失败。
+takeaway: 替换节点前先比较解码后的取值（reflect.DeepEqual(schema.Decode(old), schema.Decode(new))），相同就保留原节点；只有要改的节点才做锚点检查；用一份带注释的手写产物做无变化操作，断言字节不变。
+applies_when: 修改结构化产物时为方便而整体替换一个映射或序列条目（而不是逐个改字段），且产物可能由作者手写或带注释时
+occurrences:
+  - origin: pack-learn-style-profile
+    date: '2026-10-01'
+    evidence: internal/learn/learn.go render 中的 same 比较；TestHandWrittenProposalKept
+  - origin: series-shared-context
+    date: '2026-10-02'
+    evidence: series fact 最初对取值相同的事实也整项重新编码、丢掉事实内部的注释；审查后改为取值未变不写、只用 SetKey 修改 text 与 sources（internal/series TestSetFactKeepsComments）
