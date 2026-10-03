@@ -1,0 +1,19 @@
+schema: strict-spec-driven/lesson/v1
+schema_version: 1
+artifact_type: lesson
+schema_file: templates/strict-spec-driven/schemas/lesson.yaml
+lesson:
+  id: lesson-63f5fd
+  title: 倒排索引的候选裁剪必须是命中判定的超集，整词词条对部分子串查询会漏报
+category: coding
+status: active
+created_at: '2026-10-03T07:18:14.972Z'
+updated_at: '2026-10-03T07:18:14.972Z'
+context: recall-index 变更中 wa-cli recall 用倒排索引（中文二元组、非中文整词）产生候选单元，再对正文做子串复核。审查发现：查询 son 而正文有 json 时，整词词条 json 不含 son，候选裁剪在复核之前就把该单元剪掉，命中判定「查询词是段落的子串」被静默破坏。
+observation: 任何「索引加速 + 精确复核」的两段式检索，只有当索引起码是命中判定的超集时才正确：中文二元组满足（子串的二元组必在原文词条中），非中文整词不满足（查询可以是正文单词的一段）。单一汉字同样没有二元组词条。
+takeaway: 给加速结构做候选裁剪前，先证明它是精确判定的超集；证不出（整词词条、单字查询）就跳过裁剪、直接走精确复核，复核用 strings.Index 而非逐码点扫描，避免对抗性输入的平方级耗时。
+applies_when: 为精确匹配语义（子串、正则、自定义判定）添加索引或缓存加速时；换切词方式或命中语义时也要重查超集性。
+occurrences:
+  - origin: recall-index 变更的独立代码审查（fresh-context reviewer 实测 son/json 漏报）。
+    date: '2026-10-03'
+    evidence: 修复前：wa-cli recall son 对含「JSON 配置生效」的已验收正文返回空结果；修复后命中（internal/recall 的 beyondTerms 与 TestRunLatinPartialSubstring）。

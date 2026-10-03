@@ -79,7 +79,7 @@ type commandSet []*command
 var registry = commandSet{helpCommand, versionCommand, initCommand, validateCommand, statusCommand, configSetCommand, configResolvedCommand,
 	packInstallCommand, packListCommand, packRemoveCommand, packLearnCommand, packPreferCommand, packConfirmCommand, packRejectCommand,
 	newCommand, unitAddCommand, unitMoveCommand, advanceCommand, nextCommand, briefSetCommand, briefShowCommand, marketingSetCommand, marketingShowCommand, marketingAskCommand,
-	outlineSetCommand, outlineRemoveCommand, outlineShowCommand, contextCommand, lintCommand,
+	outlineSetCommand, outlineRemoveCommand, outlineShowCommand, contextCommand, lintCommand, recallCommand,
 	seriesSetCommand, seriesAddCommand, seriesFactCommand, seriesShowCommand, summarySetCommand, summaryShowCommand,
 	metricsPlanCommand, metricsRecordCommand, metricsShowCommand, metricsCalibrateCommand, metricsComputeCommand, curveCommand,
 	sourceAddCommand, sourceListCommand, draftWriteCommand, diffCommand, provenanceCommand, claimAddCommand, claimSetCommand, claimListCommand, claimRemoveCommand,

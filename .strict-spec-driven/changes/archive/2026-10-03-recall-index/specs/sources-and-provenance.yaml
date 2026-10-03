@@ -1,0 +1,129 @@
+schema: strict-spec-driven/delta-spec/v1
+schema_version: 1
+artifact_type: delta_spec
+schema_file: templates/strict-spec-driven/schemas/delta-spec.yaml
+target_spec: sources-and-provenance
+operations:
+  ADDED: {}
+  MODIFIED:
+    canon-add:
+      strength: MUST
+      statement: wa-cli canon add <work> --type <type> --text <text> 必须在作品根单元目录下的设定集 canon.yaml 的 entries 末尾追加一个设定条目（Canon Entry）：work 为作品根单元引用；type 取值为 character（人物，该类条目即人物卡（Character Sheet））、location（地点）、item（物品）、world-rule（世界规则）与 relationship（人物关系）之一；character、location 与 item 条目必须给出非空的 --name，world-rule 与 relationship 条目不得给出 --name 与 --aliases；--sources 为逗号分隔的素材 id（省略时为空数组，表示尚未关联素材）；--aliases 为逗号分隔的别名（Alias）（省略时为空数组）；--pin 时 protection 为 author-pinned，否则为 normal；relationship 条目必须给出 --members（逗号分隔的条目 id），成员为 2 个以上不重复的 id 且每个都是同一 canon.yaml 中的 character 条目。id 由 --id 指定，省略时为 canon-<n>，n 从已有条目数加一开始递增到不重复。canon.yaml 不存在时创建（含 schema_version 1 与 entries），已存在时只追加该项，保留其他内容与 YAML 注释。成功时退出码为 0，changedPaths 为 canon.yaml，--json 输出的 canon 字段含 work、id、type、name（未设置时为 null）、text、sources、protection、aliases（无别名时为空数组）、members（非 relationship 条目为空数组）。--name 与 --text 不是 UTF-8 文本时报告 input.invalid-value（field 为 name 或 text）；sources 中的素材 id 未登记时报告 canon.unknown-source（field 为 sources[i]）；members 引用的不是同文件 character 条目时报告 canon.unknown-character（field 为 members[i]）；type 不在取值范围内、text 为空、--name 只含空白、--aliases 元素只含空白或彼此重复、--id 不符合 id 格式、members 少于 2 个或有重复时报告 artifact.schema-violation（field 为 type、text、name、aliases、id 或 members）；--aliases 的取值与任何条目的 name、其他条目的别名或本条目 name 重复时报告 canon.duplicate-alias（field 为 aliases[i]；name 之间可以重复，场景级上下文包按 name 匹配同名条目）；id 与已有条目相同时报告 artifact.duplicate-id（field 为 id）；这些由参数引起的诊断的 next 包含 wa-cli help canon add --json 与 wa-cli source list。已有 canon.yaml 不通过 Schema 校验，或其中已有条目存在 id 重复、别名重复、sources 或 members 引用失效时报告其诊断（field 以 entries 开头）；要追加之处经由 YAML 锚点、别名或合并键得到时报告 canon.anchored-value；canon.yaml 途经符号链接或不是普通文件时按 artifact.not-found 处理；这些情况都不修改文件，退出码为 1。未找到工作区时报告 workspace.not-found；作品不存在或给出子单元引用时报告 work.not-found（message 说明 canon 是作品级产物）。
+      scenarios:
+        add-character:
+          - GIVEN: 已用 wa-cli new short-story my-story --dir D 创建作品，已登记素材 author-notes
+          - WHEN: 运行 wa-cli canon add my-story --type character --name 守灯人 --text 五十岁，左手有旧伤 --sources author-notes --dir D --json
+          - THEN: canon.yaml 的 entries 为一项：id 为 canon-1、type 为 character、name 为 守灯人、sources 为 [author-notes]、protection 为 normal、aliases 为空数组；canon.id 为 canon-1；changedPaths 为 [.writing-anything/works/my-story/canon.yaml]，退出码为 0
+        add-relationship:
+          - GIVEN: 作品 my-story 的 canon.yaml 已有 character 条目 canon-1（守灯人）与 canon-2（精灵）
+          - WHEN: 运行 wa-cli canon add my-story --type relationship --text 守灯人是精灵的旧识 --members canon-1,canon-2 --dir D --json
+          - THEN: 新条目 canon-3 的 type 为 relationship、members 为 [canon-1, canon-2]、name 为 null、protection 为 normal，退出码为 0
+        add-pinned:
+          - GIVEN: 已创建作品 my-story
+          - WHEN: 运行 wa-cli canon add my-story --type world-rule --text 灯油只能燃烧到黎明 --pin --dir D --json
+          - THEN: 该条目的 protection 为 author-pinned 且没有 name，changedPaths 为 canon.yaml，退出码为 0
+        unknown-member:
+          - GIVEN: 作品 my-story 的 canon.yaml 只有 character 条目 canon-1
+          - WHEN: 运行 wa-cli canon add my-story --type relationship --text 对立 --members canon-1,canon-9 --dir D --json
+          - THEN: diagnostics 中有一条错误码为 canon.unknown-character、field 为 members[1] 的诊断，canon.yaml 不变，退出码为 1
+        unknown-source:
+          - GIVEN: 已创建作品 my-story，没有登记素材 nope
+          - WHEN: 运行 wa-cli canon add my-story --type character --name 主角 --text 描述 --sources nope --dir D --json
+          - THEN: diagnostics 中有一条错误码为 canon.unknown-source、field 为 sources[0] 的诊断，没有创建 canon.yaml，退出码为 1
+        duplicate-id:
+          - GIVEN: 作品 my-story 的 canon.yaml 已有条目 canon-1
+          - WHEN: 运行 wa-cli canon add my-story --type world-rule --text 规则 --id canon-1 --dir D --json
+          - THEN: diagnostics 中有一条错误码为 artifact.duplicate-id、field 为 id 的诊断，canon.yaml 不变，退出码为 1
+        add-item-with-aliases:
+          - GIVEN: 已创建作品 my-story
+          - WHEN: 运行 wa-cli canon add my-story --type item --name 长命灯 --aliases 青焰灯,灯 --text 藏在阁楼的旧灯 --dir D --json
+          - THEN: 新条目的 type 为 item、name 为 长命灯、aliases 为 [青焰灯, 灯]、protection 为 normal，changedPaths 为 canon.yaml，退出码为 0
+        duplicate-alias:
+          - GIVEN: 作品 my-story 的 canon.yaml 已有 name 为守灯人的条目
+          - WHEN: 运行 wa-cli canon add my-story --type character --name 老周 --aliases 守灯人 --text 描述 --dir D --json
+          - THEN: diagnostics 中有一条错误码为 canon.duplicate-alias、field 为 aliases[0] 的诊断，canon.yaml 不变，退出码为 1
+        same-name-allowed:
+          - GIVEN: 作品 my-story 的 canon.yaml 已有 name 为守灯人的 character 条目
+          - WHEN: 运行 wa-cli canon add my-story --type character --name 守灯人 --text 年老的守灯人 --dir D --json
+          - THEN: 新条目登记成功（name 之间可以重复），changedPaths 为 canon.yaml，退出码为 0
+    canon-edit:
+      strength: MUST
+      statement: wa-cli canon set <work> <entry> 必须修改 canon.yaml 中 id 为 <entry> 的设定条目：--type 与 --text 替换对应字段；--name（空字符串删除该字段）与 --sources（逗号分隔的素材 id，空字符串表示清空）整体替换；--aliases（逗号分隔的别名（Alias），空字符串删除该字段）整体替换；--members（逗号分隔的条目 id，空字符串删除该字段）整体替换人物关系的成员；--pin 把 protection 升为 author-pinned，--unpin 把 protection 降为 normal（两者不得同时给出，否则报告 input.invalid-value，field 为 pin）；省略的参数不修改；只改动这些字段，保留其他条目、其他内容与 YAML 注释。--name 与 --text 不是 UTF-8 文本时报告 input.invalid-value（field 为 name 或 text）。成功时退出码为 0，--json 输出的 canon 字段为修改后的条目（同 canon-add 的字段，含 aliases，无别名时为空数组），changedPaths 为 [canon.yaml]；取值与原有取值相同时不写文件，changedPaths 为空数组。修改或删除后仍有条目的 sources、members 或 decision 引用失效时照常写入，这些引用以 warning 级诊断报告（canon.unknown-source、canon.unknown-character 或 canon.unknown-decision，message 提示修复命令）；修改后的 aliases 与任何条目的 name、其他条目的别名或本条目 name 重复时报告 canon.duplicate-alias（field 为 aliases[i]），不修改文件（name 之间可以重复）。对 protection 为 normal 的条目给出 --decision 时报告 input.invalid-value（field 为 decision，message 说明该参数只用于作者钦定条目的授权），不修改文件。wa-cli canon remove <work> <entry> 必须删除该条目并保留其他内容与注释：成功时 removed 为条目 id，changedPaths 为 [canon.yaml]；删除 character 条目后仍有 relationship 条目引用它时照常删除，以 warning 级 canon.unknown-character 报告剩余引用；对 normal 条目给出 --decision 同样报告 input.invalid-value。两个命令在作品没有 canon.yaml 或其中没有该 id 时报告 canon.not-found（next 包含 wa-cli canon list <work> --dir <dir> --json）；--type 不在取值范围内、--text 为空、--name 只含空白、--aliases 元素只含空白或彼此重复、--members 少于 2 个或有重复、--sources 中有素材未登记时报告对应诊断（同 canon-add 的错误码与 field）；由参数引起的诊断的 next 包含 wa-cli help canon set --json 与 wa-cli source list；已有 canon.yaml 不通过 Schema 校验或条目 id 重复时报告其诊断；要修改或删除的条目经由 YAML 锚点、别名或合并键得到时报告 canon.anchored-value；作者钦定条目的写保护见 canon-protection；这些情况都不修改文件，退出码为 1。
+      scenarios:
+        set-text:
+          - GIVEN: 作品 my-story 的 canon.yaml 有 normal 条目 canon-1（守灯人），entries 上方有作者的注释
+          - WHEN: 运行 wa-cli canon set my-story canon-1 --text 六十岁，左手有旧伤 --dir D --json
+          - THEN: canon-1 的 text 为 六十岁，左手有旧伤，name 与 type 不变，作者的注释保留，changedPaths 为 [.writing-anything/works/my-story/canon.yaml]，退出码为 0
+        set-unchanged:
+          - GIVEN: 同上
+          - WHEN: 再次运行同一 canon set 命令
+          - THEN: changedPaths 为空数组，canon.yaml 不变，退出码为 0
+        remove-entry:
+          - GIVEN: 作品 my-story 的 canon.yaml 有 world-rule 条目 canon-2 与 character 条目 canon-1，entries 上方有作者的注释
+          - WHEN: 运行 wa-cli canon remove my-story canon-2 --dir D --json
+          - THEN: removed 为 canon-2，canon.yaml 只剩 canon-1 且注释保留，changedPaths 为 [canon.yaml]，退出码为 0
+        entry-not-found:
+          - GIVEN: 作品 my-story 的 canon.yaml 中没有 canon-9
+          - WHEN: 运行 wa-cli canon set my-story canon-9 --text 新描述 --dir D --json 或 wa-cli canon remove my-story canon-9 --dir D --json
+          - THEN: diagnostics 中有一条错误码为 canon.not-found 的诊断，其 next 为 wa-cli canon list my-story --dir D --json；canon.yaml 不变，退出码为 1
+        remove-referenced-character:
+          - GIVEN: 作品 my-story 的 canon.yaml 有 character 条目 canon-1、canon-2 与 relationship 条目 canon-3（members 为 canon-1 与 canon-2）
+          - WHEN: 运行 wa-cli canon remove my-story canon-1 --dir D --json
+          - THEN: removed 为 canon-1，canon.yaml 保留 canon-2 与 canon-3；diagnostics 中有一条 severity 为 warning、错误码为 canon.unknown-character 的诊断（message 提示用 wa-cli canon set 修复 members），退出码为 0
+        set-aliases:
+          - GIVEN: canon-1 为 character 条目（name 为守灯人）
+          - WHEN: 运行 wa-cli canon set my-story canon-1 --aliases 老灯匠,提灯人 --dir D --json
+          - THEN: canon-1 的 aliases 为 [老灯匠, 提灯人]，其他字段不变，canon.aliases 为 [老灯匠, 提灯人]，changedPaths 为 [canon.yaml]，退出码为 0
+        set-aliases-clear:
+          - GIVEN: canon-1 的 aliases 为 [老灯匠]
+          - WHEN: 运行 wa-cli canon set my-story canon-1 --aliases "" --dir D --json
+          - THEN: canon-1 不含 aliases 字段，canon.aliases 为空数组，changedPaths 为 [canon.yaml]，退出码为 0
+        set-aliases-duplicate:
+          - GIVEN: canon.yaml 另有 name 为黑塔的条目 canon-2
+          - WHEN: 运行 wa-cli canon set my-story canon-1 --aliases 黑塔 --dir D --json
+          - THEN: diagnostics 中有一条错误码为 canon.duplicate-alias、field 为 aliases[0] 的诊断，canon.yaml 不变，退出码为 1
+    canon-list:
+      strength: MUST
+      statement: wa-cli canon list <work> 必须按 canon.yaml 中的顺序输出作品的设定条目：--json 输出的 entries 为数组，每项含 work、id、type、name（未设置时为 null）、text、sources、protection、aliases（无该字段时为空数组）、members（非 relationship 条目为空数组）与 decision（未设置时为 null）。作品没有 canon.yaml 时 entries 为空数组；canon.yaml 不通过 Schema 校验或条目 id、别名重复时报告其诊断，entries 为空数组，退出码为 1；条目的 sources、members 或 decision 引用失效时照常列出全部条目，这些引用以 warning 级诊断报告。该命令只读，changedPaths 为空数组；作品不存在或给出子单元引用时报告 work.not-found。不加 --json 时以人读文本列出条目（含类型、名称、别名、保护级别与内容，作者钦定条目标注［作者钦定］）。
+      scenarios:
+        list-entries:
+          - GIVEN: 作品 my-story 的 canon.yaml 有 character 条目 canon-1 与 relationship 条目 canon-3
+          - WHEN: 运行 wa-cli canon list my-story --dir D --json
+          - THEN: entries 依次为 canon-1 与 canon-3，canon-1 的 protection 为 normal、aliases 为空数组，canon-3 含 members，changedPaths 为空数组，退出码为 0
+        list-empty:
+          - GIVEN: 刚创建的作品 my-story 没有 canon.yaml
+          - WHEN: 运行 wa-cli canon list my-story --dir D --json
+          - THEN: entries 为空数组，退出码为 0
+        dangling-warning:
+          - GIVEN: 作品 my-story 的 canon.yaml 中 canon-1 的 sources 引用的素材 src-x 已被删除
+          - WHEN: 运行 wa-cli canon list my-story --dir D --json
+          - THEN: entries 列出全部条目；diagnostics 中有一条 severity 为 warning、错误码为 canon.unknown-source 的诊断，退出码为 0
+        list-aliases:
+          - GIVEN: canon.yaml 的 canon-1 有 aliases [老灯匠]
+          - WHEN: 运行 wa-cli canon list my-story --dir D --json
+          - THEN: entries 中 canon-1 的 aliases 为 [老灯匠]，退出码为 0
+    canon-validation:
+      strength: MUST
+      statement: wa-cli validate 整体校验时，必须对每个可加载作品目录中存在的 canon.yaml 做 Schema 校验并计入 checked，且满足：条目 id 在文件内唯一（否则 artifact.duplicate-id，field 为 entries[i].id）；每个别名（Alias）不得与任何条目的 name、其他条目的别名或本条目 name 重复（name 之间可以重复，场景级上下文包按 name 匹配同名条目），违反时报告 canon.duplicate-alias，field 为 entries[i].aliases[j]；world-rule 与 relationship 条目不得含 name 与 aliases，character、location 与 item 条目必须含非空 name（否则 artifact.schema-violation，field 为 entries[i].name 或 entries[i].aliases）；sources 中的每个素材 id 都已登记（否则 canon.unknown-source，field 为 entries[i].sources[j]）；relationship 条目的 members 为 2 个以上不重复的 id 且每个都是同文件 character 条目（否则 artifact.schema-violation 或 canon.unknown-character，field 为 entries[i].members[j]）；decision 引用的决策存在于决策队列（否则 canon.unknown-decision，field 为 entries[i].decision）；这些诊断的 next 包含 wa-cli validate --dir <dir> --json。wa-cli validate <path> 按位置识别可加载作品目录下的 canon.yaml 并执行同样的检查。canon.yaml 途经符号链接或不是普通文件时按不存在处理，整体校验报告 artifact.not-found（path 为该 canon.yaml），各 canon 命令同此处理；子单元目录下的 canon.yaml 不属于任何产物类型（artifact.unknown-kind）。
+      scenarios:
+        duplicate-entry:
+          - GIVEN: 作品 my-story 的 canon.yaml 中两个条目的 id 都是 canon-1
+          - WHEN: 运行 wa-cli validate --dir D --json
+          - THEN: diagnostics 中有一条错误码为 artifact.duplicate-id、path 为 .writing-anything/works/my-story/canon.yaml、field 为 entries[1].id 的诊断，退出码为 1
+        unknown-member-validate:
+          - GIVEN: 作品 my-story 的 canon.yaml 中 relationship 条目 canon-3 的 members 含 location 条目 canon-2
+          - WHEN: 运行 wa-cli validate --dir D --json
+          - THEN: diagnostics 中有一条错误码为 canon.unknown-character、field 为 entries[2].members[1] 的诊断，退出码为 1
+        single-file-validate:
+          - GIVEN: 作品 my-story 的 canon.yaml 合法（character 条目含 name，别名不与任何名称或别名重复）
+          - WHEN: 运行 wa-cli validate .writing-anything/works/my-story/canon.yaml --dir D --json
+          - THEN: valid 为 true，checked 只含该文件，退出码为 0
+        child-dir-not-recognized:
+          - GIVEN: 作品 my-story 有子单元 s1，D/.writing-anything/works/my-story/units/s1/canon.yaml 存在
+          - WHEN: 运行 wa-cli validate .writing-anything/works/my-story/units/s1/canon.yaml --dir D --json
+          - THEN: diagnostics 中有一条错误码为 artifact.unknown-kind 的诊断，退出码为 1
+        duplicate-alias-validate:
+          - GIVEN: canon.yaml 中 canon-1 的 name 为守灯人，canon-2（location）的 aliases 含守灯人
+          - WHEN: 运行 wa-cli validate --dir D --json
+          - THEN: diagnostics 中有一条错误码为 canon.duplicate-alias、field 为 entries[1].aliases[0] 的诊断，退出码为 1
+  REMOVED: {}

@@ -5,7 +5,7 @@ schema_file: ../../templates/strict-spec-driven/schemas/planned-change.yaml
 planned_change:
   id: recall-index
   milestone: novel
-status: planned
+status: complete
 summary: recall 全文检索（Full-text Search）
 details: wa-cli 为已验收正文建立内置倒排索引（Inverted Index）：中文按字符二元组（bigram）切分，并把设定集中人物、地点、物品的别名（Alias）映射到同一条目。wa-cli recall <关键词|条目 id> 返回出现位置（作品、单元、段落）和片段，用于查找某件东西在前文哪里出现过。不使用向量检索，不调用模型。正文或设定变化后增量更新索引。
 depends_on:

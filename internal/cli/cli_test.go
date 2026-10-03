@@ -258,6 +258,7 @@ var nullableFields = map[string]bool{
 	"brief":            true,
 	"choice":           true,
 	"column":           true,
+	"entry":            true,
 	"commit":           true,
 	"confirmation":     true,
 	"contextBudget":    true,
@@ -519,6 +520,9 @@ func sampleArgs(t *testing.T, name string) []string {
 		return []string{"lint", "my-post", "--dir", dir, "--json"}
 	case "context":
 		return []string{"context", "my-post", "--dir", newWork(t), "--json"}
+	case "recall":
+		// 没有 stage 为 done 的单元：不建索引、不变更产物。
+		return []string{"recall", "守灯人", "--dir", newWork(t), "--json"}
 	case "claim add":
 		return []string{"claim", "add", "my-post", "--kind", "opinion", "--text", "观点", "--dir", newWork(t), "--json"}
 	case "claim set":

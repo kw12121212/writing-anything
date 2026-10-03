@@ -1,0 +1,39 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: recall-index
+  status: proposed
+summary:
+  what:
+    - 新增 wa-cli recall <query> [--work <work>] 全文检索（Full-text Search）命令：以内置倒排索引（Inverted Index）检索工作区内已验收正文——stage 为 done 的单元的 draft.md——中文按字符二元组（bigram）切分、非中文连续字母数字段按词切分建立倒排表，命中以对当前正文的子串复核为准（ASCII 字母不区分大小写）；--json 输出 results 数组，每项含 work、unit、paragraph、snippet、matched 与 entry（未解析到设定条目时为 null），按作品 id、单元树先序与段落号排序；不加 --json 时以人读文本输出同样的结果。查询词为空或只含空白时报告 input.invalid-value；没有命中时 results 为空数组且退出码为 0。不使用向量检索（Vector Search），不调用大语言模型（LLM）。
+    - 查询词解析为设定集（Canon）条目：查询词等于检索范围内某作品条目的 id、name 或别名（Alias）时，该作品内的检索词集扩展为该条目 name 与 aliases 的并集，命中项的 entry 为该条目 id、matched 为实际命中的称谓；同一查询在不同作品解析到不同条目时各自独立扩展；均未命中时按原词检索。作品的 canon.yaml 不通过校验时报告其诊断，该作品跳过别名解析、仍按原词检索正文，其余作品照常。
+    - 倒排索引持久化为工作区级缓存 .writing-anything/.recall-index.yaml（点前缀，不属于任何产物类型，validate 不校验）：每次 recall 先按内容 SHA-256 增量刷新——只重建 draft.md 或 canon.yaml 发生变化的单元与作品、移除已删除单元与作品的条目，索引缺失、读取失败或校验不符时全量重建；recall 除该缓存文件外不创建或修改任何文件，changedPaths 仅在索引刷新写盘时含该文件。段落切分与编号复用 paragraph-model 的既有定义。
+    - docs/GLOSSARY.md 增补别名（Alias）与全文检索（Full-text Search）词条（倒排索引（Inverted Index）已有词条）。
+    - 设定集条目新增可选 aliases 字段（字符串数组）与新增 item（物品）条目类型：character（人物）、location（地点）与 item 可带 aliases，item 与 character、location 一样必填 name，world-rule 与 relationship 不得带 name 与 aliases；别名不得与任何条目的 name、其他条目的别名或本条目 name 重复（新错误码 canon.duplicate-alias；name 之间可以重复，场景级上下文包按 name 匹配同名条目）。canon add 新增 --aliases（逗号分隔），canon set 的 --aliases 整体替换（空字符串清除该字段），canon list 输出 aliases。查询词只在解析到唯一条目时扩展为该条目全部称谓，同名多个条目不构成解析、按原词检索。
+  why:
+    - 路线图 novel 里程碑（order 600）激活：依赖的 multi-level-units 与 characters-and-light-canon 已归档。本规划变更是里程碑范围「基于内置倒排索引的 recall 全文检索」与完成标准「wa-cli recall 按人物名或别名返回全部出现位置」的承载者，也是 foreshadowing-ledger、knowledge-state、scene-close-out 等后续计划变更的共同依赖。
+    - 长篇小说的正文远超任何单个会话能装下的体量：Agent 查找「某件东西前文在哪里出现过」目前只能整篇读取正文或依赖会话内记忆，跨会话即丢失。wa-cli recall 提供确定、可复现、不需要模型的全文检索；里程碑 intake 问题 retrieval-method 的推荐答案（上下文按契约显式引用精确组装，辅以内置倒排索引的全文检索，不引入向量检索）的检索侧由本变更落地。
+    - 人物与物品在正文中常以本名、绰号、称号等不同称谓出现：没有别名机制时按名检索会漏报。把设定集中的别名映射到同一条目，一次检索覆盖全部称谓；计划变更 details 明确列出人物、地点、物品，因此设定集同步增加别名与 item（物品）条目类型。
+scope:
+  in:
+    - internal/schema：canon.schema.json 的 type 枚举增加 item（必填 name），条目增加可选 aliases（字符串数组，元素非空、条目内不重复，world-rule 与 relationship 不得携带）；合法与不合法夹具更新
+    - internal/canon：加载与校验支持 item 与 aliases、name 与 aliases 文件内唯一（canon.duplicate-alias）；Add/Set 支持 --aliases（add 逗号分隔写入，set 整体替换、空字符串清除），List 输出 aliases
+    - 新包 internal/recall：段落切分复用出处计算的既有实现，倒排索引构建（CJK bigram 与非 CJK 连续字母数字词）、缓存文件持久化与读取、按 SHA-256 的增量刷新（失效条目移除、损坏全量重建）、查询解析（条目 id/name/alias 扩展）、子串复核与片段截取
+    - internal/cli：recall 命令注册（args：query；flags：--work；outputKeys：results 与 indexed 等；exitCodes；sampleArgs），canon add/set 增加 --aliases 参数声明与 canon list 输出适配，新错误码常量（canon.duplicate-alias）
+    - docs/GLOSSARY.md：别名（Alias）、全文检索（Full-text Search）词条
+  out:
+    - 上下文包（Context Pack）组装：context 命令行为不变，recall 不进入上下文包；契约显式引用组装由场景契约相关计划变更负责
+    - 向量检索（Vector Search）与嵌入（Embedding）模型：不引入，wa-cli 仍不调用任何模型
+    - 检索范围限于 stage 为 done 的单元正文：brief、outline、素材、分层摘要与草稿阶段正文不进入索引
+    - 连续性审查、审查任务包、伏笔台账、知情表、状态快照与写后收口：novel 与 novel-continuity 里程碑其他计划变更
+    - 索引的跨工作区共享与导出，以及 MCP 专属逻辑：MCP 经命令注册表自动暴露 recall，不单独编写
+unchanged_behavior:
+  - 无 aliases 与 item 的既有 canon.yaml 继续合法；canon add/set/remove/list 在不涉及 aliases 与 item 时行为与错误码不变（--json 输出仅新增 aliases 字段，无别名为空数组）
+  - context、draft、review、advance、decide 等现有命令的行为、输出与错误码不变；validate 的 checked 与现有检查不变（.recall-index.yaml 点前缀不属于任何产物类型）
+  - paragraph-model、出处（Provenance）与人工编辑保护行为不变；规范包合并与文体数据不变
+  - MCP 服务与内置技能内容不变：MCP 经命令注册表自动暴露 recall，不为其单独编写逻辑
+roadmap:
+  milestone: novel
+  planned_change: recall-index

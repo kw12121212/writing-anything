@@ -1,0 +1,100 @@
+schema: strict-spec-driven/delta-spec/v1
+schema_version: 1
+artifact_type: delta_spec
+schema_file: templates/strict-spec-driven/schemas/delta-spec.yaml
+target_spec: recall
+spec:
+  title: 检索（Recall）
+  path: .strict-spec-driven/specs/recall.yaml
+operations:
+  ADDED:
+    recall-search:
+      strength: MUST
+      statement: wa-cli recall <query> [--work <work>] 必须以全文检索（Full-text Search）在已验收正文中查找 query：检索范围为 --dir 下工作区内 stage 为 done 的全部单元的 draft.md（给出 --work 时限定该作品，取值为作品根单元 id）；命中当且仅当查询词或按 recall-aliases 解析出的条目称谓是段落文本的子串（ASCII 字母不区分大小写，含非中文单词的部分子串，如查询 son 而正文有 json）；段落按 sources-and-provenance 主规格 paragraph-model 的定义切分与编号（段落号从 1 起）。--json 输出的 results 为数组，每项含 work（作品根单元 id）、unit（单元引用）、paragraph（段落号）、snippet（片段：以段落内首次命中位置为中心、最长 120 个字符（Unicode 码点），截断时两端以 … 标示）、matched（实际命中的查询词或条目称谓原文）与 entry（解析到的设定条目 id，未解析到时为 null），按作品 id、单元树先序与段落号排序；同一称谓在同一段落多次出现只输出一项。没有命中时 results 为空数组、退出码为 0。不加 --json 时以人读文本按同样顺序输出每次出现的作品、单元、段落号、片段与条目。查询词为空或只含空白时报告 input.invalid-value（field 为 query，next 包含 wa-cli help recall --json），不检索，results 与 indexed 为空数组，退出码为 1；--work 指向不存在的作品时按 units-and-lifecycle 主规格 unit-reference 处理。recall 除 recall-index 声明的索引缓存文件外不得创建或修改任何文件，不为此调用大语言模型（LLM）。
+      scenarios:
+        keyword-search:
+          - GIVEN: short-story 作品 my-story 的场景 s1 已 done，其 draft.md 第 2 段含「守灯人」，作品 canon.yaml 没有 name 或别名等于守灯人的条目
+          - WHEN: 运行 wa-cli recall 守灯人 --dir D --json
+          - THEN: results 含一项 work 为 my-story、unit 为 my-story/s1、paragraph 为 2、snippet 含守灯人、entry 为 null，changedPaths 只含 .writing-anything/.recall-index.yaml 或为空数组，退出码为 0
+        entry-alias-search:
+          - GIVEN: my-story 的 canon.yaml 有 character 条目 canon-1（name 为守灯人，aliases 为 [老灯匠]），场景 s1 已 done，某段含「老灯匠」
+          - WHEN: 运行 wa-cli recall 老灯匠 --dir D --json
+          - THEN: 该段的命中项 entry 为 canon-1、matched 为老灯匠，退出码为 0
+        entry-id-search:
+          - GIVEN: 同上，某段含「守灯人」
+          - WHEN: 运行 wa-cli recall canon-1 --dir D --json
+          - THEN: results 含该段，entry 为 canon-1、matched 为守灯人，退出码为 0
+        work-scope:
+          - GIVEN: 工作区有 my-story 与 my-novel 两个作品，二者的已验收正文都含守灯人
+          - WHEN: 运行 wa-cli recall 守灯人 --work my-story --dir D --json
+          - THEN: results 只含 my-story 的出现，退出码为 0
+        no-results:
+          - GIVEN: 工作区的已验收正文不含「无踪之物」
+          - WHEN: 运行 wa-cli recall 无踪之物 --dir D --json
+          - THEN: results 为空数组，退出码为 0
+        empty-query:
+          - GIVEN: 已初始化的工作区 D
+          - WHEN: 运行 wa-cli recall 加一个空格作为 query --dir D --json
+          - THEN: diagnostics 中有一条错误码为 input.invalid-value、field 为 query 的诊断（next 含 wa-cli help recall --json），results 与 indexed 为空数组，退出码为 1
+        case-insensitive:
+          - GIVEN: 已验收正文某段含「JSON」
+          - WHEN: 运行 wa-cli recall json --dir D --json
+          - THEN: 该段命中，退出码为 0
+        latin-partial-word:
+          - GIVEN: 已验收正文某段含「JSON 配置生效」
+          - WHEN: 运行 wa-cli recall son --dir D --json
+          - THEN: 该段命中（son 是 json 的子串），matched 为 son，退出码为 0
+    recall-aliases:
+      strength: MUST
+      statement: wa-cli recall 必须先把查询词解析为设定集条目：在检索范围内逐作品检查 canon.yaml（给出 --work 时只查该作品），查询词与恰好一个条目的 id、name 或别名（Alias）完全相等时，该作品内的检索词集为该条目 name 与 aliases 的并集，命中项的 entry 为该条目 id、matched 为实际命中的称谓；同一个 name 命中多个条目时（场景级上下文包允许同名条目）不解析，该作品按原词检索（entry 为 null）；不同作品可各自解析到不同条目，互不影响；在任何作品都未解析到条目时按原词检索（entry 为 null）。作品的 canon.yaml 存在但不通过校验（含别名重复）时报告其诊断（error 级），该作品跳过别名解析、仍按原词检索其正文，valid 为 false、退出码为 1，其余作品照常检索与解析；作品没有 canon.yaml 时按原词检索，不报告。
+      scenarios:
+        cross-work-ids:
+          - GIVEN: my-story 与 my-novel 的 canon.yaml 各有 id 为 canon-1 的条目（name 分别为守灯人与黑塔），两作品都有已验收正文
+          - WHEN: 运行 wa-cli recall canon-1 --dir D --json
+          - THEN: my-story 的命中 entry 为 canon-1 且只匹配守灯人及其别名，my-novel 的命中 entry 为 canon-1 且只匹配黑塔及其别名，退出码为 0
+        alias-first-term:
+          - GIVEN: canon-1 的 name 为守灯人、aliases 为 [老灯匠, 提灯人]，某段同时含守灯人与提灯人
+          - WHEN: 运行 wa-cli recall canon-1 --dir D --json
+          - THEN: 该段只有一项结果，matched 为首次出现的称谓，退出码为 0
+        invalid-canon-degrade:
+          - GIVEN: my-novel 的 canon.yaml 不通过校验，my-story 的 canon.yaml 合法，守灯人出现在两个作品的已验收正文中
+          - WHEN: 运行 wa-cli recall 守灯人 --dir D --json
+          - THEN: diagnostics 中有 my-novel canon.yaml 的 error 级诊断，results 含两个作品的正文命中（my-novel 不做别名扩展），valid 为 false，退出码为 1
+        no-canon:
+          - GIVEN: my-story 没有 canon.yaml，已验收正文含守灯人
+          - WHEN: 运行 wa-cli recall 守灯人 --dir D --json
+          - THEN: 该段命中且 entry 为 null，没有 canon 相关诊断，退出码为 0
+        same-name-fallback:
+          - GIVEN: canon.yaml 有两个 name 同为守灯人的 character 条目，正文含守灯人
+          - WHEN: 运行 wa-cli recall 守灯人 --dir D --json
+          - THEN: 正文照常命中且 entry 为 null（同名条目不唯一，不做条目解析），退出码为 0
+    recall-index:
+      strength: MUST
+      statement: wa-cli 必须以内置倒排索引（Inverted Index）支撑 recall：对已索引正文，中文按字符二元组（bigram）切分、非中文连续字母数字段按词切分，建立从词条到出现（作品、单元、段落）的倒排表；索引持久化为工作区级缓存 .writing-anything/.recall-index.yaml（点前缀文件，不属于任何产物类型，wa-cli validate 不校验、不计入 checked）。每次 recall 必须先增量刷新索引再查询：对检索范围内每个 stage 为 done 的单元按其 draft.md 的 SHA-256、每个作品按其 canon.yaml 的 SHA-256 判断新鲜度，只重建内容发生变化的部分，并移除已删除单元与作品的条目；给出 --work 时范围外的作品在缓存中的条目原样保留，不因切换范围而重建；索引文件缺失、读取失败或结构不符时全量重建。段落超过 paragraph-model 上限（10000）的单元以 severity 为 warning 的 draft.too-large 诊断跳过，不阻塞其他作品；缓存写盘失败以 warning 报告（workspace.write-failed），检索结果不受影响。刷新写盘时 changedPaths 含该缓存文件，--json 输出 indexed 为本次重建的单元引用数组（未重建任何单元时为空数组）；未写盘时 changedPaths 为空数组；除该缓存文件外 recall 不得修改任何文件。检索结果必须与当前正文和设定集一致：正文或设定在两次 recall 之间发生变化后，下一次 recall 的结果反映变化后的内容。
+      scenarios:
+        refresh-after-edit:
+          - GIVEN: my-story 的 s1、s2 都已 done 且已被一次 recall 索引，作者直接把 s1 的 draft.md 中守灯人改为老灯匠
+          - WHEN: 运行 wa-cli recall 老灯匠 --dir D --json
+          - THEN: results 含 my-story/s1 的出现，indexed 只含 my-story/s1；再运行 wa-cli recall 守灯人 --dir D --json 时 results 不含 s1，退出码为 0
+        removed-unit:
+          - GIVEN: my-story 的 s2 此前被索引，work.yaml 已不再含 s2
+          - WHEN: 运行 wa-cli recall 守灯人 --dir D --json
+          - THEN: results 不含 my-story/s2 的出现，退出码为 0
+        corrupted-rebuild:
+          - GIVEN: .writing-anything/.recall-index.yaml 的内容不是合法索引结构
+          - WHEN: 运行 wa-cli recall 守灯人 --dir D --json
+          - THEN: valid 为 true，results 与按当前正文全量重建的结果一致，退出码为 0
+        no-rewrite:
+          - GIVEN: 索引已与当前正文和设定一致（同一次 recall 刚刷新过，内容未再变化）
+          - WHEN: 再次运行 wa-cli recall 守灯人 --dir D --json
+          - THEN: changedPaths 为空数组，indexed 为空数组，退出码为 0
+        not-validated:
+          - GIVEN: 已初始化的工作区 D 存在 .writing-anything/.recall-index.yaml
+          - WHEN: 运行 wa-cli validate --dir D --json
+          - THEN: valid 为 true，checked 不含 .writing-anything/.recall-index.yaml，退出码为 0
+        scoped-keeps-others:
+          - GIVEN: 工作区两个作品都已被一次不限范围的 recall 索引
+          - WHEN: 运行 wa-cli recall 守灯人 --work my-story --dir D --json，随后再运行不限范围的 wa-cli recall --dir D --json
+          - THEN: 两次调用 changedPaths 都为空数组、indexed 都为空数组（范围外作品的缓存条目原样保留，不重建），退出码为 0
+  MODIFIED: {}
+  REMOVED: {}

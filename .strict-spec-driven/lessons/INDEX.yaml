@@ -190,6 +190,11 @@ categories:
       status: active
       occurrences: 1
       path: .strict-spec-driven/lessons/coding/yaml-3ffa64.yaml
+    lesson-63f5fd:
+      title: 倒排索引的候选裁剪必须是命中判定的超集，整词词条对部分子串查询会漏报
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/coding/lesson-63f5fd.yaml
   documentation:
     must-must-6af326:
       title: 修改一条 MUST 需求时，要检查同一规格里相邻的 MUST 是否因此冲突

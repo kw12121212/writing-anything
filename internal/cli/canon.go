@@ -16,19 +16,20 @@ var workArg = argSpec{"work", "作品（Work）引用；设定集（Canon）是�
 
 var canonAddCommand = &command{
 	name:    "canon add",
-	summary: "在作品（Work）的设定集（Canon）中登记一个设定条目（Canon Entry）：人物、地点、世界规则或人物关系",
+	summary: "在作品（Work）的设定集（Canon）中登记一个设定条目（Canon Entry）：人物、地点、物品、世界规则或人物关系",
 	args:    []argSpec{workArg},
 	flags: []flagSpec{
 		dirFlag,
 		{"type", flagString, "条目类型：" + strings.Join(canon.Types, "、")},
-		{"name", flagString, "名称；character 与 location 必填，其他类型不得给出"},
+		{"name", flagString, "名称；character、location 与 item 必填，其他类型不得给出"},
+		{"aliases", flagString, "别名（Alias），用逗号分隔；同一设定集内名称与别名不得重复"},
 		{"text", flagString, "设定内容"},
 		{"sources", flagString, "关联的素材（Source）id，用逗号分隔；省略时表示尚未关联素材"},
 		{"members", flagString, "人物关系（relationship）引用的人物条目 id，用逗号分隔，至少 2 个"},
 		{"pin", flagBool, "登记为作者钦定（Author-pinned）条目，受最高级别保护"},
 		{"id", flagString, "条目 id；省略时为 canon-<n>"},
 	},
-	outputKeys: []outputKey{{"canon", "新条目：work、id、type、name、text、sources、protection、members 与 decision；失败时为 null"}},
+	outputKeys: []outputKey{{"canon", "新条目：work、id、type、name、aliases、text、sources、protection、members 与 decision；失败时为 null"}},
 	exitCodes:  standardExitCodes,
 	run:        runCanonAdd,
 }
@@ -41,6 +42,7 @@ var canonSetCommand = &command{
 		dirFlag,
 		{"type", flagString, "条目类型：" + strings.Join(canon.Types, "、") + "；省略时不修改"},
 		{"name", flagString, "名称；给出空值时删除该字段"},
+		{"aliases", flagString, "别名（Alias），用逗号分隔，整体替换；给出空值时删除该字段；同一设定集内名称与别名不得重复"},
 		{"text", flagString, "设定内容；省略时不修改"},
 		{"sources", flagString, "关联的素材（Source）id，用逗号分隔，整体替换原有关联；给出空值时清空"},
 		{"members", flagString, "人物关系引用的人物条目 id，用逗号分隔，整体替换；给出空值时删除该字段"},
@@ -48,7 +50,7 @@ var canonSetCommand = &command{
 		{"unpin", flagBool, "把 protection 降为 normal；属于修改钦定条目，需要 --decision"},
 		{"decision", flagString, "作者钦定条目的授权：指向 wa-cli decide 已决定且选择为允许的决策 id"},
 	},
-	outputKeys: []outputKey{{"canon", "修改后的条目：work、id、type、name、text、sources、protection、members 与 decision；失败时为 null"}},
+	outputKeys: []outputKey{{"canon", "修改后的条目：work、id、type、name、aliases、text、sources、protection、members 与 decision；失败时为 null"}},
 	exitCodes:  standardExitCodes,
 	run:        runCanonSet,
 }
@@ -58,7 +60,7 @@ var canonListCommand = &command{
 	summary:    "列出作品（Work）设定集（Canon）中的设定条目（Canon Entry）",
 	args:       []argSpec{workArg},
 	flags:      []flagSpec{dirFlag},
-	outputKeys: []outputKey{{"entries", "按登记顺序排列的条目数组，每项含 work、id、type、name、text、sources、protection、members 与 decision"}},
+	outputKeys: []outputKey{{"entries", "按登记顺序排列的条目数组，每项含 work、id、type、name、aliases、text、sources、protection、members 与 decision"}},
 	exitCodes:  standardExitCodes,
 	run:        runCanonList,
 }
@@ -100,19 +102,26 @@ func runCanonAdd(inv *invocation) int {
 	if problems == nil {
 		var w *work.Work
 		if w, problems = resolveWorkAt(dir, inv.args[0]); w != nil {
-			in := canon.AddInput{
-				Type:    inv.values["type"],
-				Name:    inv.values["name"],
-				Text:    inv.values["text"],
-				Sources: splitSources(inv.values["sources"]),
-				Members: splitSources(inv.values["members"]),
-				Pinned:  inv.flag("pin"),
-				ID:      inv.values["id"],
-			}
-			var e *canon.Entry
-			var changed []string
-			if e, changed, problems = canon.Add(dir, w, in); e != nil {
-				res.Canon, res.ChangedPaths = &canonEntryView{Work: w.ID, Entry: *e}, changed
+			aliases, ok := splitAliases(inv.values["aliases"])
+			if !ok {
+				problems = []workspace.Problem{{Code: schema.CodeSchemaViolation, Severity: workspace.SeverityError, Field: "aliases",
+					Message: "别名（Alias）只含空白；请给出非空白的别名，用逗号分隔"}}
+			} else {
+				in := canon.AddInput{
+					Type:    inv.values["type"],
+					Name:    inv.values["name"],
+					Aliases: aliases,
+					Text:    inv.values["text"],
+					Sources: splitSources(inv.values["sources"]),
+					Members: splitSources(inv.values["members"]),
+					Pinned:  inv.flag("pin"),
+					ID:      inv.values["id"],
+				}
+				var e *canon.Entry
+				var changed []string
+				if e, changed, problems = canon.Add(dir, w, in); e != nil {
+					res.Canon, res.ChangedPaths = &canonEntryView{Work: w.ID, Entry: *e}, changed
+				}
 			}
 		}
 	}
@@ -141,6 +150,15 @@ func runCanonSet(inv *invocation) int {
 			}
 			if v, ok := inv.values["name"]; ok {
 				in.Name = &v
+			}
+			if _, ok := inv.values["aliases"]; ok {
+				a, ok := splitAliases(inv.values["aliases"])
+				if !ok {
+					problems = []workspace.Problem{{Code: schema.CodeSchemaViolation, Severity: workspace.SeverityError, Field: "aliases",
+						Message: "别名（Alias）只含空白；请给出非空白的别名，用逗号分隔，或用空值删除全部别名"}}
+				} else {
+					in.Aliases = &a
+				}
 			}
 			if v, ok := inv.values["text"]; ok {
 				in.Text = &v
@@ -218,7 +236,7 @@ func runCanonList(inv *invocation) int {
 			fmt.Fprintf(&b, "作品 %s 还没有设定条目（Canon Entry）\n", inv.args[0])
 		}
 		for _, e := range res.Entries {
-			fmt.Fprintf(&b, "%s（%s%s）%s：%s\n", e.ID, e.Type, canonNameText(e.Name), protectionText(e.Protection), e.Text)
+			fmt.Fprintf(&b, "%s（%s%s%s）%s：%s\n", e.ID, e.Type, canonNameText(e.Name), canonAliasesText(e.Aliases), protectionText(e.Protection), e.Text)
 		}
 		_, err := io.WriteString(w, b.String())
 		return err
@@ -262,6 +280,31 @@ func canonNameText(name *string) string {
 	return "，" + *name
 }
 
+// canonAliasesText 返回人读文本中的别名列；没有别名时为空。
+func canonAliasesText(aliases []string) string {
+	if len(aliases) == 0 {
+		return ""
+	}
+	return "（别名：" + strings.Join(aliases, "、") + "）"
+}
+
+// splitAliases 把逗号分隔的别名（Alias）切开并去掉首尾空白；空串表示没有别名。与 splitSources 不同，
+// 只含空白的元素不是被丢弃而是报错：别名元素只含空白时按 Schema 违规报告（field 为 aliases）。
+func splitAliases(v string) ([]string, bool) {
+	out := []string{}
+	if v == "" {
+		return out, true
+	}
+	for _, s := range strings.Split(v, ",") {
+		s = strings.TrimSpace(s)
+		if s == "" {
+			return nil, false
+		}
+		out = append(out, s)
+	}
+	return out, true
+}
+
 func protectionText(protection string) string {
 	if protection == canon.ProtectionPinned {
 		return "［作者钦定］"
@@ -285,11 +328,11 @@ func canonParamNext(ds []Diagnostic, name, dir string) {
 	var own []Diagnostic
 	var idx []int
 	for i, d := range ds {
-		if d.Code == canon.CodeAnchoredValue || d.Code == "input.invalid-value" || paramField(d.Field, "id", "type", "name", "text", "sources", "members") {
+		if d.Code == canon.CodeAnchoredValue || d.Code == "input.invalid-value" || paramField(d.Field, "id", "type", "name", "aliases", "text", "sources", "members") {
 			own, idx = append(own, d), append(idx, i)
 		}
 	}
-	helpNext(own, name, []string{schema.CodeSchemaViolation, canon.CodeUnknownSource, catalog.CodeDuplicateID, canon.CodeAnchoredValue, "input.invalid-value"},
+	helpNext(own, name, []string{schema.CodeSchemaViolation, canon.CodeUnknownSource, catalog.CodeDuplicateID, canon.CodeDuplicateAlias, canon.CodeAnchoredValue, "input.invalid-value"},
 		shellCommand("wa-cli", "source", "list", "--dir", dir, "--json"))
 	for k, i := range idx {
 		ds[i] = own[k]

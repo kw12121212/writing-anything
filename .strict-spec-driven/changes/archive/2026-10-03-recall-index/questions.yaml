@@ -1,0 +1,42 @@
+schema: strict-spec-driven/question-list/v1
+schema_version: 1
+artifact_type: question_list
+schema_file: templates/strict-spec-driven/schemas/question-list.yaml
+change: recall-index
+open: []
+resolved:
+  - id: requirement-problem
+    question: 今天具体是什么问题、对谁？
+    context: 变更针对一个真实需求立项：需求只存在于请求方。「问题」指某人今天做什么或承受什么，而不是缺失的功能；若答案只点名一个按钮、字段或端点，那是方案而非问题。答案进入提案的 why，并决定变更是否值得做。
+    answer: 长篇小说正文远超任何单个会话能装下的体量：Agent 或作者查找「某件东西、某个人物前文在哪里出现过」时，今天只能整篇读取正文或依赖会话内记忆，跨会话即丢失。受影响的是写长篇的作者与协助的 Agent：今天只能靠重读全文或会话内记忆维持连续性。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-outcome
+    question: 什么可观察差异证明问题解决了？
+    context: 没有成功条件就无法事后判断变更是否生效。「可观察」指系统外的人不读代码就能检查：完成后某人会看到什么、或不再需要做什么。答案成为 delta spec 的场景与审稿时的验收证据。
+    answer: 里程碑完成标准与计划变更 details：wa-cli recall 按人物名或别名返回全部出现位置（作品、单元、段落）与片段；中文按字符二元组（bigram）切分的内置倒排索引；设定集别名映射到同一条目；正文或设定变化后增量更新索引；不使用向量检索、不调用模型。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-trigger
+    question: 为什么是现在——什么迫使它浮出？
+    context: 没有驱动力的工作最常被丢弃。答案说明迫使这项工作现在出现的具体事件、期限或成本，没有则如实说明；触发不充分的变更是延迟候选，审稿时衡量。
+    answer: 路线图 novel 里程碑（order 600）当前激活：依赖的 multi-level-units 与 characters-and-light-canon 已归档，本规划变更是其直接后继，也是 foreshadowing-ledger、knowledge-state、scene-close-out、long-form-planning-methods 等后续计划变更的共同依赖，完成它才能解锁同里程碑剩余工作。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-non-goals
+    question: 哪些必须明确不变？
+    context: 请求方知道哪些邻近行为被他人依赖，而 Agent 不知道。「非目标」是即使紧邻本工作也必须不动的行为、设置或输出。答案成为提案的 unchanged_behavior，审稿时对照检查成品。
+    answer: 上下文包组装（context 命令）行为不变，recall 不进入上下文包；不引入向量检索与模型调用；只索引 stage 为 done 的单元正文，brief、outline、素材、摘要与草稿阶段正文不进入索引；连续性审查、伏笔台账、知情表、状态快照与写后收口由 novel 里程碑其他计划变更负责；MCP 经命令注册表自动暴露，不单独编写逻辑。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-interpretation
+    question: 在存在多种可能读法时，请求 intended 的是哪一种？
+    context: 短请求通常有多种读法，做错读法与什么都没做无法区分。答案把 intended 的读法说得足以排除其他读法，在写代码前固定范围边界并平息「到底被要求做什么」的争议。
+    answer: 唯一读法（依据计划变更 details 与里程碑 intake 推荐答案）：「全文检索」指基于内置倒排索引的确定性子串检索，不引入向量检索；「已验收正文」指 stage 为 done 的单元的 draft.md；「别名映射到同一条目」指设定集条目新增别名（Alias），查询解析到条目时扩展检索词集并标注条目 id；「人物、地点、物品的别名」意味着设定集需新增 item（物品）条目类型；「增量更新索引」指按内容变化增量刷新持久化的倒排索引。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap

@@ -1,0 +1,59 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: recall-index
+sections:
+  Implementation:
+    canon-schema-item-aliases:
+      text: internal/schema：canon.schema.json 的 type 枚举增加 item（物品，必填 name）；条目增加可选 aliases（字符串数组，元素非空白、条目内不重复）；character、location、item 必填 name，world-rule 与 relationship 不得含 name 与 aliases；更新合法与不合法夹具。
+      status: complete
+      command: go test ./internal/schema/...
+    canon-aliases-crud:
+      text: internal/canon：加载与校验支持 item 与 aliases、name 与 aliases 文件内唯一（canon.duplicate-alias）；Add/Set 支持 --aliases（add 写入、set 整体替换与空字符串清除），List 输出 aliases。
+      status: complete
+      command: go test ./internal/canon/...
+    recall-index-package:
+      text: 新包 internal/recall：复用出处计算的段落切分，倒排索引构建（CJK 字符二元组 bigram 与非 CJK 连续字母数字词、段落号）、查询解析（条目 id/name/alias 扩展为称谓并集）、子串复核（ASCII 字母不区分大小写）与片段截取（首次命中为中心 120 个字符，截断加 …）。
+      status: complete
+      command: go test ./internal/recall/...
+    recall-incremental-cache:
+      text: internal/recall：.writing-anything/.recall-index.yaml 的持久化与读取（含 schema_version）、按单元 draft.md 与作品 canon.yaml SHA-256 的增量刷新（只重建变化部分、移除已删除单元与作品的条目）、缺失或损坏时全量重建。
+      status: complete
+      command: go test ./internal/recall/...
+    recall-cli-command:
+      text: internal/cli：注册 recall 命令（query 必需位置参数、--work、outputKeys：results 与 indexed、exitCodes、sampleArgs），先增量刷新索引再查询；canon add/set 增加 --aliases 参数声明、canon list 输出 aliases；空查询报 input.invalid-value（field 为 query）；作品 canon.yaml 非法时的降级检索；新错误码常量 canon.duplicate-alias。
+      status: complete
+      command: go test ./internal/cli/...
+    glossary-recall-terms:
+      text: docs/GLOSSARY.md 增补别名（Alias）与全文检索（Full-text Search）词条。
+      status: complete
+  Testing:
+    recall-unit-tests:
+      text: internal/recall 单元测试：切词（中文二元组、非中文词、大小写归一）、索引往返、增量刷新（改 draft 后只重建该单元、删单元移除条目、损坏索引全量重建）、查询解析（id/name/alias 扩展、跨作品独立）、子串复核与片段截取。
+      status: complete
+      command: go test ./internal/recall/...
+    canon-recall-cli-tests:
+      text: internal/cli 与 internal/canon 测试：canon add/set --aliases 与 item 成功路径、canon.duplicate-alias、--aliases 空字符串清除、取值未变不写文件；recall 命令场景（关键词、条目 id、别名扩展、--work 限定、无命中空数组、空查询、非法 canon 降级、索引 changedPaths）与 help/registry 声明。
+      status: complete
+      command: go test ./internal/cli/... ./internal/canon/...
+    regression-suite:
+      text: 完整回归测试：go vet、构建、全部测试与覆盖率检查（阈值 80%，范围 internal/**，不含 internal/tools/**）。
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    verify-change:
+      text: 变更工件校验：strict-spec-cli verify recall-index 通过，无 error 级诊断。
+      status: complete
+      command: strict-spec-cli verify recall-index
+    ready-change:
+      text: 提案交接校验：strict-spec-cli ready recall-index 通过。
+      status: complete
+      command: strict-spec-cli ready recall-index
+    archive-readiness:
+      text: 归档就绪检查：delta-spec 覆盖计划变更 details 全部要点（bigram 切分、别名映射到同一条目、出现位置与片段、增量更新、不调模型、不使用向量检索）；strict-spec-cli check-workflow-state 无异常。
+      status: complete
+      command: strict-spec-cli check-workflow-state
+testing_gates:
+  validation_task: regression-suite
+  unit_test_task: recall-unit-tests

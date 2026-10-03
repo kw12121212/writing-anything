@@ -1,6 +1,6 @@
-// Package canon 管理作品根单元目录下的设定集（Canon）canon.yaml：人物、地点、世界规则与人物关系的设定条目
-// （Canon Entry），每条带出处（素材 id）与保护级别（Protection Level）。作者钦定（Author-pinned）的条目受
-// 最高级别保护，修改或删除须经决策队列（Decision Queue）授权：拒绝时自动生成阻塞决策，作者决定后携带
+// Package canon 管理作品根单元目录下的设定集（Canon）canon.yaml：人物、地点、物品、世界规则与人物关系的设定条目
+// （Canon Entry），每条带出处（素材 id）、别名（Alias）与保护级别（Protection Level）。作者钦定（Author-pinned）
+// 的条目受最高级别保护，修改或删除须经决策队列（Decision Queue）授权：拒绝时自动生成阻塞决策，作者决定后携带
 // --decision 重试才写入。本包不 import internal/cli；只返回结构化的问题，由命令层转换为诊断（Diagnostic）。
 package canon
 
@@ -30,6 +30,7 @@ const (
 	CodeAuthorPinned     = "canon.author-pinned"
 	CodeAnchoredValue    = "canon.anchored-value"
 	CodeUnknownDecision  = "canon.unknown-decision"
+	CodeDuplicateAlias   = "canon.duplicate-alias"
 )
 
 // FileName 是设定集文件名；Path 返回作品 id 的设定集路径（只在作品根单元目录中识别）。
@@ -41,12 +42,13 @@ func Path(workID string) string { return work.Dir(workID) + "/" + FileName }
 const (
 	TypeCharacter    = "character" // 人物；该类条目即人物卡（Character Sheet）
 	TypeLocation     = "location"
+	TypeItem         = "item" // 物品
 	TypeWorldRule    = "world-rule"
 	TypeRelationship = "relationship"
 )
 
 // Types 是设定条目的全部类型，按 help 与诊断中的顺序排列。
-var Types = []string{TypeCharacter, TypeLocation, TypeWorldRule, TypeRelationship}
+var Types = []string{TypeCharacter, TypeLocation, TypeItem, TypeWorldRule, TypeRelationship}
 
 // 保护级别（Protection Level）。
 const (
@@ -68,11 +70,21 @@ type Entry struct {
 	ID         string   `json:"id"`
 	Type       string   `json:"type"`
 	Name       *string  `json:"name"`
+	Aliases    []string `json:"aliases"`
 	Text       string   `json:"text"`
 	Sources    []string `json:"sources"`
 	Protection string   `json:"protection"`
 	Members    []string `json:"members"`
 	Decision   *string  `json:"decision"`
+}
+
+// Names 返回条目的全部称谓：name 与别名（Alias），没有 name 时只有别名。
+func (e Entry) Names() []string {
+	out := []string{}
+	if e.Name != nil {
+		out = append(out, *e.Name)
+	}
+	return append(out, e.Aliases...)
 }
 
 type canonFile struct {
@@ -133,8 +145,10 @@ func notRegular(root, rel string) bool {
 	return err == nil && !info.Mode().IsRegular()
 }
 
-// checkEntries 检查已通过 Schema 校验的设定集：条目 id 唯一，sources 已登记，members 是同文件的 character
-// 条目，decision 引用的决策存在（knowDecisions 为 true 时检查）。悬空引用与 id 重复都返回，级别由调用方决定。
+// checkEntries 检查已通过 Schema 校验的设定集：条目 id 唯一；别名（Alias）不得与任何条目的 name、其他条目的
+// 别名或本条目 name 重复（name 之间可以重复：场景级上下文包按 name 匹配同名条目）；sources 已登记，members 是
+// 同文件的 character 条目，decision 引用的决策存在（knowDecisions 为 true 时检查）。悬空引用与 id、别名重复都
+// 返回，级别由调用方决定；别名重复归到该别名自己的字段上。
 func checkEntries(root, rel string, f canonFile, ds []decision.Decision, knowDecisions bool) (problems []workspace.Problem) {
 	seen := map[string]bool{}
 	characters := map[string]bool{}
@@ -143,11 +157,36 @@ func checkEntries(root, rel string, f canonFile, ds []decision.Decision, knowDec
 			characters[e.ID] = true
 		}
 	}
+	names := map[string]bool{} // 全部条目的 name；别名不得与之重复
+	for _, e := range f.Entries {
+		if e.Name != nil {
+			names[*e.Name] = true
+		}
+	}
+	seenAliases := map[string]string{} // 别名 → 首次使用它的条目 id
 	for i, e := range f.Entries {
 		if seen[e.ID] {
 			problems = append(problems, errorAt(catalog.CodeDuplicateID, rel, fmt.Sprintf("entries[%d].id", i), "设定条目 id "+e.ID+" 重复"))
 		}
 		seen[e.ID] = true
+		for j, a := range e.Aliases {
+			if first, ok := seenAliases[a]; ok {
+				problems = append(problems, errorAt(CodeDuplicateAlias, rel, fmt.Sprintf("entries[%d].aliases[%d]", i, j),
+					"别名 "+a+" 已是条目 "+first+" 的别名；同一设定集中别名不得重复"))
+				continue
+			}
+			if names[a] {
+				problems = append(problems, errorAt(CodeDuplicateAlias, rel, fmt.Sprintf("entries[%d].aliases[%d]", i, j),
+					"别名 "+a+" 与某个条目的名称相同；同一设定集中别名不得与名称重复"))
+				continue
+			}
+			if e.Name != nil && a == *e.Name {
+				problems = append(problems, errorAt(CodeDuplicateAlias, rel, fmt.Sprintf("entries[%d].aliases[%d]", i, j),
+					"别名 "+a+" 与本条目的名称相同；别名不得与名称重复"))
+				continue
+			}
+			seenAliases[a] = e.ID
+		}
 		for j, id := range e.Sources {
 			if !source.Registered(root, id) {
 				problems = append(problems, errorAt(CodeUnknownSource, rel, fmt.Sprintf("entries[%d].sources[%d]", i, j), unknownSource(id)))
@@ -166,10 +205,10 @@ func checkEntries(root, rel string, f canonFile, ds []decision.Decision, knowDec
 	return problems
 }
 
-// split 把领域检查的问题分为产物自身问题（条目 id 重复）与悬空引用，不改变级别。
+// split 把领域检查的问题分为产物自身问题（条目 id 重复、名称或别名重复）与悬空引用，不改变级别。
 func split(ps []workspace.Problem) (own, dangling []workspace.Problem) {
 	for _, p := range ps {
-		if p.Code == catalog.CodeDuplicateID {
+		if p.Code == catalog.CodeDuplicateID || p.Code == CodeDuplicateAlias {
 			own = append(own, p)
 			continue
 		}
@@ -226,7 +265,7 @@ func entriesNode(doc *yaml.Node) *yaml.Node {
 }
 
 // entryOrder 是设定条目中字段的固定顺序。
-var entryOrder = []string{"id", "type", "name", "text", "sources", "protection", "members", "decision"}
+var entryOrder = []string{"id", "type", "name", "aliases", "text", "sources", "protection", "members", "decision"}
 
 // checkText 检查写入产物的文本参数是合法的 UTF-8（workspace-artifacts/yaml-text-utf8）。
 func checkText(field, v string) []workspace.Problem {
@@ -244,6 +283,9 @@ func normalize(e Entry) Entry {
 	}
 	if e.Members == nil {
 		e.Members = []string{}
+	}
+	if e.Aliases == nil {
+		e.Aliases = []string{}
 	}
 	return e
 }
@@ -309,7 +351,8 @@ func recheck(root, rel string, doc *yaml.Node, paramIndex int, strict bool) (*ca
 // AddInput 是 canon add 的参数。
 type AddInput struct {
 	Type    string
-	Name    string // character 与 location 必填；其他类型不得给出
+	Name    string // character、location 与 item 必填；其他类型不得给出
+	Aliases []string
 	Text    string
 	Sources []string
 	Members []string // relationship 必填
@@ -323,6 +366,10 @@ type AddInput struct {
 func Add(root string, w *work.Work, in AddInput) (*Entry, []string, []workspace.Problem) {
 	for _, p := range slices.Concat(checkText("name", in.Name), checkText("text", in.Text)) {
 		return nil, nil, []workspace.Problem{p}
+	}
+	if len(in.Aliases) > 0 && (in.Type == TypeWorldRule || in.Type == TypeRelationship) {
+		return nil, nil, []workspace.Problem{{Code: schema.CodeSchemaViolation, Severity: workspace.SeverityError, Field: "aliases",
+			Message: "world-rule 与 relationship 条目不得有别名（Alias）；别名只用于 character、location 与 item 条目"}}
 	}
 	for i, s := range in.Sources {
 		if !source.Registered(root, s) {
@@ -368,6 +415,9 @@ func Add(root string, w *work.Work, in AddInput) (*Entry, []string, []workspace.
 	if in.Name != "" {
 		item.Content = append(item.Content, str("name"), str(in.Name))
 	}
+	if len(in.Aliases) > 0 {
+		item.Content = append(item.Content, str("aliases"), seqNode(in.Aliases))
+	}
 	item.Content = append(item.Content, str("text"), str(in.Text), str("sources"), seqNode(in.Sources), str("protection"), str(protection))
 	if in.Type == TypeRelationship {
 		item.Content = append(item.Content, str("members"), seqNode(in.Members))
@@ -398,6 +448,7 @@ func seqNode(v []string) *yaml.Node {
 type SetInput struct {
 	Type     *string
 	Name     *string // 指向空字符串时删除 name 字段
+	Aliases  *[]string
 	Text     *string
 	Sources  *[]string // 整体替换
 	Members  *[]string // 整体替换；指向空切片时删除 members 字段
@@ -510,6 +561,13 @@ func editEntry(entries *yaml.Node, at int, rel string, in SetInput, authorized b
 			n = str(*in.Name)
 		}
 		kvs = append(kvs, kv{"name", n})
+	}
+	if in.Aliases != nil {
+		var n *yaml.Node
+		if len(*in.Aliases) > 0 {
+			n = seqNode(*in.Aliases)
+		}
+		kvs = append(kvs, kv{"aliases", n})
 	}
 	if in.Text != nil {
 		kvs = append(kvs, kv{"text", str(*in.Text)})

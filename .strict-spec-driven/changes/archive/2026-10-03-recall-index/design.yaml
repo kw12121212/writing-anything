@@ -1,0 +1,55 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: recall-index
+approach:
+  - internal/schema 的 canon.schema.json 扩展：type 枚举增加 item；条目增加可选 aliases（字符串数组，元素 pattern 非空白）；allOf 条件改为 character、location、item 必填 name，world-rule 与 relationship 不得含 name 与 aliases。internal/canon 的加载校验新增文件内唯一性检查：全部条目的 name 与 aliases 展开后不得重复，重复时报 canon.duplicate-alias（field 为后出现者的 entries[i].name 或 entries[i].aliases[j]）；Add/Set 增加 --aliases 解析（add 写入、set 整体替换与空字符串清除，同 --sources 的既有模式）；List 输出 aliases（无该字段时为空数组）。
+  - 新包 internal/recall：对 stage 为 done 的单元 draft.md 复用出处计算的段落切分（paragraph-model）生成词条——CJK 连续段按字符二元组（bigram）、非 CJK 连续字母数字段整词为词条——并记录段落号；倒排表为 term 到出现列表（work、unit、paragraph）的映射，附带每个已索引单元的 draft SHA-256 与每个作品的 canon SHA-256；持久化为 .writing-anything/.recall-index.yaml，读取失败或结构不符时丢弃重建。Refresh 增量刷新：对范围内每个 done 单元与作品比对 SHA，只重建变化者、移除消失者，未变化时保留既有倒排表；写盘为机器生成格式。Query：在范围内逐作品解析查询词（与条目 id、name、alias 精确相等即解析到条目，词集为该条目 name 与 aliases 的并集），候选段落取词集全部词条倒排表的并集，再对当前 draft.md 段落文本做子串复核（ASCII 字母不区分大小写），片段以段落内首次命中为中心截 120 个字符（Unicode 码点）、截断时两端加 …。
+  - internal/cli 注册 recall 命令（arg：query（必需）；flags：--work（可选，取值为作品根单元 id）；outputKeys：results（每项 work、unit、paragraph、snippet、matched、entry）与 indexed（本次刷新重建的单元引用数组）；sampleArgs 给出关键词与条目 id 两例）；canon add/set 增加 --aliases 参数声明。运行时先增量刷新索引再查询；作品的 canon.yaml 非法时报告其诊断、该作品跳过别名解析按原词检索；查询词为空或只含空白报 input.invalid-value（field 为 query）。docs/GLOSSARY.md 增补别名（Alias）与全文检索（Full-text Search）词条。
+decisions:
+  index-derived-cache:
+    decision: 索引是纯派生缓存：内容为当前工作区状态的确定函数，存于点前缀的 .writing-anything/.recall-index.yaml，不属于任何产物类型，validate 不校验，可随时删除；缺失、读取失败或结构不符时全量重建。
+    rationale: 缓存没有独立真相价值，损坏即重建比修复更可靠；点前缀使其不进入 works 与 sources 的产物枚举，validate 行为不变。
+  accepted-scope:
+    decision: 只索引 stage 为 done 的单元的 draft.md，brief、outline、素材、摘要与草稿阶段正文不进入索引。
+    rationale: 「已验收正文」是稳定、可引用的事实；草稿阶段正文随时会改，检索未定稿内容会制造伪命中。done 后作者直接编辑正文由 SHA 增量刷新兜住，检索结果始终与当前内容一致。
+  alias-resolution-per-work:
+    decision: 查询词按作品逐一解析：等于该作品条目的 id、name 或 alias 时扩展为该条目 name 与 aliases 的并集并标注条目 id；不同作品各自独立解析，均未命中时按原词检索。
+    rationale: canon 条目 id 是作品内作用域（两个作品的 canon-1 互不相干），跨作品逐一解析天然无歧义；name 与 aliases 文件内唯一保证解析唯一。
+  paragraph-model-reuse:
+    decision: 段落切分与编号完全复用 paragraph-model 的既有定义（空行分隔、围栏代码块、行尾空白归一），不为检索另立段落模型。
+    rationale: 内核只有一个段落模型，出处与检索对同一段落的编号一致；另立模型会造成两套编号错位。
+  snippet-window:
+    decision: 片段以段落内首次命中位置为中心截取最长 120 个字符（Unicode 码点），截断时两端以 … 标示。
+    rationale: 足够定位上下文又不把整段灌进输出；按字符而非字节计数与上下文预算的度量一致。
+  invalid-canon-degrade:
+    decision: 作品的 canon.yaml 不通过校验时报告其诊断（error 级），该作品跳过别名解析、仍按原词检索其正文，valid 为 false、退出码为 1，其余作品照常检索。
+    rationale: 一个作品设定集损坏不应让整个工作区检索不可用，诊断如实暴露问题；recall 是跨作品检索工具，与 context「任一产物非法即 context 为 null」的单作品定位不同。
+  canon-item-and-aliases:
+    decision: 设定集以最小扩展支撑别名：type 增加 item（物品，必填 name），named 类型（character、location、item）可选 aliases；别名不得与任何条目的 name、其他条目的别名或本条目 name 重复，重复报 canon.duplicate-alias；name 之间允许重复；检索只在查询词解析到唯一条目时扩展词集，同名多个条目回退按原词检索。
+    rationale: 计划变更 details 明确列出「人物、地点、物品的别名」；物品是别名的主要使用场景之一（道具的本名、俚称、代称）。别名与名称互斥、别名彼此互斥保证别名到条目的映射无歧义；name 保留重复是因为场景级上下文包按 name 匹配同名人物条目（scene-context 的 MUST 行为），禁止重名会破坏它；同名多个条目无法唯一确定，检索此时回退原词，不给出歧义标注。
+  lazy-index-refresh:
+    decision: 索引由每次 recall 惰性增量刷新（按单元 draft.md 与作品 canon.yaml 的 SHA-256 判断新鲜度，只重建变化部分、移除消失条目；--work 限定时范围外作品的缓存条目原样保留），不挂在 draft write、review、canon 等写入命令上同步维护；段落超过 10000 上限的单元以 draft.too-large（warning）跳过。
+    rationale: 计划变更要求「正文或设定变化后增量更新索引」；作者可以直接编辑正文（人工编辑优先），任何写命令侧的同步更新都漏掉这类变化，而按内容哈希的惰性刷新对一切变化来源都正确，同时不污染既有写入命令的错误面。范围外条目保留避免 --work 与全范围交替使用时反复重建整份缓存；段落上限沿用出处推导的输入规模约束（input-limits），超限正文以 warning 跳过而不是让一条命令被单个病态单元拖垮。
+  match-substring-verify:
+    decision: 命中判定为查询词（或条目称谓）是段落文本的子串，ASCII 字母不区分大小写；倒排索引（CJK bigram 与非 CJK 词）只用于产生候选段落，且只对纯 CJK（可带标点）的称谓做候选裁剪——含非 CJK 字母数字的称谓（如 son 可能是 json 的一段）与单一汉字一律读正文做子串复核，复核用 strings.Index（线性）。
+    rationale: 对自然语言正文，词边界对中文无意义，统一子串语义最可预期；索引是加速结构而非语义来源。非 CJK 词条按整词索引，词条包含不是子串命中的超集，对这些称谓跳过裁剪保证任何查询的正确性不依赖切词完备性；strings.Index 代替逐码点扫描，避免对抗性近似匹配输入的平方级耗时。
+alternatives:
+  - option: draft write、review accept 与 canon set 等写入命令同步更新索引。
+    reason: 漏掉作者直接编辑的正文变化；让无关命令多一类失败模式与 changedPaths 噪声。
+  - option: 每次 recall 全量重建，不持久化索引。
+    reason: 百场景规模的长篇重复解析全部已验收正文；计划变更 details 明确要求增量更新。
+  - option: 词元精确匹配（分词后按词等值匹配）。
+    reason: 中文分词需要词表且引入不确定性，与确定可复现的目标冲突。
+  - option: 只加 aliases 不加 item 类型。
+    reason: 与计划变更文本不符，物品仍无处登记，state-change-proposals 等后续计划变更也要引用物品条目。
+  - option: 检索段落排除 Markdown 标题与作者批注（同上下文包相邻节摘录的处理）。
+    reason: 与出处计算用的段落模型分叉，同一段落在 provenance 与 recall 中编号不一致。
+  - option: 与 context 一致：任一作品 canon.yaml 非法即整体失败、results 为 null。
+    reason: 单作品故障放大为全工作区不可用，检索工具的可用性受损。
+  - option: name 与 aliases 全部唯一（禁止同名条目）。
+    reason: 与既有 scene-context 的 MUST 需求冲突：场景级上下文包按 name 匹配 canon 条目并明文支持同名条目按条目顺序全部保留。
+risks:
+  - 索引文件随全书增长变大：倒排表只存词条与出现位置、不存正文，片段在查询时从 draft.md 现取；百场景规模（约百万字符）下索引为数百 KB 级，可接受，更大规模由后续计划变更评估。
+  - 单一汉字查询退化为对已索引正文的线性扫描：范围限于已验收正文，规模可控，不牺牲正确性。

@@ -48,6 +48,9 @@ specs:
   - id: preview
     title: 阅读页（Reading View）
     path: .strict-spec-driven/specs/preview.yaml
+  - id: recall
+    title: 检索（Recall）
+    path: .strict-spec-driven/specs/recall.yaml
   - id: review
     title: 审稿与验收（Review and Acceptance）
     path: .strict-spec-driven/specs/review.yaml
