@@ -69,14 +69,14 @@ func runUnits(t *testing.T, dir string, args ...string) (int, unitResult) {
 	return code, out
 }
 
-// noNulls 断言 JSON 值中只有可为 null 的字段（parent、work、unit、config、defaultGenre，以及反馈的 note 与锚点的
-// quote、line、paragraph）为 null，数组永不为 null。
+// noNulls 断言 JSON 值中只有可为 null 的字段（parent、work、unit、config、defaultGenre，汇总单元之外的
+// progress，以及反馈的 note 与锚点的 quote、line、paragraph）为 null，数组永不为 null。
 func noNulls(t *testing.T, v any, path string) {
 	t.Helper()
 	switch v := v.(type) {
 	case map[string]any:
 		for k, c := range v {
-			if c == nil && !slices.Contains([]string{"parent", "work", "unit", "config", "defaultGenre", "note", "quote", "line", "paragraph", "decision", "recommendation", "rationale", "choice", "answer", "confirmation", "decidedAt", "text", "recorded", "diff", "brief", "audience", "purpose", "length", "outline", "reason", "keyMessage", "section", "contextBudget", "aiDisclosure", "method", "role", "premise", "theme", "pov", "character", "reveal"}, k) {
+			if c == nil && !slices.Contains([]string{"parent", "work", "unit", "config", "defaultGenre", "note", "quote", "line", "paragraph", "decision", "recommendation", "rationale", "choice", "answer", "confirmation", "decidedAt", "text", "recorded", "diff", "brief", "audience", "purpose", "length", "outline", "reason", "keyMessage", "section", "contextBudget", "aiDisclosure", "method", "role", "premise", "theme", "pov", "character", "reveal", "progress"}, k) {
 				t.Errorf("%s.%s is null", path, k)
 			}
 			noNulls(t, c, path+"."+k)

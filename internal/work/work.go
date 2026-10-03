@@ -37,12 +37,19 @@ const (
 	CodeUnknownStage        = "work.unknown-stage"
 	CodeAnchoredValue       = "work.anchored-value"
 	CodeUnitNotFound        = "unit.not-found"
+	CodeNotSibling          = "unit.not-sibling"
+	CodeMoveRoot            = "unit.move-root"
+	CodeMoveUnderSelf       = "unit.move-under-self"
 	CodeMissingArtifact     = "lifecycle.missing-artifact"
 	CodeAlreadyDone         = "lifecycle.already-done"
+	CodeDerivedStage        = "lifecycle.derived-stage"
 )
 
 // FileName 是作品目录中作品产物的文件名。
 const FileName = "work.yaml"
+
+// codeInvalidValue 是参数取值不合法的错误码（Error Code）；与 internal/cli 的同名约定一致。
+const codeInvalidValue = "input.invalid-value"
 
 // idPattern 与 common.schema.json 中的 id 一致；单元引用中的 id 在拼接路径前按它检查。
 var idPattern = regexp.MustCompile(`^[a-z][a-z0-9]*(-[a-z0-9]+)*$`)
@@ -475,6 +482,100 @@ func (w *Work) NextStage(u *Unit) string {
 	return catalog.StageDone
 }
 
+// Aggregated 报告单元 u 是否为汇总单元（Aggregated Unit）：其类型声明 stage_from_children，
+// 阶段不由推进得出，而由子单元汇总（Derived Stage）。文体没有声明该字段的类型各自独立推进。
+func (w *Work) Aggregated(u *Unit) bool {
+	for _, t := range w.Genre.UnitTypes {
+		if t.ID == u.Type {
+			return t.StageFromChildren
+		}
+	}
+	return false
+}
+
+// EffectiveStage 返回单元 u 的生效阶段：汇总单元为推导阶段（Derived Stage），其他单元为存储阶段。
+func (w *Work) EffectiveStage(u *Unit) string {
+	if w.Aggregated(u) {
+		return w.DerivedStage(u)
+	}
+	return u.Stage
+}
+
+// DerivedStage 返回汇总单元 u 的推导阶段：取其子单元树中所有非汇总子孙单元（走生命周期的单元）里
+// 最落后者的阶段——按文体阶段序列排序最靠前的阶段；没有非汇总子孙单元时为文体的第一个阶段；
+// 全部为 done 时为 done。
+func (w *Work) DerivedStage(u *Unit) string {
+	stage, found := w.weakest(u)
+	if !found {
+		return w.Genre.Stages[0].ID
+	}
+	return stage
+}
+
+// weakest 返回子单元树中最落后的非汇总子孙单元的阶段；没有非汇总子孙单元时 found 为 false。
+// 汇总单元自身不参与（其阶段就是推导结果），但继续向其子孙递归；非汇总单元既参与也向其子孙递归。
+func (w *Work) weakest(u *Unit) (stage string, found bool) {
+	order := map[string]int{catalog.StageDone: len(w.Genre.Stages)}
+	for i, s := range w.Genre.Stages {
+		order[s.ID] = i
+	}
+	var walk func(u *Unit)
+	walk = func(u *Unit) {
+		for _, c := range u.Units {
+			if !w.Aggregated(c) && (!found || order[c.Stage] < order[stage]) {
+				stage, found = c.Stage, true
+			}
+			walk(c)
+		}
+	}
+	walk(u)
+	return stage, found
+}
+
+// Progress 返回单元 u 的子单元树中非汇总子孙单元的总数与其中阶段为 done 的数量。
+func (w *Work) Progress(u *Unit) (done, total int) {
+	for _, c := range w.Units() {
+		if w.Aggregated(c) || !w.under(c, u) {
+			continue
+		}
+		total++
+		if c.Stage == catalog.StageDone {
+			done++
+		}
+	}
+	return done, total
+}
+
+// under 报告单元 c 是否在单元 u 的子单元树中（不含 u 自身）。
+func (w *Work) under(c, u *Unit) bool {
+	for p := c.Parent; p != nil; p = p.Parent {
+		if p == u {
+			return true
+		}
+	}
+	return false
+}
+
+// AggregatedBlockers 返回汇总单元 u 的阻塞项：其未完成非汇总子孙单元的阻塞项按出现顺序去重后的并集
+// （同一 code、artifact、path 与 decision 只保留一条）。status 与 next 对汇总单元用它代替单元自身的阻塞项。
+func (w *Work) AggregatedBlockers(root string, u *Unit) []Blocker {
+	var out []Blocker
+	seen := map[string]bool{}
+	for _, c := range w.Units() {
+		if w.Aggregated(c) || !w.under(c, u) || c.Stage == catalog.StageDone {
+			continue
+		}
+		for _, b := range w.Blockers(root, c) {
+			key := fmt.Sprintf("%s\x00%s\x00%s\x00%s", b.Code, b.Artifact, b.Path, b.Decision)
+			if !seen[key] {
+				seen[key] = true
+				out = append(out, b)
+			}
+		}
+	}
+	return out
+}
+
 // LoadAll 加载 root 下 works/ 中每个不以 . 开头的子目录的作品，按目录名排序。返回能加载的作品、
 // 已校验的 work.yaml 路径与全部问题；works/ 不存在时什么也不返回，由工作区校验报告。
 func LoadAll(root string) (works []*Work, checked []string, problems []workspace.Problem) {
@@ -599,6 +700,10 @@ func advance(root, ref string, genres genreLookup) (*Work, *Unit, string, []work
 	if u == nil {
 		return nil, nil, "", ps
 	}
+	if w.Aggregated(u) {
+		return nil, nil, "", []workspace.Problem{errorAt(CodeDerivedStage, w.Path, u.fieldOf("stage"),
+			fmt.Sprintf("单元 %s 是汇总单元（Aggregated Unit），阶段由子单元汇总得出，不能推进；当前推导阶段为 %s", u.Ref, w.DerivedStage(u)))}
+	}
 	if u.Stage == catalog.StageDone {
 		return nil, nil, "", []workspace.Problem{errorAt(CodeAlreadyDone, w.Path, u.fieldOf("stage"), "单元 "+u.Ref+" 已走完全部阶段")}
 	}
@@ -625,12 +730,20 @@ func advance(root, ref string, genres genreLookup) (*Work, *Unit, string, []work
 	return saved, saved.find(u.ID), previous, nil
 }
 
-// AddUnit 在 parentRef 所指单元的子单元末尾追加类型为 typ、id 为 id 的单元，阶段为文体的第一个阶段。
-func AddUnit(root, parentRef, typ, id string) (*Work, *Unit, []workspace.Problem) {
-	return addUnit(root, parentRef, typ, id, catalog.LoadGenre)
+// Anchor 描述在父单元子单元序列中的插入位置：Sibling 为锚点单元的 id，After 表示插在锚点之后；
+// Sibling 为空时插入到末尾。unit add 与 unit move 共用。
+type Anchor struct {
+	Sibling string
+	After   bool
 }
 
-func addUnit(root, parentRef, typ, id string, genres genreLookup) (*Work, *Unit, []workspace.Problem) {
+// AddUnit 在 parentRef 所指单元的子单元中追加（a.Sibling 为空）或按锚点插入一个类型为 typ、id 为 id 的
+// 单元，阶段为文体的第一个阶段（汇总单元把它作为存储值，行为以推导阶段为准）。
+func AddUnit(root, parentRef, typ, id string, a Anchor) (*Work, *Unit, []workspace.Problem) {
+	return addUnit(root, parentRef, typ, id, a, catalog.LoadGenre)
+}
+
+func addUnit(root, parentRef, typ, id string, a Anchor, genres genreLookup) (*Work, *Unit, []workspace.Problem) {
 	w, parent, ps := resolve(root, parentRef, genres)
 	if parent == nil {
 		return nil, nil, ps
@@ -654,17 +767,218 @@ func addUnit(root, parentRef, typ, id string, genres genreLookup) (*Work, *Unit,
 		units = &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq"}
 		node.Content = append(node.Content, str("units"), units)
 	}
+	at, ps := w.insertIndex(parent, units, a)
+	if ps != nil {
+		return nil, nil, ps
+	}
 	unit := &yaml.Node{Kind: yaml.MappingNode}
 	unit.Content = []*yaml.Node{str("id"), str(id), str("type"), str(typ), str("stage"), str(w.Genre.Stages[0].ID),
 		str("units"), {Kind: yaml.SequenceNode, Tag: "!!seq", Style: yaml.FlowStyle}}
 	workspace.BlockSequence(node, "units") // 空的流式序列 [] 追加单元后改为块式，便于阅读
-	units.Content = append(units.Content, unit)
+	units.Content = slices.Insert(units.Content, at, unit)
 	saved, ps := w.save(root)
 	if saved == nil {
 		return nil, nil, ps
 	}
 	u := saved.find(id)
 	return saved, u, nil
+}
+
+// insertIndex 返回锚点 a 在父单元 units 序列中的插入位置。锚点不存在时报告 unit.not-found；
+// 锚点不是 parent 的直接子单元时报告 unit.not-sibling。
+func (w *Work) insertIndex(parent *Unit, units *yaml.Node, a Anchor) (int, []workspace.Problem) {
+	if a.Sibling == "" {
+		return len(units.Content), nil
+	}
+	sibling := w.find(a.Sibling)
+	if sibling == nil || sibling.Parent == nil {
+		return 0, []workspace.Problem{errorAt(CodeUnitNotFound, w.Path, "",
+			fmt.Sprintf("作品 %s 中没有单元（Unit）%s", w.ID, a.Sibling))}
+	}
+	if sibling.Parent != parent {
+		return 0, []workspace.Problem{errorAt(CodeNotSibling, "", "",
+			fmt.Sprintf("单元 %s/%s 不是 %s 的直接子单元，不能作为插入锚点", w.ID, a.Sibling, parent.Ref))}
+	}
+	for i, c := range units.Content {
+		if id, _ := mappingField(c, "id"); id != nil && id.Value == a.Sibling {
+			if a.After {
+				return i + 1, nil
+			}
+			return i, nil
+		}
+	}
+	// 树中的锚点子单元不在该序列节点里：该序列不是 parent 的直接子单元序列（如经由 YAML 锚点得到）。
+	return 0, []workspace.Problem{anchored(w, parent.fieldOf("units"))}
+}
+
+// mappingField 返回映射节点 m 中键 key 的值节点；m 不是映射或没有该键时为 nil。
+func mappingField(m *yaml.Node, key string) (*yaml.Node, bool) {
+	if m == nil || m.Kind != yaml.MappingNode {
+		return nil, false
+	}
+	for i := 0; i+1 < len(m.Content); i += 2 {
+		if m.Content[i].Value == key {
+			return m.Content[i+1], true
+		}
+	}
+	return nil, false
+}
+
+// MoveUnit 把 unitRef 所指单元连同其子树移动为 parentRef 所指单元的子单元（含同父内重排序），
+// 插入位置由锚点 a 指定。只修改 work.yaml 中的树位置；单元 id、单元引用与单元目录不变。
+func MoveUnit(root, unitRef, parentRef string, a Anchor) (*Work, *Unit, []workspace.Problem) {
+	return moveUnit(root, unitRef, parentRef, a, catalog.LoadGenre)
+}
+
+func moveUnit(root, unitRef, parentRef string, a Anchor, genres genreLookup) (*Work, *Unit, []workspace.Problem) {
+	w, u, ps := resolve(root, unitRef, genres)
+	if u == nil {
+		return nil, nil, ps
+	}
+	if u.Parent == nil {
+		return nil, nil, []workspace.Problem{errorAt(CodeMoveRoot, "", "",
+			fmt.Sprintf("单元 %s 是作品的根单元，没有可以移动到的父单元", u.Ref))}
+	}
+	workID, unitID, hasUnit := strings.Cut(parentRef, "/")
+	if workID != w.ID {
+		return nil, nil, []workspace.Problem{errorAt(codeInvalidValue, "", "parent",
+			fmt.Sprintf("父单元 %s 属于另一个作品；unit move 只能在作品 %s 内移动", parentRef, w.ID))}
+	}
+	parent := w.Root
+	if hasUnit {
+		p := w.find(unitID)
+		if p == nil || p.Parent == nil {
+			return nil, nil, []workspace.Problem{errorAt(CodeUnitNotFound, w.Path, "",
+				fmt.Sprintf("作品 %s 中没有单元（Unit）%s", w.ID, unitID))}
+		}
+		parent = p
+	}
+	return w.move(root, u, parent, a)
+}
+
+func (w *Work) move(root string, u, parent *Unit, a Anchor) (*Work, *Unit, []workspace.Problem) {
+	if parent == u || w.under(parent, u) {
+		return nil, nil, []workspace.Problem{errorAt(CodeMoveUnderSelf, "", "",
+			fmt.Sprintf("不能把单元 %s 移动到它自身或其子孙单元 %s 之下", u.Ref, parent.Ref))}
+	}
+	if parent != u.Parent {
+		t := w.unitType(parent)
+		if t == nil {
+			t = &catalog.UnitType{ID: parent.Type}
+		}
+		if !slices.Contains(t.Children, u.Type) {
+			return nil, nil, []workspace.Problem{errorAt(CodeChildTypeNotAllowed, w.Path, parent.fieldOf("units"),
+				fmt.Sprintf("单元类型 %s 不能作为 %s 的子单元；%s", u.Type, parent.Type, allowedChildren(*t)))}
+		}
+	}
+	if a.Sibling == u.ID {
+		return nil, nil, []workspace.Problem{errorAt(CodeNotSibling, "", "",
+			fmt.Sprintf("锚点不能是被移动单元 %s 自身", u.Ref))}
+	}
+	if a.Sibling != "" && (w.find(a.Sibling) == nil || w.find(a.Sibling).Parent != parent) {
+		return nil, nil, w.anchorProblem(parent, a)
+	}
+	// 被移动的子树本身以及两处 units 序列途经的节点都必须不带锚点、别名或合并键。
+	moved := w.node(u)
+	if moved == nil || !subtreePlain(moved) {
+		return nil, nil, []workspace.Problem{anchored(w, u.fieldOf("units"))}
+	}
+	from, ps := w.containing(u)
+	if ps != nil {
+		return nil, nil, ps
+	}
+	// 先按解析时的 index 取到目标序列并转换为块式，再从原序列摘除子树：摘除会使同级后面的单元左移，
+	// 之后再按（解析时的）index 走树就会找错节点。插入位置在摘除后按锚点重新计算。
+	to, ps := w.childSeq(parent)
+	if ps != nil {
+		return nil, nil, ps
+	}
+	workspace.BlockSequence(w.node(parent), "units")
+	last := u.index[len(u.index)-1]
+	from.Content = slices.Delete(from.Content, last, last+1)
+	at, ps := w.insertIndex(parent, to, a)
+	if ps != nil {
+		return nil, nil, ps
+	}
+	to.Content = slices.Insert(to.Content, at, moved)
+	saved, ps := w.save(root)
+	if saved == nil {
+		return nil, nil, ps
+	}
+	return saved, saved.find(u.ID), nil
+}
+
+// anchorProblem 返回锚点 a 相对父单元 parent 的问题：锚点单元不存在或不是 parent 的直接子单元。
+func (w *Work) anchorProblem(parent *Unit, a Anchor) []workspace.Problem {
+	if w.find(a.Sibling) == nil {
+		return []workspace.Problem{errorAt(CodeUnitNotFound, w.Path, "",
+			fmt.Sprintf("作品 %s 中没有单元（Unit）%s", w.ID, a.Sibling))}
+	}
+	return []workspace.Problem{errorAt(CodeNotSibling, "", "",
+		fmt.Sprintf("单元 %s/%s 不是 %s 的直接子单元，不能作为插入锚点", w.ID, a.Sibling, parent.Ref))}
+}
+
+// containing 返回包含单元 u 的 units 序列节点；途经锚点、别名或合并键时报告 work.anchored-value。
+func (w *Work) containing(u *Unit) (*yaml.Node, []workspace.Problem) {
+	m := w.doc.Content[0]
+	if !plain(m) {
+		return nil, []workspace.Problem{anchored(w, u.fieldOf("units"))}
+	}
+	for _, i := range u.index[:len(u.index)-1] {
+		seq, safe := field(m, "units")
+		if seq == nil || !safe || i >= len(seq.Content) || !plain(seq.Content[i]) {
+			return nil, []workspace.Problem{anchored(w, u.fieldOf("units"))}
+		}
+		m = seq.Content[i]
+	}
+	seq, safe := field(m, "units")
+	if seq == nil || !safe {
+		return nil, []workspace.Problem{anchored(w, u.fieldOf("units"))}
+	}
+	return seq, nil
+}
+
+// childSeq 返回单元 parent 的 units 序列节点（没有时创建）；途经锚点、别名或合并键时报告 work.anchored-value。
+func (w *Work) childSeq(parent *Unit) (*yaml.Node, []workspace.Problem) {
+	node := w.node(parent)
+	if node == nil {
+		return nil, []workspace.Problem{anchored(w, parent.fieldOf("units"))}
+	}
+	units, safe := field(node, "units")
+	if !safe {
+		return nil, []workspace.Problem{anchored(w, parent.fieldOf("units"))}
+	}
+	if units == nil {
+		units = &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq"}
+		node.Content = append(node.Content, str("units"), units)
+	}
+	return units, nil
+}
+
+// subtreePlain 报告节点 n 及其全部子孙是否都不带锚点、不是别名（所在映射含合并键由 field 检查）。
+func subtreePlain(n *yaml.Node) bool {
+	if n == nil {
+		return false
+	}
+	if !plain(n) {
+		return false
+	}
+	for _, c := range n.Content {
+		if !subtreePlain(c) {
+			return false
+		}
+	}
+	return true
+}
+
+// unitType 返回单元 u 的类型声明。
+func (w *Work) unitType(u *Unit) *catalog.UnitType {
+	for i := range w.Genre.UnitTypes {
+		if w.Genre.UnitTypes[i].ID == u.Type {
+			return &w.Genre.UnitTypes[i]
+		}
+	}
+	return nil
 }
 
 func anchored(w *Work, f string) workspace.Problem {

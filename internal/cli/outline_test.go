@@ -371,7 +371,7 @@ func TestOutlineBlockerNext(t *testing.T) {
 	}
 	w := &work.Work{Genre: &catalog.Genre{Stages: []catalog.Stage{{ID: "outline"}, {ID: "draft"}}}}
 	u := &work.Unit{Stage: "outline"}
-	got := action(w, u, []blockerView{
+	got := action(".", w, u, []blockerView{
 		{Code: "outline.uncovered-message", Message: "核心观点 km-2 没有被覆盖。"},
 		{Code: "outline.invalid", Path: briefRel, Message: "x"},
 	})

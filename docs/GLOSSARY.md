@@ -23,6 +23,8 @@
 | 单元树 | Unit Tree | 单元树 | 单元的层级结构，如 部 → 章 → 场景 |
 | 根单元 | Root Unit | 根单元 | 单元树的顶层单元，即作品本身；类型为文体的第一个单元类型 |
 | 单元引用 | Unit Reference | 单元引用 | 命令中定位单元的写法：`<work>` 表示根单元，`<work>/<unit-id>` 表示任意深度的单元 |
+| 汇总单元 | Aggregated Unit | 汇总单元 | 单元类型声明 `stage_from_children` 的单元（如 novel 的部与章）：阶段不由推进得出，而由子单元树中走生命周期的单元汇总；`work.yaml` 中的存储阶段仅为占位，生效阶段以推导为准，`wa-cli advance` 对其报告 `lifecycle.derived-stage` |
+| 推导阶段 | Derived Stage | 推导阶段 | 汇总单元的生效阶段：取子单元树中最落后者（最短板）；没有子孙单元时为文体第一个阶段，全部 done 时为 done；`wa-cli status` 与 `next` 按此输出，另附 progress（done 计数与总数） |
 | 系列 | Series | 系列 | 共享规范与设定的多部作品；文章领域也称"专栏"；定义在 `.writing-anything/series/<id>.yaml`，成员作品继承其规范包、素材与事实 |
 | 作用域 | Scope | 作用域 | 设定或配置生效的范围，如系列级、作品级 |
 | 内置 | Built-in | 内置 | 随 `wa-cli` 二进制提供的文体与规范包，如 `default` 规范包 |
@@ -105,7 +107,7 @@
 | 禁用词 | Banned Term | 禁用词 | 规范包中不允许出现的词语，可附理由与替换写法 |
 | 评分标准 | Rubric | 评分标准 | 审稿时逐项评判的标准 |
 | AI 腔 | AI Cliché | AI 腔 | 典型的 AI 套话与句式，如"值得注意的是" |
-| 小说 AI 腔词表 | Fiction AI-cliché Terms | 小说 AI 腔词表 | 内置 short-story 文体为 `ai-cliche` 规则声明的虚构写作套话词表，如"眼底闪过一丝" |
+| 小说 AI 腔词表 | Fiction AI-cliché Terms | 小说 AI 腔词表 | 内置 short-story 与 novel 文体为 `ai-cliche` 规则声明的虚构写作套话词表，如"眼底闪过一丝" |
 | 对话标点 | Dialogue Punctuation | 对话标点 | `dialogue-punctuation` 规则检查的小说对话标点：应使用全角引号，对话后紧跟说话人时引号内句号应为逗号 |
 | 视角与人称一致 | POV Consistency | 视角一致 | `pov-consistency` 规则的启发式检查：按写作简报 `pov` 的人称检测叙述文字中的视角滑移 |
 | 中文排版 | CJK Typography | 中文排版 | 中英文间空格、全角/半角标点等排版规范 |
@@ -275,9 +277,9 @@
 | 雪花写作法 | Snowflake Method | 雪花写作法 | 从一句话前提逐步扩展到场景列表的规划方法 |
 | 大纲 | Outline | 大纲 | 情节的整体规划 |
 | 细纲 | Detailed Outline | 细纲 | 细化到章或场景的大纲 |
-| 场景 | Scene | 场景 | 连续时间、地点内的一段情节 |
-| 章 | Chapter | 章 | |
-| 部 | Part | 部 / 卷 | 网文中常称"卷" |
+| 场景 | Scene | 场景 | 连续时间、地点内的一段情节；也是小说类文体走完整生命周期的单元类型 |
+| 章 | Chapter | 章 | novel 文体包含场景的单元类型；汇总单元 |
+| 部 | Part | 部 / 卷 | novel 文体包含章的单元类型；汇总单元；网文中常称"卷" |
 | 视角 | Point of View | 视角 / POV | 叙述者的观察位置 |
 | 第一人称 | First Person | 第一人称 | 以"我"叙述 |
 | 第三人称有限视角 | Third-person Limited | 有限视角 | 只呈现单个人物的所见所想 |

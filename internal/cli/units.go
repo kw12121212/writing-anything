@@ -34,16 +34,37 @@ var newCommand = &command{
 
 var unitAddCommand = &command{
 	name:    "unit add",
-	summary: "在父单元的子单元末尾追加一个单元（Unit），从文体的第一个阶段开始",
+	summary: "在父单元的子单元中追加或按锚点插入一个单元（Unit），从文体的第一个阶段开始",
 	args: []argSpec{
 		{"parent", "父单元的" + unitRefHelp, true},
 		{"type", "新单元的单元类型，必须是父单元类型允许的子单元类型", true},
 		{"id", "新单元的 id，在作品内唯一", true},
 	},
-	flags:      []flagSpec{dirFlag},
+	flags: []flagSpec{
+		dirFlag,
+		{"before", "string", "插入锚点：新单元插到该兄弟单元之前；省略 --before/--after 时追加到末尾"},
+		{"after", "string", "插入锚点：新单元插到该兄弟单元之后；与 --before 互斥"},
+	},
 	outputKeys: []outputKey{{"unit", "新单元：unit（单元引用）、type、parent（父单元引用）与 stage；失败时为 null"}},
 	exitCodes:  standardExitCodes,
 	run:        runUnitAdd,
+}
+
+var unitMoveCommand = &command{
+	name:    "unit move",
+	summary: "把单元（Unit）连同子树移动为另一父单元的子单元（含同父内重排序）；单元 id、单元引用与单元目录保持不变",
+	args: []argSpec{
+		{"unit", "要移动的" + unitRefHelp, true},
+		{"parent", "新父单元的" + unitRefHelp + "；必须是同一作品中的单元", true},
+	},
+	flags: []flagSpec{
+		dirFlag,
+		{"before", "string", "插入锚点：单元插到新父单元下该兄弟单元之前；省略 --before/--after 时移到末尾"},
+		{"after", "string", "插入锚点：单元插到新父单元下该兄弟单元之后；与 --before 互斥"},
+	},
+	outputKeys: []outputKey{{"unit", "移动后的单元：unit、type、parent（新父单元引用）与 stage（汇总单元为推导阶段）；失败时为 null"}},
+	exitCodes:  standardExitCodes,
+	run:        runUnitMove,
 }
 
 var advanceCommand = &command{
@@ -58,10 +79,10 @@ var advanceCommand = &command{
 
 var nextCommand = &command{
 	name:       "next",
-	summary:    "列出单元（Unit）的当前阶段（Stage）、阻塞项（Blocker）与下一步命令",
+	summary:    "列出单元（Unit）的当前阶段（Stage）、阻塞项（Blocker）与下一步命令；汇总单元（Aggregated Unit）的阶段与阻塞项由子单元汇总",
 	args:       []argSpec{{"unit", "只列出该单元；省略时列出所有未完成的单元。" + unitRefHelp, false}},
 	flags:      []flagSpec{dirFlag},
-	outputKeys: []outputKey{{"steps", "下一步数组，每项含 unit、stage、blockers、action、commands 与 feedback（未处理完的作者反馈）"}},
+	outputKeys: []outputKey{{"steps", "下一步数组，每项含 unit、stage、blockers、action、commands、feedback（未处理完的作者反馈）与 progress（汇总单元的进度，其他单元为 null）"}},
 	exitCodes:  standardExitCodes,
 	run:        runNext,
 }
@@ -86,6 +107,11 @@ type addedUnit struct {
 }
 
 type unitAddResult struct {
+	Result
+	Unit *addedUnit `json:"unit"`
+}
+
+type unitMoveResult struct {
 	Result
 	Unit *addedUnit `json:"unit"`
 }
@@ -117,6 +143,14 @@ type stepView struct {
 	Action   string         `json:"action"`
 	Commands []string       `json:"commands"`
 	Feedback []feedbackView `json:"feedback"`
+	// Progress 只对汇总单元（Aggregated Unit）非空：子单元树中走生命周期的单元的完成进度。
+	Progress *progressView `json:"progress"`
+}
+
+// progressView 是汇总单元（Aggregated Unit）的进度：非汇总子孙单元的总数与其中已完成的数量。
+type progressView struct {
+	Done  int `json:"done"`
+	Total int `json:"total"`
 }
 
 type nextResult struct {
@@ -133,6 +167,7 @@ type unitView struct {
 	Stage    string        `json:"stage"`
 	Blockers []blockerView `json:"blockers"`
 	Commands []string      `json:"commands"`
+	Progress *progressView `json:"progress"`
 	depth    int
 }
 
@@ -171,18 +206,36 @@ func runNew(inv *invocation) int {
 	})
 }
 
+// anchor 从 invocation 读取插入锚点；--before 与 --after 同时给出或取值为空时返回参数问题的说明。
+func anchor(inv *invocation) (work.Anchor, string) {
+	if inv.flag("before") && inv.flag("after") {
+		return work.Anchor{}, "--before 与 --after 互斥，只能给出其中一个"
+	}
+	for _, name := range []string{"before", "after"} {
+		if inv.flag(name) && inv.values[name] == "" {
+			return work.Anchor{}, fmt.Sprintf("参数 --%s 的取值为空；锚点必须是同父单元下的兄弟单元 id", name)
+		}
+	}
+	return work.Anchor{Sibling: inv.values["before"], After: inv.flag("after")}, ""
+}
+
 func runUnitAdd(inv *invocation) int {
 	dir := projectDir(inv)
 	parent, typ, id := inv.args[0], inv.args[1], inv.args[2]
 	res := &unitAddResult{}
 	problems := workspace.Require(dir)
+	a, problem := anchor(inv)
+	if problem != "" {
+		problems = append(problems, workspace.Problem{Code: codeInvalidValue, Severity: workspace.SeverityError,
+			Field: "before", Message: problem})
+	}
 	edit := false
 	if problems == nil {
 		// 先单独解析父单元：作品本身的问题由 validate 复查，追加单元引起的问题另给下一步。
 		if _, _, problems = work.Resolve(dir, parent); problems == nil {
 			var w *work.Work
 			var u *work.Unit
-			if w, u, problems = work.AddUnit(dir, parent, typ, id); u != nil {
+			if w, u, problems = work.AddUnit(dir, parent, typ, id, a); u != nil {
 				res.Unit = &addedUnit{Unit: u.Ref, Type: u.Type, Parent: u.Parent.Ref, Stage: u.Stage}
 				res.ChangedPaths = []string{w.Path}
 			}
@@ -195,13 +248,66 @@ func runUnitAdd(inv *invocation) int {
 			res.Diagnostics[i].Next = []string{"wa-cli help unit add --json", shellCommand("wa-cli", "status", "--dir", dir, "--json")}
 		}
 	}
+	rewriteParamNext(res.Diagnostics, "unit add", work.CodeNotSibling)
 	return finish(inv, res, func(w io.Writer) error {
 		if res.Unit == nil {
 			return nil
 		}
-		_, err := fmt.Fprintf(w, "已在 %s 下追加单元（Unit）%s：类型 %s，阶段 %s\n", res.Unit.Parent, res.Unit.Unit, res.Unit.Type, res.Unit.Stage)
+		verb := "追加"
+		if a.Sibling != "" {
+			verb = "插入"
+		}
+		_, err := fmt.Fprintf(w, "已在 %s 下%s单元（Unit）%s：类型 %s，阶段 %s\n", res.Unit.Parent, verb, res.Unit.Unit, res.Unit.Type, res.Unit.Stage)
 		return err
 	})
+}
+
+func runUnitMove(inv *invocation) int {
+	dir := projectDir(inv)
+	res := &unitMoveResult{}
+	problems := workspace.Require(dir)
+	a, problem := anchor(inv)
+	if problem != "" {
+		problems = append(problems, workspace.Problem{Code: codeInvalidValue, Severity: workspace.SeverityError,
+			Field: "before", Message: problem})
+	}
+	edit := false
+	if problems == nil {
+		// 先单独解析两个引用：引用不存在的问题由 resolve 报告，移动引起的问题另给下一步。
+		if _, _, problems = work.Resolve(dir, inv.args[0]); problems == nil {
+			var w *work.Work
+			var u *work.Unit
+			if w, u, problems = work.MoveUnit(dir, inv.args[0], inv.args[1], a); u != nil {
+				res.Unit = &addedUnit{Unit: u.Ref, Type: u.Type, Parent: u.Parent.Ref, Stage: w.EffectiveStage(u)}
+				res.ChangedPaths = []string{w.Path}
+			}
+			edit = true
+		}
+	}
+	res.Diagnostics = diagnostics(problems, dir)
+	if edit {
+		for i := range res.Diagnostics {
+			res.Diagnostics[i].Next = []string{"wa-cli help unit move --json", shellCommand("wa-cli", "status", "--dir", dir, "--json")}
+		}
+	}
+	rewriteParamNext(res.Diagnostics, "unit move", work.CodeNotSibling, work.CodeMoveRoot, work.CodeMoveUnderSelf)
+	return finish(inv, res, func(w io.Writer) error {
+		if res.Unit == nil {
+			return nil
+		}
+		_, err := fmt.Fprintf(w, "已把单元（Unit）%s 移动到 %s 之下：类型 %s，生效阶段 %s\n", res.Unit.Unit, res.Unit.Parent, res.Unit.Type, res.Unit.Stage)
+		return err
+	})
+}
+
+// rewriteParamNext 把参数引起的问题的下一步改为查看命令用法；这些问题的取值不由既有产物决定，
+// 整体校验不能复查（cli-contract/next-rechecks-problem）。
+func rewriteParamNext(ds []Diagnostic, command string, codes ...string) {
+	for i := range ds {
+		if slices.Contains(codes, ds[i].Code) || ds[i].Code == codeInvalidValue {
+			ds[i].Next = []string{"wa-cli help " + command + " --json"}
+		}
+	}
 }
 
 func runAdvance(inv *invocation) int {
@@ -248,7 +354,8 @@ func runNext(inv *invocation) int {
 			works, _, problems = work.LoadAll(dir)
 			for _, w := range works {
 				for _, u := range w.Units() {
-					if u.Stage != catalog.StageDone {
+					// 汇总单元的阶段由子单元汇总：推导阶段为 done 时不再列出（同 next-skips-done）。
+					if w.EffectiveStage(u) != catalog.StageDone {
 						res.Steps = append(res.Steps, step(dir, w, u))
 					}
 				}
@@ -262,7 +369,11 @@ func runNext(inv *invocation) int {
 			b.WriteString("没有需要推进的单元（Unit）\n")
 		}
 		for _, s := range res.Steps {
-			fmt.Fprintf(&b, "%s（阶段 %s）：%s\n", s.Unit, s.Stage, s.Action)
+			stage := s.Stage
+			if s.Progress != nil {
+				stage = fmt.Sprintf("%s，进度 %d/%d", stage, s.Progress.Done, s.Progress.Total)
+			}
+			fmt.Fprintf(&b, "%s（阶段 %s）：%s\n", s.Unit, stage, s.Action)
 			for _, bl := range s.Blockers {
 				fmt.Fprintf(&b, "  阻塞项：%s\n", bl.Message)
 			}
@@ -280,8 +391,12 @@ func runNext(inv *invocation) int {
 
 func step(dir string, w *work.Work, u *work.Unit) stepView {
 	blockers, commands := progress(dir, w, u)
-	s := stepView{Unit: u.Ref, Stage: u.Stage, Blockers: blockers, Action: action(w, u, blockers), Commands: commands,
+	s := stepView{Unit: u.Ref, Stage: w.EffectiveStage(u), Blockers: blockers, Action: action(dir, w, u, blockers), Commands: commands,
 		Feedback: pendingFeedback(dir, w, u)}
+	if w.Aggregated(u) {
+		done, total := w.Progress(u)
+		s.Progress = &progressView{Done: done, Total: total}
+	}
 	if n := len(s.Feedback); n > 0 {
 		s.Action = fmt.Sprintf("先处理 %d 条未处理的作者反馈（Feedback）；%s", n, s.Action)
 	}
@@ -289,8 +404,20 @@ func step(dir string, w *work.Work, u *work.Unit) stepView {
 }
 
 // progress 返回单元的阻塞项与可以直接运行的下一步命令，next 与 status 共用；数组永不为 nil。
+// 汇总单元（Aggregated Unit）不能推进：阻塞项为未完成子单元的汇总，commands 恒为空数组
+// （逐场景的可执行命令列在各自的条目上）。
 func progress(dir string, w *work.Work, u *work.Unit) ([]blockerView, []string) {
 	blockers, commands := []blockerView{}, []string{}
+	if w.Aggregated(u) {
+		for _, b := range w.AggregatedBlockers(dir, u) {
+			v := blockerView{Code: b.Code, Artifact: b.Artifact, Path: b.Path, Message: b.Message}
+			if b.Decision != "" {
+				v.Decision = &b.Decision
+			}
+			blockers = append(blockers, v)
+		}
+		return blockers, commands
+	}
 	for _, b := range w.Blockers(dir, u) {
 		v := blockerView{Code: b.Code, Artifact: b.Artifact, Path: b.Path, Message: b.Message}
 		if b.Decision != "" {
@@ -360,7 +487,18 @@ func artifactNext(dir, artifact, unitDir string) []string {
 }
 
 // action 以人读文字说明单元的下一步。
-func action(w *work.Work, u *work.Unit, blockers []blockerView) string {
+func action(dir string, w *work.Work, u *work.Unit, blockers []blockerView) string {
+	if w.Aggregated(u) {
+		done, total := w.Progress(u)
+		switch {
+		case total == 0:
+			return "汇总单元（Aggregated Unit）：下面还没有场景，先用 wa-cli unit add 添加场景"
+		case done < total:
+			return fmt.Sprintf("汇总单元（Aggregated Unit）：已完成 %d/%d 个场景，还有 %d 个未完成；先推进未完成的场景", done, total, total-done)
+		default:
+			return fmt.Sprintf("汇总单元（Aggregated Unit）：全部 %d 个场景已完成", total)
+		}
+	}
 	switch {
 	case u.Stage == catalog.StageDone:
 		return "已走完全部阶段"
@@ -417,12 +555,12 @@ func action(w *work.Work, u *work.Unit, blockers []blockerView) string {
 	return fmt.Sprintf("阶段 %s 的必需产物已齐备，可以推进到 %s", u.Stage, w.NextStage(u))
 }
 
-// unitViews 按作品与单元树先序列出每个单元，供 status 输出。
+// unitViews 按作品与单元树先序列出每个单元，供 status 输出；汇总单元的阶段与阻塞项取汇总值。
 func unitViews(dir string, works []*work.Work) []unitView {
 	out := []unitView{}
 	for _, w := range works {
 		for _, u := range w.Units() {
-			v := unitView{Unit: u.Ref, Work: w.ID, Type: u.Type, Stage: u.Stage}
+			v := unitView{Unit: u.Ref, Work: w.ID, Type: u.Type, Stage: w.EffectiveStage(u)}
 			if u.Parent != nil {
 				v.Parent = &u.Parent.Ref
 			}
@@ -430,6 +568,10 @@ func unitViews(dir string, works []*work.Work) []unitView {
 				v.depth++
 			}
 			v.Blockers, v.Commands = progress(dir, w, u)
+			if w.Aggregated(u) {
+				done, total := w.Progress(u)
+				v.Progress = &progressView{Done: done, Total: total}
+			}
 			out = append(out, v)
 		}
 	}

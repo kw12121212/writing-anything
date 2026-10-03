@@ -1,0 +1,14 @@
+# 测试文体：递归与混合层级，只在 internal/work 的测试中使用。sec 可以嵌套 sec（第三方文体可声明的
+# 任意形状）；part 为汇总单元，其下的 chapter 不汇总（混合汇总与非汇总的中间层）。
+schema_version: 1
+id: nested
+title: 测试嵌套
+unit_types:
+  - {id: nested, title: 书, children: [sec, part]}
+  - {id: sec, title: 节, children: [sec, scene]}
+  - {id: part, title: 部, children: [chapter], stage_from_children: true}
+  - {id: chapter, title: 章, children: [scene]}
+  - {id: scene, title: 场景}
+stages:
+  - {id: plan, title: 规划, required_artifacts: [plan]}
+  - {id: draft, title: 草稿, required_artifacts: [draft]}

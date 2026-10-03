@@ -69,12 +69,15 @@ type RubricItem struct {
 	Blocking    bool   `json:"blocking,omitempty"` // strict 关卡强度下结论为 fail 时阻塞验收
 }
 
-// UnitType 是文体声明的单元类型。BriefRequired 是该类型单元的简报必填项（Required Brief Field）。
+// UnitType 是文体声明的单元类型。BriefRequired 是该类型单元的简报必填项（Required Brief Field）；
+// StageFromChildren 为 true 时该类型是汇总单元（Aggregated Unit）：单元的阶段不由推进得出，而由子单元汇总
+// （见 internal/work 的推导阶段）。
 type UnitType struct {
-	ID            string   `json:"id"`
-	Title         string   `json:"title"`
-	Children      []string `json:"children"`
-	BriefRequired []string `json:"briefRequired"`
+	ID                string   `json:"id"`
+	Title             string   `json:"title"`
+	Children          []string `json:"children"`
+	BriefRequired     []string `json:"briefRequired"`
+	StageFromChildren bool     `json:"stageFromChildren"`
 }
 
 // Stage 是文体声明的生命周期阶段（Stage）。
@@ -159,10 +162,11 @@ type Pack struct {
 // 文件格式：字段名与 YAML 一致。与公开类型只差结构体标签，可以直接转换。
 type (
 	unitTypeFile struct {
-		ID            string   `json:"id"`
-		Title         string   `json:"title"`
-		Children      []string `json:"children"`
-		BriefRequired []string `json:"brief_required"`
+		ID                string   `json:"id"`
+		Title             string   `json:"title"`
+		Children          []string `json:"children"`
+		BriefRequired     []string `json:"brief_required"`
+		StageFromChildren bool     `json:"stage_from_children"`
 	}
 	stageFile struct {
 		ID                string   `json:"id"`
@@ -314,6 +318,10 @@ func checkGenre(g *Genre) []workspace.Problem {
 		declared[u.ID] = true
 	}
 	for i, u := range g.UnitTypes {
+		if u.StageFromChildren && len(u.Children) == 0 {
+			// 汇总单元（Aggregated Unit）的阶段由子单元汇总得出；不带子单元的类型声明汇总没有意义。
+			add(schema.CodeSchemaViolation, fmt.Sprintf("unit_types[%d].stage_from_children", i), "stage_from_children 只能声明在带 children 的单元类型上")
+		}
 		for j, c := range u.Children {
 			if !declared[c] {
 				add(CodeUnknownUnitType, fmt.Sprintf("unit_types[%d].children[%d]", i, j), "子单元类型 "+c+" 未声明")

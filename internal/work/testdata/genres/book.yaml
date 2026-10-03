@@ -1,11 +1,12 @@
 # 测试文体：多层单元树 book → part → chapter → scene，只在 internal/work 的测试中使用。
+# part 与 chapter 声明为汇总单元（Aggregated Unit）：阶段由子场景汇总得出，场景走完整生命周期。
 schema_version: 1
 id: book
 title: 测试长篇
 unit_types:
   - {id: book, title: 书, children: [part]}
-  - {id: part, title: 部, children: [chapter]}
-  - {id: chapter, title: 章, children: [scene]}
+  - {id: part, title: 部, children: [chapter], stage_from_children: true}
+  - {id: chapter, title: 章, children: [scene], stage_from_children: true}
   - {id: scene, title: 场景}
 stages:
   - {id: plan, title: 规划, required_artifacts: [plan]}

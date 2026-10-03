@@ -24,7 +24,7 @@ func newWork(t *testing.T) (string, *work.Work) {
 	if _, _, ps := work.Create(root, "minimal", "my-post"); len(ps) > 0 {
 		t.Fatal(ps)
 	}
-	w, _, ps := work.AddUnit(root, "my-post", "section", "intro")
+	w, _, ps := work.AddUnit(root, "my-post", "section", "intro", work.Anchor{})
 	if len(ps) > 0 {
 		t.Fatal(ps)
 	}

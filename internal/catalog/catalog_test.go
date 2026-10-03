@@ -354,3 +354,60 @@ func TestGenreSummaryLength(t *testing.T) {
 		t.Fatalf("default = %+v", g.SummaryLength)
 	}
 }
+
+// 内置 novel 文体：四层单元类型（novel/part/chapter/scene），part 与 chapter 为汇总单元，
+// 场景走完整生命周期；声明与 short-story 相同的四条小说规则，不声明写作法与评分指标。
+func TestNovelGenre(t *testing.T) {
+	g, ps, ok := LoadGenre("novel")
+	if !ok || g == nil || len(ps) > 0 {
+		t.Fatalf("LoadGenre(novel) = %+v, %+v, %v", g, ps, ok)
+	}
+	aggregated := map[bool][]string{}
+	for _, u := range g.UnitTypes {
+		aggregated[u.StageFromChildren] = append(aggregated[u.StageFromChildren], u.ID)
+	}
+	if !slices.Equal(aggregated[true], []string{"part", "chapter"}) || !slices.Equal(aggregated[false], []string{"novel", "scene"}) {
+		t.Fatalf("aggregated unit types = %v / %v", aggregated[true], aggregated[false])
+	}
+	root := g.UnitTypes[0]
+	if root.ID != "novel" || !slices.Equal(root.Children, []string{"part"}) ||
+		!slices.Equal(root.BriefRequired, []string{"premise", "pov", "length", "key_messages"}) {
+		t.Fatalf("root unit type = %+v", root)
+	}
+	if g.ContextBudget != 16000 || g.DefaultMethod != "" || len(g.ScoredMetrics) != 0 || len(g.PacingChecks) != 0 {
+		t.Fatalf("budget/method/metrics = %d/%q/%d/%d", g.ContextBudget, g.DefaultMethod, len(g.ScoredMetrics), len(g.PacingChecks))
+	}
+	for _, id := range []string{"length", "fiction-cliches", "dialogue", "pov"} {
+		if _, ok := g.Rules[id]; !ok || g.Rules[id].Severity != "warning" {
+			t.Fatalf("rule %s = %+v", id, g.Rules[id])
+		}
+	}
+	if _, ok := g.Rules["claims"]; ok {
+		t.Fatalf("fiction genre must not declare claim rules")
+	}
+	var stages []string
+	for _, s := range g.Stages {
+		stages = append(stages, s.ID)
+	}
+	if !slices.Equal(stages, []string{"brief", "outline", "draft", "review"}) {
+		t.Fatalf("stages = %v", stages)
+	}
+}
+
+// stage_from_children 只能声明在带 children 的单元类型上：叶子类型声明时按 Schema 违例报告。
+func TestStageFromChildrenLeaf(t *testing.T) {
+	doc, p := schema.Parse([]byte("schema_version: 1\nid: g\ntitle: 测试文体\nunit_types:\n" +
+		"  - {id: story, title: 故事, children: [scene]}\n  - {id: scene, title: 场景, stage_from_children: true}\n" +
+		"stages:\n  - {id: brief, title: 简报, required_artifacts: [brief]}\n"))
+	if p != nil {
+		t.Fatal(p)
+	}
+	if ps := schema.Named("genre").ValidateNode(doc); len(ps) > 0 {
+		t.Fatalf("boolean field must pass the JSON Schema: %+v", ps)
+	}
+	g := genreOf(doc)
+	ps := checkGenre(g)
+	if len(ps) != 1 || ps[0].Code != "artifact.schema-violation" || ps[0].Field != "unit_types[1].stage_from_children" {
+		t.Fatalf("leaf aggregation problems = %+v", ps)
+	}
+}

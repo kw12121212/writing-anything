@@ -62,7 +62,7 @@ var statusCommand = &command{
 		{"config", "配置摘要，含 language、defaultGenre、packs、gateLevel；配置无法解析时为 null"},
 		{"sources", "sources/ 下的直接条目数，不含隐藏条目"},
 		{"works", "works/ 下的直接条目数，不含隐藏条目"},
-		{"units", "按作品与单元树先序列出的单元，每项含 unit、work、type、parent、stage、blockers 与 commands"},
+		{"units", "按作品与单元树先序列出的单元，每项含 unit、work、type、parent、stage、blockers、commands 与 progress（汇总单元（Aggregated Unit）的进度，其他单元为 null）；汇总单元的 stage 与 blockers 由子单元汇总"},
 	},
 	exitCodes: standardExitCodes,
 	run:       runStatus,
@@ -257,7 +257,11 @@ func runStatus(inv *invocation) int {
 		}
 		for _, u := range res.Units {
 			indent := strings.Repeat("  ", u.depth+1)
-			fmt.Fprintf(&b, "%s%s（%s）：阶段 %s", indent, u.Unit, u.Type, u.Stage)
+			stage := u.Stage
+			if u.Progress != nil {
+				stage = fmt.Sprintf("%s，进度 %d/%d", stage, u.Progress.Done, u.Progress.Total)
+			}
+			fmt.Fprintf(&b, "%s%s（%s）：阶段 %s", indent, u.Unit, u.Type, stage)
 			if len(u.Blockers) > 0 {
 				fmt.Fprintf(&b, "，阻塞项 %d 项", len(u.Blockers))
 			}
@@ -662,8 +666,11 @@ func next(p workspace.Problem, dir string) []string {
 		}
 	case workspace.CodeNotFound, workspace.CodeMissingDirectory:
 		return []string{initCmd}
-	case work.CodeNotFound, work.CodeUnitNotFound, work.CodeExists, work.CodeAlreadyDone:
+	case work.CodeNotFound, work.CodeUnitNotFound, work.CodeExists, work.CodeAlreadyDone, work.CodeDerivedStage:
 		return []string{status}
+	case work.CodeNotSibling, work.CodeMoveRoot, work.CodeMoveUnderSelf:
+		// 由本次参数引起的问题：unit add 与 unit move 会改写为各自的用法；这里给出两个用法兜底。
+		return []string{"wa-cli help unit add --json", "wa-cli help unit move --json"}
 	case work.CodeMissingArtifact:
 		return []string{shellCommand("wa-cli", "next", work.RefOf(p.Path), "--dir", dir, "--json")}
 	case review.CodeAcceptanceStale, review.CodeAcceptanceInvalid, review.CodeAcceptanceWeakerGate:

@@ -1,0 +1,22 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: multi-level-units
+  status: proposed
+summary:
+  what:
+    - 长篇小说的多层单元树：内置 novel 文体声明 部（Part）→ 章（Chapter）→ 场景（Scene）三层单元层级，场景走完整生命周期，部与章声明为汇总单元（Aggregated Unit，单元类型布尔字段 stage_from_children），其阶段（Stage）由子单元树中走生命周期的单元汇总得出；wa-cli status 与 next 对汇总单元输出推导阶段（Derived Stage）、进度与汇总阻塞项（Blocker）；wa-cli unit add 支持 --before/--after 在层级中插入单元，新增 wa-cli unit move 在层级间移动单元（连同子树），单元 id、单元引用与单元目录保持稳定。
+  why:
+    - novel 里程碑要求在任何单个会话都装不下全书的前提下由 Agent 逐场景推进一部长篇小说：三层结构让作者与 Agent 按部、章组织上百个场景；场景是唯一走生命周期的单元，章与部的进度必须由场景汇总而不是手工推进，长篇的进度才能不依赖任何会话的记忆；插入与移动支撑写作过程中的结构调整，id 稳定则保证设定集、摘要等按单元 id 的既有引用不因调整失效。
+scope:
+  in:
+    - 1) 内置 novel 文体：单元类型 novel（根，children 为 [part]，简报必填项 premise、pov、length 与 key_messages）、part（children 为 [chapter]，stage_from_children 为 true）、chapter（children 为 [scene]，stage_from_children 为 true）与 scene；阶段依次为 brief（必需产物 brief）、outline（outline）、draft（draft）与 review（review 与 acceptance），同 short-story；声明与 short-story 相同的四条小说规则（fiction-cliches、dialogue、pov 均为 warning，length 为 warning、1000 到 20000 字）与上下文预算 16000；不声明默认写作法与 AI 评分指标（分别属 long-form-planning-methods 与 novel-scene-contract 等后续计划变更）。2) 文体单元类型可声明布尔 stage_from_children（仅允许声明在带 children 的单元类型上，叶子类型声明时报告 artifact.schema-violation）；wa-cli config resolved 的 unitTypes 每项含 stageFromChildren。3) 汇总单元的阶段由子单元树中所有非汇总子孙单元（走生命周期的单元）汇总得出：取最落后者（按文体阶段序列最靠前）的阶段，没有非汇总子孙单元时为第一个阶段，全部 done 时为 done；work.yaml 中汇总单元仍存合法 stage（schema 不变，unit add 写第一个阶段作存储值），行为以推导阶段为准；wa-cli advance 汇总单元时不修改文件，报告 lifecycle.derived-stage（next 含 wa-cli status），退出码 1。4) status 的 units 与 next 的 steps 对汇总单元输出推导阶段与新增 progress（非汇总子孙单元中 done 的数量与总数），blockers 为未完成非汇总子孙单元阻塞项的按序去重并集，commands 为空数组，next 的 action 提示未完成场景数，推导阶段为 done 的汇总单元在 next 中跳过；非汇总单元输出不变。5) wa-cli unit add <parent> <type> <id> 新增可选 --before <sibling> 与 --after <sibling>（互斥，同时给出报告 input.invalid-value）：在父单元子单元序列中按锚点插入而非末尾追加；锚点不存在报告 unit.not-found，锚点存在但不是 parent 的直接子单元报告 unit.not-sibling；其余校验与输出不变。6) 新增 wa-cli unit move <unit> <parent> [--before <sibling>] [--after <sibling>]：把单元连同子树移动为 parent 的子单元（含同父内重排序），只改 work.yaml 中的位置并保留 YAML 注释；单元 id、单元引用、单元目录（units/<unit-id>/）与一切按 id 的引用不变；类型不被 parent 允许时报告 work.child-type-not-allowed，parent 是该单元自身或其子孙时报告 unit.move-under-self，移动根单元报告 unit.move-root，锚点校验同插入，途经 YAML 锚点时报告 work.anchored-value，这些情况都不修改文件；--json 输出 unit（unit、type、parent 与 stage，汇总单元为推导阶段）与 changedPaths。7) unit move 按命令注册表自动成为 MCP tool（unit_move），行为遵循 mcp 主规格的注册表驱动条款，无需规格变更。8) 测试夹具含至少一部/两章/三场景的长篇，端到端测试覆盖插入、移动与汇总输出。
+  out:
+    - 1) 场景契约与因果链、状态快照与事件溯源、知情表、伏笔台账、写后收口、recall 检索、分层摘要与卷末检查点、长篇规划写作法（雪花写作法、黄金三章与卷结构）——均为依赖本变更的后续计划变更。2) 删除单元（unit remove）与跨作品移动。3) status 与 next 输出结构的既有字段、排序与非汇总单元行为变化。4) work.yaml 的 JSON Schema 变化（每个单元仍含 id、type、stage）。5) 单元引用与单元目录解析规则的变化。6) 汇总阻塞项的截断策略（先按序去重并集输出，过噪时由后续计划变更再议）。
+unchanged_behavior:
+  - 1) 不带 --before/--after 的 unit add 仍在父单元子单元末尾追加，输出不变。2) advance、next、status 对非汇总单元的阶段推进、阻塞项计算与输出不变；现有文体（minimal、tech-blog、wechat-marketing、short-story）的行为与声明不变。3) MCP tools 的注册表生成规则与既有 tool 行为不变。4) 人工编辑保护（Human Edit Protection）、YAML 注释保留与 work.anchored-value 的适用范围不变。5) export、context、review、summary 等按单元 id 或单元树遍历的命令对多层结构的行为不变（单元树遍历本就支持任意深度）。
+roadmap:
+  milestone: novel
+  planned_change: multi-level-units

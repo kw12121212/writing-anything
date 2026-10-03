@@ -185,6 +185,11 @@ categories:
       status: active
       occurrences: 1
       path: .strict-spec-driven/lessons/coding/lesson-1f07b0.yaml
+    yaml-3ffa64:
+      title: 在 YAML 节点树上按解析时的下标导航，任何改变兄弟序列的操作都会使其后单元的下标左移
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/coding/yaml-3ffa64.yaml
   documentation:
     must-must-6af326:
       title: 修改一条 MUST 需求时，要检查同一规格里相邻的 MUST 是否因此冲突

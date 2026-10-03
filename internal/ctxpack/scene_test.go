@@ -23,7 +23,7 @@ func storyProject(t *testing.T) string {
 		t.Fatal(ps)
 	}
 	for _, id := range []string{"s1", "s2"} {
-		if _, _, ps := work.AddUnit(root, "my-story", "scene", id); len(ps) > 0 {
+		if _, _, ps := work.AddUnit(root, "my-story", "scene", id, work.Anchor{}); len(ps) > 0 {
 			t.Fatal(ps)
 		}
 	}

@@ -1,0 +1,54 @@
+schema: strict-spec-driven/question-list/v1
+schema_version: 1
+artifact_type: question_list
+schema_file: templates/strict-spec-driven/schemas/question-list.yaml
+change: multi-level-units
+open: []
+resolved:
+  - id: requirement-problem
+    question: What is concretely going wrong today, and for whom?
+    context: 'Why this is asked: the change is planned against a need, and the need lives only with the requester. A "problem" here means what someone does or suffers today — not a feature that is missing. If the answer names a button, a field, a page, or an endpoint, it is a solution, and the underlying problem is still unstated. What a sufficient answer contains: who is affected, what they do today instead, and how often. Worked example: "every Monday one person spends forty minutes copying order rows into a spreadsheet to send the weekly report". What it changes: this becomes the proposal''s why, and it decides whether the change is worth making.'
+    answer: 今天内置文体最深只有两层（story → scene），作者与 Agent 无法按 部（Part）/章（Chapter）组织一部上百场景的长篇：要么把全部场景拍平挂在一层之下，要么在 wa-cli 之外手工维护章、部进度；novel 里程碑的目标（任何单个会话都装不下全书时由 Agent 逐场景推进长篇）缺少结构前提。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-outcome
+    question: What observable difference proves the problem is solved?
+    context: 'Why this is asked: without a success condition, nobody can tell afterwards whether the change worked. "Observable" means someone outside the system can check it without reading the code. What a sufficient answer contains: what a person will see, or no longer have to do, once this is done. Worked example: "the report is in the manager''s inbox on Monday morning without anyone assembling it". What it changes: this becomes the delta spec''s scenarios and the acceptance evidence at review time.'
+    answer: 用 wa-cli new novel 创建的作品把场景挂在 部/章 之下；推进若干场景后，wa-cli status 与 next 无需任何人手工推进部、章，就输出它们的推导阶段、progress（done/total）与汇总阻塞项；wa-cli unit add --before/--after 与 wa-cli unit move 调整场景位置后，单元 id、单元引用与 units/<unit-id>/ 目录不变（work.yaml、status 输出与磁盘目录可直接观察）。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-trigger
+    question: Why now — what forced this?
+    context: 'Why this is asked: work that nothing forced is the work most often thrown away later. This question catches a request that sounds reasonable but has no real driver behind it. What a sufficient answer contains: the concrete event, deadline, incident, or cost that made this surface now, or an honest statement that nothing did. Worked example: "the report was missed last month and it was raised with the team". What it changes: a change with no trigger is a candidate for deferral, and the answer is weighed at review before archive.'
+    answer: novel 是路线图顺序中最早的未完成里程碑（此前里程碑全部 complete）；脚本化 roadmap-recommend 在 54 个计划变更中只选出 multi-level-units 一个可推荐项——novel 里程碑其余 8 个计划变更（场景契约、状态快照、知情表、伏笔台账、分层摘要、recall、收口、长篇规划写作法、状态变更提议）全部直接或间接依赖它。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-non-goals
+    question: What must explicitly not change?
+    context: 'Why this is asked: the requester knows which nearby behavior other people depend on, and the agent does not. A "non-goal" is something the change must leave alone even though it sits close to the work. What a sufficient answer contains: the behavior, setting, or output that must survive untouched, and who relies on it. Worked example: "do not change the saved filters — several people rely on their own". What it changes: these become the proposal''s unchanged_behavior items, which review checks the finished result against.'
+    answer: 既有文体（minimal、tech-blog、wechat-marketing、short-story）的行为与声明、work.yaml 的 JSON Schema、单元引用与单元目录的解析规则、不带锚点参数时 unit add 的末尾追加语义、MCP tool 的注册表生成规则、YAML 注释保留与 work.anchored-value 保护范围，以及非汇总单元在 status/next 中的输出，都必须保持不变（已记入 proposal 的 unchanged_behavior）。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-interpretation
+    question: Which reading of the request is intended, where more than one is possible?
+    context: 'Why this is asked: a short request usually admits several readings, and building the wrong one is indistinguishable from building nothing. What a sufficient answer contains: the reading that is meant, stated plainly enough to rule the others out — or a statement that only one reading exists and what it is. Worked example: "export means the version sent to the manager, not the one I read myself". What it changes: this fixes the scope boundary before any code is written, and settles disputes about what was asked for.'
+    answer: 「多层单元树」指由文体声明的 部 → 章 → 场景 层级，其中只有场景走完整生命周期、部与章的阶段由子单元汇总得出，而不是给内核增加嵌套能力（单元树本就支持任意深度）；「插入、移动场景」指扩展既有单元命令族（unit add 的 --before/--after 与新增 unit move）并保持 id 稳定，不是新的规划或调度子系统。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: aggregation-rule
+    question: 汇总单元（部与章）的推导阶段采用哪种汇总规则？
+    context: 路线图计划变更只写明「章与部的状态由子单元汇总得出」，没有定义汇总规则。本变更按最短板（Weakest Link）设计：推导阶段取子单元树中所有走生命周期的单元（非汇总子孙单元）里最落后者的阶段；没有子孙单元时为文体第一个阶段；全部 done 时为 done；status 与 next 另输出 progress（done 计数与总数）。备选是按完成计数（如全部子单元过半 done 即视为进入下一阶段）。影响范围：units-and-lifecycle 与 workspace 的 delta spec（derived-stage 与 status 聚合行为的场景断言）、internal/work 的推导函数实现、internal/cli 的 status/next 输出与测试夹具断言；不影响实现文件之外的依赖。推荐采用最短板规则：只要还有一个场景在简报阶段，这一部就仍在起步，与「场景走完整生命周期」的阶段模型对齐，且定义与场景数无关。
+    answer: 采用最短板（Weakest Link）规则：汇总单元的推导阶段取其子单元树中所有非汇总子孙单元（走生命周期的单元）里最落后者的阶段；没有非汇总子孙单元时为文体第一个阶段；全部为 done 时为 done；status 与 next 另输出 progress（done 计数与总数）。
+    status: resolved
+    answered_by: human
+  - id: novel-genre-declaration-scope
+    question: novel 文体在本变更中声明到什么范围：是否携带 short-story 的四条小说规则与相同简报必填项？
+    context: 路线图计划变更只写明「内置 novel 文体，单元层级为 部 → 章 → 场景」，未规定规则、简报必填项、评分指标与默认写作法。本变更的设计是：声明四条小说规则（fiction-cliches、dialogue、pov 均 warning，length 为 warning、1000 到 20000 字）、根单元简报必填项 premise、pov、length、key_messages 与上下文预算 16000；不声明 default_method、scored_metrics 与 pacing_checks（分别留给 long-form-planning-methods 与 scene-contract-and-causality 等后续计划变更）。备选是最小声明（仅层级与阶段，零规则零必填项）。影响范围：genres-and-packs 的 delta spec（novel-genre 需求的声明与场景断言）、internal/catalog 的内置文体数据、lint 与 brief gate 对 novel 作品的即时行为、测试夹具；不影响其他文体。推荐携带四条规则与相同必填项：规则类型与词表已存在，纯数据复用零实现成本，novel 作为小说文体不应在首个可用版本缺少基本质量检查，且参数可被规范包与项目配置按 id 覆盖或豁免。
+    answer: 携带 short-story 的四条小说规则（fiction-cliches、dialogue、pov 均 warning；length 为 warning、1000 到 20000 字）、相同根单元简报必填项（premise、pov、length、key_messages）与上下文预算 16000；不声明 default_method、scored_metrics 与 pacing_checks（留给后续计划变更）。
+    status: resolved
+    answered_by: human

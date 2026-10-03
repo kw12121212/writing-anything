@@ -129,7 +129,7 @@ func project(t *testing.T) string {
 		t.Fatal(ps)
 	}
 	for _, id := range []string{"intro", "why", "how"} {
-		if _, _, ps := work.AddUnit(root, "my-post", "section", id); len(ps) > 0 {
+		if _, _, ps := work.AddUnit(root, "my-post", "section", id, work.Anchor{}); len(ps) > 0 {
 			t.Fatal(ps)
 		}
 	}

@@ -1,0 +1,21 @@
+schema: strict-spec-driven/delta-spec/v1
+schema_version: 1
+artifact_type: delta_spec
+schema_file: templates/strict-spec-driven/schemas/delta-spec.yaml
+target_spec: workspace
+operations:
+  ADDED:
+    status-aggregated-units:
+      strength: MUST
+      statement: 'wa-cli status 对汇总单元（Aggregated Unit，文体的单元类型声明 stage_from_children 为 true，见 units-and-lifecycle 主规格的 derived-stage 与 genres-and-packs 主规格的 aggregated-unit-types）必须按层级输出汇总进度：units 数组仍按作品与单元树先序列出，汇总单元的 stage 为推导阶段（Derived Stage，由子单元汇总得出），并新增 progress 字段（对象，含 done 与 total：其子单元树中非汇总子孙单元的总数与其中 stage 为 done 的数量；没有非汇总子孙单元时为 {done: 0, total: 0}），blockers 为其未完成非汇总子孙单元阻塞项按序去重后的并集，commands 为空数组；非汇总单元不输出 progress（该字段为 null），其余字段、排序与行为不变。不加 --json 时以人读文本输出同样的信息，汇总单元的缩进树与计数照同一取值渲染。'
+      scenarios:
+        status-derived-progress:
+          - GIVEN: novel 作品 my-novel 有 part-one（chapter-one 下 scene-1 为 done、scene-2 为 draft）
+          - WHEN: 运行 wa-cli status --dir D --json
+          - THEN: 'units 中 chapter-one 的 stage 为 draft、progress 为 {done: 1, total: 2}，part-one 的 stage 为 draft、progress 为 {done: 1, total: 2}，scene-1 的 progress 为 null，退出码为 0'
+        status-non-aggregated-unchanged:
+          - GIVEN: minimal 作品 my-post（单元类型未声明 stage_from_children）
+          - WHEN: 运行 wa-cli status --dir D --json
+          - THEN: 每个单元的 stage、blockers 与 commands 与本变更之前的行为一致，progress 为 null，退出码为 0
+  MODIFIED: {}
+  REMOVED: {}
