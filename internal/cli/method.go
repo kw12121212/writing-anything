@@ -15,7 +15,7 @@ import (
 const codeMethodNotFound = "method.not-found"
 
 const methodHelp = "id、title、description、kind（article 文章类、structure 结构类或 planning 规划类）、source（builtin 或 pack:<id>）、" +
-	"sections、beats（另含 position 的 min 与 max）、steps 与 rubric"
+	"sections、beats（另含 position 的 min 与 max，以及声明了目标张力时的 tension）、steps 与 rubric"
 
 var methodListCommand = &command{
 	name:       "method list",
@@ -140,17 +140,26 @@ func runMethodShow(inv *invocation) int {
 	})
 }
 
+// unitDefaultMethod 返回单元适用的文体默认写作法：只有作品的根单元用文体的 default_method，
+// 子单元不继承（子单元的写作法只来自它自己的写作简报），见 methods 主规格的 method-selection。
+func unitDefaultMethod(w *work.Work, u *work.Unit) string {
+	if u.Parent == nil {
+		return w.Genre.DefaultMethod
+	}
+	return ""
+}
+
 // unitMethod 返回单元选用的写作法：与大纲关卡相同，取写作简报 method 字段的原始取值（写作简报的其他问题不影响它），为空时
-// 用文体的默认写作法；为 none 或写作法不存在时为 nil（不存在的问题由 validate 与大纲关卡报告）。
+// 根单元用文体的默认写作法；为 none 或写作法不存在时为 nil（不存在的问题由 validate 与大纲关卡报告）。
 func unitMethod(dir string, w *work.Work, u *work.Unit) *catalog.Method {
-	m, _ := catalog.LoadMethods(dir).Pick(brief.MethodOf(dir, w.UnitDir(u)), w.Genre.DefaultMethod)
+	m, _ := catalog.LoadMethods(dir).Pick(brief.MethodOf(dir, w.UnitDir(u)), unitDefaultMethod(w, u))
 	return m
 }
 
 // danglingMethod 在单元选用的写作法不存在时返回一条 warning：审稿与验收照常执行，但不包含该写作法附带的评分项。
 func danglingMethod(dir string, w *work.Work, u *work.Unit) []workspace.Problem {
 	set := catalog.LoadMethods(dir)
-	if _, missing := set.Pick(brief.MethodOf(dir, w.UnitDir(u)), w.Genre.DefaultMethod); missing != "" {
+	if _, missing := set.Pick(brief.MethodOf(dir, w.UnitDir(u)), unitDefaultMethod(w, u)); missing != "" {
 		p := brief.UnknownMethod(brief.Path(w.UnitDir(u)), brief.FieldMethod, missing, set)
 		p.Severity = workspace.SeverityWarning
 		p.Message += "；审稿的评分标准暂不包含写作法附带的评分项"

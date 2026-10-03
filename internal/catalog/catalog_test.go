@@ -1,13 +1,14 @@
 package catalog
 
 import (
-	"github.com/kw12121212/writing-anything/internal/schema"
+	"math"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 
+	"github.com/kw12121212/writing-anything/internal/schema"
 	"github.com/kw12121212/writing-anything/internal/workspace"
 )
 
@@ -56,13 +57,20 @@ func TestBuiltinsAreValid(t *testing.T) {
 			t.Errorf("pack %s: ok = %v, pack = %+v, problems = %+v", id, ok, p, ps)
 		}
 	}
-	if len(BuiltinMethods()) != 9 {
+	if len(BuiltinMethods()) != 14 {
 		t.Errorf("builtin methods = %v", BuiltinMethods())
 	}
 	for _, id := range BuiltinMethods() {
 		m, ps, ok := LoadMethod(id)
-		if !ok || m == nil || len(ps) > 0 || m.Kind != MethodArticle || len(m.Parts()) == 0 {
+		if !ok || m == nil || len(ps) > 0 || len(m.Parts()) == 0 {
 			t.Errorf("method %s: ok = %v, method = %+v, problems = %+v", id, ok, m, ps)
+		}
+		if m.Kind == MethodStructure {
+			for _, b := range m.Beats {
+				if b.Position == nil || b.Tension == nil || *b.Tension < 0 || *b.Tension > 10 || *b.Tension != math.Trunc(*b.Tension) {
+					t.Errorf("structure method %s beat %s: position = %+v, tension = %+v", id, b.ID, b.Position, b.Tension)
+				}
+			}
 		}
 	}
 	if _, _, ok := LoadMethod("nope"); ok {
@@ -118,8 +126,48 @@ func TestShortStoryGenre(t *testing.T) {
 	if !slices.Equal(rubric, []string{"conflict", "pacing", "motivation"}) {
 		t.Errorf("short-story rubric = %v", rubric)
 	}
-	if g.ContextBudget != 16000 || g.DefaultMethod != "" {
+	if g.ContextBudget != 16000 || g.DefaultMethod != "three-act" {
 		t.Errorf("short-story budget = %d, default method = %q", g.ContextBudget, g.DefaultMethod)
+	}
+}
+
+// 五个内置结构类写作法（methods 主规格的 method-data）：three-act 节拍位置与 beat-positions 场景一致，
+// save-the-cat 为标准 15 节拍，起承转合与英雄之旅节拍齐全（structure-builtin-methods）。
+func TestBuiltinStructureMethods(t *testing.T) {
+	for _, id := range []string{"three-act", "save-the-cat", "seven-point", "qichengzhuanhe", "hero-journey"} {
+		m, ps, ok := LoadMethod(id)
+		if !ok || m == nil || len(ps) > 0 || m.Kind != MethodStructure {
+			t.Fatalf("method %s: ok = %v, kind = %q, problems = %+v", id, ok, m.Kind, ps)
+		}
+		if !slices.Contains(BuiltinMethods(), id) {
+			t.Errorf("builtin methods miss %s", id)
+		}
+	}
+	act, _, _ := LoadMethod("three-act")
+	var beatIDs []string
+	for _, b := range act.Beats {
+		beatIDs = append(beatIDs, b.ID)
+	}
+	if !slices.Equal(beatIDs, []string{"setup", "confrontation", "climax", "resolution"}) {
+		t.Errorf("three-act beats = %v", beatIDs)
+	}
+	if s := act.Beats[0].Position; s.Min != 0 || s.Max != 0.3 {
+		t.Errorf("three-act setup position = %+v", s)
+	}
+	if c := act.Beats[2].Position; c.Min != 0.7 || c.Max != 1 {
+		t.Errorf("three-act climax position = %+v", c)
+	}
+	cat, _, _ := LoadMethod("save-the-cat")
+	if len(cat.Beats) != 15 {
+		t.Errorf("save-the-cat beats = %d, want 15", len(cat.Beats))
+	}
+	qi, _, _ := LoadMethod("qichengzhuanhe")
+	if len(qi.Beats) != 4 || qi.Beats[0].ID != "qi" || qi.Beats[3].ID != "he" {
+		t.Errorf("qichengzhuanhe beats = %+v", qi.Beats)
+	}
+	hj, _, _ := LoadMethod("hero-journey")
+	if len(hj.Beats) != 12 || hj.Beats[0].ID != "ordinary-world" || hj.Beats[11].ID != "return-with-elixir" {
+		t.Errorf("hero-journey beats = %+v", hj.Beats)
 	}
 }
 
@@ -233,6 +281,30 @@ func TestPackMethods(t *testing.T) {
 	}
 	if len(p.Methods[0].Parts()) != 2 || p.Methods[1].Parts() != nil {
 		t.Fatalf("parts: %v %v", p.Methods[0].Parts(), p.Methods[1].Parts())
+	}
+}
+
+// 规范包结构类写作法的目标张力（Target Tension）：越界与非整数报告 method.invalid-tension（field 指向 beats[i].tension），省略合法。
+func TestPackMethodTension(t *testing.T) {
+	twelve, minus, half := 12.0, -1.0, 3.5
+	p := &Pack{ID: "house", Origin: OriginWorkspace, Path: ".writing-anything/packs/house.yaml", Methods: []Method{
+		{ID: "m", Kind: MethodStructure, Beats: []MethodPart{
+			{ID: "a", Position: &Position{Min: 0, Max: 1}, Tension: &twelve},
+			{ID: "b", Position: &Position{Min: 0, Max: 1}, Tension: &minus},
+			{ID: "c", Position: &Position{Min: 0, Max: 1}, Tension: &half},
+			{ID: "d", Position: &Position{Min: 0, Max: 1}},
+		}},
+	}}
+	ps := checkPack(p)
+	want := []string{"method.invalid-tension", "method.invalid-tension", "method.invalid-tension"}
+	if !slices.Equal(codes(ps), want) {
+		t.Fatalf("codes = %v, want %v", codes(ps), want)
+	}
+	wantFields := []string{"methods[0].beats[0].tension", "methods[0].beats[1].tension", "methods[0].beats[2].tension"}
+	for i, p := range ps {
+		if p.Field != wantFields[i] {
+			t.Errorf("problem[%d].field = %q, want %q", i, p.Field, wantFields[i])
+		}
 	}
 }
 

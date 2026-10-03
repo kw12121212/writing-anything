@@ -300,12 +300,16 @@ requirements:
         - THEN: 'resolved.driftThreshold 为 {value: 2, source: default}；规范包 mine 声明 1.5 且启用时为 {value: 1.5, source: pack:mine}'
   short-story-genre:
     strength: MUST
-    statement: wa-cli 必须随二进制提供内置的 short-story 文体（短篇小说（Short Story））：单元类型 story（子单元类型 scene，简报必填项为 premise、pov、length 与 key_messages，关键转折复用核心观点条目）与 scene（不声明简报必填项）；阶段依次为 brief（必需产物 brief）、outline（outline）、draft（draft）与 review（review 与 acceptance）；不声明默认写作法，也不声明论断类规则（claims 与 claim-candidates），论断出处检查对虚构内容关闭；规则为 length（length-range，warning，1000 到 20000 字）、fiction-cliches（ai-cliche，warning，terms 为小说 AI 腔词表：眼底闪过一丝、嘴角勾起一抹、不易察觉的笑、空气仿佛凝固、时间仿佛静止、心中五味杂陈、命运的车轮、岁月静好、说不清道不明、仿佛在诉说着什么、内心深处、无声地呐喊）、dialogue（dialogue-punctuation，warning）与 pov（pov-consistency，warning，视角与人称一致，启发式检测，见 lint 主规格的 fiction-rule-types）；评分标准为 conflict（冲突清晰）、pacing（节奏得当）与 motivation（人物动机可信）；上下文预算为 16000。它与其他内置文体一样通过文体的校验。
+    statement: wa-cli 必须随二进制提供内置的 short-story 文体（短篇小说（Short Story））：单元类型 story（子单元类型 scene，简报必填项为 premise、pov、length 与 key_messages，关键转折复用核心观点条目）与 scene（不声明简报必填项）；阶段依次为 brief（必需产物 brief）、outline（outline）、draft（draft）与 review（review 与 acceptance）；默认写作法为 three-act（三幕结构（Three-Act Structure）：setup、confrontation、climax 与 resolution 四个节拍，每个节拍含位置范围与目标张力（Target Tension），作者可通过写作简报的 method 改选其他写作法或用 none 退出）；不声明论断类规则（claims 与 claim-candidates），论断出处检查对虚构内容关闭；规则为 length（length-range，warning，1000 到 20000 字）、fiction-cliches（ai-cliche，warning，terms 为小说 AI 腔词表：眼底闪过一丝、嘴角勾起一抹、不易察觉的笑、空气仿佛凝固、时间仿佛静止、心中五味杂陈、命运的车轮、岁月静好、说不清道不明、仿佛在诉说着什么、内心深处、无声地呐喊）、dialogue（dialogue-punctuation，warning）与 pov（pov-consistency，warning，视角与人称一致，启发式检测，见 lint 主规格的 fiction-rule-types）；评分标准为 conflict（冲突清晰）、pacing（节奏得当）与 motivation（人物动机可信）；上下文预算为 16000。它与其他内置文体一样通过文体的校验。
     scenarios:
       new-short-story:
         - GIVEN: 刚用 wa-cli init --genre short-story --dir D 初始化的工作区
         - WHEN: 运行 wa-cli new short-story my-story --dir D --json，再运行 wa-cli config resolved --dir D --json
         - THEN: work.yaml 的 genre 为 short-story、type 为 story、stage 为 brief；resolved.rules 含 length、fiction-cliches、dialogue 与 pov 且不含 claims 与 claim-candidates，fiction-cliches 的 terms 含「眼底闪过一丝」，三条新规则的 severity 均为 warning，resolved.rubric 含 conflict、pacing 与 motivation，unitTypes 中 story 的 briefRequired 为 [premise, pov, length, key_messages]、scene 的为空数组；退出码都为 0
+      default-structure-method:
+        - GIVEN: short-story 作品 my-story 的写作简报满足校验且没有 method，根单元 outline.yaml 有一节但没有 role
+        - WHEN: 运行 wa-cli outline show my-story --dir D --json，再运行 wa-cli brief set my-story --method none --dir D --json 与 wa-cli outline show my-story --dir D --json
+        - THEN: 第一次 gaps 含四项 code 为 outline.missing-method-part 的缺口（setup、confrontation、climax 与 resolution，即默认写作法 three-act 的节拍）；brief set --method none 后同样的大纲没有写作法缺口；退出码都为 0
       fiction-claims-off:
         - GIVEN: short-story 作品 my-story 的 draft.md 含亲历式叙述，作品没有关联素材的论断
         - WHEN: 运行 wa-cli lint my-story --dir D --json
@@ -316,5 +320,5 @@ requirements:
         - THEN: findings 含一项 rule 为 fiction-cliches、severity 为 warning、source 为 genre:short-story 的发现项，退出码为 0
       short-story-e2e:
         - GIVEN: 用 wa-cli init --genre short-story --dir D 初始化的工作区，以及含违例文本与合规文本的测试夹具
-        - WHEN: 只用 wa-cli 命令完成：new、source add（作者的前提笔记）、brief set（premise 关联素材、pov、length 与作为关键转折的 key_messages，转折关联素材）、advance、根单元按情节节拍 outline set（节 covers 关键转折）、advance、canon add 出场人物（人物卡，带 name）、unit add 两个场景、场景 outline set（characters、beats 与 reveal）、场景一 draft write（合规文本，lint 无 error 级与论断类发现项；以违例文本夹具断言 dialogue、pov 与 fiction-cliches 的发现项）、advance、review record、accept（给出作者确认）、advance、summary set 场景一摘要、场景二 draft write 前运行 context（断言 characters、priorScenes 与 reveal）、完成场景二生命周期、最后 export --format text 与 export
-        - THEN: 两个场景 stage 为 done，纯文本导出文件只含已验收场景的正文且不含 Markdown 标记（未验收的根单元以 warning 跳过），validate 通过；前提或关键转折没有关联作者素材或确认记录时 advance 被拒绝
+        - WHEN: 只用 wa-cli 命令完成：new、source add（作者的前提笔记）、brief set（premise 关联素材、pov、length 与作为关键转折的 key_messages，转折关联素材）、advance、根单元按情节节拍 outline set（每节同时以 --role 承担默认写作法 three-act 的 setup、confrontation、climax 或 resolution 节拍）、advance、canon add 出场人物（人物卡，带 name）、unit add 两个场景、场景 outline set（characters、beats 与 reveal）、场景一 draft write（合规文本，lint 无 error 级与论断类发现项；以违例文本夹具断言 dialogue、pov 与 fiction-cliches 的发现项）、advance、review record、accept（给出作者确认）、advance、summary set 场景一摘要、场景二 draft write 前运行 context（断言 characters、priorScenes 与 reveal）、完成场景二生命周期、最后 export --format text 与 export
+        - THEN: 两个场景 stage 为 done，纯文本导出文件只含已验收场景的正文且不含 Markdown 标记（未验收的根单元以 warning 跳过），validate 通过；前提或关键转折没有关联作者素材或确认记录时 advance 被拒绝；根单元大纲缺少默认写作法要求的节拍时 advance 同样被拒绝

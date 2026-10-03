@@ -1,0 +1,59 @@
+schema: strict-spec-driven/question-list/v1
+schema_version: 1
+artifact_type: question_list
+schema_file: templates/strict-spec-driven/schemas/question-list.yaml
+change: story-structure-templates
+open: []
+resolved:
+  - id: requirement-problem
+    question: What is concretely going wrong today, and for whom?
+    context: 'Why this is asked: the change is planned against a need, and the need lives only with the requester. A "problem" here means what someone does or suffers today — not a feature that is missing. If the answer names a button, a field, a page, or an endpoint, it is a solution, and the underlying problem is still unstated. What a sufficient answer contains: who is affected, what they do today instead, and how often. Worked example: "every Monday one person spends forty minutes copying order rows into a spreadsheet to send the weekly report". What it changes: this becomes the proposal''s why, and it decides whether the change is worth making.'
+    answer: Agent 协助写 short-story 短篇小说时没有任何结构类写作法可用：9 个内置写作法全部是文章类，short-story 文体未声明默认写作法（genre 文件注释明确留待结构类写作法变更），作者与 Agent 安排故事结构只能凭感觉、无节拍与位置可依；被阻塞的情绪曲线（Emotion Curve）与张力曲线（Tension Curve）变更需要结构模板的节拍目标张力作为默认目标走势。受影响的是以场景为单元写短篇的作者与协助写作的 Agent。（证据：roadmap/planned-changes/short-story-story-structure-templates.yaml 的 summary 与 details，milestone short-story 的 goal 与 scope.in、details，short-story-emotion-pacing-curve 的 depends_on）
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-outcome
+    question: What observable difference proves the problem is solved?
+    context: 'Why this is asked: without a success condition, nobody can tell afterwards whether the change worked. Observable means someone outside the system can check it without reading the code. This becomes the delta spec''s scenarios and the acceptance evidence at review time. 初次以路线图证据作答时默认写作法候选尚未定稿，现按作者的最终确认更新。'
+    answer: wa-cli method list/show 列出 three-act、save-the-cat、seven-point、qichengzhuanhe 与 hero-journey 五个结构类写作法，节拍含位置范围（position 0 到 1）与目标张力（Target Tension，0 到 10 整数）；short-story 作品不选写作法时默认套用 three-act（作者确认）：根单元大纲缺节拍时 wa-cli validate 报 outline.missing-method-part 且退出码为 1，子单元不继承默认写作法，写作简报 method 为 none 时无写作法缺口；规范包模板 tension 越界或非整数报 method.invalid-tension。这些即 delta 规格 scenarios 与验收证据（证据：planned change details 的『大纲缺少模板要求的节拍时 validate 失败；成稿后节拍位置超出范围只提示、不阻塞』、milestone done_criteria，作者对 default-method 与 default-method-scope 的确认）
+    status: resolved
+    answered_by: roadmap
+  - id: requirement-trigger
+    question: Why now — what forced this?
+    context: 'Why this is asked: work that nothing forced is the work most often thrown away later. This question catches a request that sounds reasonable but has no real driver behind it. What a sufficient answer contains: the concrete event, deadline, incident, or cost that made this surface now, or an honest statement that nothing did. Worked example: "the report was missed last month and it was raised with the team". What it changes: a change with no trigger is a candidate for deferral, and the answer is weighed at review before archive.'
+    answer: short-story 里程碑（order 500）的既定排期推进到本变更：roadmap-recommend 显示它是当前仅有的两个合格规划变更之一，且 emotion-pacing-curve 等 8 个规划变更因 dependency-incomplete 被阻塞、其中 1 个直接依赖本变更；milestone details 指出本里程碑要验证结构类写作法模板作为节奏目标的来源。（证据：roadmap-recommend --create 输出的 candidateSummary 与 blockers，milestone short-story 的 planned_changes 顺序）
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-non-goals
+    question: What must explicitly not change?
+    context: 'Why this is asked: the requester knows which nearby behavior other people depend on, and the agent does not. A "non-goal" is something the change must leave alone even though it sits close to the work. What a sufficient answer contains: the behavior, setting, or output that must survive untouched, and who relies on it. Worked example: "do not change the saved filters — several people rely on their own". What it changes: these become the proposal''s unchanged_behavior items, which review checks the finished result against.'
+    answer: 不变：大纲缺少所选写作法节拍时 validate 失败、成稿后节拍位置超出 position 范围只提示不阻塞的既有语义（methods 主规格 method-outline-check 与 beat-positions）；写作简报 method 选用、改选与 none 退出的机制；规范包定义文章类与规划类写作法的校验；既有 9 个内置写作法；情绪曲线与张力曲线命令及偏离发现项（属 emotion-pacing-curve 变更，本变更只提供节拍目标张力数据）；场景契约的目标情绪与目标张力声明。（证据：planned change details 的边界表述、depends_on，milestone scope.out 对 novel 各项的排除）
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-interpretation
+    question: Which reading of the request is intended, where more than one is possible?
+    context: 'Why this is asked: a short request usually admits several readings, and building the wrong one is indistinguishable from building nothing. What a sufficient answer contains: the reading that is meant, stated plainly enough to rule the others out — or a statement that only one reading exists and what it is. Worked example: "export means the version sent to the manager, not the one I read myself". What it changes: this fixes the scope boundary before any code is written, and settles disputes about what was asked for.'
+    answer: 『短篇默认使用起承转合或三幕结构』读作：short-story 的 default_method 取两者之一（推荐 qichengzhuanhe，最终以开放问题 default-method 的作者答案为准），不是同时声明两个默认或按作品自动切换；『目标张力』读作随结构类节拍声明的静态数据字段（0 到 10 整数，本变更只随模板提供并在 method list/show 输出，与曲线的对比属 emotion-pacing-curve 变更）；『救猫咪节拍表』指标准 15 节拍版本。（证据：planned change details 与 emotion-pacing-curve 的 details 对目标走势的引用）
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: default-method
+    question: short-story 文体的默认写作法应选起承转合（qichengzhuanhe）还是三幕结构（three-act）？
+    context: 路线图原文『短篇默认使用起承转合或三幕结构，作者可以改选或不用』给出两个候选而未定，这是需要作者拍板的产品决策。影响范围：proposal 范围与 genres-and-packs 主规格 short-story-genre 的 delta（默认写作法的声明与 new-short-story 场景断言）、实现文件 internal/catalog/builtin/genres/short-story.yaml 的 default_method 一处数据、以及测试（genre-e2e-test 断言默认选用的节拍集合）；不影响 methods 主规格其余内容、Schema 与其余实现文件。推荐：qichengzhuanhe——起承转合是术语表既有条目、中文叙事传统的四段式，节拍最少（4 拍），最贴合短篇体量与产品中文定位；three-act 为备选（西方默认，已在 beat-positions 场景出现）。若作者选 three-act，仅需改 short-story.yaml 一处数据、对应 delta 场景与 e2e 断言。
+    answer: 三幕结构 three-act：short-story 文体的 default_method 设为 three-act（setup、confrontation、climax、resolution 四个节拍）；作者仍可通过写作简报 method 改选其他写作法或用 none 退出
+    status: resolved
+    answered_by: human
+  - id: tension-scale
+    question: 结构类节拍的目标张力（Target Tension）采用 0 到 10 整数刻度是否可行？
+    context: 路线图只说『每个模板声明节拍名称、在全文中的位置范围和目标张力』，未定刻度。影响范围：规格 delta（methods 主规格 method-data 中 tension 字段与 method.invalid-tension 诊断）、实现文件 internal/schema/schemas/common.schema.json 与 internal/catalog/method.go、五个内置模板的数据取值、测试断言；同时约束后续 emotion-pacing-curve 变更中张力曲线的默认目标走势与 AI 评分指标刻度的兼容性（依赖关系，不是本变更的实现范围）。推荐：0 到 10 整数——与 AI 评分指标的整数锚定分值直接可比，粒度足够画出走势，且在决策队列 26 个选项上限内；备选 0 到 1 浮点（与 position 同域，但与整数打分对比需要换算，且易与位置语义混淆）。tension 设为可选字段（规范包模板可省略）以随推荐一并确认。
+    answer: 0 到 10 整数：tension 为结构类节拍的可选字段，给出时必须是 0 到 10 的整数（0 最平静、10 最高张力），否则报告 method.invalid-tension；规范包模板可省略 tension，省略表示不给出目标走势
+    status: resolved
+    answered_by: human
+  - id: default-method-scope
+    question: short-story 场景（子单元）继承了文体默认写作法 three-act，导致每个场景大纲都被要求承担全部四个节拍而无法推进，如何处理？
+    context: 影响范围：methods 主规格 method-selection 的语义（单元选用写作法的规则）、实现文件 internal/work/work.go 与 internal/cli/{method,lint,outline,workspace}.go 的默认写作法应用点、以及所有带 default_method 的文体（tech-blog、wechat-marketing 的子单元同样不再继承）。选项：默认法只作用根单元（推荐）；文体按单元类型声明默认写作法（short-story 的 scene 为 none）；不改语义、每个场景简报显式 method none。
+    answer: 默认法只作用根单元（作者确认）：文体的 default_method 只作用于作品的根单元，子单元未选用写作法时不用写作法；子单元仍可在自己的写作简报中选用任意写作法
+    status: resolved
+    answered_by: human

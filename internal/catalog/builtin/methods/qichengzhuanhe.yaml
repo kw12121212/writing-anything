@@ -1,0 +1,27 @@
+# 起承转合（Introduction–Development–Turn–Conclusion）：中文叙事传统的四段式结构。
+schema_version: 1
+id: qichengzhuanhe
+title: 起承转合
+description: 传统的四段式结构：起开篇立境、承顺势铺陈、转突变逆转、合收束归宿，转折即张力顶点。
+kind: structure
+beats:
+  - id: qi
+    title: 起
+    description: 开端：交代人物、处境与即将失衡的世界。
+    position: {min: 0, max: 0.25}
+    tension: 2
+  - id: cheng
+    title: 承
+    description: 发展：顺着开端铺陈、累积与加深。
+    position: {min: 0.2, max: 0.5}
+    tension: 4
+  - id: zhuan
+    title: 转
+    description: 转折：突变与逆转，全篇张力顶点。
+    position: {min: 0.5, max: 0.8}
+    tension: 8
+  - id: he
+    title: 合
+    description: 收束：转折之后的归宿与余韵。
+    position: {min: 0.75, max: 1}
+    tension: 3

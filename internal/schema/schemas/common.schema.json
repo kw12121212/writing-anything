@@ -144,6 +144,10 @@
                 "required": ["min", "max"],
                 "description": "节拍在全文中的位置范围：按字数比例，0 为开头，1 为结尾",
                 "properties": {"min": {"type": "number", "minimum": 0, "maximum": 1}, "max": {"type": "number", "minimum": 0, "maximum": 1}}
+              },
+              "tension": {
+                "type": "number",
+                "description": "目标张力（Target Tension）：0 到 10 的整数，0 最平静，10 最高张力；作为情绪曲线与张力曲线的目标走势。整数与范围由校验报告 method.invalid-tension"
               }
             }
           }

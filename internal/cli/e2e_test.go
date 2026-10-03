@@ -173,9 +173,37 @@ func TestShortStoryEndToEnd(t *testing.T) {
 	if res := step("", "advance", "lamp"); !strings.Contains(res.stdout, `"stage":"outline"`) {
 		t.Fatalf("advance to outline: %s", res.stdout)
 	}
-	// 故事大纲：节即情节节拍（Story Beat），节拍覆盖关键转折。
-	step("", "outline", "set", "lamp", "dim", "--title", "灯变暗", "--reason", "建立日常与异常")
-	step("", "outline", "set", "lamp", "clash", "--title", "灯下对峙", "--covers", "turn-1")
+	// 故事大纲：节即情节节拍（Story Beat），节拍覆盖关键转折；每节另以 --role 承担默认写作法 three-act 的节拍。
+	step("", "outline", "set", "lamp", "dim", "--title", "灯变暗", "--reason", "建立日常与异常", "--role", "setup")
+	// default-structure-method：默认写作法要求的节拍缺失时 validate 失败（confrontation、climax 与 resolution 三项）。
+	_, vres := runWS(t, dir, "validate")
+	var parts int
+	var first string
+	for _, d := range vres.Diagnostics {
+		if d.Code == "outline.missing-method-part" {
+			parts++
+			if first == "" {
+				first = d.Message
+			}
+		}
+	}
+	if vres.Valid || parts != 3 || !strings.Contains(first, "confrontation") {
+		t.Fatalf("missing beats: valid = %v, parts = %d, %+v", vres.Valid, parts, vres.Diagnostics)
+	}
+	// 作者可以改选其他结构类写作法，或用 none 退出；none 时同样的大纲没有写作法缺口。
+	step("", "brief", "set", "lamp", "--method", "qichengzhuanhe")
+	step("", "brief", "set", "lamp", "--method", "none")
+	if code, res := runWS(t, dir, "outline", "show", "lamp"); code != 0 || strings.Contains(res.stdout, "missing-method-part") {
+		t.Fatalf("method none gaps: exit code = %d, %s", code, res.stdout)
+	}
+	step("", "brief", "set", "lamp", "--method", "")
+	step("", "outline", "set", "lamp", "confront", "--title", "精灵再撒谎", "--reason", "对抗升级", "--role", "confrontation", "--after", "dim")
+	step("", "outline", "set", "lamp", "clash", "--title", "灯下对峙", "--covers", "turn-1", "--role", "climax")
+	// 还缺 resolution：大纲关卡阻塞推进，补齐后通过（short-story-e2e）。
+	if d := fail("outline.missing-method-part", "advance", "lamp"); !strings.Contains(d.Message, "resolution") {
+		t.Fatalf("missing resolution: %+v", d)
+	}
+	step("", "outline", "set", "lamp", "resolve", "--title", "灯焰复明", "--reason", "对峙之后的收束", "--role", "resolution")
 	step("", "advance", "lamp")
 	// 场景：自己的大纲声明场景契约（出场人物、承担的节拍、揭示边界）。
 	step("", "unit", "add", "lamp", "scene", "scene-1")

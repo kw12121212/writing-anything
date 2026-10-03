@@ -1,0 +1,73 @@
+schema: strict-spec-driven/delta-spec/v1
+schema_version: 1
+artifact_type: delta_spec
+schema_file: templates/strict-spec-driven/schemas/delta-spec.yaml
+target_spec: methods
+operations:
+  ADDED: {}
+  MODIFIED:
+    method-data:
+      strength: MUST
+      statement: 写作法模板（Method Template）必须是纯数据，含 id、title、可选的 description、kind 与可选的 rubric（评分标准（Rubric）条目，字段同文体的 rubric）：kind 为 article（文章类，必须有 sections：按顺序排列的必需章节，每项含 id、title 与可选的 description）、structure（结构类，必须有 beats：节拍，每项另含 position.min 与 position.max，取值 0 到 1，表示按字数比例在全文中的位置范围，以及可选的 tension：目标张力（Target Tension），0 到 10 的整数，作为情绪曲线（Emotion Curve）与张力曲线（Tension Curve）的目标走势）或 planning（规划类，必须有 steps：规划步骤）；三种列表只能出现与 kind 对应的一种，不得有其他字段。wa-cli 必须随二进制提供内置文章类写作法：pyramid-scqa（金字塔原理与 SCQA）、general-specific-general（总分总）、inverted-pyramid（倒金字塔）、diataxis-tutorial、diataxis-how-to、diataxis-reference 与 diataxis-explanation（Diátaxis 的教程、操作指南、参考与解释），营销写作法 aida（AIDA：注意、兴趣、欲望、行动）与 pas（PAS：问题、放大、解决），以及内置结构类写作法：three-act（三幕结构（Three-Act Structure）：setup、confrontation、climax 与 resolution 四个节拍）、save-the-cat（救猫咪节拍表（Save the Cat! Beat Sheet），15 个节拍）、seven-point（七点结构（Seven-Point Story Structure）：hook、plot-turn-1、pinch-1、midpoint、pinch-2、plot-turn-2 与 resolution 七个节拍）、qichengzhuanhe（起承转合：qi、cheng、zhuan 与 he 四个节拍）与 hero-journey（英雄之旅（Hero's Journey），12 个阶段）；内置结构类的每个节拍都声明 position 与 tension。规范包（Pack）可以在 methods 中定义写作法；文体（Genre）可以在 default_method 中声明默认写作法，取值必须是内置写作法（否则报告 genre.unknown-method）。同一个规范包中写作法 id 重复，或同一个写作法中章节、节拍、步骤或评分项的 id 重复时报告 artifact.duplicate-id；节拍的 position.min 大于 max 时报告 method.invalid-position；节拍的 tension 不是 0 到 10 的整数时报告 method.invalid-tension；写作法 id 为 none（写作简报中表示不用写作法）时报告 method.reserved-id；这些问题由 wa-cli validate 报告，field 指向出错的位置（如 methods[0].beats[1].position 或 methods[0].beats[0].tension）。
+      scenarios:
+        pack-method-problem:
+          - GIVEN: '工作区规范包 house 的 methods[0] 是结构类写作法，第二个节拍的 position 为 {min: 0.9, max: 0.1}，config.yaml 的 packs 为 [house]'
+          - WHEN: 运行 wa-cli validate --dir D --json
+          - THEN: diagnostics 中有一条错误码为 method.invalid-position、field 为 methods[0].beats[1].position 的诊断，退出码为 1
+        builtin-marketing-methods:
+          - GIVEN: 已初始化的工作区
+          - WHEN: 运行 wa-cli method show aida --dir D --json 与 wa-cli method show pas --dir D --json
+          - THEN: aida 为文章类，sections 依次为 attention、interest、desire、action；pas 为文章类，sections 依次为 problem、agitate、solution；source 都为 builtin，退出码为 0
+        structure-builtin-methods:
+          - GIVEN: 已初始化的工作区
+          - WHEN: 运行 wa-cli method show three-act --dir D --json 与 wa-cli method show save-the-cat --dir D --json
+          - THEN: three-act 为结构类，beats 依次为 setup（position 为 0 到 0.3）、confrontation、climax（position 为 0.7 到 1）与 resolution，每个节拍含 0 到 10 整数的 tension；save-the-cat 为结构类，beats 恰好 15 项；source 都为 builtin，退出码为 0
+        pack-tension-out-of-range:
+          - GIVEN: 工作区规范包 house 的 methods[0] 是结构类写作法，第一个节拍的 tension 为 12，config.yaml 的 packs 为 [house]
+          - WHEN: 运行 wa-cli validate --dir D --json
+          - THEN: diagnostics 中有一条错误码为 method.invalid-tension、field 为 methods[0].beats[0].tension 的诊断，退出码为 1
+    method-list-show:
+      strength: MUST
+      statement: wa-cli method list 必须只读地列出工作区可用的写作法：内置写作法，以及 config.yaml 的 packs（为空时为内置 default 规范包）按顺序定义的写作法，同一 id 由后出现的来源覆盖；--json 输出的 methods 按 id 排序，每项含 id、title、description（没有时为空字符串）、kind、source（builtin 或 pack:<id>）、sections、beats、steps 与 rubric（没有时为空数组），beats 每项另含 position 的 min 与 max，以及节拍声明了目标张力（Target Tension）时的 tension。wa-cli method show <method> 必须只读地输出该写作法（字段同 method list 的每项）；不存在时报告 method.not-found（next 包含 wa-cli method list --dir <dir> --json），method 为 null，退出码为 1。
+      scenarios:
+        list-builtin:
+          - GIVEN: 刚初始化的工作区 D
+          - WHEN: 运行 wa-cli method list --dir D --json
+          - THEN: methods 依次为 aida、diataxis-explanation、diataxis-how-to、diataxis-reference、diataxis-tutorial、general-specific-general、hero-journey、inverted-pyramid、pas、pyramid-scqa、qichengzhuanhe、save-the-cat、seven-point 与 three-act，其中 hero-journey、qichengzhuanhe、save-the-cat、seven-point 与 three-act 为结构类且 beats 每项含 tension，其余为文章类，source 都为 builtin，退出码为 0
+        pack-overrides:
+          - GIVEN: 工作区规范包 house 定义了 id 为 general-specific-general 的写作法，config.yaml 的 packs 为 [house]
+          - WHEN: 运行 wa-cli method list --dir D --json
+          - THEN: general-specific-general 的 source 为 pack:house，退出码为 0
+        show-unknown:
+          - GIVEN: 刚初始化的工作区 D
+          - WHEN: 运行 wa-cli method show nope --dir D --json
+          - THEN: diagnostics 中有一条错误码为 method.not-found 的诊断，其 next 包含 wa-cli method list 命令；method 为 null，退出码为 1
+    method-selection:
+      strength: MUST
+      statement: 写作简报（Brief）可以含 method：写作法 id 或 none；wa-cli brief set <unit> --method <id> 设置它（none 表示不用写作法，空字符串时删除），wa-cli brief show 的 brief 含 method（未设置时为 null）。单元选用的写作法为写作简报的 method；未设置（或没有写作简报）时，只有作品的根单元选用文体的 default_method，子单元不用写作法；为 none 时不用写作法（根单元的写作简报与文体 default_method 都没有取值时也不用）。method 不是可用的写作法时，wa-cli validate 报告 brief.unknown-method（path 为 brief.yaml，field 为 method，message 列出可用的写作法，next 包含 wa-cli method list --dir <dir> --json），大纲关卡把它作为 outline.invalid 阻塞项；brief set --method 给出不可用的写作法时报告 brief.unknown-method（field 为 method、path 为空）且不修改文件。method 是对写作法的引用：brief show、brief set、outline show、outline set、review show 与 accept 不因它不可用而拒绝执行，并以 warning 报告 brief.unknown-method（outline 命令不检查写作法缺口，审稿的评分标准不包含写作法的评分项），context 不报告它（workspace-artifacts/cross-artifact-references）。审稿与大纲关卡按 brief.yaml 中 method 字段的原始取值选出同一个写作法，写作简报的其他问题不影响选择。
+      scenarios:
+        select-method:
+          - GIVEN: 作品 my-post 的写作简报含 audience 与 purpose
+          - WHEN: 运行 wa-cli brief set my-post --method general-specific-general --dir D --json
+          - THEN: brief.yaml 的 method 为 general-specific-general，brief.method 为 general-specific-general，退出码为 0
+        unknown-method-param:
+          - GIVEN: 同上
+          - WHEN: 运行 wa-cli brief set my-post --method nope --dir D --json
+          - THEN: diagnostics 中有一条错误码为 brief.unknown-method、field 为 method 的诊断，brief.yaml 不变，退出码为 1
+        reserved-none:
+          - GIVEN: 工作区规范包 house 定义了 id 为 none 的写作法，config.yaml 的 packs 为 [house]
+          - WHEN: 运行 wa-cli validate --dir D --json
+          - THEN: diagnostics 中有一条错误码为 method.reserved-id、field 为 methods[0].id 的诊断，退出码为 1
+        dangling-method:
+          - GIVEN: 作品 my-post 的 brief.yaml 的 method 为不存在的 gone
+          - WHEN: 运行 wa-cli validate --dir D --json，再运行 wa-cli brief set my-post --method "" --dir D --json
+          - THEN: validate 报告一条错误码为 brief.unknown-method、path 为 .writing-anything/works/my-post/brief.yaml 的诊断，退出码为 1；brief set 成功删除 method，退出码为 0
+        dangling-commands:
+          - GIVEN: 作品 my-post 选用规范包 house 定义的写作法，之后 config.yaml 的 packs 改为 [default]
+          - WHEN: 运行 wa-cli brief show my-post、wa-cli brief set my-post --audience 运维、wa-cli context my-post 与 wa-cli outline show my-post
+          - THEN: 四个命令的退出码都为 0；brief show、brief set 与 outline show 的 diagnostics 中各有一条 severity 为 warning、错误码为 brief.unknown-method 的诊断
+        child-unit-no-method:
+          - GIVEN: short-story 作品 my-story 的场景 s1 已登记，有自己的 outline.yaml（一节，无 role），场景的写作简报没有 method
+          - WHEN: 运行 wa-cli outline show my-story/s1 --dir D --json，再运行 wa-cli brief set my-story/s1 --method three-act --dir D --json 与 wa-cli outline show my-story/s1 --dir D --json
+          - THEN: 第一次 gaps 不含 outline.missing-method-part（子单元不继承文体的 default_method）；第二次含四项 outline.missing-method-part（setup、confrontation、climax 与 resolution）；退出码都为 0
+  REMOVED: {}

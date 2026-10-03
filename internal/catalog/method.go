@@ -2,6 +2,7 @@ package catalog
 
 import (
 	"fmt"
+	"math"
 	"slices"
 	"strings"
 	"sync"
@@ -13,6 +14,7 @@ import (
 // 写作法模板的错误码。已发布的错误码不得改名或复用。
 const (
 	CodeInvalidPosition = "method.invalid-position"
+	CodeInvalidTension  = "method.invalid-tension"
 	CodeUnknownMethod   = "genre.unknown-method"
 	CodeReservedMethod  = "method.reserved-id"
 )
@@ -28,11 +30,13 @@ const (
 const MethodNone = "none"
 
 // MethodPart 是写作法的一个章节、节拍或规划步骤。Position 只用于节拍：按字数比例的位置范围，0 为开头，1 为结尾。
+// Tension 只用于节拍：目标张力（Target Tension），0 到 10 的整数，作为情绪曲线与张力曲线的目标走势；未声明为 nil。
 type MethodPart struct {
 	ID          string    `json:"id"`
 	Title       string    `json:"title"`
 	Description string    `json:"description,omitempty"`
 	Position    *Position `json:"position,omitempty"`
+	Tension     *float64  `json:"tension,omitempty"`
 }
 
 // Position 是节拍在全文中的位置范围。
@@ -82,6 +86,10 @@ func checkMethod(m Method, prefix string, problem func(code, field, msg string))
 		if b.Position != nil && b.Position.Min > b.Position.Max {
 			problem(CodeInvalidPosition, fmt.Sprintf("%sbeats[%d].position", prefix, i),
 				fmt.Sprintf("节拍 %s 的位置范围 min %g 大于 max %g", b.ID, b.Position.Min, b.Position.Max))
+		}
+		if b.Tension != nil && (*b.Tension != math.Trunc(*b.Tension) || *b.Tension < 0 || *b.Tension > 10) {
+			problem(CodeInvalidTension, fmt.Sprintf("%sbeats[%d].tension", prefix, i),
+				fmt.Sprintf("节拍 %s 的目标张力 %g 必须是 0 到 10 的整数", b.ID, *b.Tension))
 		}
 	}
 	for _, d := range duplicates(len(m.Rubric), func(i int) string { return m.Rubric[i].ID }) {

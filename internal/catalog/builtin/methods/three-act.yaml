@@ -1,0 +1,27 @@
+# 三幕结构（Three-Act Structure）：建置、对抗、高潮与解决。short-story 文体的默认写作法。
+schema_version: 1
+id: three-act
+title: 三幕结构
+description: 建置、对抗、高潮与解决的三幕式结构：前 30% 建置人物与世界，中段冲突对抗升级，70% 之后进入高潮与解决。
+kind: structure
+beats:
+  - id: setup
+    title: 建置
+    description: 介绍主角、世界与即将到来的问题，埋下转变的种子。
+    position: {min: 0, max: 0.3}
+    tension: 3
+  - id: confrontation
+    title: 对抗
+    description: 主角迎接挑战，冲突与阻力逐波升级。
+    position: {min: 0.2, max: 0.6}
+    tension: 6
+  - id: climax
+    title: 高潮
+    description: 冲突全面爆发的最高张力点，主角做出关键选择。
+    position: {min: 0.7, max: 1}
+    tension: 10
+  - id: resolution
+    title: 解决
+    description: 高潮之后的收束：代价、新均衡与余韵。
+    position: {min: 0.85, max: 1}
+    tension: 2

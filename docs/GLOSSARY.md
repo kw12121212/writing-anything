@@ -301,6 +301,7 @@
 | 写作法模板 | Method Template | 写作法模板 | 以纯数据描述的写作方法：规划步骤、结构节拍或章节模板 |
 | 规划类写作法 | Planning Method | 规划类写作法 | 分步产出规划产物，每步经作者确认后进入下一步，如雪花写作法 |
 | 结构类写作法 | Structure Method | 结构类写作法 | 规定节拍及其在全文中的位置范围，如三幕结构 |
+| 目标张力 | Target Tension | 目标张力 | 结构类写作法节拍声明的 0 到 10 整数目标紧张度，作为情绪曲线与张力曲线的目标走势 |
 | 文章类写作法 | Article Method | 文章类写作法 | 规定必需章节及其顺序，如金字塔原理 |
 | SCQA | Situation–Complication–Question–Answer | SCQA | 情境 → 冲突 → 问题 → 答案的开篇结构，常与金字塔原理配合 |
 | 倒金字塔 | Inverted Pyramid | 倒金字塔 | 最重要的信息放在最前面，常用于新闻与资讯 |

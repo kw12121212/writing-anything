@@ -441,10 +441,12 @@ func checkWorkspace(dir string) (checked []string, works []*work.Work, problems 
 	}
 	q := brief.LoadQueue(dir) // 写作简报与大纲共用一次加载的决策队列
 	bchecked, bps := brief.CheckUnitArtifacts(dir, dirs, q)
-	defaults := map[string]string{} // 单元目录 → 所在作品的文体的默认写作法
+	defaults := map[string]string{} // 单元目录 → 所在作品的文体的默认写作法；只有根单元适用（method-selection）
 	for _, w := range works {
 		for _, u := range w.Units() {
-			defaults[w.UnitDir(u)] = w.Genre.DefaultMethod
+			if u.Parent == nil {
+				defaults[w.UnitDir(u)] = w.Genre.DefaultMethod
+			}
 		}
 	}
 	ochecked, ops := outline.CheckUnitArtifacts(dir, dirs, q, func(d string) string { return defaults[d] })
@@ -464,9 +466,10 @@ func checkWorkspace(dir string) (checked []string, works []*work.Work, problems 
 	return checked, works, slices.Concat(problems, ps, wps, sps, ups, bps, ops, fps, rps, mps, dps, lps, xps, cps, pps, eps, tps, yps, kps)
 }
 
-// defaultMethodOf 返回单元产物 rel 所在作品的文体的默认写作法；作品无法加载时为空（其问题由作品校验报告）。
+// defaultMethodOf 返回单元产物 rel 适用的文体默认写作法：只有作品的根单元适用，子单元不继承；
+// 作品无法加载时为空（其问题由作品校验报告）。
 func defaultMethodOf(dir, rel string) string {
-	if w, _, _ := work.Resolve(dir, work.RefOf(rel[:strings.LastIndex(rel, "/")])); w != nil {
+	if w, u, _ := work.Resolve(dir, work.RefOf(rel[:strings.LastIndex(rel, "/")])); w != nil && u != nil && u.Parent == nil {
 		return w.Genre.DefaultMethod
 	}
 	return ""

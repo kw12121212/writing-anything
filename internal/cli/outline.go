@@ -272,7 +272,7 @@ func runOutlineSet(inv *invocation) int {
 		var u *work.Unit
 		if w, u, problems = work.Resolve(dir, inv.args[0]); u != nil {
 			unitDir := w.UnitDir(u)
-			ms := outline.LoadMessages(dir, unitDir, brief.LoadQueue(dir), outline.Picker{Methods: catalog.LoadMethods(dir), Default: w.Genre.DefaultMethod})
+			ms := outline.LoadMessages(dir, unitDir, brief.LoadQueue(dir), outline.Picker{Methods: catalog.LoadMethods(dir), Default: unitDefaultMethod(w, u)})
 			var existing *outline.Outline
 			// 已有大纲中的引用问题不妨碍修改：写作简报删除核心观点后，要能用 outline set 修复大纲。
 			if existing, problems, _ = outline.LoadLenient(dir, unitDir, ms); problems == nil {
@@ -322,7 +322,7 @@ func runOutlineRemove(inv *invocation) int {
 		var u *work.Unit
 		if w, u, problems = work.Resolve(dir, inv.args[0]); u != nil {
 			unitDir := w.UnitDir(u)
-			ms := outline.LoadMessages(dir, unitDir, brief.LoadQueue(dir), outline.Picker{Methods: catalog.LoadMethods(dir), Default: w.Genre.DefaultMethod})
+			ms := outline.LoadMessages(dir, unitDir, brief.LoadQueue(dir), outline.Picker{Methods: catalog.LoadMethods(dir), Default: unitDefaultMethod(w, u)})
 			var o *outline.Outline
 			var changed []string
 			if o, changed, problems = outline.Remove(dir, unitDir, inv.args[1], ms); o != nil {
@@ -359,7 +359,7 @@ func runOutlineShow(inv *invocation) int {
 		var u *work.Unit
 		if w, u, problems = work.Resolve(dir, inv.args[0]); u != nil {
 			unitDir := w.UnitDir(u)
-			ms := outline.LoadMessages(dir, unitDir, brief.LoadQueue(dir), outline.Picker{Methods: catalog.LoadMethods(dir), Default: w.Genre.DefaultMethod})
+			ms := outline.LoadMessages(dir, unitDir, brief.LoadQueue(dir), outline.Picker{Methods: catalog.LoadMethods(dir), Default: unitDefaultMethod(w, u)})
 			if problems = ms.Problems; problems == nil {
 				// 引用问题照常报告，但仍输出大纲与覆盖情况，便于据此修复。
 				o, fatal, refs := outline.LoadLenient(dir, unitDir, ms)

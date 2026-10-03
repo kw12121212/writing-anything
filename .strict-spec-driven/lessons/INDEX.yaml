@@ -3,6 +3,12 @@ schema_version: 2
 artifact_type: lessons_index
 schema_file: templates/strict-spec-driven/schemas/lessons-index.yaml
 categories:
+  architecture:
+    lesson-8f8885:
+      title: 为文体补默认配置时，默认值会沿每个单元级应用点生效，子单元会被父级规则卡死
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/architecture/lesson-8f8885.yaml
   coding:
     go-flag-bd930f:
       title: Go flag 包的默认报错不符合中文术语约定

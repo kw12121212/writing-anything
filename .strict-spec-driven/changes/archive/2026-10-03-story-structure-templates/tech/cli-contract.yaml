@@ -1,0 +1,21 @@
+schema: strict-spec-driven/delta-tech/v1
+schema_version: 1
+artifact_type: delta_tech
+schema_file: templates/strict-spec-driven/schemas/delta-tech.yaml
+target_standard: cli-contract
+operations:
+  ADDED:
+    unit-aware-defaults:
+      strength: SHOULD
+      statement: 按单元消费的文体默认值（如 default_method）的应用点必须经过单元感知的统一入口（internal/cli 的 unitDefaultMethod 与 internal/work 的 Work.picker），不得在应用点直接读取 Work.Genre.DefaultMethod；新增应用点时先检查是否已有入口可复用。
+      rationale: story-structure-templates 把 default_method 的语义改为只作用于作品的根单元时，需要同步修改六个分散的应用点（大纲关卡、整体校验、单产物校验、outline set/remove/show、审稿、lint）；直接读 Genre.DefaultMethod 的新增点会静默恢复「所有单元继承」的旧行为，使子单元被父级规则卡死（lesson-8f8885）。
+      enforcement:
+        method: review
+        detail: 检查方式：在 internal/ 下搜索 Genre.DefaultMethod，只应命中单元感知的入口（unitDefaultMethod、Work.picker、defaultMethodOf）及其定义。
+      examples:
+        good:
+          - 'outline.Picker{Methods: catalog.LoadMethods(dir), Default: unitDefaultMethod(w, u)}'
+        bad:
+          - 'outline.Picker{Methods: catalog.LoadMethods(dir), Default: w.Genre.DefaultMethod}'
+  MODIFIED: {}
+  REMOVED: {}

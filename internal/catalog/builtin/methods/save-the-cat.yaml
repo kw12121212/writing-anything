@@ -1,0 +1,82 @@
+# 救猫咪节拍表（Save the Cat! Beat Sheet）：布莱克·斯奈德提出的 15 个故事节拍，按好莱坞剧本的比例分布。
+schema_version: 1
+id: save-the-cat
+title: 救猫咪节拍表
+description: 布莱克·斯奈德（Blake Snyder）的 15 节拍结构：从开场画面到终场画面，覆盖催化剂、一无所有、灵魂黑夜与结局等关键节点。
+kind: structure
+beats:
+  - id: opening-image
+    title: 开场画面
+    description: 用一个画面确立主角与世界的初始状态，与终场画面对照。
+    position: {min: 0, max: 0.01}
+    tension: 3
+  - id: theme-stated
+    title: 主题呈现
+    description: 有人（往往不是主角）说出或暗示故事要回答的主题。
+    position: {min: 0.02, max: 0.05}
+    tension: 3
+  - id: setup
+    title: 铺设
+    description: 展示主角需要改变或缺少的东西，介绍主要人物。
+    position: {min: 0.01, max: 0.1}
+    tension: 2
+  - id: catalyst
+    title: 催化剂
+    description: 打破日常的事件，逼主角面对改变。
+    position: {min: 0.08, max: 0.12}
+    tension: 6
+  - id: debate
+    title: 争论
+    description: 主角犹豫要不要跨出这一步，问题被具体化。
+    position: {min: 0.1, max: 0.2}
+    tension: 4
+  - id: break-into-two
+    title: 进入第二幕
+    description: 主角主动选择进入新世界，故事正式启程。
+    position: {min: 0.18, max: 0.22}
+    tension: 5
+  - id: b-story
+    title: B 故事
+    description: 承载主题的副线（常是爱情或师徒），给主角讨论主题的对象。
+    position: {min: 0.2, max: 0.3}
+    tension: 4
+  - id: fun-and-games
+    title: 游戏时光
+    description: 兑现前提许诺的段落：观众来看的那部分乐趣与代价。
+    position: {min: 0.2, max: 0.5}
+    tension: 5
+  - id: midpoint
+    title: 中点
+    description: 虚假的胜利或虚假的失败，赌注抬高，主角从被动转为主动。
+    position: {min: 0.45, max: 0.55}
+    tension: 7
+  - id: bad-guys-close-in
+    title: 坏蛋逼近
+    description: 外部阻力与内部矛盾同时收紧，情况持续恶化。
+    position: {min: 0.5, max: 0.75}
+    tension: 7
+  - id: all-is-lost
+    title: 一无所有
+    description: 最大的挫败，常常伴随死亡气息（哪怕是隐喻的）。
+    position: {min: 0.72, max: 0.78}
+    tension: 9
+  - id: dark-night-of-the-soul
+    title: 灵魂黑夜
+    description: 至暗时刻：主角消化失败，直面真正的问题。
+    position: {min: 0.75, max: 0.8}
+    tension: 8
+  - id: break-into-three
+    title: 进入第三幕
+    description: A 故事与 B 故事合流，主角找到解决办法。
+    position: {min: 0.78, max: 0.82}
+    tension: 7
+  - id: finale
+    title: 结局
+    description: 用学到的一切证明转变，解决外部与内心两个问题。
+    position: {min: 0.8, max: 0.99}
+    tension: 10
+  - id: final-image
+    title: 终场画面
+    description: 与开场画面对照，证明改变已经发生。
+    position: {min: 0.99, max: 1}
+    tension: 2

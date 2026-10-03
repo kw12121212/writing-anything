@@ -1,0 +1,25 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: story-structure-templates
+  status: proposed
+summary:
+  what:
+    - 新增 5 个内置结构类写作法模板：三幕结构（three-act）、救猫咪节拍表（save-the-cat，15 个节拍）、七点结构（seven-point）、起承转合（qichengzhuanhe）与英雄之旅（hero-journey），每个节拍声明名称、在全文中的位置范围与目标张力（Target Tension，0 到 10 整数）；写作法数据 Schema 与校验为结构类节拍增加可选的 tension 字段（越界报告 method.invalid-tension）；为 short-story 文体声明默认写作法（推荐起承转合，见开放问题）；wa-cli method list/show 的节拍输出含 tension
+    - 新增 5 个内置结构类写作法模板：三幕结构（three-act）、救猫咪节拍表（save-the-cat，15 个节拍）、七点结构（seven-point）、起承转合（qichengzhuanhe）与英雄之旅（hero-journey），每个节拍声明名称、在全文中的位置范围与目标张力（Target Tension，0 到 10 整数）；写作法数据 Schema 与校验为结构类节拍增加可选的 tension 字段（非 0 到 10 整数报告 method.invalid-tension）；short-story 文体的默认写作法设为 three-act（作者确认）；wa-cli method list/show 的节拍输出含 tension
+    - 新增 5 个内置结构类写作法模板：三幕结构（three-act）、救猫咪节拍表（save-the-cat，15 个节拍）、七点结构（seven-point）、起承转合（qichengzhuanhe）与英雄之旅（hero-journey），每个节拍声明名称、在全文中的位置范围与目标张力（Target Tension，0 到 10 整数）；写作法数据 Schema 与校验为结构类节拍增加可选的 tension 字段（非 0 到 10 整数报告 method.invalid-tension）；short-story 文体的默认写作法设为 three-act（作者确认）；文体的默认写作法只作用于作品的根单元，子单元（场景、章节等）不再继承——子单元未在自己的写作简报选用写作法时不用写作法（作者确认，修复场景大纲被要求承担全部节拍而无法推进的问题）；wa-cli method list/show 的节拍输出含 tension
+  why:
+    - short-story 里程碑要求结构类写作法模板作为情绪曲线（Emotion Curve）与张力曲线（Tension Curve）的目标走势来源：当前被阻塞的 emotion-pacing-curve 变更将在场景契约未声明目标张力时采用所选结构类写作法给出的目标走势。现状是 9 个内置写作法全部为文章类，short-story 文体的 default_method 明确留待本变更提供（short-story.yaml 注释与 genres-and-packs 主规格 short-story-genre 的『不声明默认写作法』）。大纲缺少模板节拍时 validate 失败、成稿后节拍位置超出范围只提示的语义已由 method-outline-check 与 beat-positions 通用实现，本变更只需提供数据
+scope:
+  in:
+    - internal/catalog/builtin/methods/（新增 three-act、save-the-cat、seven-point、qichengzhuanhe、hero-journey 五个模板文件）；internal/catalog/builtin/genres/short-story.yaml（default_method）；internal/schema/schemas/common.schema.json（methodBody 的 beats 节增加可选 tension）；internal/catalog/method.go（MethodPart 增加 Tension 与 method.invalid-tension 校验）；internal/cli/method.go（method list/show 输出沿用 MethodPart 序列化，自动含 tension）；docs/GLOSSARY.md（目标张力（Target Tension））；.strict-spec-driven/specs/methods.yaml 与 genres-and-packs.yaml 的 delta；各包测试与测试夹具
+    - internal/catalog/builtin/methods/（新增 three-act、save-the-cat、seven-point、qichengzhuanhe、hero-journey 五个模板文件）；internal/catalog/builtin/genres/short-story.yaml（default_method）；internal/schema/schemas/common.schema.json（methodBody 的 beats 节增加可选 tension）；internal/catalog/method.go（MethodPart 增加 Tension 与 method.invalid-tension 校验）；internal/work/work.go 与 internal/cli/{method,lint,outline,workspace}.go（默认写作法只在根单元生效：大纲关卡 Picker、validate、outline 命令、审稿与 lint 的应用点）；internal/cli/method.go（method list/show 输出沿用 MethodPart 序列化，自动含 tension）；docs/GLOSSARY.md（目标张力（Target Tension））；.strict-spec-driven/specs/methods.yaml 与 genres-and-packs.yaml 的 delta；各包测试与测试夹具
+  out:
+    - 情绪曲线与张力曲线命令及偏离发现项（emotion-pacing-curve 变更）；场景契约的目标情绪与目标张力声明；多层单元树与状态快照（novel、novel-continuity 里程碑）；节奏类文体规则（如爽点间隔）；新的写作法选用与退出机制（brief set --method / none 已存在，不变）
+unchanged_behavior:
+  - 大纲缺少所选结构类写作法节拍时 validate 失败（outline.missing-method-part 等诊断的判定逻辑不变，仅因新增内置模板而被 short-story 作品默认触发）；成稿后节拍位置超出 position 范围只提示不阻塞（outline.beat-position 行为不变，three-act 既有场景 setup 0–30%、climax 70–100% 保持一致）；规范包（Pack）定义文章类与规划类写作法的校验不变；写作法 id 保留 none、id 重复与 position.min 大于 max 的既有诊断不变；作者改选或不用写作法（写作简报 method）的机制不变
+roadmap:
+  milestone: short-story
+  planned_change: story-structure-templates

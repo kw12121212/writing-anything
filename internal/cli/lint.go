@@ -212,7 +212,7 @@ func runUnitLintWith(dir string, w *work.Work, u *work.Unit, resolved func() (*r
 // beatPositions 按单元选用的结构类写作法核对成稿中节拍的位置，超出范围时给出 warning（只提示，不阻塞）。
 func beatPositions(dir string, w *work.Work, u *work.Unit, content []byte, rel string) []workspace.Problem {
 	unitDir := w.UnitDir(u)
-	ms := outline.LoadMessages(dir, unitDir, brief.LoadQueue(dir), outline.Picker{Methods: catalog.LoadMethods(dir), Default: w.Genre.DefaultMethod})
+	ms := outline.LoadMessages(dir, unitDir, brief.LoadQueue(dir), outline.Picker{Methods: catalog.LoadMethods(dir), Default: unitDefaultMethod(w, u)})
 	if ms.Method == nil || len(ms.Problems) > 0 {
 		return nil
 	}

@@ -29,8 +29,8 @@ const methodPack = `schema_version: 1
 id: house
 title: 团队规范
 methods:
-  - id: three-act
-    title: 三幕结构
+  - id: team-act
+    title: 三幕结构（团队版）
     kind: structure
     beats:
       - {id: setup, title: 建置, position: {min: 0, max: 0.3}}
@@ -47,20 +47,47 @@ methods:
 func TestMethodListShow(t *testing.T) {
 	dir := newWorkspace(t)
 	code, res := runMethod(t, dir, "method", "list")
+	structures := map[string]bool{"hero-journey": true, "qichengzhuanhe": true, "save-the-cat": true, "seven-point": true, "three-act": true}
 	var ids []string
 	for _, m := range res.Methods {
-		ids = append(ids, m["id"].(string))
-		if m["kind"] != "article" || m["source"] != "builtin" || len(m["sections"].([]any)) == 0 {
+		id := m["id"].(string)
+		ids = append(ids, id)
+		wantKind := "article"
+		if structures[id] {
+			wantKind = "structure"
+		}
+		if m["kind"] != wantKind || m["source"] != "builtin" {
 			t.Errorf("builtin method %v", m)
 		}
+		if wantKind == "structure" {
+			for _, b := range m["beats"].([]any) {
+				beat := b.(map[string]any)
+				if beat["position"] == nil || beat["tension"] == nil {
+					t.Errorf("structure method %s beat %v misses position or tension", id, beat)
+				}
+			}
+		}
 	}
-	want := []string{"aida", "diataxis-explanation", "diataxis-how-to", "diataxis-reference", "diataxis-tutorial", "general-specific-general", "inverted-pyramid", "pas", "pyramid-scqa"}
+	want := []string{"aida", "diataxis-explanation", "diataxis-how-to", "diataxis-reference", "diataxis-tutorial", "general-specific-general", "hero-journey", "inverted-pyramid", "pas", "pyramid-scqa", "qichengzhuanhe", "save-the-cat", "seven-point", "three-act"}
 	if code != 0 || !slices.Equal(ids, want) {
 		t.Fatalf("method list: code = %d, ids = %v", code, ids)
 	}
 	code, res = runMethod(t, dir, "method", "show", "pyramid-scqa")
 	if code != 0 || res.Method["title"] != "金字塔原理与 SCQA" || len(res.Method["sections"].([]any)) != 5 || len(res.Method["beats"].([]any)) != 0 || len(res.Method["rubric"].([]any)) != 1 {
 		t.Fatalf("method show: %+v", res.Method)
+	}
+	// 内置结构类写作法：节拍按顺序声明位置范围与目标张力（structure-builtin-methods）。
+	code, res = runMethod(t, dir, "method", "show", "three-act")
+	beats := res.Method["beats"].([]any)
+	if code != 0 || res.Method["source"] != "builtin" || len(beats) != 4 {
+		t.Fatalf("three-act: code = %d, method = %+v", code, res.Method)
+	}
+	setup := beats[0].(map[string]any)
+	if setup["id"] != "setup" || setup["position"].(map[string]any)["min"] != 0.0 || setup["position"].(map[string]any)["max"] != 0.3 || setup["tension"] != 3.0 {
+		t.Fatalf("three-act setup: %+v", setup)
+	}
+	if cat, res := runMethod(t, dir, "method", "show", "save-the-cat"); cat != 0 || len(res.Method["beats"].([]any)) != 15 {
+		t.Fatalf("save-the-cat: code = %d, beats = %d", cat, len(res.Method["beats"].([]any)))
 	}
 	code, res = runMethod(t, dir, "method", "show", "nope")
 	if d := diag(t, res.result, "method.not-found"); code != 1 || res.Method != nil || !hasNext(d, "wa-cli method list") {
@@ -74,10 +101,10 @@ func TestMethodListShow(t *testing.T) {
 	for _, m := range res.Methods {
 		got[m["id"].(string)] = m
 	}
-	if got["general-specific-general"]["source"] != "pack:house" || got["three-act"]["kind"] != "structure" || len(res.Methods) != 10 {
+	if got["general-specific-general"]["source"] != "pack:house" || got["team-act"]["kind"] != "structure" || got["three-act"]["source"] != "builtin" || len(res.Methods) != 15 {
 		t.Fatalf("pack methods: %v", got)
 	}
-	if _, res = runMethod(t, dir, "method", "show", "three-act"); res.Method["beats"].([]any)[1].(map[string]any)["position"].(map[string]any)["min"] != 0.7 {
+	if _, res = runMethod(t, dir, "method", "show", "team-act"); res.Method["beats"].([]any)[1].(map[string]any)["position"].(map[string]any)["min"] != 0.7 {
 		t.Fatalf("beats: %+v", res.Method)
 	}
 	// 规范包中写作法的问题由整体校验报告。
@@ -155,7 +182,7 @@ func TestMethodBeatsAndRubric(t *testing.T) {
 	dir := reviewWork(t)
 	writePack(t, dir, "house", methodPack)
 	mustRunWS(t, dir, "config", "set", "packs", "house")
-	mustRunWS(t, dir, "brief", "set", "my-post", "--method", "three-act")
+	mustRunWS(t, dir, "brief", "set", "my-post", "--method", "team-act")
 	mustRunWS(t, dir, "outline", "set", "my-post", "s", "--title", "开端", "--role", "setup", "--reason", "x")
 	mustRunWS(t, dir, "outline", "set", "my-post", "c", "--title", "高潮", "--role", "climax", "--reason", "x")
 	draft := "## 高潮\n\n" + strings.Repeat("内容很长。", 40) + "\n\n## 开端\n\n结尾。\n"
@@ -186,6 +213,27 @@ func TestMethodBeatsAndRubric(t *testing.T) {
 	}
 }
 
+// 文体的默认写作法只作用于根单元：子单元（如 short-story 的场景）不继承，无 role 的大纲节没有写作法缺口；
+// 子单元仍可在自己的写作简报中选用写作法（method-selection 的 child-unit-no-method）。
+func TestMethodDefaultRootOnly(t *testing.T) {
+	dir := newWorkspace(t, "--genre", "short-story")
+	mustRunWS(t, dir, "new", "short-story", "my-story")
+	mustRunWS(t, dir, "unit", "add", "my-story", "scene", "s1")
+	mustRunWS(t, dir, "outline", "set", "my-story/s1", "sc", "--title", "场景一", "--reason", "场景契约")
+	if code, res := runWS(t, dir, "outline", "show", "my-story/s1"); code != 0 || strings.Contains(res.stdout, "missing-method-part") {
+		t.Fatalf("child unit inherited the genre default: exit code = %d, %s", code, res.stdout)
+	}
+	// 对子单元产物单独校验同样不施加默认写作法。
+	if code, res := runWS(t, dir, "validate", ".writing-anything/works/my-story/units/s1/outline.yaml"); code != 0 {
+		t.Fatalf("child outline validate: exit code = %d, %+v", code, res.Diagnostics)
+	}
+	mustRunWS(t, dir, "brief", "set", "my-story/s1", "--method", "three-act")
+	if _, res := runWS(t, dir, "outline", "show", "my-story/s1"); strings.Count(res.stdout, "missing-method-part") != 4 ||
+		!strings.Contains(res.stdout, "resolution") {
+		t.Fatalf("child's own method ignored: %s", res.stdout)
+	}
+}
+
 // 写作法被移除后：查看与修改写作简报和大纲的命令照常执行，大纲命令以 warning 报告；validate 与 next 报告问题并给出可执行的
 // 下一步（cross-artifact-references、next-rechecks-problem）。
 func TestMethodDanglingAndNext(t *testing.T) {
@@ -193,7 +241,7 @@ func TestMethodDanglingAndNext(t *testing.T) {
 	writeFile(t, filepath.Join(dir, ".writing-anything", "works", "my-post", "brief.yaml"), completeBrief)
 	writePack(t, dir, "house", methodPack)
 	mustRunWS(t, dir, "config", "set", "packs", "house")
-	mustRunWS(t, dir, "brief", "set", "my-post", "--method", "three-act")
+	mustRunWS(t, dir, "brief", "set", "my-post", "--method", "team-act")
 	mustRunWS(t, dir, "outline", "set", "my-post", "s", "--title", "开端", "--role", "setup", "--reason", "x")
 	// 缺少节拍 climax：outline show 的缺口与 validate 的诊断都给出 outline show 与 method list。
 	code, res := runWS(t, dir, "validate")
@@ -221,7 +269,7 @@ func TestMethodDanglingAndNext(t *testing.T) {
 		t.Fatalf("validate dangling: %+v", res.Diagnostics)
 	}
 	// 写作法的 id 不能是保留的 none；规范包写作法省略 description 时输出空字符串。
-	writePack(t, dir, "house", strings.Replace(methodPack, "id: three-act", "id: none", 1))
+	writePack(t, dir, "house", strings.Replace(methodPack, "id: team-act", "id: none", 1))
 	mustRunWS(t, dir, "config", "set", "packs", "house")
 	if code, res := runWS(t, dir, "validate"); code != 1 || diag(t, res, "method.reserved-id").Field != "methods[0].id" {
 		t.Fatalf("reserved none: %+v", res.Diagnostics)

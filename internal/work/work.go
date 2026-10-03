@@ -376,7 +376,7 @@ func (w *Work) briefBlockers(root string, u *Unit, q brief.Queue) []Blocker {
 // （Coverage Gap）一条；单元目录下没有 outline.yaml 与 outline.md 时没有（由缺失产物报告）。
 func (w *Work) outlineBlockers(root string, u *Unit, q brief.Queue) []Blocker {
 	dir := w.UnitDir(u)
-	g := outline.Check(root, dir, isFile(root, outline.Path(dir)), isFile(root, dir+"/"+outline.MDName), q, w.picker(root))
+	g := outline.Check(root, dir, isFile(root, outline.Path(dir)), isFile(root, dir+"/"+outline.MDName), q, w.picker(root, u))
 	if g == nil {
 		return nil
 	}
@@ -433,12 +433,17 @@ func (w *Work) level(root string) string {
 	return w.gateLevel
 }
 
-// picker 返回为大纲关卡选出写作法的 Picker；每个作品只加载一次写作法目录。
-func (w *Work) picker(root string) outline.Picker {
+// picker 返回为单元 u 的大纲关卡选出写作法的 Picker；每个作品只加载一次写作法目录。
+// 只有作品的根单元用文体的 default_method，子单元不继承（method-selection）。
+func (w *Work) picker(root string, u *Unit) outline.Picker {
 	if w.methods == nil {
 		w.methods = catalog.LoadMethods(root)
 	}
-	return outline.Picker{Methods: w.methods, Default: w.Genre.DefaultMethod}
+	def := ""
+	if u.Parent == nil {
+		def = w.Genre.DefaultMethod
+	}
+	return outline.Picker{Methods: w.methods, Default: def}
 }
 
 func (w *Work) queue(root string) ([]decision.Decision, bool) {
