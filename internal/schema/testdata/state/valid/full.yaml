@@ -1,0 +1,21 @@
+schema_version: 1
+events:
+  - id: state-1
+    scene: my-novel/c1/s1
+    entry: canon-1
+    state: 左手旧伤复发
+    status: proposed
+  - id: state-2
+    scene: my-novel/c1/s2
+    entry: canon-1
+    state: 伤愈
+    status: confirmed
+    confirmation: 作者确认伤愈发生在灯室对峙后
+    decided_at: 2026-10-03T08:00:00Z
+  - id: state-3
+    scene: my-novel/c2/s1
+    entry: canon-2
+    state: 灯芯易主给精灵
+    status: rejected
+    confirmation: 作者撤销该变化
+    decided_at: 2026-10-03T09:30:00Z

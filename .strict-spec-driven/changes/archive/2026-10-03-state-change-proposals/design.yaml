@@ -1,0 +1,35 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: state-change-proposals
+approach:
+  - 在作品根单元目录新增 state.yaml 状态台账（State Ledger）（与 canon.yaml、threads.yaml 同级，同为故事圣经（Story Bible）的磁盘记忆），新包 internal/state 持有加载、Schema 与领域校验、Propose/List/Confirm/Reject/Set 及按单元树先序的重放与快照计算；internal/cli 以 state propose / state list / state confirm / state reject / state set / state at 六个子命令暴露，作者确认采用 --confirmation 原话摘要的确认记录模式（与 decide、accept 一致）；validate 按 CheckWorks 模式纳入 state.yaml。
+decisions:
+  ledger-artifact:
+    decision: state.yaml 放在作品根单元目录，条目由 wa-cli state propose 显式登记（登记式台账），每条绑定 scene 单元引用与设定集条目 id；确认后的状态不写回 canon.yaml
+    rationale: 里程碑 details 明确记忆放在磁盘上的故事圣经台账中；canon.yaml 的 text 是稳定的设定定义，逐场景变化的状态由重放派生才可复现（事件溯源），把状态写回设定集会破坏定义与快照的分离，也使「修改早期事件后快照重新计算」不可能；canon.yaml 与 threads.yaml 已在同一位置验证了台账产物的加载、锚点保护与符号链接处理，直接复用该结构最省新概念。
+  confirm-mechanism:
+    decision: 作者确认走 --confirmation 原话摘要的确认记录（Confirmation Record）模式（state confirm / state reject / confirmed 条目的 state set），不用决策队列（Decision Queue）阻塞模式
+    rationale: 决策队列用于 Agent 需要作者在选项间做选择的场景（canon 作者钦定、伏笔放弃）；状态变更提议的确认是逐条二值动作，长篇一章常有多条，逐条生成阻塞决策会淹没队列并阻塞所有单元推进；decide 与 accept 已确立记录作者确认原话摘要的模式，可独立验证；「提议未处理时场景不能验收」的 enforcement 属 scene-close-out 计划变更，届时在验收关卡检查，不在写入路径拦截。
+  replay-semantics:
+    decision: wa-cli state at <scene> 只重放 status 为 confirmed 且绑定场景按单元树先序严格早于目标场景的条目，同一场景内多条按文件顺序，每个设定条目取最后一条生效；快照只含至少有一条生效条目的设定条目，按 entry 升序输出
+    rationale: 「任一场景开始时的状态」不含目标场景自身发生的变化（场景开始时尚未发生）；先序加文件顺序是全序且只依赖单元树与文件内容，同一输入同一结果；没有条目的设定条目处于设定集定义的初始状态，经 canon list 可得，重复输出只会挤占上下文（Context Budget）——context 纳入快照属 layered-summaries-and-budget 计划变更。
+  edit-revoke:
+    decision: 修改与撤销直接作用于既有条目：state set 修改 proposed 条目无需确认、修改 confirmed 条目必须给出 --confirmation（重新确认）；state reject 拒绝 proposed 条目或撤销 confirmed 条目（均记录 confirmation 与 decided_at）；rejected 为终态，重新提议须新登记条目
+    rationale: 计划变更 details 明确「修改或撤销早期事件后，快照随之重新计算」，即直接编辑而非追加补偿事件；补偿事件把修正一个错别字或绑错场景的代价变成三条记录；confirmed 条目的变更等价于改写既成事实，需要作者重新确认（保护级别与 canon 作者钦定条目同级，机制上用重新确认而非决策队列，见 confirm-mechanism）；rejected 终态防止已拒绝的猜测经编辑复活。
+  contract-linkage-deferred:
+    decision: 本变更不建立台账条目与场景契约 state_changes/events 字段的显式关联；条目只绑定 scene 单元引用与设定集条目 id
+    rationale: 计划变更 details 只要求「绑定场景」；「契约要求的状态变化已提交」的校验属 scene-close-out 计划变更（其 depends_on 含本变更），届时按其需要扩展可选关联参数，新增可选参数向后兼容；现在引入违反「只实现当前任务要求」的代码规则。
+  ledger-optional:
+    decision: 作品没有 state.yaml 时不做任何状态检查：validate 不新增诊断，state list 输出空列表，state at 输出空快照，退出码均为 0
+    rationale: 向后兼容优先——既有作品与已归档夹具在无台账下行为不变，与 threads.yaml 的可选台账模式一致；台账是长篇工作流的可选产物。
+alternatives:
+  - option: 状态变更提议经决策队列（Decision Queue）阻塞确认（仿 canon 作者钦定条目）
+    reason: 逐条提议生成阻塞决策会淹没队列并阻塞全部单元推进；确认是二值动作不需要选项；验收侧 enforcement 已由 scene-close-out 计划变更承接。
+  - option: 修改历史只允许追加补偿事件（纯事件溯源不改历史）
+    reason: 计划变更 details 明确要求修改早期事件后快照重新计算；补偿事件让简单修正（错别字、绑错场景）变成三条记录，作者心智负担更重。
+  - option: 由场景契约 state_changes 自动派生台账条目
+    reason: 契约表达预期、收口记录实际，二者可能不一致（实际发生但未预期、预期但未发生）；自动派生无法承载确认状态与作者确认原话。
+risks:
+  - 本变更落地到 scene-close-out 之前，未确认的提议不阻塞任何流程，可能积压；以 state list 默认只列 proposed 缓解，close-out 落地后在验收关卡强制处理。

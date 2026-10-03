@@ -1,0 +1,108 @@
+schema: strict-spec-driven/main-spec/v1
+schema_version: 1
+artifact_type: main_spec
+schema_file: templates/strict-spec-driven/schemas/main-spec.yaml
+spec:
+  id: state
+  title: 状态快照（State Snapshot）
+requirements:
+  state-artifact:
+    strength: MUST
+    statement: 作品根单元目录下的 state.yaml 是状态台账（State Ledger）：含 schema_version（1）与 events 数组；每个条目是一条状态变更提议（State Change Proposal），含符合 id 格式且文件内唯一的 id、scene（变化发生的场景，单元类型为 scene 的单元引用）、entry（发生变化的设定集（Canon）条目 id）与非空的 state（变化后的状态描述）；status 取 proposed（待确认）/ confirmed（已确认）/ rejected（已拒绝）之一；confirmation（作者确认原话摘要，status 非 proposed 时非空，为 proposed 时为 null 或缺省）与 decided_at（决定时的 UTC 时间，RFC 3339 格式，status 非 proposed 时非空，为 proposed 时为 null 或缺省）按取值声明（不为空的取值必须符合各自形态），键存在性条件不进入 Schema。字段形态不符合上述要求时报告 artifact.schema-violation（field 为对应点分路径，如 events[i].status）。wa-cli validate 整体校验时必须对每个可加载作品存在的 state.yaml 做 Schema 与领域校验并计入 checked：条目 id 重复报告 artifact.duplicate-id（field 为 events[i].id）；scene 引用的单元不存在或类型不为 scene 报告 state.unknown-unit（field 为 events[i].scene）；entry 不在该作品 canon.yaml 的设定条目中（含作品没有 canon.yaml 时）报告 state.unknown-entry（field 为 events[i].entry）；status 非 proposed 而缺非空 confirmation 或 decided_at 报告 state.incomplete-confirmation（field 为 events[i]）。state.yaml 途经符号链接或不是普通文件时按 artifact.not-found 处理（path 为该 state.yaml，不读取也不覆盖它）。作品没有 state.yaml 时不做任何状态检查；wa-cli validate <path> 对该位置的 state.yaml 执行同样的检查（entry 检查以该作品根单元目录下的 canon.yaml 为准）。
+    scenarios:
+      invalid-status:
+        - GIVEN: novel 文体作品 my-novel 的 state.yaml 首个条目 status 为 decided
+        - WHEN: 运行 wa-cli validate --dir D --json
+        - THEN: 报告 artifact.schema-violation 且 field 含 events[0].status，退出码为 1
+      unknown-entry:
+        - GIVEN: state.yaml 首个条目 entry 为 canon-9，my-novel 的 canon.yaml 中没有 id 为 canon-9 的条目
+        - WHEN: 运行 wa-cli validate --dir D --json
+        - THEN: 报告 state.unknown-entry（field 为 events[0].entry），退出码为 1
+      duplicate-id:
+        - GIVEN: state.yaml 有两条 id 同为 state-1 的条目
+        - WHEN: 运行 wa-cli validate --dir D --json
+        - THEN: 报告 artifact.duplicate-id（field 含 events[i].id），退出码为 1
+      incomplete-confirmation:
+        - GIVEN: state.yaml 首个条目 status 为 confirmed 而 confirmation 为 null
+        - WHEN: 运行 wa-cli validate --dir D --json
+        - THEN: 报告 state.incomplete-confirmation（field 为 events[0]），退出码为 1
+  state-propose:
+    strength: MUST
+    statement: wa-cli state propose <work> --scene <场景> --entry <条目> --state <状态描述> [--id <id>] 必须在 state.yaml 的 events 末尾追加一个条目（初始 status 为 proposed，不写 confirmation 与 decided_at）：--scene、--entry 与 --state 必填；--scene 引用的单元不存在或类型不为 scene 时拒绝写入（state.unknown-unit，field 为 scene）；--entry 不在该作品 canon.yaml 的设定条目中（含没有 canon.yaml 时）拒绝写入（state.unknown-entry，field 为 entry，next 含 wa-cli canon list <work> --dir <dir> --json）；canon.yaml 存在但不通过校验时报告其诊断且不写入；--state 为空或只含空白、--id 不符合 id 格式时报告 artifact.schema-violation（field 为 state 或 id）；--state 不是 UTF-8 文本时报告 input.invalid-value（field 为 state）；--id 缺省生成 state-<n>（n 从条目数加一起递增到不重复），与既有条目重复时拒绝（artifact.duplicate-id，field 为 id）。state.yaml 不存在时创建（含 schema_version 1 与 events），已存在时只追加该项，保留其他内容与 YAML 注释。成功时退出码为 0，changedPaths 为 state.yaml，--json 输出的 event 字段为新条目（字段同 state-list）。已有 state.yaml 不通过 Schema 校验、条目 id 重复或确认记录不完整（state.incomplete-confirmation）时报告其诊断且不写入；已有条目的悬空 scene 或 entry 引用不阻止追加，成功时以 warning 报告（state.unknown-unit / state.unknown-entry）；要追加之处经由 YAML 锚点、别名或合并键得到时报告 state.anchored-value；state.yaml 途经符号链接时按 artifact.not-found 处理；这些失败情况都不修改文件，退出码为 1。由参数引起的诊断不填 path，next 含 wa-cli help state propose --json。
+    scenarios:
+      propose-default-id:
+        - GIVEN: my-novel 的 state.yaml 已有两条条目
+        - WHEN: 运行 wa-cli state propose my-novel --scene my-novel/c2/s1 --entry canon-1 --state 灯芯易主给精灵 --dir D --json
+        - THEN: 新条目 id 为 state-3、status 为 proposed、confirmation 与 decided_at 为 null，changedPaths 含 state.yaml，退出码为 0
+      propose-unknown-entry:
+        - GIVEN: my-novel 的 canon.yaml 没有 id 为 canon-9 的条目
+        - WHEN: 运行 wa-cli state propose my-novel --scene my-novel/c1/s1 --entry canon-9 --state 离队 --dir D --json
+        - THEN: 报告 state.unknown-entry，state.yaml 未被修改，退出码为 1
+      propose-unknown-unit:
+        - GIVEN: my-novel 的单元 c1 是章（chapter）而非场景
+        - WHEN: 运行 wa-cli state propose my-novel --scene my-novel/c1 --entry canon-1 --state 受伤 --dir D --json
+        - THEN: 报告 state.unknown-unit，state.yaml 未被修改，退出码为 1
+  state-decide:
+    strength: MUST
+    statement: wa-cli state confirm <work> <id> --confirmed-by-author --confirmation <原话摘要> 必须把该条目的 status 改为 confirmed 并写入确认记录（Confirmation Record）：confirmation 为作者确认原话的摘要，decided_at 为确认时的 UTC 时间（RFC 3339 格式）；--confirmed-by-author 与 --confirmation 必须同时给出且摘要不为空白，否则报告 state.incomplete-confirmation（不修改文件）。条目不存在时报告 state.not-found（next 含 wa-cli state list <work> --all --dir <dir> --json）；条目 status 不为 proposed 时报告 state.already-decided。wa-cli state reject <work> <id> --confirmed-by-author --confirmation <原话摘要> 必须把该条目的 status 改为 rejected 并写入同样的确认记录（--confirmed-by-author 与 --confirmation 必须同时给出且摘要不为空白，否则报告 state.incomplete-confirmation）：条目为 proposed 时即作者拒绝该提议，为 confirmed 时即作者撤销已生效的状态变化；条目不存在时报告 state.not-found；条目已是 rejected 时报告 state.already-decided。wa-cli state set <work> <id> [--scene <场景>] [--state <文本>] 只修改给出的字段：条目为 proposed 时照常修改；条目为 confirmed 时必须同时给出 --confirmed-by-author 与 --confirmation（改动会改变已生效的状态，须作者重新确认；缺失或摘要为空白时报告 state.incomplete-confirmation），写入后 confirmation 与 decided_at 更新为本次取值，status 不变；条目为 rejected 时报告 state.already-decided（rejected 为终态，重新提议应 state propose 新条目）。--scene 引用的单元不存在或类型不为 scene 时报告 state.unknown-unit（field 为 scene）；--state 为空或只含空白时报告 artifact.schema-violation（field 为 state），不是 UTF-8 文本时报告 input.invalid-value（field 为 state）。三个命令只修改目标条目，保留其他条目、其他内容与 YAML 注释；修改后的取值与原有取值相同时不写文件（changedPaths 为空数组），否则 changedPaths 为 state.yaml，--json 输出的 event 字段为修改后的条目，成功时退出码为 0；目标条目或其字段经由 YAML 锚点、别名或合并键得到时报告 state.anchored-value；已有 state.yaml 不通过 Schema 校验、条目 id 重复或确认记录不完整时报告其诊断且不修改文件；已有条目的悬空 scene 或 entry 引用不阻止修改，成功时以 warning 报告；这些失败情况都不修改文件，退出码为 1。由参数引起的诊断不填 path，next 含对应子命令的 wa-cli help state <subcommand> --json。
+    scenarios:
+      confirm-records:
+        - GIVEN: state.yaml 有 status 为 proposed 的条目 state-1
+        - WHEN: 运行 wa-cli state confirm my-novel state-1 --confirmed-by-author --confirmation 作者确认灯芯易主 --dir D --json
+        - THEN: state-1 的 status 为 confirmed、confirmation 为「作者确认灯芯易主」、decided_at 为 RFC 3339 格式，changedPaths 含 state.yaml，退出码为 0
+      confirm-missing-confirmation:
+        - GIVEN: state.yaml 有 status 为 proposed 的条目 state-1
+        - WHEN: 运行 wa-cli state confirm my-novel state-1 --confirmation 作者确认 --dir D --json
+        - THEN: 报告 state.incomplete-confirmation，state.yaml 未变，退出码为 1
+      confirm-twice:
+        - GIVEN: 条目 state-1 已是 confirmed
+        - WHEN: 运行 wa-cli state confirm my-novel state-1 --confirmed-by-author --confirmation 再次确认 --dir D --json
+        - THEN: 报告 state.already-decided，state.yaml 未变，退出码为 1
+      reject-revokes-confirmed:
+        - GIVEN: 条目 state-1 已 confirmed 且参与某场景的状态快照
+        - WHEN: 运行 wa-cli state reject my-novel state-1 --confirmed-by-author --confirmation 作者撤销该变化 --dir D --json
+        - THEN: state-1 的 status 为 rejected，此后该场景的快照不再含该条目带来的状态，退出码为 0
+      set-confirmed-needs-confirmation:
+        - GIVEN: 条目 state-1 已 confirmed
+        - WHEN: 运行 wa-cli state set my-novel state-1 --state 修正后的描述 --dir D --json
+        - THEN: 报告 state.incomplete-confirmation，state.yaml 未变，退出码为 1
+      set-proposed-free:
+        - GIVEN: 条目 state-2 为 proposed
+        - WHEN: 运行 wa-cli state set my-novel state-2 --state 修正描述 --dir D --json
+        - THEN: state-2 的 state 更新、status 仍为 proposed，退出码为 0
+  state-list:
+    strength: MUST
+    statement: wa-cli state list <work> 必须只读地列出状态台账条目：--json 输出 events 数组，默认只含 status 为 proposed 的条目（作者待处理清单），--all 时含全部；每项含 id、scene、entry、state、status、confirmation（无则为 null）与 decided_at（无则为 null），按 scene 的单元树先序排序，先序相同按文件顺序。台账不存在时 events 为空数组、退出码为 0；不通过 Schema 校验、条目 id 重复或确认记录不完整（state.incomplete-confirmation）时报告其诊断、events 为空数组、退出码为 1；条目的悬空 scene 或 entry 引用照常列出，以 warning 报告。changedPaths 为空数组；作品不存在或给出子单元引用时报告 work.not-found（message 说明状态台账是作品级产物）。不加 --json 时以人读文本按同样顺序输出每条提议的 id、绑定场景、设定条目、状态描述与 status（已确认与已拒绝加标注）。
+    scenarios:
+      list-proposed-default:
+        - GIVEN: my-novel 的 state.yaml 有 proposed、confirmed 与 rejected 条目各一条
+        - WHEN: 运行 wa-cli state list my-novel --dir D --json
+        - THEN: events 只含 proposed 条目，--all 时含全部三条，退出码为 0
+      list-empty-ledger:
+        - GIVEN: my-novel 没有 state.yaml
+        - WHEN: 运行 wa-cli state list my-novel --dir D --json
+        - THEN: events 为空数组，changedPaths 为空数组，退出码为 0
+  state-at:
+    strength: MUST
+    statement: wa-cli state at <unit> 必须只读地输出单元（单元类型为 scene）开始时的状态快照（State Snapshot）：--json 输出 snapshot 数组，每项含 entry（设定集条目 id）、name（该条目的 name，来自 canon.yaml，未设置时为 null）、state（最后生效的状态描述）、proposal（最后生效的台账条目 id）与 scene（该条目绑定的场景引用），按 entry 升序。快照由重放得出：取 state.yaml 中 status 为 confirmed 且 scene 按单元树先序严格早于 <unit> 的条目，按 scene 的先序排序、先序相同按文件顺序依次应用，每个设定条目以最后应用的条目为准；proposed 与 rejected 条目不参与，<unit> 自身及其后场景上的条目不参与。同一 state.yaml、canon.yaml 与单元树输入总是得到同一输出（输出不含时间戳等不稳定值）。没有任何可应用条目（含没有 state.yaml）时 snapshot 为空数组、退出码为 0；state.yaml 不通过 Schema 或领域校验（含条目的 scene 或 entry 无法解析、确认记录不完整），或 canon.yaml 不通过校验时报告其诊断、snapshot 为空数组、退出码为 1（作品没有 canon.yaml 时所有 entry 均无法解析）。<unit> 不存在或类型不为 scene 时报告 state.unknown-unit（field 为 unit，next 含 wa-cli help state at --json）。changedPaths 为空数组。不加 --json 时以人读文本按同样顺序输出每个设定条目的当前状态与生效场景。
+    scenarios:
+      replay-confirmed-only:
+        - GIVEN: state.yaml 中条目 canon-1 有绑定 my-novel/c1/s1 的 confirmed 条目与绑定 my-novel/c1/s2 的 proposed 条目各一条
+        - WHEN: 运行 wa-cli state at my-novel/c2/s1 --dir D --json
+        - THEN: snapshot 中 canon-1 的 state 为 confirmed 条目的描述，退出码为 0
+      scene-start-excludes-own-scene:
+        - GIVEN: state.yaml 只有一条 confirmed 条目，绑定 my-novel/c2/s1、state 为 灯芯易主
+        - WHEN: 运行 wa-cli state at my-novel/c2/s1 --dir D --json
+        - THEN: snapshot 为空数组（该场景开始时变化尚未发生），退出码为 0
+      later-event-wins:
+        - GIVEN: canon-1 有绑定 my-novel/c1/s1（state 为 受伤）与绑定 my-novel/c2/s1（state 为 痊愈）的 confirmed 条目各一条
+        - WHEN: 运行 wa-cli state at my-novel/c3/s1 --dir D --json
+        - THEN: canon-1 的 state 为 痊愈、proposal 为后一条的 id，退出码为 0
+      edit-early-event:
+        - GIVEN: confirmed 条目 state-1 绑定 my-novel/c1/s1、state 为 受伤
+        - WHEN: 运行 wa-cli state set my-novel state-1 --state 重伤 --confirmed-by-author --confirmation 作者修正为重伤 --dir D 后再运行 wa-cli state at my-novel/c2/s1 --dir D --json
+        - THEN: snapshot 中该条目的 state 为 重伤（快照随早期条目修改重新计算），退出码为 0
+      deterministic-replay:
+        - GIVEN: 同一多章长篇夹具
+        - WHEN: 连续两次运行 wa-cli state at my-novel/c3/s1 --dir D --json
+        - THEN: 两次输出的 snapshot 完全一致，退出码为 0

@@ -66,6 +66,9 @@ specs:
   - id: sources-and-provenance
     title: 素材与出处（Sources and Provenance）
     path: .strict-spec-driven/specs/sources-and-provenance.yaml
+  - id: state
+    title: 状态快照（State Snapshot）
+    path: .strict-spec-driven/specs/state.yaml
   - id: style-profile
     title: 文风画像（Style Profile）
     path: .strict-spec-driven/specs/style-profile.yaml

@@ -1,0 +1,40 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: state-change-proposals
+  status: proposed
+summary:
+  what:
+    - 新增作品根单元目录下的状态台账 state.yaml：每个条目是一条状态变更提议（State Change Proposal），即绑定场景的状态变化事件，含符合 id 格式且文件内唯一的 id（缺省生成 state-<n>）、scene（变化发生的场景，单元类型为 scene 的单元引用）、entry（发生变化的设定集（Canon）条目 id）、非空的 state（变化后的状态描述）与 status（proposed 待确认 / confirmed 已确认 / rejected 已拒绝）；status 非 proposed 时条目还含非空的 confirmation（作者确认原话摘要）与 decided_at（RFC 3339 格式），为 proposed 时不得含这两个字段。
+    - 新增 wa-cli state propose <work> --scene <场景> --entry <条目> --state <状态描述> [--id <id>]：Agent 提交提议，初始 status 为 proposed；--scene 引用的单元必须存在且类型为 scene（否则 state.unknown-unit），--entry 必须是该作品 canon.yaml 中已有的设定条目（否则 state.unknown-entry），未确认的提议不参与任何计算。
+    - 新增 wa-cli state confirm <work> <id> --confirmation <原话摘要> 与 wa-cli state reject <work> <id> --confirmation <原话摘要>：作者确认或拒绝提议，记录 confirmation 与 decided_at；reject 对 confirmed 条目即撤销已生效的状态变化；rejected 为终态。新增 wa-cli state set <work> <id> [--scene <场景>] [--state <文本>]：修改条目；proposed 条目照常修改，confirmed 条目必须给出 --confirmation（作者重新确认，改动会改变已生效状态），rejected 条目拒绝修改（state.already-decided）。修改或撤销早期条目后，快照随之重新计算。
+    - 新增 wa-cli state list <work> [--all]：默认只列出 status 为 proposed 的条目（作者待处理清单），--all 列出全部；每项含 id、scene、entry、state、status、confirmation 与 decided_at（无则为 null），按 scene 的单元树先序排序，先序相同按文件顺序；无台账时为空列表。
+    - 新增 wa-cli state at <scene>：输出该场景开始时的状态快照（State Snapshot）——重放 state.yaml 中 status 为 confirmed 且 scene 按单元树先序严格早于目标场景的条目（同一场景内按文件顺序），每个设定条目取最后一条生效，快照每项含 entry、name（来自设定集，未设置时为 null）、state、proposal 与 scene，按 entry 升序；proposed 与 rejected 条目及目标场景自身和其后场景的条目不参与；同一输入总是得到同一结果。
+    - wa-cli validate 整体校验纳入 state.yaml 的 Schema 与领域校验并计入 checked（id 重复 artifact.duplicate-id；scene 单元不存在或类型不符 state.unknown-unit；entry 不在设定集中 state.unknown-entry；字段约束 artifact.schema-violation）；wa-cli validate <path> 对单个 state.yaml 执行同样检查。
+  why:
+    - 路线图 novel 里程碑（order 600，长篇结构与记忆）的计划变更 state-change-proposals：它是完成标准「wa-cli state at <scene> 输出的状态快照等于此前已确认事件的重放结果；测试夹具中修改早期事件后，后续快照随之变化」与「状态变更提议未经作者确认时不进入设定集，也不参与状态快照计算」的承载者；依赖的 multi-level-units 与 scene-contract-and-causality 均已归档，单元树先序与场景契约的 state_changes 字段已就位。
+    - 长篇中人物、物品、地点的状态随剧情不断变化（受伤、易主、损毁），任何单个会话都装不下全书：Agent 换会话后不知道某场景开始时各设定条目处于什么状态，容易写出与前后文矛盾的内容。事件溯源把状态放到磁盘上的状态台账中，由已确认条目按先序确定性重放得出，不依赖模型记忆，也不调用大语言模型（LLM），与里程碑「长篇的连续性不依赖模型记忆」原则一致。
+    - 状态变化生效是作者的决定：Agent 抽取的状态变化可能漏抽或错抽，未经确认就生效会把 Agent 的猜测变成既成事实。提议须作者确认后生效、未确认不参与计算，与仓库约定「涉及作者意图的行为，规格必须写明人的确认点」一致；「提议尚未经作者处理时场景不能验收」的验收侧 enforcement 属 scene-close-out 计划变更（依赖本变更）。
+scope:
+  in:
+    - internal/schema：新增 state.schema.json（schema_version 与 events 的 id/scene/entry/state/status/confirmation/decided_at 约束）与命名注册，补合法与不合法夹具
+    - 新包 internal/state：state.yaml 加载与领域校验（id 唯一、scene 单元存在且为 scene 类型、entry 在设定集中、status 与 confirmation/decided_at 字段约束、符号链接处理）、Propose/List/Confirm/Reject/Set、按单元树先序的重放与快照计算，供 validate 与 CLI 复用
+    - internal/cli：state propose / state list / state confirm / state reject / state set / state at 六个命令注册（args、flags、outputKeys、exitCodes、--json 与人读输出、诊断与 next）；validate 整体校验与 validate <path> 纳入 state.yaml
+    - docs/GLOSSARY.md：状态台账（State Ledger）词条
+    - 测试夹具：带 state.yaml 的多章长篇夹具（跨章状态变化、修改与撤销早期条目的场景）与无台账夹具
+  out:
+    - 写后收口（Close-out）与验收联动：契约要求的状态变化未提交时 accept 被拒绝、提议未处理时场景不能验收，以及台账条目与场景契约 state_changes 的显式关联——属 scene-close-out 计划变更（依赖本变更），本变更不要求关联字段
+    - 知情表（Knowledge State）与 wa-cli knowledge at——属 knowledge-state 计划变更（依赖本变更，复用本变更的确认与重放模式）
+    - wa-cli context 纳入状态快照（出场人物的状态快照内容项与预算裁剪）——属 layered-summaries-and-budget 计划变更
+    - 状态的自动抽取与识别：抽取由接入的 Agent 完成，wa-cli 不调用大语言模型（LLM）；时间线类检查（如人物同时出现在两地）属 novel-series 里程碑
+    - MCP 服务与内置技能不单独编写（state 命令经命令注册表自动暴露）
+unchanged_behavior:
+  - 作品没有 state.yaml 时，validate、context、advance、accept 等命令的输出、退出码与错误码不变；state list 输出空列表、state at 输出空快照，退出码为 0
+  - 设定集（canon.yaml）、伏笔台账（threads.yaml）、场景契约与因果链（Causality Chain）检查、决策队列（Decision Queue）语义均不变；state 条目只是设定集条目的新引用方
+  - 既有 outline.yaml 的 state_changes/events 字段格式与 scene contract 参数不变；wa-cli state 不读写大纲
+  - MCP 服务与内置技能内容不变
+roadmap:
+  milestone: novel
+  planned_change: state-change-proposals

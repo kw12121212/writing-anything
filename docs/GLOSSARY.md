@@ -83,6 +83,7 @@
 | 故事圣经 | Story Bible | 故事圣经 | 长篇的外部记忆：设定集、状态快照、知情表、伏笔台账、因果链、分层摘要的总称 |
 | 事件溯源 | Event Sourcing | 事件溯源 | 只记录每次变化（事件），状态由事件按顺序重放得出 |
 | 状态快照 | State Snapshot | 状态快照 | 某个场景开始时人物、物品、地点的状态 |
+| 状态台账 | State Ledger | 状态台账 | 作品根单元目录 `state.yaml` 中按场景登记的状态变更提议（State Change Proposal）总账：Agent 经 `wa-cli state propose` 提交、作者确认后生效，`wa-cli state at <场景>` 按单元树先序重放已确认条目得出状态快照（State Snapshot） |
 | 知情表 | Knowledge State | 知情表 | 各人物与读者在某个场景时已知的信息 |
 | 伏笔台账 | Foreshadowing Ledger | 伏笔台账 | 伏笔的埋设位置、计划回收位置与状态，存于作品根单元目录的 `threads.yaml`，由 `wa-cli threads` 列出并标出已超过计划回收位置的条目 |
 | 伏笔条目 | Thread Entry | 伏笔条目 | 伏笔台账中的一条登记：伏笔内容、埋设场景、计划回收位置与状态（open 未回收 / paid 已回收 / dropped 放弃），放弃须经决策队列作者确认 |

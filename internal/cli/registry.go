@@ -85,6 +85,7 @@ var registry = commandSet{helpCommand, versionCommand, initCommand, validateComm
 	sourceAddCommand, sourceListCommand, draftWriteCommand, diffCommand, provenanceCommand, claimAddCommand, claimSetCommand, claimListCommand, claimRemoveCommand,
 	canonAddCommand, canonSetCommand, canonListCommand, canonRemoveCommand,
 	threadsListCommand, threadsAddCommand, threadsSetCommand,
+	stateProposeCommand, stateListCommand, stateConfirmCommand, stateRejectCommand, stateSetCommand, stateAtCommand,
 	methodListCommand, methodShowCommand, reviewRecordCommand, reviewShowCommand, reviewResolveCommand, acceptCommand, exportCommand, previewCommand, skillsListCommand, skillsInstallCommand,
 	feedbackAddCommand, feedbackListCommand, feedbackResolveCommand, feedbackWatchCommand,
 	decisionAddCommand, decisionsCommand, decideCommand, mcpCommand, mcpInstallCommand}

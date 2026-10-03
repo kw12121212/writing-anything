@@ -1,0 +1,63 @@
+schema: strict-spec-driven/question-list/v1
+schema_version: 1
+artifact_type: question_list
+schema_file: templates/strict-spec-driven/schemas/question-list.yaml
+change: state-change-proposals
+open: []
+resolved:
+  - id: requirement-problem
+    question: What is concretely going wrong today, and for whom?
+    context: 'Why this is asked: the change is planned against a need, and the need lives only with the requester. A "problem" here means what someone does or suffers today — not a feature that is missing. What a sufficient answer contains: who is affected, what they do today instead, and how often.'
+    answer: 长篇的状态变化只存在于正文与 Agent 的会话记忆中：换会话后 Agent 不知道某场景开始时人物、物品、地点各设定条目处于什么状态，容易写出与前后文矛盾的内容，也无法确定性核对（novel 里程碑 details 与完成标准指出的缺口）。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-outcome
+    question: What observable difference proves the problem is solved?
+    context: 'Why this is asked: without a success condition, nobody can tell afterwards whether the change worked. "Observable" means someone outside the system can check it without reading the code.'
+    answer: 里程碑 done_criteria：wa-cli state at <scene> 输出的状态快照等于此前已确认事件的重放结果；测试夹具中修改早期事件后，后续快照随之变化；状态变更提议未经作者确认时不进入设定集，也不参与状态快照计算。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-trigger
+    question: Why now — what forced this?
+    context: 'Why this is asked: work that nothing forced is the work most often thrown away later. This question catches a request that sounds reasonable but has no real driver behind it.'
+    answer: 依赖的 multi-level-units 与 scene-contract-and-causality 均已归档，单元树先序与场景契约的 state_changes 字段已就位；roadmap-recommend 在 novel 里程碑中选中本计划变更（其余候选均因依赖未完成被跳过）。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-non-goals
+    question: What must explicitly not change?
+    context: 'Why this is asked: the requester knows which nearby behavior other people depend on, and the agent does not. A "non-goal" is something the change must leave alone even though it sits close to the work.'
+    answer: 无 state.yaml 的作品全部命令行为不变；canon、threads、场景契约与因果链检查、决策队列语义不变；close-out 验收联动、知情表、context 纳入快照不在本变更（proposal 的 out 与 unchanged_behavior）。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-interpretation
+    question: Which reading of the request is intended, where more than one is possible?
+    context: 'Why this is asked: a short request usually admits several readings, and building the wrong one is indistinguishable from building nothing.'
+    answer: 按计划变更 details 的唯一读法：登记式台账（绑定场景与设定条目）+ 作者确认生效 + 已确认条目按单元树先序重放。「不进入设定集」读作不改变 canon.yaml 的稳定定义（状态由重放派生），确认机制的歧义已作为设计决策 confirm-mechanism 记录。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: confirm-mechanism
+    question: 作者确认走决策队列（Decision Queue）阻塞模式，还是 --confirmation 原话摘要的确认记录模式？
+    context: 计划变更 details 只写「作者确认后生效」，未指定机制。影响范围：state 主规格 state-decide 需求语句、internal/state 的 Confirm/Reject 实现（state-package 任务）、test-state-package 断言；不影响其他规格。推荐：--confirmation 确认记录——确认是逐条二值动作，长篇一章常有多条，逐条生成阻塞决策会淹没队列并阻塞全部单元推进；「提议未处理时场景不能验收」的 enforcement 属 scene-close-out，届时在验收关卡检查。
+    answer: 采用 --confirmation 原话摘要的确认记录模式（与 decide、accept 一致）：state confirm / state reject 记录 confirmation 与 decided_at；confirmed 条目的修改（state set）同样需 --confirmation 重新确认；不用决策队列。
+    status: resolved
+    kind: requirement
+    answered_by: assumption
+  - id: replay-scope
+    question: state at 的重放边界——目标场景自身绑定的条目参与吗？没有任何条目的设定条目出现在快照里吗？
+    context: 「任一场景开始时的状态」字面上有边界歧义。影响范围：state 主规格 state-at 需求语句、internal/state 的 Snapshot 实现（state-package 任务）、test-state-replay 夹具断言；不影响其他规格。推荐：目标场景自身严格排除（场景开始时尚未发生）；快照只含至少有一条已重放条目的设定条目，无条目条目处于设定集初始状态、经 canon list 可得，重复输出只会挤占上下文预算。
+    answer: 只重放 status 为 confirmed 且绑定场景按单元树先序严格早于目标场景的条目（同场景按文件顺序，每条目取最后生效）；快照只含有生效条目的设定条目，按 entry 升序。
+    status: resolved
+    kind: requirement
+    answered_by: assumption
+  - id: edit-revoke
+    question: 修改与撤销早期事件的机制——直接编辑既有条目，还是只允许追加补偿事件？已确认条目的修改需要什么授权？
+    context: 计划变更 details 要求「修改或撤销早期事件后，快照随之重新计算」，未指定机制。影响范围：state 主规格 state-decide 需求语句、internal/state 的 Set/Reject 实现（state-package 任务）、test-state-replay 断言；不影响其他规格。推荐：直接编辑（补偿事件把修正错别字的代价变成三条记录）；confirmed 条目的修改与撤销都需 --confirmation 重新确认（等价于改写既成事实）；rejected 为终态防止已拒绝的猜测经编辑复活。
+    answer: 直接编辑：state set 修改 proposed 条目无需确认、修改 confirmed 条目须 --confirmation；state reject 拒绝 proposed 或撤销 confirmed（均记录 confirmation 与 decided_at）；rejected 终态，重新提议须新登记条目。
+    status: resolved
+    kind: requirement
+    answered_by: assumption

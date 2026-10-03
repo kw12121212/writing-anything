@@ -5,7 +5,7 @@ schema_file: ../../templates/strict-spec-driven/schemas/planned-change.yaml
 planned_change:
   id: state-change-proposals
   milestone: novel
-status: planned
+status: complete
 summary: 事件溯源（Event Sourcing）的状态快照（State Snapshot）与状态变更提议
 details: 人物、物品、地点等设定条目的每次状态变化，都记录为绑定场景的事件：Agent 通过 wa-cli state propose 提交，作者确认后生效，未确认的提议不参与计算。wa-cli state at <scene> 按单元树顺序重放此前已确认的事件，得出任一场景开始时的状态快照，同一输入总是得到同一结果。修改或撤销早期事件后，快照随之重新计算。测试夹具验证重放结果与期望一致。
 depends_on:

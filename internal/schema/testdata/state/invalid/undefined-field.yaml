@@ -1,0 +1,8 @@
+schema_version: 1
+events:
+  - id: state-1
+    scene: my-novel/c1/s1
+    entry: canon-1
+    state: 受伤
+    status: proposed
+    note: 多余字段

@@ -265,6 +265,7 @@ var nullableFields = map[string]bool{
 	"confirmation":     true,
 	"contextBudget":    true,
 	"cta":              true,
+	"decided_at":       true,
 	"decidedAt":        true,
 	"decision":         true,
 	"defaultGenre":     true,
@@ -283,6 +284,7 @@ var nullableFields = map[string]bool{
 	"lock":             true,
 	"median":           true,
 	"method":           true,
+	"name":             true,
 	"note":             true,
 	"opening":          true,
 	"outline":          true,
@@ -414,7 +416,7 @@ func TestRegistryConsistency(t *testing.T) {
 }
 
 // mutatingSamples 列出只能通过变更产物才能成功的命令；它们的样例在临时工作区中变更产物。
-var mutatingSamples = map[string]bool{"new": true, "unit add": true, "unit move": true, "advance": true, "source add": true, "claim add": true, "claim remove": true, "review record": true, "accept": true, "export": true, "preview": true, "marketing ask": true, "mcp install": true, "skills install": true, "feedback add": true, "decision add": true, "decide": true, "outline remove": true, "pack install": true, "pack remove": true, "metrics record": true, "metrics calibrate": true, "pack learn": true, "series add": true, "series fact": true, "summary set": true, "pack confirm": true, "pack reject": true, "canon add": true, "canon remove": true, "scene contract": true, "threads add": true, "plan step": true, "plan confirm": true}
+var mutatingSamples = map[string]bool{"new": true, "unit add": true, "unit move": true, "advance": true, "source add": true, "claim add": true, "claim remove": true, "review record": true, "accept": true, "export": true, "preview": true, "marketing ask": true, "mcp install": true, "skills install": true, "feedback add": true, "decision add": true, "decide": true, "outline remove": true, "pack install": true, "pack remove": true, "metrics record": true, "metrics calibrate": true, "pack learn": true, "series add": true, "series fact": true, "summary set": true, "pack confirm": true, "pack reject": true, "canon add": true, "canon remove": true, "scene contract": true, "threads add": true, "plan step": true, "plan confirm": true, "state propose": true, "state confirm": true, "state reject": true, "state set": true}
 
 // sampleArgs 返回命令的一次成功调用：除 mutatingSamples 中的命令外都不变更任何产物；工作区命令在已初始化的
 // 临时工作区中运行。
@@ -589,6 +591,45 @@ func sampleArgs(t *testing.T, name string) []string {
 		run(t, "unit", "add", "my-story", "scene", "s1", "--dir", dir)
 		run(t, "threads", "add", "my-story", "--text", "灯芯的来历后文揭晓", "--plant-in", "my-story/s1", "--recover-at", "my-story/s1", "--dir", dir)
 		return []string{"threads", "set", "my-story", "thread-1", "--text", "灯芯的来历后文揭晓", "--dir", dir, "--json"}
+	case "state list":
+		return []string{"state", "list", "my-post", "--dir", newWork(t), "--json"}
+	case "state propose":
+		dir := newWorkspace(t)
+		run(t, "new", "short-story", "my-story", "--dir", dir)
+		run(t, "unit", "add", "my-story", "scene", "s1", "--dir", dir)
+		run(t, "canon", "add", "my-story", "--type", "character", "--name", "守灯人", "--text", "五十岁，左手有旧伤", "--dir", dir)
+		return []string{"state", "propose", "my-story", "--scene", "my-story/s1", "--entry", "canon-1", "--state", "左手旧伤复发", "--dir", dir, "--json"}
+	case "state confirm":
+		dir := newWorkspace(t)
+		run(t, "new", "short-story", "my-story", "--dir", dir)
+		run(t, "unit", "add", "my-story", "scene", "s1", "--dir", dir)
+		run(t, "canon", "add", "my-story", "--type", "character", "--name", "守灯人", "--text", "五十岁，左手有旧伤", "--dir", dir)
+		run(t, "state", "propose", "my-story", "--scene", "my-story/s1", "--entry", "canon-1", "--state", "左手旧伤复发", "--dir", dir)
+		return []string{"state", "confirm", "my-story", "state-1", "--confirmed-by-author", "--confirmation", "作者确认旧伤复发", "--dir", dir, "--json"}
+	case "state reject":
+		dir := newWorkspace(t)
+		run(t, "new", "short-story", "my-story", "--dir", dir)
+		run(t, "unit", "add", "my-story", "scene", "s1", "--dir", dir)
+		run(t, "canon", "add", "my-story", "--type", "character", "--name", "守灯人", "--text", "五十岁，左手有旧伤", "--dir", dir)
+		run(t, "state", "propose", "my-story", "--scene", "my-story/s1", "--entry", "canon-1", "--state", "左手旧伤复发", "--dir", dir)
+		return []string{"state", "reject", "my-story", "state-1", "--confirmed-by-author", "--confirmation", "作者撤销该变化", "--dir", dir, "--json"}
+	case "state set":
+		// 修改 proposed 条目不需要作者确认。
+		dir := newWorkspace(t)
+		run(t, "new", "short-story", "my-story", "--dir", dir)
+		run(t, "unit", "add", "my-story", "scene", "s1", "--dir", dir)
+		run(t, "canon", "add", "my-story", "--type", "character", "--name", "守灯人", "--text", "五十岁，左手有旧伤", "--dir", dir)
+		run(t, "state", "propose", "my-story", "--scene", "my-story/s1", "--entry", "canon-1", "--state", "左手旧伤复发", "--dir", dir)
+		return []string{"state", "set", "my-story", "state-1", "--state", "旧伤复发，握不住灯杆", "--dir", dir, "--json"}
+	case "state at":
+		dir := newWorkspace(t)
+		run(t, "new", "short-story", "my-story", "--dir", dir)
+		run(t, "unit", "add", "my-story", "scene", "s1", "--dir", dir)
+		run(t, "unit", "add", "my-story", "scene", "s2", "--dir", dir)
+		run(t, "canon", "add", "my-story", "--type", "character", "--name", "守灯人", "--text", "五十岁，左手有旧伤", "--dir", dir)
+		run(t, "state", "propose", "my-story", "--scene", "my-story/s1", "--entry", "canon-1", "--state", "左手旧伤复发", "--dir", dir)
+		run(t, "state", "confirm", "my-story", "state-1", "--confirmed-by-author", "--confirmation", "作者确认旧伤复发", "--dir", dir)
+		return []string{"state", "at", "my-story/s2", "--dir", dir, "--json"}
 	case "method list":
 		return []string{"method", "list", "--dir", newWorkspace(t), "--json"}
 	case "method show":

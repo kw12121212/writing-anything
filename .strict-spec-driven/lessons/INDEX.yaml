@@ -210,6 +210,11 @@ categories:
       status: active
       occurrences: 1
       path: .strict-spec-driven/lessons/coding/null-schema-37e8c0.yaml
+    canon-list-canon-yaml-nil-nil-dac3b3:
+      title: canon.List 对不存在的 canon.yaml 返回 (nil, nil)，与无法加载无法按返回值区分
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/coding/canon-list-canon-yaml-nil-nil-dac3b3.yaml
   documentation:
     must-must-6af326:
       title: 修改一条 MUST 需求时，要检查同一规格里相邻的 MUST 是否因此冲突
