@@ -339,6 +339,7 @@ func TestKindForSourcesAndUnitArtifacts(t *testing.T) {
 		".writing-anything/works/my-post/marketing.yaml":              "marketing",
 		".writing-anything/works/my-post/units/intro/marketing.yaml":  "marketing",
 		".writing-anything/works/my-post/canon.yaml":                  "canon",
+		".writing-anything/works/my-post/threads.yaml":                "threads",
 	} {
 		if k := KindFor(rel); k == nil || k.Name != want {
 			t.Errorf("KindFor(%q) = %+v, want %s", rel, k, want)
@@ -346,8 +347,9 @@ func TestKindForSourcesAndUnitArtifacts(t *testing.T) {
 	}
 	for _, rel := range []string{".writing-anything/sources/source.yaml", ".writing-anything/sources/a/original.md",
 		".writing-anything/works/my-post/units/provenance.yaml", ".writing-anything/works/my-post/units/a/b/claims.yaml",
-		// canon 只在作品根单元目录中识别（canon-validation/child-dir-not-recognized）。
-		".writing-anything/works/my-post/units/s1/canon.yaml"} {
+		// canon 与 threads 只在作品根单元目录中识别（canon-validation/child-dir-not-recognized）。
+		".writing-anything/works/my-post/units/s1/canon.yaml",
+		".writing-anything/works/my-post/units/s1/threads.yaml"} {
 		if k := KindFor(rel); k != nil {
 			t.Errorf("KindFor(%q) = %s, want nil", rel, k.Name)
 		}

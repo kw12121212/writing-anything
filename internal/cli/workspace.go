@@ -24,6 +24,7 @@ import (
 	"github.com/kw12121212/writing-anything/internal/schema"
 	"github.com/kw12121212/writing-anything/internal/series"
 	"github.com/kw12121212/writing-anything/internal/source"
+	"github.com/kw12121212/writing-anything/internal/threads"
 	"github.com/kw12121212/writing-anything/internal/work"
 	"github.com/kw12121212/writing-anything/internal/workspace"
 )
@@ -181,6 +182,8 @@ func runValidate(inv *invocation) int {
 					problems = append(problems, draft.CheckArtifact(dir, checked[0])...)
 				case "canon":
 					problems = append(problems, canon.CheckArtifact(dir, checked[0])...)
+				case "threads":
+					problems = append(problems, threads.CheckArtifact(dir, checked[0])...)
 				case "brief":
 					problems = append(problems, brief.CheckArtifact(dir, checked[0])...)
 				case "outline":
@@ -446,7 +449,7 @@ func checkWorkspace(dir string) (checked []string, works []*work.Work, problems 
 	}
 	q := brief.LoadQueue(dir) // 写作简报与大纲共用一次加载的决策队列
 	bchecked, bps := brief.CheckUnitArtifacts(dir, dirs, q)
-	defaults := map[string]string{}                  // 单元目录 → 所在作品的文体的默认写作法；只有根单元适用（method-selection）
+	defaults := map[string]string{}                     // 单元目录 → 所在作品的文体的默认写作法；只有根单元适用（method-selection）
 	genreMetrics := map[string][]catalog.ScoredMetric{} // 单元目录 → 所在作品按文体合并的 AI 评分指标（targets 检查）
 	for _, w := range works {
 		var ms []catalog.ScoredMetric
@@ -477,8 +480,9 @@ func checkWorkspace(dir string) (checked []string, works []*work.Work, problems 
 	tchecked, tps := series.Check(dir)
 	ychecked, yps := series.CheckSummaries(dir, works)
 	kchecked, kps := canon.CheckWorks(dir, works)
-	checked = slices.Concat(checked, more, wchecked, schecked, uchecked, bchecked, ochecked, fchecked, rchecked, mchecked, dchecked, lchecked, xchecked, cchecked, pchecked, echecked, tchecked, ychecked, kchecked)
-	return checked, works, slices.Concat(problems, ps, wps, sps, ups, bps, ops, fps, rps, mps, dps, lps, xps, cps, pps, eps, tps, yps, kps)
+	thchecked, thps := threads.CheckWorks(dir, works)
+	checked = slices.Concat(checked, more, wchecked, schecked, uchecked, bchecked, ochecked, fchecked, rchecked, mchecked, dchecked, lchecked, xchecked, cchecked, pchecked, echecked, tchecked, ychecked, kchecked, thchecked)
+	return checked, works, slices.Concat(problems, ps, wps, sps, ups, bps, ops, fps, rps, mps, dps, lps, xps, cps, pps, eps, tps, yps, kps, thps)
 }
 
 // defaultMethodOf 返回单元产物 rel 适用的文体默认写作法：只有作品的根单元适用，子单元不继承；

@@ -18,6 +18,7 @@ import (
 	"github.com/kw12121212/writing-anything/internal/outline"
 	"github.com/kw12121212/writing-anything/internal/resolve"
 	"github.com/kw12121212/writing-anything/internal/series"
+	"github.com/kw12121212/writing-anything/internal/threads"
 	"github.com/kw12121212/writing-anything/internal/work"
 	"github.com/kw12121212/writing-anything/internal/workspace"
 )
@@ -29,6 +30,7 @@ const (
 	PartSection      = "section"
 	PartCharacter    = "character"
 	PartReveal       = "reveal"
+	PartThread       = "thread"
 	PartFeedback     = "feedback"
 	PartDecision     = "decision"
 	PartFact         = "fact"
@@ -146,6 +148,16 @@ type RevealBoundary struct {
 	Text    string
 }
 
+// Thread 是与本场景契约相关的一条未回收伏笔（Open Foreshadowing）：埋设在本场景、计划回收于本场景，或本场景
+// 大纲节 recovers 引用的伏笔台账（Foreshadowing Ledger）条目。
+type Thread struct {
+	ID             string
+	Text           string
+	PlantedIn      string
+	PlannedRecover string
+	Overdue        bool
+}
+
 // CodeSummaryMissing 是前序作品或前序场景还没有摘要时的 warning 错误码。已发布的错误码不得改名或复用。
 const CodeSummaryMissing = "context.summary-missing"
 
@@ -171,6 +183,7 @@ type Pack struct {
 	Characters               []Character    // 场景级：出场人物的当前设定；非 scene 单元为 nil
 	PriorScenes              []SceneSummary // 场景级：前序场景的已验收摘要；非 scene 单元为 nil
 	Reveal                   []RevealBoundary
+	Threads                  []Thread // 场景级：与本场景契约相关的未回收伏笔；非 scene 单元为 nil
 	Feedback                 []feedback.Item
 	Decisions                []Decision
 	Norms                    Norms
@@ -251,9 +264,9 @@ func Build(root string, w *work.Work, u *work.Unit) (*Pack, []workspace.Problem)
 		}
 	}
 
-	// 场景级上下文（scene-context）：出场人物的当前设定与揭示边界，只对单元类型为 scene 的单元组装。
+	// 场景级上下文（scene-context）：出场人物的当前设定、揭示边界与未回收伏笔，只对单元类型为 scene 的单元组装。
 	if u.Type == "scene" {
-		its, fatal := sceneItems(root, w, own, p, &warnings)
+		its, fatal := sceneItems(root, w, u, own, p, &warnings)
 		if fatal != nil {
 			return nil, fatal
 		}
@@ -402,11 +415,12 @@ func Build(root string, w *work.Work, u *work.Unit) (*Pack, []workspace.Problem)
 	return p, warnings
 }
 
-// sceneItems 组装场景单元的出场人物与揭示边界内容项，按 context-trim 的优先级（人物设定在前、揭示边界在后）：
-// 出场人物按场景大纲 characters 声明顺序去重后，取 canon.yaml 中 name 相同的 character 条目（同名的按条目顺序都保留）；
-// 揭示边界为本单元大纲各节的 reveal。canon.yaml 存在但不通过校验时返回阻止组装的问题（canon.List 的 error 级）；
-// 声明的人物没有同名条目时逐个追加 warning（作品没有 canon.yaml 时不提示）。
-func sceneItems(root string, w *work.Work, own *outline.Outline, p *Pack, warnings *[]workspace.Problem) ([]item, []workspace.Problem) {
+// sceneItems 组装场景单元的出场人物、揭示边界与未回收伏笔内容项，按 context-trim 的优先级（人物设定在前、揭示边界
+// 其次、未回收伏笔在后）：出场人物按场景大纲 characters 声明顺序去重后，取 canon.yaml 中 name 相同的 character 条目
+// （同名的按条目顺序都保留）；揭示边界为本单元大纲各节的 reveal；未回收伏笔为伏笔台账（Foreshadowing Ledger）中
+// open 且与本场景契约相关的条目（threads 主规格 scene-context）。canon.yaml 或 threads.yaml 存在但不通过校验时返回
+// 阻止组装的问题；声明的人物没有同名条目时逐个追加 warning（作品没有 canon.yaml 时不提示）。
+func sceneItems(root string, w *work.Work, u *work.Unit, own *outline.Outline, p *Pack, warnings *[]workspace.Problem) ([]item, []workspace.Problem) {
 	var names []string
 	if own != nil {
 		for _, sec := range own.Sections {
@@ -463,6 +477,50 @@ func sceneItems(root string, w *work.Work, own *outline.Outline, p *Pack, warnin
 				p.Reveal = slices.DeleteFunc(p.Reveal, func(x RevealBoundary) bool { return x.Section == id })
 			}})
 		}
+	}
+	if its, fatal := threadItems(root, w, u, own, p, warnings); fatal != nil {
+		return nil, fatal
+	} else {
+		out = append(out, its...)
+	}
+	return out, nil
+}
+
+// threadItems 组装未回收伏笔（Open Foreshadowing）内容项：伏笔台账中 open 且与本场景契约相关的条目——埋设在本
+// 场景、计划回收于本场景，或本场景大纲节 recovers 引用。threads.yaml 不存在时 List 返回空，不提示；台账存在但不
+// 通过校验时返回阻止组装的问题（同 canon.yaml 的处理）。
+func threadItems(root string, w *work.Work, u *work.Unit, own *outline.Outline, p *Pack, warnings *[]workspace.Problem) ([]item, []workspace.Problem) {
+	items, ps := threads.List(root, w, false)
+	var fatal []workspace.Problem
+	for _, q := range ps {
+		if q.Severity == workspace.SeverityError {
+			fatal = append(fatal, q)
+		} else {
+			*warnings = append(*warnings, q)
+		}
+	}
+	if fatal != nil {
+		return nil, fatal
+	}
+	recovers := map[string]bool{}
+	if own != nil {
+		for _, sec := range own.Sections {
+			for _, id := range sec.Recovers {
+				recovers[id] = true
+			}
+		}
+	}
+	var out []item
+	for _, it := range items {
+		if it.PlantedIn != u.Ref && it.PlannedRecover != u.Ref && !recovers[it.ID] {
+			continue
+		}
+		v := Thread{ID: it.ID, Text: it.Text, PlantedIn: it.PlantedIn, PlannedRecover: it.PlannedRecover, Overdue: it.Overdue}
+		p.Threads = append(p.Threads, v)
+		id := v.ID
+		out = append(out, item{part: PartThread, id: id, body: v.markdown(), drop: func() {
+			p.Threads = slices.DeleteFunc(p.Threads, func(x Thread) bool { return x.ID == id })
+		}})
 	}
 	return out, nil
 }

@@ -1,0 +1,60 @@
+schema: strict-spec-driven/question-list/v1
+schema_version: 1
+artifact_type: question_list
+schema_file: templates/strict-spec-driven/schemas/question-list.yaml
+change: foreshadowing-ledger
+open: []
+resolved:
+  - id: requirement-problem
+    question: What is concretely going wrong today, and for whom?
+    context: 'Why this is asked: the change is planned against a need, and the need lives only with the requester. A "problem" here means what someone does or suffers today — not a feature that is missing. If the answer names a button, a field, a page, or an endpoint, it is a solution, and the underlying problem is still unstated. What a sufficient answer contains: who is affected, what they do today instead, and how often. Worked example: "every Monday one person spends forty minutes copying order rows into a spreadsheet to send the weekly report". What it changes: this becomes the proposal''s why, and it decides whether the change is worth making.'
+    answer: 长篇的伏笔只存在于各场景契约的 plants/recovers 字段，没有任何跨场景记忆：Agent 换会话后不知道埋了哪些伏笔、计划在哪收、哪些已收，回收引用不存在的埋设也不会被发现，wa-cli 也无法提示已超过计划回收位置的伏笔（计划变更 novel-foreshadowing-ledger 的 details 与 novel 里程碑完成标准指出的缺口）。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-outcome
+    question: What observable difference proves the problem is solved?
+    context: 'Why this is asked: without a success condition, nobody can tell afterwards whether the change worked. "Observable" means someone outside the system can check it without reading the code. What a sufficient answer contains: what a person will see, or no longer have to do, once this is done. Worked example: "the report is in the manager''s inbox on Monday morning without anyone assembling it". What it changes: this becomes the delta spec''s scenarios and the acceptance evidence at review time.'
+    answer: 里程碑 done_criteria：伏笔回收引用不存在的埋设时校验失败；wa-cli threads 标出超过计划回收位置的未回收伏笔。加上计划变更 details 的 context 要求：context 输出与当前场景契约相关的未回收伏笔。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-trigger
+    question: Why now — what forced this?
+    context: 'Why this is asked: work that nothing forced is the work most often thrown away later. This question catches a request that sounds reasonable but has no real driver behind it. What a sufficient answer contains: the concrete event, deadline, incident, or cost that made this surface now, or an honest statement that nothing did. Worked example: "the report was missed last month and it was raised with the team". What it changes: a change with no trigger is a candidate for deferral, and the answer is weighed at review before archive.'
+    answer: 依赖的 scene-contract-and-causality 已归档，场景契约的 plants/recovers 字段已就位，只缺台账与校验；roadmap-recommend 在 novel 里程碑中选中本计划变更（其余候选均因依赖未完成被跳过）。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-non-goals
+    question: What must explicitly not change?
+    context: 'Why this is asked: the requester knows which nearby behavior other people depend on, and the agent does not. A "non-goal" is something the change must leave alone even though it sits close to the work. What a sufficient answer contains: the behavior, setting, or output that must survive untouched, and who relies on it. Worked example: "do not change the saved filters — several people rely on their own". What it changes: these become the proposal''s unchanged_behavior items, which review checks the finished result against.'
+    answer: 无 threads.yaml 的作品：validate、scene contract、context 等命令的输出、退出码与错误码不变；既有 outline.yaml 的 plants/recovers 字段格式与因果链检查不变；写后收口与验收联动、状态快照、知情表、分层摘要不在本变更（proposal 的 out 与 unchanged_behavior）。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-interpretation
+    question: Which reading of the request is intended, where more than one is possible?
+    context: 'Why this is asked: a short request usually admits several readings, and building the wrong one is indistinguishable from building nothing. What a sufficient answer contains: the reading that is meant, stated plainly enough to rule the others out — or a statement that only one reading exists and what it is. Worked example: "export means the version sent to the manager, not the one I read myself". What it changes: this fixes the scope boundary before any code is written, and settles disputes about what was asked for.'
+    answer: 按计划变更 details 的唯一读法：登记式台账（记录埋设场景、计划回收位置与状态），放弃需作者确认。存在多种读法的三点已登记为开放问题 plants-consistency、paid-recording、overdue-boundary，实现前由作者确认。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: plants-consistency
+    question: 场景契约 --plant 引用未在伏笔台账登记的伏笔时，写入应当场拒绝，还是放行写入、仅由 wa-cli validate 报告？
+    context: 计划变更 details 只明确规定「回收引用不存在的埋设时校验失败」，未说明埋设侧的校验强度。影响范围：proposal 的校验范围、threads 主规格 threads-contract-checks 需求语句、internal/cli 的 scene contract 写入预检（threads-scene-precheck 任务）与 internal/threads 的 ContractProblems、以及 test-threads-cli 的两组断言；不影响 context 规格。推荐：当场拒绝，与 --recover 同级——台账是唯一记忆，放行会造成「契约埋了、台账不知道」的漏检窗口，且诊断 next 可直接给出补登记命令；代价是 Agent 必须先 threads add 再写契约，多一次往返。
+    answer: 当场拒绝：wa-cli scene contract 给出 --plant 或 --recover 时按写入后状态即时预检，引用未登记（或埋设位置不符）的伏笔即拒绝写入；台账始终完整，诊断 next 直接给出 wa-cli threads add 补登记命令。
+    status: resolved
+    answered_by: assumption
+  - id: paid-recording
+    question: paid 状态如何记录——由 Agent 在回收场景验收后用 wa-cli threads set --recovered-in 显式标记，还是 wa-cli 从场景契约 recovers 自动推导？
+    context: 写后收口（Close-out）属 scene-close-out 计划变更，本变更没有「场景验收后自动同步台账」的时机。影响范围：threads 主规格 threads-commands 需求语句、internal/threads 的 Set 语义（threads-package 任务）与 test-threads-package 断言；不影响 context 规格。推荐：本变更以 threads set 显式标记为准（台账是事实记忆，recovered_in 记录实际发生的回收场景），自动同步留给 scene-close-out；在其落地前，契约 recovers 与 paid 状态可能暂时不一致，由作者与 Agent 经 threads 列表比对，overdue 标记会兜底提示。
+    answer: threads set --recovered-in <场景> 显式标记：台账是事实记忆，recovered_in 记录实际发生回收的场景；与验收联动的自动同步留给 scene-close-out 计划变更。
+    status: resolved
+    answered_by: assumption
+  - id: overdue-boundary
+    question: 计划回收位置为章（chapter）时，章内已有场景 done 但章本身未完成，算不算「已超过计划回收位置」？
+    context: 「标出已超过计划回收位置的伏笔」的判定边界未在计划变更 details 中给出。影响范围：threads 主规格 threads-commands 的 overdue 语义、internal/threads 的 overdue 判定（threads-package 任务）与 test-threads-package 的夹具断言；不影响其他规格。推荐：不算——章内后续场景仍可回收，误报会打扰写作；判定取「计划回收单元自身 stage 为 done，或存在 stage 为 done 的 scene 单元既不在计划回收单元子树内、又按单元树先序位于其后」，对场景目标与章目标语义一致且只依赖单元树与 stage，确定可复现。
+    answer: 不算超过：判定为 open 且（计划回收单元自身 stage 为 done，或存在既不在计划回收单元子树内、又按单元树先序位于其后的 done 场景）；章内先行场景 done 不误报，场景与章目标语义一致。
+    status: resolved
+    answered_by: assumption

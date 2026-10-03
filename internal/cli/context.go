@@ -16,7 +16,7 @@ var contextCommand = &command{
 	summary:    "输出单元（Unit）的有界上下文包（Context Pack）：不加 --json 时为 Markdown；超出上下文预算（Context Budget）时按优先级裁剪",
 	args:       []argSpec{{"unit", unitRefHelp, true}},
 	flags:      []flagSpec{dirFlag},
-	outputKeys: []outputKey{{"context", "上下文包：unit、type、stage、genre、budget（value、source）、used、brief、outline、section、characters（场景级：出场人物在设定集中的当前设定 id、name、text、protection；非 scene 单元为空数组）、priorScenes（前序场景的已验收摘要 unit、text、stale）、reveal（揭示边界 section、text）、feedback、decisions、norms、sources、neighbors、series（所属系列的 id、title、facts 与前序作品的 summaries：work、text、stale；不属于系列时为 null）与 trimmed；失败时为 null"}},
+	outputKeys: []outputKey{{"context", "上下文包：unit、type、stage、genre、budget（value、source）、used、brief、outline、section、characters（场景级：出场人物在设定集中的当前设定 id、name、text、protection；非 scene 单元为空数组）、priorScenes（前序场景的已验收摘要 unit、text、stale）、reveal（揭示边界 section、text）、threads（场景级：与本场景契约相关的未回收伏笔 id、text、planted_in、planned_recover、overdue；非 scene 单元或作品没有伏笔台账时为空数组）、feedback、decisions、norms、sources、neighbors、series（所属系列的 id、title、facts 与前序作品的 summaries：work、text、stale；不属于系列时为 null）与 trimmed；失败时为 null"}},
 	exitCodes:  standardExitCodes,
 	run:        runContext,
 }
@@ -70,6 +70,14 @@ type ctxSceneSummary struct {
 type ctxReveal struct {
 	Section string `json:"section"`
 	Text    string `json:"text"`
+}
+
+type ctxThread struct {
+	ID             string `json:"id"`
+	Text           string `json:"text"`
+	PlantedIn      string `json:"planted_in"`
+	PlannedRecover string `json:"planned_recover"`
+	Overdue        bool   `json:"overdue"`
 }
 
 type ctxOption struct {
@@ -144,6 +152,7 @@ type ctxView struct {
 	Characters  []ctxCharacter    `json:"characters"`
 	PriorScenes []ctxSceneSummary `json:"priorScenes"`
 	Reveal      []ctxReveal       `json:"reveal"`
+	Threads     []ctxThread       `json:"threads"`
 	Feedback    []feedbackView    `json:"feedback"`
 	Decisions   []ctxDecision     `json:"decisions"`
 	Norms       ctxNorms          `json:"norms"`
@@ -183,7 +192,7 @@ func messagesView(ms []ctxpack.Message) []ctxMessage {
 // viewContext 把上下文包转换为 --json 输出；数组永不为 null（cli-contract/shared-envelope）。
 func viewContext(p *ctxpack.Pack) *ctxView {
 	v := &ctxView{Unit: p.Unit, Type: p.Type, Stage: p.Stage, Genre: p.Genre, Budget: p.Budget, Used: p.Used,
-		Characters: []ctxCharacter{}, PriorScenes: []ctxSceneSummary{}, Reveal: []ctxReveal{},
+		Characters: []ctxCharacter{}, PriorScenes: []ctxSceneSummary{}, Reveal: []ctxReveal{}, Threads: []ctxThread{},
 		Feedback: []feedbackView{}, Decisions: []ctxDecision{}, Sources: []ctxSource{}, Neighbors: []ctxNeighbor{}, Trimmed: []ctxTrim{},
 		Norms: ctxNorms{Rules: []ctxRule{}, Glossary: []ctxTerm{}, BannedTerms: []ctxBannedTerm{}, Style: nonNilStrings(p.Norms.Style)}}
 	if b := p.Brief; b != nil {
@@ -207,6 +216,9 @@ func viewContext(p *ctxpack.Pack) *ctxView {
 	}
 	for _, r := range p.Reveal {
 		v.Reveal = append(v.Reveal, ctxReveal{Section: r.Section, Text: r.Text})
+	}
+	for _, t := range p.Threads {
+		v.Threads = append(v.Threads, ctxThread{ID: t.ID, Text: t.Text, PlantedIn: t.PlantedIn, PlannedRecover: t.PlannedRecover, Overdue: t.Overdue})
 	}
 	for _, f := range p.Feedback {
 		v.Feedback = append(v.Feedback, feedbackOf(f))

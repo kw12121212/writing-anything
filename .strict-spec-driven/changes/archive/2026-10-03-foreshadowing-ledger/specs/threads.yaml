@@ -1,0 +1,80 @@
+schema: strict-spec-driven/delta-spec/v1
+schema_version: 1
+artifact_type: delta_spec
+schema_file: templates/strict-spec-driven/schemas/delta-spec.yaml
+target_spec: threads
+spec:
+  title: 伏笔台账（Foreshadowing Ledger）
+  path: .strict-spec-driven/specs/threads.yaml
+operations:
+  ADDED:
+    threads-artifact:
+      strength: MUST
+      statement: 作品根单元目录下的 threads.yaml 是伏笔台账（Foreshadowing Ledger）：含 schema_version（1）与 entries 数组；每个伏笔条目（Thread Entry）含符合 id 格式且文件内唯一的 id、非空的 text（伏笔内容）、planted_in（埋设场景，单元类型为 scene 的单元引用）、planned_recover（计划回收位置，单元类型为 chapter（章）或 scene 的单元引用）与 status（open 未回收 / paid 已回收 / dropped 放弃）；status 为 paid 时条目还含 recovered_in（回收发生的 scene 单元引用）且不得含 decision，为 dropped 时条目还含 decision（授权放弃的决策 id）且不得含 recovered_in，为 open 时不得含这两个字段；回收单元下没有任何按单元树先序不早于埋设场景的场景（还没有场景的空章按单元位置直接比较）时报告 threads.recover-before-plant。字段不符合上述要求时报告 artifact.schema-violation（field 为对应点分路径，如 entries[i].status）。wa-cli validate 整体校验时必须对每个可加载作品存在的 threads.yaml 做 Schema 与领域校验并计入 checked：条目 id 重复报告 artifact.duplicate-id（field 为 entries[i].id）；planted_in、planned_recover 与 recovered_in 引用的单元不存在或类型不符报告 threads.unknown-unit（field 为对应点分路径）；planned_recover 早于 planted_in 报告 threads.recover-before-plant（field 为 entries[i].planned_recover）；dropped 条目的 decision 不指向决策队列（Decision Queue）中已由作者决定的决策报告 threads.unknown-decision（field 为 entries[i].decision）。threads.yaml 途经符号链接或不是普通文件时按 artifact.not-found 处理（path 为该 threads.yaml，不读取也不覆盖它）。作品没有 threads.yaml 时不做任何伏笔检查；wa-cli validate <path> 对该位置的 threads.yaml 执行同样的检查。
+      scenarios:
+        invalid-status:
+          - GIVEN: novel 文体作品 my-novel 的 threads.yaml 首个条目 status 为 closed
+          - WHEN: 运行 wa-cli validate --dir D --json
+          - THEN: 报告 artifact.schema-violation 且 field 含 entries[0].status，退出码为 1
+        recover-before-plant:
+          - GIVEN: 条目 planted_in 为 my-novel/c2/s1、planned_recover 为 my-novel/c1/s1，c1 在单元树先序中早于 c2
+          - WHEN: 运行 wa-cli validate --dir D --json
+          - THEN: 报告 threads.recover-before-plant（field 为 entries[0].planned_recover），退出码为 1
+        dropped-missing-decision:
+          - GIVEN: 条目 status 为 dropped 且没有 decision 字段
+          - WHEN: 运行 wa-cli validate --dir D --json
+          - THEN: 报告 artifact.schema-violation 且 field 含 entries[0].decision，退出码为 1
+    threads-commands:
+      strength: MUST
+      statement: wa-cli threads <work> 列出作品伏笔台账的条目：默认只返回 status 为 open 的条目，给出 --all 时返回全部条目；每项含 id、text、planted_in、planned_recover、status、recovered_in（无则为 null）、decision（无则为 null）与 overdue（布尔值），按 planted_in 的单元树先序排序，先序相同按台账文件顺序。overdue 为 true 当且仅当条目 status 为 open 且满足其一：计划回收单元的阶段（Stage，汇总单元取推导阶段）为 done；存在 stage 为 done 的 scene 单元既不在计划回收单元的子树内、又按单元树先序位于计划回收单元之后。不加 --json 时以人读文本按同样顺序输出每条伏笔的 id、内容、埋设场景与计划回收位置，overdue 条目额外标注已超过计划回收位置并附建议命令 wa-cli threads set（--status paid --recovered-in <场景>，或 --status dropped）。台账不存在时输出空列表、退出码为 0；台账不通过 Schema 校验或条目 id 重复时报告其诊断、不输出条目、退出码为 1。wa-cli threads add <work> --text <内容> --plant-in <场景> --recover-at <章或场景> [--id <id>] 在台账末尾追加一个条目（初始状态 open）：--text、--plant-in 与 --recover-at 必填；--plant-in 引用的单元必须是 scene 类型、--recover-at 必须是 chapter 或 scene 类型，否则拒绝写入（threads.unknown-unit，next 含 wa-cli help threads add --json）；--recover-at 按单元树先序早于 --plant-in 时拒绝（threads.recover-before-plant）；--id 缺省生成 thread-<n>（n 从条目数加一起递增到不重复），与既有条目重复时拒绝（artifact.duplicate-id）。wa-cli threads set <work> <id> 修改条目，只改动给出的字段：--text、--recover-at（仍不得早于 planted_in，否则 threads.recover-before-plant）与 --status；--status 为 paid 时必须同时给出 --recovered-in（scene 单元，否则 input.invalid-value），写入后条目含 recovered_in；--status 为 open 时清除 recovered_in 与 decision；--status 为 dropped 时需要作者确认：未给出 --decision，或给出的决策不是为放弃该条目生成、已由作者决定且选择允许的决策时拒绝（threads.author-confirmation），并按设定集（Canon）作者钦定条目同样的阻塞模式幂等地向决策队列追加阻塞决策（同一作品同一条目已有 open 的此类决策或作者已选择保持不变时不重复追加），changedPaths 为决策队列路径；作者允许后携带该决策 id 重试才写入，条目记录 decision。条目 id 不存在时报告 threads.not-found。threads add 与 threads set 出错时不修改 threads.yaml；--json 输出写入后的条目与 changedPaths。
+      scenarios:
+        list-open:
+          - GIVEN: my-novel 的 threads.yaml 有 open、paid 与 dropped 条目各一条
+          - WHEN: 运行 wa-cli threads my-novel --dir D --json
+          - THEN: threads 只含 open 条目，--all 时含全部三条，退出码为 0
+        overdue-scene-done:
+          - GIVEN: 条目 status 为 open，planned_recover 为场景 my-novel/c2/s5，s5 的 stage 为 done
+          - WHEN: 运行 wa-cli threads my-novel --dir D --json
+          - THEN: 该条目 overdue 为 true，不加 --json 的输出标注已超过计划回收位置，退出码为 0
+        overdue-chapter-early:
+          - GIVEN: 条目 status 为 open，planned_recover 为章 my-novel/c2，c2 内场景 s5 的 stage 为 done 而 c2 的另一场景 s6 尚未 done（c2 的推导阶段不是 done），c2 子树之外、先序在 c2 之后的场景没有 done
+          - WHEN: 运行 wa-cli threads my-novel --dir D --json
+          - THEN: 该条目 overdue 为 false（章内 s6 仍可回收），退出码为 0
+        overdue-chapter-passed:
+          - GIVEN: 同上，但 c3 的场景 s9 的 stage 为 done（s9 不在 c2 子树内且先序在 c2 之后）
+          - WHEN: 运行 wa-cli threads my-novel --dir D --json
+          - THEN: 该条目 overdue 为 true，退出码为 0
+        drop-with-decision:
+          - GIVEN: 作者已对放弃条目 f-1 的阻塞决策 d-3 选择允许
+          - WHEN: 运行 wa-cli threads set my-novel f-1 --status dropped --decision d-3 --dir D --json
+          - THEN: f-1 的 status 为 dropped 且 decision 为 d-3，changedPaths 含 threads.yaml，退出码为 0
+        drop-without-decision:
+          - GIVEN: 条目 f-1 的 status 为 open，尚无相关决策
+          - WHEN: 运行 wa-cli threads set my-novel f-1 --status dropped --dir D --json
+          - THEN: 报告 threads.author-confirmation，幂等生成阻塞决策，changedPaths 含决策队列路径，threads.yaml 未变，退出码为 1
+    threads-contract-checks:
+      strength: MUST
+      statement: 作品有伏笔台账 threads.yaml 时，场景大纲与台账必须交叉一致：某场景大纲节 recovers 引用的每个伏笔 id 必须是台账中 planted_in 按单元树先序不晚于该场景的条目——id 不在台账中报告 threads.unknown-thread（path 为该场景的 outline.yaml，field 为 sections[i].recovers[j]），planted_in 按先序晚于该场景报告 threads.recover-not-planted（field 同上）；大纲节 plants 引用的每个伏笔 id 必须是台账中 planted_in 恰为该场景的条目，否则报告 threads.unknown-thread（path 为该场景的 outline.yaml，field 为 sections[i].plants[j]）。wa-cli scene contract 给出 --plant 或 --recover 时必须按写入后的状态即时检查被编辑节的上述问题并拒绝写入（诊断不填 path，field 去掉 sections[i] 前缀，next 含 wa-cli help scene contract --json、wa-cli help threads add --json 与 wa-cli threads <work> --json），检查通过前不写文件；其他节或其他场景的既有问题不阻止写入，由整体校验报告。wa-cli validate 整体校验时必须报告每个可加载作品的全部此类问题。作品没有 threads.yaml 时不做伏笔交叉检查，scene contract 与 validate 的既有行为不变。
+      scenarios:
+        recover-unknown:
+          - GIVEN: my-novel 有 threads.yaml，场景 my-novel/c2/s2 的大纲节 recovers 含 f-9，台账中没有 id 为 f-9 的条目
+          - WHEN: 运行 wa-cli validate --dir D --json
+          - THEN: 报告 threads.unknown-thread（field 含 recovers），退出码为 1
+        recover-not-planted:
+          - GIVEN: 条目 f-1 的 planted_in 为 my-novel/c3/s1，场景 my-novel/c2/s2 的大纲节 recovers 含 f-1
+          - WHEN: 运行 wa-cli validate --dir D --json
+          - THEN: 报告 threads.recover-not-planted（field 含 recovers），退出码为 1
+        plant-wrong-scene:
+          - GIVEN: 条目 f-2 的 planted_in 为 my-novel/c1/s1，场景 my-novel/c2/s1 的大纲节 plants 含 f-2
+          - WHEN: 运行 wa-cli validate --dir D --json
+          - THEN: 报告 threads.unknown-thread（field 含 plants），退出码为 1
+        write-precheck:
+          - GIVEN: my-novel 有 threads.yaml，台账中没有 f-9
+          - WHEN: 运行 wa-cli scene contract my-novel/c2/s2 beat-1 --recover f-9 --dir D --json
+          - THEN: 报告 threads.unknown-thread，outline.yaml 未被修改，退出码为 1
+        no-ledger-no-check:
+          - GIVEN: 作品 my-story 没有 threads.yaml，其场景大纲节 plants 与 recovers 引用任意伏笔 id
+          - WHEN: 运行 wa-cli validate --dir D --json 与 wa-cli scene contract my-story/s1 beat-1 --plant f-1 --dir D --json
+          - THEN: 不报告任何伏笔交叉诊断，scene contract 照常写入，行为与引入台账前一致
+  MODIFIED: {}
+  REMOVED: {}

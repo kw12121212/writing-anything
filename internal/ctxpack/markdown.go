@@ -19,6 +19,7 @@ var partTitles = map[string]string{
 	PartSection:      "## 本节大纲条目",
 	PartCharacter:    "## 出场人物（Characters）",
 	PartReveal:       "## 揭示边界（Reveal Boundary）",
+	PartThread:       "## 未回收伏笔（Open Foreshadowing）",
 	PartFeedback:     "## 未处理的作者反馈（Feedback）",
 	PartDecision:     "## 待决的决策（Decision Queue）",
 	PartFact:         "## 系列（Series）",
@@ -187,6 +188,14 @@ func (c Character) markdown() string {
 
 func (r RevealBoundary) markdown() string {
 	return fmt.Sprintf("- 节 %s 不能提前透露：%s\n", r.Section, oneLine(r.Text))
+}
+
+func (t Thread) markdown() string {
+	note := ""
+	if t.Overdue {
+		note = "（已超过计划回收位置）"
+	}
+	return fmt.Sprintf("- %s%s：埋设于 %s，计划回收于 %s：%s\n", t.ID, note, t.PlantedIn, t.PlannedRecover, oneLine(t.Text))
 }
 
 func (s SceneSummary) markdown() string {

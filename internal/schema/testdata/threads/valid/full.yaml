@@ -1,0 +1,19 @@
+schema_version: 1
+entries:
+  - id: f-1
+    text: 灯芯的来历在第三章揭晓
+    planted_in: my-novel/c1/s1
+    planned_recover: my-novel/c3/s2
+    status: open
+  - id: f-2
+    text: 老灯匠的真实身份
+    planted_in: my-novel/c1/s1
+    planned_recover: my-novel/c2
+    status: paid
+    recovered_in: my-novel/c2/s4
+  - id: f-3
+    text: 精灵的誓言
+    planted_in: my-novel/c2/s1
+    planned_recover: my-novel/c3
+    status: dropped
+    decision: d-3

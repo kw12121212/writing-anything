@@ -9,6 +9,11 @@ categories:
       status: active
       occurrences: 1
       path: .strict-spec-driven/lessons/architecture/lesson-8f8885.yaml
+    lesson-e43bdb:
+      title: 比较章与场景的单元树先序时，章节点先于其子场景，不能直接比位置
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/architecture/lesson-e43bdb.yaml
   coding:
     go-flag-bd930f:
       title: Go flag 包的默认报错不符合中文术语约定

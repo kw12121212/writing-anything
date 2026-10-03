@@ -11,6 +11,7 @@ import (
 	"github.com/kw12121212/writing-anything/internal/draft"
 	"github.com/kw12121212/writing-anything/internal/outline"
 	"github.com/kw12121212/writing-anything/internal/schema"
+	"github.com/kw12121212/writing-anything/internal/threads"
 	"github.com/kw12121212/writing-anything/internal/work"
 	"github.com/kw12121212/writing-anything/internal/workspace"
 )
@@ -176,6 +177,37 @@ func causalityPrecheck(dir string, w *work.Work, u *work.Unit, e outline.Edit, e
 	return ps
 }
 
+// threadsPrecheck 以写入后的状态检查场景契约的 plants/recovers 与伏笔台账（Foreshadowing Ledger）的交叉一致
+// （threads-contract-checks），只拦截被编辑的节上、由本次 --plant/--recover 引起的问题：不填 path，字段去掉
+// sections[i] 前缀。作品没有 threads.yaml 时不检查（ContractProblems 返回空）；其他节或其他场景的既有问题不阻止
+// 写入，由整体校验报告。
+func threadsPrecheck(dir string, w *work.Work, u *work.Unit, e outline.Edit, existing *outline.Outline) []workspace.Problem {
+	scenes := w.Scenes()
+	cand := e.Candidate(existing)
+	if cand == nil {
+		return nil
+	}
+	unitDir := w.UnitDir(u)
+	for i := range scenes {
+		if scenes[i].Dir == unitDir {
+			scenes[i].Outline = cand
+		}
+	}
+	at := slices.IndexFunc(cand.Sections, func(s outline.Section) bool { return s.ID == e.ID })
+	var ps []workspace.Problem
+	for _, p := range threads.ContractProblems(dir, w, scenes) {
+		if p.Path != outline.Path(unitDir) || at < 0 || !strings.HasPrefix(p.Field, fmt.Sprintf("sections[%d].", at)) {
+			continue
+		}
+		p.Path, p.Line = "", 0
+		if _, rest, ok := strings.Cut(p.Field, "]."); ok {
+			p.Field = rest
+		}
+		ps = append(ps, p)
+	}
+	return ps
+}
+
 func runSceneContract(inv *invocation) int {
 	dir := projectDir(inv)
 	res := newOutlineResult()
@@ -202,6 +234,10 @@ func runSceneContract(inv *invocation) int {
 						// 给出 --cause 或 --event 时按写入后的状态即时检查因果链（scene-causality），检查通过前不写文件。
 						if e.Causes != nil || e.Events != nil {
 							problems = causalityPrecheck(dir, w, u, e, existing)
+						}
+						// 给出 --plant 或 --recover 时按写入后的状态即时检查伏笔台账的交叉一致（threads-contract-checks）。
+						if problems == nil && (e.Plants != nil || e.Recovers != nil) {
+							problems = threadsPrecheck(dir, w, u, e, existing)
 						}
 						if problems == nil {
 							var o *outline.Outline
@@ -256,6 +292,11 @@ func sceneContractParamNext(res *outlineResult, dir, ref string) {
 			next = append(next, shellCommand("wa-cli", "outline", "show", ref, "--dir", dir, "--json"))
 		case outline.CodeUnknownEvent, outline.CodeEventNotHappened, outline.CodeDuplicateEvent:
 			next = append(next, shellCommand("wa-cli", "outline", "show", ref, "--dir", dir, "--json"))
+		case threads.CodeUnknownThread, threads.CodeRecoverNotPlanted:
+			if w, _, found := strings.Cut(ref, "/"); found {
+				ref = w
+			}
+			next = append(next, "wa-cli help threads add --json", shellCommand("wa-cli", "threads", ref, "--dir", dir, "--json"))
 		}
 		res.Diagnostics[i].Next = next
 	}

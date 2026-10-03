@@ -167,3 +167,75 @@ func TestSceneBudget(t *testing.T) {
 		t.Fatalf("duplicated names: %+v", p.Characters)
 	}
 }
+
+// 场景级未回收伏笔（Open Foreshadowing）：埋设在本场景、计划回收于本场景或契约 recovers 引用的 open 条目进入
+// 上下文包；paid 与无关条目不进入；无台账时为空；台账不通过校验时阻止组装。
+func TestSceneThreads(t *testing.T) {
+	root := storyProject(t)
+	dir := work.Dir("my-story")
+	// s2 的场景契约 recovers 引用 f-3。
+	put(t, root, dir+"/units/s2/outline.yaml",
+		"schema_version: 1\nsections:\n  - id: scene-2\n    title: 灯下对峙\n    characters: [守灯人]\n    recovers: [f-3]\n")
+	put(t, root, dir+"/threads.yaml",
+		"schema_version: 1\nentries:\n"+
+			"  - {id: f-1, text: 灯芯的来历, planted_in: my-story/s1, planned_recover: my-story/s2, status: open}\n"+
+			"  - {id: f-2, text: 老灯匠的怀表, planted_in: my-story/s2, planned_recover: my-story/s2, status: open}\n"+
+			"  - {id: f-3, text: 精灵的誓言, planted_in: my-story/s1, planned_recover: my-story/s1, status: open}\n"+
+			"  - {id: f-4, text: 已收的伏笔, planted_in: my-story/s1, planned_recover: my-story/s2, status: paid, recovered_in: my-story/s1}\n")
+	w, u, ps := work.Resolve(root, "my-story/s2")
+	if ps != nil {
+		t.Fatal(ps)
+	}
+	p, ps := Build(root, w, u)
+	if p == nil {
+		t.Fatal(ps)
+	}
+	// f-1（计划回收于本场景）、f-2（埋设于本场景）与 f-3（契约 recovers 引用）入选；paid 的 f-4 不入选。
+	if len(p.Threads) != 3 {
+		t.Fatalf("threads = %+v", p.Threads)
+	}
+	for i, id := range []string{"f-1", "f-3", "f-2"} {
+		if p.Threads[i].ID != id || p.Threads[i].Overdue {
+			t.Fatalf("threads[%d] = %+v", i, p.Threads[i])
+		}
+	}
+	if !strings.Contains(p.Markdown(), "## 未回收伏笔（Open Foreshadowing）") || !strings.Contains(p.Markdown(), "灯芯的来历") {
+		t.Fatalf("markdown missing threads section")
+	}
+
+	// 预算很小时 thread 项按优先级（揭示边界之后）被裁剪并出现在 trimmed 中。
+	root = storyProject(t)
+	dir = work.Dir("my-story")
+	put(t, root, workspace.ConfigPath, "schema_version: 1\nlanguage: zh-CN\ngate_level: standard\npacks: []\ncontext_budget: 10\n")
+	put(t, root, dir+"/threads.yaml",
+		"schema_version: 1\nentries:\n  - {id: f-1, text: 灯芯的来历, planted_in: my-story/s1, planned_recover: my-story/s2, status: open}\n")
+	w, u, _ = work.Resolve(root, "my-story/s2")
+	p, ps = Build(root, w, u)
+	if p == nil {
+		t.Fatal(ps)
+	}
+	if len(p.Threads) != 0 || !slices.ContainsFunc(p.Trimmed, func(x Trim) bool { return x.Part == PartThread && x.KeptChars == 0 }) {
+		t.Fatalf("trimmed threads: %+v", p.Trimmed)
+	}
+
+	// 没有台账的作品：threads 为空且不报告伏笔诊断。
+	root = storyProject(t)
+	w, u, _ = work.Resolve(root, "my-story/s2")
+	p, ps = Build(root, w, u)
+	if p == nil {
+		t.Fatal(ps)
+	}
+	if len(p.Threads) != 0 {
+		t.Fatalf("no ledger: threads = %+v", p.Threads)
+	}
+
+	// 台账不通过 Schema 校验：报告其诊断，context 为 null。
+	root = storyProject(t)
+	put(t, root, work.Dir("my-story")+"/threads.yaml",
+		"schema_version: 1\nentries:\n  - {id: f-1, text: 灯芯, planted_in: my-story/s1, planned_recover: my-story/s2, status: closed}\n")
+	w, u, _ = work.Resolve(root, "my-story/s2")
+	p, ps = Build(root, w, u)
+	if p != nil || !slices.ContainsFunc(ps, func(x workspace.Problem) bool { return x.Severity == workspace.SeverityError }) {
+		t.Fatalf("invalid ledger: p = %+v, ps = %+v", p, ps)
+	}
+}

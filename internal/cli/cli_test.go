@@ -269,6 +269,7 @@ var nullableFields = map[string]bool{
 	"digest":           true,
 	"feedback":         true,
 	"genre":            true,
+	"recovered_in":     true,
 	"headline":         true,
 	"headlineDecision": true,
 	"imageList":        true,
@@ -409,7 +410,7 @@ func TestRegistryConsistency(t *testing.T) {
 }
 
 // mutatingSamples 列出只能通过变更产物才能成功的命令；它们的样例在临时工作区中变更产物。
-var mutatingSamples = map[string]bool{"new": true, "unit add": true, "unit move": true, "advance": true, "source add": true, "claim add": true, "claim remove": true, "review record": true, "accept": true, "export": true, "preview": true, "marketing ask": true, "mcp install": true, "skills install": true, "feedback add": true, "decision add": true, "decide": true, "outline remove": true, "pack install": true, "pack remove": true, "metrics record": true, "metrics calibrate": true, "pack learn": true, "series add": true, "series fact": true, "summary set": true, "pack confirm": true, "pack reject": true, "canon add": true, "canon remove": true, "scene contract": true}
+var mutatingSamples = map[string]bool{"new": true, "unit add": true, "unit move": true, "advance": true, "source add": true, "claim add": true, "claim remove": true, "review record": true, "accept": true, "export": true, "preview": true, "marketing ask": true, "mcp install": true, "skills install": true, "feedback add": true, "decision add": true, "decide": true, "outline remove": true, "pack install": true, "pack remove": true, "metrics record": true, "metrics calibrate": true, "pack learn": true, "series add": true, "series fact": true, "summary set": true, "pack confirm": true, "pack reject": true, "canon add": true, "canon remove": true, "scene contract": true, "threads add": true}
 
 // sampleArgs 返回命令的一次成功调用：除 mutatingSamples 中的命令外都不变更任何产物；工作区命令在已初始化的
 // 临时工作区中运行。
@@ -557,6 +558,20 @@ func sampleArgs(t *testing.T, name string) []string {
 		dir := newWork(t)
 		run(t, "canon", "add", "my-post", "--type", "world-rule", "--text", "灯油只能燃烧到黎明", "--dir", dir)
 		return []string{"canon", "remove", "my-post", "canon-1", "--dir", dir, "--json"}
+	case "threads":
+		return []string{"threads", "my-post", "--dir", newWork(t), "--json"}
+	case "threads add":
+		dir := newWorkspace(t)
+		run(t, "new", "short-story", "my-story", "--dir", dir)
+		run(t, "unit", "add", "my-story", "scene", "s1", "--dir", dir)
+		return []string{"threads", "add", "my-story", "--text", "灯芯的来历后文揭晓", "--plant-in", "my-story/s1", "--recover-at", "my-story/s1", "--dir", dir, "--json"}
+	case "threads set":
+		// 取值未变时不变更产物。
+		dir := newWorkspace(t)
+		run(t, "new", "short-story", "my-story", "--dir", dir)
+		run(t, "unit", "add", "my-story", "scene", "s1", "--dir", dir)
+		run(t, "threads", "add", "my-story", "--text", "灯芯的来历后文揭晓", "--plant-in", "my-story/s1", "--recover-at", "my-story/s1", "--dir", dir)
+		return []string{"threads", "set", "my-story", "thread-1", "--text", "灯芯的来历后文揭晓", "--dir", dir, "--json"}
 	case "method list":
 		return []string{"method", "list", "--dir", newWorkspace(t), "--json"}
 	case "method show":

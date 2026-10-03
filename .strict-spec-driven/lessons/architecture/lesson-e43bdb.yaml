@@ -1,0 +1,19 @@
+schema: strict-spec-driven/lesson/v1
+schema_version: 1
+artifact_type: lesson
+schema_file: templates/strict-spec-driven/schemas/lesson.yaml
+lesson:
+  id: lesson-e43bdb
+  title: 比较章与场景的单元树先序时，章节点先于其子场景，不能直接比位置
+category: architecture
+status: active
+created_at: '2026-10-03T09:22:28.052Z'
+updated_at: '2026-10-03T09:22:28.052Z'
+context: novel 文体的单元层级为 部（part）→ 章（chapter）→ 场景（scene），章是汇总单元。先序遍历中父节点排在子节点之前：章的位置永远早于它包含的全部场景。伏笔台账（threads）的「计划回收位置不早于埋设场景」检查最初直接比较两个单元的先序下标。
+observation: 埋设在某章第一个场景、计划在该章回收的合法条目被判 threads.recover-before-plant 拒绝；还没有任何场景的空章（自上而下先建章后补场景的工作流）也被误判。因果链（Causality Chain）检查不受影响，因为它只比较场景与场景。
+takeaway: 涉及章（或任何汇总单元）与场景的先后比较时，不能直接比较先序下标：以「汇总单元子树内是否存在不早于目标场景的场景」为准；子树内还没有任何场景时按单元位置直接比较并注释这一空单元约定。
+applies_when: 任何按单元树先序比较汇总单元（part/chapter）与叶子单元（scene）先后关系的检查，如伏笔回收位置、知情表的时间线、后续里程碑的依赖时间的检查。
+occurrences:
+  - origin: foreshadowing-ledger 变更的独立代码评审发现（先于测试发现，测试夹具的章内场景顺序未覆盖该分支）
+    date: '2026-10-03'
+    evidence: internal/threads/threads.go 的 recoverBeforePlant 与其注释；internal/threads/threads_test.go 的 TestAddEmptyChapter 与 TestListOverdue 章内推进分支

@@ -66,6 +66,9 @@ specs:
   - id: style-profile
     title: 文风画像（Style Profile）
     path: .strict-spec-driven/specs/style-profile.yaml
+  - id: threads
+    title: 伏笔台账（Foreshadowing Ledger）
+    path: .strict-spec-driven/specs/threads.yaml
   - id: units-and-lifecycle
     title: 单元树与生命周期（Unit Tree and Lifecycle）
     path: .strict-spec-driven/specs/units-and-lifecycle.yaml

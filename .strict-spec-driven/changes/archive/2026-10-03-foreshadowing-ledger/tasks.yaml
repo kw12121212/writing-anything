@@ -1,0 +1,54 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: foreshadowing-ledger
+sections:
+  Implementation:
+    threads-schema:
+      text: internal/schema 新增 threads.schema.json（schema_version=1；entries 数组：id 符合 id 格式必填、text 非空必填、planted_in 与 planned_recover 非空必填、status 枚举 open|paid|dropped 必填、recovered_in 仅 paid 时允许、decision 仅 dropped 时允许），在 schema.go 注册命名 threads 并纳入 embed 清单；补合法与不合法夹具及 schema 包测试
+      status: complete
+    threads-package:
+      text: 新包 internal/threads：threads.yaml 的加载与领域校验（id 唯一报 artifact.duplicate-id；planted_in/planned_recover/recovered_in 引用单元不存在或类型不符报 threads.unknown-unit；planned_recover 按先序早于 planted_in 报 threads.recover-before-plant；open 不得带 recovered_in/decision、paid 必带 recovered_in、dropped 必带 decision 且决策存在已决定否则 threads.unknown-decision；途经符号链接按 artifact.not-found）；Add（text/plant-in/recover-at/id，缺省 thread-<n> 递增）、Set（text/recover-at/status/recovered-in/decision；dropped 复用 canon 的决策队列 gate/authorize 模式，未授权拒绝并幂等生成阻塞决策）、List（open 过滤、planted_in 先序排序、overdue 判定：open 且计划回收单元 done，或存在子树之外且先序在后的 done 场景）；ContractProblems 输出场景契约 plants/recovers 与台账的交叉检查（threads.unknown-thread / threads.recover-not-plant），供 validate 与写入预检复用
+      status: complete
+    threads-cli:
+      text: internal/cli 注册 threads（args：work；flags：--all）、threads add（args：work；flags：--text/--plant-in/--recover-at/--id）、threads set（args：work、id；flags：--text/--recover-at/--status/--recovered-in/--decision）三个命令：outputKeys、exitCodes、sampleArgs、--json 信封与人读 Markdown 输出（overdue 条目标注已超过计划回收位置并附 next）、诊断与 next（threads add 用法、threads set 决策流程）；--status paid 缺 --recovered-in 时拒绝
+      status: complete
+    threads-scene-precheck:
+      text: internal/cli scene contract：给出 --plant 或 --recover 且作品有 threads.yaml 时，仿 causalityPrecheck 按写入后状态预检台账交叉检查（threads.unknown-thread / threads.recover-not-plant），命中即拒绝写入不落盘；wa-cli validate 整体校验按 CheckWorks 模式纳入每个可加载作品 threads.yaml 的 Schema 与领域校验（计入 checked）及全部契约交叉检查，validate <path> 支持对 threads.yaml 直接校验
+      status: complete
+    threads-ctxpack:
+      text: internal/ctxpack：sceneItems 新增未回收伏笔（Open Foreshadowing）内容项——台账 open 且 planted_in 为本场景、planned_recover 为本场景或本场景大纲节 recovers 引用的条目，每项含 id、text、planted_in、planned_recover、overdue；part 为 thread，计入上下文预算并在优先级序列中排在揭示边界之后；--json 输出 threads 字段，Markdown 新增「未回收伏笔（Open Foreshadowing）」小节；无台账作品为空数组不报告，台账不通过校验时报告其诊断且 context 为 null 退出码 1（同 canon.yaml 处理）
+      status: complete
+    threads-glossary:
+      text: docs/GLOSSARY.md 增补伏笔条目（Thread Entry）词条：伏笔台账中一条伏笔的登记（内容、埋设场景、计划回收位置与状态），与既有伏笔（Foreshadowing）、伏笔台账（Foreshadowing Ledger）、回收伏笔（Payoff）词条写法一致
+      status: complete
+  Testing:
+    test-threads-package:
+      text: internal/threads 单元测试：Schema 校验各失败分支（status 非法、paid 缺 recovered_in、dropped 缺 decision、open 带 recovered_in）；领域校验错误码（artifact.duplicate-id、threads.unknown-unit 单元不存在或类型不符、threads.recover-before-plant、threads.unknown-decision）；Add 的 id 缺省生成与重复拒绝、Set 的各参数组合与 paid 缺 --recovered-in 拒绝；dropped 决策 gate（未授权拒绝且 changedPaths 含决策队列、幂等不重复生成、授权后写入、保持不变拒绝）；List 的 open 过滤与排序；overdue 边界（场景目标已 done/未 done、章目标章内场景 done、章后场景 done）；ContractProblems（recovers 引用未登记/埋设晚于本场景、plants 埋设不在本场景）
+      status: complete
+    test-threads-cli:
+      text: internal/cli 测试：threads 列出（--json 信封字段、默认 open 过滤、--all、人读输出 overdue 标注）、threads add（必填参数缺失拒绝、threads.unknown-unit 不写文件）、threads set（--status paid 缺 --recovered-in、--status dropped 无 --decision 拒绝并生成阻塞决策、带 --decision 写入）；scene contract 预检（--recover 引用不存在伏笔拒绝且不写文件、--plant 引用他场景伏笔拒绝、无台账作品照常写入）；退出码与 next 断言
+      status: complete
+    test-threads-ctxpack:
+      text: internal/ctxpack 测试：场景上下文含相关 open 伏笔（本场景埋设、本场景回收、契约 recovers 引用三类；paid/dropped 不出现）；预算不足时 part 为 thread 的项按优先级裁剪并出现在 trimmed；非 scene 单元与无台账作品 threads 为空数组；台账不通过校验时 context 为 null 且退出码 1
+      status: complete
+    test-threads-e2e:
+      text: internal/cli e2e 与 validate 测试：带 threads.yaml 的长篇夹具整体校验（threads.yaml 计入 checked、契约交叉问题按错误码与 field 报告、合法台账零诊断）；无台账作品的 validate、scene contract 与 context 输出与既有断言一致（threads 字段空数组、无新诊断）；validate <path> 对单个 threads.yaml 的检查
+      status: complete
+    run-regression:
+      text: 完整回归测试并确认覆盖率不低于阈值：go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    verify-change:
+      text: 运行 strict-spec-cli ready foreshadowing-ledger 与 strict-spec-cli verify foreshadowing-ledger：确认变更就绪、规格与任务一致、诊断清零
+      status: complete
+      command: strict-spec-cli ready foreshadowing-ledger && strict-spec-cli verify foreshadowing-ledger
+    verify-archive-readiness:
+      text: 核对归档合并路径：threads 新主规格将写入 .strict-spec-driven/specs/threads.yaml 并进入 specs/INDEX.yaml，context 主规格的 context-trim 与 scene-context 两个 MODIFIED 需求在归档时替换原语句且不破坏既有场景；运行 strict-spec-cli verify foreshadowing-ledger 确认无跨文件冲突
+      status: complete
+      command: strict-spec-cli verify foreshadowing-ledger
+testing_gates:
+  validation_task: run-regression
+  unit_test_task: test-threads-package
