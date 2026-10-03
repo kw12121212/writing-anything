@@ -159,7 +159,15 @@
             "type": "object",
             "additionalProperties": false,
             "required": ["id", "title"],
-            "properties": {"id": {"$ref": "#/$defs/id"}, "title": {"$ref": "#/$defs/text"}, "description": {"type": "string"}}
+            "properties": {
+              "id": {"$ref": "#/$defs/id"},
+              "title": {"$ref": "#/$defs/text"},
+              "description": {"type": "string"},
+              "product": {
+                "enum": ["characters", "scenes", "scene-contracts"],
+                "description": "规划产物（Planning Product）：该步骤的产物链接（Plan Link）类型——characters 指向设定集（Canon）的人物条目，scenes 指向单元树（Unit Tree）的场景单元，scene-contracts 指向场景契约（Scene Contract）；steps 只出现在规划类写作法中，product 因此只在规划步骤上"
+              }
+            }
           }
         },
         "rubric": {"$ref": "#/$defs/rubric"}

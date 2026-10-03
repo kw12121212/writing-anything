@@ -1,0 +1,15 @@
+schema_version: 1
+method: outline-first
+steps:
+  - id: premise
+    title: 前提
+    text: 守灯人在灯塔与精灵共生百年后必须做出选择。
+    sources: [src-idea]
+    confirmed_by_author: true
+    confirmation: 作者：这句话就是这本书
+    confirmed_at: 2026-10-03T08:00:00Z
+  - id: cast
+    title: 人物表
+    text: 主角守灯人：外冷内热，恐惧失去。
+    links: [c-1]
+    confirmed_by_author: false

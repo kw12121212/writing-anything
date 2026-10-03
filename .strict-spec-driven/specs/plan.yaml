@@ -1,0 +1,100 @@
+schema: strict-spec-driven/main-spec/v1
+schema_version: 1
+artifact_type: main_spec
+schema_file: templates/strict-spec-driven/schemas/main-spec.yaml
+spec:
+  id: plan
+  title: 规划（Plan）
+requirements:
+  plan-artifact:
+    strength: MUST
+    statement: 单元目录下的 plan.yaml 是规划（Plan）：含 schema_version（1）、method（选用的规划类写作法 id）与 steps（已起草的规划步骤（Planning Step）记录，按写作法 steps 的顺序）；每项含 id（所选写作法的步骤 id）、title（取自写作法步骤标题）、非空 text（该步的规划文本）、sources（关联的素材（Source）id，不重复，可为空）、links（产物链接（Plan Link），不重复，可为空）与确认记录字段 confirmed_by_author（布尔，未确认为 false）、confirmation（作者原话摘要，未确认为 null）与 confirmed_at（UTC 时间，格式 YYYY-MM-DDTHH:MM:SSZ，未确认为 null）。字段不符合时报告 artifact.schema-violation（field 为对应点分路径，如 steps[i].text）。wa-cli validate 整体校验必须对每个可加载作品的每个单元目录中存在的 plan.yaml 做 Schema 校验并计入 checked，且满足：单元选用的写作法（见 methods 主规格 method-selection）是规划类而 plan.yaml 的 method 与它不一致时报告 plan.method-changed（field 为 method）；步骤记录必须是所选写作法 steps 的前缀（已确认步骤都排在未确认步骤之前，每个 id 都是该写作法的步骤 id），否则报告 plan.step-order（field 为 steps[i]）；sources 都已登记，否则报告 plan.unknown-source（field 为 steps[i].sources[j]）；confirmed_by_author 为 true 的步骤缺非空 confirmation 或 confirmed_at 时报告 plan.incomplete-confirmation（field 为该步骤）；声明了规划产物（Planning Product，见 methods 主规格 method-data）的步骤每个 link 都可解析且类型正确，否则报告 plan.unknown-link（field 为 steps[i].links[j]）：product 为 characters 时 link 是本作品设定集中类型为 character 的条目 id；为 scenes 时 link 是本作品单元树中 type 为 scene 的单元引用；为 scene-contracts 时 link 形如 <场景单元引用>:<大纲节 id>，该节存在于该场景单元的 outline.yaml 且声明了至少一个场景契约（Scene Contract）字段（pov、location、characters、beats、reveal、state_changes、plants、recovers、causes 或 events）。单元选用的写作法不是规划类而该单元目录存在 plan.yaml 时报告 plan.not-planning（path 为该 plan.yaml）。plan.yaml 途经符号链接或不是普通文件时按不存在处理并报告 artifact.not-found（path 为该 plan.yaml）。wa-cli validate <path> 对该位置的 plan.yaml 执行同样的检查。
+    scenarios:
+      validate-order-violation:
+        - GIVEN: novel 作品 my-novel 选用 snowflake（文体的 default_method），plan.yaml 的 steps 只有 id 为 one-paragraph 的记录（one-sentence 未起草）
+        - WHEN: 运行 wa-cli validate --dir D --json
+        - THEN: diagnostics 中有一条错误码为 plan.step-order、field 为 steps[0] 的诊断，退出码为 1
+      validate-dangling-link:
+        - GIVEN: novel 作品 my-novel 的 plan.yaml 中 character-sketch 已确认，links 为 [c9]，设定集中没有条目 c9
+        - WHEN: 运行 wa-cli validate --dir D --json
+        - THEN: diagnostics 中有一条错误码为 plan.unknown-link、field 指向该步骤 links[0] 的诊断，退出码为 1
+      validate-unknown-source:
+        - GIVEN: novel 作品 my-novel 的 plan.yaml 中 one-sentence 的 sources 为 [src-x]，src-x 未登记
+        - WHEN: 运行 wa-cli validate --dir D --json
+        - THEN: diagnostics 中有一条错误码为 plan.unknown-source、field 为 steps[0].sources[0] 的诊断，退出码为 1
+  plan-show:
+    strength: MUST
+    statement: wa-cli plan show <unit> 必须只读地输出单元的规划情况，changedPaths 为空数组：--json 输出 plan 与 currentStep。单元选用规划类写作法时：plan 含 method（id 与 source）、path（plan.yaml 路径，没有时为 null）与 steps（写作法每个步骤一项，按写作法顺序，每项含 id、title、product（声明了规划产物时为其取值，否则为 null）、status（pending 没有记录、drafted 有记录未确认、confirmed 已确认）、text、sources 与 links（没有记录时为空数组）、confirmedByAuthor、confirmation 与 confirmedAt（未确认时为 null））；currentStep 为第一个 status 不是 confirmed 的步骤 id，全部确认时为 null；没有 plan.yaml 时 steps 仍按写作法列出（全部 pending）。单元选用的写作法不是规划类时 plan 与 currentStep 为 null，并以 warning 报告 plan.not-planning；选用的写作法不存在时以 warning 报告 brief.unknown-method（method-selection），plan 与 currentStep 为 null。plan.yaml 有解析、Schema 或前缀顺序问题时报告其诊断、退出码为 1；只有 sources、links 的引用问题时照常输出 plan 与 currentStep，同时报告这些诊断，退出码为 1；否则退出码为 0。不加 --json 时以人读文本输出同样的信息。
+    scenarios:
+      show-fresh:
+        - GIVEN: 刚创建的 novel 作品 my-novel（文体 default_method 为 snowflake），没有 plan.yaml
+        - WHEN: 运行 wa-cli plan show my-novel --dir D --json
+        - THEN: plan 的 path 为 null，steps 依次为 snowflake 的十步且 status 都为 pending，currentStep 为 one-sentence，退出码为 0
+      show-progress:
+        - GIVEN: novel 作品 my-novel 的 plan.yaml 中 one-sentence 已确认、one-paragraph 已起草未确认
+        - WHEN: 运行 wa-cli plan show my-novel --dir D --json
+        - THEN: one-sentence 的 status 为 confirmed 且 confirmation 非 null，one-paragraph 为 drafted，其余为 pending，currentStep 为 one-paragraph，退出码为 0
+      show-not-planning:
+        - GIVEN: tech-blog 作品 my-post（未选用规划类写作法）
+        - WHEN: 运行 wa-cli plan show my-post --dir D --json
+        - THEN: plan 与 currentStep 为 null，diagnostics 中有一条 severity 为 warning、错误码为 plan.not-planning 的诊断，退出码为 0
+  plan-step:
+    strength: MUST
+    statement: wa-cli plan step <unit> <step> --text <文本> 必须写入规划步骤的草稿：--source <素材 id>（逗号分隔，整体替换，空白取值被忽略）与 --link <链接>（逗号分隔，整体替换，空白取值被忽略）可选。step 必须是单元选用写作法的规划步骤 id，否则报告 plan.unknown-step（field 为 step，next 含 wa-cli method show <写作法 id> --dir <dir> --json）；选用的写作法不是规划类时报告 plan.not-planning（next 含 wa-cli method list --dir <dir> --json）；两者都不修改文件、退出码为 1。step 必须是当前步（第一个未确认的步骤）：重写当前步自己的未确认草稿允许，写已确认的步骤或越过未确认的步骤时报告 plan.step-order（message 含当前步 id，next 含 wa-cli plan show <unit> --dir <dir> --json）。--text 缺省或只含空白、步骤没有声明 product 而给出 --link、--link 中有重复取值时报告 input.invalid-value（field 为对应参数名）。--source 中素材未登记时报告 plan.unknown-source（field 为 sources[i]，不填 path）。给出 --link 时按写入后的状态即时校验每个链接可解析且类型正确（plan-artifact 的规则），本次写入引起的问题以 error 报告并拒绝写入，诊断不填 path、field 为 links[i]。已确认的步骤只能经 --redo 修订：plan step <unit> <step> --redo --confirmed-by-author --confirmation <作者原话摘要> --text <文本> [--source ...] [--link ...] 把该步骤重置为新的未确认草稿（新的 text、sources 与 links，清空确认记录），并删除其后全部步骤的记录（各步产物不动，后续步骤须重新逐级起草与确认）；--redo 必须与 --confirmed-by-author、--confirmation 同时给出且摘要不为空白，否则报告 plan.incomplete-confirmation；对未经确认的步骤给出 --redo 报告 plan.not-confirmed（直接改写即可，无需 --redo）。plan.yaml 已存在而其 method 与当前选用写作法不一致时报告 plan.method-changed（field 为 method）且不修改文件。写入时 plan.yaml 不存在则创建（含 schema_version 与 method），只写该步骤的记录并保留其他步骤、其他内容与 YAML 注释；修改后的取值与原有取值相同时不写文件、changedPaths 为空数组（--redo 重置后续步骤时视为有变化，照常写入）；否则 changedPaths 为 [该 plan.yaml]。成功时 --json 输出与 plan show 相同的 plan 与 currentStep（--redo 后为被重置的步骤），退出码为 0。要修改之处经由 YAML 锚点、别名或合并键得到时报告 plan.anchored-value；这些失败情况都不修改任何文件，退出码为 1，next 含 wa-cli help plan step --json。
+    scenarios:
+      step-first:
+        - GIVEN: 刚创建的 novel 作品 my-novel（default_method 为 snowflake），已登记素材 src-idea
+        - WHEN: 运行 wa-cli plan step my-novel one-sentence --text 守灯人在灯塔与精灵共生百年后必须做出选择 --source src-idea --dir D --json
+        - THEN: plan.yaml 的 steps 有一项 one-sentence（text 与 sources 如给出，confirmed_by_author 为 false），currentStep 仍为 one-sentence（待作者确认），changedPaths 含该 plan.yaml，退出码为 0
+      step-skip-blocked:
+        - GIVEN: 同上，one-sentence 已起草但未经作者确认
+        - WHEN: 运行 wa-cli plan step my-novel one-paragraph --text 百年共生的守灯人与精灵迎来破裂的一夜 --dir D --json
+        - THEN: diagnostics 中有一条错误码为 plan.step-order、message 含 one-sentence 的诊断，plan.yaml 不变，退出码为 1
+      step-confirmed-immutable:
+        - GIVEN: novel 作品 my-novel 的 one-sentence 已确认，当前步 one-paragraph 已起草
+        - WHEN: 运行 wa-cli plan step my-novel one-sentence --text 重写的一句话 --dir D --json
+        - THEN: diagnostics 中有一条错误码为 plan.step-order 的诊断，plan.yaml 不变，退出码为 1
+      step-link-character:
+        - GIVEN: novel 作品 my-novel 的前两步已确认，当前步 character-sketch，设定集已有 character 条目 c1（wa-cli canon add 写入）
+        - WHEN: 运行 wa-cli plan step my-novel character-sketch --text 主角守灯人：外冷内热 --link c1 --dir D --json
+        - THEN: character-sketch 的 links 为 [c1]，退出码为 0
+      step-link-unknown:
+        - GIVEN: 同上，设定集中没有条目 c9
+        - WHEN: 运行 wa-cli plan step my-novel character-sketch --text 主角概要 --link c9 --dir D --json
+        - THEN: diagnostics 中有一条错误码为 plan.unknown-link、不填 path、field 为 links[0] 的诊断，plan.yaml 不变，退出码为 1
+      step-not-planning:
+        - GIVEN: tech-blog 作品 my-post（未选用规划类写作法）
+        - WHEN: 运行 wa-cli plan step my-post one-sentence --text 一句话 --dir D --json
+        - THEN: diagnostics 中有一条错误码为 plan.not-planning 的诊断，没有写出 plan.yaml，退出码为 1
+      step-redo:
+        - GIVEN: novel 作品 my-novel 的前三步已确认，one-paragraph 与 character-sketch 的记录其后不存在
+        - WHEN: 运行 wa-cli plan step my-novel one-sentence --redo --confirmed-by-author --confirmation 作者：前提要改 --text 新的一句话概括 --dir D --json
+        - THEN: one-sentence 变为未确认的新草稿（text 为新值、确认记录清空），其后步骤的记录被删除，currentStep 为 one-sentence，退出码为 0
+      step-redo-unconfirmed:
+        - GIVEN: novel 作品 my-novel 的 one-sentence 已起草未确认
+        - WHEN: 运行 wa-cli plan step my-novel one-sentence --redo --confirmed-by-author --confirmation 作者：改 --text 新的一句话 --dir D --json
+        - THEN: diagnostics 中有一条错误码为 plan.not-confirmed 的诊断，plan.yaml 不变，退出码为 1
+  plan-confirm:
+    strength: MUST
+    statement: 'wa-cli plan confirm <unit> <step> --confirmed-by-author --confirmation <作者原话摘要> 必须确认当前步并写入确认记录（Confirmation Record）：--confirmed-by-author 与 --confirmation 必须同时给出且摘要不为空白，否则报告 plan.incomplete-confirmation（next 含 wa-cli help plan confirm --json），不修改文件。step 必须是当前步且已有草稿：不是当前步（含已确认的步骤）时报告 plan.step-order（message 含当前步 id），当前步还没有草稿时报告 plan.not-drafted（next 含 wa-cli plan step <unit> <step> --text ... --dir <dir> --json 的提示）；步骤 id 不在写作法中报告 plan.unknown-step；选用的写作法不是规划类报告 plan.not-planning（next 含 wa-cli method list --dir <dir> --json）。步骤声明了规划产物（Planning Product）时必须已有至少一个 link 且全部按 plan-artifact 的规则可解析：一个链接都没有时报告 plan.missing-links（field 为 links，message 含 product 与产物命令提示），不可解析时报告 plan.unknown-link（field 为 links[i]）。确认写入 confirmed_by_author: true、confirmation 与 confirmed_at（UTC 时间，格式 YYYY-MM-DDTHH:MM:SSZ），不改变单元的阶段；changedPaths 为 [该 plan.yaml]；成功时 --json 输出确认后的 plan 与 currentStep（下一步 id，全部确认时为 null），退出码为 0。这些失败情况都不修改任何文件，退出码为 1。'
+    scenarios:
+      confirm-advance:
+        - GIVEN: novel 作品 my-novel 的 one-sentence 已起草
+        - WHEN: 运行 wa-cli plan confirm my-novel one-sentence --confirmed-by-author --confirmation 作者：这句话就是这本书 --dir D --json
+        - THEN: plan.yaml 中 one-sentence 的 confirmed_by_author 为 true、confirmation 为 作者：这句话就是这本书、confirmed_at 非空，currentStep 为 one-paragraph，changedPaths 含该 plan.yaml，退出码为 0
+      confirm-scene-list:
+        - GIVEN: novel 作品 my-novel 前七步已确认，已用 wa-cli unit add 在章 chapter-one 下登记场景 scene-1（单元引用 my-novel/scene-1），当前步 scene-list 的草稿 links 为 [my-novel/scene-1]
+        - WHEN: 运行 wa-cli plan confirm my-novel scene-list --confirmed-by-author --confirmation 作者：场景表可以 --dir D --json
+        - THEN: 确认成功，currentStep 为 scene-details，单元树中 scene-1 存在（场景列表关联单元树中的场景），退出码为 0
+      confirm-missing-links:
+        - GIVEN: novel 作品 my-novel 当前步 character-sketch 已起草但 links 为空
+        - WHEN: 运行 wa-cli plan confirm my-novel character-sketch --confirmed-by-author --confirmation 作者：可以 --dir D --json
+        - THEN: diagnostics 中有一条错误码为 plan.missing-links 的诊断，plan.yaml 不变，退出码为 1
+      confirm-incomplete:
+        - GIVEN: novel 作品 my-novel 的 one-sentence 已起草
+        - WHEN: 运行 wa-cli plan confirm my-novel one-sentence --confirmed-by-author --dir D --json
+        - THEN: diagnostics 中有一条错误码为 plan.incomplete-confirmation 的诊断，plan.yaml 不变，退出码为 1
+      confirm-not-drafted:
+        - GIVEN: novel 作品 my-novel 当前步 one-sentence 还没有草稿
+        - WHEN: 运行 wa-cli plan confirm my-novel one-sentence --confirmed-by-author --confirmation 作者：好 --dir D --json
+        - THEN: diagnostics 中有一条错误码为 plan.not-drafted 的诊断，没有写出 plan.yaml，退出码为 1

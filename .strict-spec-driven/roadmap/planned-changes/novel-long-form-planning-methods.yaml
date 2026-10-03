@@ -5,7 +5,7 @@ schema_file: ../../templates/strict-spec-driven/schemas/planned-change.yaml
 planned_change:
   id: long-form-planning-methods
   milestone: novel
-status: planned
+status: complete
 summary: 长篇规划写作法：雪花写作法（Snowflake Method）十步与网文结构
 details: 内置雪花写作法十步的规划类模板：① 一句话概括 ② 一段话概括 ③ 人物概要 ④ 一页纲要 ⑤ 人物详述 ⑥ 四页纲要 ⑦ 人物宝典 ⑧ 场景列表 ⑨ 场景详述 ⑩ 开始写作。每一步产出对应的规划产物，并经作者确认后才进入下一步；其中人物概要、人物详述、人物宝典写入设定集的人物卡，场景列表生成单元树中的场景，场景详述生成场景契约。每步的核心内容（例如一句话概括、关键转折）需要关联作者素材或确认记录。另外内置网文结构模板：黄金三章（前三章必须完成的钩子、主角亮相、核心冲突与金手指揭示）和卷结构（每卷的目标、高潮与断章）。
 depends_on:

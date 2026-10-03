@@ -61,7 +61,7 @@ func TestSkillCommandsExist(t *testing.T) {
 
 func TestSkillsCommands(t *testing.T) {
 	code, list := runJSON(t, "skills", "list", "--json")
-	if code != 0 || len(list["skills"].([]any)) != 8 || len(list["skills"].([]any)[0].(map[string]any)["commands"].([]any)) == 0 {
+	if code != 0 || len(list["skills"].([]any)) != 9 || len(list["skills"].([]any)[0].(map[string]any)["commands"].([]any)) == 0 {
 		t.Fatalf("skills list: %v", list)
 	}
 	dir := t.TempDir()
@@ -73,7 +73,7 @@ func TestSkillsCommands(t *testing.T) {
 	if err := json.Unmarshal([]byte(res.stdout), &out); err != nil {
 		t.Fatal(err)
 	}
-	if code != 0 || len(out.Skills) != 8 || out.Skills[0]["path"] != ".agents/skills/wa-auto/SKILL.md" || len(res.ChangedPaths) != 18 {
+	if code != 0 || len(out.Skills) != 9 || out.Skills[0]["path"] != ".agents/skills/wa-auto/SKILL.md" || len(res.ChangedPaths) != 20 {
 		t.Fatalf("install codex: code = %d, %+v %v", code, out.Skills, res.ChangedPaths)
 	}
 	if !strings.Contains(readFile(t, filepath.Join(dir, ".agents", "skills", "wa-auto", "SKILL.md")), "name: wa-auto") {

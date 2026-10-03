@@ -305,3 +305,15 @@ rules:
         - unit move 先经 childSeq 取到目标序列并转换块式，再从原序列摘除子树，插入位置按锚点在摘除后的序列内容中重新扫描。
       bad:
         - 先从序列删除元素，再按解析时的 index 走树取目标父单元的序列节点。
+  value-based-optional-fields:
+    strength: SHOULD
+    statement: 产物中「A 为真时 B 必填，否则 B 为 null 或缺省」的字段（如确认记录（Confirmation Record）的 confirmation 与 confirmed_at）：JSON Schema 把 B 声明为 [原类型, null] 的可选键并只约束取值形态（pattern、枚举），不得用键存在性条件（条件 required 或 not/anyOf required）表达跨字段约束；「A 为真 ⇒ B 非空」的一致性由该产物的领域校验函数检查并给专属错误码（field 指向该条目），wa-cli validate 整体校验与单产物校验都执行该检查。
+    rationale: 'draft 2020-12 的条件 required 挡不住显式 null：已确认而 confirmation: null 的非法产物通过整体校验（plan-artifact 审查复现，valid=true）；键存在性条件又会拒绝规格明文合法的「未确认为 null」写法；且 $ref 内取值校验失败会把兄弟字段标为未评估，产生误导性诊断。取值化 Schema 与领域专属错误码两侧都可用测试逐字断言。'
+    enforcement:
+      method: test
+      detail: 每种带此类条件字段的新产物至少有一条测试覆盖三种形态——A 为真且 B 为 null、A 为真且 B 缺省、A 为假且 B 为 null——断言前两者得到领域错误码（如 plan.incomplete-confirmation，field 指向条目）、第三者通过校验；internal/plan 的 TestCheckConfirmations 与 internal/cli 的 TestPlanValidate 为参照实现。
+    examples:
+      good:
+        - 'plan.schema.json 把 confirmation 声明为 {"type": ["string","null"], "pattern": "\\S"}，plan 包 checkConfirmations 对已确认步骤缺非空确认记录报告 plan.incomplete-confirmation（field 为 steps[i]）'
+      bad:
+        - 'plan.schema.json 用 allOf 条件在 confirmed_by_author 为 true 时 required [confirmation, confirmed_at]、为 false 时 not anyOf required：「已确认 + confirmation: null」通过校验（应为 plan.incomplete-confirmation），「未确认 + confirmation: null」（规格合法）反被 artifact.schema-violation 拒绝'

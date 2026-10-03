@@ -1,0 +1,9 @@
+schema_version: 1
+method: outline-first
+steps:
+  - id: premise
+    title: 前提
+    text: 守灯人必须做出选择。
+    confirmed_by_author: true
+    confirmation: "  "
+    confirmed_at: 2026-10-03T08:00:00Z

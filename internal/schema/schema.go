@@ -60,6 +60,7 @@ var kinds = []*Kind{
 	newKind("decisions", "decisions.schema.json", ".writing-anything/decisions.yaml"),
 	newKind("brief", "brief.schema.json", ".writing-anything/works/*/brief.yaml", ".writing-anything/works/*/units/*/brief.yaml"),
 	newKind("outline", "outline.schema.json", ".writing-anything/works/*/outline.yaml", ".writing-anything/works/*/units/*/outline.yaml"),
+	newKind("plan", "plan.schema.json", ".writing-anything/works/*/plan.yaml", ".writing-anything/works/*/units/*/plan.yaml"),
 	newKind("feedback", "feedback.schema.json", ".writing-anything/works/*/feedback.yaml", ".writing-anything/works/*/units/*/feedback.yaml"),
 	newKind("review", "review.schema.json", ".writing-anything/works/*/review.yaml", ".writing-anything/works/*/units/*/review.yaml"),
 	newKind("review-input", "review-input.schema.json"),
@@ -477,6 +478,10 @@ func describe(ek jsonschema.ErrorKind) string {
 		return fmt.Sprintf("长度至少为 %d 个字符，实际为 %d 个", k.Want, k.Got)
 	case *kind.MaxLength:
 		return fmt.Sprintf("长度最多为 %d 个字符，实际为 %d 个", k.Want, k.Got)
+	case *kind.FalseSchema:
+		// unevaluatedProperties: false 在同对象其他字段校验失败时会把兄弟字段一并标为未评估；
+		// 真正的取值错误在同组诊断中，这里说明这一条不是独立的新问题。
+		return "未能通过校验；通常由同一对象中其他字段的取值错误引起，请一并查看同组的其他诊断"
 	}
 	return "不符合 Schema 约束 " + strings.Join(ek.KeywordPath(), "/")
 }

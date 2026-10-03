@@ -356,12 +356,16 @@ requirements:
         - THEN: diagnostics 中有一条错误码为 artifact.schema-violation、field 为 unit_types[1].stage_from_children 的诊断，退出码为 1
   novel-genre:
     strength: MUST
-    statement: 'wa-cli 必须随二进制提供内置的 novel 文体（长篇小说（Novel））：单元类型 novel（根，子单元类型 part，简报必填项为 premise、pov、length 与 key_messages）、part（子单元类型 chapter，stage_from_children: true）、chapter（子单元类型 scene，stage_from_children: true）与 scene（不声明简报必填项与汇总）；阶段依次为 brief（必需产物 brief）、outline（outline）、draft（draft）与 review（review 与 acceptance）；规则 fiction-cliches（ai-cliche，warning，小说 AI 腔词表同 short-story）、dialogue（dialogue-punctuation，warning）、pov（pov-consistency，warning）与 length（length-range，warning，1000 到 20000 字），不声明论断类规则；不声明默认写作法（default_method）、AI 评分指标（scored_metrics）与节奏检查（pacing_checks）（分别属 long-form-planning-methods 与 scene-contract-and-causality 等后续计划变更）；上下文预算为 16000。场景（scene）是唯一走完整生命周期的单元层：部与章为汇总单元（见本规格 aggregated-unit-types 与 units-and-lifecycle 主规格的 derived-stage）。它与其他内置文体一样通过文体的校验。'
+    statement: 'wa-cli 必须随二进制提供内置的 novel 文体（长篇小说（Novel））：单元类型 novel（根，子单元类型 part，简报必填项为 premise、pov、length 与 key_messages）、part（子单元类型 chapter，stage_from_children: true）、chapter（子单元类型 scene，stage_from_children: true）与 scene（不声明简报必填项与汇总）；阶段依次为 brief（必需产物 brief）、outline（outline）、draft（draft）与 review（review 与 acceptance）；规则 fiction-cliches（ai-cliche，warning，小说 AI 腔词表同 short-story）、dialogue（dialogue-punctuation，warning）、pov（pov-consistency，warning）与 length（length-range，warning，1000 到 20000 字），不声明论断类规则；默认写作法（default_method）为 snowflake（内置规划类写作法，见 methods 主规格 method-data；根单元经 method-selection 选用它，规划步骤不由大纲承担，见 method-outline-check，分步确认见 plan 主规格），不声明 AI 评分指标（scored_metrics）与节奏检查（pacing_checks）；上下文预算为 16000。场景（scene）是唯一走完整生命周期的单元层：部与章为汇总单元（见本规格 aggregated-unit-types 与 units-and-lifecycle 主规格的 derived-stage）。它与其他内置文体一样通过文体的校验。'
     scenarios:
       new-novel:
         - GIVEN: 刚用 wa-cli init --genre novel --dir D 初始化的工作区
         - WHEN: 运行 wa-cli new novel my-novel --dir D --json，再运行 wa-cli config resolved --dir D --json
         - THEN: work.yaml 的 genre 为 novel、type 为 novel、stage 为 brief；resolved.unitTypes 含 novel、part、chapter 与 scene，part 与 chapter 的 stageFromChildren 为 true；resolved.rules 含 fiction-cliches、dialogue、pov 与 length 且不含 claims 与 claim-candidates；退出码都为 0
+      novel-default-method:
+        - GIVEN: 刚创建的 novel 作品 my-novel，写作简报没有 method，没有 plan.yaml
+        - WHEN: 运行 wa-cli plan show my-novel --dir D --json
+        - THEN: 根单元选用 snowflake（plan.method 为 snowflake、source 为 builtin），steps 为十步且全部 pending，currentStep 为 one-sentence，退出码为 0
       novel-hierarchy:
         - GIVEN: novel 作品 my-novel 已创建
         - WHEN: 依次运行 wa-cli unit add my-novel part part-one --dir D --json、wa-cli unit add my-novel/part-one chapter chapter-one --dir D --json 与 wa-cli unit add my-novel/part-one/chapter-one scene scene-1 --dir D --json

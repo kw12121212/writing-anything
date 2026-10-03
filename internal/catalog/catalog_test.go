@@ -57,18 +57,28 @@ func TestBuiltinsAreValid(t *testing.T) {
 			t.Errorf("pack %s: ok = %v, pack = %+v, problems = %+v", id, ok, p, ps)
 		}
 	}
-	if len(BuiltinMethods()) != 14 {
+	if len(BuiltinMethods()) != 17 {
 		t.Errorf("builtin methods = %v", BuiltinMethods())
 	}
 	for _, id := range BuiltinMethods() {
 		m, ps, ok := LoadMethod(id)
-		if !ok || m == nil || len(ps) > 0 || len(m.Parts()) == 0 {
+		hasParts := m != nil && (m.Kind == MethodArticle || m.Kind == MethodStructure)
+		if !ok || m == nil || len(ps) > 0 || (hasParts && len(m.Parts()) == 0) || (!hasParts && len(m.Steps) == 0) {
 			t.Errorf("method %s: ok = %v, method = %+v, problems = %+v", id, ok, m, ps)
 		}
 		if m.Kind == MethodStructure {
 			for _, b := range m.Beats {
 				if b.Position == nil || b.Tension == nil || *b.Tension < 0 || *b.Tension > 10 || *b.Tension != math.Trunc(*b.Tension) {
 					t.Errorf("structure method %s beat %s: position = %+v, tension = %+v", id, b.ID, b.Position, b.Tension)
+				}
+			}
+		}
+		if m.Kind == MethodPlanning {
+			for _, s := range m.Steps {
+				switch s.Product {
+				case "", "characters", "scenes", "scene-contracts":
+				default:
+					t.Errorf("planning method %s step %s: product = %q", id, s.ID, s.Product)
 				}
 			}
 		}
@@ -374,7 +384,7 @@ func TestNovelGenre(t *testing.T) {
 		!slices.Equal(root.BriefRequired, []string{"premise", "pov", "length", "key_messages"}) {
 		t.Fatalf("root unit type = %+v", root)
 	}
-	if g.ContextBudget != 16000 || g.DefaultMethod != "" || len(g.ScoredMetrics) != 0 || len(g.PacingChecks) != 0 {
+	if g.ContextBudget != 16000 || g.DefaultMethod != "snowflake" || len(g.ScoredMetrics) != 0 || len(g.PacingChecks) != 0 {
 		t.Fatalf("budget/method/metrics = %d/%q/%d/%d", g.ContextBudget, g.DefaultMethod, len(g.ScoredMetrics), len(g.PacingChecks))
 	}
 	for _, id := range []string{"length", "fiction-cliches", "dialogue", "pov"} {

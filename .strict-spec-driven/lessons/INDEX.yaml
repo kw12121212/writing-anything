@@ -205,6 +205,11 @@ categories:
       status: active
       occurrences: 1
       path: .strict-spec-driven/lessons/coding/lesson-7cc0c9.yaml
+    null-schema-37e8c0:
+      title: 规格写「未确认为 null」时，产物 Schema 不得用键存在性表达条件
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/coding/null-schema-37e8c0.yaml
   documentation:
     must-must-6af326:
       title: 修改一条 MUST 需求时，要检查同一规格里相邻的 MUST 是否因此冲突

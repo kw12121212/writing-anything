@@ -19,6 +19,7 @@ import (
 	"github.com/kw12121212/writing-anything/internal/metrics"
 	"github.com/kw12121212/writing-anything/internal/outline"
 	"github.com/kw12121212/writing-anything/internal/packinstall"
+	"github.com/kw12121212/writing-anything/internal/plan"
 	"github.com/kw12121212/writing-anything/internal/resolve"
 	"github.com/kw12121212/writing-anything/internal/review"
 	"github.com/kw12121212/writing-anything/internal/schema"
@@ -188,6 +189,8 @@ func runValidate(inv *invocation) int {
 					problems = append(problems, brief.CheckArtifact(dir, checked[0])...)
 				case "outline":
 					problems = append(problems, outline.CheckArtifact(dir, checked[0], defaultMethodOf(dir, checked[0]), metricsOfArtifact(dir, checked[0]), scenesOfOutlineArtifact(dir, checked[0]))...)
+				case "plan":
+					problems = append(problems, plan.CheckArtifact(dir, checked[0], defaultMethodOf(dir, checked[0]))...)
 				case "feedback":
 					problems = append(problems, feedback.CheckArtifact(dir, checked[0])...)
 				case "decisions":
@@ -481,8 +484,9 @@ func checkWorkspace(dir string) (checked []string, works []*work.Work, problems 
 	ychecked, yps := series.CheckSummaries(dir, works)
 	kchecked, kps := canon.CheckWorks(dir, works)
 	thchecked, thps := threads.CheckWorks(dir, works)
-	checked = slices.Concat(checked, more, wchecked, schecked, uchecked, bchecked, ochecked, fchecked, rchecked, mchecked, dchecked, lchecked, xchecked, cchecked, pchecked, echecked, tchecked, ychecked, kchecked, thchecked)
-	return checked, works, slices.Concat(problems, ps, wps, sps, ups, bps, ops, fps, rps, mps, dps, lps, xps, cps, pps, eps, tps, yps, kps, thps)
+	plchecked, plps := plan.CheckUnitArtifacts(dir, works, catalog.LoadMethods(dir), unitDefaultMethod)
+	checked = slices.Concat(checked, more, wchecked, schecked, uchecked, bchecked, ochecked, fchecked, rchecked, mchecked, dchecked, lchecked, xchecked, cchecked, pchecked, echecked, tchecked, ychecked, kchecked, thchecked, plchecked)
+	return checked, works, slices.Concat(problems, ps, wps, sps, ups, bps, ops, fps, rps, mps, dps, lps, xps, cps, pps, eps, tps, yps, kps, thps, plps)
 }
 
 // defaultMethodOf 返回单元产物 rel 适用的文体默认写作法：只有作品的根单元适用，子单元不继承；
@@ -713,6 +717,14 @@ func next(p workspace.Problem, dir string) []string {
 	case canon.CodeUnknownDecision:
 		// 决策引用涉及多个产物，用整体校验复查（canon-validation）。
 		return []string{shellCommand("wa-cli", "decisions", "--all", "--dir", dir, "--json"), validateAll}
+	case plan.CodeNotPlanning, plan.CodeStepOrder, plan.CodeMethodChanged, plan.CodeUnknownLink, plan.CodeMissingLinks:
+		// 规划的问题涉及写作法选用与产物链接：查看规划并整体校验复查（plan-artifact）。
+		if strings.HasSuffix(p.Path, "/"+plan.FileName) {
+			return []string{shellCommand("wa-cli", "plan", "show", work.RefOf(strings.TrimSuffix(p.Path, "/"+plan.FileName)), "--dir", dir, "--json"), validate}
+		}
+		return []string{validateAll}
+	case plan.CodeUnknownSource:
+		return []string{shellCommand("wa-cli", "source", "list", "--dir", dir, "--json"), validateAll}
 	case catalog.CodeDuplicateID:
 		if strings.HasSuffix(p.Path, "/"+draft.ClaimsName) || strings.HasSuffix(p.Path, "/"+brief.FileName) || strings.HasSuffix(p.Path, "/"+outline.FileName) {
 			return []string{validateAll}

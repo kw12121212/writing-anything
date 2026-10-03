@@ -42,6 +42,9 @@ specs:
   - id: outline
     title: 大纲（Outline）
     path: .strict-spec-driven/specs/outline.yaml
+  - id: plan
+    title: 规划（Plan）
+    path: .strict-spec-driven/specs/plan.yaml
   - id: preferences
     title: 作者偏好（Author Preference）
     path: .strict-spec-driven/specs/preferences.yaml

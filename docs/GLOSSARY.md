@@ -273,7 +273,9 @@
 | 高潮 | Climax | 高潮 | 冲突最激烈的部分 |
 | 结局 | Resolution / Ending | 结局 | |
 | 开篇 | Opening | 开篇 | 小说的开头部分 |
-| 断章 | Cliffhanger | 断章 | 章节在悬念处结束，网文常用 |
+| 断章 | Cliffhanger | 断章 | 章节在悬念处结束，网文常用；也是内置结构类写作法 volume-structure 的收束节拍 |
+| 黄金三章 | Golden Three Chapters | 黄金三章 | 网文开篇模板：前三章完成钩子、主角亮相、核心冲突与金手指（Protagonist's Advantage）揭示，内置写作法 id 为 golden-three |
+| 卷结构 | Volume Structure | 卷结构 | 网文的卷级模板：每卷声明目标、高潮与断章三个节拍，供部（卷）单元选用，内置写作法 id 为 volume-structure |
 | 爽点 | Payoff Beat | 爽点 | 网文中让读者获得满足感的情节 |
 | 金手指 | Protagonist's Advantage | 金手指 | 网文中主角独有的特殊能力或机缘 |
 | 起承转合 | Introduction–Development–Turn–Conclusion | 起承转合 | 传统的四段式结构 |
@@ -309,6 +311,10 @@
 |---|---|---|---|
 | 写作法模板 | Method Template | 写作法模板 | 以纯数据描述的写作方法：规划步骤、结构节拍或章节模板 |
 | 规划类写作法 | Planning Method | 规划类写作法 | 分步产出规划产物，每步经作者确认后进入下一步，如雪花写作法 |
+| 规划 | Plan | 规划 | 单元目录下的 `plan.yaml`：按规划类写作法的步骤分步记录规划文本、素材与产物链接，由 `wa-cli plan show / step / confirm` 管理 |
+| 规划步骤 | Planning Step | 规划步骤 | 规划类写作法 steps 中声明的一步（如雪花写作法的一句话概括）；每步起草后经作者确认才能进入下一步 |
+| 规划产物 | Planning Product | 规划产物 | 规划步骤声明的产物链接类型：characters 为设定集人物卡、scenes 为场景单元、scene-contracts 为场景契约 |
+| 产物链接 | Plan Link | 产物链接 | 规划步骤记录中指向已落地产物的引用（`--link`）：characters 为设定集条目 id，scenes 为场景单元引用，scene-contracts 形如 <场景单元引用>:<大纲节 id>，确认时校验可解析 |
 | 结构类写作法 | Structure Method | 结构类写作法 | 规定节拍及其在全文中的位置范围，如三幕结构 |
 | 目标张力 | Target Tension | 目标张力 | 结构类写作法节拍声明的 0 到 10 整数目标紧张度，作为情绪曲线与张力曲线的目标走势 |
 | 文章类写作法 | Article Method | 文章类写作法 | 规定必需章节及其顺序，如金字塔原理 |

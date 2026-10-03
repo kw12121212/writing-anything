@@ -29,7 +29,7 @@ func TestBuiltinSkills(t *testing.T) {
 		}
 		names = append(names, s.Name)
 	}
-	want := []string{"wa-auto", "wa-brief", "wa-draft", "wa-init", "wa-outline", "wa-publish", "wa-review", "wa-revise"}
+	want := []string{"wa-auto", "wa-brief", "wa-draft", "wa-init", "wa-outline", "wa-plan", "wa-publish", "wa-review", "wa-revise"}
 	if !slices.Equal(names, want) || len(All()) != len(want) {
 		t.Fatalf("skills = %v", names)
 	}
@@ -58,8 +58,8 @@ func TestParse(t *testing.T) {
 func TestInstall(t *testing.T) {
 	root := t.TempDir()
 	r, ps := Install(root, ".claude/skills", false)
-	if len(ps) > 0 || len(r.Skills) != 8 || !r.Skills[0].Changed || r.Skills[0].Path != ".claude/skills/wa-auto/SKILL.md" ||
-		!slices.Equal(r.Created[:2], []string{".claude", ".claude/skills"}) || len(r.Created) != 10 {
+	if len(ps) > 0 || len(r.Skills) != 9 || !r.Skills[0].Changed || r.Skills[0].Path != ".claude/skills/wa-auto/SKILL.md" ||
+		!slices.Equal(r.Created[:2], []string{".claude", ".claude/skills"}) || len(r.Created) != 11 {
 		t.Fatalf("install: %+v %+v", r, ps)
 	}
 	if r, ps := Install(root, ".claude/skills", false); len(ps) > 0 || len(r.Created) != 0 || slices.ContainsFunc(r.Skills, func(i Installed) bool { return i.Changed }) {
@@ -76,7 +76,7 @@ func TestInstall(t *testing.T) {
 	if _, err := os.Stat(other); err == nil {
 		t.Fatal("a modified skill must stop every write")
 	}
-	if r, ps := Install(root, ".claude/skills", true); len(ps) > 0 || len(r.Skills) != 8 {
+	if r, ps := Install(root, ".claude/skills", true); len(ps) > 0 || len(r.Skills) != 9 {
 		t.Fatalf("force: %+v %+v", r, ps)
 	}
 	if info, _ := os.Stat(file); info.Mode().Perm() != 0o600 {

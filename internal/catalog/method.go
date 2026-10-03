@@ -31,12 +31,14 @@ const MethodNone = "none"
 
 // MethodPart 是写作法的一个章节、节拍或规划步骤。Position 只用于节拍：按字数比例的位置范围，0 为开头，1 为结尾。
 // Tension 只用于节拍：目标张力（Target Tension），0 到 10 的整数，作为情绪曲线与张力曲线的目标走势；未声明为 nil。
+// Product 只用于规划步骤：规划产物（Planning Product），声明该步骤的产物链接（Plan Link）类型，供 plan 命令校验。
 type MethodPart struct {
 	ID          string    `json:"id"`
 	Title       string    `json:"title"`
 	Description string    `json:"description,omitempty"`
 	Position    *Position `json:"position,omitempty"`
 	Tension     *float64  `json:"tension,omitempty"`
+	Product     string    `json:"product,omitempty"`
 }
 
 // Position 是节拍在全文中的位置范围。

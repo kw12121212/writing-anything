@@ -47,7 +47,7 @@ methods:
 func TestMethodListShow(t *testing.T) {
 	dir := newWorkspace(t)
 	code, res := runMethod(t, dir, "method", "list")
-	structures := map[string]bool{"hero-journey": true, "qichengzhuanhe": true, "save-the-cat": true, "seven-point": true, "three-act": true}
+	structures := map[string]bool{"golden-three": true, "hero-journey": true, "qichengzhuanhe": true, "save-the-cat": true, "seven-point": true, "three-act": true, "volume-structure": true}
 	var ids []string
 	for _, m := range res.Methods {
 		id := m["id"].(string)
@@ -55,6 +55,9 @@ func TestMethodListShow(t *testing.T) {
 		wantKind := "article"
 		if structures[id] {
 			wantKind = "structure"
+		}
+		if id == "snowflake" {
+			wantKind = "planning"
 		}
 		if m["kind"] != wantKind || m["source"] != "builtin" {
 			t.Errorf("builtin method %v", m)
@@ -68,7 +71,7 @@ func TestMethodListShow(t *testing.T) {
 			}
 		}
 	}
-	want := []string{"aida", "diataxis-explanation", "diataxis-how-to", "diataxis-reference", "diataxis-tutorial", "general-specific-general", "hero-journey", "inverted-pyramid", "pas", "pyramid-scqa", "qichengzhuanhe", "save-the-cat", "seven-point", "three-act"}
+	want := []string{"aida", "diataxis-explanation", "diataxis-how-to", "diataxis-reference", "diataxis-tutorial", "general-specific-general", "golden-three", "hero-journey", "inverted-pyramid", "pas", "pyramid-scqa", "qichengzhuanhe", "save-the-cat", "seven-point", "snowflake", "three-act", "volume-structure"}
 	if code != 0 || !slices.Equal(ids, want) {
 		t.Fatalf("method list: code = %d, ids = %v", code, ids)
 	}
@@ -89,6 +92,48 @@ func TestMethodListShow(t *testing.T) {
 	if cat, res := runMethod(t, dir, "method", "show", "save-the-cat"); cat != 0 || len(res.Method["beats"].([]any)) != 15 {
 		t.Fatalf("save-the-cat: code = %d, beats = %d", cat, len(res.Method["beats"].([]any)))
 	}
+	// 内置规划类写作法 snowflake：十步与各步的规划产物（Planning Product）声明（builtin-planning-method）。
+	code, res = runMethod(t, dir, "method", "show", "snowflake")
+	steps := res.Method["steps"].([]any)
+	var stepIDs []string
+	products := map[string]any{}
+	for _, s := range steps {
+		step := s.(map[string]any)
+		stepIDs = append(stepIDs, step["id"].(string))
+		if p, ok := step["product"]; ok {
+			products[step["id"].(string)] = p
+		}
+	}
+	wantSteps := []string{"one-sentence", "one-paragraph", "character-sketch", "one-page-synopsis", "character-details", "four-page-synopsis", "character-bible", "scene-list", "scene-details", "start-writing"}
+	if code != 0 || res.Method["kind"] != "planning" || !slices.Equal(stepIDs, wantSteps) {
+		t.Fatalf("snowflake: code = %d, steps = %v", code, stepIDs)
+	}
+	for id, want := range map[string]any{"character-sketch": "characters", "character-details": "characters", "character-bible": "characters", "scene-list": "scenes", "scene-details": "scene-contracts"} {
+		if products[id] != want {
+			t.Errorf("snowflake step %s product = %v, want %v", id, products[id], want)
+		}
+	}
+	if len(products) != 5 {
+		t.Errorf("steps with product = %v, want exactly the five product steps", products)
+	}
+	// 内置网文结构模板：黄金三章与卷结构，节拍含位置范围与目标张力（builtin-web-structure）。
+	for id, wantBeats := range map[string][]string{"golden-three": {"hook", "protagonist", "core-conflict"}, "volume-structure": {"goal", "climax", "cliffhanger"}} {
+		code, res = runMethod(t, dir, "method", "show", id)
+		if code != 0 || res.Method["kind"] != "structure" {
+			t.Fatalf("%s: code = %d, method = %+v", id, code, res.Method)
+		}
+		var got []string
+		for _, b := range res.Method["beats"].([]any) {
+			beat := b.(map[string]any)
+			got = append(got, beat["id"].(string))
+			if beat["position"] == nil || beat["tension"] == nil {
+				t.Errorf("%s beat %v misses position or tension", id, beat)
+			}
+		}
+		if !slices.Equal(got, wantBeats) {
+			t.Errorf("%s beats = %v, want %v", id, got, wantBeats)
+		}
+	}
 	code, res = runMethod(t, dir, "method", "show", "nope")
 	if d := diag(t, res.result, "method.not-found"); code != 1 || res.Method != nil || !hasNext(d, "wa-cli method list") {
 		t.Fatalf("not found: %+v", res.Diagnostics)
@@ -101,7 +146,7 @@ func TestMethodListShow(t *testing.T) {
 	for _, m := range res.Methods {
 		got[m["id"].(string)] = m
 	}
-	if got["general-specific-general"]["source"] != "pack:house" || got["team-act"]["kind"] != "structure" || got["three-act"]["source"] != "builtin" || len(res.Methods) != 15 {
+	if got["general-specific-general"]["source"] != "pack:house" || got["team-act"]["kind"] != "structure" || got["three-act"]["source"] != "builtin" || len(res.Methods) != 18 {
 		t.Fatalf("pack methods: %v", got)
 	}
 	if _, res = runMethod(t, dir, "method", "show", "team-act"); res.Method["beats"].([]any)[1].(map[string]any)["position"].(map[string]any)["min"] != 0.7 {

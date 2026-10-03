@@ -788,3 +788,28 @@ func CheckArtifact(root, rel string) []workspace.Problem {
 	ds, know, _ := decisions(root)
 	return checkEntries(root, rel, *f, ds, know)
 }
+
+// CharacterIDs 返回作品 w 设定集中全部 character 条目（人物卡）的 id 集合：canon.yaml 不存在时为空集合；
+// 无法读取或未通过 Schema 校验时 ok 为 false（其问题由 canon 自身的校验报告），调用方应跳过对人物链接的检查。
+func CharacterIDs(root string, w *work.Work) (ids map[string]bool, ok bool) {
+	rel := Path(w.ID)
+	if _, regular, _ := workspace.ReadRegular(root, rel); !regular {
+		return map[string]bool{}, true
+	}
+	doc, ps := workspace.Read(root, rel)
+	if doc == nil || len(ps) > 0 {
+		return nil, false
+	}
+	if ps := schema.Named("canon").ValidateNode(doc); len(ps) > 0 {
+		return nil, false
+	}
+	var f canonFile
+	catalog.Decode(doc, &f)
+	ids = map[string]bool{}
+	for _, e := range f.Entries {
+		if e.Type == TypeCharacter {
+			ids[e.ID] = true
+		}
+	}
+	return ids, true
+}
