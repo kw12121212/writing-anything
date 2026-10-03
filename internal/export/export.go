@@ -35,10 +35,11 @@ const MaxBytes = 2 << 20
 const (
 	FormatMarkdown = "markdown"
 	FormatWechat   = "wechat-html"
+	FormatText     = "text"
 )
 
 // Formats 是支持的导出格式。
-var Formats = []string{FormatMarkdown, FormatWechat}
+var Formats = []string{FormatMarkdown, FormatWechat, FormatText}
 
 // ExportsDir 是工作区中存放导出文件的目录。
 const ExportsDir = workspace.Dir + "/exports"
@@ -179,6 +180,37 @@ func WechatHTML(root string, w *work.Work, opt Options, theme map[string]string)
 
 // ImageListPath 返回导出文件 rel 的配图清单路径：去掉 .html 后缀（没有时为整个文件名）加 .images.md。
 func ImageListPath(rel string) string { return strings.TrimSuffix(rel, ".html") + ".images.md" }
+
+// PlainText 把作品 w 中已验收的单元导出为一个纯文本（Plain Text）文件：按 export-markdown 同样的规则选出单元、去掉过程注释，
+// 再把正文去掉 Markdown 标记（见 RenderPlainText）。AI 参与说明按 Markdown 的文末格式追加：纯文本没有元数据位置，placement 为
+// metadata 或 both 时同样只按 footer 追加（有说明就追加）。--front-matter 由命令层拒绝（plain-text-export）。
+func PlainText(root string, w *work.Work, opt Options) (*Result, []string, []workspace.Problem) {
+	out := opt.Output
+	if out == "" {
+		out = ExportsDir + "/" + w.ID + ".txt"
+	}
+	rel, p := cleanOutput(out, CodeInvalidOutput)
+	if p != nil {
+		return nil, nil, []workspace.Problem{*p}
+	}
+	res, parts, units, _, problems := collect(root, w, opt.Level)
+	if len(parts) == 0 {
+		return nil, nil, problems
+	}
+	res.Path = rel
+	d, ps := disclose(root, w, units, opt.Disclosure)
+	problems, res.Disclosure = append(problems, ps...), d
+	doc := RenderPlainText(strings.Join(parts, "\n\n")) + "\n"
+	if d != nil {
+		doc += "\n---\n\n" + d.Text + "\n"
+	}
+	changed, ps := write(root, rel, []byte(doc), CodeInvalidOutput)
+	if len(ps) > 0 {
+		return nil, nil, append(problems, ps...)
+	}
+	res.Chars = len([]rune(doc))
+	return res, changed, problems
+}
 
 // collect 选出作品 w 中验收记录有效的单元（level 为工作区当前的关卡强度），返回结果（不含 Path 与 Chars）、各单元去掉过程注释后的
 // 正文、导出的单元与验收记录；跳过的单元以 warning 级 export.unaccepted 报告，没有可导出的单元时追加 export.nothing-accepted。

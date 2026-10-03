@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -130,11 +131,12 @@ func TestShortStoryEndToEnd(t *testing.T) {
 	}
 	step("", "init", "--genre", "short-story")
 	step("", "new", "short-story", "lamp")
-	// new-short-story：根单元类型为 story，简报必填项与解析出的规则、评分标准符合文体声明。
+	// new-short-story：根单元类型为 story，简报必填项与解析出的规则、评分标准符合文体声明（含三条小说专用规则）。
 	if code, res := runWS(t, dir, "config", "resolved"); code != 0 {
 		t.Fatalf("resolved: %+v", res.Diagnostics)
 	} else {
-		for _, want := range []string{`"id":"short-story"`, `"briefRequired":["premise","pov","length","key_messages"]`, `"id":"conflict"`, `"id":"pacing"`, `"id":"motivation"`} {
+		for _, want := range []string{`"id":"short-story"`, `"briefRequired":["premise","pov","length","key_messages"]`, `"id":"conflict"`, `"id":"pacing"`, `"id":"motivation"`,
+			`"fiction-cliches"`, `"dialogue-punctuation"`, `"pov-consistency"`, `"眼底闪过一丝"`} {
 			if !strings.Contains(res.stdout, want) {
 				t.Errorf("resolved lacks %s", want)
 			}
@@ -144,6 +146,8 @@ func TestShortStoryEndToEnd(t *testing.T) {
 		}
 	}
 	step("守灯人笔记：灯里的精灵每撒一次谎，灯就暗一分；它说它说的是真话。", "source", "add", "--type", "author-note", "--id", "idea", "--title", "前提笔记")
+	// 人物卡（Character Sheet）：场景上下文按 name 匹配设定集中的 character 条目。
+	step("", "canon", "add", "lamp", "--type", "character", "--name", "守灯人", "--text", "五十岁，左手有旧伤，守灯三十年")
 	// 写作简报：前提与视角先不关联素材，关键转折（核心观点）也没有出处。
 	step("", "brief", "set", "lamp", "--premise", "灯里的精灵每撒一次谎，灯就暗一分", "--theme", "善意的谎言",
 		"--pov-person", "third", "--pov-character", "守灯人", "--length", "2000-8000",
@@ -220,22 +224,103 @@ func TestShortStoryEndToEnd(t *testing.T) {
 	if res := step("", "advance", "lamp/scene-1"); !strings.Contains(res.stdout, `"stage":"done"`) {
 		t.Fatalf("scene to done: %s", res.stdout)
 	}
-	// 导出：只导出已验收的场景，根单元以 warning 跳过。
-	res := step("", "export", "lamp")
+	// 已验收场景的摘要：第二个场景的上下文包会带上它作为前情（scene-context）。
+	step("", "summary", "set", "lamp/scene-1", "--text", "守灯人发现灯焰随精灵的谎言变暗，想起笔记里的话，决定暂不拆穿。")
+	// 第二个场景：先写违例文本夹具，断言三条小说规则的发现项后换回合规文本。
+	step("", "unit", "add", "lamp", "scene", "scene-2")
+	step("", "brief", "set", "lamp/scene-2", "--purpose", "守灯人按住精灵的手")
+	step("", "advance", "lamp/scene-2")
+	step("", "outline", "set", "lamp/scene-2", "scene-2", "--title", "按住手", "--characters", "守灯人,精灵",
+		"--beats", "clash", "--reveal", "精灵的身世", "--reason", "场景契约：承担 clash 节拍，不透露身世")
+	// 场景级上下文包：出场人物的当前设定、前序场景摘要与揭示边界；精灵没有同名条目，以 warning 提示。
+	code, ctx := runContextJSON(t, dir, "lamp/scene-2")
+	if code != 0 {
+		t.Fatalf("context scene-2: %+v", ctx.Diagnostics)
+	}
+	cs := ctx.Context
+	if chars := cs["characters"].([]any); len(chars) != 1 || chars[0].(map[string]any)["name"] != "守灯人" ||
+		chars[0].(map[string]any)["protection"] != "normal" {
+		t.Fatalf("context characters: %+v", chars)
+	}
+	if prior := cs["priorScenes"].([]any); len(prior) != 1 || prior[0].(map[string]any)["unit"] != "lamp/scene-1" ||
+		prior[0].(map[string]any)["stale"] != false {
+		t.Fatalf("context priorScenes: %+v", prior)
+	}
+	if reveal := cs["reveal"].([]any); len(reveal) != 1 || reveal[0].(map[string]any)["text"] != "精灵的身世" {
+		t.Fatalf("context reveal: %+v", reveal)
+	}
+	if d := diag(t, ctx.result, "context.character-not-in-canon"); d.Severity != "warning" || !hasNext(d, "wa-cli canon list lamp --dir "+dir+" --json") {
+		t.Fatalf("character-not-in-canon: %+v", d)
+	}
+	// 违例文本夹具：半角引号对话、第三人称叙述中的「我」与小说 AI 腔各报告发现项（都是 warning）。
+	step("", "advance", "lamp/scene-2")
+	step("他说\"我不去。\"然后离开。\n\n我看着灯焰发呆。\n\n她的眼底闪过一丝慌乱。\n", "draft", "write", "lamp/scene-2")
+	if code, lint := runWS(t, dir, "lint", "lamp/scene-2"); code != 0 {
+		t.Fatalf("lint violations: exit code = %d, %+v", code, lint.Diagnostics)
+	} else {
+		var lr struct {
+			Findings []map[string]any `json:"findings"`
+		}
+		if err := json.Unmarshal([]byte(lint.stdout), &lr); err != nil {
+			t.Fatal(err)
+		}
+		for _, want := range []string{"dialogue", "pov", "fiction-cliches"} {
+			if !slices.ContainsFunc(lr.Findings, func(f map[string]any) bool { return f["rule"] == want }) {
+				t.Errorf("lint violations lack rule %s: %v", want, lr.Findings)
+			}
+		}
+	}
+	// 合规文本：三条小说规则零发现项。
+	scene2 := "守灯人按住精灵的手，灯焰晃了一下又稳住。\n\n精灵说灯不会熄，守灯人选择相信。\n\n夜色沉进海里。"
+	step(scene2, "draft", "write", "lamp/scene-2")
+	if code, lint := runWS(t, dir, "lint", "lamp/scene-2"); code != 0 {
+		t.Fatalf("lint compliant: exit code = %d, %+v", code, lint.Diagnostics)
+	} else {
+		var lr struct {
+			Findings []map[string]any `json:"findings"`
+		}
+		if err := json.Unmarshal([]byte(lint.stdout), &lr); err != nil {
+			t.Fatal(err)
+		}
+		for _, f := range lr.Findings {
+			if f["rule"] == "dialogue" || f["rule"] == "pov" || f["rule"] == "fiction-cliches" {
+				t.Errorf("lint compliant finding: %v", f)
+			}
+		}
+	}
+	step("", "advance", "lamp/scene-2")
+	step(fixture(t, "story-review.yaml"), "review", "record", "lamp/scene-2")
+	step("", "accept", "lamp/scene-2", "--confirmed-by-author", "--confirmation", "作者：第二个场景可以定稿")
+	if res := step("", "advance", "lamp/scene-2"); !strings.Contains(res.stdout, `"stage":"done"`) {
+		t.Fatalf("scene-2 to done: %s", res.stdout)
+	}
+	// 纯文本导出：两个场景拼接，AI 参与说明按 footer 追加；--front-matter 被拒绝。
+	res := step("", "export", "lamp", "--format", "text")
 	var er struct {
 		Export map[string]any `json:"export"`
 	}
 	if err := json.Unmarshal([]byte(res.stdout), &er); err != nil {
 		t.Fatal(err)
 	}
-	if units := er.Export["units"].([]any); len(units) != 1 || units[0] != "lamp/scene-1" {
+	if units := er.Export["units"].([]any); len(units) != 2 || units[0] != "lamp/scene-1" || units[1] != "lamp/scene-2" {
 		t.Fatalf("export units: %+v", er.Export)
+	}
+	if er.Export["format"] != "text" || er.Export["path"] != ".writing-anything/exports/lamp.txt" || er.Export["imageList"] != nil {
+		t.Fatalf("export text: %+v", er.Export)
 	}
 	if skipped := er.Export["skipped"].([]any); len(skipped) != 1 {
 		t.Fatalf("export skipped: %+v", er.Export)
 	}
+	if got := readFile(t, filepath.Join(dir, ".writing-anything", "exports", "lamp.txt")); !strings.Contains(got, "守灯人把油芯拧亮") || !strings.Contains(got, "守灯人按住精灵的手") || !strings.Contains(got, "AI 辅助") {
+		t.Fatalf("export text content = %q", got)
+	}
+	// Markdown 导出照常；--front-matter 与 text 互斥。
+	step("", "export", "lamp")
 	if got := readFile(t, filepath.Join(dir, ".writing-anything", "exports", "lamp.md")); !strings.Contains(got, "守灯人把油芯拧亮") {
-		t.Fatalf("export content = %q", got)
+		t.Fatalf("export markdown content = %q", got)
+	}
+	if d := fail("input.invalid-value", "export", "lamp", "--format", "text", "--front-matter"); d.Field != "front-matter" {
+		t.Fatalf("text front matter: %+v", d)
 	}
 	if code, res := runWS(t, dir, "validate"); code != 0 {
 		t.Fatalf("validate after export: %+v", res.Diagnostics)
@@ -260,6 +345,20 @@ func TestExportEdges(t *testing.T) {
 	// 正文由 Agent 写入：文末带 AI 参与说明（ai-disclosure）。
 	if got := readFile(t, filepath.Join(dir, "dist", "post.md")); got != reviewDraft+"\n---\n\n"+fullAIDisclosure+"\n" {
 		t.Fatalf("export without front matter = %q", got)
+	}
+	// 纯文本（Plain Text）导出：默认输出 exports/<work>.txt；placement 为 metadata 时纯文本没有元数据位置，
+	// 同样按 footer 追加 AI 参与说明（plain-text-export）；--front-matter 被拒绝。
+	mustRunWS(t, dir, "config", "set", "ai_disclosure", "metadata")
+	code, res = runWS(t, dir, "export", "my-post", "--format", "text")
+	if code != 0 || res.ChangedPaths[len(res.ChangedPaths)-1] != ".writing-anything/exports/my-post.txt" {
+		t.Fatalf("export text: code = %d, %+v %v", code, res.Diagnostics, res.ChangedPaths)
+	}
+	if got := readFile(t, filepath.Join(dir, ".writing-anything", "exports", "my-post.txt")); got != reviewDraft+"\n---\n\n"+fullAIDisclosure+"\n" {
+		t.Fatalf("export text content = %q", got)
+	}
+	if code, res = runWS(t, dir, "export", "my-post", "--format", "text", "--front-matter"); code != 1 ||
+		diag(t, res, "input.invalid-value").Field != "front-matter" {
+		t.Fatalf("text front matter: code = %d, %+v", code, res.Diagnostics)
 	}
 	for _, tc := range []struct {
 		args []string

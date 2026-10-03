@@ -267,3 +267,17 @@ rules:
         - canon set 对钦定条目未授权时：报告 canon.author-pinned、changedPaths 为 [.writing-anything/decisions.yaml]、canon.yaml 逐字节不变；作者 decide 允许后携带 --decision 重试成功并把决策 id 记录在条目上。
       bad:
         - 每次拒绝都追加一条新的阻塞决策；或拒绝时 changedPaths 为空数组，Agent 因此不知道决策队列已被写入；或 --decision 指向任意已决定决策即放行。
+  markdown-structure-single-source:
+    strength: SHOULD
+    statement: Markdown 结构识别（围栏代码块的开头与结束行、行内代码区间、偏移是否落在区间中）只能放在 internal/mdscan，由文本检查（Lint）、导出（Markdown、纯文本、公众号 HTML）与作者反馈的批注识别共用（FenceLines、FenceMarkers、CodeSpans、InSpans）；新增识别规则或需要新的派生（如区分围栏标记行与内容行）时修改 mdscan 一处并由既有函数派生，不得在渲染器、导出格式或命令中重写同类的正则状态机。
+    rationale: 本变更的纯文本渲染器需要去掉围栏的标记行而保留内容行，初版在导出包内复制了 FenceLines 的状态机（新上下文评审发现）：两份状态机会随识别规则演进而分叉，文本检查与导出对「代码块」的认知随之不一致，正是 mdscan 包注释承诺要避免的。修复后 FenceLines 改为由 FenceMarkers 派生，仓库中只保留一份围栏状态机。
+    enforcement:
+      method: review
+      detail: 代码审查时确认新的 Markdown 结构识别只出现在 internal/mdscan；internal/export、internal/lint 与 internal/feedback 只调用 mdscan 的函数，不自带围栏或行内代码的正则状态机。
+  export-format-layering:
+    strength: SHOULD
+    statement: 新增导出交付格式（如纯文本、后续的书稿格式）时分三层复用：单元选择与验收有效性判断复用 internal/export 的 collect（含 StripComments 去批注），每种格式只实现自己的渲染函数（如 RenderPlainText、RenderWechat），输出路径检查、原子写入与 AI 参与说明的追加复用 export-output 与既有格式入口的同组内部函数；不得在新格式里复制单元选择、注释剥离或输出路径检查。
+    rationale: 纯文本导出（--format text）按该分层实现只新增了渲染函数与入口，Markdown 与公众号 HTML 两个既有格式同样由 collect 与统一输出路径检查支撑；若新格式自带单元选择或路径检查，验收过滤与输出防护会随格式数分叉。
+    enforcement:
+      method: review
+      detail: 代码审查新的导出格式时确认：collect、StripComments、cleanOutput/write 只有一份实现，新格式只贡献渲染函数与入口分支。

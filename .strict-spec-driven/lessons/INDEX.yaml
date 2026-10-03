@@ -169,6 +169,11 @@ categories:
       status: active
       occurrences: 1
       path: .strict-spec-driven/lessons/coding/lesson-6d8efb.yaml
+    lesson-2c7047:
+      title: 按既有产物字段写启发式规则的识别条件，先核对字段的真实结构
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/coding/lesson-2c7047.yaml
   documentation:
     must-must-6af326:
       title: 修改一条 MUST 需求时，要检查同一规格里相邻的 MUST 是否因此冲突

@@ -14,21 +14,35 @@ var (
 	tildeFence    = regexp.MustCompile(`^ {0,3}(~{3,})`)
 )
 
-// FenceLines 返回每行是否属于围栏代码块（含开头与结束行）。行可以带或不带结尾的换行。
+// FenceLines 返回每行是否属于围栏代码块（含开头与结束行）。行可以带或不带结尾的换行。识别复用 FenceMarkers 的
+// 状态机：标记行本身属于围栏，两个标记行之间的内容行也属于（未闭合时到末尾）。
 func FenceLines(lines []string) []bool {
+	mark := FenceMarkers(lines)
 	in := make([]bool, len(lines))
+	open := false
+	for i, m := range mark {
+		if m {
+			open = !open // 标记行交替出现：开头行开启，结束行关闭
+		}
+		in[i] = m || open
+	}
+	return in
+}
+
+// FenceMarkers 返回每行是否为围栏代码块的开头或结束行（识别同 FenceLines；未闭合的围栏没有结束行）。行可以带或不带结尾的换行。
+func FenceMarkers(lines []string) []bool {
+	mark := make([]bool, len(lines))
 	open, char := 0, byte(0)
 	for i, line := range lines {
 		line = strings.TrimRight(line, "\r\n")
 		if open > 0 {
-			in[i] = true
 			trim := strings.TrimLeft(line, " ")
 			n := 0
 			for n < len(trim) && trim[n] == char {
 				n++
 			}
 			if n >= open && strings.TrimSpace(trim[n:]) == "" {
-				open = 0
+				open, mark[i] = 0, true
 			}
 			continue
 		}
@@ -37,10 +51,10 @@ func FenceLines(lines []string) []bool {
 			m = tildeFence.FindStringSubmatch(line)
 		}
 		if m != nil {
-			open, char, in[i] = len(m[1]), m[1][0], true
+			open, char, mark[i] = len(m[1]), m[1][0], true
 		}
 	}
-	return in
+	return mark
 }
 
 // CodeSpans 返回一行中行内代码的字节区间 [开头反引号, 结尾反引号之后)：n 个反引号到之后恰好 n 个反引号为止；没有对应结束的

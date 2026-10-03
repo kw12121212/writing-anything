@@ -17,6 +17,9 @@ type Input struct {
 	Claims []Claim // 单元 claims.yaml 中已登记的论断
 	// ClaimsInvalid 为 true 时 claims.yaml 不通过校验：其问题由调用方报告，论断相关的规则不执行。
 	ClaimsInvalid bool
+	// POVPerson 是写作简报（本单元或继承的祖先单元）pov 的人称（first、second 或 third）；空表示写作简报不可用
+	// 或没有 pov，pov-consistency 规则不执行。
+	POVPerson string
 }
 
 // Claim 是一个已登记的论断（Claim）；Sources 为所关联素材的 id 与类型。

@@ -238,3 +238,39 @@ requirements:
         - GIVEN: 'config.yaml 定义 ads（type 为 ad-compliance），params 为 basis: 3'
         - WHEN: 运行 wa-cli lint my-post --dir D --json
         - THEN: diagnostics 中有一条错误码为 rule.invalid-params、field 为 rules.ads.params.basis 的诊断，ads 不执行，退出码为 1
+  fiction-rule-types:
+    strength: MUST
+    statement: wa-cli lint 必须按规则的 type 执行以下小说检查，只检查正文、不访问网络，跳过屏蔽区域（同 rule-types 的文本模型），发现项的位置、排序、单处豁免（lint-ignore）与规则级 waivers 同现有规则。dialogue-punctuation（无参数）：同一行内成对的半角双引号（从奇数序的双引号到其后第一个双引号）包住的文字，每个这样的对话报告一项发现项，text 为含两侧引号的对话原文，suggestion 为改用全角引号「“”」的提示；对话引号内以句号「。」结尾、闭引号后紧跟不超过 4 个汉字且以说、道、问、答、喊、叫、嚷、吼、笑、哭收尾的说话人分句时，报告一项发现项，text 为引号内的句号，suggestion 为「，」，message 说明对话后紧跟说话人时句末句号应为逗号；引号内以「？」「！」或「…」结尾时不报告此项；闭引号后是句号、逗号等其他标点或超过 4 个汉字的分句时不报告。pov-consistency（无参数）：从本单元到根单元自下而上第一个声明了 pov 的写作简报读取人称（person；场景常有自己的简报，而 pov 声明在故事根单元的简报里）——person 为 first 期望第一人称，为 third 期望第三人称；没有任何简报声明 pov、person 为 second 或写作简报不可用时规则不执行，并给出一条 severity 为 warning 的诊断 lint.pov-unrecognized（path 为 draft.md，message 说明 pov 人称无法识别或写作简报不可用、规则未执行，不改变退出码）；期望第三人称时，对话（同一行内成对的全角引号「“”」与成对的半角双引号包住的文字）之外的叙述文字中每个出现的「我」字报告一项发现项（「我们」等只按其「我」字报告一处），text 为「我」，message 说明疑似视角滑移或对话漏加引号、为启发式检测，suggestion 为 null；期望第一人称时不报告发现项。两种类型的规则给出任何 params 时按 rule-params 报告 rule.invalid-params（field 为 rules.<id>.params 或其下的参数名）。
+    scenarios:
+      halfwidth-dialogue:
+        - GIVEN: short-story 作品 my-story 的 draft.md 为「他说"明天我就走。"」（对话用半角双引号）
+        - WHEN: 运行 wa-cli lint my-story --dir D --json
+        - THEN: findings 含一项 type 为 dialogue-punctuation 的发现项，text 含该对话原文，suggestion 提示改用全角引号，退出码不因它变为 1
+      period-before-attribution:
+        - GIVEN: draft.md 为「“我明天走。”他说。」
+        - WHEN: 运行 wa-cli lint my-story --dir D --json
+        - THEN: findings 含一项 type 为 dialogue-punctuation、text 为引号内句号的发现项，suggestion 为「，」
+      question-mark-kept:
+        - GIVEN: draft.md 为「“你走吗？”他问。」
+        - WHEN: 运行 wa-cli lint my-story --dir D --json
+        - THEN: findings 没有 type 为 dialogue-punctuation 的发现项
+      compliant-dialogue:
+        - GIVEN: draft.md 为「“我明天走，”他说。」（全角引号、逗号结尾）
+        - WHEN: 运行 wa-cli lint my-story --dir D --json
+        - THEN: findings 没有 type 为 dialogue-punctuation 的发现项
+      pov-slip:
+        - GIVEN: '故事根单元写作简报的 pov 为 {person: third}（场景自己的简报没有 pov），场景的 draft.md 叙述段（引号外）含「我拿起灯。」'
+        - WHEN: 运行 wa-cli lint my-story/s1 --dir D --json
+        - THEN: findings 含一项 type 为 pov-consistency、text 为「我」的发现项
+      pov-dialogue-exempt:
+        - GIVEN: 同上，draft.md 为「他说：“我在这里等了很久。”」
+        - WHEN: 运行 wa-cli lint my-story/s1 --dir D --json
+        - THEN: findings 没有 type 为 pov-consistency 的发现项
+      pov-first-person:
+        - GIVEN: '写作简报的 pov 为 {person: first}，叙述含「我」与「他」'
+        - WHEN: 运行 wa-cli lint my-story --dir D --json
+        - THEN: findings 没有 type 为 pov-consistency 的发现项
+      pov-unrecognized:
+        - GIVEN: '写作简报的 pov 为 {person: second}（或从本单元到根单元没有任何简报声明 pov）'
+        - WHEN: 运行 wa-cli lint my-story --dir D --json
+        - THEN: diagnostics 中有一条错误码为 lint.pov-unrecognized、severity 为 warning 的诊断，findings 没有 pov-consistency 发现项，退出码不因它变为 1

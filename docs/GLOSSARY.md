@@ -51,6 +51,7 @@
 | 修订任务 | Revision Task | 修订任务 | 尚未处理的审稿发现项或作者反馈；standard 与 strict 关卡强度下全部解决或豁免后才能验收 |
 | 验收 | Acceptance | 验收 | 作者确认单元达到要求 |
 | 导出 | Export | 导出 | 生成 Markdown、HTML 等交付格式 |
+| 纯文本 | Plain Text | 纯文本 | `--format text` 导出的交付格式：去掉 Markdown 标记、只保留文字内容的 `.txt` 文件 |
 | 文件头元数据 | Front Matter | front matter | 导出文件开头的 YAML 元数据块（标题、描述、文体、单元与验收时间），供博客平台读取 |
 | 组稿 | Assembly | 组稿 | 把已验收单元按顺序合成完整书稿 |
 
@@ -71,7 +72,7 @@
 | 保护级别 | Protection Level | 保护级别 | 设定条目的保护强度：`normal`（常规）或 `author-pinned`（作者钦定，最高级别，修改须经决策队列授权） |
 | 作者钦定 | Author-pinned | 作者钦定 | 由作者确定、受最高级别保护的内容 |
 | 状态变更提议 | State Change Proposal | 状态变更提议 | 场景造成的人物或世界状态变化，待作者确认 |
-| 摘要 | Summary | 摘要 | 已验收单元的简要内容，由 Agent 撰写、`wa-cli summary set` 校验并记录正文哈希；正文之后被修改时过期；系列中后面作品的上下文包会带上前序作品的摘要 |
+| 摘要 | Summary | 摘要 | 已验收单元的简要内容，由 Agent 撰写、`wa-cli summary set` 校验并记录正文哈希；正文之后被修改时过期；系列中后面作品的上下文包会带上前序作品的摘要，场景单元的上下文包会带上前序场景的摘要 |
 | 事实 | Fact | 事实 | 系列中带素材出处的共享事实，成员作品的上下文包会带上它 |
 | 分层摘要 | Layered Summary | 分层摘要 | 场景 → 章 → 部 逐层汇总的摘要 |
 | 卷末检查点 | Volume Checkpoint | 卷末检查点 | 每部（卷）结束时汇总新增设定、状态与伏笔变化，供作者抽查确认 |
@@ -104,6 +105,9 @@
 | 禁用词 | Banned Term | 禁用词 | 规范包中不允许出现的词语，可附理由与替换写法 |
 | 评分标准 | Rubric | 评分标准 | 审稿时逐项评判的标准 |
 | AI 腔 | AI Cliché | AI 腔 | 典型的 AI 套话与句式，如"值得注意的是" |
+| 小说 AI 腔词表 | Fiction AI-cliché Terms | 小说 AI 腔词表 | 内置 short-story 文体为 `ai-cliche` 规则声明的虚构写作套话词表，如"眼底闪过一丝" |
+| 对话标点 | Dialogue Punctuation | 对话标点 | `dialogue-punctuation` 规则检查的小说对话标点：应使用全角引号，对话后紧跟说话人时引号内句号应为逗号 |
+| 视角与人称一致 | POV Consistency | 视角一致 | `pov-consistency` 规则的启发式检查：按写作简报 `pov` 的人称检测叙述文字中的视角滑移 |
 | 中文排版 | CJK Typography | 中文排版 | 中英文间空格、全角/半角标点等排版规范 |
 | 术语表 | Glossary | 术语表 | 标准写法与错误写法的对照 |
 | 覆盖追踪 | Coverage Tracing | 覆盖追踪 | 检查每个核心观点都被大纲的某一节覆盖 |

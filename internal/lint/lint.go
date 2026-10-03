@@ -26,6 +26,7 @@ const (
 	CodeInactiveTerms     = "lint.inactive-terms"
 	CodeTooLarge          = "lint.too-large"
 	CodeTruncated         = "lint.truncated"
+	CodePOVUnrecognized   = "lint.pov-unrecognized"
 	CodeInvalidParams     = "rule.invalid-params"
 )
 
@@ -96,19 +97,21 @@ func (p params) strings(name string) []string {
 }
 
 var ruleTypes = map[string]ruleType{
-	"cjk-typography":      {params: []param{{"spacing", kindBool, false}, {"punctuation", kindBool, false}}, check: checkCJK},
-	"ai-cliche":           {params: []param{{"terms", kindStrings, false}, {"max_dashes_per_1000", kindPositiveNumber, false}}, check: checkCliche},
-	"banned-terms":        {params: []param{{"terms", kindStrings, false}}, check: checkBanned},
-	"term-consistency":    {check: checkTerms},
-	"length-range":        {params: []param{{"min", kindPositiveInt, false}, {"max", kindPositiveInt, false}}, check: checkLength},
-	"paragraph-length":    {params: []param{{"max", kindPositiveInt, true}}, check: checkParagraphs},
-	"required-sections":   {params: []param{{"sections", kindStrings, true}}, check: checkSections},
-	"claim-sources":       {params: []param{{"kinds", kindStrings, false}, {"source_types", kindStrings, false}}, check: checkClaimSources},
-	"code-block-language": {check: checkCodeLanguage},
-	"link-format":         {params: []param{{"schemes", kindStrings, false}}, check: checkLinks},
-	"reference-sources":   {params: []param{{"source_types", kindNonEmptyStrings, false}, {"versions", kindBool, false}, {"apis", kindBool, false}}, check: checkReferences},
-	"claim-candidates":    {params: []param{{"pronouns", kindStrings, false}, {"experience_markers", kindStrings, false}, {"data", kindBool, false}, {"cover_kinds", kindStrings, false}}, check: checkCandidates},
-	"ad-compliance":       {params: []param{{"terms", kindStrings, false}, {"builtin", kindBool, false}, {"basis", kindString, false}}, check: checkAdCompliance},
+	"cjk-typography":       {params: []param{{"spacing", kindBool, false}, {"punctuation", kindBool, false}}, check: checkCJK},
+	"ai-cliche":            {params: []param{{"terms", kindStrings, false}, {"max_dashes_per_1000", kindPositiveNumber, false}}, check: checkCliche},
+	"banned-terms":         {params: []param{{"terms", kindStrings, false}}, check: checkBanned},
+	"term-consistency":     {check: checkTerms},
+	"length-range":         {params: []param{{"min", kindPositiveInt, false}, {"max", kindPositiveInt, false}}, check: checkLength},
+	"paragraph-length":     {params: []param{{"max", kindPositiveInt, true}}, check: checkParagraphs},
+	"required-sections":    {params: []param{{"sections", kindStrings, true}}, check: checkSections},
+	"claim-sources":        {params: []param{{"kinds", kindStrings, false}, {"source_types", kindStrings, false}}, check: checkClaimSources},
+	"code-block-language":  {check: checkCodeLanguage},
+	"link-format":          {params: []param{{"schemes", kindStrings, false}}, check: checkLinks},
+	"reference-sources":    {params: []param{{"source_types", kindNonEmptyStrings, false}, {"versions", kindBool, false}, {"apis", kindBool, false}}, check: checkReferences},
+	"claim-candidates":     {params: []param{{"pronouns", kindStrings, false}, {"experience_markers", kindStrings, false}, {"data", kindBool, false}, {"cover_kinds", kindStrings, false}}, check: checkCandidates},
+	"ad-compliance":        {params: []param{{"terms", kindStrings, false}, {"builtin", kindBool, false}, {"basis", kindString, false}}, check: checkAdCompliance},
+	"dialogue-punctuation": {check: checkDialogue},
+	"pov-consistency":      {check: checkPOV},
 }
 
 // Run 对正文 content 执行 r 中的全部生效规则，按行、列、规则 id 排序发现项，并应用单处豁免。problems 为规则参数问题
@@ -140,6 +143,12 @@ func Run(content string, r *resolve.Resolved, rel string, in Input) (*Result, []
 		p, ps := validate(id, rt, rule, r)
 		if len(ps) > 0 {
 			problems = append(problems, ps...)
+			continue
+		}
+		if typ == "pov-consistency" && in.POVPerson != povFirst && in.POVPerson != povThird {
+			// pov 人称无法识别（second、未设置或写作简报不可用）时规则不执行，以 warning 提示（fiction-rule-types）。
+			problems = append(problems, workspace.Problem{Code: CodePOVUnrecognized, Severity: workspace.SeverityWarning, Path: rel,
+				Message: "视角与人称一致（POV Consistency）：写作简报的 pov 人称无法识别（应为 first 或 third）或写作简报不可用，规则未执行；请用 wa-cli brief set 设置 pov"})
 			continue
 		}
 		active[typ] = true

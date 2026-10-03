@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/kw12121212/writing-anything/internal/canon"
 	"github.com/kw12121212/writing-anything/internal/feedback"
 	"github.com/kw12121212/writing-anything/internal/outline"
 	"github.com/kw12121212/writing-anything/internal/series"
@@ -13,19 +14,22 @@ import (
 
 // partTitles 是各部分在 Markdown 中的二级标题；标题不计入预算。
 var partTitles = map[string]string{
-	PartBrief:       "## 写作简报（Brief）",
-	PartOutline:     "## 本单元大纲（Outline）",
-	PartSection:     "## 本节大纲条目",
-	PartFeedback:    "## 未处理的作者反馈（Feedback）",
-	PartDecision:    "## 待决的决策（Decision Queue）",
-	PartFact:        "## 系列（Series）",
-	PartSummary:     "## 系列（Series）",
-	PartRules:       "## 规范要点",
-	PartGlossary:    "## 规范要点",
-	PartBannedTerms: "## 规范要点",
-	PartStyle:       "## 规范要点",
-	PartSource:      "## 素材原文",
-	PartNeighbor:    "## 相邻节（Neighbor Section）",
+	PartBrief:        "## 写作简报（Brief）",
+	PartOutline:      "## 本单元大纲（Outline）",
+	PartSection:      "## 本节大纲条目",
+	PartCharacter:    "## 出场人物（Characters）",
+	PartReveal:       "## 揭示边界（Reveal Boundary）",
+	PartFeedback:     "## 未处理的作者反馈（Feedback）",
+	PartDecision:     "## 待决的决策（Decision Queue）",
+	PartFact:         "## 系列（Series）",
+	PartSummary:      "## 系列（Series）",
+	PartSceneSummary: "## 前序场景（Prior Scenes）",
+	PartRules:        "## 规范要点",
+	PartGlossary:     "## 规范要点",
+	PartBannedTerms:  "## 规范要点",
+	PartStyle:        "## 规范要点",
+	PartSource:       "## 素材原文",
+	PartNeighbor:     "## 相邻节（Neighbor Section）",
 }
 
 func (b *Brief) markdown() string {
@@ -171,6 +175,31 @@ func (n Neighbor) markdown() string {
 		s += "：" + *n.Excerpt
 	}
 	return s + "\n"
+}
+
+func (c Character) markdown() string {
+	pin := ""
+	if c.Protection == canon.ProtectionPinned {
+		pin = "［作者钦定］"
+	}
+	return fmt.Sprintf("- %s %s%s：%s\n", c.ID, c.Name, pin, oneLine(c.Text))
+}
+
+func (r RevealBoundary) markdown() string {
+	return fmt.Sprintf("- 节 %s 不能提前透露：%s\n", r.Section, oneLine(r.Text))
+}
+
+func (s SceneSummary) markdown() string {
+	note := ""
+	if s.Stale {
+		note = "（已过期：正文在摘要之后被修改）"
+	}
+	// 摘要按引用块输出，其中以 # 开头的行不会变成上下文包的标题。
+	var b strings.Builder
+	for _, line := range strings.Split(strings.TrimSpace(s.Text), "\n") {
+		b.WriteString("> " + line + "\n")
+	}
+	return fmt.Sprintf("- 前序场景 %s 的摘要（Summary）%s：\n\n%s\n", s.Unit, note, b.String())
 }
 
 // Markdown 返回上下文包的 Markdown 文本：单元信息头、按优先级顺序保留的内容项与裁剪报告。

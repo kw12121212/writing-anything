@@ -1,0 +1,57 @@
+schema: strict-spec-driven/delta-spec/v1
+schema_version: 1
+artifact_type: delta_spec
+schema_file: templates/strict-spec-driven/schemas/delta-spec.yaml
+target_spec: context
+operations:
+  ADDED:
+    scene-context:
+      strength: MUST
+      statement: wa-cli context 对单元类型为 scene 的单元必须在上下文包（Context Pack）中额外输出场景级内容，其余内容与裁剪行为不变；对其他单元这三个字段为空值（characters 与 priorScenes 为空数组、reveal 为空数组），不输出场景级诊断。characters 为出场人物的当前设定：按场景自身 outline.yaml 各大纲节 characters 声明的顺序去重后，取作品 canon.yaml 中 name 与之相同的 character 条目（同名的按 canon 条目顺序），每项含 id、name、text 与 protection；声明的人物没有同名 character 条目时逐个给出 severity 为 warning 的诊断 context.character-not-in-canon（message 含该人物名，next 含 wa-cli help canon add --json 与 wa-cli canon list <work> --dir <dir> --json），作品没有 canon.yaml 时对应项缺失但不报告；canon.yaml 存在但不通过校验时报告其诊断，context 为 null，退出码为 1（同 context-command 对写作简报与大纲等产物的处理）。priorScenes 为前序场景摘要（Prior Scene Summary）：父单元 units 中排在本单元之前、单元类型为 scene 且单元目录下有 summary.yaml 的兄弟单元，按 units 顺序，每项含 unit、text 与 stale；summary.yaml 无法读取或不合法时以 warning 报告其诊断并跳过该摘要；前序场景没有 summary.yaml 时给出 severity 为 warning 的诊断 context.summary-missing（next 含 wa-cli help summary set --json）。reveal 为揭示边界（Reveal Boundary）：场景自身 outline.yaml 各节 reveal 的取值，按节顺序，每项含 section（节 id）与 text；场景没有 outline.yaml 或各节都没有 reveal 时为空数组。三个新内容项计入上下文预算并按 context-trim 的优先级裁剪；不加 --json 的 Markdown 输出新增「出场人物（Characters）」「前序场景（Prior Scenes）」与「揭示边界（Reveal Boundary）」小节，按裁剪结果输出保留的内容，被整项裁剪的小节不输出。
+      scenarios:
+        scene-characters:
+          - GIVEN: short-story 作品 my-story 的场景 s2 的 outline.yaml 节声明 characters 为 [守灯人]，作品 canon.yaml 有 name 为 守灯人、protection 为 author-pinned 的 character 条目 canon-1
+          - WHEN: 运行 wa-cli context my-story/s2 --dir D --json
+          - THEN: context.characters 含一项 id 为 canon-1、name 为 守灯人、protection 为 author-pinned，退出码为 0
+        character-not-in-canon:
+          - GIVEN: 场景 s2 的大纲节声明 characters 为 [守灯人, 精灵]，canon.yaml 只有 name 为 守灯人的条目
+          - WHEN: 运行 wa-cli context my-story/s2 --dir D --json
+          - THEN: context.characters 只含守灯人的条目，diagnostics 中有一条错误码为 context.character-not-in-canon、severity 为 warning 的诊断，message 含 精灵，退出码为 0
+        prior-scene-summaries:
+          - GIVEN: my-story 的场景 s1 已验收且写入了摘要，s2 是 units 顺序中 s1 之后的场景
+          - WHEN: 运行 wa-cli context my-story/s2 --dir D --json
+          - THEN: context.priorScenes 含一项 unit 为 my-story/s1、text 为摘要文字；s1 没有摘要时改为有一条错误码为 context.summary-missing、severity 为 warning 的诊断
+        scene-reveal:
+          - GIVEN: 场景 s2 的 outline.yaml 节 scene-1 声明 reveal 为 精灵的真实身份
+          - WHEN: 运行 wa-cli context my-story/s2 --dir D --json
+          - THEN: context.reveal 含一项 section 为 scene-1、text 为 精灵的真实身份，退出码为 0
+        invalid-canon:
+          - GIVEN: 作品 my-story 的 canon.yaml 不通过校验
+          - WHEN: 运行 wa-cli context my-story/s2 --dir D --json
+          - THEN: diagnostics 中有该 canon.yaml 的诊断，context 为 null，退出码为 1
+        non-scene-empty:
+          - GIVEN: tech-blog 作品 my-post 的子单元 why
+          - WHEN: 运行 wa-cli context my-post/why --dir D --json
+          - THEN: context.characters 与 priorScenes 为空数组，reveal 为空数组，没有场景级诊断，退出码为 0
+  MODIFIED:
+    context-trim:
+      strength: MUST
+      statement: 上下文包必须把内容控制在上下文预算（Context Budget，见 context-budget）之内：每个内容项按其 Markdown 文本的字符数（Unicode 码点）计入预算，按以下优先级从高到低依次放入：写作简报、本单元大纲、本节大纲条目、每个 canon 人物设定项、每条揭示边界、每条作者反馈、每个决策、每条系列事实、每份前序作品摘要、每份前序场景摘要、规范要点的规则、术语表、禁用词、文风、每份素材原文、每个相邻节；canon 人物设定项、揭示边界与前序场景摘要只在 scene 单元出现（见 scene-context）；单元信息头与裁剪报告不计入预算。放入某项会超出预算时：素材原文在剩余预算大于其标题行所占字符数加 1 时截断到剩余字符数（truncated 为 true，截断后的内容仍以换行结尾），否则与其他项一样整项裁剪，继续尝试之后的项。used 为保留的内容项字符数之和，不超过预算；trimmed 为被裁剪或截断的项，按优先级顺序，每项含 part（brief、outline、section、character、reveal、feedback、decision、fact、summary、scene-summary、rules、glossary、bannedTerms、style、source 或 neighbor）、id（反馈、决策、事实、素材与 canon 人物设定的 id，摘要的作品 id、前序场景摘要的场景单元引用与相邻节的单元引用，其他为 null）、chars（原字符数）与 keptChars（保留的字符数，整项裁剪时为 0）；被整项裁剪的内容不出现在 context 的对应字段中（对应字段为 null 或不含该项）。
+      scenarios:
+        within-budget:
+          - GIVEN: 上下文预算为 12000，全部内容不超过预算
+          - WHEN: 运行 wa-cli context my-post --dir D --json
+          - THEN: trimmed 为空数组，used 等于各内容项字符数之和，退出码为 0
+        truncate-source:
+          - GIVEN: config.yaml 的 context_budget 为 300，素材 src-a 的原文有 5000 字
+          - WHEN: 运行 wa-cli context my-post --dir D --json
+          - THEN: used 不超过 300；sources 中 src-a 的 truncated 为 true；trimmed 含 part 为 source、id 为 src-a、chars 大于 keptChars 的一项，退出码为 0
+        drop-low-priority:
+          - GIVEN: 上下文预算很小，只放得下写作简报
+          - WHEN: 运行 wa-cli context my-post/why --dir D --json
+          - THEN: context.brief 非 null；被裁剪的反馈、规范要点与相邻节出现在 trimmed 中且 keptChars 为 0，退出码为 0
+        drop-scene-parts:
+          - GIVEN: 场景 s2 的预算很小，只放得下写作简报与本节大纲条目，作品有 canon 条目与前序场景摘要
+          - WHEN: 运行 wa-cli context my-story/s2 --dir D --json
+          - THEN: 被裁剪的人物设定与前序场景摘要出现在 trimmed 中（part 为 character 与 scene-summary）且 keptChars 为 0，context.characters 与 priorScenes 不含被裁剪的项，退出码为 0
+  REMOVED: {}

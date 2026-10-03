@@ -80,7 +80,9 @@ func TestContext(t *testing.T) {
 		t.Fatalf("context-json: exit code = %d, context = %v", code, c)
 	}
 	// root-sources：写作简报的 sources，然后是核心观点的 sources，再是本单元大纲各节的 uses（去重）。
-	if c["section"] != nil || len(c["neighbors"].([]any)) != 0 || c["outline"] == nil {
+	// 非 scene 单元没有场景级内容：characters、priorScenes 与 reveal 为空数组（scene-context 的 non-scene-empty）。
+	if c["section"] != nil || len(c["neighbors"].([]any)) != 0 || c["outline"] == nil ||
+		len(c["characters"].([]any)) != 0 || len(c["priorScenes"].([]any)) != 0 || len(c["reveal"].([]any)) != 0 {
 		t.Fatalf("root: context = %v", c)
 	}
 	var ids []string

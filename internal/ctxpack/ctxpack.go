@@ -11,6 +11,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/kw12121212/writing-anything/internal/brief"
+	"github.com/kw12121212/writing-anything/internal/canon"
 	"github.com/kw12121212/writing-anything/internal/decision"
 	"github.com/kw12121212/writing-anything/internal/draft"
 	"github.com/kw12121212/writing-anything/internal/feedback"
@@ -23,19 +24,22 @@ import (
 
 // 内容项的部分名，也是 trimmed 中的 part。
 const (
-	PartBrief       = "brief"
-	PartOutline     = "outline"
-	PartSection     = "section"
-	PartFeedback    = "feedback"
-	PartDecision    = "decision"
-	PartFact        = "fact"
-	PartSummary     = "summary"
-	PartRules       = "rules"
-	PartGlossary    = "glossary"
-	PartBannedTerms = "bannedTerms"
-	PartStyle       = "style"
-	PartSource      = "source"
-	PartNeighbor    = "neighbor"
+	PartBrief        = "brief"
+	PartOutline      = "outline"
+	PartSection      = "section"
+	PartCharacter    = "character"
+	PartReveal       = "reveal"
+	PartFeedback     = "feedback"
+	PartDecision     = "decision"
+	PartFact         = "fact"
+	PartSummary      = "summary"
+	PartSceneSummary = "scene-summary"
+	PartRules        = "rules"
+	PartGlossary     = "glossary"
+	PartBannedTerms  = "bannedTerms"
+	PartStyle        = "style"
+	PartSource       = "source"
+	PartNeighbor     = "neighbor"
 )
 
 // ExcerptChars 是相邻节节选的最大字符数。
@@ -121,8 +125,32 @@ type Summary struct {
 	Stale bool
 }
 
-// CodeSummaryMissing 是前序作品还没有摘要时的 warning 错误码。已发布的错误码不得改名或复用。
+// Character 是场景大纲声明的出场人物在设定集（Canon）中的当前设定。
+type Character struct {
+	ID         string
+	Name       string
+	Text       string
+	Protection string
+}
+
+// SceneSummary 是一个前序场景的已验收摘要（复用 summary.yaml）；Stale 为摘要之后正文又被修改。
+type SceneSummary struct {
+	Unit  string
+	Text  string
+	Stale bool
+}
+
+// RevealBoundary 是场景大纲一节的揭示边界（Reveal Boundary）：本场景不能提前透露的信息。
+type RevealBoundary struct {
+	Section string
+	Text    string
+}
+
+// CodeSummaryMissing 是前序作品或前序场景还没有摘要时的 warning 错误码。已发布的错误码不得改名或复用。
 const CodeSummaryMissing = "context.summary-missing"
+
+// CodeCharacterNotInCanon 是场景大纲声明的出场人物在设定集中没有同名 character 条目时的 warning 错误码。
+const CodeCharacterNotInCanon = "context.character-not-in-canon"
 
 // Trim 是一个被裁剪或截断的内容项。
 type Trim struct {
@@ -140,6 +168,9 @@ type Pack struct {
 	Brief                    *Brief
 	Outline                  *outline.Outline
 	Section                  *Section
+	Characters               []Character    // 场景级：出场人物的当前设定；非 scene 单元为 nil
+	PriorScenes              []SceneSummary // 场景级：前序场景的已验收摘要；非 scene 单元为 nil
+	Reveal                   []RevealBoundary
 	Feedback                 []feedback.Item
 	Decisions                []Decision
 	Norms                    Norms
@@ -220,6 +251,15 @@ func Build(root string, w *work.Work, u *work.Unit) (*Pack, []workspace.Problem)
 		}
 	}
 
+	// 场景级上下文（scene-context）：出场人物的当前设定与揭示边界，只对单元类型为 scene 的单元组装。
+	if u.Type == "scene" {
+		its, fatal := sceneItems(root, w, own, p, &warnings)
+		if fatal != nil {
+			return nil, fatal
+		}
+		items = append(items, its...)
+	}
+
 	// 未处理的作者反馈与关联本单元的未决定决策。
 	fb, ps := feedback.List(root, w, u)
 	if len(ps) > 0 {
@@ -278,6 +318,36 @@ func Build(root string, w *work.Work, u *work.Unit) (*Pack, []workspace.Problem)
 		}
 	}
 
+	// 场景级：前序场景的已验收摘要（复用 summary.yaml），按父单元 units 顺序；排在前序作品摘要之后。
+	if u.Type == "scene" && u.Parent != nil {
+		sib := u.Parent.Units
+		for _, c := range sib[:slices.Index(sib, u)] {
+			if c.Type != "scene" {
+				continue
+			}
+			sum, ps := series.LoadSummary(root, w, c)
+			if len(ps) > 0 {
+				// 前序场景的摘要读不出来不让本场景的上下文包失败：降为 warning 并跳过（同系列摘要的处理）。
+				for _, q := range ps {
+					q.Severity = workspace.SeverityWarning
+					warnings = append(warnings, q)
+				}
+				continue
+			}
+			if sum == nil {
+				warnings = append(warnings, workspace.Problem{Code: CodeSummaryMissing, Severity: workspace.SeverityWarning,
+					Message: fmt.Sprintf("前序场景 %s 还没有摘要（Summary）；在它验收后用 wa-cli summary set %s 写入，本场景的上下文才会带出前情", c.Ref, c.Ref)})
+				continue
+			}
+			v := SceneSummary{Unit: c.Ref, Text: sum.Text, Stale: sum.Stale}
+			p.PriorScenes = append(p.PriorScenes, v)
+			ref := c.Ref
+			add(item{part: PartSceneSummary, id: ref, body: v.markdown(), drop: func() {
+				p.PriorScenes = slices.DeleteFunc(p.PriorScenes, func(x SceneSummary) bool { return x.Unit == ref })
+			}})
+		}
+	}
+
 	// 规范要点。
 	p.Norms = normsOf(r)
 	for _, it := range p.Norms.items(&p.Norms) {
@@ -330,6 +400,71 @@ func Build(root string, w *work.Work, u *work.Unit) (*Pack, []workspace.Problem)
 
 	p.fit(items)
 	return p, warnings
+}
+
+// sceneItems 组装场景单元的出场人物与揭示边界内容项，按 context-trim 的优先级（人物设定在前、揭示边界在后）：
+// 出场人物按场景大纲 characters 声明顺序去重后，取 canon.yaml 中 name 相同的 character 条目（同名的按条目顺序都保留）；
+// 揭示边界为本单元大纲各节的 reveal。canon.yaml 存在但不通过校验时返回阻止组装的问题（canon.List 的 error 级）；
+// 声明的人物没有同名条目时逐个追加 warning（作品没有 canon.yaml 时不提示）。
+func sceneItems(root string, w *work.Work, own *outline.Outline, p *Pack, warnings *[]workspace.Problem) ([]item, []workspace.Problem) {
+	var names []string
+	if own != nil {
+		for _, sec := range own.Sections {
+			names = append(names, sec.Characters...)
+		}
+	}
+	names = dedupe(names)
+	var out []item
+	if len(names) > 0 {
+		entries, ps := canon.List(root, w)
+		var fatal []workspace.Problem
+		for _, q := range ps {
+			if q.Severity == workspace.SeverityError {
+				fatal = append(fatal, q)
+			} else {
+				*warnings = append(*warnings, q)
+			}
+		}
+		if fatal != nil {
+			return nil, fatal
+		}
+		// canon.yaml 不存在时 List 返回空：出场人物照常缺失，但不提示（scene-context）。
+		if entries != nil {
+			for _, name := range names {
+				matched := false
+				for _, e := range entries {
+					if e.Type != canon.TypeCharacter || e.Name == nil || *e.Name != name {
+						continue
+					}
+					matched = true
+					v := Character{ID: e.ID, Name: name, Text: e.Text, Protection: e.Protection}
+					p.Characters = append(p.Characters, v)
+					id := e.ID
+					out = append(out, item{part: PartCharacter, id: id, body: v.markdown(), drop: func() {
+						p.Characters = slices.DeleteFunc(p.Characters, func(x Character) bool { return x.ID == id })
+					}})
+				}
+				if !matched {
+					*warnings = append(*warnings, workspace.Problem{Code: CodeCharacterNotInCanon, Severity: workspace.SeverityWarning,
+						Message: fmt.Sprintf("场景大纲声明的出场人物「%s」在设定集（canon.yaml）中没有同名 character 条目；用 wa-cli canon add 登记人物卡（Character Sheet）后，wa-cli context 才会带出其当前设定", name)})
+				}
+			}
+		}
+	}
+	if own != nil {
+		for _, sec := range own.Sections {
+			if sec.Reveal == "" {
+				continue
+			}
+			v := RevealBoundary{Section: sec.ID, Text: sec.Reveal}
+			p.Reveal = append(p.Reveal, v)
+			id := sec.ID
+			out = append(out, item{part: PartReveal, body: v.markdown(), drop: func() {
+				p.Reveal = slices.DeleteFunc(p.Reveal, func(x RevealBoundary) bool { return x.Section == id })
+			}})
+		}
+	}
+	return out, nil
 }
 
 // briefCache 在一条命令中每个单元目录的写作简报只加载并校验一次。

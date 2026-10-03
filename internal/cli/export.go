@@ -16,14 +16,14 @@ import (
 var exportCommand = &command{
 	name: "export",
 	summary: "导出（Export）作品中已验收（Acceptance）的单元：按单元树先序拼接正文，去掉批注与单处豁免注释；markdown 可选附带文件头元数据（Front Matter），" +
-		"wechat-html 输出只含内联样式（Inline Style）的公众号 HTML，配图导出为占位并附配图清单",
+		"wechat-html 输出只含内联样式（Inline Style）的公众号 HTML，配图导出为占位并附配图清单，text 输出去掉 Markdown 标记的纯文本（Plain Text）",
 	args: []argSpec{{"work", "作品 id", true}},
 	flags: []flagSpec{dirFlag,
 		{"format", flagString, "导出格式：" + strings.Join(export.Formats, "、") + "；省略时为 markdown"},
-		{"output", flagString, "输出文件，相对 --dir；省略时为 .writing-anything/exports/<work>.md（wechat-html 为 <work>.html）"},
+		{"output", flagString, "输出文件，相对 --dir；省略时为 .writing-anything/exports/<work>.md（wechat-html 为 <work>.html，text 为 <work>.txt）"},
 		{"front-matter", flagBool, "在开头附带 YAML front matter：title、description、genre、units 与 accepted_at；只用于 markdown"}},
 	outputKeys: []outputKey{{"export", "导出结果：work、format、path、units（导出的单元，按顺序）、skipped（没有导出的单元，每项含 unit 与 reason）、chars、" +
-		"images（wechat-html 的配图（Illustration），每项含 index、alt、src 与 title；markdown 为空数组）、imageList（配图清单的路径，没有时为 null）与 " +
+		"images（wechat-html 的配图（Illustration），每项含 index、alt、src 与 title；markdown 与 text 为空数组）、imageList（配图清单的路径，没有时为 null）与 " +
 		"disclosure（AI 参与说明（AI-generated Content Label）：text、placement、aiParagraphs、paragraphs 与 aiPercent；没有 AI 参与的段落时为 null）；失败时为 null"}},
 	exitCodes: standardExitCodes,
 	run:       runExport,
@@ -83,8 +83,8 @@ func runExport(inv *invocation) int {
 	case problems != nil:
 	case !slices.Contains(export.Formats, format):
 		problems = []workspace.Problem{invalidValue("format", format, "支持的导出格式为 "+strings.Join(export.Formats, "、"))}
-	case format == export.FormatWechat && frontMatter:
-		p := invalidValue("front-matter", "true", "--front-matter 只用于 markdown 格式；公众号 HTML 没有文件头元数据")
+	case (format == export.FormatWechat || format == export.FormatText) && frontMatter:
+		p := invalidValue("front-matter", "true", "--front-matter 只用于 markdown 格式；"+map[string]string{export.FormatWechat: "公众号 HTML", export.FormatText: "纯文本"}[format]+"没有文件头元数据")
 		p.Field = "front-matter"
 		problems = []workspace.Problem{p}
 	}
@@ -115,6 +115,9 @@ func runExport(inv *invocation) int {
 						theme[k] = fmt.Sprint(v.Value)
 					}
 					r, changed, problems = export.WechatHTML(dir, w, opt, theme)
+				case format == export.FormatText:
+					opt.Disclosure = disclosureConfig(resolved)
+					r, changed, problems = export.PlainText(dir, w, opt)
 				default:
 					opt.Disclosure = disclosureConfig(resolved)
 					r, changed, problems = export.Markdown(dir, w, opt)

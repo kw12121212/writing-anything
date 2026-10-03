@@ -16,7 +16,7 @@ var contextCommand = &command{
 	summary:    "输出单元（Unit）的有界上下文包（Context Pack）：不加 --json 时为 Markdown；超出上下文预算（Context Budget）时按优先级裁剪",
 	args:       []argSpec{{"unit", unitRefHelp, true}},
 	flags:      []flagSpec{dirFlag},
-	outputKeys: []outputKey{{"context", "上下文包：unit、type、stage、genre、budget（value、source）、used、brief、outline、section、feedback、decisions、norms、sources、neighbors、series（所属系列的 id、title、facts 与前序作品的 summaries：work、text、stale；不属于系列时为 null）与 trimmed；失败时为 null"}},
+	outputKeys: []outputKey{{"context", "上下文包：unit、type、stage、genre、budget（value、source）、used、brief、outline、section、characters（场景级：出场人物在设定集中的当前设定 id、name、text、protection；非 scene 单元为空数组）、priorScenes（前序场景的已验收摘要 unit、text、stale）、reveal（揭示边界 section、text）、feedback、decisions、norms、sources、neighbors、series（所属系列的 id、title、facts 与前序作品的 summaries：work、text、stale；不属于系列时为 null）与 trimmed；失败时为 null"}},
 	exitCodes:  standardExitCodes,
 	run:        runContext,
 }
@@ -52,6 +52,24 @@ type ctxSection struct {
 	Reason      *string      `json:"reason"`
 	Uses        []string     `json:"uses"`
 	KeyMessages []ctxMessage `json:"keyMessages"`
+}
+
+type ctxCharacter struct {
+	ID         string `json:"id"`
+	Name       string `json:"name"`
+	Text       string `json:"text"`
+	Protection string `json:"protection"`
+}
+
+type ctxSceneSummary struct {
+	Unit  string `json:"unit"`
+	Text  string `json:"text"`
+	Stale bool   `json:"stale"`
+}
+
+type ctxReveal struct {
+	Section string `json:"section"`
+	Text    string `json:"text"`
 }
 
 type ctxOption struct {
@@ -114,22 +132,25 @@ type ctxTrim struct {
 }
 
 type ctxView struct {
-	Unit      string         `json:"unit"`
-	Type      string         `json:"type"`
-	Stage     string         `json:"stage"`
-	Genre     string         `json:"genre"`
-	Budget    resolve.Value  `json:"budget"`
-	Used      int            `json:"used"`
-	Brief     *ctxBrief      `json:"brief"`
-	Outline   *ctxOutline    `json:"outline"`
-	Section   *ctxSection    `json:"section"`
-	Feedback  []feedbackView `json:"feedback"`
-	Decisions []ctxDecision  `json:"decisions"`
-	Norms     ctxNorms       `json:"norms"`
-	Sources   []ctxSource    `json:"sources"`
-	Neighbors []ctxNeighbor  `json:"neighbors"`
-	Series    *ctxSeries     `json:"series"`
-	Trimmed   []ctxTrim      `json:"trimmed"`
+	Unit        string            `json:"unit"`
+	Type        string            `json:"type"`
+	Stage       string            `json:"stage"`
+	Genre       string            `json:"genre"`
+	Budget      resolve.Value     `json:"budget"`
+	Used        int               `json:"used"`
+	Brief       *ctxBrief         `json:"brief"`
+	Outline     *ctxOutline       `json:"outline"`
+	Section     *ctxSection       `json:"section"`
+	Characters  []ctxCharacter    `json:"characters"`
+	PriorScenes []ctxSceneSummary `json:"priorScenes"`
+	Reveal      []ctxReveal       `json:"reveal"`
+	Feedback    []feedbackView    `json:"feedback"`
+	Decisions   []ctxDecision     `json:"decisions"`
+	Norms       ctxNorms          `json:"norms"`
+	Sources     []ctxSource       `json:"sources"`
+	Neighbors   []ctxNeighbor     `json:"neighbors"`
+	Series      *ctxSeries        `json:"series"`
+	Trimmed     []ctxTrim         `json:"trimmed"`
 }
 
 type ctxSeries struct {
@@ -162,6 +183,7 @@ func messagesView(ms []ctxpack.Message) []ctxMessage {
 // viewContext 把上下文包转换为 --json 输出；数组永不为 null（cli-contract/shared-envelope）。
 func viewContext(p *ctxpack.Pack) *ctxView {
 	v := &ctxView{Unit: p.Unit, Type: p.Type, Stage: p.Stage, Genre: p.Genre, Budget: p.Budget, Used: p.Used,
+		Characters: []ctxCharacter{}, PriorScenes: []ctxSceneSummary{}, Reveal: []ctxReveal{},
 		Feedback: []feedbackView{}, Decisions: []ctxDecision{}, Sources: []ctxSource{}, Neighbors: []ctxNeighbor{}, Trimmed: []ctxTrim{},
 		Norms: ctxNorms{Rules: []ctxRule{}, Glossary: []ctxTerm{}, BannedTerms: []ctxBannedTerm{}, Style: nonNilStrings(p.Norms.Style)}}
 	if b := p.Brief; b != nil {
@@ -176,6 +198,15 @@ func viewContext(p *ctxpack.Pack) *ctxView {
 	}
 	if s := p.Section; s != nil {
 		v.Section = &ctxSection{ID: s.ID, Title: s.Title, Reason: optional(s.Reason), Uses: nonNilStrings(s.Uses), KeyMessages: messagesView(s.KeyMessages)}
+	}
+	for _, c := range p.Characters {
+		v.Characters = append(v.Characters, ctxCharacter{ID: c.ID, Name: c.Name, Text: c.Text, Protection: c.Protection})
+	}
+	for _, s := range p.PriorScenes {
+		v.PriorScenes = append(v.PriorScenes, ctxSceneSummary{Unit: s.Unit, Text: s.Text, Stale: s.Stale})
+	}
+	for _, r := range p.Reveal {
+		v.Reveal = append(v.Reveal, ctxReveal{Section: r.Section, Text: r.Text})
 	}
 	for _, f := range p.Feedback {
 		v.Feedback = append(v.Feedback, feedbackOf(f))
@@ -214,6 +245,14 @@ func viewContext(p *ctxpack.Pack) *ctxView {
 	return v
 }
 
+// canonWork 返回单元引用所属作品的 id：设定集（canon）是作品级产物。
+func canonWork(ref string) string {
+	if i := strings.Index(ref, "/"); i >= 0 {
+		return ref[:i]
+	}
+	return ref
+}
+
 func runContext(inv *invocation) int {
 	dir := projectDir(inv)
 	res := &contextResult{}
@@ -236,6 +275,8 @@ func runContext(inv *invocation) int {
 			res.Diagnostics[i].Next = []string{shellCommand("wa-cli", "context", inv.args[0], "--dir", dir, "--json")}
 		case d.Code == ctxpack.CodeSummaryMissing:
 			res.Diagnostics[i].Next = []string{"wa-cli help summary set --json", shellCommand("wa-cli", "context", inv.args[0], "--dir", dir, "--json")}
+		case d.Code == ctxpack.CodeCharacterNotInCanon:
+			res.Diagnostics[i].Next = []string{"wa-cli help canon add --json", shellCommand("wa-cli", "canon", "list", canonWork(inv.args[0]), "--dir", dir, "--json")}
 		case d.Code == ctxpack.CodeSourceSkipped:
 			// 非 UTF-8 的素材整体校验检不出，用本命令复查；素材列表给出可用的素材。
 			res.Diagnostics[i].Next = []string{shellCommand("wa-cli", "source", "list", "--dir", dir, "--json"), shellCommand("wa-cli", "context", inv.args[0], "--dir", dir, "--json")}

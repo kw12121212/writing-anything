@@ -5,7 +5,7 @@ schema_file: ../../templates/strict-spec-driven/schemas/planned-change.yaml
 planned_change:
   id: scene-context-and-fiction-rules
   milestone: short-story
-status: planned
+status: complete
 summary: 场景级上下文与小说专用检查规则
 details: context 对场景单元额外输出出场人物的当前设定、前序场景的已验收摘要和揭示边界。新增规则类型：dialogue-punctuation（对话标点）、pov-consistency（视角与人称一致，启发式检测）、小说 AI 腔词表。短篇导出支持 Markdown 与纯文本。测试夹具包含违例文本与合规文本，端到端测试覆盖一篇短篇的完整流程。
 depends_on:

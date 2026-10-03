@@ -132,6 +132,33 @@ func lintClaims(dir string, w *work.Work, u *work.Unit) (claims []lint.Claim, in
 	return claims, len(ps) > 0, ps
 }
 
+// povRules 报告合并结果中是否有生效的 pov-consistency 规则；没有时 lint 不读取写作简报。
+func povRules(r *resolve.Resolved) bool {
+	for _, rule := range r.Rules {
+		if rule.Enabled && fmt.Sprint(rule.Type.Value) == "pov-consistency" {
+			return true
+		}
+	}
+	return false
+}
+
+// lintPOV 读取 pov 的人称：从本单元到根单元自下而上第一个声明了 pov 的写作简报（场景常有自己的简报，而 pov 声明在
+// 故事根单元的简报里）；写作简报不可用或没有任何简报声明 pov 时返回空字符串，规则不执行（由规则引擎以
+// lint.pov-unrecognized 提示）。写作简报的问题不在这里报告：lint 不因简报问题失败。
+func lintPOV(dir string, w *work.Work, u *work.Unit) string {
+	q := brief.LoadQueue(dir)
+	for x := u; x != nil; x = x.Parent {
+		b, ps := brief.Load(dir, w.UnitDir(x), q)
+		if len(ps) > 0 {
+			return ""
+		}
+		if b != nil && b.Pov != nil {
+			return b.Pov.Person
+		}
+	}
+	return ""
+}
+
 // runUnitLint 读取单元 u 的正文、合并生效规则与论断并运行规则引擎；lint、review show 与 accept 共用，合并结果 r 一并返回，
 // 调用方不必再合并一次。out 为 nil 时文本检查没有运行（没有正文、合并失败等），problems 为其原因；否则 problems 含段落出处、
 // 论断与规则引擎的问题。
@@ -174,6 +201,9 @@ func runUnitLintWith(dir string, w *work.Work, u *work.Unit, resolved func() (*r
 	var cps []workspace.Problem
 	if claimRules(r) {
 		in.Claims, in.ClaimsInvalid, cps = lintClaims(dir, w, u)
+	}
+	if povRules(r) {
+		in.POVPerson = lintPOV(dir, w, u)
 	}
 	out, ps = lint.Run(string(content), r, rel, in)
 	return out, r, content, slices.Concat(problems, warnings, cps, ps, beatPositions(dir, w, u, content, rel))
@@ -238,6 +268,8 @@ func runLint(inv *invocation) int {
 			res.Diagnostics[i].Next = []string{"wa-cli help lint --json", shellCommand("wa-cli", "provenance", inv.args[0], "--dir", dir, "--json")}
 		case lint.CodeInactiveTerms, lint.CodeTruncated:
 			res.Diagnostics[i].Next = []string{shellCommand("wa-cli", "lint", inv.args[0], "--dir", dir, "--json"), shellCommand("wa-cli", "config", "resolved", "--dir", dir, "--json")}
+		case lint.CodePOVUnrecognized:
+			res.Diagnostics[i].Next = []string{"wa-cli help brief set --json", shellCommand("wa-cli", "lint", inv.args[0], "--dir", dir, "--json")}
 		case lint.CodeTooLarge:
 			res.Diagnostics[i].Next = []string{"wa-cli help unit add --json", shellCommand("wa-cli", "lint", inv.args[0], "--dir", dir, "--json")}
 		}

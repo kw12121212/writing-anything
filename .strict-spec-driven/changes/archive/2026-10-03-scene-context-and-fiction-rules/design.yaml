@@ -1,0 +1,31 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: scene-context-and-fiction-rules
+approach:
+  - 在 internal/ctxpack 为 scene 单元组装场景级内容：从场景自身 outline.yaml 的大纲节读取 characters/beats/reveal；出场人物按 name 在作品 canon.yaml 的 character 条目中匹配，得到当前设定；前序场景摘要按父单元 units 顺序读取排在本场景之前的兄弟场景的 summary.yaml；新内容项接入现有预算裁剪（context-trim）与 Markdown 输出。internal/lint 新增 dialogue-punctuation 与 pov-consistency 两种规则类型（均无参数，参数校验复用 rule-params 的通用条款），pov 取自本单元或继承的写作简报，对话引号内文字不计入叙述检查。internal/catalog 的内置 short-story 文体新增 fiction-cliches（ai-cliche，小说 AI 腔词表）、dialogue-punctuation、pov-consistency 三条规则数据；internal/catalog 的已知规则类型注册表加入两种新类型。internal/export 复用现有 Markdown 解析（同 wechat-html 的识别规则）输出纯文本。internal/cli/testdata 增加含违例与合规文本的短篇端到端夹具。
+decisions:
+  prior-scene-summaries-reuse:
+    decision: 前序场景的已验收摘要复用单元摘要 summary.yaml（wa-cli summary set 写入，写入以单元已验收为前提）。
+    rationale: summary.yaml 已存在且其写入门槛（summary.not-accepted）天然保证「已验收」语义，与系列前序作品摘要（context.series.summaries）的行为一致，不引入新的产物类型或命令。
+  canon-character-by-name:
+    decision: 场景上下文的出场人物按场景大纲 characters 中的名字与 canon.yaml 中 character 条目的 name 精确匹配。
+    rationale: outline 主规格已把场景契约的 characters 定型为自由文本数组，canon 的 character 条目自带 name 字段；按 name 匹配不改变任何现有产物结构，未登记的人物以 warning 提示作者用 canon add 补建。
+  new-format-value-text:
+    decision: 纯文本导出的 --format 取值为 text，默认输出 .writing-anything/exports/<work>.txt，与 --front-matter 互斥（同 wechat-html）。
+    rationale: 与 markdown、wechat-html 的小写短词命名一致；纯文本文件没有安全的元数据放置方式，front matter 会破坏「纯文本」语义。
+  fiction-rules-severity-warning:
+    decision: short-story 文体声明的 fiction-cliches、dialogue-punctuation 与 pov-consistency 三条规则 severity 均为 warning。
+    rationale: 三者都是启发式质量检查，中文小说写法多样、误报可能性高于合规类规则，不应以 error 阻塞验收；与 cjk-typography 的定位一致。误报可经单处豁免（lint-ignore）与规则级 waivers 处理。
+  pov-single-direction:
+    decision: pov-consistency 只在期望第三人称时检测叙述文字（对话引号之外）中的「我」「我们」，期望第一人称时不产生发现项。
+    rationale: 第一人称叙述中出现他/她属正常指称，双向检测误报率高；启发式检查定位为提示视角滑移而非强制约束，检出方向收窄以保证报告的可信度。
+alternatives:
+  - option: 前序场景摘要从已验收场景的 draft.md 自动截取开头若干字。
+    reason: 免去 Agent 写摘要的步骤，但摘要质量不可控，且违背「摘要由 Agent 撰写、wa-cli 只校验」的既有分工与 series 主规格的先例。
+  - option: 把场景大纲的 characters 改为 canon 条目 id 列表。
+    reason: 引用更精确，但要求先建设定集才能写大纲，抬高使用门槛，且 outline 主规格已把 characters 定型为文本数组，改动属于扩大范围。
+risks:
+  - pov-consistency 与 dialogue-punctuation 是启发式检查，中文小说写法多样，可能误报；以 warning 级别、单处豁免（lint-ignore）与规则级 waivers 缓解，且 short-story 之外的作品默认不启用这两条规则。
+  - 小说 AI 腔词表是内置文体数据，随写作惯例演进需要维护；词表通过 ai-cliche 的 terms 参数声明，规范包与项目配置可按 id 覆盖或豁免，无需改代码。

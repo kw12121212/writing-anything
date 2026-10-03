@@ -1,0 +1,19 @@
+schema: strict-spec-driven/lesson/v1
+schema_version: 1
+artifact_type: lesson
+schema_file: templates/strict-spec-driven/schemas/lesson.yaml
+lesson:
+  id: lesson-2c7047
+  title: 按既有产物字段写启发式规则的识别条件，先核对字段的真实结构
+category: coding
+status: active
+created_at: '2026-10-02T17:06:56.678Z'
+updated_at: '2026-10-02T17:06:56.678Z'
+context: '为 short-story 的 pov-consistency 规则编写规格与实现：规格陈述假设写作简报的 pov 是自由文本（含「第三人称」等字样），实现时才发现 pov 是结构化字段 {person: first|second|third, character}，且场景常有自己的简报而 pov 声明在故事根单元。'
+observation: 按想象中的字段写识别条件，规格陈述与实现会在评审时对不上：识别条件要改成真实枚举取值，简报继承语义还要按字段是否故事级另行决定（自下而上找第一个声明 pov 的简报，而不是停在最近的简报）。
+takeaway: 新增读取既有产物的启发式检查时，先读该产物的 JSON Schema 与加载代码，把识别条件写在真实字段与取值上；涉及继承的字段先判断它是单元级还是作品级，再决定继承语义并写进规格。
+applies_when: 为 lint 规则、上下文组装或任何按产物字段推导期望行为的检查编写规格陈述或实现，且该字段由其他变更已经定义时。
+occurrences:
+  - origin: scene-context-and-fiction-rules
+    date: '2026-10-02'
+    evidence: specs/lint.yaml 的 fiction-rule-types 在实现中途重写两次（自由文本→person 枚举→自下而上找第一个声明 pov 的简报）；internal/cli/lint.go 的 lintPOV 最终形态与 design.yaml 最初设想不同。

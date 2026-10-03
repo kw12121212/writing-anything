@@ -43,7 +43,7 @@ const (
 const DefaultPack = "default"
 
 // RuleTypes 是已知的规则类型（Rule Type）。规则的 params 结构由规则引擎定义，这里不校验。
-var RuleTypes = []string{"cjk-typography", "ai-cliche", "banned-terms", "term-consistency", "length-range", "paragraph-length", "required-sections", "claim-sources", "claim-candidates", "code-block-language", "link-format", "reference-sources", "ad-compliance"}
+var RuleTypes = []string{"cjk-typography", "ai-cliche", "banned-terms", "term-consistency", "length-range", "paragraph-length", "required-sections", "claim-sources", "claim-candidates", "code-block-language", "link-format", "reference-sources", "ad-compliance", "dialogue-punctuation", "pov-consistency"}
 
 //go:embed builtin
 var builtin embed.FS
