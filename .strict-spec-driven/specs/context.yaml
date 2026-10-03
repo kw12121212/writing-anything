@@ -56,8 +56,12 @@ requirements:
         - THEN: valid 为 true，diagnostics 中有一条错误码为 source.modified、severity 为 warning 的诊断，sources 不含 src-a，退出码为 0
   context-trim:
     strength: MUST
-    statement: 上下文包必须把内容控制在上下文预算（Context Budget，见 context-budget）之内：每个内容项按其 Markdown 文本的字符数（Unicode 码点）计入预算，按以下优先级从高到低依次放入：写作简报、本单元大纲、本节大纲条目、每个 canon 人物设定项、每条揭示边界、每条未回收伏笔、每条作者反馈、每个决策、每条系列事实、每份前序作品摘要、每份前序场景摘要、规范要点的规则、术语表、禁用词、文风、每份素材原文、每个相邻节；canon 人物设定项、揭示边界、未回收伏笔与前序场景摘要只在 scene 单元出现（见 scene-context）；单元信息头与裁剪报告不计入预算。放入某项会超出预算时：素材原文在剩余预算大于其标题行所占字符数加 1 时截断到剩余字符数（truncated 为 true，截断后的内容仍以换行结尾），否则与其他项一样整项裁剪，继续尝试之后的项。used 为保留的内容项字符数之和，不超过预算；trimmed 为被裁剪或截断的项，按优先级顺序，每项含 part（brief、outline、section、character、reveal、thread、feedback、decision、fact、summary、scene-summary、rules、glossary、bannedTerms、style、source 或 neighbor）、id（反馈、决策、事实、素材、canon 人物设定与未回收伏笔条目的 id，摘要的作品 id、前序场景摘要的场景单元引用与相邻节的单元引用，其他为 null）、chars（原字符数）与 keptChars（保留的字符数，整项裁剪时为 0）；被整项裁剪的内容不出现在 context 的对应字段中（对应字段为 null 或不含该项）。
-    scenarios: {}
+    statement: 上下文包必须把内容控制在上下文预算（Context Budget，见 context-budget）之内：每个内容项按其 Markdown 文本的字符数（Unicode 码点）计入预算，按以下优先级从高到低依次放入：写作简报、本单元大纲、本节大纲条目、每个 canon 人物设定项、每条视角人物已知条目、每条读者已知人物未知条目、每条揭示边界、每条未回收伏笔、每条作者反馈、每个决策、每条系列事实、每份前序作品摘要、每份前序场景摘要、规范要点的规则、术语表、禁用词、文风、每份素材原文、每个相邻节；canon 人物设定项、视角人物已知条目、读者已知人物未知条目、揭示边界、未回收伏笔与前序场景摘要只在 scene 单元出现（见 scene-context）；单元信息头与裁剪报告不计入预算。放入某项会超出预算时：素材原文在剩余预算大于其标题行所占字符数加 1 时截断到剩余字符数（truncated 为 true，截断后的内容仍以换行结尾），否则与其他项一样整项裁剪，继续尝试之后的项。used 为保留的内容项字符数之和，不超过预算；trimmed 为被裁剪或截断的项，按优先级顺序，每项含 part（brief、outline、section、character、knowledge、reader-only、reveal、thread、feedback、decision、fact、summary、scene-summary、rules、glossary、bannedTerms、style、source 或 neighbor）、id（反馈、决策、事实、素材、canon 人物设定、未回收伏笔与知情条目对应设定条目的 id，摘要的作品 id、前序场景摘要的场景单元引用与相邻节的单元引用，其他为 null）、chars（原字符数）与 keptChars（保留的字符数，整项裁剪时为 0）；被整项裁剪的内容不出现在 context 的对应字段中（对应字段为 null 或不含该项）。
+    scenarios:
+      trim-knowledge:
+        - GIVEN: 场景 my-novel/c2/s2 的预算很小，只放得下写作简报、大纲与 canon 人物设定项，knowledge.yaml 有视角人物已知条目与 reader 条目各一条
+        - WHEN: 运行 wa-cli context my-novel/c2/s2 --dir D --json
+        - THEN: 被裁剪的知情条目出现在 trimmed 中（part 为 knowledge 或 reader-only、id 为设定条目 id、keptChars 为 0），knowledge 与 readerOnly 不含被裁剪的项，退出码为 0
   context-budget:
     strength: MUST
     statement: 上下文预算（Context Budget）为不超过 100000000 的正整数字符数，由配置项 context_budget 给出：文体（Genre）、规范包（Pack）与项目配置 config.yaml 都可以声明，按 文体默认值 → 规范包（按 config.yaml 中 packs 的顺序）→ 项目配置 合并，后者覆盖前者；都没有声明时为 12000，来源为 default。wa-cli config resolved 必须输出 contextBudget（value 与 source，source 为 genre:<id>、pack:<id>、project 或 default）。wa-cli context 使用单元所在作品的文体作为文体层，而不是 default_genre。context_budget 不是这一范围内的整数时，文体、规范包与 config.yaml 的校验报告 artifact.schema-violation（field 为 context_budget）。内置 minimal 文体声明 context_budget 为 12000。
@@ -80,17 +84,21 @@ requirements:
         - THEN: context.budget.source 为 genre:minimal
   scene-context:
     strength: MUST
-    statement: wa-cli context 对单元类型为 scene 的单元必须在上下文包（Context Pack）中额外输出场景级内容，其余内容与裁剪行为不变；对其他单元这四个字段为空值（characters 与 priorScenes 为空数组、reveal 与 threads 为空数组），不输出场景级诊断。characters 为出场人物的当前设定：按场景自身 outline.yaml 各大纲节 characters 声明的顺序去重后，取作品 canon.yaml 中 name 与之相同的 character 条目（同名的按 canon 条目顺序），每项含 id、name、text 与 protection；声明的人物没有同名 character 条目时逐个给出 severity 为 warning 的诊断 context.character-not-in-canon（message 含该人物名，next 含 wa-cli help canon add --json 与 wa-cli canon list <work> --dir <dir> --json），作品没有 canon.yaml 时对应项缺失但不报告；canon.yaml 存在但不通过校验时报告其诊断，context 为 null，退出码为 1（同 context-command 对写作简报与大纲等产物的处理）。priorScenes 为前序场景摘要（Prior Scene Summary）：父单元 units 中排在本单元之前、单元类型为 scene 且单元目录下有 summary.yaml 的兄弟单元，按 units 顺序，每项含 unit、text 与 stale；summary.yaml 无法读取或不合法时以 warning 报告其诊断并跳过该摘要；前序场景没有 summary.yaml 时给出 severity 为 warning 的诊断 context.summary-missing（next 含 wa-cli help summary set --json）。reveal 为揭示边界（Reveal Boundary）：场景自身 outline.yaml 各节 reveal 的取值，按节顺序，每项含 section（节 id）与 text；场景没有 outline.yaml 或各节都没有 reveal 时为空数组。threads 为未回收伏笔（Open Foreshadowing）：作品根单元目录 threads.yaml（伏笔台账，见 threads 主规格）中 status 为 open 且与本场景契约相关的条目——planted_in 为本场景、planned_recover 为本场景，或本场景大纲节 recovers 引用该条目——按 planted_in 的单元树先序排序（同 threads 主规格 threads-commands），每项含 id、text、planted_in、planned_recover 与 overdue（语义同 threads 主规格）；作品没有 threads.yaml 时 threads 为空数组且不报告；threads.yaml 存在但不通过校验时报告其诊断，context 为 null，退出码为 1（同 canon.yaml 的处理）。四个新内容项计入上下文预算并按 context-trim 的优先级裁剪；不加 --json 的 Markdown 输出新增「出场人物（Characters）」「前序场景（Prior Scenes）」「揭示边界（Reveal Boundary）」与「未回收伏笔（Open Foreshadowing）」小节，按裁剪结果输出保留的内容，被整项裁剪的小节不输出。
+    statement: wa-cli context 对单元类型为 scene 的单元必须在上下文包（Context Pack）中额外输出场景级内容，其余内容与裁剪行为不变；对其他单元这六个字段为空值（characters、priorScenes、knowledge 与 readerOnly 为空数组、reveal 与 threads 为空数组），不输出场景级诊断。characters 为出场人物的当前设定：按场景自身 outline.yaml 各大纲节 characters 声明的顺序去重后，取作品 canon.yaml 中 name 与之相同的 character 条目（同名的按 canon 条目顺序），每项含 id、name、text 与 protection；声明的人物没有同名 character 条目时逐个给出 severity 为 warning 的诊断 context.character-not-in-canon（message 含该人物名，next 含 wa-cli help canon add --json 与 wa-cli canon list <work> --dir <dir> --json），作品没有 canon.yaml 时对应项缺失但不报告；canon.yaml 存在但不通过校验时报告其诊断，context 为 null，退出码为 1（同 context-command 对写作简报与大纲等产物的处理）。priorScenes 为前序场景摘要（Prior Scene Summary）：父单元 units 中排在本单元之前、单元类型为 scene 且单元目录下有 summary.yaml 的兄弟单元，按 units 顺序，每项含 unit、text 与 stale；summary.yaml 无法读取或不合法时以 warning 报告其诊断并跳过该摘要；前序场景没有 summary.yaml 时给出 severity 为 warning 的诊断 context.summary-missing（next 含 wa-cli help summary set --json）。reveal 为揭示边界（Reveal Boundary）：场景自身 outline.yaml 各节 reveal 的取值，按节顺序，每项含 section（节 id）与 text；场景没有 outline.yaml 或各节都没有 reveal 时为空数组。threads 为未回收伏笔（Open Foreshadowing）：作品根单元目录 threads.yaml（伏笔台账，见 threads 主规格）中 status 为 open 且与本场景契约相关的条目——planted_in 为本场景、planned_recover 为本场景，或本场景大纲节 recovers 引用该条目——按 planted_in 的单元树先序排序（同 threads 主规格 threads-commands），每项含 id、text、planted_in、planned_recover 与 overdue（语义同 threads 主规格）；作品没有 threads.yaml 时 threads 为空数组且不报告；threads.yaml 存在但不通过校验时报告其诊断，context 为 null，退出码为 1（同 canon.yaml 的处理）。knowledge 为视角人物（POV）已知的条目：视角人物取场景自身 outline.yaml 中第一个声明 pov 的大纲节的 pov（非空文本），解析为作品 canon.yaml 中 name 与该 pov 相同的第一个 character 条目；按 knowledge 主规格 knowledge-at 的语义重放该视角人物的适用事件（status 为 confirmed、character 为该条目 id、scene 按先序严格早于本场景，同一 entry 取最早事件），每项含 entry、name、text（设定集条目的 text）、event 与 scene，按 entry 升序。readerOnly 为读者已知、视角人物未知的条目：按同样语义重放 character 为 reader 的适用事件得到的条目（字段同 knowledge），去掉 knowledge 已含的 entry，按 entry 升序，与揭示边界配合供营造悬念使用。场景大纲没有声明 pov、或 pov 没有解析到 character 条目时（后者以 severity 为 warning 的诊断 knowledge.pov-not-in-canon 报告，message 含该 pov 文本，next 含 wa-cli canon list <work> --dir <dir> --json 与 wa-cli help scene contract --json）knowledge 与 readerOnly 为空数组；作品没有 knowledge.yaml 时两个字段为空数组且不报告；knowledge.yaml 存在但不通过校验时报告其诊断，context 为 null，退出码为 1（同 threads.yaml 的处理）。六个内容项计入上下文预算并按 context-trim 的优先级裁剪；不加 --json 的 Markdown 输出新增「出场人物（Characters）」「前序场景（Prior Scenes）」「揭示边界（Reveal Boundary）」「未回收伏笔（Open Foreshadowing）」「视角人物已知（POV Knowledge）」与「读者已知、人物未知（Reader Only）」小节，按裁剪结果输出保留的内容，被整项裁剪的小节不输出。
     scenarios:
-      scene-threads:
-        - GIVEN: my-novel 的 threads.yaml 有条目 f-1（open，planted_in 为 my-novel/c1/s1，planned_recover 为场景 my-novel/c2/s2）与 f-2（paid），场景 s2 的大纲节 recovers 含 f-1
-        - WHEN: 运行 wa-cli context my-novel/c2/s2 --dir D --json
-        - THEN: threads 含 f-1 一项（含 id、text、planted_in、planned_recover 与 overdue），不含 paid 的 f-2，退出码为 0
-      scene-threads-empty:
-        - GIVEN: 作品 my-story 没有 threads.yaml
+      scene-knowledge:
+        - GIVEN: my-novel 的 knowledge.yaml 有 confirmed 条目（character 为 canon-1、entry 为 canon-5、scene 为 my-novel/c1/s1），场景 my-novel/c2/s1 契约的 pov 为 canon-1 条目的 name
+        - WHEN: 运行 wa-cli context my-novel/c2/s1 --dir D --json
+        - THEN: knowledge 含 canon-5 一项（含 name、text、event 与 scene），退出码为 0
+      scene-knowledge-reader-only:
+        - GIVEN: canon-5 另有 character 为 reader 的 confirmed 条目（绑定 my-novel/c1/s1），视角人物 canon-1 没有获知 canon-5
+        - WHEN: 运行 wa-cli context my-novel/c2/s1 --dir D --json
+        - THEN: readerOnly 含 canon-5，knowledge 不含 canon-5，退出码为 0
+      scene-pov-not-in-canon:
+        - GIVEN: 场景 my-novel/c2/s1 契约的 pov 为 高人，canon.yaml 没有 name 为 高人的 character 条目
+        - WHEN: 运行 wa-cli context my-novel/c2/s1 --dir D --json
+        - THEN: diagnostics 中有一条错误码为 knowledge.pov-not-in-canon、severity 为 warning 的诊断，knowledge 与 readerOnly 为空数组，退出码为 0
+      scene-knowledge-empty:
+        - GIVEN: 作品 my-story 没有 knowledge.yaml，场景 s1 的契约声明了 pov
         - WHEN: 运行 wa-cli context my-story/s1 --dir D --json
-        - THEN: threads 为空数组，不报告伏笔诊断，退出码为 0
-      drop-scene-threads:
-        - GIVEN: 场景 s2 的预算很小，只放得下写作简报与本节大纲条目，台账有 open 条目与 f-1 相关
-        - WHEN: 运行 wa-cli context my-novel/c2/s2 --dir D --json
-        - THEN: 被裁剪的伏笔条目出现在 trimmed 中（part 为 thread 且 keptChars 为 0），threads 不含被裁剪的项，退出码为 0
+        - THEN: knowledge 与 readerOnly 为空数组，不报告知情诊断，退出码为 0

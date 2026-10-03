@@ -1,0 +1,38 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: knowledge-state
+approach:
+  - 在作品根单元目录新增 knowledge.yaml 知情表（与 state.yaml、threads.yaml 同级，同为故事圣经（Story Bible）的磁盘记忆），新包 internal/knowledge 持有加载、Schema 与领域校验、Propose/List/Confirm/Reject/Set 及按单元树先序的知情重放；internal/cli 以 knowledge propose / list / confirm / reject / set / at 六个子命令暴露，作者确认沿用 --confirmed-by-author 与 --confirmation 原话摘要的确认记录模式（与 state、decide、accept 一致）；validate 按 CheckWorks 模式纳入 knowledge.yaml；internal/ctxpack 为 scene 单元组装 knowledge 与 readerOnly 两个内容项并纳入预算裁剪（pov 取场景大纲第一个声明 pov 的大纲节，按 name 解析 canon character 条目）
+decisions:
+  ledger-artifact:
+    decision: knowledge.yaml 放在作品根单元目录，条目由 wa-cli knowledge propose 显式登记（登记式台账），每条绑定 scene 单元引用、设定集条目 id 与获知者（character 条目 id 或固定值 reader）；秘密与关键信息本身以现有设定条目类型登记在 canon.yaml，不新增条目类型
+    rationale: 里程碑 details 明确记忆放在磁盘上的故事圣经台账中；state.yaml 与 threads.yaml 已在同一位置验证了台账产物的加载、锚点保护与符号链接处理，直接复用该结构最省新概念。「秘密」类型不承载任何额外行为（保护、校验都相同），知情状态由事件表达即可，新增类型违反「不做假设性抽象」
+  reader-representation:
+    decision: 获知者统一放在 character 字段：取该作品 canon.yaml 中 type 为 character 的条目 id，或固定值 reader 表示读者；读者获知与人物获知同机制、同确认流，knowledge at --character reader 与 context 的 readerOnly 都从 character 为 reader 的条目得出；揭示边界（场景契约 reveal）继续作为「读者尚不知」的契约侧守卫，二者在 context 输出中并列呈现
+    rationale: 计划变更 details 要求「读者获知与揭示边界关联」：读者知情进同一台账、同一确认与重放语义，context 同时给出揭示边界（不能提前透露）与读者已知清单（可以动用的悬念），关联在输出层成立且确定性可验证；wa-cli 不理解正文语义，不做 reveal 文本与条目的自动比对（那需要调用模型）；独立读者台账会把同一机制实现两遍
+  confirm-mechanism:
+    decision: 作者确认走 --confirmed-by-author 与 --confirmation 原话摘要的确认记录（Confirmation Record）模式（knowledge confirm / knowledge reject / confirmed 条目的 knowledge set），不用决策队列（Decision Queue）阻塞模式
+    rationale: 与刚归档的 state-change-proposals 同一决策：知情确认是逐条二值动作，长篇一章常有多条，逐条生成阻塞决策会淹没队列并阻塞所有单元推进；decide 与 accept 已确立记录作者确认原话摘要的模式，可独立验证；「提议未处理时场景不能验收」的 enforcement 属 scene-close-out 计划变更，届时在验收关卡检查
+  replay-semantics:
+    decision: wa-cli knowledge at <scene> --character <人物|reader> 只重放 status 为 confirmed、character 等于所给获知者且绑定场景按单元树先序严格早于目标场景的条目；同一获知者对同一设定条目有多条适用事件时取按先序最早的一条（先序相同按文件顺序）——与 state at 的 later-wins 相反；已知列表每项含 entry、name、event 与 scene，按 entry 升序
+    rationale: 「任一场景开始时已知」不含目标场景自身发生的学习（先序严格早于，与 state at 的边界一致，只依赖单元树与文件内容的全序使输出可复现）；状态会被后续事件覆盖而知识只会积累，首次获知即已知，重复登记（例如收口与人工补录撞车）不影响结果，取最早一条使命中撤销任一冗余条目都不改变已知事实
+  context-integration-scope:
+    decision: 本变更交付场景级 context 的 knowledge（视角人物已知）与 readerOnly（读者已知、视角人物未知）两个内容项，含预算计入与裁剪 part（knowledge、reader-only，插在 canon 人物设定项与揭示边界之间）；按契约显式引用的整体重组、出场人物状态快照进 context 与最终优先级顺序不在本变更
+    rationale: 计划变更 details 明确要求 context「只给出视角人物已知的信息，并单列读者已知、人物未知的内容」，这是本变更领域内的可交付内容，也是里程碑完成标准的承载；整体重组与最终优先级属 layered-summaries-and-budget 计划变更（其依赖链经 scene-close-out 汇于本变更），届时可自由重排，本变更只插入不重排，保持其余项相对顺序不变
+  ledger-optional:
+    decision: 作品没有 knowledge.yaml 时不做任何知情检查：validate 不新增诊断，knowledge list 输出空列表，knowledge at 输出空数组，context 的 knowledge 与 readerOnly 为空数组，退出码均为 0
+    rationale: 向后兼容优先——既有作品与已归档夹具在无台账下行为不变，与 state.yaml、threads.yaml 的可选台账模式一致；知情表是长篇工作流的可选产物
+alternatives:
+  - option: 读者知情用独立台账（reader.yaml）或独立命令记录
+    reason: 同一登记、确认、重放机制要实现两遍，knowledge at --character reader 与差集计算反而要跨文件合并；单一台账用 character=reader 一个取值就能统一
+  - option: 新增设定集条目类型 secret（秘密），把知情条目限制在该类型
+    reason: 类型不承载任何额外行为（校验、保护与现有类型相同），被获知的信息可以是任何条目（人物身份、世界规则、物品真相）；知情状态由事件表达，YAGNI
+  - option: 知情变化经决策队列（Decision Queue）阻塞确认
+    reason: 与 state-change-proposals 已否决的方案同理：逐条提议生成阻塞决策会淹没队列并阻塞全部单元推进；确认是二值动作不需要选项；验收侧 enforcement 已由 scene-close-out 计划变更承接
+  - option: context 集成整体延后到 layered-summaries-and-budget 计划变更
+    reason: 计划变更 details 明确要求本变更给出 context 行为（只给视角人物已知、单列读者已知人物未知）；延后会让里程碑完成标准「context 只包含视角人物已知的信息」的归属悬空，且该行为只依赖本变更的台账，无理由等待收口与摘要机制
+risks:
+  - pov 是自由文本（人物名），与 canon 条目靠 name 匹配，重名或作者改名时解析不到视角人物：以 warning（knowledge.pov-not-in-canon）呈现并且两个字段为空数组，不阻塞组装；修复路径在诊断 next 中给出
+  - 同一（获知者， 条目）可能被重复登记（收口抽取与人工补录撞车）：重放取最早事件使冗余条目无害；收口对照契约提交（scene-close-out 计划变更）落地后可进一步减少重复

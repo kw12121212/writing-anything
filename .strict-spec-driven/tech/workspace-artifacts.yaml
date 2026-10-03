@@ -317,3 +317,9 @@ rules:
         - 'plan.schema.json 把 confirmation 声明为 {"type": ["string","null"], "pattern": "\\S"}，plan 包 checkConfirmations 对已确认步骤缺非空确认记录报告 plan.incomplete-confirmation（field 为 steps[i]）'
       bad:
         - 'plan.schema.json 用 allOf 条件在 confirmed_by_author 为 true 时 required [confirmation, confirmed_at]、为 false 时 not anyOf required：「已确认 + confirmation: null」通过校验（应为 plan.incomplete-confirmation），「未确认 + confirmation: null」（规格合法）反被 artifact.schema-violation 拒绝'
+  ledger-skeleton-reuse:
+    strength: SHOULD
+    statement: 新增与 canon.yaml、threads.yaml、state.yaml、knowledge.yaml 同构的作品级台账产物，或修改其中任何一个包的台账骨架（ReadRegular+Lstat 的加载与符号链接处理、eventsNode 的锚点防护、recheck 的写前复查与 path/field 改写）时，先评估把该骨架提炼为 internal/workspace 的共享台账编辑助手：在同一变更中完成提炼，或记录不提炼的理由（如产物差异过大）；修复骨架缺陷时同步检查其余同构包是否同样受影响，不在第五个包中再次复制该骨架。
+    rationale: knowledge-state 变更复制 internal/state 的台账骨架实现 internal/knowledge，fresh-context 评审确认四个包（canon、threads、state、knowledge）的加载、锚点防护与写前复查逐字重复；每次复制都让符号链接处理这类缺陷要修多处。knowledge.For 与 recheck 的 canonEntries 注入已示范跨包复用设定集索引的做法，提炼骨架是自然的下一步，但涉及四个已归档包的重构，应作为独立变更评估而不是在本变更内顺手完成。
+    enforcement:
+      method: review

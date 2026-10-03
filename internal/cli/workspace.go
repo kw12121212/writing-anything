@@ -24,6 +24,7 @@ import (
 	"github.com/kw12121212/writing-anything/internal/review"
 	"github.com/kw12121212/writing-anything/internal/schema"
 	"github.com/kw12121212/writing-anything/internal/series"
+	"github.com/kw12121212/writing-anything/internal/knowledge"
 	"github.com/kw12121212/writing-anything/internal/state"
 	"github.com/kw12121212/writing-anything/internal/source"
 	"github.com/kw12121212/writing-anything/internal/threads"
@@ -188,6 +189,8 @@ func runValidate(inv *invocation) int {
 					problems = append(problems, threads.CheckArtifact(dir, checked[0])...)
 				case "state":
 					problems = append(problems, state.CheckArtifact(dir, checked[0])...)
+				case "knowledge":
+					problems = append(problems, knowledge.CheckArtifact(dir, checked[0])...)
 				case "brief":
 					problems = append(problems, brief.CheckArtifact(dir, checked[0])...)
 				case "outline":
@@ -488,9 +491,10 @@ func checkWorkspace(dir string) (checked []string, works []*work.Work, problems 
 	kchecked, kps := canon.CheckWorks(dir, works)
 	thchecked, thps := threads.CheckWorks(dir, works)
 	stchecked, stps := state.CheckWorks(dir, works)
+	knchecked, knps := knowledge.CheckWorks(dir, works)
 	plchecked, plps := plan.CheckUnitArtifacts(dir, works, catalog.LoadMethods(dir), unitDefaultMethod)
-	checked = slices.Concat(checked, more, wchecked, schecked, uchecked, bchecked, ochecked, fchecked, rchecked, mchecked, dchecked, lchecked, xchecked, cchecked, pchecked, echecked, tchecked, ychecked, kchecked, thchecked, stchecked, plchecked)
-	return checked, works, slices.Concat(problems, ps, wps, sps, ups, bps, ops, fps, rps, mps, dps, lps, xps, cps, pps, eps, tps, yps, kps, thps, stps, plps)
+	checked = slices.Concat(checked, more, wchecked, schecked, uchecked, bchecked, ochecked, fchecked, rchecked, mchecked, dchecked, lchecked, xchecked, cchecked, pchecked, echecked, tchecked, ychecked, kchecked, thchecked, stchecked, knchecked, plchecked)
+	return checked, works, slices.Concat(problems, ps, wps, sps, ups, bps, ops, fps, rps, mps, dps, lps, xps, cps, pps, eps, tps, yps, kps, thps, stps, knps, plps)
 }
 
 // defaultMethodOf 返回单元产物 rel 适用的文体默认写作法：只有作品的根单元适用，子单元不继承；

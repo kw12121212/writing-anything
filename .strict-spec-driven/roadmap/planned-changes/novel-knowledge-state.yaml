@@ -5,7 +5,7 @@ schema_file: ../../templates/strict-spec-driven/schemas/planned-change.yaml
 planned_change:
   id: knowledge-state
   milestone: novel
-status: planned
+status: complete
 summary: 知情表（Knowledge State）：谁在什么时候知道了什么
 details: 把秘密和关键信息登记为设定条目；人物获知某条信息，记录为绑定场景的知情事件，同样经作者确认；读者获知与揭示边界关联。wa-cli knowledge at <scene> --character <id> 输出该人物此时已知的信息。context 只给出视角人物已知的信息，并单列读者已知、人物未知的内容，供营造悬念使用。
 depends_on:

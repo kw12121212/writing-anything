@@ -1,0 +1,43 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: knowledge-state
+  status: proposed
+summary:
+  what:
+    - 新增作品根单元目录下的知情表 knowledge.yaml：每个条目是一条绑定场景的知情事件（Knowledge Event），含符合 id 格式且文件内唯一的 id（缺省生成 know-<n>）、scene（获知发生的场景，单元类型为 scene 的单元引用）、entry（被获知的设定集（Canon）条目 id，秘密与关键信息即以现有设定条目类型登记）、character（获知者：该作品 canon.yaml 中 type 为 character 的条目 id，或固定值 reader 表示读者（Reader））与 status（proposed 待确认 / confirmed 已确认 / rejected 已拒绝）；status 非 proposed 时条目还含非空的 confirmation（作者确认原话摘要）与 decided_at（RFC 3339 格式），为 proposed 时不得含这两个字段
+    - 新增 wa-cli knowledge propose <work> --scene <场景> --entry <条目> --character <人物|reader> [--id <id>]：Agent 登记知情事件，初始 status 为 proposed；--scene 引用的单元必须存在且类型为 scene（否则 knowledge.unknown-unit），--entry 必须是该作品 canon.yaml 中已有的设定条目（否则 knowledge.unknown-entry），--character 必须是 canon.yaml 中 type 为 character 的条目 id 或固定值 reader（否则 knowledge.unknown-character）；未确认的提议不参与任何计算
+    - 新增 wa-cli knowledge confirm / reject / set（作者确认与修订，机制同 state 命令组）：confirm 与 reject 需 --confirmed-by-author 与 --confirmation 原话摘要，记录 confirmation 与 decided_at；reject 对 confirmed 条目即作者撤销已生效的知情事件（此后该获知者的已知列表不再含该条目带来的信息）；set 修改条目的 scene/entry/character，proposed 条目照常修改，confirmed 条目必须重新确认，rejected 为终态；修改或撤销早期条目后，已知列表随之重新计算
+    - 新增 wa-cli knowledge list <work> [--all]：默认只列 status 为 proposed 的条目（作者待处理清单），--all 列全部；每项含 id、scene、entry、character、status、confirmation 与 decided_at（无则为 null），按 scene 的单元树先序排序，先序相同按文件顺序；无台账时为空列表
+    - 新增 wa-cli knowledge at <scene> --character <人物|reader>：输出该场景开始时该获知者已知的信息——重放 status 为 confirmed、character 为该获知者且 scene 按先序严格早于目标场景的条目，同一设定条目取最早获知事件（知情只积累，首次获知即已知），每项含 entry、name（来自设定集，未设置时为 null）、event 与 scene，按 entry 升序；同一输入总是得到同一输出
+    - wa-cli validate 整体校验纳入 knowledge.yaml 的 Schema 与领域校验并计入 checked（id 重复 artifact.duplicate-id；scene 单元不存在或类型不符 knowledge.unknown-unit；entry 不在设定集 knowledge.unknown-entry；character 既非 character 条目也非 reader 时 knowledge.unknown-character；确认记录不完整 knowledge.incomplete-confirmation）；wa-cli validate <path> 对单个 knowledge.yaml 执行同样检查
+    - wa-cli context 对 scene 单元新增两个字段：knowledge 为视角人物已知的条目（按场景契约 pov 解析 canon character 条目后按 knowledge at 的语义重放，每项含 entry、name、text、event 与 scene），readerOnly 为读者已知、视角人物未知的条目（供营造悬念，与揭示边界配合）；两项计入上下文预算并按优先级裁剪，Markdown 输出新增「视角人物已知（POV Knowledge）」「读者已知、人物未知（Reader Only）」小节
+  why:
+    - 路线图 novel 里程碑（order 600，长篇结构与记忆）的计划变更 knowledge-state：它是完成标准「context 只包含视角人物已知的信息，并单列读者已知、人物未知的内容」的承载者；依赖的 state-change-proposals 已归档，确认记录与重放模式已就位；后续 scene-close-out（知情变化收口）与 layered-summaries-and-budget（视角人物的知情表进组装优先级）都依赖本变更，当前是唯一可推荐的计划变更
+    - 长篇中「谁在什么时候知道了什么」是悬念与连续性的核心：Agent 换会话后不掌握各人物与读者的知情边界，容易让人物说出不该知道的话，或把该留给读者的信息提前泄露。知情表把知情状态放到磁盘上的台账中，由已确认事件按先序确定性重放得出，不依赖模型记忆，也不调用大语言模型（LLM），与里程碑「长篇的连续性不依赖模型记忆」原则一致
+    - 知情生效是作者的决定：Agent 抽取的知情变化可能错抽或漏抽，未经确认就生效会把 Agent 的猜测变成既成事实（人物知道了不该知道的事）。提议须作者确认后生效、未确认不参与计算，与仓库约定「涉及作者意图的行为，规格必须写明人的确认点」一致；「提议尚未经作者处理时场景不能验收」的验收侧 enforcement 属 scene-close-out 计划变更（依赖本变更）
+scope:
+  in:
+    - internal/schema：新增 knowledge.schema.json（schema_version 与 events 的 id/scene/entry/character/status/confirmation/decided_at 约束）与命名注册，补合法与不合法夹具
+    - 新包 internal/knowledge：knowledge.yaml 加载与领域校验（id 唯一、scene 单元存在且为 scene 类型、entry 在设定集、character 为 character 条目或 reader、确认记录约束、符号链接处理）、Propose/List/Confirm/Reject/Set、按单元树先序的知情重放与已知列表计算，供 validate 与 CLI 复用
+    - internal/cli：knowledge propose / list / confirm / reject / set / at 六个命令注册（args、flags、outputKeys、exitCodes、--json 与人读输出、诊断与 next）；validate 整体校验与 validate <path> 纳入 knowledge.yaml
+    - internal/ctxpack 与 internal/cli/context.go：scene 单元上下文的 knowledge 与 readerOnly 内容项（pov 解析、readerOnly 差集、knowledge.pov-not-in-canon 警告）、预算计入与裁剪 part（knowledge、reader-only）、Markdown 小节
+    - docs/GLOSSARY.md：知情表（Knowledge State）与知情事件（Knowledge Event）词条
+    - 测试夹具：带 knowledge.yaml 的多章长篇夹具（人物与读者知情差异、修改与撤销早期条目的场景）与无台账夹具
+  out:
+    - 写后收口（Close-out）与验收联动：契约要求的知情变化未提交时 accept 被拒绝、提议未处理时场景不能验收——属 scene-close-out 计划变更（依赖本变更），本变更不要求契约关联字段
+    - 按场景契约显式引用的整体上下文重组、最终组装优先级顺序与出场人物状态快照进 context——属 layered-summaries-and-budget 计划变更；本变更只交付 knowledge 与 readerOnly 两个场景级内容项及其裁剪
+    - 正文级「提前泄露」检测：reveal 是自由文本，wa-cli 不调用大语言模型（LLM），不做语义比对；揭示边界继续作为契约侧声明在 context 中呈现，由接入的 Agent 与审稿把关
+    - 新增设定集条目类型：秘密与关键信息用现有 canon 条目类型登记，知情状态由事件表达（不改 sources-and-provenance 主规格）
+    - MCP 服务与内置技能不单独编写（knowledge 命令经命令注册表自动暴露）
+unchanged_behavior:
+  - 作品没有 knowledge.yaml 时，validate、context、advance、accept 等命令的输出、退出码与错误码不变；knowledge list 输出空列表、knowledge at 输出空数组、context 的 knowledge 与 readerOnly 为空数组，退出码为 0
+  - 设定集（canon.yaml）、状态台账（state.yaml）、伏笔台账（threads.yaml）、场景契约与因果链（Causality Chain）检查、决策队列（Decision Queue）语义均不变；knowledge 条目只是设定集条目与场景的新引用方
+  - 非 scene 单元的 context 输出不变（knowledge 与 readerOnly 为空值，不输出场景级诊断）；既有 characters、priorScenes、reveal、threads 字段不变，新增内容项只插入裁剪优先级序列（canon 人物设定项与揭示边界之间），不改变其他项的相对顺序
+  - 既有 outline.yaml 的契约字段（pov、reveal 等）格式与 scene contract 参数不变；wa-cli knowledge 不读写大纲
+  - MCP 服务与内置技能内容不变
+roadmap:
+  milestone: novel
+  planned_change: knowledge-state

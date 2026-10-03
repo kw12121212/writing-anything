@@ -1,0 +1,112 @@
+schema: strict-spec-driven/delta-spec/v1
+schema_version: 1
+artifact_type: delta_spec
+schema_file: templates/strict-spec-driven/schemas/delta-spec.yaml
+target_spec: knowledge
+spec:
+  title: 知情表（Knowledge State）
+  path: .strict-spec-driven/specs/knowledge.yaml
+operations:
+  ADDED:
+    knowledge-artifact:
+      strength: MUST
+      statement: 作品根单元目录下的 knowledge.yaml 是知情表（Knowledge State）：含 schema_version（1）与 events 数组；每个条目是一条知情事件（Knowledge Event），含符合 id 格式且文件内唯一的 id、scene（获知发生的场景，单元类型为 scene 的单元引用）、entry（被获知的设定集（Canon）条目 id）与 character（获知者：该作品 canon.yaml 中 type 为 character 的条目 id，或固定值 reader 表示读者（Reader））；status 取 proposed（待确认）/ confirmed（已确认）/ rejected（已拒绝）之一；confirmation（作者确认原话摘要，status 非 proposed 时非空，为 proposed 时为 null 或缺省）与 decided_at（决定时的 UTC 时间，RFC 3339 格式，status 非 proposed 时非空，为 proposed 时为 null 或缺省）按取值声明（不为空的取值必须符合各自形态），键存在性条件不进入 Schema。字段形态不符合上述要求时报告 artifact.schema-violation（field 为对应点分路径，如 events[i].status）。wa-cli validate 整体校验时必须对每个可加载作品存在的 knowledge.yaml 做 Schema 与领域校验并计入 checked：条目 id 重复报告 artifact.duplicate-id（field 为 events[i].id）；scene 引用的单元不存在或类型不为 scene 报告 knowledge.unknown-unit（field 为 events[i].scene）；entry 不在该作品 canon.yaml 的设定条目中（含作品没有 canon.yaml 时）报告 knowledge.unknown-entry（field 为 events[i].entry）；character 不为 reader 且不在该 canon.yaml 的 character 条目中（含没有 canon.yaml 时）报告 knowledge.unknown-character（field 为 events[i].character）；status 非 proposed 而缺非空 confirmation 或 decided_at 报告 knowledge.incomplete-confirmation（field 为 events[i]）。knowledge.yaml 途经符号链接或不是普通文件时按 artifact.not-found 处理（path 为该 knowledge.yaml，不读取也不覆盖它）。作品没有 knowledge.yaml 时不做任何知情检查；wa-cli validate <path> 对该位置的 knowledge.yaml 执行同样的检查（entry 与 character 检查以该作品根单元目录下的 canon.yaml 为准）。
+      scenarios:
+        invalid-status:
+          - GIVEN: novel 文体作品 my-novel 的 knowledge.yaml 首个条目 status 为 decided
+          - WHEN: 运行 wa-cli validate --dir D --json
+          - THEN: 报告 artifact.schema-violation 且 field 含 events[0].status，退出码为 1
+        unknown-character:
+          - GIVEN: knowledge.yaml 首个条目 character 为 canon-9，my-novel 的 canon.yaml 没有 id 为 canon-9 的条目
+          - WHEN: 运行 wa-cli validate --dir D --json
+          - THEN: 报告 knowledge.unknown-character（field 为 events[0].character），退出码为 1
+        duplicate-id:
+          - GIVEN: knowledge.yaml 有两条 id 同为 know-1 的条目
+          - WHEN: 运行 wa-cli validate --dir D --json
+          - THEN: 报告 artifact.duplicate-id（field 含 events[i].id），退出码为 1
+        incomplete-confirmation:
+          - GIVEN: knowledge.yaml 首个条目 status 为 confirmed 而 confirmation 为 null
+          - WHEN: 运行 wa-cli validate --dir D --json
+          - THEN: 报告 knowledge.incomplete-confirmation（field 为 events[0]），退出码为 1
+    knowledge-propose:
+      strength: MUST
+      statement: wa-cli knowledge propose <work> --scene <场景> --entry <条目> --character <人物|reader> [--id <id>] 必须在 knowledge.yaml 的 events 末尾追加一个条目（初始 status 为 proposed，不写 confirmation 与 decided_at）：--scene、--entry 与 --character 必填；--scene 引用的单元不存在或类型不为 scene 时拒绝写入（knowledge.unknown-unit，field 为 scene）；--entry 不在该作品 canon.yaml 的设定条目中（含没有 canon.yaml 时）拒绝写入（knowledge.unknown-entry，field 为 entry，next 含 wa-cli canon list <work> --dir <dir> --json）；--character 不为 reader 且不是该作品 canon.yaml 中 type 为 character 的条目时拒绝写入（knowledge.unknown-character，field 为 character，next 含 wa-cli canon list <work> --dir <dir> --json）；canon.yaml 存在但不通过校验时报告其诊断且不写入；--id 不符合 id 格式时报告 artifact.schema-violation（field 为 id）；--id 缺省生成 know-<n>（n 从条目数加一起递增到不重复），与既有条目重复时拒绝（artifact.duplicate-id，field 为 id）。knowledge.yaml 不存在时创建（含 schema_version 1 与 events），已存在时只追加该项，保留其他内容与 YAML 注释。成功时退出码为 0，changedPaths 为 knowledge.yaml，--json 输出的 event 字段为新条目（字段同 knowledge-list）。已有 knowledge.yaml 不通过 Schema 校验、条目 id 重复或确认记录不完整（knowledge.incomplete-confirmation）时报告其诊断且不写入；已有条目的悬空 scene、entry 或 character 引用不阻止追加，成功时以 warning 报告（knowledge.unknown-unit / knowledge.unknown-entry / knowledge.unknown-character）；要追加之处经由 YAML 锚点、别名或合并键得到时报告 knowledge.anchored-value；knowledge.yaml 途经符号链接时按 artifact.not-found 处理；这些失败情况都不修改文件，退出码为 1。由参数引起的诊断不填 path，next 含 wa-cli help knowledge propose --json。
+      scenarios:
+        propose-default-id:
+          - GIVEN: my-novel 的 knowledge.yaml 已有两条条目
+          - WHEN: 运行 wa-cli knowledge propose my-novel --scene my-novel/c2/s1 --entry canon-5 --character canon-1 --dir D --json
+          - THEN: 新条目 id 为 know-3、status 为 proposed、confirmation 与 decided_at 为 null，changedPaths 含 knowledge.yaml，退出码为 0
+        propose-reader:
+          - GIVEN: my-novel 的 canon.yaml 有 character 条目 canon-1 与 world-rule 条目 canon-5
+          - WHEN: 运行 wa-cli knowledge propose my-novel --scene my-novel/c1/s1 --entry canon-5 --character reader --dir D --json
+          - THEN: 新条目的 character 为 reader、status 为 proposed，changedPaths 含 knowledge.yaml，退出码为 0
+        propose-unknown-character:
+          - GIVEN: my-novel 的 canon.yaml 中 canon-5 是 item 条目而非 character 条目
+          - WHEN: 运行 wa-cli knowledge propose my-novel --scene my-novel/c1/s1 --entry canon-5 --character canon-5 --dir D --json
+          - THEN: 报告 knowledge.unknown-character，knowledge.yaml 未被修改，退出码为 1
+        propose-unknown-unit:
+          - GIVEN: my-novel 的单元 c1 是章（chapter）而非场景
+          - WHEN: 运行 wa-cli knowledge propose my-novel --scene my-novel/c1 --entry canon-5 --character canon-1 --dir D --json
+          - THEN: 报告 knowledge.unknown-unit，knowledge.yaml 未被修改，退出码为 1
+    knowledge-decide:
+      strength: MUST
+      statement: wa-cli knowledge confirm <work> <id> --confirmed-by-author --confirmation <原话摘要> 必须把该条目的 status 改为 confirmed 并写入确认记录（Confirmation Record）：confirmation 为作者确认原话的摘要，decided_at 为确认时的 UTC 时间（RFC 3339 格式）；--confirmed-by-author 与 --confirmation 必须同时给出且摘要不为空白，否则报告 knowledge.incomplete-confirmation（不修改文件）。条目不存在时报告 knowledge.not-found（next 含 wa-cli knowledge list <work> --all --dir <dir> --json）；条目 status 不为 proposed 时报告 knowledge.already-decided。wa-cli knowledge reject <work> <id> --confirmed-by-author --confirmation <原话摘要> 必须把该条目的 status 改为 rejected 并写入同样的确认记录（--confirmed-by-author 与 --confirmation 必须同时给出且摘要不为空白，否则报告 knowledge.incomplete-confirmation）：条目为 proposed 时即作者拒绝该提议，为 confirmed 时即作者撤销已生效的知情事件（此后该获知者的已知列表不再含该条目带来的信息）；条目不存在时报告 knowledge.not-found；条目已是 rejected 时报告 knowledge.already-decided。wa-cli knowledge set <work> <id> [--scene <场景>] [--entry <条目>] [--character <人物|reader>] 只修改给出的字段：条目为 proposed 时照常修改；条目为 confirmed 时必须同时给出 --confirmed-by-author 与 --confirmation（改动会改变已生效的知情，须作者重新确认；缺失或摘要为空白时报告 knowledge.incomplete-confirmation），写入后 confirmation 与 decided_at 更新为本次取值，status 不变；条目为 rejected 时报告 knowledge.already-decided（rejected 为终态，重新登记应 knowledge propose 新条目）。--scene 引用的单元不存在或类型不为 scene 时报告 knowledge.unknown-unit（field 为 scene）；--entry 不在该作品设定条目中时报告 knowledge.unknown-entry（field 为 entry）；--character 不为 reader 且不是该作品 canon.yaml 中 type 为 character 的条目时报告 knowledge.unknown-character（field 为 character）。三个命令只修改目标条目，保留其他条目、其他内容与 YAML 注释；修改后的取值与原有取值相同时不写文件（changedPaths 为空数组），否则 changedPaths 为 knowledge.yaml，--json 输出的 event 字段为修改后的条目，成功时退出码为 0；目标条目或其字段经由 YAML 锚点、别名或合并键得到时报告 knowledge.anchored-value；已有 knowledge.yaml 不通过 Schema 校验、条目 id 重复或确认记录不完整时报告其诊断且不修改文件；已有条目的悬空 scene、entry 或 character 引用不阻止修改，成功时以 warning 报告；这些失败情况都不修改文件，退出码为 1。由参数引起的诊断不填 path，next 含对应子命令的 wa-cli help knowledge <subcommand> --json。
+      scenarios:
+        confirm-records:
+          - GIVEN: knowledge.yaml 有 status 为 proposed 的条目 know-1
+          - WHEN: 运行 wa-cli knowledge confirm my-novel know-1 --confirmed-by-author --confirmation 作者确认守灯人获知身份 --dir D --json
+          - THEN: know-1 的 status 为 confirmed、confirmation 为「作者确认守灯人获知身份」、decided_at 为 RFC 3339 格式，changedPaths 含 knowledge.yaml，退出码为 0
+        confirm-missing-confirmation:
+          - GIVEN: knowledge.yaml 有 status 为 proposed 的条目 know-1
+          - WHEN: 运行 wa-cli knowledge confirm my-novel know-1 --confirmation 作者确认 --dir D --json
+          - THEN: 报告 knowledge.incomplete-confirmation，knowledge.yaml 未变，退出码为 1
+        reject-revokes-confirmed:
+          - GIVEN: 条目 know-1 已 confirmed 且 character 为 canon-1、entry 为 canon-5
+          - WHEN: 运行 wa-cli knowledge reject my-novel know-1 --confirmed-by-author --confirmation 作者撤销该知情 --dir D --json
+          - THEN: know-1 的 status 为 rejected，此后 wa-cli knowledge at <其后场景> --character canon-1 的已知列表不再含 canon-5，退出码为 0
+        set-confirmed-needs-confirmation:
+          - GIVEN: 条目 know-1 已 confirmed
+          - WHEN: 运行 wa-cli knowledge set my-novel know-1 --character canon-2 --dir D --json
+          - THEN: 报告 knowledge.incomplete-confirmation，knowledge.yaml 未变，退出码为 1
+        set-proposed-free:
+          - GIVEN: 条目 know-2 为 proposed
+          - WHEN: 运行 wa-cli knowledge set my-novel know-2 --character reader --dir D --json
+          - THEN: know-2 的 character 为 reader、status 仍为 proposed，退出码为 0
+    knowledge-list:
+      strength: MUST
+      statement: wa-cli knowledge list <work> 必须只读地列出台账条目：--json 输出 events 数组，默认只含 status 为 proposed 的条目（作者待处理清单），--all 时含全部；每项含 id、scene、entry、character、status、confirmation（无则为 null）与 decided_at（无则为 null），按 scene 的单元树先序排序，先序相同按文件顺序。台账不存在时 events 为空数组、退出码为 0；不通过 Schema 校验、条目 id 重复或确认记录不完整（knowledge.incomplete-confirmation）时报告其诊断、events 为空数组、退出码为 1；条目的悬空 scene、entry 或 character 引用照常列出，以 warning 报告。changedPaths 为空数组；作品不存在或给出子单元引用时报告 work.not-found（message 说明知情表是作品级产物）。不加 --json 时以人读文本按同样顺序输出每条的 id、绑定场景、设定条目、获知者与 status（已确认与已拒绝加标注）。
+      scenarios:
+        list-proposed-default:
+          - GIVEN: my-novel 的 knowledge.yaml 有 proposed、confirmed 与 rejected 条目各一条
+          - WHEN: 运行 wa-cli knowledge list my-novel --dir D --json
+          - THEN: events 只含 proposed 条目，--all 时含全部三条，退出码为 0
+        list-empty-ledger:
+          - GIVEN: my-novel 没有 knowledge.yaml
+          - WHEN: 运行 wa-cli knowledge list my-novel --dir D --json
+          - THEN: events 为空数组，changedPaths 为空数组，退出码为 0
+    knowledge-at:
+      strength: MUST
+      statement: wa-cli knowledge at <unit> --character <人物|reader> 必须只读地输出单元（单元类型为 scene）开始时该获知者已知的信息：--json 输出 knowledge 数组，每项含 entry（设定集条目 id）、name（该条目的 name，来自 canon.yaml，未设置时为 null）、event（适用事件的 id）与 scene（该事件绑定的场景引用），按 entry 升序。适用事件为 knowledge.yaml 中 status 为 confirmed、character 等于所给获知者、且 scene 按单元树先序严格早于 <unit> 的条目；同一获知者对同一设定条目有多条适用事件时取按先序最早的一条（先序相同按文件顺序）——知情只积累，首次获知即已知，此后对同一条目的重复登记不改变输出。proposed 与 rejected 条目不参与，<unit> 自身及其后场景上的条目不参与。同一 knowledge.yaml、canon.yaml 与单元树输入总是得到同一输出（输出不含时间戳等不稳定值）。没有任何适用条目（含没有 knowledge.yaml）时 knowledge 为空数组、退出码为 0；knowledge.yaml 不通过 Schema 或领域校验（含条目的 scene、entry 或 character 无法解析、确认记录不完整），或 canon.yaml 不通过校验时报告其诊断、knowledge 为空数组、退出码为 1（作品没有 canon.yaml 时所有 entry 均无法解析）。<unit> 不存在或类型不为 scene 时报告 knowledge.unknown-unit（field 为 unit，next 含 wa-cli help knowledge at --json）；--character 不为 reader 且不是该作品 canon.yaml 中 type 为 character 的条目时报告 knowledge.unknown-character（field 为 character，next 含 wa-cli canon list <work> --dir <dir> --json）。changedPaths 为空数组。不加 --json 时以人读文本按同样顺序输出每个已知设定条目与获知场景。
+      scenarios:
+        replay-confirmed-only:
+          - GIVEN: knowledge.yaml 中 entry 为 canon-5、character 为 canon-1 的条目有绑定 my-novel/c1/s1 的 confirmed 条目与绑定 my-novel/c1/s2 的 proposed 条目各一条
+          - WHEN: 运行 wa-cli knowledge at my-novel/c2/s1 --character canon-1 --dir D --json
+          - THEN: knowledge 含 canon-5 一项且 event 为 confirmed 条目的 id，退出码为 0
+        earliest-event-wins:
+          - GIVEN: canon-1 获知 canon-5 有两条 confirmed 条目，分别绑定 my-novel/c1/s1 与 my-novel/c2/s1
+          - WHEN: 运行 wa-cli knowledge at my-novel/c3/s1 --character canon-1 --dir D --json
+          - THEN: canon-5 的 event 与 scene 指向绑定 c1/s1 的最早条目，退出码为 0
+        scene-start-excludes-own-scene:
+          - GIVEN: knowledge.yaml 只有一条 confirmed 条目，绑定 my-novel/c2/s1、character 为 canon-1
+          - WHEN: 运行 wa-cli knowledge at my-novel/c2/s1 --character canon-1 --dir D --json
+          - THEN: knowledge 为空数组（该场景开始时尚未获知），退出码为 0
+        reader-vs-character:
+          - GIVEN: canon-5 有 character 为 reader 的 confirmed 条目（绑定 c1/s1）与 character 为 canon-2 的 confirmed 条目（绑定 c1/s2），没有 character 为 canon-1 的条目
+          - WHEN: 运行 wa-cli knowledge at my-novel/c2/s1 --character reader --dir D --json 与 wa-cli knowledge at my-novel/c2/s1 --character canon-1 --dir D --json
+          - THEN: 前者 knowledge 含 canon-5（读者已知），后者为空数组（人物未知），退出码均为 0
+        deterministic-replay:
+          - GIVEN: 同一多章长篇夹具
+          - WHEN: 连续两次运行 wa-cli knowledge at my-novel/c3/s1 --character canon-1 --dir D --json
+          - THEN: 两次输出的 knowledge 完全一致，退出码为 0
+  MODIFIED: {}
+  REMOVED: {}

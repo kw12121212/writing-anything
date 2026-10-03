@@ -15,6 +15,7 @@ import (
 	"github.com/kw12121212/writing-anything/internal/decision"
 	"github.com/kw12121212/writing-anything/internal/draft"
 	"github.com/kw12121212/writing-anything/internal/feedback"
+	"github.com/kw12121212/writing-anything/internal/knowledge"
 	"github.com/kw12121212/writing-anything/internal/outline"
 	"github.com/kw12121212/writing-anything/internal/resolve"
 	"github.com/kw12121212/writing-anything/internal/series"
@@ -29,6 +30,8 @@ const (
 	PartOutline      = "outline"
 	PartSection      = "section"
 	PartCharacter    = "character"
+	PartKnowledge    = "knowledge"
+	PartReaderOnly   = "reader-only"
 	PartReveal       = "reveal"
 	PartThread       = "thread"
 	PartFeedback     = "feedback"
@@ -158,6 +161,19 @@ type Thread struct {
 	Overdue        bool
 }
 
+// KnowledgeItem 是视角人物（POV）或读者已知的一个设定条目（scene-context 的 knowledge 与 readerOnly 内容项）：
+// Event 与 Scene 指向该获知者最早获知它的知情事件（knowledge 主规格的 knowledge-at 语义）。
+type KnowledgeItem struct {
+	Entry  string
+	Name   *string
+	Text   string
+	Event  string
+	Scene  string
+}
+
+// CodePOVNotInCanon 是场景契约的视角人物在设定集中没有同名 character 条目时的 warning 错误码。
+const CodePOVNotInCanon = "knowledge.pov-not-in-canon"
+
 // CodeSummaryMissing 是前序作品或前序场景还没有摘要时的 warning 错误码。已发布的错误码不得改名或复用。
 const CodeSummaryMissing = "context.summary-missing"
 
@@ -180,8 +196,10 @@ type Pack struct {
 	Brief                    *Brief
 	Outline                  *outline.Outline
 	Section                  *Section
-	Characters               []Character    // 场景级：出场人物的当前设定；非 scene 单元为 nil
-	PriorScenes              []SceneSummary // 场景级：前序场景的已验收摘要；非 scene 单元为 nil
+	Characters               []Character     // 场景级：出场人物的当前设定；非 scene 单元为 nil
+	Knowledge                []KnowledgeItem // 场景级：视角人物已知的条目；非 scene 单元为 nil
+	ReaderOnly               []KnowledgeItem // 场景级：读者已知、视角人物未知的条目；非 scene 单元为 nil
+	PriorScenes              []SceneSummary  // 场景级：前序场景的已验收摘要；非 scene 单元为 nil
 	Reveal                   []RevealBoundary
 	Threads                  []Thread // 场景级：与本场景契约相关的未回收伏笔；非 scene 单元为 nil
 	Feedback                 []feedback.Item
@@ -415,22 +433,32 @@ func Build(root string, w *work.Work, u *work.Unit) (*Pack, []workspace.Problem)
 	return p, warnings
 }
 
-// sceneItems 组装场景单元的出场人物、揭示边界与未回收伏笔内容项，按 context-trim 的优先级（人物设定在前、揭示边界
-// 其次、未回收伏笔在后）：出场人物按场景大纲 characters 声明顺序去重后，取 canon.yaml 中 name 相同的 character 条目
-// （同名的按条目顺序都保留）；揭示边界为本单元大纲各节的 reveal；未回收伏笔为伏笔台账（Foreshadowing Ledger）中
-// open 且与本场景契约相关的条目（threads 主规格 scene-context）。canon.yaml 或 threads.yaml 存在但不通过校验时返回
-// 阻止组装的问题；声明的人物没有同名条目时逐个追加 warning（作品没有 canon.yaml 时不提示）。
+// sceneItems 组装场景单元的出场人物、视角人物知情、揭示边界与未回收伏笔内容项，按 context-trim 的优先级（人物
+// 设定在前、视角人物已知与读者已知人物未知其次、揭示边界再次、未回收伏笔在后）：出场人物按场景大纲 characters
+// 声明顺序去重后，取 canon.yaml 中 name 相同的 character 条目（同名的按条目顺序都保留）；知情内容项按场景大纲
+// 第一个声明 pov 的大纲节解析视角人物，重放 knowledge.yaml（knowledge 主规格的 knowledge-at 语义）；揭示边界为
+// 本单元大纲各节的 reveal；未回收伏笔为伏笔台账（Foreshadowing Ledger）中 open 且与本场景契约相关的条目
+// （threads 主规格 scene-context）。canon.yaml、knowledge.yaml 或 threads.yaml 存在但不通过校验时返回阻止组装的
+// 问题；声明的人物或视角人物没有同名条目时追加 warning（作品没有 canon.yaml 时不提示）。
 func sceneItems(root string, w *work.Work, u *work.Unit, own *outline.Outline, p *Pack, warnings *[]workspace.Problem) ([]item, []workspace.Problem) {
 	var names []string
+	pov := ""
 	if own != nil {
 		for _, sec := range own.Sections {
 			names = append(names, sec.Characters...)
+			if pov == "" && sec.Pov != "" {
+				pov = sec.Pov
+			}
 		}
 	}
 	names = dedupe(names)
-	var out []item
-	if len(names) > 0 {
-		entries, ps := canon.List(root, w)
+	// 设定集只在需要解析（声明了出场人物或视角人物）时加载一次（workspace-artifacts/load-once-per-command），
+	// 出场人物匹配与视角人物解析、知情条目的 text 复用同一份；两者都未声明时留给 knowledge.For 按需加载。
+	var canonEntries map[string]canon.Entry
+	var entries []canon.Entry
+	if len(names) > 0 || pov != "" {
+		var ps []workspace.Problem
+		entries, ps = canon.List(root, w)
 		var fatal []workspace.Problem
 		for _, q := range ps {
 			if q.Severity == workspace.SeverityError {
@@ -442,6 +470,13 @@ func sceneItems(root string, w *work.Work, u *work.Unit, own *outline.Outline, p
 		if fatal != nil {
 			return nil, fatal
 		}
+		canonEntries = make(map[string]canon.Entry, len(entries))
+		for _, e := range entries {
+			canonEntries[e.ID] = e
+		}
+	}
+	var out []item
+	if len(names) > 0 {
 		// canon.yaml 不存在时 List 返回空：出场人物照常缺失，但不提示（scene-context）。
 		if entries != nil {
 			for _, name := range names {
@@ -462,6 +497,52 @@ func sceneItems(root string, w *work.Work, u *work.Unit, own *outline.Outline, p
 					*warnings = append(*warnings, workspace.Problem{Code: CodeCharacterNotInCanon, Severity: workspace.SeverityWarning,
 						Message: fmt.Sprintf("场景大纲声明的出场人物「%s」在设定集（canon.yaml）中没有同名 character 条目；用 wa-cli canon add 登记人物卡（Character Sheet）后，wa-cli context 才会带出其当前设定", name)})
 				}
+			}
+		}
+	}
+	// 视角人物（POV）的知情与读者已知：knowledge.yaml 不存在时 For 返回空重放；存在但不通过校验时返回阻止组装
+	// 的问题（同 threads.yaml 的处理）。
+	rep, fatal := knowledge.For(root, w, u, canonEntries)
+	if fatal != nil {
+		return nil, fatal
+	}
+	if pov != "" {
+		var povID string
+		for _, e := range entries {
+			if e.Type == canon.TypeCharacter && e.Name != nil && *e.Name == pov {
+				povID = e.ID
+				break
+			}
+		}
+		if povID == "" {
+			*warnings = append(*warnings, workspace.Problem{Code: CodePOVNotInCanon, Severity: workspace.SeverityWarning,
+				Message: fmt.Sprintf("场景契约的视角人物「%s」在设定集（canon.yaml）中没有同名 character 条目；wa-cli canon add 登记后，wa-cli context 才会带出视角人物已知与读者已知的条目", pov)})
+		} else {
+			known := map[string]bool{}
+			for _, it := range rep.Known(povID) {
+				known[it.Entry] = true
+				v := KnowledgeItem{Entry: it.Entry, Name: it.Name, Event: it.Event, Scene: it.Scene}
+				if c, ok := canonEntries[it.Entry]; ok {
+					v.Text = c.Text
+				}
+				p.Knowledge = append(p.Knowledge, v)
+				out = append(out, item{part: PartKnowledge, id: v.Entry, body: v.markdown(), drop: func() {
+					p.Knowledge = slices.DeleteFunc(p.Knowledge, func(x KnowledgeItem) bool { return x.Entry == v.Entry })
+				}})
+			}
+			// 读者已知、视角人物未知的条目（悬念素材，与揭示边界配合）。
+			for _, it := range rep.Known(knowledge.Reader) {
+				if known[it.Entry] {
+					continue
+				}
+				v := KnowledgeItem{Entry: it.Entry, Name: it.Name, Event: it.Event, Scene: it.Scene}
+				if c, ok := canonEntries[it.Entry]; ok {
+					v.Text = c.Text
+				}
+				p.ReaderOnly = append(p.ReaderOnly, v)
+				out = append(out, item{part: PartReaderOnly, id: v.Entry, body: v.markdown(), drop: func() {
+					p.ReaderOnly = slices.DeleteFunc(p.ReaderOnly, func(x KnowledgeItem) bool { return x.Entry == v.Entry })
+				}})
 			}
 		}
 	}

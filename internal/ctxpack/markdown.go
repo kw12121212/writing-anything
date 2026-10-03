@@ -18,6 +18,8 @@ var partTitles = map[string]string{
 	PartOutline:      "## 本单元大纲（Outline）",
 	PartSection:      "## 本节大纲条目",
 	PartCharacter:    "## 出场人物（Characters）",
+	PartKnowledge:    "## 视角人物已知（POV Knowledge）",
+	PartReaderOnly:   "## 读者已知、人物未知（Reader Only）",
 	PartReveal:       "## 揭示边界（Reveal Boundary）",
 	PartThread:       "## 未回收伏笔（Open Foreshadowing）",
 	PartFeedback:     "## 未处理的作者反馈（Feedback）",
@@ -188,6 +190,14 @@ func (c Character) markdown() string {
 
 func (r RevealBoundary) markdown() string {
 	return fmt.Sprintf("- 节 %s 不能提前透露：%s\n", r.Section, oneLine(r.Text))
+}
+
+func (k KnowledgeItem) markdown() string {
+	name := ""
+	if k.Name != nil {
+		name = "（" + *k.Name + "）"
+	}
+	return fmt.Sprintf("- %s%s：%s（获知于 %s）\n", k.Entry, name, oneLine(k.Text), k.Scene)
 }
 
 func (t Thread) markdown() string {

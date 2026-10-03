@@ -1,0 +1,63 @@
+schema: strict-spec-driven/question-list/v1
+schema_version: 1
+artifact_type: question_list
+schema_file: templates/strict-spec-driven/schemas/question-list.yaml
+change: knowledge-state
+open: []
+resolved:
+  - id: requirement-problem
+    question: What is concretely going wrong today, and for whom?
+    context: 'Why this is asked: the change is planned against a need, and the need lives only with the requester. A "problem" here means what someone does or suffers today — not a feature that is missing. What a sufficient answer contains: who is affected, what they do today instead, and how often.'
+    answer: 长篇中「谁在什么时候知道了什么」只存在于正文与 Agent 的会话记忆中：换会话后 Agent 不掌握各人物与读者的知情边界，容易让人物说出不该知道的话、或把该留给读者的信息提前泄露，也无法确定性核对（novel 里程碑 goal 与计划变更 details 指出的缺口）。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-outcome
+    question: What observable difference proves the problem is solved?
+    context: 'Why this is asked: without a success condition, nobody can tell afterwards whether the change worked. "Observable" means someone outside the system can check it without reading the code.'
+    answer: 里程碑 done_criteria：context 只包含视角人物已知的信息，并单列读者已知、人物未知的内容；知情事件未经作者确认时不参与已知列表计算；wa-cli knowledge at <scene> --character <id> 输出该人物此时已知的信息。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-trigger
+    question: Why now — what forced this?
+    context: 'Why this is asked: work that nothing forced is the work most often thrown away later. This question catches a request that sounds reasonable but has no real driver behind it.'
+    answer: 依赖的 state-change-proposals 已归档，确认记录与重放模式已就位；roadmap-recommend 在 novel 里程碑中选中本计划变更（54 个候选中唯一可推荐，其余均因依赖未完成被跳过，其中 scene-close-out 与 layered-summaries-and-budget 直接依赖本变更）。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-non-goals
+    question: What must explicitly not change?
+    context: 'Why this is asked: the requester knows which nearby behavior other people depend on, and the agent does not. A "non-goal" is something the change must leave alone even though it sits close to the work.'
+    answer: 无 knowledge.yaml 的作品全部命令行为不变；canon、state、threads、场景契约与因果链、决策队列语义不变；close-out 验收联动、整体上下文重组与状态快照进 context、正文级泄露检测不在本变更（proposal 的 out 与 unchanged_behavior）。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-interpretation
+    question: Which reading of the request is intended, where more than one is possible?
+    context: 'Why this is asked: a short request usually admits several readings, and building the wrong one is indistinguishable from building nothing.'
+    answer: 按计划变更 details 的读法：知情状态是登记式台账（绑定场景、设定条目与获知者）+ 作者确认生效 + 已确认条目按单元树先序确定性重放；「context 只给出视角人物已知的信息」读作对知情条目的筛选与单列（knowledge 与 readerOnly 两个字段），不是对设定集定义文本做语义过滤（wa-cli 不调用模型）；读者获知与揭示边界的「关联」读作输出层的并列呈现，不做正文语义比对。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: reader-representation
+    question: 读者获知如何表示——独立台账、独立命令，还是与人物同一台账的取值？
+    context: 计划变更 details 只写「读者获知与揭示边界关联」，未指定表示法。影响范围：knowledge 主规格的 knowledge-artifact 与 knowledge-propose 需求语句、internal/knowledge 的校验与 KnownAt 实现（knowledge-package 任务）、context 的 readerOnly 计算（knowledge-context 任务）、相关测试断言；不影响其他规格。推荐：与人物同一台账，character 字段取 canon 的 character 条目 id 或固定值 reader——同机制不实现两遍，knowledge at --character reader 与差集计算自然成立。
+    answer: 采用同一台账：character 字段取该作品 canon.yaml 中 type 为 character 的条目 id 或固定值 reader；读者知情与人物知情同登记、同确认流、同重放语义；揭示边界继续作为契约侧守卫在 context 中与读者已知清单并列呈现。
+    status: resolved
+    kind: requirement
+    answered_by: assumption
+  - id: replay-scope
+    question: knowledge at 的重放边界与冲突语义——目标场景自身的条目参与吗？同一获知者对同一设定条目有多条适用事件时取哪条？
+    context: 计划变更 details 只写「输出该人物此时已知的信息」，边界与冲突未指定。影响范围：knowledge 主规格 knowledge-at 需求语句、internal/knowledge 的 KnownAt 实现（knowledge-package 任务）、test-knowledge-replay 夹具断言；不影响其他规格。推荐：目标场景自身严格排除（场景开始时尚未获知，与 state at 一致）；知情单调，同一条目取最早适用事件（与 state at 的 later-wins 相反，因为知识只会积累），冗余登记无害。
+    answer: 只重放 status 为 confirmed、character 等于所给获知者且 scene 按先序严格早于目标场景的条目；同一设定条目取按先序最早的一条（先序相同按文件顺序），每项含 entry、name、event 与 scene，按 entry 升序；无适用条目时空数组。
+    status: resolved
+    kind: requirement
+    answered_by: assumption
+  - id: context-integration-scope
+    question: context 集成随本变更交付多少——只加场景级字段，还是等 layered-summaries-and-budget 的整体重组？
+    context: 本计划变更 details 要求 context「只给出视角人物已知的信息，并单列读者已知、人物未知的内容」，而 layered-summaries-and-budget 的 details 又把「视角人物的知情表」列进其组装优先级，两处有重叠。影响范围：context 主规格 scene-context 与 context-trim 的 MODIFIED 语句、internal/ctxpack 与 internal/cli/context.go（knowledge-context 任务）、test-knowledge-context 断言；不影响其他规格。推荐：本变更交付场景级 knowledge 与 readerOnly 两个内容项及预算裁剪，整体重组与最终优先级留给后续变更。
+    answer: 本变更交付场景级 context 的 knowledge（视角人物已知）与 readerOnly（读者已知、视角人物未知）两个内容项，计入预算、裁剪 part 为 knowledge 与 reader-only、优先级插在 canon 人物设定项与揭示边界之间；按契约显式引用的整体重组、出场人物状态快照与最终优先级顺序属 layered-summaries-and-budget 计划变更。
+    status: resolved
+    kind: requirement
+    answered_by: assumption

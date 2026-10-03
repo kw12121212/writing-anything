@@ -416,7 +416,7 @@ func TestRegistryConsistency(t *testing.T) {
 }
 
 // mutatingSamples 列出只能通过变更产物才能成功的命令；它们的样例在临时工作区中变更产物。
-var mutatingSamples = map[string]bool{"new": true, "unit add": true, "unit move": true, "advance": true, "source add": true, "claim add": true, "claim remove": true, "review record": true, "accept": true, "export": true, "preview": true, "marketing ask": true, "mcp install": true, "skills install": true, "feedback add": true, "decision add": true, "decide": true, "outline remove": true, "pack install": true, "pack remove": true, "metrics record": true, "metrics calibrate": true, "pack learn": true, "series add": true, "series fact": true, "summary set": true, "pack confirm": true, "pack reject": true, "canon add": true, "canon remove": true, "scene contract": true, "threads add": true, "plan step": true, "plan confirm": true, "state propose": true, "state confirm": true, "state reject": true, "state set": true}
+var mutatingSamples = map[string]bool{"new": true, "unit add": true, "unit move": true, "advance": true, "source add": true, "claim add": true, "claim remove": true, "review record": true, "accept": true, "export": true, "preview": true, "marketing ask": true, "mcp install": true, "skills install": true, "feedback add": true, "decision add": true, "decide": true, "outline remove": true, "pack install": true, "pack remove": true, "metrics record": true, "metrics calibrate": true, "pack learn": true, "series add": true, "series fact": true, "summary set": true, "pack confirm": true, "pack reject": true, "canon add": true, "canon remove": true, "scene contract": true, "threads add": true, "plan step": true, "plan confirm": true, "state propose": true, "state confirm": true, "state reject": true, "state set": true, "knowledge propose": true, "knowledge confirm": true, "knowledge reject": true, "knowledge set": true}
 
 // sampleArgs 返回命令的一次成功调用：除 mutatingSamples 中的命令外都不变更任何产物；工作区命令在已初始化的
 // 临时工作区中运行。
@@ -630,6 +630,50 @@ func sampleArgs(t *testing.T, name string) []string {
 		run(t, "state", "propose", "my-story", "--scene", "my-story/s1", "--entry", "canon-1", "--state", "左手旧伤复发", "--dir", dir)
 		run(t, "state", "confirm", "my-story", "state-1", "--confirmed-by-author", "--confirmation", "作者确认旧伤复发", "--dir", dir)
 		return []string{"state", "at", "my-story/s2", "--dir", dir, "--json"}
+	case "knowledge list":
+		return []string{"knowledge", "list", "my-post", "--dir", newWork(t), "--json"}
+	case "knowledge propose":
+		dir := newWorkspace(t)
+		run(t, "new", "short-story", "my-story", "--dir", dir)
+		run(t, "unit", "add", "my-story", "scene", "s1", "--dir", dir)
+		run(t, "canon", "add", "my-story", "--type", "character", "--name", "守灯人", "--text", "五十岁，左手有旧伤", "--dir", dir)
+		run(t, "canon", "add", "my-story", "--type", "world-rule", "--text", "灯油只能燃烧到黎明", "--dir", dir)
+		return []string{"knowledge", "propose", "my-story", "--scene", "my-story/s1", "--entry", "canon-2", "--character", "canon-1", "--dir", dir, "--json"}
+	case "knowledge confirm":
+		dir := newWorkspace(t)
+		run(t, "new", "short-story", "my-story", "--dir", dir)
+		run(t, "unit", "add", "my-story", "scene", "s1", "--dir", dir)
+		run(t, "canon", "add", "my-story", "--type", "character", "--name", "守灯人", "--text", "五十岁，左手有旧伤", "--dir", dir)
+		run(t, "canon", "add", "my-story", "--type", "world-rule", "--text", "灯油只能燃烧到黎明", "--dir", dir)
+		run(t, "knowledge", "propose", "my-story", "--scene", "my-story/s1", "--entry", "canon-2", "--character", "canon-1", "--dir", dir)
+		return []string{"knowledge", "confirm", "my-story", "know-1", "--confirmed-by-author", "--confirmation", "作者确认守灯人得知灯油规则", "--dir", dir, "--json"}
+	case "knowledge reject":
+		dir := newWorkspace(t)
+		run(t, "new", "short-story", "my-story", "--dir", dir)
+		run(t, "unit", "add", "my-story", "scene", "s1", "--dir", dir)
+		run(t, "canon", "add", "my-story", "--type", "character", "--name", "守灯人", "--text", "五十岁，左手有旧伤", "--dir", dir)
+		run(t, "canon", "add", "my-story", "--type", "world-rule", "--text", "灯油只能燃烧到黎明", "--dir", dir)
+		run(t, "knowledge", "propose", "my-story", "--scene", "my-story/s1", "--entry", "canon-2", "--character", "canon-1", "--dir", dir)
+		return []string{"knowledge", "reject", "my-story", "know-1", "--confirmed-by-author", "--confirmation", "作者撤销该知情", "--dir", dir, "--json"}
+	case "knowledge set":
+		// 修改 proposed 条目不需要作者确认。
+		dir := newWorkspace(t)
+		run(t, "new", "short-story", "my-story", "--dir", dir)
+		run(t, "unit", "add", "my-story", "scene", "s1", "--dir", dir)
+		run(t, "canon", "add", "my-story", "--type", "character", "--name", "守灯人", "--text", "五十岁，左手有旧伤", "--dir", dir)
+		run(t, "canon", "add", "my-story", "--type", "world-rule", "--text", "灯油只能燃烧到黎明", "--dir", dir)
+		run(t, "knowledge", "propose", "my-story", "--scene", "my-story/s1", "--entry", "canon-2", "--character", "canon-1", "--dir", dir)
+		return []string{"knowledge", "set", "my-story", "know-1", "--character", "reader", "--dir", dir, "--json"}
+	case "knowledge at":
+		dir := newWorkspace(t)
+		run(t, "new", "short-story", "my-story", "--dir", dir)
+		run(t, "unit", "add", "my-story", "scene", "s1", "--dir", dir)
+		run(t, "unit", "add", "my-story", "scene", "s2", "--dir", dir)
+		run(t, "canon", "add", "my-story", "--type", "character", "--name", "守灯人", "--text", "五十岁，左手有旧伤", "--dir", dir)
+		run(t, "canon", "add", "my-story", "--type", "world-rule", "--text", "灯油只能燃烧到黎明", "--dir", dir)
+		run(t, "knowledge", "propose", "my-story", "--scene", "my-story/s1", "--entry", "canon-2", "--character", "canon-1", "--dir", dir)
+		run(t, "knowledge", "confirm", "my-story", "know-1", "--confirmed-by-author", "--confirmation", "作者确认守灯人得知灯油规则", "--dir", dir)
+		return []string{"knowledge", "at", "my-story/s2", "--character", "canon-1", "--dir", dir, "--json"}
 	case "method list":
 		return []string{"method", "list", "--dir", newWorkspace(t), "--json"}
 	case "method show":

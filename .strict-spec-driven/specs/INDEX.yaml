@@ -24,6 +24,9 @@ specs:
   - id: genres-and-packs
     title: 文体与规范包（Genre and Pack）
     path: .strict-spec-driven/specs/genres-and-packs.yaml
+  - id: knowledge
+    title: 知情表（Knowledge State）
+    path: .strict-spec-driven/specs/knowledge.yaml
   - id: lint
     title: 文本检查（Lint）
     path: .strict-spec-driven/specs/lint.yaml
