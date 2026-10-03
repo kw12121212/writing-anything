@@ -500,3 +500,100 @@ func TestShortStoryCanonEndToEnd(t *testing.T) {
 	step("", "canon", "list", "lighthouse")
 	step("", "validate")
 }
+
+// TestShortStoryCurve 端到端验证曲线：张力曲线偏离场景契约目标的场景被 wa-cli curve 列为发现项，
+// 且存在发现项时 lint、review、accept 与 advance 的行为与没有发现项时相同（默认不阻塞验收）。
+func TestShortStoryCurve(t *testing.T) {
+	dir := t.TempDir()
+	step := func(input string, args ...string) result {
+		t.Helper()
+		code, res := runWSIn(t, dir, input, args...)
+		if code != 0 || !res.Valid {
+			t.Fatalf("%v: exit code = %d, diagnostics = %+v", args, code, res.Diagnostics)
+		}
+		return res
+	}
+	step("", "init", "--genre", "short-story")
+	step("", "new", "short-story", "lamp")
+	step("守灯人笔记：灯里的精灵每撒一次谎，灯就暗一分。", "source", "add", "--type", "author-note", "--id", "idea", "--title", "前提笔记")
+	step("", "brief", "set", "lamp", "--premise", "灯里的精灵每撒一次谎，灯就暗一分", "--premise-sources", "idea",
+		"--theme", "善意的谎言", "--pov-person", "third", "--pov-character", "守灯人", "--length", "1000-8000",
+		"--message", "turn-1", "--message-text", "守灯人发现谎言与灯焰的联系", "--message-sources", "idea")
+	step("", "advance", "lamp")
+	for _, b := range []struct{ id, title, role string }{
+		{"dim", "灯变暗", "setup"}, {"confront", "精灵再撒谎", "confrontation"}, {"resolve", "灯焰复明", "resolution"},
+	} {
+		step("", "outline", "set", "lamp", b.id, "--title", b.title, "--reason", "情节节拍", "--role", b.role)
+	}
+	step("", "outline", "set", "lamp", "clash", "--title", "灯下对峙", "--covers", "turn-1", "--role", "climax")
+	step("", "advance", "lamp")
+	step("", "unit", "add", "lamp", "scene", "s1")
+	step("", "brief", "set", "lamp/s1", "--purpose", "守灯人与精灵在灯下对峙")
+	step("", "advance", "lamp/s1")
+	// 场景契约声明目标张力 4：打分会话的中位数为 2 时偏离目标（相差 2，大于 tolerance 1）。
+	step("", "outline", "set", "lamp/s1", "act", "--title", "灯下对峙", "--characters", "守灯人,精灵",
+		"--beats", "clash", "--reveal", "精灵的真实身份", "--reason", "场景契约：承担 clash 节拍", "--target", "tension=4")
+	step("", "advance", "lamp/s1")
+	step("守灯人把油芯拧亮，问精灵为什么灯又暗了。\n\n精灵说它从不说谎，可灯焰抖了一下。\n\n守灯人想起笔记里那句话，没有拆穿。", "draft", "write", "lamp/s1")
+	session := "session: %s\nscores:\n" +
+		"  - {metric: tension, paragraph: 1, score: 2}\n  - {metric: tension, paragraph: 2, score: 2}\n  - {metric: tension, paragraph: 3, score: 2}\n"
+	for _, id := range []string{"s1", "s2", "s3"} {
+		step(fmt.Sprintf(session, id), "metrics", "record", "lamp/s1")
+	}
+	// curve 列出张力曲线的偏离发现项；changedPaths 为空（只读），发现项不影响退出码。
+	code, out := runWS(t, dir, "curve", "lamp", "--json")
+	if code != 0 {
+		t.Fatalf("curve: exit code = %d, diagnostics = %+v", code, out.Diagnostics)
+	}
+	var cr struct {
+		ChangedPaths []string `json:"changedPaths"`
+		Curves       []struct {
+			Metric     string `json:"metric"`
+			Points     []struct {
+				Unit   string   `json:"unit"`
+				Value  *float64 `json:"value"`
+				Target *float64 `json:"target"`
+			} `json:"points"`
+			Deviations []struct {
+				Unit   string  `json:"unit"`
+				Metric string  `json:"metric"`
+			} `json:"deviations"`
+		} `json:"curves"`
+	}
+	if err := json.Unmarshal([]byte(out.stdout), &cr); err != nil {
+		t.Fatal(err)
+	}
+	if len(cr.ChangedPaths) != 0 {
+		t.Fatalf("curve changedPaths: %v", cr.ChangedPaths)
+	}
+	var devOK bool
+	for _, c := range cr.Curves {
+		if c.Metric != "tension" {
+			continue
+		}
+		for _, d := range c.Deviations {
+			if d.Unit == "lamp/s1" && d.Metric == "tension" {
+				devOK = true
+			}
+		}
+		for _, p := range c.Points {
+			if p.Unit == "lamp/s1" && (p.Value == nil || *p.Value != 2 || p.Target == nil || *p.Target != 4) {
+				t.Fatalf("curve point lamp/s1: %+v", p)
+			}
+		}
+	}
+	if !devOK {
+		t.Fatalf("curve lacks deviation for lamp/s1: %s", out.stdout)
+	}
+	// 发现项不阻塞验收：lint、review、accept 与 advance 和没有发现项时行为相同。
+	if code, lint := runWS(t, dir, "lint", "lamp/s1"); code != 0 {
+		t.Fatalf("lint with findings: exit code = %d, diagnostics = %+v", code, lint.Diagnostics)
+	}
+	step("", "advance", "lamp/s1")
+	step(fixture(t, "story-review.yaml"), "review", "record", "lamp/s1")
+	step("", "accept", "lamp/s1", "--confirmed-by-author", "--confirmation", "作者：场景可以定稿")
+	if res := step("", "advance", "lamp/s1"); !strings.Contains(res.stdout, `"stage":"done"`) {
+		t.Fatalf("scene to done: %s", res.stdout)
+	}
+	step("", "validate")
+}

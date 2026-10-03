@@ -2,6 +2,7 @@ package outline
 
 import (
 	"fmt"
+	"maps"
 	"reflect"
 	"slices"
 	"strings"
@@ -14,7 +15,7 @@ import (
 )
 
 // sectionOrder 是大纲节中字段的固定顺序。
-var sectionOrder = []string{"id", "title", "role", "covers", "uses", "reason", "characters", "beats", "reveal"}
+var sectionOrder = []string{"id", "title", "role", "covers", "uses", "reason", "characters", "beats", "reveal", "targets"}
 
 // Edit 是一次 outline set 的修改：按 ID 新增或修改一节。指针为 nil 的字段不修改；取值为空（空字符串、空数组）表示删除
 // 该字段。After 或 Before 非空时把该节放到指定节之后或之前。新增时调用方须给出 Title，否则写前复查报告缺少 title。
@@ -28,6 +29,7 @@ type Edit struct {
 	Characters *[]string // 场景契约：出场人物；空数组表示删除
 	Beats      *[]string // 场景契约：承担的情节节拍 id；空数组表示删除
 	Reveal     *string   // 场景契约：揭示边界；空字符串表示删除
+	Targets    *map[string]int // 场景契约：AI 评分指标 id → 目标锚定分值；空映射表示删除
 	After, Before string
 }
 
@@ -133,6 +135,9 @@ func paramOf(field string) string {
 	if name, _, _ := strings.Cut(rest, "["); slices.Contains([]string{"title", "role", "covers", "uses", "reason", "characters", "beats", "reveal"}, name) {
 		return rest
 	}
+	if strings.HasPrefix(rest, "targets.") {
+		return rest
+	}
 	return ""
 }
 
@@ -166,6 +171,19 @@ func checkEdit(root, dir string, e Edit, ms Messages) []workspace.Problem {
 				if !slices.Contains(ids, id) {
 					out = append(out, errorAt(CodeUnknownBeat, "", fmt.Sprintf("beats[%d]", i), unknownBeat(id)))
 				}
+			}
+		}
+	}
+	if e.Targets != nil && len(*e.Targets) > 0 && ms.Metrics != nil {
+		for _, id := range slices.Sorted(maps.Keys(*e.Targets)) {
+			j := slices.IndexFunc(ms.Metrics, func(m catalog.ScoredMetric) bool { return m.ID == id })
+			if j < 0 {
+				out = append(out, errorAt(CodeUnknownTarget, "", "targets."+id, unknownTarget(id)))
+				continue
+			}
+			if v := (*e.Targets)[id]; v < ms.Metrics[j].Scale.Min || v > ms.Metrics[j].Scale.Max {
+				out = append(out, errorAt(CodeTargetOutOfRange, "", "targets."+id,
+					fmt.Sprintf("目标分值 %d 不在 AI 评分指标（Metric）%s 的 scale（%d 到 %d）内", v, id, ms.Metrics[j].Scale.Min, ms.Metrics[j].Scale.Max)))
 			}
 		}
 	}
@@ -220,6 +238,18 @@ func apply(secs *yaml.Node, rel string, e Edit) *workspace.Problem {
 			continue
 		}
 		if f, ok := workspace.SetKey(item, sectionOrder, kv.key, n); !ok {
+			return anchored(rel, field+"."+f)
+		}
+	}
+	if e.Targets != nil {
+		var n *yaml.Node
+		if len(*e.Targets) > 0 {
+			n = &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
+			for _, k := range slices.Sorted(maps.Keys(*e.Targets)) {
+				n.Content = append(n.Content, workspace.Str(k), workspace.Int((*e.Targets)[k]))
+			}
+		}
+		if f, ok := workspace.SetKey(item, sectionOrder, "targets", n); !ok {
 			return anchored(rel, field+"."+f)
 		}
 	}

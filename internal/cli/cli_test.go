@@ -302,6 +302,7 @@ var nullableFields = map[string]bool{
 	"styleProfile":     true,
 	"suggestion":       true,
 	"summary":          true,
+	"target":           true,
 	"text":             true,
 	"theme":            true,
 	"title":            true,
@@ -581,6 +582,8 @@ func sampleArgs(t *testing.T, name string) []string {
 		return []string{"pack", "install", "house.yaml", "--dir", dir, "--json"}
 	case "metrics compute":
 		return []string{"metrics", "compute", "my-post", "--dir", metricsWork(t, ""), "--json"}
+	case "curve":
+		return []string{"curve", "my-post", "--dir", metricsWork(t, ""), "--json"}
 	case "metrics plan", "metrics show":
 		return []string{"metrics", strings.Fields(name)[1], "my-post", "--dir", metricsWork(t, ""), "--json"}
 	case "metrics record":

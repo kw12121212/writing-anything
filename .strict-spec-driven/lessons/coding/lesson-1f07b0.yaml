@@ -1,0 +1,19 @@
+schema: strict-spec-driven/lesson/v1
+schema_version: 1
+artifact_type: lesson
+schema_file: templates/strict-spec-driven/schemas/lesson.yaml
+lesson:
+  id: lesson-1f07b0
+  title: 只有内置文体能声明的配置，没有任何内置文体使用时，其校验与合并路径无法从工作区触发
+category: coding
+status: active
+created_at: '2026-10-03T05:07:03.742Z'
+updated_at: '2026-10-03T05:07:03.742Z'
+context: 为文体（Genre）新增一种只有文体能声明的数据（如 pacing_checks 节奏检查）时，合并与校验代码在 internal/resolve 与 internal/catalog 中运行，但测试只能通过 config resolved 与 validate 从工作区触达，而工作区只能选择内置文体。
+observation: emotion-pacing-curve 变更最初实现 pacing_checks 后，没有任何内置文体声明节奏检查：resolve 的合并与引用校验路径（pacing.unknown-metric、pacing.invalid-params）无法被任何端到端测试执行，规格场景不可验证。
+takeaway: 为内置文体新增配置能力时，让至少一个内置文体真实声明它（选一条有产品价值的默认数据），否则合并与校验路径只能靠同包单测覆盖接线之外的逻辑；跨层引用校验写成导出的纯函数（如 catalog.CheckPacingRefs）供领域包测试直接调用。
+applies_when: 为文体或规范包新增数据声明字段，且该字段的合并、引用或校验逻辑在领域包中实现、需要端到端验证时
+occurrences:
+  - origin: emotion-pacing-curve
+    date: '2026-10-03'
+    evidence: internal/catalog/pacing.go 的 CheckPacingRefs 与 internal/catalog/builtin/genres/short-story.yaml 的 emotional-beat-gap 声明；internal/cli/curve_test.go 的 TestPacingInvalidParams 经规范包覆盖指标 scale 后从工作区触发了 pacing.invalid-params

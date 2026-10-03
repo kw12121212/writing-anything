@@ -81,7 +81,7 @@ var registry = commandSet{helpCommand, versionCommand, initCommand, validateComm
 	newCommand, unitAddCommand, advanceCommand, nextCommand, briefSetCommand, briefShowCommand, marketingSetCommand, marketingShowCommand, marketingAskCommand,
 	outlineSetCommand, outlineRemoveCommand, outlineShowCommand, contextCommand, lintCommand,
 	seriesSetCommand, seriesAddCommand, seriesFactCommand, seriesShowCommand, summarySetCommand, summaryShowCommand,
-	metricsPlanCommand, metricsRecordCommand, metricsShowCommand, metricsCalibrateCommand, metricsComputeCommand,
+	metricsPlanCommand, metricsRecordCommand, metricsShowCommand, metricsCalibrateCommand, metricsComputeCommand, curveCommand,
 	sourceAddCommand, sourceListCommand, draftWriteCommand, diffCommand, provenanceCommand, claimAddCommand, claimSetCommand, claimListCommand, claimRemoveCommand,
 	canonAddCommand, canonSetCommand, canonListCommand, canonRemoveCommand,
 	methodListCommand, methodShowCommand, reviewRecordCommand, reviewShowCommand, reviewResolveCommand, acceptCommand, exportCommand, previewCommand, skillsListCommand, skillsInstallCommand,

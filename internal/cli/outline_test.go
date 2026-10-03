@@ -379,3 +379,52 @@ func TestOutlineBlockerNext(t *testing.T) {
 		t.Fatalf("action = %q", got)
 	}
 }
+
+// TestOutlineTargets 覆盖场景契约（Scene Contract）targets 的写入、删除与校验：指标须已声明、分值须在 scale 内。
+func TestOutlineTargets(t *testing.T) {
+	dir := metricsWork(t, "") // house 规范包声明 tension（1 到 5 分）
+	// set-target：写入目标锚定分值，outline show 输出 targets。
+	code, res := runOutline(t, dir, "outline", "set", "my-post", "why", "--title", "为什么", "--reason", "r", "--target", "tension=4")
+	if code != 0 {
+		t.Fatalf("set-target: exit code = %d, diagnostics = %+v", code, res.Diagnostics)
+	}
+	sec := res.Outline["sections"].([]any)[0].(map[string]any)
+	if targets, ok := sec["targets"].(map[string]any); !ok || targets["tension"] != float64(4) {
+		t.Fatalf("set-target: targets = %v", sec["targets"])
+	}
+	if _, stdout, _ := run(t, "outline", "show", "my-post", "--dir", dir); !strings.Contains(stdout, "目标 tension=4") {
+		t.Fatalf("set-target text: %q", stdout)
+	}
+	// target-out-of-range：分值不在 scale 内，不修改文件。
+	before := readFile(t, wsPath(dir, outlineRel))
+	code, res = runOutline(t, dir, "outline", "set", "my-post", "why", "--target", "tension=7")
+	if code != 1 || diag(t, res.result, "outline.target-out-of-range").Field != "targets.tension" || readFile(t, wsPath(dir, outlineRel)) != before {
+		t.Fatalf("target-out-of-range: exit code = %d, diagnostics = %+v", code, res.Diagnostics)
+	}
+	// unknown-target-metric：指标未声明。
+	code, res = runOutline(t, dir, "outline", "set", "my-post", "why", "--target", "emotion=3")
+	if code != 1 || diag(t, res.result, "outline.unknown-target-metric").Field != "targets.emotion" {
+		t.Fatalf("unknown-target-metric: exit code = %d, diagnostics = %+v", code, res.Diagnostics)
+	}
+	// target-clear：空字符串删除字段。
+	code, res = runOutline(t, dir, "outline", "set", "my-post", "why", "--target", "")
+	if code != 0 || !slices.Equal(res.ChangedPaths, []string{outlineRel}) {
+		t.Fatalf("target-clear: exit code = %d, result = %+v", code, res)
+	}
+	if sec = res.Outline["sections"].([]any)[0].(map[string]any); len(sec["targets"].(map[string]any)) != 0 {
+		t.Fatalf("target-clear: targets = %v", sec["targets"])
+	}
+	// 手写产物中越界的 targets 由整体校验报告。
+	writeFile(t, wsPath(dir, outlineRel), "schema_version: 1\nsections:\n  - {id: why, title: t, reason: r, targets: {tension: 9}}\n")
+	code, vres := runWS(t, dir, "validate")
+	if code != 1 {
+		t.Fatalf("validate: exit code = %d", code)
+	}
+	d := diag(t, vres, "outline.target-out-of-range")
+	if d.Path != outlineRel || d.Field != "sections[0].targets.tension" {
+		t.Fatalf("validate target-out-of-range: %+v", d)
+	}
+	if !hasNext(d, "wa-cli outline show my-post --dir "+dir+" --json") || !hasNext(d, "wa-cli help outline set --json") {
+		t.Fatalf("validate target next: %+v", d)
+	}
+}

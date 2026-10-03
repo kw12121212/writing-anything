@@ -5,7 +5,7 @@ schema_file: ../../templates/strict-spec-driven/schemas/planned-change.yaml
 planned_change:
   id: emotion-pacing-curve
   milestone: short-story
-status: planned
+status: complete
 summary: 情绪曲线（Emotion Curve）与张力曲线（Tension Curve）
 details: 场景契约可以声明目标情绪与目标张力（使用锚定分值）；未声明时，采用所选结构类写作法给出的目标走势。wa-cli curve <work> 把 AI 量化评分按单元顺序汇总为情绪曲线和张力曲线，与目标对比，输出偏离发现项。文体还可以提供节奏检查，例如网文中两个爽点之间的最大字数间隔，检查基于已记录的分数和确定性指标进行。曲线以 --json 和文本图表两种形式输出。偏离发现项默认不阻塞验收。
 depends_on:

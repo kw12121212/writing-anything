@@ -146,3 +146,19 @@ requirements:
         - GIVEN: 作品的文体在单元当前阶段要求 outline，outline.yaml 合法，brief.yaml 不通过校验
         - WHEN: 运行 wa-cli advance my-post --dir D --json
         - THEN: diagnostics 中只有一条错误码为 outline.invalid 的大纲诊断，path 为 .writing-anything/works/my-post/brief.yaml，next 含 wa-cli validate .writing-anything/works/my-post/brief.yaml 命令，退出码为 1
+  scene-contract-targets:
+    strength: MUST
+    statement: 大纲节的轻量场景契约（Scene Contract）可以声明 targets：AI 评分指标（Metric）id 到目标锚定分值（scale 内的整数；非整数取值由 Schema 与参数解析报告）的映射。wa-cli outline set <unit> <section> --target <metric>=<score>[,<metric>=<score>…] 设置它（逗号分隔、整体替换，空字符串时删除），outline show 的 sections 每项含 targets（未声明时为空对象）。wa-cli validate 整体校验时（wa-cli validate <path> 对 outline.yaml 执行相同检查）必须校验：targets 的 metric 不在按作品文体合并的已声明指标（见 genres-and-packs 主规格的 scored-metrics）中时报告 outline.unknown-target-metric（field 为 sections[i].targets.<metric>）；分值不在该指标的 scale 内时报告 outline.target-out-of-range（field 同上）；两种情况以退出码 1 退出，next 为 wa-cli outline show <unit> --dir <dir> --json 与 wa-cli help outline set --json。outline set --target 给出不合法取值时报告相同错误码（field 为 targets.<metric>），不修改文件。生命周期关卡不检查 targets（调用方未解析生效配置时跳过），其问题由整体校验报告。
+    scenarios:
+      set-target:
+        - GIVEN: short-story 作品 my-story 的场景 s1 已有大纲节，文体声明了 tension 指标（scale 1 到 5）
+        - WHEN: 运行 wa-cli outline set my-story/s1 sec1 --target tension=4 --dir D --json
+        - THEN: 'outline.yaml 中该节的 targets 为 {tension: 4}，outline show 输出的 sections 含 targets，退出码为 0'
+      target-out-of-range:
+        - GIVEN: 同上
+        - WHEN: 运行 wa-cli outline set my-story/s1 sec1 --target tension=7 --dir D --json
+        - THEN: diagnostics 中有一条错误码为 outline.target-out-of-range、field 为 targets.tension 的诊断，outline.yaml 不变，退出码为 1
+      unknown-target-metric:
+        - GIVEN: 作品合并后没有声明任何 AI 评分指标
+        - WHEN: 运行 wa-cli outline set my-story/s1 sec1 --target emotion=3 --dir D --json
+        - THEN: diagnostics 中有一条错误码为 outline.unknown-target-metric、field 为 targets.emotion 的诊断，退出码为 1

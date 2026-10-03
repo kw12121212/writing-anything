@@ -123,6 +123,14 @@ func nonNilStrings(s []string) []string {
 	return s
 }
 
+// nonNilInts 保证映射类型的输出键不为 null：nil 映射输出为空对象（shared-envelope）。
+func nonNilInts(m map[string]int) map[string]int {
+	if m == nil {
+		return map[string]int{}
+	}
+	return m
+}
+
 func viewBrief(ref string, b *brief.Brief) *briefView {
 	v := &briefView{Unit: ref, Path: b.Path, Audience: optional(b.Audience), Purpose: optional(b.Purpose), KeyMessages: []messageView{},
 		Length: b.Length, Avoid: nonNilStrings(b.Avoid), Sources: nonNilStrings(b.Sources), Method: optional(b.Method)}

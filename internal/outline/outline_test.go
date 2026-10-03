@@ -100,7 +100,7 @@ func TestLoadAndCheck(t *testing.T) {
 			if o != nil || len(ps) != 1 || ps[0].Code != tt.code || ps[0].Field != tt.field || ps[0].Path != rel {
 				t.Fatalf("Load = %+v, %+v; want one %s at %s", o, ps, tt.code, tt.field)
 			}
-			if ps := CheckArtifact(root, rel, ""); !slices.Equal(codes(ps), []string{tt.code}) {
+			if ps := CheckArtifact(root, rel, "", nil); !slices.Equal(codes(ps), []string{tt.code}) {
 				t.Fatalf("CheckArtifact = %+v", ps)
 			}
 		})
@@ -113,7 +113,7 @@ func TestLoadAndCheck(t *testing.T) {
 
 	// 合法时 validate 报告覆盖缺口。
 	put(t, root, rel, "schema_version: 1\nsections:\n  - {id: why, title: 为什么, covers: [km-1], uses: [src-a]}\n  - {id: bg, title: 背景}\n")
-	checked, ps := CheckUnitArtifacts(root, []string{unitDir, unitDir + "/units/intro"}, brief.Queue{}, noDefault)
+	checked, ps := CheckUnitArtifacts(root, []string{unitDir, unitDir + "/units/intro"}, brief.Queue{}, noDefault, noMetrics)
 	if !slices.Equal(checked, []string{rel}) || !slices.Equal(codes(ps), []string{"outline.uncovered-message", "outline.missing-reason"}) {
 		t.Fatalf("CheckUnitArtifacts = %v %+v", checked, ps)
 	}
@@ -122,7 +122,7 @@ func TestLoadAndCheck(t *testing.T) {
 	}
 	// 写作简报不通过校验时不报告覆盖缺口（由写作简报自己的校验报告）。
 	put(t, root, unitDir+"/brief.yaml", "k: v\n")
-	if ps := CheckArtifact(root, rel, ""); ps != nil {
+	if ps := CheckArtifact(root, rel, "", nil); ps != nil {
 		t.Fatalf("invalid brief gaps: %+v", ps)
 	}
 }
@@ -422,7 +422,7 @@ func TestSymlinkedOutline(t *testing.T) {
 	if _, _, ps := Set(root, unitDir, Edit{ID: "why", Title: ptr("t")}, ms, noEnsure); !slices.Equal(codes(ps), []string{"artifact.not-found"}) {
 		t.Fatalf("Set = %+v", ps)
 	}
-	if checked, ps := CheckUnitArtifacts(root, []string{unitDir}, brief.Queue{}, noDefault); len(checked) != 1 || !slices.Equal(codes(ps), []string{"artifact.not-found"}) {
+	if checked, ps := CheckUnitArtifacts(root, []string{unitDir}, brief.Queue{}, noDefault, noMetrics); len(checked) != 1 || !slices.Equal(codes(ps), []string{"artifact.not-found"}) {
 		t.Fatalf("CheckUnitArtifacts = %v %+v", checked, ps)
 	}
 	if g := Check(root, unitDir, true, false, brief.Queue{}, Picker{}); g == nil || len(g.Invalid) != 1 {
@@ -468,6 +468,9 @@ func TestDanglingReferences(t *testing.T) {
 }
 
 func noDefault(string) string { return "" }
+
+// noMetrics 表示调用方没有解析生效配置：跳过场景契约 targets 的检查。
+func noMetrics(string) []catalog.ScoredMetric { return nil }
 
 // 写作法缺口：未知 role、缺少的章节、文章类的顺序；规划类写作法与没有写作法时不检查（method-outline-check）。
 func TestMethodGaps(t *testing.T) {

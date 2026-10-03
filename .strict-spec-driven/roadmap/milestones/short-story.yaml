@@ -36,6 +36,6 @@ dependencies:
   - packs-and-series
 risks:
   - 文章阶段的出处规则（亲历必须有来源）不适用于虚构内容，需要按文体关闭或替换
-status: proposed
+status: complete
 notes: []
 details: 本里程碑首次验证单元树（Unit Tree）与生命周期能否承载虚构文体，同时验证设定集（Canon）能否作为事实库的扩展实现。文章阶段的论断出处检查对虚构内容关闭，改为要求前提与关键转折来自作者。

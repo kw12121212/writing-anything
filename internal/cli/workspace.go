@@ -183,7 +183,7 @@ func runValidate(inv *invocation) int {
 				case "brief":
 					problems = append(problems, brief.CheckArtifact(dir, checked[0])...)
 				case "outline":
-					problems = append(problems, outline.CheckArtifact(dir, checked[0], defaultMethodOf(dir, checked[0]))...)
+					problems = append(problems, outline.CheckArtifact(dir, checked[0], defaultMethodOf(dir, checked[0]), metricsOfArtifact(dir, checked[0]))...)
 				case "feedback":
 					problems = append(problems, feedback.CheckArtifact(dir, checked[0])...)
 				case "decisions":
@@ -441,15 +441,21 @@ func checkWorkspace(dir string) (checked []string, works []*work.Work, problems 
 	}
 	q := brief.LoadQueue(dir) // 写作简报与大纲共用一次加载的决策队列
 	bchecked, bps := brief.CheckUnitArtifacts(dir, dirs, q)
-	defaults := map[string]string{} // 单元目录 → 所在作品的文体的默认写作法；只有根单元适用（method-selection）
+	defaults := map[string]string{}                  // 单元目录 → 所在作品的文体的默认写作法；只有根单元适用（method-selection）
+	genreMetrics := map[string][]catalog.ScoredMetric{} // 单元目录 → 所在作品按文体合并的 AI 评分指标（targets 检查）
 	for _, w := range works {
+		var ms []catalog.ScoredMetric
+		if r, _ := series.Resolve(dir, w); r != nil {
+			ms = metricDefs(r.ScoredMetrics)
+		}
 		for _, u := range w.Units() {
 			if u.Parent == nil {
 				defaults[w.UnitDir(u)] = w.Genre.DefaultMethod
 			}
+			genreMetrics[w.UnitDir(u)] = ms
 		}
 	}
-	ochecked, ops := outline.CheckUnitArtifacts(dir, dirs, q, func(d string) string { return defaults[d] })
+	ochecked, ops := outline.CheckUnitArtifacts(dir, dirs, q, func(d string) string { return defaults[d] }, func(d string) []catalog.ScoredMetric { return genreMetrics[d] })
 	fchecked, fps := feedback.CheckUnitArtifacts(dir, works)
 	rchecked, rps := review.CheckUnitArtifacts(dir, dirs)
 	mchecked, mps := marketing.CheckUnitArtifacts(dir, dirs)
@@ -473,6 +479,20 @@ func defaultMethodOf(dir, rel string) string {
 		return w.Genre.DefaultMethod
 	}
 	return ""
+}
+
+// metricsOfArtifact 返回单元产物 rel 所在作品按文体合并的 AI 评分指标（Metric），供 outline.yaml 的 targets 检查；
+// 作品或生效配置无法加载时为 nil（其问题由作品与配置校验报告），跳过 targets 检查。
+func metricsOfArtifact(dir, rel string) []catalog.ScoredMetric {
+	w, _, _ := work.Resolve(dir, work.RefOf(rel[:strings.LastIndex(rel, "/")]))
+	if w == nil {
+		return nil
+	}
+	r, _ := series.Resolve(dir, w)
+	if r == nil {
+		return nil
+	}
+	return metricDefs(r.ScoredMetrics)
 }
 
 // unitExists 返回检查单元引用能否解析的函数，供决策队列检查关联单元；每个作品只解析一次。
@@ -596,6 +616,12 @@ func next(p workspace.Problem, dir string) []string {
 			return []string{shellCommand("wa-cli", "brief", "show", work.RefOf(p.Path[:i]), "--dir", dir, "--json"), validateAll}
 		}
 		return []string{validateAll}
+	case outline.CodeUnknownTarget, outline.CodeTargetOutOfRange:
+		// targets 引用按作品文体合并的指标，涉及配置层与产物；查看大纲与用法后修复（scene-contract-targets）。
+		if p.Path != "" {
+			return []string{shellCommand("wa-cli", "outline", "show", work.RefOf(strings.TrimSuffix(p.Path, "/"+outline.FileName)), "--dir", dir, "--json"),
+				"wa-cli help outline set --json"}
+		}
 	case outline.CodeUnknownSource:
 		return []string{shellCommand("wa-cli", "source", "list", "--dir", dir, "--json"), validateAll}
 	case brief.CodeUnknownSource:

@@ -26,7 +26,7 @@ milestones:
   short-story:
     title: 短篇小说（Short Story）
     path: roadmap/milestones/short-story.yaml
-    status: proposed
+    status: complete
   novel:
     title: 长篇结构与记忆（Novel Structure & Memory）
     path: roadmap/milestones/novel.yaml

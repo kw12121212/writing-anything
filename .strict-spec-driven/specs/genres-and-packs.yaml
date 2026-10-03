@@ -322,3 +322,23 @@ requirements:
         - GIVEN: 用 wa-cli init --genre short-story --dir D 初始化的工作区，以及含违例文本与合规文本的测试夹具
         - WHEN: 只用 wa-cli 命令完成：new、source add（作者的前提笔记）、brief set（premise 关联素材、pov、length 与作为关键转折的 key_messages，转折关联素材）、advance、根单元按情节节拍 outline set（每节同时以 --role 承担默认写作法 three-act 的 setup、confrontation、climax 或 resolution 节拍）、advance、canon add 出场人物（人物卡，带 name）、unit add 两个场景、场景 outline set（characters、beats 与 reveal）、场景一 draft write（合规文本，lint 无 error 级与论断类发现项；以违例文本夹具断言 dialogue、pov 与 fiction-cliches 的发现项）、advance、review record、accept（给出作者确认）、advance、summary set 场景一摘要、场景二 draft write 前运行 context（断言 characters、priorScenes 与 reveal）、完成场景二生命周期、最后 export --format text 与 export
         - THEN: 两个场景 stage 为 done，纯文本导出文件只含已验收场景的正文且不含 Markdown 标记（未验收的根单元以 warning 跳过），validate 通过；前提或关键转折没有关联作者素材或确认记录时 advance 被拒绝；根单元大纲缺少默认写作法要求的节拍时 advance 同样被拒绝
+  genre-pacing-checks:
+    strength: MUST
+    statement: 文体（Genre）可以用 pacing_checks 声明节奏检查（Pacing Check）：每项含 id、metric（AI 评分指标 id）、min_score（片段取值达到该分值视为节拍点）与 max_gap_chars（正整数，相邻两个节拍点片段之间允许的最大非空白字符数）。规范包（Pack）与 config.yaml 不能声明 pacing_checks（出现时报告 artifact.schema-violation）。wa-cli config resolved 的 resolved.pacingChecks 按声明顺序输出，每项含 id、metric、minScore、maxGapChars 与 source（genre:<id>）；没有声明时为空数组。同一文体中 id 重复时报告 artifact.duplicate-id；max_gap_chars 不是正整数时报告 pacing.invalid-params（field 为 pacing_checks[i].max_gap_chars）；合并后 metric 不在已声明指标（resolved.scoredMetrics）中时报告 pacing.unknown-metric（field 为 pacing_checks[i].metric），min_score 不在该指标的 scale 内时报告 pacing.invalid-params（field 为 pacing_checks[i].min_score）；这些情况 wa-cli validate 与 wa-cli config resolved 都以退出码 1 退出。节奏检查的判定由 wa-cli curve 执行（见 metrics 主规格的 curve-command），发现项不阻塞验收。
+    scenarios:
+      pacing-unknown-metric:
+        - GIVEN: 文体的 pacing_checks 引用未在任何配置层声明的指标 nope
+        - WHEN: 运行 wa-cli validate --dir D --json
+        - THEN: diagnostics 中有一条错误码为 pacing.unknown-metric、field 为 pacing_checks[0].metric 的诊断，退出码为 1
+      declare-pacing-check:
+        - GIVEN: '刚用 wa-cli init --genre short-story --dir D 初始化的工作区：short-story 文体声明 pacing_checks 为 [{id: emotional-beat-gap, metric: emotion, min_score: 3, max_gap_chars: 2000}]'
+        - WHEN: 运行 wa-cli config resolved --dir D --json
+        - THEN: resolved.pacingChecks 只含 emotional-beat-gap，minScore 为 3、maxGapChars 为 2000、source 为 genre:short-story，退出码为 0
+  short-story-scored-metrics:
+    strength: MUST
+    statement: short-story 文体必须声明 AI 评分指标 emotion（情绪）与 tension（张力）：scale 都为 1 到 5，anchors 含 scale 内每个分值的 description 与 example，字段与校验同 scored-metrics；作者与规范包可按 id 整项覆盖（合并规则同 scored-metrics）。文体另声明节奏检查 emotional-beat-gap：emotion 取值达到 3 分的片段之间最多 2000 个非空白字符（见本规格 genre-pacing-checks）。这两个指标使 wa-cli curve 在 short-story 作品上输出情绪曲线（Emotion Curve）与张力曲线（Tension Curve），并执行节奏检查。
+    scenarios:
+      resolve-story-metrics:
+        - GIVEN: 刚用 wa-cli init --genre short-story --dir D 初始化的工作区
+        - WHEN: 运行 wa-cli config resolved --dir D --json
+        - THEN: resolved.scoredMetrics 含 emotion 与 tension，source 都为 genre:short-story，scale 为 1 到 5、anchors 各 5 项；resolved.pacingChecks 含 emotional-beat-gap，退出码为 0

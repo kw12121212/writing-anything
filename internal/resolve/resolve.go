@@ -83,6 +83,10 @@ type (
 		catalog.ScoredMetric
 		Source string `json:"source"`
 	}
+	PacingCheck struct {
+		catalog.PacingCheck
+		Source string `json:"source"`
+	}
 	Style struct {
 		Text   string `json:"text"`
 		Source string `json:"source"`
@@ -110,6 +114,8 @@ type Resolved struct {
 	StyleProfile *Value `json:"styleProfile"`
 	// ScoredMetrics 是 AI 评分指标（Metric）：按 id 合并，后面的配置层整项替换前面的同名指标并保留其位置。
 	ScoredMetrics []ScoredMetric `json:"scoredMetrics"`
+	// PacingChecks 是节奏检查（Pacing Check）：只有文体能声明，按声明顺序输出；没有声明时为空数组。
+	PacingChecks []PacingCheck `json:"pacingChecks"`
 	// AIDisclosure 是 AI 参与说明的放置位置（项目配置的 ai_disclosure，默认 both）与模板（规范包的 ai_disclosure_template，默认为内置模板）。
 	AIDisclosure Disclosure `json:"aiDisclosure"`
 }
@@ -251,6 +257,7 @@ func merge(root string, doc *yaml.Node, genre string, extra *Layer) (*Resolved, 
 	}
 	r := &Resolved{Packs: []Ref{}, UnitTypes: []UnitType{}, Stages: []Stage{}, Rules: map[string]*Rule{},
 		Glossary: []Term{}, BannedTerms: []BannedTerm{}, Style: []Style{}, Rubric: []RubricItem{}, ScoredMetrics: []ScoredMetric{},
+		PacingChecks: []PacingCheck{},
 		ContextBudget: Value{DefaultContextBudget, SourceDefault}, HTMLTheme: map[string]Value{}, DriftThreshold: Value{DefaultDriftThreshold, SourceDefault},
 		AIDisclosure: Disclosure{Placement: Value{DefaultDisclosurePlacement, SourceDefault}, Template: Value{catalog.DefaultDisclosureTemplate, SourceDefault}}}
 	for _, k := range catalog.HTMLThemeKeys {
@@ -262,6 +269,8 @@ func merge(root string, doc *yaml.Node, genre string, extra *Layer) (*Resolved, 
 		}
 	}
 	var layers []layer
+	var pacing []catalog.PacingCheck
+	var pacingLayer *layer
 	rubric := map[string]int{}
 	addRubric := func(items []catalog.RubricItem, source string) {
 		for _, it := range items {
@@ -303,8 +312,14 @@ func merge(root string, doc *yaml.Node, genre string, extra *Layer) (*Resolved, 
 			}
 			addRubric(g.Rubric, source)
 			addMetrics(g.ScoredMetrics, source)
+			for _, c := range g.PacingChecks {
+				r.PacingChecks = append(r.PacingChecks, PacingCheck{c, source})
+			}
 			budget(g.ContextBudget, source)
 			layers = append(layers, layer{source: source, origin: "内置文体 " + g.ID, rules: g.Rules})
+			// 节奏检查引用的指标可以来自规范包：合并完全部指标层之后再校验，问题记在声明它的文体层。
+			pacingLayer = &layer{source: source, path: "", origin: "内置文体 " + g.ID}
+			pacing = g.PacingChecks
 		}
 	}
 
@@ -420,6 +435,11 @@ func merge(root string, doc *yaml.Node, genre string, extra *Layer) (*Resolved, 
 			rule.Enabled, rule.Waiver = false, &Waiver{w.Reason, l.source}
 		}
 	}
+	if pacingLayer != nil {
+		catalog.CheckPacingRefs(pacing, metricDefs(r.ScoredMetrics), func(code, field, msg string) {
+			layerError(*pacingLayer, code, field, msg)
+		})
+	}
 	for _, p := range problems {
 		if p.Severity == workspace.SeverityError {
 			return nil, problems
@@ -433,4 +453,12 @@ func list(ids []string) string {
 		return "无"
 	}
 	return strings.Join(ids, "、")
+}
+
+func metricDefs(ms []ScoredMetric) []catalog.ScoredMetric {
+	out := make([]catalog.ScoredMetric, len(ms))
+	for i, m := range ms {
+		out[i] = m.ScoredMetric
+	}
+	return out
 }

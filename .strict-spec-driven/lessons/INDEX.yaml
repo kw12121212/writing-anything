@@ -180,6 +180,11 @@ categories:
       status: active
       occurrences: 1
       path: .strict-spec-driven/lessons/coding/lesson-2c7047.yaml
+    lesson-1f07b0:
+      title: 只有内置文体能声明的配置，没有任何内置文体使用时，其校验与合并路径无法从工作区触发
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/coding/lesson-1f07b0.yaml
   documentation:
     must-must-6af326:
       title: 修改一条 MUST 需求时，要检查同一规格里相邻的 MUST 是否因此冲突

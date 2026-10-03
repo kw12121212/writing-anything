@@ -113,6 +113,8 @@ type Genre struct {
 	DefaultMethod string
 	// ScoredMetrics 是文体声明的 AI 评分指标（Metric）。
 	ScoredMetrics []ScoredMetric
+	// PacingChecks 是文体声明的节奏检查（Pacing Check）；规范包与 config.yaml 不能声明。
+	PacingChecks []PacingCheck
 	// SummaryLength 是已验收单元摘要（Summary）的字数范围；未声明时为 DefaultSummaryLength。
 	SummaryLength Range
 }
@@ -178,6 +180,7 @@ type (
 		Budget      int                `json:"context_budget"`
 		Method      string             `json:"default_method"`
 		Metrics     []scoredMetricFile `json:"scored_metrics"`
+		Pacing      []pacingCheckFile  `json:"pacing_checks"`
 		Summary     *Range             `json:"summary_length"`
 	}
 	packFile struct {
@@ -275,7 +278,7 @@ func genreOf(doc *yaml.Node) (g *Genre) {
 	var f genreFile
 	Decode(doc, &f)
 	g = &Genre{ID: f.ID, Title: f.Title, Description: f.Description, Rules: f.Rules, Rubric: f.Rubric, ContextBudget: f.Budget, DefaultMethod: f.Method,
-		ScoredMetrics: scoredMetrics(f.Metrics), SummaryLength: DefaultSummaryLength}
+		ScoredMetrics: scoredMetrics(f.Metrics), PacingChecks: pacingChecks(f.Pacing), SummaryLength: DefaultSummaryLength}
 	if f.Summary != nil {
 		g.SummaryLength = *f.Summary
 	}
@@ -329,6 +332,7 @@ func checkGenre(g *Genre) []workspace.Problem {
 		add(CodeDuplicateID, fmt.Sprintf("rubric[%d].id", d), "评分项 "+g.Rubric[d].ID+" 重复")
 	}
 	checkScoredMetrics(g.ScoredMetrics, add)
+	checkPacingChecks(g.PacingChecks, add)
 	if g.DefaultMethod != "" && !slices.Contains(BuiltinMethods(), g.DefaultMethod) {
 		add(CodeUnknownMethod, "default_method", fmt.Sprintf("默认写作法 %s 不是内置写作法（%s）", g.DefaultMethod, strings.Join(BuiltinMethods(), "、")))
 	}

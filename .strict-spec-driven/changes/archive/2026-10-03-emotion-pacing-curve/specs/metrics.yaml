@@ -1,0 +1,33 @@
+schema: strict-spec-driven/delta-spec/v1
+schema_version: 1
+artifact_type: delta_spec
+schema_file: templates/strict-spec-driven/schemas/delta-spec.yaml
+target_spec: metrics
+operations:
+  ADDED:
+    curve-command:
+      strength: MUST
+      statement: wa-cli curve <work> 必须只读地汇总作品的 AI 评分走势，不修改任何产物，changedPaths 为空数组，wa-cli 不调用模型。对按作品文体合并的每个已声明 AI 评分指标输出一条曲线：数据点按单元树先序（与 metrics compute 相同）排列，每个单元一个点；点值 value 为该单元各片段取值（取值语义同 metrics show：agreed 为中位数、decided 为作者选择的分值）的中位数，偶数个时为中间两值的平均；没有任何可取值片段（片段 pending、disputed，或 metrics.yaml 过期）时为 null。目标分值 target 按三层解析：优先取该单元大纲节声明的 targets（见 outline 主规格的 scene-contract-targets，取第一个为该指标声明目标的节）；未声明且指标 id 为 tension 时，取该单元大纲节 beats 引用的根单元大纲节 role 对应的结构类写作法节拍的目标张力（Target Tension，0 到 10），按 min + tension ÷ 10 × (max − min) 线性映射到该指标的 scale，多个节拍取映射值的平均，四舍五入（远离零）；其他情况无目标（null）。单元的 value 与 target 都存在且 |value − target| 大于该指标的 tolerance 时输出一条偏离发现项，含 unit、metric、value、target、difference 与 message（说明偏高或偏低，只衡量偏离、不评判好坏）；value 或 target 为 null 时不输出。文体声明的节奏检查（见 genres-and-packs 主规格的 genre-pacing-checks）同样由 curve 输出：按单元树先序拼接各单元正文片段，片段取值达到 min_score 为节拍点，相邻两个节拍点片段之间的非空白字符数（其间所有片段的非空白字符数之和，相邻片段间隔为 0）大于 max_gap_chars 时输出一条节奏发现项，含 check、metric、from（前一节拍点的单元与段落）、to（后一节拍点的单元与段落）、gapChars 与 message。曲线以 --json 输出：curves 数组每项含 metric、title、source、scale、advisory、points（unit、value、target）与 deviations（该指标的偏离发现项）；pacing 为节奏发现项数组。未加 --json 时以文本图表输出：每个指标一段、按单元先序排列的字符条形（标注单元、值与目标）及发现项列表。合并后没有任何 AI 评分指标时报告 metrics.none-declared（同 metrics plan），退出码为 1；发现项不影响退出码（为 0）。
+      scenarios:
+        curve-contract-target:
+          - GIVEN: 'short-story 作品 my-story 的场景 s1 与 s2 都有 agreed 的 tension 分数（单元中位数分别为 2 与 4），文体声明 tension 指标（scale 1 到 5、tolerance 1），s1 的大纲节声明 targets 为 {tension: 4}'
+          - WHEN: 运行 wa-cli curve my-story --dir D --json
+          - THEN: curves 中 tension 的 points 依次为 s1（value 2、target 4）与 s2；deviations 含一条 unit 为 s1、difference 为 −2 的发现项；changedPaths 为空数组，退出码为 0
+        curve-not-blocking:
+          - GIVEN: 作品存在曲线偏离发现项或节奏发现项且已满足其他验收条件
+          - WHEN: 运行 wa-cli accept 与 wa-cli advance
+          - THEN: 结果与没有发现项时相同，发现项不阻塞验收
+        curve-no-metrics:
+          - GIVEN: 合并后没有任何 AI 评分指标的工作区
+          - WHEN: 运行 wa-cli curve post --dir D --json
+          - THEN: diagnostics 中有一条错误码为 metrics.none-declared 的诊断，退出码为 1
+        curve-method-default:
+          - GIVEN: s2 未声明 targets，其大纲节 beats 引用根单元大纲中 role 为 setup 的节（默认写作法 three-act 的 setup 节拍目标张力为 3，线性映射 1 + 3 ÷ 10 × 4 = 2.2 后四舍五入为 2），s2 的 value 为 4，tension 指标的 tolerance 为 1
+          - WHEN: 运行 wa-cli curve my-story --dir D --json
+          - THEN: s2 的 target 为 2，|4 − 2| 大于 1，deviations 含 s2 的发现项
+        curve-pacing-gap:
+          - GIVEN: short-story 作品 my-story 的正文中，第 1 段与第 4 段的 emotion 取值为 4 与 5（文体声明的节奏检查 emotional-beat-gap：emotion 达到 3 分为节拍点、间隔不超过 2000 个非空白字符），两段之间的片段共有 3000 个非空白字符
+          - WHEN: 运行 wa-cli curve my-story --dir D --json
+          - THEN: pacing 含一条 check 为 emotional-beat-gap、gapChars 为 3000 的发现项，from 与 to 分别指向第 1 段与第 4 段，退出码为 0
+  MODIFIED: {}
+  REMOVED: {}

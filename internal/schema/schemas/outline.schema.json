@@ -27,7 +27,13 @@
             "description": "轻量场景契约（Scene Contract）：本场景出场的角色"
           },
           "beats": {"$ref": "common.schema.json#/$defs/ids", "description": "轻量场景契约：本场景承担的情节节拍（Story Beat）id，指向同一作品根单元大纲的节"},
-          "reveal": {"type": "string", "pattern": "\\S", "description": "轻量场景契约：揭示边界（Reveal Boundary），本场景不能提前透露的信息"}
+          "reveal": {"type": "string", "pattern": "\\S", "description": "轻量场景契约：揭示边界（Reveal Boundary），本场景不能提前透露的信息"},
+          "targets": {
+            "type": "object",
+            "propertyNames": {"$ref": "common.schema.json#/$defs/id"},
+            "additionalProperties": {"type": "integer"},
+            "description": "轻量场景契约：AI 评分指标（Metric）id 到目标锚定分值的映射，供曲线对比目标走势"
+          }
         }
       }
     }

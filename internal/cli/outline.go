@@ -3,7 +3,9 @@ package cli
 import (
 	"fmt"
 	"io"
+	"maps"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/kw12121212/writing-anything/internal/brief"
@@ -11,12 +13,13 @@ import (
 	"github.com/kw12121212/writing-anything/internal/draft"
 	"github.com/kw12121212/writing-anything/internal/outline"
 	"github.com/kw12121212/writing-anything/internal/schema"
+	"github.com/kw12121212/writing-anything/internal/series"
 	"github.com/kw12121212/writing-anything/internal/work"
 	"github.com/kw12121212/writing-anything/internal/workspace"
 )
 
 var outlineKeys = []outputKey{
-	{"outline", "大纲（Outline）：unit、path 与 sections（id、title、role、covers、uses、reason、characters、beats、reveal）；没有 outline.yaml 或失败时为 null"},
+	{"outline", "大纲（Outline）：unit、path 与 sections（id、title、role、covers、uses、reason、characters、beats、reveal、targets）；没有 outline.yaml 或失败时为 null"},
 	{"coverage", "写作简报中每个核心观点（Key Message）的覆盖情况：keyMessage、text 与 sections（覆盖它的节）"},
 	{"gaps", "覆盖缺口（Coverage Gap）数组，每项含 code、keyMessage、section 与 message"},
 }
@@ -38,6 +41,7 @@ var outlineSetCommand = &command{
 		{"characters", flagString, "场景契约（Scene Contract）：本场景出场的人物，用逗号分隔；整体替换，空字符串时删除"},
 		{"beats", flagString, "场景契约：本场景承担的情节节拍（Story Beat）id，用逗号分隔，指向故事根单元大纲的节；整体替换，空字符串时删除"},
 		{"reveal", flagString, "场景契约：揭示边界（Reveal Boundary），本场景不能提前透露的信息；空字符串时删除"},
+		{"target", flagString, "场景契约：目标锚定分值，形如 <指标 id>=<分值>，用逗号分隔（如 tension=4）；整体替换，空字符串时删除"},
 		{"after", flagString, "把该节放到这一节之后"},
 		{"before", flagString, "把该节放到这一节之前"},
 	},
@@ -70,15 +74,16 @@ var outlineShowCommand = &command{
 }
 
 type sectionView struct {
-	ID         string   `json:"id"`
-	Title      string   `json:"title"`
-	Role       *string  `json:"role"`
-	Covers     []string `json:"covers"`
-	Uses       []string `json:"uses"`
-	Reason     *string  `json:"reason"`
-	Characters []string `json:"characters"`
-	Beats      []string `json:"beats"`
-	Reveal     *string  `json:"reveal"`
+	ID         string         `json:"id"`
+	Title      string         `json:"title"`
+	Role       *string        `json:"role"`
+	Covers     []string       `json:"covers"`
+	Uses       []string       `json:"uses"`
+	Reason     *string        `json:"reason"`
+	Characters []string       `json:"characters"`
+	Beats      []string       `json:"beats"`
+	Reveal     *string        `json:"reveal"`
+	Targets    map[string]int `json:"targets"`
 }
 
 type outlineView struct {
@@ -113,7 +118,7 @@ func (res *outlineResult) fill(ref string, o *outline.Outline, ms outline.Messag
 		v := &outlineView{Unit: ref, Path: o.Path, Sections: []sectionView{}}
 		for _, s := range o.Sections {
 			v.Sections = append(v.Sections, sectionView{ID: s.ID, Title: s.Title, Role: optional(s.Role), Covers: nonNilStrings(s.Covers), Uses: nonNilStrings(s.Uses), Reason: optional(s.Reason),
-				Characters: nonNilStrings(s.Characters), Beats: nonNilStrings(s.Beats), Reveal: optional(s.Reveal)})
+				Characters: nonNilStrings(s.Characters), Beats: nonNilStrings(s.Beats), Reveal: optional(s.Reveal), Targets: nonNilInts(s.Targets)})
 		}
 		res.Outline = v
 	}
@@ -199,6 +204,31 @@ func outlineEdit(inv *invocation, existing *outline.Outline) (outline.Edit, []wo
 			e.Beats = &list
 		}
 	}
+	// 场景契约：按 AI 评分指标（Metric）id 声明的目标锚定分值（如 tension=4）；格式不合法在修改前报告，空字符串删除字段。
+	if v, ok := inv.values["target"]; ok {
+		targets := map[string]int{}
+		if v != "" {
+			for _, item := range strings.Split(v, ",") {
+				id, score, found := strings.Cut(strings.TrimSpace(item), "=")
+				if !found {
+					return e, []workspace.Problem{invalidValue("target", v, "每一项应为 <指标 id>=<分值>，如 tension=4")}
+				}
+				id = strings.TrimSpace(id)
+				if !brief.ValidID(id) {
+					return e, []workspace.Problem{invalidValue("target", v, "指标 id "+id+" 不合法：应以小写字母开头，由小写字母、数字与连字符组成")}
+				}
+				if _, dup := targets[id]; dup {
+					return e, []workspace.Problem{invalidValue("target", v, "指标 "+id+" 重复")}
+				}
+				n, err := strconv.Atoi(strings.TrimSpace(score))
+				if err != nil {
+					return e, []workspace.Problem{invalidValue("target", v, "指标 "+id+" 的分值应为整数")}
+				}
+				targets[id] = n
+			}
+		}
+		e.Targets = &targets
+	}
 	switch {
 	case e.After != "" && e.Before != "":
 		return e, []workspace.Problem{invalidValue("before", e.Before, "--after 与 --before 只能给出一个")}
@@ -211,9 +241,9 @@ func outlineEdit(inv *invocation, existing *outline.Outline) (outline.Edit, []wo
 	if !exists && e.Title == nil {
 		return e, []workspace.Problem{invalidValue("title", inv.values["title"], "新增大纲节时必须给出 --title")}
 	}
-	if exists && e.Title == nil && e.Role == nil && e.Covers == nil && e.Uses == nil && e.Reason == nil && e.Characters == nil && e.Beats == nil && e.Reveal == nil && e.After == "" && e.Before == "" {
+	if exists && e.Title == nil && e.Role == nil && e.Covers == nil && e.Uses == nil && e.Reason == nil && e.Characters == nil && e.Beats == nil && e.Reveal == nil && e.Targets == nil && e.After == "" && e.Before == "" {
 		return e, []workspace.Problem{{Code: codeInvalidValue, Severity: workspace.SeverityError,
-			Message: "没有给出要修改的内容；至少给出 --title、--role、--covers、--uses、--reason、--characters、--beats、--reveal、--after 或 --before 之一"}}
+			Message: "没有给出要修改的内容；至少给出 --title、--role、--covers、--uses、--reason、--characters、--beats、--reveal、--target、--after 或 --before 之一"}}
 	}
 	return e, nil
 }
@@ -225,6 +255,15 @@ func remainingRefs(dir, unitDir string, ms outline.Messages) []workspace.Problem
 		refs[i].Severity = workspace.SeverityWarning
 	}
 	return append(refs, methodWarning(ms)...)
+}
+
+// outlineMetrics 返回作品 w 按文体合并的 AI 评分指标（Metric），供场景契约（Scene Contract）的 targets 检查；
+// 生效配置无法解析时返回 nil（其问题由 validate 报告），修改与查看大纲的命令不因此拒绝。
+func outlineMetrics(root string, w *work.Work) []catalog.ScoredMetric {
+	if r, _ := series.Resolve(root, w); r != nil {
+		return metricDefs(r.ScoredMetrics)
+	}
+	return nil
 }
 
 // methodWarning 把写作简报选用的写作法不存在的问题作为 warning 返回：查看与修改大纲照常执行，写作法缺口暂不检查。
@@ -255,6 +294,8 @@ func outlineParamNext(res *outlineResult, dir, ref string) {
 				ref = work
 			}
 			next = append(next, shellCommand("wa-cli", "outline", "show", ref, "--dir", dir, "--json"))
+		case outline.CodeUnknownTarget, outline.CodeTargetOutOfRange:
+			next = append(next, shellCommand("wa-cli", "config", "resolved", "--dir", dir, "--json"))
 		case outline.CodeSectionNotFound:
 			next = append(next, shellCommand("wa-cli", "outline", "show", ref, "--dir", dir, "--json"))
 		}
@@ -273,6 +314,7 @@ func runOutlineSet(inv *invocation) int {
 		if w, u, problems = work.Resolve(dir, inv.args[0]); u != nil {
 			unitDir := w.UnitDir(u)
 			ms := outline.LoadMessages(dir, unitDir, brief.LoadQueue(dir), outline.Picker{Methods: catalog.LoadMethods(dir), Default: unitDefaultMethod(w, u)})
+			ms.Metrics = outlineMetrics(dir, w)
 			var existing *outline.Outline
 			// 已有大纲中的引用问题不妨碍修改：写作简报删除核心观点后，要能用 outline set 修复大纲。
 			if existing, problems, _ = outline.LoadLenient(dir, unitDir, ms); problems == nil {
@@ -323,6 +365,7 @@ func runOutlineRemove(inv *invocation) int {
 		if w, u, problems = work.Resolve(dir, inv.args[0]); u != nil {
 			unitDir := w.UnitDir(u)
 			ms := outline.LoadMessages(dir, unitDir, brief.LoadQueue(dir), outline.Picker{Methods: catalog.LoadMethods(dir), Default: unitDefaultMethod(w, u)})
+			ms.Metrics = outlineMetrics(dir, w)
 			var o *outline.Outline
 			var changed []string
 			if o, changed, problems = outline.Remove(dir, unitDir, inv.args[1], ms); o != nil {
@@ -360,6 +403,7 @@ func runOutlineShow(inv *invocation) int {
 		if w, u, problems = work.Resolve(dir, inv.args[0]); u != nil {
 			unitDir := w.UnitDir(u)
 			ms := outline.LoadMessages(dir, unitDir, brief.LoadQueue(dir), outline.Picker{Methods: catalog.LoadMethods(dir), Default: unitDefaultMethod(w, u)})
+			ms.Metrics = outlineMetrics(dir, w)
 			if problems = ms.Problems; problems == nil {
 				// 引用问题照常报告，但仍输出大纲与覆盖情况，便于据此修复。
 				o, fatal, refs := outline.LoadLenient(dir, unitDir, ms)
@@ -409,6 +453,13 @@ func outlineText(res *outlineResult) string {
 			}
 			if sec.Reveal != nil {
 				detail += "；不提前透露：" + *sec.Reveal
+			}
+			if len(sec.Targets) > 0 {
+				var items []string
+				for _, k := range slices.Sorted(maps.Keys(sec.Targets)) {
+					items = append(items, fmt.Sprintf("%s=%d", k, sec.Targets[k]))
+				}
+				detail += "；目标 " + strings.Join(items, "、")
 			}
 			fmt.Fprintf(&s, "  %d. %s %s（%s）\n", i+1, sec.ID, sec.Title, detail)
 		}

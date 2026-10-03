@@ -6,6 +6,7 @@ package outline
 
 import (
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -34,6 +35,8 @@ const (
 	CodeMissingPart      = "outline.missing-method-part"
 	CodeMethodOrder      = "outline.method-order"
 	CodeUnknownRole      = "outline.unknown-role"
+	CodeUnknownTarget    = "outline.unknown-target-metric"
+	CodeTargetOutOfRange = "outline.target-out-of-range"
 )
 
 // 单元目录中大纲的文件名：outline.yaml 是结构化的大纲，outline.md 是自由文本，不含可检查的节。
@@ -42,18 +45,20 @@ const (
 	MDName   = "outline.md"
 )
 
-// Section 是一个大纲节；未设置的数组为 nil，未设置的 reason 为空字符串。Characters、Beats 与 Reveal 是轻量场景契约
-// （Scene Contract）字段：出场人物、承担的情节节拍（Story Beat）与揭示边界（Reveal Boundary），用于虚构文体。
+// Section 是一个大纲节；未设置的数组为 nil，未设置的 reason 为空字符串。Characters、Beats、Reveal 与 Targets 是轻量场景契约
+// （Scene Contract）字段：出场人物、承担的情节节拍（Story Beat）、揭示边界（Reveal Boundary）与按 AI 评分指标（Metric）id
+// 声明的目标锚定分值，用于虚构文体。
 type Section struct {
-	ID         string   `json:"id"`
-	Title      string   `json:"title"`
-	Role       string   `json:"role"` // 该节承担的写作法章节或节拍 id；空表示不承担
-	Covers     []string `json:"covers"`
-	Uses       []string `json:"uses"`
-	Reason     string   `json:"reason"`
-	Characters []string `json:"characters"`
-	Beats      []string `json:"beats"`
-	Reveal     string   `json:"reveal"`
+	ID         string         `json:"id"`
+	Title      string         `json:"title"`
+	Role       string         `json:"role"` // 该节承担的写作法章节或节拍 id；空表示不承担
+	Covers     []string       `json:"covers"`
+	Uses       []string       `json:"uses"`
+	Reason     string         `json:"reason"`
+	Characters []string       `json:"characters"`
+	Beats      []string       `json:"beats"`
+	Reveal     string         `json:"reveal"`
+	Targets    map[string]int `json:"targets"`
 }
 
 // Outline 是一份已通过校验的大纲。
@@ -68,6 +73,9 @@ type Messages struct {
 	List     []brief.Message
 	Method   *catalog.Method
 	Problems []workspace.Problem
+	// Metrics 是按作品文体合并的 AI 评分指标（Metric），供场景契约的 targets 做引用与取值检查；为 nil 时（调用方没有
+	// 解析生效配置，如配置本身不通过校验）不检查 targets，整体校验会另行报告配置的问题。
+	Metrics []catalog.ScoredMetric
 	// MethodProblem 非 nil 时写作简报选用的写作法不存在（brief.unknown-method）：大纲关卡视为不通过校验，查看与修改大纲的
 	// 命令照常执行并以 warning 报告它（workspace-artifacts/cross-artifact-references），validate 由写作简报的检查报告它。
 	MethodProblem *workspace.Problem
@@ -214,6 +222,21 @@ func checkRefs(root, rel string, o *Outline, ms Messages) []workspace.Problem {
 				}
 			}
 		}
+		// 调用方没有解析生效配置（如关卡路径）时 ms.Metrics 为 nil，跳过 targets 检查，由整体校验报告。
+		if ms.Metrics != nil {
+			for _, id := range slices.Sorted(maps.Keys(s.Targets)) {
+				field := fmt.Sprintf("sections[%d].targets.%s", i, id)
+				j := slices.IndexFunc(ms.Metrics, func(m catalog.ScoredMetric) bool { return m.ID == id })
+				if j < 0 {
+					out = append(out, errorAt(CodeUnknownTarget, rel, field, unknownTarget(id)))
+					continue
+				}
+				if v := s.Targets[id]; v < ms.Metrics[j].Scale.Min || v > ms.Metrics[j].Scale.Max {
+					out = append(out, errorAt(CodeTargetOutOfRange, rel, field,
+						fmt.Sprintf("目标分值 %d 不在 AI 评分指标（Metric）%s 的 scale（%d 到 %d）内", v, id, ms.Metrics[j].Scale.Min, ms.Metrics[j].Scale.Max)))
+				}
+			}
+		}
 	}
 	return out
 }
@@ -268,6 +291,10 @@ func unknownSource(id string) string {
 
 func unknownBeat(id string) string {
 	return "情节节拍（Story Beat）" + id + " 不在故事根单元的大纲（Outline）节中；场景契约（Scene Contract）的 beats 只能引用根单元大纲的节 id"
+}
+
+func unknownTarget(id string) string {
+	return "AI 评分指标（Metric）" + id + " 不是按作品文体合并的已声明指标；场景契约（Scene Contract）的 targets 只能引用已声明的指标"
 }
 
 // Cover 是一个核心观点的覆盖情况：Sections 为 covers 含它的节 id，按大纲顺序。
@@ -410,21 +437,23 @@ func Problems(rel string, gaps []Gap) []workspace.Problem {
 }
 
 // CheckUnitArtifacts 校验 dirs 中每个单元目录下存在的 outline.yaml：合法性问题，以及合法时的覆盖缺口。q 为调用方
-// 已加载的决策队列（load-once-per-command），defaultMethod 返回单元目录所在作品的文体的默认写作法。
-func CheckUnitArtifacts(root string, dirs []string, q brief.Queue, defaultMethod func(dir string) string) (checked []string, problems []workspace.Problem) {
+// 已加载的决策队列（load-once-per-command），defaultMethod 返回单元目录所在作品的文体的默认写作法，metricsOf 返回
+// 该作品按文体合并的 AI 评分指标（无法解析生效配置时返回 nil，跳过 targets 检查）。
+func CheckUnitArtifacts(root string, dirs []string, q brief.Queue, defaultMethod func(dir string) string, metricsOf func(dir string) []catalog.ScoredMetric) (checked []string, problems []workspace.Problem) {
 	set := catalog.LoadMethods(root) // 写作法目录每条命令只加载一次
 	for _, dir := range dirs {
 		if _, err := os.Lstat(filepath.Join(root, filepath.FromSlash(Path(dir)))); err != nil {
 			continue
 		}
 		checked = append(checked, Path(dir))
-		problems = append(problems, checkDir(root, dir, q, Picker{set, defaultMethod(dir)})...)
+		problems = append(problems, checkDir(root, dir, q, Picker{set, defaultMethod(dir)}, metricsOf(dir))...)
 	}
 	return checked, problems
 }
 
-func checkDir(root, dir string, q brief.Queue, pick Picker) []workspace.Problem {
+func checkDir(root, dir string, q brief.Queue, pick Picker, metrics []catalog.ScoredMetric) []workspace.Problem {
 	ms := LoadMessages(root, dir, q, pick)
+	ms.Metrics = metrics
 	o, ps := Load(root, dir, ms)
 	if o == nil || len(ms.Problems) > 0 {
 		// 写作简报不通过校验时不报告覆盖缺口，写作简报的问题由它自己的校验报告。
@@ -433,9 +462,10 @@ func checkDir(root, dir string, q brief.Queue, pick Picker) []workspace.Problem 
 	return Problems(o.Path, Gaps(o, ms))
 }
 
-// CheckArtifact 对已通过 Schema 校验的 outline.yaml（rel）做领域检查与覆盖追踪；defaultMethod 为所在作品的文体的默认写作法。
-func CheckArtifact(root, rel, defaultMethod string) []workspace.Problem {
-	return checkDir(root, strings.TrimSuffix(rel, "/"+FileName), brief.LoadQueue(root), Picker{catalog.LoadMethods(root), defaultMethod})
+// CheckArtifact 对已通过 Schema 校验的 outline.yaml（rel）做领域检查与覆盖追踪；defaultMethod 为所在作品的文体的默认写作法，
+// metrics 为该作品按文体合并的 AI 评分指标（nil 时跳过 targets 检查）。
+func CheckArtifact(root, rel, defaultMethod string, metrics []catalog.ScoredMetric) []workspace.Problem {
+	return checkDir(root, strings.TrimSuffix(rel, "/"+FileName), brief.LoadQueue(root), Picker{catalog.LoadMethods(root), defaultMethod}, metrics)
 }
 
 // Gate 是单元目录 dir 下大纲的关卡结果。

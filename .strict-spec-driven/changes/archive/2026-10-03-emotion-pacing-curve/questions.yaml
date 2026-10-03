@@ -1,0 +1,54 @@
+schema: strict-spec-driven/question-list/v1
+schema_version: 1
+artifact_type: question_list
+schema_file: templates/strict-spec-driven/schemas/question-list.yaml
+change: emotion-pacing-curve
+open: []
+resolved:
+  - id: requirement-problem
+    question: What is concretely going wrong today, and for whom?
+    context: 'Why this is asked: the change is planned against a need, and the need lives only with the requester. A "problem" here means what someone does or suffers today — not a feature that is missing. If the answer names a button, a field, a page, or an endpoint, it is a solution, and the underlying problem is still unstated. What a sufficient answer contains: who is affected, what they do today instead, and how often. Worked example: "every Monday one person spends forty minutes copying order rows into a spreadsheet to send the weekly report". What it changes: this becomes the proposal''s why, and it decides whether the change is worth making.'
+    answer: 以场景为单元写短篇的作者与协助写作的 Agent 在审稿阶段无法对照目标走势检查情绪与张力：AI 评分（metrics record/show）已能逐段记录分数，结构类写作法节拍也已声明目标张力（Target Tension），但没有任何命令把分数按单元顺序汇总成曲线并与目标对比，作者只能逐段人工比对，两个爽点间隔过长这类节奏问题无从发现。（证据：roadmap/planned-changes/short-story-emotion-pacing-curve.yaml 的 summary 与 details，milestone short-story 的 goal、scope.in「情绪曲线与张力曲线：对比场景契约中的目标，并套用文体节奏模板」与 done_criteria）
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-outcome
+    question: What observable difference proves the problem is solved?
+    context: 'Why this is asked: without a success condition, nobody can tell afterwards whether the change worked. "Observable" means someone outside the system can check it without reading the code. What a sufficient answer contains: what a person will see, or no longer have to do, once this is done. Worked example: "the report is in the manager''s inbox on Monday morning without anyone assembling it". What it changes: this becomes the delta spec''s scenarios and the acceptance evidence at review time.'
+    answer: 运行 wa-cli curve <work> 得到每个已声明 AI 评分指标的曲线（--json 结构与文本图表），short-story 作品上即情绪曲线（Emotion Curve）与张力曲线（Tension Curve）；张力曲线偏离契约目标或默认写作法目标走势的场景被列为发现项，accept、advance 与 lint 的行为与没有发现项时相同；文体声明的节奏检查（如两个达到阈值分值的片段之间的最大字数间隔）同样输出发现项。这些即 delta 规格 curve-command 的 scenarios 与验收证据，对应里程碑完成标准「测试夹具中张力曲线偏离契约目标的场景被列为发现项，且默认不阻塞验收」。（证据：planned change details，milestone done_criteria）
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-trigger
+    question: Why now — what forced this?
+    context: 'Why this is asked: work that nothing forced is the work most often thrown away later. This question catches a request that sounds reasonable but has no real driver behind it. What a sufficient answer contains: the concrete event, deadline, incident, or cost that made this surface now, or an honest statement that nothing did. Worked example: "the report was missed last month and it was raised with the team". What it changes: a change with no trigger is a candidate for deferral, and the answer is weighed at review before archive.'
+    answer: short-story 里程碑（order 500）的既定排期推进到本变更：六个规划变更已完成五个，本变更是最后一个且其四个依赖（short-story-genre、ai-scored-metrics、style-metrics-and-drift、story-structure-templates）全部 complete；roadmap-recommend 显示它是当前仅有的合格候选之一，novel 与 novel-continuity 里程碑的规划变更全部因 dependency-incomplete 被阻塞。（证据：roadmap-recommend --create 输出的 candidateSummary 与 blockers，planned change 的 depends_on 及各依赖文件 status）
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-non-goals
+    question: What must explicitly not change?
+    context: 'Why this is asked: the requester knows which nearby behavior other people depend on, and the agent does not. A "non-goal" is something the change must leave alone even though it sits close to the work. What a sufficient answer contains: the behavior, setting, or output that must survive untouched, and who relies on it. Worked example: "do not change the saved filters — several people rely on their own". What it changes: these become the proposal''s unchanged_behavior items, which review checks the finished result against.'
+    answer: 不变：验收判定语义——accept、advance 与 lint 不读取曲线偏离发现项与节奏发现项（默认不阻塞验收）；metrics plan、record、show、calibrate、compute 的行为与 metrics.yaml、calibration.yaml 格式；写作法模板数据格式（节拍 tension 已存在，本变更只读取并映射）；场景契约现有字段（characters、beats、reveal）与场景级上下文包；审稿评分标准、验收关卡与导出。依赖这些行为的既有文体与已归档变更的测试不回归。（证据：planned change details 的「偏离发现项默认不阻塞验收」，milestone scope.out 对 novel 各项的排除）
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-interpretation
+    question: Which reading of the request is intended, where more than one is possible?
+    context: 'Why this is asked: a short request usually admits several readings, and building the wrong one is indistinguishable from building nothing. What a sufficient answer contains: the reading that is meant, stated plainly enough to rule the others out — or a statement that only one reading exists and what it is. Worked example: "export means the version sent to the manager, not the one I read myself". What it changes: this fixes the scope boundary before any code is written, and settles disputes about what was asked for.'
+    answer: 「情绪曲线与张力曲线」读作按已声明 AI 评分指标输出的曲线，内核不硬编码这两个名字，short-story 声明 emotion 与 tension 指标后自然形成两条曲线；「未声明时，采用所选结构类写作法给出的目标走势」读作仅适用于 id 为 tension 的指标（节拍数据只有 tension 一个目标字段），且需从 0 到 10 线性映射到该指标 scale；「两个爽点之间的最大字数间隔」读作片段取值达到文体声明的 min_score 即节拍点、间隔按非空白字符数计；「使用锚定分值」读作 targets 的分值必须是该指标 scale 内的整数。（证据：planned change details 全文，methods 主规格 method-data 的 beats.tension 字段，genres-and-packs 主规格 scored-metrics 的锚定刻度）
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: pacing-check-scope
+    question: 节奏检查（Pacing Check）的声明范围是仅文体（Genre），还是文体与规范包（Pack）都可以声明？
+    context: 路线图只写「文体还可以提供节奏检查」，未提规范包。影响范围：genres-and-packs 主规格增量的数据声明与合并规则、internal/catalog 与 internal/resolve 的实现文件与测试；若允许规范包声明，合并顺序需与 scored_metrics（按 packs 顺序后者覆盖）保持一致。推荐：仅文体声明（数据面最小、与路线图原文一致；规范包需要时再经 strict-spec-modify 扩展）。备选：文体与规范包都可声明，规范包按 packs 顺序合并覆盖。
+    answer: 仅文体（Genre）声明 pacing_checks：规范包与 config.yaml 不能声明（出现时按 Schema 拒绝，报告 artifact.schema-violation），合并结果 resolved.pacingChecks 的 source 只会为 genre:<id>；规范包需要节奏检查时将来再经 strict-spec-modify 扩展（作者确认推荐方案）
+    status: resolved
+    answered_by: human
+  - id: curve-deviation-surface
+    question: 曲线偏离发现项是否需要像结构类节拍位置 warning 一样出现在 wa-cli review show 与 accept 的输出中？
+    context: 既有行为分裂：节拍位置超范围以 warning 出现在 lint、review show 与 accept（methods 主规格 beat-positions）；文风漂移（Style Drift）发现项只在 metrics compute 输出，accept 与 lint 都不读取（metrics 主规格 drift-detection 的 not-blocking 场景）。影响范围：metrics 主规格 curve-command 的场景、internal/cli 的 review 与 accept 改动范围及对应测试；也影响 proposal 的 out-of-scope 表述（当前写明 accept、advance 与 lint 不读取）。推荐：与文风漂移一致——只在 curve 输出，review show 与 accept 不展示（路线图写明偏离发现项默认不阻塞验收，作者按需运行 curve）。备选：像节拍位置一样以 warning 展示但不阻塞。
+    answer: 与文风漂移（Style Drift）一致：曲线偏离发现项与节奏发现项只在 wa-cli curve 输出，review show、accept、lint 都不读取、不展示；作者按需运行 curve 查看（作者确认推荐方案）
+    status: resolved
+    answered_by: human

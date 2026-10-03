@@ -281,3 +281,15 @@ rules:
     enforcement:
       method: review
       detail: 代码审查新的导出格式时确认：collect、StripComments、cleanOutput/write 只有一份实现，新格式只贡献渲染函数与入口分支。
+  post-merge-ref-attribution:
+    strength: SHOULD
+    statement: 某一配置层声明的数据引用可能来自其他配置层的目标时（如文体专属的 pacing_checks 引用可由规范包按 id 覆盖的 AI 评分指标），引用校验必须在全部配置层合并完成后按合并结果（internal/resolve 的 resolved）进行，不得在单层内校验；问题归因到声明引用的那一层（内置文体不填 path、Origin 写明出处），校验逻辑写成领域包导出的纯函数（如 catalog.CheckPacingRefs），供 resolve 接线并可供领域包测试直接调用。
+    rationale: 单层校验会把引用其他层声明的合法引用误判为悬空（如节奏检查引用规范包覆盖的指标），合并后校验配合导出的纯函数让跨层引用既有正确的归因，又能不依赖工作区构造内置文体数据而直接测试。
+    enforcement:
+      method: review
+      detail: 适用于为文体或规范包新增可引用其他配置层 id 的数据字段；同层即可判定的检查（id 重复、取值范围）仍在各领域包的加载校验中做。
+    examples:
+      good:
+        - internal/resolve 在合并完全部层后调用 catalog.CheckPacingRefs(文体声明, 合并后的 scoredMetrics)，问题经 layerError 记在内置文体层；internal/catalog 的测试直接构造检查与指标列表断言 pacing.unknown-metric 与 pacing.invalid-params。
+      bad:
+        - 在 catalog.LoadGenre 的单层校验中检查 pacing_checks 的 metric 是否存在于该文体自己的 scored_metrics：引用规范包声明指标的合法检查被误报为 pacing.unknown-metric。

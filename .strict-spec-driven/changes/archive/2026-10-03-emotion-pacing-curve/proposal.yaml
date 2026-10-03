@@ -1,0 +1,35 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: emotion-pacing-curve
+  status: proposed
+summary:
+  what:
+    - 大纲节（Outline Section）的轻量场景契约（Scene Contract）新增 targets：按 AI 评分指标（Metric）id 声明目标锚定分值（整数，须在该指标的 scale 内）；outline set --target 写入与删除，validate 校验未知指标与越界分值
+    - 新增只读命令 wa-cli curve <work>：把已记录的 AI 评分按单元树先序汇总为每个已声明指标的一条曲线（情绪曲线（Emotion Curve）与张力曲线（Tension Curve）即 short-story 文体声明的两个指标），与目标对比输出偏离发现项，以 --json 与文本图表两种形式输出
+    - 目标走势的默认来源：单元未在 targets 中声明且指标 id 为 tension 时，由该场景承担的结构类写作法节拍的目标张力（Target Tension，0 到 10）线性映射到该指标的 scale；文体可用 pacing_checks 声明节奏检查（Pacing Check），如两个达到阈值分值的片段之间的最大字数间隔，检查基于已记录的分数与确定性指标
+    - short-story 文体声明 emotion 与 tension 两个 AI 评分指标（含锚定评分说明与示例片段），使曲线开箱可用
+    - short-story 文体另声明节奏检查 emotional-beat-gap：emotion 取值达到 3 分的片段之间最多 2000 个非空白字符，使节奏检查在该文体开箱可用并可端到端验证；发现项只在 curve 输出
+  why:
+    - 完成 short-story 里程碑的完成标准：测试夹具中张力曲线偏离契约目标的场景被列为发现项，且默认不阻塞验收
+    - 作者与 Agent 目前没有任何命令能对照场景契约目标与结构类写作法的目标走势检查情绪与张力的偏离；AI 评分（metrics record/show）与节拍目标张力（story-structure-templates）都已就绪，只差汇总对比这一层
+scope:
+  in:
+    - internal/schema 与 internal/outline：大纲节 targets 字段、outline set --target 参数与校验（outline.unknown-target-metric、outline.target-out-of-range）
+    - internal/catalog 与 internal/resolve：文体 pacing_checks 数据声明、合并与校验（pacing.unknown-metric、pacing.invalid-params）；内置 short-story 文体声明 emotion 与 tension 评分指标
+    - internal/metrics 与 internal/cli：wa-cli curve 只读命令——曲线汇总、目标三层解析、偏离判定、节奏检查、--json 与文本图表输出、诊断与下一步命令
+    - docs/GLOSSARY.md：新增节奏检查（Pacing Check）等本变更引入的术语
+  out:
+    - 不改变验收判定：wa-cli accept、advance 与 lint 不读取曲线偏离发现项与节奏检查发现项（默认不阻塞验收）
+    - 不做图形界面或图片输出，文本图表为纯字符条形图；不调用任何模型，曲线只汇总已记录的分数
+    - 不新增长篇（novel、novel-continuity）的结构、状态与连续性能力，不做多层单元树
+    - 不修改写作法模板数据格式：节拍的 tension 字段已存在，本变更只读取并映射
+unchanged_behavior:
+  - metrics plan、record、show、calibrate、compute 的现有行为与 metrics.yaml、calibration.yaml 格式
+  - 场景契约现有字段（characters、beats、reveal）、场景级上下文包与人物卡、设定集行为
+  - 审稿评分标准、验收关卡、导出与 MCP 服务行为
+roadmap:
+  milestone: short-story
+  planned_change: emotion-pacing-curve

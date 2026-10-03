@@ -45,6 +45,21 @@
     "rules": {"$ref": "common.schema.json#/$defs/rules"},
     "rubric": {"$ref": "common.schema.json#/$defs/rubric"},
     "scored_metrics": {"$ref": "common.schema.json#/$defs/scoredMetrics"},
+    "pacing_checks": {
+      "type": "array",
+      "description": "节奏检查（Pacing Check）：文体声明的、基于已记录分数与确定性指标的节奏约束，由 wa-cli curve 执行",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "metric", "min_score", "max_gap_chars"],
+        "properties": {
+          "id": {"$ref": "common.schema.json#/$defs/id"},
+          "metric": {"$ref": "common.schema.json#/$defs/id", "description": "判定的 AI 评分指标（Metric）id"},
+          "min_score": {"type": "integer", "description": "片段取值达到该分值视为节拍点"},
+          "max_gap_chars": {"type": "integer", "description": "相邻两个节拍点片段之间允许的最大非空白字符数"}
+        }
+      }
+    },
 "context_budget": {"$ref": "common.schema.json#/$defs/budget"},
     "summary_length": {
       "type": "object",
