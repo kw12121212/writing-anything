@@ -273,6 +273,8 @@ var nullableFields = map[string]bool{
 	"headlineDecision": true,
 	"imageList":        true,
 	"key":              true,
+	"keyMessage":       true,
+	"location":         true,
 	"length":           true,
 	"line":             true,
 	"lock":             true,
@@ -290,6 +292,7 @@ var nullableFields = map[string]bool{
 	"quote":            true,
 	"rate":             true,
 	"rationale":        true,
+	"reason":           true,
 	"recommendation":   true,
 	"recorded":         true,
 	"ref":              true,
@@ -406,7 +409,7 @@ func TestRegistryConsistency(t *testing.T) {
 }
 
 // mutatingSamples 列出只能通过变更产物才能成功的命令；它们的样例在临时工作区中变更产物。
-var mutatingSamples = map[string]bool{"new": true, "unit add": true, "unit move": true, "advance": true, "source add": true, "claim add": true, "claim remove": true, "review record": true, "accept": true, "export": true, "preview": true, "marketing ask": true, "mcp install": true, "skills install": true, "feedback add": true, "decision add": true, "decide": true, "outline remove": true, "pack install": true, "pack remove": true, "metrics record": true, "metrics calibrate": true, "pack learn": true, "series add": true, "series fact": true, "summary set": true, "pack confirm": true, "pack reject": true, "canon add": true, "canon remove": true}
+var mutatingSamples = map[string]bool{"new": true, "unit add": true, "unit move": true, "advance": true, "source add": true, "claim add": true, "claim remove": true, "review record": true, "accept": true, "export": true, "preview": true, "marketing ask": true, "mcp install": true, "skills install": true, "feedback add": true, "decision add": true, "decide": true, "outline remove": true, "pack install": true, "pack remove": true, "metrics record": true, "metrics calibrate": true, "pack learn": true, "series add": true, "series fact": true, "summary set": true, "pack confirm": true, "pack reject": true, "canon add": true, "canon remove": true, "scene contract": true}
 
 // sampleArgs 返回命令的一次成功调用：除 mutatingSamples 中的命令外都不变更任何产物；工作区命令在已初始化的
 // 临时工作区中运行。
@@ -514,6 +517,11 @@ func sampleArgs(t *testing.T, name string) []string {
 		return []string{"outline", "remove", "my-post", "why", "--dir", dir, "--json"}
 	case "outline show":
 		return []string{"outline", "show", "my-post", "--dir", newWork(t), "--json"}
+	case "scene contract":
+		dir := newWorkspace(t)
+		run(t, "new", "short-story", "my-story", "--dir", dir)
+		run(t, "unit", "add", "my-story", "scene", "s1", "--dir", dir)
+		return []string{"scene", "contract", "my-story/s1", "sc1", "--title", "灯下对峙", "--pov", "守灯人", "--dir", dir, "--json"}
 	case "lint":
 		dir := newWork(t)
 		writeFile(t, filepath.Join(dir, ".writing-anything", "works", "my-post", "draft.md"), "正文。")

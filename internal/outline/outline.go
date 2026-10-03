@@ -39,6 +39,18 @@ const (
 	CodeTargetOutOfRange = "outline.target-out-of-range"
 )
 
+// 场景契约与因果链（Causality Chain）的错误码。
+const (
+	CodeNotScene         = "scene.not-scene"
+	CodeDuplicateEvent   = "scene.duplicate-event"
+	CodeUnknownEvent     = "scene.unknown-event"
+	CodeEventNotHappened = "scene.event-not-yet-happened"
+)
+
+// SceneType 是场景单元（Unit）的单元类型 id；short-story 与 novel 文体都以 scene 声明场景，
+// 场景契约（Scene Contract）与因果链检查只作用于该类型的单元。
+const SceneType = "scene"
+
 // 单元目录中大纲的文件名：outline.yaml 是结构化的大纲，outline.md 是自由文本，不含可检查的节。
 const (
 	FileName = "outline.yaml"
@@ -47,18 +59,33 @@ const (
 
 // Section 是一个大纲节；未设置的数组为 nil，未设置的 reason 为空字符串。Characters、Beats、Reveal 与 Targets 是轻量场景契约
 // （Scene Contract）字段：出场人物、承担的情节节拍（Story Beat）、揭示边界（Reveal Boundary）与按 AI 评分指标（Metric）id
-// 声明的目标锚定分值，用于虚构文体。
+// 声明的目标锚定分值，用于虚构文体。Pov、Location、StateChanges、Plants、Recovers、Causes 与 Events 是长篇场景契约扩展字段：
+// 视角人物、地点、必须发生的状态变化、要埋设与回收的伏笔（Foreshadowing）、起因（Cause，引用前文已发生事件的 id）与
+// 预期产生的事件（Event）id，由 wa-cli scene contract 写入，供因果链检查与后续的写后收口、上下文包组装使用。
 type Section struct {
-	ID         string         `json:"id"`
-	Title      string         `json:"title"`
-	Role       string         `json:"role"` // 该节承担的写作法章节或节拍 id；空表示不承担
-	Covers     []string       `json:"covers"`
-	Uses       []string       `json:"uses"`
-	Reason     string         `json:"reason"`
-	Characters []string       `json:"characters"`
-	Beats      []string       `json:"beats"`
-	Reveal     string         `json:"reveal"`
-	Targets    map[string]int `json:"targets"`
+	ID           string         `json:"id"`
+	Title        string         `json:"title"`
+	Role         string         `json:"role"` // 该节承担的写作法章节或节拍 id；空表示不承担
+	Covers       []string       `json:"covers"`
+	Uses         []string       `json:"uses"`
+	Reason       string         `json:"reason"`
+	Characters   []string       `json:"characters"`
+	Beats         []string      `json:"beats"`
+	Reveal       string         `json:"reveal"`
+	Targets      map[string]int `json:"targets"`
+	Pov          string         `json:"pov"`      // 视角人物；空表示未声明
+	Location     string         `json:"location"` // 地点；空表示未声明
+	StateChanges []StateChange  `json:"state_changes"`
+	Plants       []string       `json:"plants"`   // 要埋设的伏笔 id
+	Recovers     []string       `json:"recovers"` // 要回收的伏笔 id
+	Causes       []string       `json:"causes"`   // 起因：引用前文已发生事件的 id
+	Events       []string       `json:"events"`   // 预期产生的事件 id
+}
+
+// StateChange 是场景契约中必须发生的一条状态变化：id 供写后收口按稳定键对照提交，text 为描述。
+type StateChange struct {
+	ID   string `json:"id"`
+	Text string `json:"text"`
 }
 
 // Outline 是一份已通过校验的大纲。
@@ -178,7 +205,8 @@ func parse(root, rel string, doc *yaml.Node, ms Messages) (*Outline, []workspace
 	return &o, nil, checkRefs(root, rel, &o, ms)
 }
 
-// checkIDs 检查节 id 在文件内唯一。
+// checkIDs 检查节 id 在文件内唯一，以及场景契约 state_changes 的 id 在节内唯一（Schema 的 uniqueItems 只能拦截
+// 完全相同的条目，id 相同而描述不同的条目在此检查）。
 func checkIDs(rel string, o *Outline) []workspace.Problem {
 	var out []workspace.Problem
 	seen := map[string]bool{}
@@ -187,6 +215,14 @@ func checkIDs(rel string, o *Outline) []workspace.Problem {
 			out = append(out, errorAt(catalog.CodeDuplicateID, rel, fmt.Sprintf("sections[%d].id", i), "大纲节 id "+s.ID+" 重复"))
 		}
 		seen[s.ID] = true
+		seenSC := map[string]bool{}
+		for j, sc := range s.StateChanges {
+			if seenSC[sc.ID] {
+				out = append(out, errorAt(schema.CodeSchemaViolation, rel, fmt.Sprintf("sections[%d].state_changes[%d].id", i, j),
+					"状态变化 id "+sc.ID+" 在该节内重复；state_changes 的 id 必须节内唯一，供写后收口对照"))
+			}
+			seenSC[sc.ID] = true
+		}
 	}
 	return out
 }
@@ -257,21 +293,8 @@ func RootDir(dir string) string {
 // beatIDs 返回作品根单元目录 rootDir 下大纲（Outline）的节 id，即可引用的情节节拍（Story Beat）。根单元没有大纲、
 // 或大纲不通过 Schema 与节 id 唯一性检查时不做引用检查，返回 false。
 func beatIDs(root, rootDir string) ([]string, bool) {
-	rel := Path(rootDir)
-	data, ok, err := workspace.ReadRegular(root, rel)
-	if err != nil || !ok {
-		return nil, false
-	}
-	doc, p := schema.Parse(data)
-	if p != nil {
-		return nil, false
-	}
-	if ps := schema.Named("outline").ValidateNode(doc); len(ps) > 0 {
-		return nil, false
-	}
-	var o Outline
-	catalog.Decode(doc, &o)
-	if len(checkIDs(rel, &o)) > 0 {
+	o := Loadable(root, rootDir)
+	if o == nil {
 		return nil, false
 	}
 	ids := make([]string, len(o.Sections))
@@ -279,6 +302,106 @@ func beatIDs(root, rootDir string) ([]string, bool) {
 		ids[i] = s.ID
 	}
 	return ids, true
+}
+
+// Loadable 读取单元目录 dir 下的 outline.yaml 并做 Schema 与节 id（含 state_changes id）唯一检查；没有文件、读取失败
+// 或不通过检查时返回 nil。引用问题（covers、uses、beats、targets 与因果链）不妨碍返回，由各自的检查报告。
+func Loadable(root, dir string) *Outline {
+	rel := Path(dir)
+	data, ok, err := workspace.ReadRegular(root, rel)
+	if err != nil || !ok {
+		return nil
+	}
+	doc, p := schema.Parse(data)
+	if p != nil {
+		return nil
+	}
+	if ps := schema.Named("outline").ValidateNode(doc); len(ps) > 0 {
+		return nil
+	}
+	var o Outline
+	catalog.Decode(doc, &o)
+	if len(checkIDs(rel, &o)) > 0 {
+		return nil
+	}
+	return &o
+}
+
+// Scene 是因果链（Causality Chain）检查中的一个场景单元：Ref 为单元引用（用于诊断 message），Dir 为单元目录
+// （相对项目目录）。Outline 非 nil 时代替磁盘上的大纲，供 scene contract 的写前检查以写入后的状态运行。
+type Scene struct {
+	Ref     string
+	Dir     string
+	Outline *Outline
+}
+
+// causality 检查同一作品按单元树先序（Pre-order）给出的场景序列 scenes 的因果链：事件（Event）id 由场景大纲节的
+// events 声明，在作品内跨场景唯一，同一 id 被之后的场景再次声明时对每个后声明的节报告 scene.duplicate-event；
+// 每个场景大纲节的 causes 引用的事件 id 没有任何场景声明时报告 scene.unknown-event，声明它的场景不按先序排在
+// 该场景之前（同一场景或更靠后）时报告 scene.event-not-yet-happened。大纲不通过 Schema 与节 id 检查的场景不参与
+// 因果链（其问题由整体校验另行报告）；非场景单元大纲节上的 causes 与 events 不参与因果链。
+func causality(root string, scenes []Scene) []workspace.Problem {
+	type declared struct{ scene int }
+	first := map[string]declared{}
+	os := make([]*Outline, len(scenes))
+	var out []workspace.Problem
+	for i, sc := range scenes {
+		o := sc.Outline
+		if o == nil {
+			o = Loadable(root, sc.Dir)
+		}
+		if o == nil {
+			continue
+		}
+		os[i] = o
+		for si, s := range o.Sections {
+			for ei, id := range s.Events {
+				if d, dup := first[id]; dup {
+					out = append(out, errorAt(CodeDuplicateEvent, Path(sc.Dir), fmt.Sprintf("sections[%d].events[%d]", si, ei),
+						fmt.Sprintf("事件（Event）%s 已由场景 %s 的大纲声明；预期产生的事件 id 在作品内唯一", id, scenes[d.scene].Ref)))
+					continue
+				}
+				first[id] = declared{i}
+			}
+		}
+	}
+	for i, o := range os {
+		if o == nil {
+			continue
+		}
+		for si, s := range o.Sections {
+			for ci, id := range s.Causes {
+				d, ok := first[id]
+				switch {
+				case !ok:
+					out = append(out, errorAt(CodeUnknownEvent, Path(scenes[i].Dir), fmt.Sprintf("sections[%d].causes[%d]", si, ci),
+						fmt.Sprintf("起因（Cause）引用的事件（Event）%s 没有被任何场景的大纲声明；起因只能引用前文场景 events 声明的事件 id", id)))
+				case d.scene >= i:
+					out = append(out, errorAt(CodeEventNotHappened, Path(scenes[i].Dir), fmt.Sprintf("sections[%d].causes[%d]", si, ci),
+						fmt.Sprintf("起因（Cause）引用的事件（Event）%s 由场景 %s 声明，按单元树先序不排在本场景之前，尚未发生；起因只能引用前文已发生的事件", id, scenes[d.scene].Ref)))
+				}
+			}
+		}
+	}
+	return out
+}
+
+// Causality 返回作品全部场景的因果链问题，供整体校验（wa-cli validate）使用；scenes 必须是同一作品全部场景
+// 单元的单元树先序序列。
+func Causality(root string, scenes []Scene) []workspace.Problem {
+	return causality(root, scenes)
+}
+
+// CausalityOn 返回报告在单元目录 dir 的大纲上的因果链问题（该场景的 causes，以及它作为后声明者的重复事件），
+// 供单产物校验（wa-cli validate <path>）、大纲关卡（outline.invalid）与 scene contract 的写前检查使用。
+func CausalityOn(root string, scenes []Scene, dir string) []workspace.Problem {
+	var out []workspace.Problem
+	for _, p := range causality(root, scenes) {
+		if p.Path == Path(dir) {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 func unknownMessage(id string) string {
@@ -463,9 +586,12 @@ func checkDir(root, dir string, q brief.Queue, pick Picker, metrics []catalog.Sc
 }
 
 // CheckArtifact 对已通过 Schema 校验的 outline.yaml（rel）做领域检查与覆盖追踪；defaultMethod 为所在作品的文体的默认写作法，
-// metrics 为该作品按文体合并的 AI 评分指标（nil 时跳过 targets 检查）。
-func CheckArtifact(root, rel, defaultMethod string, metrics []catalog.ScoredMetric) []workspace.Problem {
-	return checkDir(root, strings.TrimSuffix(rel, "/"+FileName), brief.LoadQueue(root), Picker{catalog.LoadMethods(root), defaultMethod}, metrics)
+// metrics 为该作品按文体合并的 AI 评分指标（nil 时跳过 targets 检查）。scenes 为该作品全部场景单元的先序序列，
+// 因果链问题只报告该文件自己的部分；没有场景（作品无法加载）时跳过因果链检查。
+func CheckArtifact(root, rel, defaultMethod string, metrics []catalog.ScoredMetric, scenes []Scene) []workspace.Problem {
+	dir := strings.TrimSuffix(rel, "/"+FileName)
+	ps := checkDir(root, dir, brief.LoadQueue(root), Picker{catalog.LoadMethods(root), defaultMethod}, metrics)
+	return append(ps, CausalityOn(root, scenes, dir)...)
 }
 
 // Gate 是单元目录 dir 下大纲的关卡结果。

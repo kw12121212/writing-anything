@@ -5,6 +5,7 @@ import (
 	"io"
 	"maps"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/kw12121212/writing-anything/internal/brief"
@@ -183,7 +184,7 @@ func runValidate(inv *invocation) int {
 				case "brief":
 					problems = append(problems, brief.CheckArtifact(dir, checked[0])...)
 				case "outline":
-					problems = append(problems, outline.CheckArtifact(dir, checked[0], defaultMethodOf(dir, checked[0]), metricsOfArtifact(dir, checked[0]))...)
+					problems = append(problems, outline.CheckArtifact(dir, checked[0], defaultMethodOf(dir, checked[0]), metricsOfArtifact(dir, checked[0]), scenesOfOutlineArtifact(dir, checked[0]))...)
 				case "feedback":
 					problems = append(problems, feedback.CheckArtifact(dir, checked[0])...)
 				case "decisions":
@@ -460,6 +461,10 @@ func checkWorkspace(dir string) (checked []string, works []*work.Work, problems 
 		}
 	}
 	ochecked, ops := outline.CheckUnitArtifacts(dir, dirs, q, func(d string) string { return defaults[d] }, func(d string) []catalog.ScoredMetric { return genreMetrics[d] })
+	// 因果链（Causality Chain）跨一个作品的多个场景大纲：每个作品按先序计算一次（scene-causality）。
+	for _, w := range works {
+		ops = append(ops, outline.Causality(dir, w.Scenes())...)
+	}
 	fchecked, fps := feedback.CheckUnitArtifacts(dir, works)
 	rchecked, rps := review.CheckUnitArtifacts(dir, dirs)
 	mchecked, mps := marketing.CheckUnitArtifacts(dir, dirs)
@@ -488,7 +493,7 @@ func defaultMethodOf(dir, rel string) string {
 // metricsOfArtifact 返回单元产物 rel 所在作品按文体合并的 AI 评分指标（Metric），供 outline.yaml 的 targets 检查；
 // 作品或生效配置无法加载时为 nil（其问题由作品与配置校验报告），跳过 targets 检查。
 func metricsOfArtifact(dir, rel string) []catalog.ScoredMetric {
-	w, _, _ := work.Resolve(dir, work.RefOf(rel[:strings.LastIndex(rel, "/")]))
+	w, _, _ := work.Resolve(dir, work.RefOf(strings.TrimSuffix(rel, "/"+outline.FileName)))
 	if w == nil {
 		return nil
 	}
@@ -497,6 +502,40 @@ func metricsOfArtifact(dir, rel string) []catalog.ScoredMetric {
 		return nil
 	}
 	return metricDefs(r.ScoredMetrics)
+}
+
+// scenesOfOutlineArtifact 返回 outline.yaml 单产物校验所需的因果链场景列表：该作品全部场景单元的先序序列；
+// 作品无法加载时为 nil（其问题由作品校验报告），跳过因果链检查。
+func scenesOfOutlineArtifact(dir, rel string) []outline.Scene {
+	w, _, _ := work.Resolve(dir, work.RefOf(strings.TrimSuffix(rel, "/"+outline.FileName)))
+	if w == nil {
+		return nil
+	}
+	return w.Scenes()
+}
+
+// sceneContractTarget 从因果链诊断的 path 与 field 解析要修改的单元引用与大纲节（Outline Section）id，供 next 给出
+// 可直接运行的 scene contract 命令；解析不出节 id 时返回空串，调用方改用查看大纲。
+func sceneContractTarget(dir string, p workspace.Problem) (ref, section string) {
+	unitDir := strings.TrimSuffix(p.Path, "/"+outline.FileName)
+	ref = work.RefOf(unitDir)
+	at, _, ok := strings.Cut(strings.TrimPrefix(p.Field, "sections["), "]")
+	if !ok {
+		return ref, ""
+	}
+	n, err := strconv.Atoi(at)
+	if err != nil {
+		return ref, ""
+	}
+	// 只读地取出该节的 id：因果链诊断只在大纲通过 Schema 与节 id 检查后产生，这里解析不出时按无节处理。
+	w, u, _ := work.Resolve(dir, ref)
+	if w == nil || u == nil {
+		return ref, ""
+	}
+	if o := outline.Loadable(dir, w.UnitDir(u)); o != nil && n < len(o.Sections) {
+		return ref, o.Sections[n].ID
+	}
+	return ref, ""
 }
 
 // unitExists 返回检查单元引用能否解析的函数，供决策队列检查关联单元；每个作品只解析一次。
@@ -626,6 +665,16 @@ func next(p workspace.Problem, dir string) []string {
 			return []string{shellCommand("wa-cli", "outline", "show", work.RefOf(strings.TrimSuffix(p.Path, "/"+outline.FileName)), "--dir", dir, "--json"),
 				"wa-cli help outline set --json"}
 		}
+	case outline.CodeUnknownEvent, outline.CodeEventNotHappened, outline.CodeDuplicateEvent:
+		// 因果链（Causality Chain）引用其他场景的大纲，涉及多个产物；用 scene contract 修复出错的场景契约（scene-causality）。
+		if p.Path != "" {
+			if ref, sec := sceneContractTarget(dir, p); sec != "" {
+				return []string{shellCommand("wa-cli", "scene", "contract", ref, sec, "--dir", dir, "--json"), "wa-cli help scene contract --json"}
+			}
+			return []string{shellCommand("wa-cli", "outline", "show", work.RefOf(strings.TrimSuffix(p.Path, "/"+outline.FileName)), "--dir", dir, "--json"),
+				"wa-cli help scene contract --json"}
+		}
+		return []string{validateAll}
 	case outline.CodeUnknownSource:
 		return []string{shellCommand("wa-cli", "source", "list", "--dir", dir, "--json"), validateAll}
 	case brief.CodeUnknownSource:

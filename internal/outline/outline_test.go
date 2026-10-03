@@ -100,7 +100,7 @@ func TestLoadAndCheck(t *testing.T) {
 			if o != nil || len(ps) != 1 || ps[0].Code != tt.code || ps[0].Field != tt.field || ps[0].Path != rel {
 				t.Fatalf("Load = %+v, %+v; want one %s at %s", o, ps, tt.code, tt.field)
 			}
-			if ps := CheckArtifact(root, rel, "", nil); !slices.Equal(codes(ps), []string{tt.code}) {
+			if ps := CheckArtifact(root, rel, "", nil, nil); !slices.Equal(codes(ps), []string{tt.code}) {
 				t.Fatalf("CheckArtifact = %+v", ps)
 			}
 		})
@@ -122,7 +122,7 @@ func TestLoadAndCheck(t *testing.T) {
 	}
 	// 写作简报不通过校验时不报告覆盖缺口（由写作简报自己的校验报告）。
 	put(t, root, unitDir+"/brief.yaml", "k: v\n")
-	if ps := CheckArtifact(root, rel, "", nil); ps != nil {
+	if ps := CheckArtifact(root, rel, "", nil, nil); ps != nil {
 		t.Fatalf("invalid brief gaps: %+v", ps)
 	}
 }
@@ -180,7 +180,7 @@ func TestSetSceneContract(t *testing.T) {
 		!slices.Equal(o.Sections[0].Characters, []string{"守灯人", "精灵"}) || !slices.Equal(o.Sections[0].Beats, []string{"clash"}) || o.Sections[0].Reveal != "精灵的真实身份" {
 		t.Fatalf("set contract: %+v %v %+v", o, changed, ps)
 	}
-	want := "# 大纲（Outline）；请用 wa-cli outline set 与 wa-cli outline remove 修改。\n\nschema_version: 1\nsections:\n  - id: scene-1\n    title: 灯下对峙\n    characters: [守灯人, 精灵]\n    beats: [clash]\n    reveal: 精灵的真实身份\n"
+	want := "# 大纲（Outline）；请用 wa-cli outline set、wa-cli outline remove 与 wa-cli scene contract 修改。\n\nschema_version: 1\nsections:\n  - id: scene-1\n    title: 灯下对峙\n    characters: [守灯人, 精灵]\n    beats: [clash]\n    reveal: 精灵的真实身份\n"
 	if got := read(t, root, child+"/outline.yaml"); got != want {
 		t.Fatalf("outline.yaml =\n%s\nwant\n%s", got, want)
 	}
@@ -271,7 +271,7 @@ func TestSetAndRemove(t *testing.T) {
 	if ps != nil || !ensured || !slices.Equal(changed, []string{"new-dir", rel}) || len(o.Sections) != 1 || o.Path != rel {
 		t.Fatalf("create: %+v %v %+v", o, changed, ps)
 	}
-	want := "# 大纲（Outline）；请用 wa-cli outline set 与 wa-cli outline remove 修改。\n\nschema_version: 1\nsections:\n  - id: why\n    title: 为什么\n    covers: [km-1]\n"
+	want := "# 大纲（Outline）；请用 wa-cli outline set、wa-cli outline remove 与 wa-cli scene contract 修改。\n\nschema_version: 1\nsections:\n  - id: why\n    title: 为什么\n    covers: [km-1]\n"
 	if got := read(t, root, rel); got != want {
 		t.Fatalf("outline.yaml =\n%s\nwant\n%s", got, want)
 	}

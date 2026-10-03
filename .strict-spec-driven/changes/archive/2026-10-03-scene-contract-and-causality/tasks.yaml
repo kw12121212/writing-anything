@@ -1,0 +1,44 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: scene-contract-and-causality
+sections:
+  Implementation:
+    schema-contract-fields:
+      text: internal/schema/schemas/outline.schema.json：大纲节新增 pov、location（非空文本）、state_changes（每项含符合 id 格式且节内不重复的 id 与非空 text）、plants、recovers、causes、events（id 列表，不重复且符合 id 格式），并补充 internal/schema 的 Schema 校验测试。
+      status: complete
+    outline-causality:
+      text: internal/outline：Section 结构体与加载/校验扩展；因果链校验——事件 id 按单元树先序在作品内唯一（scene.duplicate-event），起因引用未声明的事件（scene.unknown-event）或由同场景/更靠后场景声明的事件（scene.event-not-yet-happened）时报告对应错误码；wa-cli validate 整体校验与单路径校验都执行，非场景单元大纲节不参与因果链。
+      status: complete
+    scene-contract-command:
+      text: internal/cli 新增 scene.go：wa-cli scene contract <unit> <section> 命名参数写入（--pov、--location、--reveal、--characters、--beats、--plant、--recover、--cause、--event、--state-change、--title）；单元 type 不是 scene 时报告 scene.not-scene；节不存在时需 --title 新增、存在时只改给出的字段，空字符串删除/清空；给出 --cause 或 --event 时即时执行引用与因果检查；沿用 outline set 的既有错误码（artifact.schema-violation、input.invalid-value、outline.unknown-beat、outline.anchored-value 等）；注册 help，MCP tool 随命令注册表自动派生。
+      status: complete
+    outline-show-contract:
+      text: internal/outline 与 internal/cli 的 outline show：sections 每项输出 pov、location（未设置为 null）与 state_changes、plants、recovers、causes、events（未声明为空数组，state_changes 每项含 id 与 text）。
+      status: complete
+    glossary-contract:
+      text: docs/GLOSSARY.md：补充本变更引入且术语表缺失的术语（如 起因（Cause）、场景事件（Event）、伏笔（Foreshadowing）），首次出现遵循「中文（English）」写法。
+      status: complete
+  Testing:
+    outline-unit-tests:
+      text: internal/outline 单元测试：新字段 Schema 校验（id 格式、重复、空白文本）、因果链三类错误码（scene.duplicate-event、scene.unknown-event、scene.event-not-yet-happened）、单元树先序判定与跨章场景引用、非场景单元不参与因果链。
+      status: complete
+    scene-command-tests:
+      text: internal/cli 测试：scene contract 在 novel 与 short-story 场景上的新增/修改/清空与注释保留、非场景单元拒绝（scene.not-scene）、--cause/--event 即时因果检查、outline show 新字段输出、wa-cli validate 整体与单路径集成、novel 夹具回归。
+      status: complete
+    project-regression:
+      text: 完整项目回归（含 80% 覆盖率门槛，范围 internal/** 不含 internal/tools/**）。
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    ready-verify:
+      text: 运行 strict-spec-cli ready scene-contract-and-causality 与 strict-spec-cli verify scene-contract-and-causality，确认规划产物齐备且无诊断。
+      status: complete
+      command: strict-spec-cli ready scene-contract-and-causality && strict-spec-cli verify scene-contract-and-causality
+    archive-readiness:
+      text: 归档就绪检查：delta-spec 与实际实现一致、docs/GLOSSARY.md 已补术语、roadmap 同步检查（roadmap-sync-check）无诊断。
+      status: complete
+testing_gates:
+  validation_task: project-regression
+  unit_test_task: outline-unit-tests

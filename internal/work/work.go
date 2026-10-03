@@ -79,9 +79,10 @@ type Work struct {
 	Genre     *catalog.Genre
 	Root      *Unit
 	doc       *yaml.Node
-	decisions *loadedQueue       // 决策队列，首次计算阻塞项时加载
-	gateLevel string             // 工作区配置的关卡强度（Gate Level），首次需要时读取
-	methods   *catalog.MethodSet // 写作法目录，首次计算大纲阻塞项时加载
+	decisions *loadedQueue         // 决策队列，首次计算阻塞项时加载
+	gateLevel string               // 工作区配置的关卡强度（Gate Level），首次需要时读取
+	methods   *catalog.MethodSet   // 写作法目录，首次计算大纲阻塞项时加载
+	causality *[]workspace.Problem // 场景因果链（Causality Chain）的全部问题，首次需要时计算（load-once-per-command）
 }
 
 // loadedQueue 是一次加载的决策队列。
@@ -380,12 +381,22 @@ func (w *Work) briefBlockers(root string, u *Unit, q brief.Queue) []Blocker {
 }
 
 // outlineBlockers 返回单元 u 的大纲（Outline）阻塞项：大纲或写作简报不通过校验时一条 outline.invalid，否则每个覆盖缺口
-// （Coverage Gap）一条；单元目录下没有 outline.yaml 与 outline.md 时没有（由缺失产物报告）。
+// （Coverage Gap）一条；单元目录下没有 outline.yaml 与 outline.md 时没有（由缺失产物报告）。报告在该单元大纲上的
+// 因果链（Causality Chain）问题同样计入 outline.invalid（scene-causality）。
 func (w *Work) outlineBlockers(root string, u *Unit, q brief.Queue) []Blocker {
 	dir := w.UnitDir(u)
 	g := outline.Check(root, dir, isFile(root, outline.Path(dir)), isFile(root, dir+"/"+outline.MDName), q, w.picker(root, u))
 	if g == nil {
 		return nil
+	}
+	if isFile(root, outline.Path(dir)) {
+		if ps := w.outlineCausality(root, dir); len(ps) > 0 {
+			if len(g.Invalid) == 0 {
+				g = &outline.Gate{Path: outline.Path(dir), Invalid: ps}
+			} else {
+				g.Invalid = append(g.Invalid, ps...)
+			}
+		}
 	}
 	if len(g.Invalid) > 0 {
 		// path 为不通过校验的产物（outline.yaml 或 brief.yaml），复查命令才能重新检出问题。
@@ -414,6 +425,33 @@ func (w *Work) marketingBlockers(root string, u *Unit, q marketing.Queue) []Bloc
 	var out []Blocker
 	for _, q := range g.Questions {
 		out = append(out, Blocker{Code: q.Code, Artifact: "marketing", Path: g.Path, Message: q.Message})
+	}
+	return out
+}
+
+// Scenes 返回作品全部场景单元（type 为 scene）的因果链场景列表，按单元树先序排列。
+func (w *Work) Scenes() []outline.Scene {
+	var out []outline.Scene
+	for _, u := range w.Units() {
+		if u.Type == outline.SceneType {
+			out = append(out, outline.Scene{Ref: u.Ref, Dir: w.UnitDir(u)})
+		}
+	}
+	return out
+}
+
+// outlineCausality 返回报告在单元目录 dir 的大纲上的因果链（Causality Chain）问题；全部场景的因果链每条命令只
+// 计算一次，再按目录过滤（load-once-per-command）。
+func (w *Work) outlineCausality(root, dir string) []workspace.Problem {
+	if w.causality == nil {
+		ps := outline.Causality(root, w.Scenes())
+		w.causality = &ps
+	}
+	var out []workspace.Problem
+	for _, p := range *w.causality {
+		if p.Path == outline.Path(dir) {
+			out = append(out, p)
+		}
 	}
 	return out
 }

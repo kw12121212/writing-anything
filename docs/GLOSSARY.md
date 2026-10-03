@@ -86,7 +86,10 @@
 | 知情表 | Knowledge State | 知情表 | 各人物与读者在某个场景时已知的信息 |
 | 伏笔台账 | Foreshadowing Ledger | 伏笔台账 | 伏笔的埋设位置、计划回收位置与状态 |
 | 因果链 | Causality Chain | 因果链 | 场景的起因引用前文事件、结果产生新事件的链条 |
-| 场景契约 | Scene Contract | 场景契约 | 动笔前声明场景的出场人物、承担的情节节拍（Story Beat）与揭示边界（Reveal Boundary）；长篇在此基础上扩展状态变化、伏笔与因果链 |
+| 起因 | Cause | 起因 | 场景契约中引用的前文已发生事件（Event）的 id，由 `wa-cli scene contract` 声明；引用不存在或尚未发生的事件时校验失败 |
+| 事件 | Event | 事件 | 场景契约中预期产生的事件 id，在作品内唯一，是因果链与事件溯源（Event Sourcing）的引用对象 |
+| 状态变化 | State Change | 状态变化 | 场景契约中声明的必须发生的变化，每条带 id 与描述，写后收口（Close-out）按 id 对照提交 |
+| 场景契约 | Scene Contract | 场景契约 | 动笔前声明场景的出场人物、承担的情节节拍（Story Beat）与揭示边界（Reveal Boundary）；长篇在此基础上扩展视角（POV）、地点、状态变化、伏笔与因果链，由 `wa-cli scene contract` 写入 |
 | 写后收口 | Close-out | 收口 | 场景写完后提交抽取结果，使台账与正文同步 |
 | 别名 | Alias | 别名 | 同一人物、地点、物品的其他称呼 |
 

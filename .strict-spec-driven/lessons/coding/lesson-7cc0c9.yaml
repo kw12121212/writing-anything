@@ -1,0 +1,19 @@
+schema: strict-spec-driven/lesson/v1
+schema_version: 1
+artifact_type: lesson
+schema_file: templates/strict-spec-driven/schemas/lesson.yaml
+lesson:
+  id: lesson-7cc0c9
+  title: 写前检查的候选模型必须与实际写入共用同一套字段合并逻辑
+category: coding
+status: active
+created_at: '2026-10-03T08:15:43.044Z'
+updated_at: '2026-10-03T08:15:43.044Z'
+context: scene contract 的 --state-change 语义是按 id 新增或更新；实现把合并逻辑写在写前检查用的 Edit.Candidate 里，而实际写文件的 apply 按本次参数整体重建 state_changes。
+observation: 同一条命令存在候选推导与实际写入两条路径时，合并语义只写在其中一条：第二次 --state-change 退出码 0、命令成功，但既有条目被静默删除；单元测试只覆盖了 Candidate，落盘路径没有连续写入断言，问题在全新上下文审查的实测中才暴露。
+takeaway: 为写前检查构造候选产物时，候选的构造必须与实际写入复用同一函数（或让写入直接消费候选）；并为「先写一条、再写另一条」的连续调用补落盘断言，防止整体替换伪装成按 id 合并。
+applies_when: 命令同时实现写前推导（候选/预览/因果检查）与实际写入两条路径，且字段语义是合并（按 id 新增或更新）而非整体替换时。
+occurrences:
+  - origin: scene-contract-and-causality
+    date: '2026-10-03'
+    evidence: internal/outline/set.go 的 apply 整体重建 state_changes，与 internal/cli/scene.go 的按 id 合并分叉；审查实测第二次调用丢失既有条目；修复后 internal/cli/scene_test.go 的 TestSceneContractStateChangeMerge 覆盖连续写入落盘。

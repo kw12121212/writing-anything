@@ -19,7 +19,7 @@ import (
 )
 
 var outlineKeys = []outputKey{
-	{"outline", "大纲（Outline）：unit、path 与 sections（id、title、role、covers、uses、reason、characters、beats、reveal、targets）；没有 outline.yaml 或失败时为 null"},
+	{"outline", "大纲（Outline）：unit、path 与 sections（id、title、role、covers、uses、reason、characters、beats、reveal、targets，以及场景契约扩展字段 pov、location、state_changes、plants、recovers、causes、events）；没有 outline.yaml 或失败时为 null"},
 	{"coverage", "写作简报中每个核心观点（Key Message）的覆盖情况：keyMessage、text 与 sections（覆盖它的节）"},
 	{"gaps", "覆盖缺口（Coverage Gap）数组，每项含 code、keyMessage、section 与 message"},
 }
@@ -74,16 +74,29 @@ var outlineShowCommand = &command{
 }
 
 type sectionView struct {
-	ID         string         `json:"id"`
-	Title      string         `json:"title"`
-	Role       *string        `json:"role"`
-	Covers     []string       `json:"covers"`
-	Uses       []string       `json:"uses"`
-	Reason     *string        `json:"reason"`
-	Characters []string       `json:"characters"`
-	Beats      []string       `json:"beats"`
-	Reveal     *string        `json:"reveal"`
-	Targets    map[string]int `json:"targets"`
+	ID           string              `json:"id"`
+	Title        string              `json:"title"`
+	Role         *string             `json:"role"`
+	Covers       []string            `json:"covers"`
+	Uses         []string            `json:"uses"`
+	Reason       *string             `json:"reason"`
+	Characters   []string            `json:"characters"`
+	Beats        []string            `json:"beats"`
+	Reveal       *string             `json:"reveal"`
+	Targets      map[string]int      `json:"targets"`
+	Pov          *string             `json:"pov"`
+	Location     *string             `json:"location"`
+	StateChanges []stateChangeView   `json:"state_changes"`
+	Plants       []string            `json:"plants"`
+	Recovers     []string            `json:"recovers"`
+	Causes       []string            `json:"causes"`
+	Events       []string            `json:"events"`
+}
+
+// stateChangeView 是场景契约中一条必须发生的状态变化：id 供写后收口对照，text 为描述。
+type stateChangeView struct {
+	ID   string `json:"id"`
+	Text string `json:"text"`
 }
 
 type outlineView struct {
@@ -117,8 +130,14 @@ func (res *outlineResult) fill(ref string, o *outline.Outline, ms outline.Messag
 	if o != nil {
 		v := &outlineView{Unit: ref, Path: o.Path, Sections: []sectionView{}}
 		for _, s := range o.Sections {
-			v.Sections = append(v.Sections, sectionView{ID: s.ID, Title: s.Title, Role: optional(s.Role), Covers: nonNilStrings(s.Covers), Uses: nonNilStrings(s.Uses), Reason: optional(s.Reason),
-				Characters: nonNilStrings(s.Characters), Beats: nonNilStrings(s.Beats), Reveal: optional(s.Reveal), Targets: nonNilInts(s.Targets)})
+			sv := sectionView{ID: s.ID, Title: s.Title, Role: optional(s.Role), Covers: nonNilStrings(s.Covers), Uses: nonNilStrings(s.Uses), Reason: optional(s.Reason),
+				Characters: nonNilStrings(s.Characters), Beats: nonNilStrings(s.Beats), Reveal: optional(s.Reveal), Targets: nonNilInts(s.Targets),
+				Pov: optional(s.Pov), Location: optional(s.Location), Plants: nonNilStrings(s.Plants), Recovers: nonNilStrings(s.Recovers),
+				Causes: nonNilStrings(s.Causes), Events: nonNilStrings(s.Events), StateChanges: []stateChangeView{}}
+			for _, sc := range s.StateChanges {
+				sv.StateChanges = append(sv.StateChanges, stateChangeView{ID: sc.ID, Text: sc.Text})
+			}
+			v.Sections = append(v.Sections, sv)
 		}
 		res.Outline = v
 	}
@@ -453,6 +472,27 @@ func outlineText(res *outlineResult) string {
 			}
 			if sec.Reveal != nil {
 				detail += "；不提前透露：" + *sec.Reveal
+			}
+			if sec.Pov != nil {
+				detail += "；视角 " + *sec.Pov
+			}
+			if sec.Location != nil {
+				detail += "；地点 " + *sec.Location
+			}
+			for _, sc := range sec.StateChanges {
+				detail += "；必须发生：" + sc.Text + "（" + sc.ID + "）"
+			}
+			if len(sec.Plants) > 0 {
+				detail += "；埋设伏笔 " + strings.Join(sec.Plants, "、")
+			}
+			if len(sec.Recovers) > 0 {
+				detail += "；回收伏笔 " + strings.Join(sec.Recovers, "、")
+			}
+			if len(sec.Causes) > 0 {
+				detail += "；起因 " + strings.Join(sec.Causes, "、")
+			}
+			if len(sec.Events) > 0 {
+				detail += "；产生事件 " + strings.Join(sec.Events, "、")
 			}
 			if len(sec.Targets) > 0 {
 				var items []string

@@ -195,6 +195,11 @@ categories:
       status: active
       occurrences: 1
       path: .strict-spec-driven/lessons/coding/lesson-63f5fd.yaml
+    lesson-7cc0c9:
+      title: 写前检查的候选模型必须与实际写入共用同一套字段合并逻辑
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/coding/lesson-7cc0c9.yaml
   documentation:
     must-must-6af326:
       title: 修改一条 MUST 需求时，要检查同一规格里相邻的 MUST 是否因此冲突

@@ -12,3 +12,12 @@ sections:
     characters: [守灯人, 精灵]
     beats: [why]
     reveal: 精灵的真实身份
+    pov: 守灯人
+    location: 灯室
+    state_changes:
+      - id: sc-1
+        text: 精灵交出灯芯
+    plants: [fs-1]
+    recovers: []
+    causes: [ev-1]
+    events: [ev-2]

@@ -28,6 +28,26 @@
           },
           "beats": {"$ref": "common.schema.json#/$defs/ids", "description": "轻量场景契约：本场景承担的情节节拍（Story Beat）id，指向同一作品根单元大纲的节"},
           "reveal": {"type": "string", "pattern": "\\S", "description": "轻量场景契约：揭示边界（Reveal Boundary），本场景不能提前透露的信息"},
+          "pov": {"type": "string", "pattern": "\\S", "description": "长篇场景契约：视角人物"},
+          "location": {"type": "string", "pattern": "\\S", "description": "长篇场景契约：地点"},
+          "state_changes": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["id", "text"],
+              "properties": {
+                "id": {"$ref": "common.schema.json#/$defs/id", "description": "必须发生的状态变化 id，节内不重复"},
+                "text": {"type": "string", "pattern": "\\S", "description": "必须发生的状态变化描述"}
+              }
+            },
+            "description": "长篇场景契约：必须发生的状态变化，写后收口按 id 对照提交"
+          },
+          "plants": {"$ref": "common.schema.json#/$defs/ids", "description": "长篇场景契约：本场景要埋设的伏笔（Foreshadowing）id"},
+          "recovers": {"$ref": "common.schema.json#/$defs/ids", "description": "长篇场景契约：本场景要回收的伏笔 id"},
+          "causes": {"$ref": "common.schema.json#/$defs/ids", "description": "长篇场景契约：起因（Cause），引用前文已发生事件的 id"},
+          "events": {"$ref": "common.schema.json#/$defs/ids", "description": "长篇场景契约：预期产生的事件（Event）id，作品内唯一"},
           "targets": {
             "type": "object",
             "propertyNames": {"$ref": "common.schema.json#/$defs/id"},
