@@ -1,0 +1,12 @@
+schema: strict-spec-driven/planned-change/v1
+schema_version: 1
+artifact_type: planned_change
+schema_file: ../../templates/strict-spec-driven/schemas/planned-change.yaml
+planned_change:
+  id: docs-runbook
+  milestone: novel-e2e
+status: planned
+summary: 语料 README 与维护流程：目录结构、运行方式、UPDATE_GOLDEN 用法、修订语料的完整步骤与矩阵维护约定
+details: README 检入语料目录，说明素材、正文、脚本、黄金文件、矩阵的布局；修订流程：改设定或正文 → 重放全部命令 → UPDATE_GOLDEN=1 更新黄金文件 → 矩阵对账；运行方式并入完整回归命令说明。
+depends_on:
+  - matrix-check

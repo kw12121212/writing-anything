@@ -1,0 +1,12 @@
+schema: strict-spec-driven/planned-change/v1
+schema_version: 1
+artifact_type: planned_change
+schema_file: ../../templates/strict-spec-driven/schemas/planned-change.yaml
+planned_change:
+  id: replay-harness
+  milestone: novel-e2e
+status: planned
+summary: Go 重放测试：读取命令脚本与语料在临时目录按序重放，逐步断言退出码、诊断码与产物路径，冻结时间源并验证两次执行一致
+details: 沿用 internal/cli 现有 runWSIn 进程内执行约定；脚本按 corpus-design 定义的格式解析；冻结 now 时间源（同 TestTechBlogEndToEnd 模式）；每步校验退出码与期望诊断码，关键阶段校验 changedPaths；同一环境连续重放两次产物一致，作为可重复性的显式验证。
+depends_on:
+  - corpus-authoring

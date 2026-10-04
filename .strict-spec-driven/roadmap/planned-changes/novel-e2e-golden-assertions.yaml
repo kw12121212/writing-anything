@@ -1,0 +1,12 @@
+schema: strict-spec-driven/planned-change/v1
+schema_version: 1
+artifact_type: planned_change
+schema_file: ../../templates/strict-spec-driven/schemas/planned-change.yaml
+planned_change:
+  id: golden-assertions
+  milestone: novel-e2e
+status: planned
+summary: 黄金文件比对与四类负向断言：结构化产物与整书导出对 golden 逐字节比对（UPDATE_GOLDEN 一键更新），注入设定冲突、知情违例、伏笔悬空、时间线倒置并断言 error 级发现
+details: golden 对象：知情表、伏笔台账、状态快照、连续性审查报告、场景上下文包、审查任务包清单、组稿整书导出（Markdown 与纯文本）；比对前规范化易变字段（时间戳、临时目录路径）。负向断言在重放副本上进行：修改钦定条目、提前引用秘密、删除伏笔回收、插入时间倒置场景，逐类断言对应审查命令以 error 报告且诊断码正确，修回合规文本后恢复全绿。
+depends_on:
+  - replay-harness
