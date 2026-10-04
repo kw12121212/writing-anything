@@ -1,0 +1,72 @@
+schema: strict-spec-driven/main-spec/v1
+schema_version: 1
+artifact_type: main_spec
+schema_file: templates/strict-spec-driven/schemas/main-spec.yaml
+spec:
+  id: impact
+  title: 影响传播（Ripple Analysis）
+requirements:
+  impact-preview:
+    strength: MUST
+    statement: wa-cli impact <target> 必须只读地预览影响传播：目标（target）为场景单元（Unit）引用（如 my-novel/scene-1）或 <work>/<id> 形式的设定条目、事件或伏笔引用，解析不了时报告 impact.unknown-target（field 为 target）。受影响后续场景按磁盘引用图确定性计算：场景大纲（causes 引用的事件、characters 与 pov 解析到唯一设定条目的称谓）、伏笔台账（planted_in、planned_recover 与 recovered_in 指向该场景）、状态与知情台账（绑定该条目的场景）、recall 正文命中（设定条目的 name 与别名出现在 stage 为 done 的场景正文中），再对受影响场景声明的事件做一层传递（受影响场景声明的事件被更晚场景的 causes 引用时，后者也受影响）；不做多层闭包（逐层 mark 传播）。--json 输出 affected 数组（每项含 scene、via（cause-event、character、state、thread 之一）与 reason），按场景的单元树先序排列，没有受影响场景时为空数组；changedPaths 为空数组，退出码为 0。不加 --json 时按先序逐行列出。
+    scenarios:
+      preview-event-chain:
+        - GIVEN: scene-1 声明事件 ev-1；scene-2 的 causes 引用 ev-1 且声明 ev-2；scene-3 的 causes 引用 ev-2
+        - WHEN: 运行 wa-cli impact my-novel/scene-1 --dir D --json
+        - THEN: affected 依次含 scene-2（via 为 cause-event）与 scene-3（一层传递），退出码为 0
+      preview-canon-prose-hit:
+        - GIVEN: canon-1 的 name 出现在 stage 为 done 的场景 scene-9 正文中，scene-9 的大纲未声明该人物
+        - WHEN: 运行 wa-cli impact my-novel/canon-1 --dir D --json
+        - THEN: affected 含 scene-9（via 为 character，reason 说明为正文命中），退出码为 0
+      preview-latest-scene:
+        - GIVEN: scene-3 是先序最后的场景
+        - WHEN: 运行 wa-cli impact my-novel/scene-3 --dir D --json
+        - THEN: affected 为空数组，changedPaths 为空数组，退出码为 0
+      preview-unknown-target:
+        - GIVEN: 目标 nope 不是场景、条目、事件或伏笔
+        - WHEN: 运行 wa-cli impact my-novel/nope --dir D --json
+        - THEN: 报告 impact.unknown-target，退出码为 1
+  impact-mark:
+    strength: MUST
+    statement: wa-cli impact mark <target> 必须把影响范围落盘为复查标记（Recheck Mark）：写入 .writing-anything/rechecks/<work>.yaml（schema_version 1 与 scenes 数组），追加式合并——同（场景， 目标）已有 open 标记时不重复追加，cleared 后同目标再标记追加新条目（历史保留）；每项含 scene、target、via、reason、marked_at（UTC，RFC 3339）与 status（open）。同时为每个受影响场景生成 causality 维度的审查任务包（复用 review plan 的生成、预算与 done 保留规则）：先完成全部任务包生成、再写复查标记文件（任务包生成失败时 rechecks 逐字节不变），changedPaths 如实列出复查标记文件与包文件。没有受影响场景时不写任何文件（changedPaths 为空数组），--json 输出的 marked 为空数组，退出码为 0。--json 输出 marked 数组（每项含 scene、target、via、reason 与 markedAt）。
+    scenarios:
+      mark-idempotent:
+        - GIVEN: scene-1 的修改影响 scene-2 与 scene-3
+        - WHEN: 运行 wa-cli impact mark my-novel/scene-1 --dir D --json 后再次运行同一命令
+        - THEN: 第一次 marked 含两项且 changedPaths 含 rechecks 与两个 causality 包文件；第二次 marked 为空数组、changedPaths 为空数组，退出码均为 0
+      mark-no-affected:
+        - GIVEN: scene-3 是先序最后的场景
+        - WHEN: 运行 wa-cli impact mark my-novel/scene-3 --dir D --json
+        - THEN: marked 为空数组，没有写出任何文件，退出码为 0
+  impact-clear:
+    strength: MUST
+    statement: wa-cli impact clear <scene> <target> 必须解除场景 scene 对目标 target 的 open 复查标记：--confirmed-by-author 与非空白的 --confirmation（作者确认原话摘要）同时给出，或该场景重新审查通过——review.yaml 基于当前正文（draft_sha256 与当前 draft.md 的 SHA-256 一致）且 rubric 无 fail 结论——时可省略作者确认；两条路径都不满足时报告 impact.incomplete-confirmation（field 为 confirmation，next 含 wa-cli help impact clear --json）。解除把该条目的 status 改为 cleared，写入 cleared_at（UTC，RFC 3339）与依据（作者路径写 confirmation，review 路径写 review_based 为 true），只改这些字段并保留其他内容与 YAML 注释；条目字段经由 YAML 锚点、别名或合并键得到时报告 impact.invalid。没有该 open 标记（或没有复查标记文件）时报告 impact.not-found（next 含 wa-cli help impact mark --json 与 wa-cli impact list <work> --dir <dir> --json）。--json 输出 cleared 字段（含 scene、target、status、clearedAt 与依据），changedPaths 为该文件。wa-cli impact list <work> [--all] 只读列出标记：默认只含 open，--all 含全部（含解除依据）；--json 输出 marks 数组，没有标记或文件时为空数组，退出码为 0。
+    scenarios:
+      clear-author-path:
+        - GIVEN: scene-2 对 scene-1 有 open 标记，尚无合格审稿
+        - WHEN: 运行 wa-cli impact clear my-novel/scene-2 my-novel/scene-1 --confirmed-by-author --confirmation 作者确认无影响 --dir D --json
+        - THEN: 该条目 status 为 cleared、confirmation 为该摘要、cleared_at 为 UTC 时间，changedPaths 含 rechecks 文件，退出码为 0
+      clear-review-based:
+        - GIVEN: scene-2 有基于当前正文且无 fail 结论的 review.yaml
+        - WHEN: 运行 wa-cli impact clear my-novel/scene-2 my-novel/scene-1 --dir D --json
+        - THEN: 该条目 status 为 cleared 且 review_based 为 true（免作者确认），退出码为 0
+      clear-needs-confirmation:
+        - GIVEN: scene-3 没有审稿
+        - WHEN: 运行 wa-cli impact clear my-novel/scene-3 my-novel/scene-1 --dir D --json
+        - THEN: 报告 impact.incomplete-confirmation，rechecks 文件未变，退出码为 1
+      clear-not-found:
+        - GIVEN: 没有针对该（场景， 目标）的 open 标记
+        - WHEN: 运行 wa-cli impact clear my-novel/scene-2 nope --confirmed-by-author --confirmation ok --dir D --json
+        - THEN: 报告 impact.not-found，退出码为 1
+  impact-validation:
+    strength: MUST
+    statement: wa-cli validate 整体校验必须对 .writing-anything/rechecks/ 下每个作品的复查标记文件（rechecks/<work>.yaml）做 Schema 与领域校验并计入 checked：scene 必须是该作品的场景单元（否则 impact.unknown-target，field 为对应位置）；via 取值合法；同（scene， target）至多一条 open 标记（否则 impact.invalid）；open 标记不得含 cleared_at（impact.invalid）；cleared 标记必须含 cleared_at（impact.invalid）与解除依据（confirmation 或 review_based，否则 impact.incomplete-confirmation）；途经符号链接按 artifact.not-found 处理。wa-cli validate <path> 对该位置的复查标记文件执行同样的检查。wa-cli next 对有 open 复查标记的场景，在该单元的 action 中追加提示（不进入 blockers，复查标记不是推进关卡；组稿侧的阻塞由 assemble 引入）；其余输出不变。
+    scenarios:
+      validate-open-with-cleared-at:
+        - GIVEN: rechecks/my-novel.yaml 的 open 标记含 cleared_at
+        - WHEN: 运行 wa-cli validate --dir D --json
+        - THEN: 报告 impact.invalid（path 为该文件），退出码为 1
+      next-hint-not-blocker:
+        - GIVEN: scene-2 有 open 复查标记且阶段产物齐备
+        - WHEN: 运行 wa-cli next my-novel/scene-2 --dir D --json
+        - THEN: blockers 为空数组，action 提示存在复查标记，commands 含 wa-cli advance，退出码为 0

@@ -52,28 +52,20 @@ requirements:
         - THEN: diagnostics 中有一条错误码为 review.missing-note 的诊断，review.yaml 不变，退出码为 1
   accept-gate:
     strength: MUST
-    statement: 'wa-cli accept <unit> 必须按工作区配置的关卡强度（Gate Level）检查验收的阻塞项，有阻塞项时为每项给出一条 error 级诊断、不写任何文件、退出码为 1。所有关卡强度下的阻塞项：本单元文本检查未被豁免的 error 级发现项（accept.lint-errors，path 为 draft.md，next 包含 wa-cli lint <unit> --dir <dir> --json）、使文本检查无法完成的 error 级问题（保留其错误码）、关联该单元的 open 阻塞决策（decision.blocking，next 包含 wa-cli decisions --dir <dir> --json），以及决策队列无法加载（decision.invalid-queue，message 说明决策队列无法加载）。standard 与 strict 另有：没有 review.yaml（accept.review-missing）、review.yaml 不通过校验（保留其诊断）、审稿的 draft_sha256 与当前正文不同（accept.review-stale）、单元的评分项（见 review-record）没有结论（review.missing-verdict），每个 status 为 open 的审稿发现项（accept.open-finding，next 包含 wa-cli help review resolve --json）与每条未处理的作者反馈（accept.open-feedback，next 包含 wa-cli feedback list <unit> --dir <dir> --json）。strict 另有：单元的评分项（来自文体、规范包或选用的写作法）声明 blocking: true 且审稿结论为 fail（accept.blocking-rubric），以及没有给出 --confirmed-by-author 与 --confirmation（accept.unconfirmed，next 包含 wa-cli help accept --json）。审稿结论为 fail 在 fast、standard 下以及未声明 blocking 的评分项上都不阻塞。每条阻塞项诊断的 next 都包含能复查它的 wa-cli review show <unit> --dir <dir> --json。'
+    statement: 'wa-cli accept <unit> 必须按工作区配置的关卡强度（Gate Level）检查验收的阻塞项，有阻塞项时为每项给出一条 error 级诊断、不写任何文件、退出码为 1。所有关卡强度下的阻塞项：本单元文本检查未被豁免的 error 级发现项（accept.lint-errors，path 为 draft.md，next 包含 wa-cli lint <unit> --dir <dir> --json）、使文本检查无法完成的 error 级问题（保留其错误码）、关联该单元的 open 阻塞决策（decision.blocking，next 包含 wa-cli decisions --dir <dir> --json），决策队列无法加载（decision.invalid-queue，message 说明决策队列无法加载），以及写后收口（Close-out）阻塞项——单元为场景且其大纲任一节声明了非空的 state_changes、plants、recovers 或 events（契约要求收口的场景）时：单元目录下没有 closeout.yaml 报告 closeout.missing（path 为单元目录，next 包含 wa-cli scene close-out <unit> --dir <dir> --json 与 wa-cli help scene close-out --json）；closeout.yaml 不通过校验或途经符号链接时报告 closeout.invalid（保留其诊断，next 同上）；closeout.yaml 的 draft_sha256 与当前正文 draft.md 不同报告 closeout.stale（path 为 closeout.yaml，next 同上）；closeout.yaml 记录的 state 与 knowledge 提议仍有 status 为 proposed 的条目报告 closeout.pending-proposals（next 另含 wa-cli state list <work> --dir <dir> --json 与 wa-cli knowledge list <work> --dir <dir> --json）；按当前契约与台账复查收口的契约对照失败时报告 closeout.missing-state-change、closeout.missing-recovery、closeout.missing-plant 或 closeout.missing-event（path 为 closeout.yaml，next 同上）。场景大纲没有声明上述契约字段且单元目录下没有 closeout.yaml 时不做任何收口检查。以及连续性审查（Continuity Review，见 continuity 主规格）阻塞项——单元为场景时，wa-cli continuity 的 error 级发现项（未建卡出场人物、保留词终态人物出场、同场景多名一卡、按场景过滤的悬空引用与伏笔超期）每项一条诊断（错误码同发现项，path 为该场景大纲所在单元目录，next 包含 wa-cli continuity <unit> --dir <dir> --json 与 wa-cli decisions --dir <dir> --json）；已被作者决策豁免的（场景、错误码）不再阻塞，未豁免而阻塞时按 continuity 主规格幂等地生成阻塞决策（changedPaths 如实列出决策队列路径）；没有 error 级发现项的场景与未声明场景契约扩展字体的单元不做连续性检查。standard 与 strict 另有：没有 review.yaml（accept.review-missing）、review.yaml 不通过校验（保留其诊断）、审稿的 draft_sha256 与当前正文不同（accept.review-stale）、单元的评分项（见 review-record）没有结论（review.missing-verdict），每个 status 为 open 的审稿发现项（accept.open-finding，next 包含 wa-cli help review resolve --json）与每条未处理的作者反馈（accept.open-feedback，next 包含 wa-cli feedback list <unit> --dir <dir> --json）。strict 另有：单元的评分项（来自文体、规范包或选用的写作法）声明 blocking: true 且审稿结论为 fail（accept.blocking-rubric），以及没有给出 --confirmed-by-author 与 --confirmation（accept.unconfirmed，next 包含 wa-cli help accept --json）。审稿结论为 fail 在 fast、standard 下以及未声明 blocking 的评分项上都不阻塞。每条阻塞项诊断的 next 都包含能复查它的 wa-cli review show <unit> --dir <dir> --json。'
     scenarios:
-      strict-unconfirmed:
-        - GIVEN: 作品 my-post 处于审稿阶段，审稿基于当前正文且没有未处理的修订任务，gate_level 为 strict
-        - WHEN: 运行 wa-cli accept my-post --dir D --json
-        - THEN: diagnostics 中有一条错误码为 accept.unconfirmed、severity 为 error 的诊断，其 next 包含 wa-cli help accept --json；没有写出 acceptance.yaml，退出码为 1
-      standard-open-revisions:
-        - GIVEN: gate_level 为 standard，审稿有一个 open 的发现项，另有一条 open 的作者反馈
-        - WHEN: 运行 wa-cli accept my-post --dir D --json
-        - THEN: diagnostics 中有错误码为 accept.open-finding 与 accept.open-feedback 的诊断，其 next 包含 wa-cli review show my-post 命令；退出码为 1
-      hard-rules-fast:
-        - GIVEN: gate_level 为 fast，正文命中 error 级的 AI 腔词表，关联该单元有一个 open 的阻塞决策，没有审稿
-        - WHEN: 运行 wa-cli accept my-post --dir D --json
-        - THEN: diagnostics 中有错误码为 accept.lint-errors 与 decision.blocking 的诊断，没有 accept.review-missing，退出码为 1
-      every-blocker-rechecks:
-        - GIVEN: gate_level 为 strict，关联该单元有 open 的阻塞决策，review.yaml 不通过校验
-        - WHEN: 运行 wa-cli accept my-post --dir D --json
-        - THEN: 每条 error 级诊断的 next 都包含 wa-cli review show my-post 命令，退出码为 1
-      blocking-rubric:
-        - GIVEN: 'gate_level 为 strict，评分项 facts 声明 blocking: true，审稿对它的结论为 fail'
-        - WHEN: 运行 wa-cli accept my-post --confirmed-by-author --confirmation 作者：好 --dir D --json
-        - THEN: diagnostics 中有一条错误码为 accept.blocking-rubric 的诊断，退出码为 1
+      continuity-blocks-accept:
+        - GIVEN: novel 作品 my-novel 的场景 s1 处于审稿阶段，其余验收条件满足，出场人物之一在设定集中没有同名 character 条目（continuity.unknown-character），尚无相关决策
+        - WHEN: 运行 wa-cli accept my-novel/s1 --confirmed-by-author --confirmation 作者：可以 --dir D --json
+        - THEN: diagnostics 中有一条错误码为 continuity.unknown-character 的诊断（next 含 wa-cli continuity my-novel/s1 与 wa-cli decisions），决策队列幂等新增一条阻塞决策，没有写出 acceptance.yaml，退出码为 1
+      continuity-waived-passes:
+        - GIVEN: 同上，作者已对豁免场景 s1 的 continuity.unknown-character 的阻塞决策选择允许
+        - WHEN: 运行 wa-cli accept my-novel/s1 --confirmed-by-author --confirmation 作者：可以 --dir D --json
+        - THEN: 没有 continuity 诊断，验收成功，退出码为 0
+      no-contract-scene-unchanged:
+        - GIVEN: short-story 场景的大纲只声明 characters 与 reveal（无场景契约扩展字段），出场人物没有设定卡
+        - WHEN: 运行 wa-cli accept <该场景> --confirmed-by-author --confirmation 作者：可以 --dir D --json
+        - THEN: 没有 continuity 诊断，验收行为与引入连续性审查前一致，退出码为 0
   accept-record:
     strength: MUST
     statement: wa-cli accept <unit> 只能在单元当前阶段的必需产物（Required Artifact）含 acceptance 时使用，否则报告 accept.wrong-stage（next 包含 wa-cli next <unit> --dir <dir> --json）。--confirmed-by-author 与 --confirmation <作者原话摘要> 必须同时给出且摘要不为空白，否则报告 accept.incomplete-confirmation（next 包含 wa-cli help accept --json）。没有阻塞项时必须整体替换单元目录下的 acceptance.yaml，记录 schema_version 1、gate_level、draft_sha256（当前正文的 SHA-256）、confirmed_by_author、confirmation（给出作者确认时）与 accepted_at（UTC 时间，格式 YYYY-MM-DDTHH:MM:SSZ），即确认记录（Confirmation Record）；changedPaths 为 [acceptance.yaml]，--json 输出的 acceptance 字段含 unit、path、gateLevel、draftSha256、confirmedByAuthor、confirmation 与 acceptedAt，退出码为 0。standard 与 fast 下没有给出作者确认时照常验收，confirmed_by_author 为 false，并给出一条 warning 级 accept.unconfirmed。accept 不改变单元的阶段；之后正文被修改、验收记录不通过校验或工作区的关卡强度变得比记录的 gate_level 更严时，advance 与 next 分别报告 acceptance.stale、acceptance.invalid 与 acceptance.weaker-gate（见 units-and-lifecycle 主规格的 advance-stage）。

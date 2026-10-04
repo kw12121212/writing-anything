@@ -1,0 +1,48 @@
+schema: strict-spec-driven/main-spec/v1
+schema_version: 1
+artifact_type: main_spec
+schema_file: templates/strict-spec-driven/schemas/main-spec.yaml
+spec:
+  id: continuity
+  title: 连续性审查（Continuity Review）
+requirements:
+  continuity-command:
+    strength: MUST
+    statement: wa-cli continuity <unit|work> 必须只读地执行确定性连续性检查，不调用大语言模型（LLM）、不修改任何产物（幂等生成的决策除外）。给出 scene 单元时检查该场景；给出其他单元或作品时检查其子树全部场景。连续性检查只对声明了长篇场景契约扩展字段（pov、location、state_changes、plants、recovers、causes、events 任一）的场景启用：只有轻量契约（characters、beats、reveal）的场景跳过（既有文体验收行为不变），跳过的场景不出现在输出中。--json 输出 findings 数组，每项含 scene（场景单元引用）、code、severity（error 或 warning）、waived（该（场景， 错误码）是否已被作者决策豁免）与 message，按场景的单元树先序排列，同场景按检查顺序；changedPaths 为空数组（本命令不生成决策；豁免决策由 accept 的阻塞路径生成）。检查集：(1) continuity.unknown-character：场景大纲各节 characters 的取值与首个非空 pov，在与设定集条目 name、别名（Alias）完全相等的匹配下没有任何命中条目（同名多条目命中时不判，与 recall 的多义不解析一致；作品没有 canon.yaml 时每个称谓都未命中），每个未命中称谓一条 error；(2) continuity.dead-acting：出场称谓唯一命中 character 条目时，取状态台账（state.yaml）中该条目在按先序严格早于本场景的已确认（confirmed）状态里最后生效的完整描述，其值精确等于保留词（死亡、已死亡、已亡故、失踪、已退场）之一时报 error（message 含称谓、条目与状态）；状态描述非保留词（如 殒命）或只有 proposed 状态时不判；(3) continuity.alias-mismatch：同一场景的多个不同出场称谓唯一命中同一 character 条目时报 error（message 含两个称谓与条目 id）；(4) continuity.dangling-reference：绑定该场景的状态与知情台账条目的失效引用（warning，不阻塞验收）、该场景 closeout.yaml 的领域问题（error）、伏笔交叉检查中 path 为该场景大纲的问题（error）与因果链检查中 path 为该场景大纲的问题（error）；状态或知情台账整体无法加载（error 级）时该场景的检查以原问题作为 error findings 返回；(5) continuity.thread-anomaly：伏笔台账中 planted_in 或 planned_recover 为本场景、或本场景大纲节 recovers 引用、status 为 open 且超过计划回收位置（overdue，语义同 threads 主规格）的条目，每条一条 error。没有大纲的场景跳过全部检查。检查项之间的 message 使用中文并含可操作的修复指引。不加 --json 时以人读文本按场景分组输出，被豁免的条目标注［已豁免］。 (6) 时间线（Timeline）检查：作品任一场景声明了 time 或 after 时启用——timeline.unknown-scene（after 引用不存在）、timeline.cycle（after 成环）、timeline.order-conflict（after 声明与推导全序矛盾）与 timeline.same-time-presence（同一出场人物在两个相同 time 的场景出场且两场景间无 after 链分隔），发现为 error 级并进入既有的（场景， 错误码）豁免通道（见 timeline 主规格）；没有任何 time/after 声明的作品不输出时间线发现。 给出系列 id（.writing-anything/series/<id>.yaml 存在）时，continuity 执行系列范围的跨作品检查（见 timeline 与本规格的系列段）：合并成员作品的场景集合（works 顺序）后检查跨作品时间线（timeline 主规格语义，发现 message 标明涉及的作品）、系列级设定引用（canon.Resolve 的解析视图，系列级来源标明 series:<id>）与跨作品状态矛盾——同一设定条目在多部作品的最后生效 confirmed 状态不同时报告 continuity.conflicting-state（error，归先序更早作品的相关场景，message 含两部作品的场景与两个状态描述）；发现进入既有豁免通道。
+    scenarios:
+      series-cross-work-blocks:
+        - GIVEN: 系列 guide 的 book-1/s1 与 book-2/s1 声明相同 time 第一日夜 且都出场守灯人，两场景间无 after
+        - WHEN: 运行 wa-cli continuity guide --dir D --json
+        - THEN: findings 含一条 timeline.same-time-presence（Scene 为 book-1/s1，message 含 book-2/s1 与守灯人），退出码为 0
+      series-conflicting-state:
+        - GIVEN: book-1 把 canon-1 确认为 受伤、book-2 把 canon-1 确认为 痊愈（均为 confirmed）
+        - WHEN: 运行 wa-cli continuity guide --dir D --json
+        - THEN: findings 含一条 continuity.conflicting-state（Scene 为 book-1/s1，message 含两部作品的场景与两个状态描述），退出码为 0
+      series-consistent-state-ok:
+        - GIVEN: 同上，但 book-2 的确认也为 受伤（一致）
+        - WHEN: 运行 wa-cli continuity guide --dir D --json
+        - THEN: 没有 continuity.conflicting-state 发现，退出码为 0
+      single-work-cross-after-skipped:
+        - GIVEN: 作品 book-2 的场景声明 after [book-1/s1]（引用系列内另一作品的场景）
+        - WHEN: 运行 wa-cli continuity book-2/s1 --dir D --json
+        - THEN: 单作品检查不报告该跨作品引用的 timeline.unknown-scene（由系列范围检查负责），退出码为 0
+  continuity-accept-gate:
+    strength: MUST
+    statement: wa-cli continuity 必须为验收提供连续性阻塞项计算：AcceptanceBlockers(root, w, unit) 对 scene 单元返回该场景 error 级且未被豁免的 findings（每项一条 workspace.Problem，错误码同 finding，path 为该场景的 outline.yaml，next 由命令层填充）；（场景， 错误码）的豁免判定查询决策队列：存在为该场景与错误码生成（问题文本为固定格式「是否豁免场景 <场景> 的连续性检查 <错误码>？」，同场景同错误码的多条发现共用一个豁免决策）、status 为 decided 且作者选择允许（选项 a）的决策时豁免生效；连续性阻塞在所有关卡强度（Gate Level）下都是 error，发现即阻塞。accept 因连续性阻塞被拒时，必须按（场景， 错误码）幂等地向决策队列追加阻塞决策（decision 包的追加语义：blocking 为 true，options 为 允许/保持不变，推荐保持不变，units 含该作品根单元）：同一（场景， 错误码）已有 open 的此类决策、或作者已选择保持不变时不重复追加；追加时 changedPaths 如实列出决策队列路径，未追加时为空数组；决策队列无法加载时不追加并原样报告其诊断（目标产物逐字节不变）；wa-cli next 因这些决策按 decision-blocking 阻塞推进。作者对豁免决策选择允许后，对应（场景， 错误码）不再阻塞该场景的验收；finding 因正文或台账修改而消失后，不再生成新的豁免决策。只读命令（如 wa-cli review show）复用同一阻塞计算但不生成豁免决策：豁免决策只在 accept 的阻塞路径上生成。
+    scenarios:
+      blockers-waive-flow:
+        - GIVEN: 场景 s1 有 error 级 unknown-character finding，决策队列为空
+        - WHEN: accept 被连续性阻塞拒绝后再次运行 accept
+        - THEN: 第一次生成一条豁免决策（changedPaths 含决策队列），第二次不再追加（幂等）；作者 decide 选择允许后 accept 不再被该 finding 阻塞
+      keep-choice-suppresses:
+        - GIVEN: 作者对豁免 s1 的 dead-acting 决策选择了保持不变
+        - WHEN: accept 再次被连续性阻塞拒绝
+        - THEN: 不追加新的豁免决策（changedPaths 为空数组），finding 仍然阻塞，message 提示作者已决定保持不变
+      non-scene-no-check:
+        - GIVEN: 单元是章（chapter）或作品根
+        - WHEN: 调用 AcceptanceBlockers
+        - THEN: 返回空（连续性阻塞只挂在场景验收上）
+      read-only-no-decisions:
+        - GIVEN: 场景 s1 有未豁免的 error 级 finding
+        - WHEN: 运行 wa-cli review show s1 --dir D --json
+        - THEN: gate.blockers 呈现该 finding，changedPaths 为空数组，没有创建或修改 decisions.yaml

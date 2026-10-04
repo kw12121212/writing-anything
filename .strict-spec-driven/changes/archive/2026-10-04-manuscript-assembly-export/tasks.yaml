@@ -1,0 +1,39 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: manuscript-assembly-export
+sections:
+  Implementation:
+    assembly-package:
+      text: 新包 internal/assembly：Collect(root, w)（按单元树先序收集 done 场景的正文（StripComments 去注释）与部/章分组；标题取各级大纲首个节 title，无则回退单元 id）；Gate(root, w)（assemble.scenes-open：stage 不为 done 的场景引用清单；assemble.continuity：各场景未豁免 error 级连续性发现（复用 continuity 只读计算）；assemble.rechecks：open 复查标记（复用 impact.OpenMarks）；全部为空时通过）；Render markdown 与 text 两种（书名、目录（部/章两级、Markdown 带锚点）、部/章标题、场景正文、验收摘要头、AI 参与说明——复用 internal/export 的说明函数）；Assemble(root, w, format, output)（关卡通过后渲染并经 export 的输出路径检查与原子写入写出）
+      status: complete
+    assembly-cli:
+      text: internal/cli：assemble 命令注册（args：work；flags：--dir、--output、--format（markdown 缺省|text）；--json 输出 manuscript 字段（work、path、format、scenes 数、chars、parts 数）与 changedPaths；诊断与 next（三类阻塞分别指向 status、continuity、impact list）；sampleArgs 与 mutatingSamples）
+      status: complete
+    assembly-glossary:
+      text: docs/GLOSSARY.md 增补组稿（Assembly）词条：wa-cli assemble 按单元树先序把已验收场景组成整书（目录、部/章标题、去注释正文与 AI 参与说明），未完成、连续性阻塞或 open 复查标记任一存在时拒绝
+      status: complete
+  Testing:
+    test-assembly-package:
+      text: internal/assembly 单元测试：组装顺序与标题解析（大纲节标题优先、无大纲回退 id、场景不渲染标题）；关卡三类阻塞的逐项列出与解除后通过；两种格式渲染（目录锚点、验收摘要、AI 参与说明）；输出路径检查与原子写入复用（无效路径拒绝且不写）
+      status: complete
+    test-assembly-cli:
+      text: internal/cli 测试：assemble 的 --json 信封与人读输出、--output 与 --format、三类阻塞的拒绝与 next 断言、解除（推进场景/豁免连续性/解除复查）后成功导出并 validate 通过；sampleArgs 与 TestRegistryConsistency 通过
+      status: complete
+    run-regression:
+      text: 完整回归测试并确认覆盖率不低于阈值：go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    verify-change:
+      text: 已运行 ready 与 verify；实现含包测试与 CLI 测试（组装顺序与标题回退、注释剥离、两种格式、三类阻塞与解除、输出路径复用），完整回归通过（覆盖率 87.41% ≥ 80%）
+      status: complete
+      command: strict-spec-cli ready manuscript-assembly-export && strict-spec-cli verify manuscript-assembly-export
+    verify-archive-readiness:
+      text: 已核对归档合并路径：assembly 新主规格将写入 .strict-spec-driven/specs/assembly.yaml 并进入 specs/INDEX.yaml；strict-spec-cli verify 诊断清零
+      status: complete
+      command: strict-spec-cli verify manuscript-assembly-export
+testing_gates:
+  validation_task: run-regression
+  unit_test_task: test-assembly-package

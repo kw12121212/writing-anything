@@ -1,0 +1,48 @@
+schema: strict-spec-driven/main-spec/v1
+schema_version: 1
+artifact_type: main_spec
+schema_file: templates/strict-spec-driven/schemas/main-spec.yaml
+spec:
+  id: timeline
+  title: 时间线（Timeline）
+requirements:
+  timeline-command:
+    strength: MUST
+    statement: wa-cli timeline <ref> 必须只读地输出时间线：ref 为场景或章/部单元引用（输出其所属作品全部场景）、作品 id 或系列 id（输出成员作品按 series.yaml 的 works 顺序拼接的全部场景）。场景大纲节可声明 time（故事时间（Story Time）：自由文本标记，相同文本视为同时，不做历法解析）与 after（声明本场景晚于的前文场景引用数组，可跨作品，格式 <work>/<scene>；同作品可省略作品段）。全序由 after 声明的偏序经拓扑排序推导（Kahn 算法，候选按默认序稳定选择，同一输入同一输出），无声明或声明不约束的场景按默认序（单元树先序，系列内按 works 顺序）补位。--json 输出 timeline 数组（每项含 unit、time（未声明为 null）、after 与 position（从 1 递增）），changedPaths 为空数组；发现按 error 诊断：after 引用不存在的场景报告 timeline.unknown-scene（field 为 after，message 含引用与场景）；after 声明成环报告 timeline.cycle（message 列出成环场景，至多 5 项后省略，此时输出退回默认序）；after 声明与推导全序矛盾（引用的场景不早于本场景）报告 timeline.order-conflict；同一人物（出场称谓解析到同一设定集条目或原文相同）在两个相同 time 的场景出场且两场景之间没有 after 链分隔（任一方向可达即视为有序）报告 timeline.same-time-presence（message 含人物、time 与两个场景）。所有诊断的 next 含 wa-cli help scene contract --json 与 wa-cli timeline <ref> --dir <dir> --json。没有场景时 timeline 为空数组、退出码为 0。不加 --json 时按序逐行输出（序号、场景、time 与晚于声明）。
+    scenarios:
+      timeline-no-declarations:
+        - GIVEN: my-novel 四个场景都没有声明 time/after
+        - WHEN: 运行 wa-cli timeline my-novel --dir D --json
+        - THEN: timeline 按单元树先序排列四项（time 为 null、after 为空数组），没有诊断，退出码为 0
+      timeline-after-chain:
+        - GIVEN: scene-4 声明 after [scene-3]、scene-3 声明 after [scene-1]
+        - WHEN: 运行 wa-cli timeline my-novel --dir D --json
+        - THEN: 推导序中 scene-1 早于 scene-3 早于 scene-4，退出码为 0
+      timeline-cycle:
+        - GIVEN: scene-2 与 scene-3 互相声明 after
+        - WHEN: 运行 wa-cli timeline my-novel --dir D --json
+        - THEN: 报告 timeline.cycle（message 含两个场景），timeline 按默认序输出，退出码为 1
+      timeline-same-time:
+        - GIVEN: scene-1 与 scene-2 都声明 time 第三日夜 且都出场守灯人，两场景之间没有 after
+        - WHEN: 运行 wa-cli timeline my-novel --dir D --json
+        - THEN: 报告 timeline.same-time-presence（message 含守灯人、第三日夜 与两个场景），退出码为 1
+      timeline-series:
+        - GIVEN: 系列 guide 的 works 为 [part-1, part-2]，side-story 是 part-2 下的作品且其场景声明 after [my-novel/scene-4]
+        - WHEN: 运行 wa-cli timeline guide --dir D --json
+        - THEN: 两作品的场景合并在一条时间线中，my-novel/scene-4 早于跨作品引用它的场景，退出码为 0
+  timeline-continuity:
+    strength: MUST
+    statement: wa-cli continuity 必须接入时间线检查：作品任一场景声明了 time 或 after 时，Run 的 findings 增加时间线项——timeline.unknown-scene（after 引用不存在）、timeline.cycle（成环）、timeline.order-conflict（声明矛盾）与 timeline.same-time-presence（同 time 双出场），发现归属 message 中提及的场景（无明确场景时归首个场景），error 级，进入既有的决策豁免通道（（场景， 错误码）粒度，与连续性发现一致）；accept 的阻塞与豁免沿用 continuity 主规格的既有机制。没有任何 time/after 声明的作品：continuity、accept、validate 的输出与错误码完全不变（零新增检查）。scene contract 的 --time 与 --after 参数写入大纲节的 time 与 after（after 为逗号分隔整体替换，空字符串删除）；outline set 的节视图与 outline show 输出含 time（未声明为 null）与 after（数组，未声明为空数组）。
+    scenarios:
+      continuity-same-time-blocks:
+        - GIVEN: 场景 s1 与 s2 声明相同 time 且出场同一人物，两场景间无 after
+        - WHEN: 运行 wa-cli accept s1 --confirmed-by-author --confirmation 作者：可以 --dir D --json
+        - THEN: diagnostics 中有一条错误码为 timeline.same-time-presence 的诊断，验收被拒；修正声明（s2 声明 after s1）后验收通过
+      continuity-no-declaration-unchanged:
+        - GIVEN: 作品没有任何 time/after 声明
+        - WHEN: 运行 wa-cli continuity <场景> 与 wa-cli accept <场景> --dir D --json
+        - THEN: 没有 timeline.* 诊断，输出与引入时间线前一致
+      scene-contract-time-flags:
+        - GIVEN: 场景 s1 的大纲节 sc1 没有时间声明
+        - WHEN: 运行 wa-cli scene contract my-novel/s1 sc1 --time 第三日夜 --after scene-0 --dir D --json
+        - THEN: 节 sc1 的 time 为 第三日夜、after 为 [scene-0]，outline show 的节视图含 time 与 after，退出码为 0

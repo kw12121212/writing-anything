@@ -1,0 +1,51 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: scene-close-out
+sections:
+  Implementation:
+    closeout-schema:
+      text: internal/schema 新增 closeout.schema.json（schema_version=1 必填；draft_sha256 为 64 位十六进制必填；events、canon、state、knowledge、plants、recovers 与 waived 为数组，缺省视为空数组；events/canon/state/knowledge/plants/recovers 的元素须符合 id 格式；waived 元素为非空文本且不重复），在 schema.go 注册命名 closeout 并纳入 embed 清单；补合法与不合法夹具及 schema 包测试
+      status: complete
+    closeout-package:
+      text: 新包 internal/closeout：closeout.yaml 的加载与领域校验（draft_sha256 形态；state、knowledge、plants、recovers、canon 各 id 引用的台账条目存在且绑定该场景——state.scene、knowledge.scene、threads.planted_in 或 recovered_in 等于该场景、canon 条目在 canon.yaml——否则 closeout.unknown-entry 级诊断；events 的每个 id 在该场景大纲声明，否则 closeout.unknown-event；途经符号链接按 artifact.not-found）；收口输入（--file 或标准输入 YAML）解析与 Schema 校验（节：canon、state_changes（含可选 contract）、knowledge、plants、recovers、events、waived）；按写入后状态的契约对照（合并场景大纲全部节：契约 state_changes 节内 id 由载荷 contract 关联必须覆盖，closeout.missing-state-change；契约 recovers 写入后须 paid 且 recovered_in 为该场景，closeout.missing-recovery；载荷 events 恰等于契约 events 全覆盖，closeout.missing-event 与 closeout.unknown-event；契约 plants 的 planted_in 复查）；疑似专有名词扫描（大纲 characters、pov、location 对照写入后 canon 的 name 与别名完全相等匹配，未命中且未豁免者产生 warning closeout.suspected-name）；提交编排（预检通过后依次以 canon add、state propose、knowledge propose、threads add、threads set 语义写入并整体写出 closeout.yaml，closeout.yaml 已存在时无 --replace 报 closeout.already-closed）；Waive(unit, name)（只并入 closeout.yaml 的 waived 并去重）；AcceptanceBlockers(unit)（closeout.missing、closeout.invalid 保留诊断、closeout.stale、closeout.pending-proposals、契约对照错误码），供 validate、CLI 与 review 复用
+      status: complete
+    closeout-cli:
+      text: internal/cli 注册 scene close-out 子命令（args：unit；flags：--file、--replace、--waive 可重复；输入从 --file 或标准输入读取，模式同 review record）：给出 --waive 且不带收口输入时执行豁免子操作（closeout.yaml 不存在报告 closeout.not-closed，next 含 wa-cli help scene close-out --json）；提交时 --json 信封输出 closeout 字段（unit、path、draftSha256、canon、state、knowledge、plants、recovers 各写入 id、events、waived 与疑似专有名词名单）与人读输出；诊断与 next（契约缺口指向 wa-cli scene close-out 与 wa-cli help scene contract --json、未知引用指向对应台账 list 与 canon add、closeout.already-closed 指向 --replace 用法）；scene 命令组帮助纳入 close-out；wa-cli validate 整体校验按 CheckWorks 模式纳入每个场景单元目录下存在的 closeout.yaml（计入 checked），validate <path> 支持对单个 closeout.yaml 直接校验；无 closeout.yaml 的作品零新增诊断
+      status: complete
+    accept-closeout-gate:
+      text: internal/review 与 internal/cli 的 accept 集成收口阻塞项：场景大纲任一节声明非空 state_changes、plants、recovers 或 events 时，accept 在所有关卡强度（fast、standard、strict）下按 internal/closeout 的 AcceptanceBlockers 计算——无 closeout.yaml 报 closeout.missing（next 含 wa-cli scene close-out <unit> --dir <dir> --json 与 wa-cli help scene close-out --json）；产物不合法报 closeout.invalid（保留其诊断）；draft_sha256 与当前正文不同报 closeout.stale；记录的 state 与 knowledge 提议仍有 proposed 报 closeout.pending-proposals（next 含 wa-cli state list 与 wa-cli knowledge list）；按当前契约与台账复查契约对照失败复用 closeout.missing-state-change、closeout.missing-recovery、closeout.missing-plant、closeout.missing-event；每条阻塞项 next 均含 wa-cli review show <unit> --dir <dir> --json；review show 的 gate.blockers 与 ready 随之呈现；未触发条件（无契约要求字段且无 closeout.yaml）的 accept 行为逐字节不变
+      status: complete
+    closeout-glossary:
+      text: docs/GLOSSARY.md 增补疑似专有名词（Suspected Proper Noun）词条：写后收口扫描中以场景大纲声明（characters、pov、location）为候选、未能解析到设定集条目 name 或别名的取值，以 warning 提示补录或豁免；并在既有写后收口（Close-out）词条中补一句收口产物 closeout.yaml 的说明（记录正文 SHA-256、提交的台账条目 id、确认的事件与豁免名单）
+      status: complete
+  Testing:
+    test-closeout-package:
+      text: internal/closeout 单元测试：已实现并通过（契约对照各失败分支、疑似专名扫描与豁免、canon 载荷 id 预演、already-closed 与 --replace、Waive 幂等、AcceptanceBlockers 各错误码、CheckWorks 与 CheckArtifact、被拒提交零写入断言）
+      status: complete
+    test-closeout-cli:
+      text: internal/cli 测试：已实现并通过（--file 与标准输入两入口、--json 信封与 closeout 字段、changedPaths、契约缺口拒绝且文件未变、疑似专名 warning 与人读输出、--waive 子操作、already-closed 与 --replace 重收口、help 注册）
+      status: complete
+    test-closeout-accept:
+      text: 验收联动测试：已实现并通过（fast 下 closeout.missing 且 next 含 scene close-out 与 review show、review show 的 gate.blockers 呈现、pending-proposals 与确认后通过并推进 done、closeout.stale 与重收口恢复、契约扩展 missing-state-change、short-story 轻量契约场景零收口诊断）
+      status: complete
+    test-closeout-e2e:
+      text: internal/cli e2e 与 validate 测试：已实现并通过（契约 → 正文 → 收口 → 作者确认 → 验收 → 推进 done 全流程、closeout.yaml 计入 checked 且零诊断、validate <path> 单产物校验）
+      status: complete
+    run-regression:
+      text: 完整回归测试并确认覆盖率不低于阈值：go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    verify-change:
+      text: 已运行 strict-spec-cli ready scene-close-out（就绪）与 strict-spec-cli verify scene-close-out（实现完成后仅剩 verification 任务自身 pending）；fresh-context 独立审查的 5 个 MUST FIX（预检漏洞、验收领域校验、pending-proposals next、scene 类型条件、recover_at 语义）已全部修复并补回归测试，修复后完整回归通过（覆盖率 89.03% ≥ 80%）
+      status: complete
+      command: strict-spec-cli ready scene-close-out && strict-spec-cli verify scene-close-out
+    verify-archive-readiness:
+      text: 已核对归档合并路径：closeout 新主规格将写入 .strict-spec-driven/specs/closeout.yaml 并进入 specs/INDEX.yaml（3 需求 22 场景与实现一致，closeout-submit 语句已按 runnable-next 修正 next 表述）；review 的 accept-gate 为 MODIFIED（完整保留既有阻塞项 + 新增收口阻塞项，新增 5 场景与既有 5 场景合并）；strict-spec-cli verify 无跨文件冲突
+      status: complete
+      command: strict-spec-cli verify scene-close-out
+testing_gates:
+  validation_task: run-regression
+  unit_test_task: test-closeout-package

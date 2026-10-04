@@ -1,0 +1,52 @@
+schema: strict-spec-driven/delta-spec/v1
+schema_version: 1
+artifact_type: delta_spec
+schema_file: templates/strict-spec-driven/schemas/delta-spec.yaml
+target_spec: handoff
+spec:
+  title: 交接记录（Handoff Note）
+  path: .strict-spec-driven/specs/handoff.yaml
+operations:
+  ADDED:
+    handoff-show:
+      strength: MUST
+      statement: wa-cli handoff show [--last N] 必须只读地输出交接记录：默认最近一条，--last N 输出最近 N 条（N 为 1 到 50 的整数，超出范围报告 input.invalid-value，field 为 last，next 含 wa-cli help handoff show --json）；--json 输出 notes 数组，按写入顺序倒序（最近在前），每项含 id、writtenAt、done、todo、instructions 与 risks（数组永不为 null）；没有任何记录（含没有 handoffs.yaml）时 notes 为空数组、退出码为 0；handoffs.yaml 不通过 Schema 或领域校验（id 不符合 handoff-<n> 顺序递增形态或重复）时报告其诊断、退出码为 1；途经符号链接按 artifact.not-found。changedPaths 为空数组。不加 --json 时以人读文本按同样顺序输出每条的 id、时间、完成与待办（及指示与风险）。wa-cli next 的每个单元条目新增 handoff 字段：工作区有交接记录时为最近一条（含 id 与 todo 数组），没有时为 null；next 的其余输出（blockers、action、commands、feedback、progress）不变。wa-cli validate 整体校验纳入 .writing-anything/handoffs.yaml（存在时）的 Schema 与领域校验并计入 checked；wa-cli validate <path> 对该文件执行同样的检查。
+      scenarios:
+        show-latest:
+          - GIVEN: handoffs.yaml 有三条，最近一条 todo 为 [场景三待收口]
+          - WHEN: 运行 wa-cli handoff show --dir D --json
+          - THEN: notes 只含最近一条（id 为 handoff-3、todo 含 场景三待收口），退出码为 0
+        show-last-n:
+          - GIVEN: 同上
+          - WHEN: 运行 wa-cli handoff show --last 2 --dir D --json
+          - THEN: notes 依次为 handoff-3 与 handoff-2（倒序），退出码为 0
+        show-empty:
+          - GIVEN: 工作区没有 handoffs.yaml
+          - WHEN: 运行 wa-cli handoff show --dir D --json 与 wa-cli next --dir D --json
+          - THEN: 前者 notes 为空数组、退出码 0；后者每个单元条目的 handoff 为 null 且其余输出与之前一致
+        next-shows-latest:
+          - GIVEN: 工作区有交接记录，作品 my-novel 有未完成场景
+          - WHEN: 运行 wa-cli next my-novel/scene-2 --dir D --json
+          - THEN: 该条目含 handoff 字段（id 为最近一条且 todo 数组非空），blockers 与 commands 不变，退出码为 0
+    handoff-write:
+      strength: MUST
+      statement: wa-cli handoff write 必须从 --file（相对 --dir 或为绝对路径）或标准输入读取交接记录输入并整体追加到工作区（Workspace）的 .writing-anything/handoffs.yaml：输入为 YAML，含非空的 done（完成了什么，字符串数组）与 todo（未完成事项，字符串数组）及可选的 instructions（作者的新指示，字符串数组）与 risks（需要注意的风险，字符串数组），元素为非空文本。产物含 schema_version（1）与 notes 数组，每条含 id（handoff-<n>，n 从条目数加一递增到不重复）、written_at（UTC，YYYY-MM-DDTHH:MM:SSZ）、done、todo、instructions 与 risks（省略的可选节为空数组）。输入不符合 Schema 或无法解析时报告 artifact.schema-violation 或 artifact.parse-error（field 为输入中的位置，path 为空）；条目数已达到上限 200 时报告 handoff.too-many（message 提示作者归档清理旧记录），不写文件；这些失败退出码为 1。成功时在 notes 末尾追加一条（节点树追加，保留其他内容与 YAML 注释；途经符号链接按 artifact.not-found 处理；notes 经由 YAML 锚点、别名或合并键得到时报告 handoff.anchored-value），changedPaths 为 [handoffs.yaml]，--json 输出的 note 字段含 id、writtenAt、done、todo、instructions 与 risks，退出码为 0。没有 handoff write 之外的写入命令：交接记录只能追加（没有编辑或删除命令）。
+      scenarios:
+        write-first:
+          - GIVEN: 刚初始化的工作区 D，输入含 done [完成场景一] 与 todo [场景二待收口]
+          - WHEN: 运行 wa-cli handoff write --dir D --json（标准输入为输入）
+          - THEN: handoffs.yaml 被创建，首条 id 为 handoff-1、written_at 为 UTC 时间，changedPaths 含 handoffs.yaml，退出码为 0
+        write-appends:
+          - GIVEN: handoffs.yaml 已有一条 handoff-1，文件中有作者注释
+          - WHEN: 运行 wa-cli handoff write --dir D --json（标准输入为第二条输入）
+          - THEN: 追加 id 为 handoff-2 的条目，注释保留，退出码为 0
+        write-invalid-input:
+          - GIVEN: 输入缺少 todo 节
+          - WHEN: 运行 wa-cli handoff write --dir D --json
+          - THEN: 报告 artifact.schema-violation，handoffs.yaml 未被创建或修改，退出码为 1
+        write-cap:
+          - GIVEN: handoffs.yaml 已有 200 条
+          - WHEN: 运行 wa-cli handoff write --dir D --json
+          - THEN: 报告 handoff.too-many，文件未变，退出码为 1
+  MODIFIED: {}
+  REMOVED: {}

@@ -19,6 +19,7 @@ import (
 	"github.com/kw12121212/writing-anything/internal/outline"
 	"github.com/kw12121212/writing-anything/internal/resolve"
 	"github.com/kw12121212/writing-anything/internal/series"
+	"github.com/kw12121212/writing-anything/internal/state"
 	"github.com/kw12121212/writing-anything/internal/threads"
 	"github.com/kw12121212/writing-anything/internal/work"
 	"github.com/kw12121212/writing-anything/internal/workspace"
@@ -30,6 +31,11 @@ const (
 	PartOutline      = "outline"
 	PartSection      = "section"
 	PartCharacter    = "character"
+	PartState        = "state"
+	PartPriorEnding  = "prior-ending"
+	PartChapSummary  = "chapter-summary"
+	PartPartSummary  = "part-summary"
+	PartBookSummary  = "book-summary"
 	PartKnowledge    = "knowledge"
 	PartReaderOnly   = "reader-only"
 	PartReveal       = "reveal"
@@ -161,14 +167,40 @@ type Thread struct {
 	Overdue        bool
 }
 
+// StateItem 是出场人物状态快照（Character States）中的一条：契约出场人物按 state at 本场景语义重放的当前状态。
+type StateItem struct {
+	Entry    string  `json:"entry"`
+	Name     *string `json:"name"`
+	State    string  `json:"state"`
+	Proposal string  `json:"proposal"`
+	Scene    string  `json:"scene"`
+}
+
+// PriorEnding 是一个前序场景的原文结尾（Prior Ending）：至多 400 个字符，最近的在前。
+type PriorEnding struct {
+	Unit    string `json:"unit"`
+	Excerpt string `json:"excerpt"`
+}
+
+// LayeredSummary 是一层分层摘要（Layered Summary）：所属章（chapter）、部（part）或全书（book）的摘要。
+type LayeredSummary struct {
+	Unit  string `json:"unit"`
+	Level string `json:"level"`
+	Text  string `json:"text"`
+	Stale bool   `json:"stale"`
+}
+
+// PriorEndingChars 是前序场景结尾的最大字符数。
+const PriorEndingChars = 400
+
 // KnowledgeItem 是视角人物（POV）或读者已知的一个设定条目（scene-context 的 knowledge 与 readerOnly 内容项）：
 // Event 与 Scene 指向该获知者最早获知它的知情事件（knowledge 主规格的 knowledge-at 语义）。
 type KnowledgeItem struct {
-	Entry  string
-	Name   *string
-	Text   string
-	Event  string
-	Scene  string
+	Entry string
+	Name  *string
+	Text  string
+	Event string
+	Scene string
 }
 
 // CodePOVNotInCanon 是场景契约的视角人物在设定集中没有同名 character 条目时的 warning 错误码。
@@ -196,10 +228,13 @@ type Pack struct {
 	Brief                    *Brief
 	Outline                  *outline.Outline
 	Section                  *Section
-	Characters               []Character     // 场景级：出场人物的当前设定；非 scene 单元为 nil
-	Knowledge                []KnowledgeItem // 场景级：视角人物已知的条目；非 scene 单元为 nil
-	ReaderOnly               []KnowledgeItem // 场景级：读者已知、视角人物未知的条目；非 scene 单元为 nil
-	PriorScenes              []SceneSummary  // 场景级：前序场景的已验收摘要；非 scene 单元为 nil
+	Characters               []Character      // 场景级：出场人物的当前设定；非 scene 单元为 nil
+	States                   []StateItem      // 场景级：出场人物的状态快照；非 scene 单元为 nil
+	PriorEndings             []PriorEnding    // 场景级：前序场景的原文结尾；非 scene 单元为 nil
+	Summaries                []LayeredSummary // 场景级：章、部与全书的分层摘要；非 scene 单元为 nil
+	Knowledge                []KnowledgeItem  // 场景级：视角人物已知的条目；非 scene 单元为 nil
+	ReaderOnly               []KnowledgeItem  // 场景级：读者已知、视角人物未知的条目；非 scene 单元为 nil
+	PriorScenes              []SceneSummary   // 场景级：前序场景的已验收摘要；非 scene 单元为 nil
 	Reveal                   []RevealBoundary
 	Threads                  []Thread // 场景级：与本场景契约相关的未回收伏笔；非 scene 单元为 nil
 	Feedback                 []feedback.Item
@@ -349,6 +384,97 @@ func Build(root string, w *work.Work, u *work.Unit) (*Pack, []workspace.Problem)
 		}
 	}
 
+	// 场景级：前序场景结尾（Prior Ending）——同作品先序最近两个场景的原文末尾（scene-context 的 priorEndings）。
+	if u.Type == "scene" {
+		// 先序中有正文的场景，取最近两个（不足取全部），最近的在前。
+		var withDraft []*work.Unit
+		for _, x := range w.Units() {
+			if x.Ref == u.Ref {
+				break
+			}
+			if x.Type != "scene" {
+				continue
+			}
+			if _, ok, ps := draft.Read(root, w, x); len(ps) == 0 && ok {
+				withDraft = append(withDraft, x)
+			}
+		}
+		count := 0
+		for i := len(withDraft) - 1; i >= 0 && count < 2; i-- {
+			c := withDraft[i]
+			excerpt := tailCharsOf(root, w, c)
+			if strings.TrimSpace(excerpt) == "" {
+				continue
+			}
+			count++
+			v := PriorEnding{Unit: c.Ref, Excerpt: excerpt}
+			p.PriorEndings = append(p.PriorEndings, v)
+			ref := v.Unit
+			heading := fmt.Sprintf("### %s 的结尾\n\n", ref)
+			add(item{part: PartPriorEnding, id: ref, prefix: heading, body: heading + v.Excerpt + "\n",
+				drop: func() {
+					p.PriorEndings = slices.DeleteFunc(p.PriorEndings, func(x PriorEnding) bool { return x.Unit == ref })
+				},
+				truncate: func(t string) {
+					for j := range p.PriorEndings {
+						if p.PriorEndings[j].Unit == ref {
+							p.PriorEndings[j].Excerpt = t
+						}
+					}
+				}})
+		}
+		// 分层摘要（Layered Summary）：所属章、部与全书根单元的摘要，按章、部、书的顺序。
+		levels := []struct {
+			level string
+			part  string
+			unit  *work.Unit
+		}{}
+		for a := u.Parent; a != nil; a = a.Parent {
+			switch a.Type {
+			case "chapter":
+				levels = append(levels, struct {
+					level string
+					part  string
+					unit  *work.Unit
+				}{"chapter", PartChapSummary, a})
+			case "part":
+				levels = append(levels, struct {
+					level string
+					part  string
+					unit  *work.Unit
+				}{"part", PartPartSummary, a})
+			}
+		}
+		if w.Root != nil && w.Root.Type != "scene" {
+			levels = append(levels, struct {
+				level string
+				part  string
+				unit  *work.Unit
+			}{"book", PartBookSummary, w.Root})
+		}
+		for _, l := range levels {
+			sum, ps := series.LoadSummary(root, w, l.unit)
+			if len(ps) > 0 {
+				for _, q := range ps {
+					q.Severity = workspace.SeverityWarning
+					warnings = append(warnings, q)
+				}
+				continue
+			}
+			if sum == nil {
+				warnings = append(warnings, workspace.Problem{Code: CodeSummaryMissing, Severity: workspace.SeverityWarning,
+					Message: fmt.Sprintf("%s 层还没有摘要（Summary）；用 wa-cli summary set %s 写入后，后续场景的上下文才会带出该层摘要", l.unit.Ref, l.unit.Ref)})
+				continue
+			}
+			v := LayeredSummary{Unit: l.unit.Ref, Level: l.level, Text: sum.Text, Stale: sum.Stale}
+			p.Summaries = append(p.Summaries, v)
+			ref := v.Unit
+			add(item{part: l.part, id: ref, body: v.markdown(), drop: func() {
+				p.Summaries = slices.DeleteFunc(p.Summaries, func(x LayeredSummary) bool { return x.Unit == ref })
+			}})
+		}
+	}
+
 	// 场景级：前序场景的已验收摘要（复用 summary.yaml），按父单元 units 顺序；排在前序作品摘要之后。
 	if u.Type == "scene" && u.Parent != nil {
 		sib := u.Parent.Units
@@ -429,6 +555,15 @@ func Build(root string, w *work.Work, u *work.Unit) (*Pack, []workspace.Problem)
 		}})
 	}
 
+	if u.Type == "scene" {
+		// scene 单元按 context-trim 的场景优先级整体重排（稳定排序：同 part 保持构造顺序）；非 scene 单元保持
+		// 既有顺序（本变更的 unchanged behavior）。
+		rank := map[string]int{PartOutline: 0, PartBrief: 1, PartSection: 2, PartState: 3, PartKnowledge: 4,
+			PartReaderOnly: 5, PartReveal: 6, PartThread: 7, PartPriorEnding: 8, PartChapSummary: 9, PartPartSummary: 10,
+			PartBookSummary: 11, PartFeedback: 12, PartDecision: 13, PartFact: 14, PartSummary: 15, PartSceneSummary: 16,
+			PartRules: 17, PartGlossary: 18, PartBannedTerms: 19, PartStyle: 20, PartSource: 21, PartNeighbor: 22}
+		slices.SortStableFunc(items, func(a, b item) int { return rank[a.part] - rank[b.part] })
+	}
 	p.fit(items)
 	return p, warnings
 }
@@ -458,7 +593,18 @@ func sceneItems(root string, w *work.Work, u *work.Unit, own *outline.Outline, p
 	var entries []canon.Entry
 	if len(names) > 0 || pov != "" {
 		var ps []workspace.Problem
-		entries, ps = canon.List(root, w)
+		scoped, sps := canon.Resolve(root, w)
+		if sps != nil {
+			entries, ps = nil, sps
+		} else if len(scoped) == 0 {
+			entries, ps = nil, nil // 没有任何设定条目：与没有 canon.yaml 一致，不提示
+		} else {
+			entries = make([]canon.Entry, len(scoped))
+			for i, se := range scoped {
+				entries[i] = se.Entry
+			}
+			ps = nil
+		}
 		var fatal []workspace.Problem
 		for _, q := range ps {
 			if q.Severity == workspace.SeverityError {
@@ -476,6 +622,8 @@ func sceneItems(root string, w *work.Work, u *work.Unit, own *outline.Outline, p
 		}
 	}
 	var out []item
+	// 出场人物与视角人物解析到的设定条目（按声明顺序去重），供状态快照重放过滤。
+	var memberIDs []string
 	if len(names) > 0 {
 		// canon.yaml 不存在时 List 返回空：出场人物照常缺失，但不提示（scene-context）。
 		if entries != nil {
@@ -486,6 +634,9 @@ func sceneItems(root string, w *work.Work, u *work.Unit, own *outline.Outline, p
 						continue
 					}
 					matched = true
+					if !slices.Contains(memberIDs, e.ID) {
+						memberIDs = append(memberIDs, e.ID)
+					}
 					v := Character{ID: e.ID, Name: name, Text: e.Text, Protection: e.Protection}
 					p.Characters = append(p.Characters, v)
 					id := e.ID
@@ -506,8 +657,8 @@ func sceneItems(root string, w *work.Work, u *work.Unit, own *outline.Outline, p
 	if fatal != nil {
 		return nil, fatal
 	}
+	povID := ""
 	if pov != "" {
-		var povID string
 		for _, e := range entries {
 			if e.Type == canon.TypeCharacter && e.Name != nil && *e.Name == pov {
 				povID = e.ID
@@ -517,33 +668,53 @@ func sceneItems(root string, w *work.Work, u *work.Unit, own *outline.Outline, p
 		if povID == "" {
 			*warnings = append(*warnings, workspace.Problem{Code: CodePOVNotInCanon, Severity: workspace.SeverityWarning,
 				Message: fmt.Sprintf("场景契约的视角人物「%s」在设定集（canon.yaml）中没有同名 character 条目；wa-cli canon add 登记后，wa-cli context 才会带出视角人物已知与读者已知的条目", pov)})
-		} else {
-			known := map[string]bool{}
-			for _, it := range rep.Known(povID) {
-				known[it.Entry] = true
-				v := KnowledgeItem{Entry: it.Entry, Name: it.Name, Event: it.Event, Scene: it.Scene}
-				if c, ok := canonEntries[it.Entry]; ok {
-					v.Text = c.Text
-				}
-				p.Knowledge = append(p.Knowledge, v)
-				out = append(out, item{part: PartKnowledge, id: v.Entry, body: v.markdown(), drop: func() {
-					p.Knowledge = slices.DeleteFunc(p.Knowledge, func(x KnowledgeItem) bool { return x.Entry == v.Entry })
-				}})
+		} else if !slices.Contains(memberIDs, povID) {
+			memberIDs = append(memberIDs, povID)
+		}
+	}
+	// 出场人物状态快照（scene-context 的 states）：state.yaml 不存在时 Snapshot 返回空；存在但不通过校验时
+	// 返回阻止组装的问题（同 threads.yaml 的处理）；未声明 pov 时仍含 characters 解析的条目。
+	snap, fatal := state.Snapshot(root, w, u)
+	if fatal != nil {
+		return nil, fatal
+	}
+	for _, it := range snap {
+		if !slices.Contains(memberIDs, it.Entry) {
+			continue
+		}
+		v := StateItem{Entry: it.Entry, Name: it.Name, State: it.State, Proposal: it.Proposal, Scene: it.Scene}
+		p.States = append(p.States, v)
+		entry := v.Entry
+		out = append(out, item{part: PartState, id: entry, body: v.markdown(), drop: func() {
+			p.States = slices.DeleteFunc(p.States, func(x StateItem) bool { return x.Entry == entry })
+		}})
+	}
+	if povID != "" {
+		known := map[string]bool{}
+		for _, it := range rep.Known(povID) {
+			known[it.Entry] = true
+			v := KnowledgeItem{Entry: it.Entry, Name: it.Name, Event: it.Event, Scene: it.Scene}
+			if c, ok := canonEntries[it.Entry]; ok {
+				v.Text = c.Text
 			}
-			// 读者已知、视角人物未知的条目（悬念素材，与揭示边界配合）。
-			for _, it := range rep.Known(knowledge.Reader) {
-				if known[it.Entry] {
-					continue
-				}
-				v := KnowledgeItem{Entry: it.Entry, Name: it.Name, Event: it.Event, Scene: it.Scene}
-				if c, ok := canonEntries[it.Entry]; ok {
-					v.Text = c.Text
-				}
-				p.ReaderOnly = append(p.ReaderOnly, v)
-				out = append(out, item{part: PartReaderOnly, id: v.Entry, body: v.markdown(), drop: func() {
-					p.ReaderOnly = slices.DeleteFunc(p.ReaderOnly, func(x KnowledgeItem) bool { return x.Entry == v.Entry })
-				}})
+			p.Knowledge = append(p.Knowledge, v)
+			out = append(out, item{part: PartKnowledge, id: v.Entry, body: v.markdown(), drop: func() {
+				p.Knowledge = slices.DeleteFunc(p.Knowledge, func(x KnowledgeItem) bool { return x.Entry == v.Entry })
+			}})
+		}
+		// 读者已知、视角人物未知的条目（悬念素材，与揭示边界配合）。
+		for _, it := range rep.Known(knowledge.Reader) {
+			if known[it.Entry] {
+				continue
 			}
+			v := KnowledgeItem{Entry: it.Entry, Name: it.Name, Event: it.Event, Scene: it.Scene}
+			if c, ok := canonEntries[it.Entry]; ok {
+				v.Text = c.Text
+			}
+			p.ReaderOnly = append(p.ReaderOnly, v)
+			out = append(out, item{part: PartReaderOnly, id: v.Entry, body: v.markdown(), drop: func() {
+				p.ReaderOnly = slices.DeleteFunc(p.ReaderOnly, func(x KnowledgeItem) bool { return x.Entry == v.Entry })
+			}})
 		}
 	}
 	if own != nil {
@@ -813,6 +984,20 @@ var (
 	comments = regexp.MustCompile(`(?s)<!--.*?-->`)
 	heading  = regexp.MustCompile(`^#{1,6}(\s|$)`)
 )
+
+// tailCharsOf 返回场景正文（去掉 HTML 注释、换行换成空格）末尾至多 PriorEndingChars 个字符（Prior Ending）。
+func tailCharsOf(root string, w *work.Work, u *work.Unit) string {
+	content, ok, ps := draft.Read(root, w, u)
+	if len(ps) > 0 || !ok {
+		return ""
+	}
+	text := oneLine(comments.ReplaceAllString(strings.ReplaceAll(string(content), "\r\n", "\n"), ""))
+	r := []rune(strings.TrimSpace(text))
+	if len(r) > PriorEndingChars {
+		r = r[len(r)-PriorEndingChars:]
+	}
+	return string(r)
+}
 
 // excerpt 返回正文第一个不是 Markdown 标题的段落（去掉 HTML 注释与首尾空白、换行换成空格）的前 ExcerptChars 个字符。
 func excerpt(text string) string {

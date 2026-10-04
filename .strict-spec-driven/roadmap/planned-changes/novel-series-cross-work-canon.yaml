@@ -5,7 +5,7 @@ schema_file: ../../templates/strict-spec-driven/schemas/planned-change.yaml
 planned_change:
   id: cross-work-canon
   milestone: novel-series
-status: planned
+status: complete
 summary: 跨作品共享设定集与作用域（Scope）
 details: 设定集条目的作用域分为系列级和作品级。作品级条目可以覆盖系列级条目，但必须记录覆盖原因并经作者确认。context 与连续性审查按作用域解析设定集，并在输出中标明条目来自哪一级。
 depends_on:

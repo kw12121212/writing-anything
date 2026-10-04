@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "审查任务包结论输入",
+  "description": "wa-cli review submit 从 --file 或标准输入读取的结论输入：每个清单项一个结论。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["verdicts"],
+  "properties": {
+    "verdicts": {"type": "array", "minItems": 1, "items": {"type": "object", "additionalProperties": false, "required": ["item", "verdict"], "properties": {
+      "item": {"$ref": "common.schema.json#/$defs/id"},
+      "verdict": {"enum": ["pass", "fail", "na"]},
+      "note": {"type": "string"}
+    }}}
+  }
+}

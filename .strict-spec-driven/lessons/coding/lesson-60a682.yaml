@@ -1,0 +1,19 @@
+schema: strict-spec-driven/lesson/v1
+schema_version: 1
+artifact_type: lesson
+schema_file: templates/strict-spec-driven/schemas/lesson.yaml
+lesson:
+  id: lesson-60a682
+  title: 编排多个台账写入的命令，预检必须逐条覆盖每个写入函数会拒绝的输入
+category: coding
+status: active
+created_at: '2026-10-03T16:56:33.290Z'
+updated_at: '2026-10-03T16:56:33.290Z'
+context: scene close-out 一次提交按 canon→state→knowledge→threads 的顺序写四个台账，承诺「任一预检失败时不写任何文件」
+observation: fresh-context 审查发现三处预检缺口：knowledge 载荷的 id 重复、canon 载荷逐条领域规则（sources 登记、name 规则、别名冲突）、台账追加点的 YAML 锚点——每处都会让写入中途失败而留下更早写入的文件（如 state.yaml 已建而 knowledge 因 id 重复失败），被拒提交的 changedPaths 为空但工作区已不一致
+takeaway: 预检清单来自对每个写入函数拒绝分支的枚举，不是来自规格文字：新增一类载荷时逐个打开写入函数，把它的早期拒绝分支（参数校验、引用存在、id 重复、追加点锚点）抄进预检，并为每条配「被拒提交零写入」的快照测试
+applies_when: 新增编排多个产物写入的命令，或给既有编排命令追加一类载荷时
+occurrences:
+  - origin: scene-close-out 变更的 fresh-context 独立审查
+    date: '2026-10-03'
+    evidence: internal/closeout/closeout.go 的 Submit 预检段与 internal/closeout/closeout_test.go 的 TestSubmitPrecheckCoversWriteRejections

@@ -30,12 +30,12 @@ milestones:
   novel:
     title: 长篇结构与记忆（Novel Structure & Memory）
     path: roadmap/milestones/novel.yaml
-    status: proposed
+    status: complete
   novel-continuity:
     title: 长篇连续性与组稿（Novel Continuity & Assembly）
     path: roadmap/milestones/novel-continuity.yaml
-    status: proposed
+    status: complete
   novel-series:
     title: 系列小说（Novel Series）
     path: roadmap/milestones/novel-series.yaml
-    status: proposed
+    status: complete

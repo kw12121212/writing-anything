@@ -1,0 +1,56 @@
+schema: strict-spec-driven/main-spec/v1
+schema_version: 1
+artifact_type: main_spec
+schema_file: templates/strict-spec-driven/schemas/main-spec.yaml
+spec:
+  id: reviewpacket
+  title: 审查任务包（Review Task Packet）
+requirements:
+  packet-plan:
+    strength: MUST
+    statement: wa-cli review plan <work|unit> [--dimension <维度>] 必须按维度生成语义审查任务包（Review Task Packet），写入 .writing-anything/packets/<work>/ 下的一包一文件（文件名 <dimension>-<n>.yaml，id 为文件名去扩展名，新包的 n 避开该作品全部既有 id 递增）。维度与生成范围：(1) character（人物一致性）：对本范围内每个章（chapter 单元），对其子树场景大纲声明出场、且解析到唯一设定集条目的人物各建一包（名与别名解析到同一条目的合并为一包）——scope 为章引用，excerpt 为该章内声明该人物的场景正文按先序拼接（计入预算后截断），slices 为该人物的状态台账条目（全部状态按先序）与知情台账中该人物获知的全部条目；(2) thread（伏笔回收质量）：对伏笔台账每个条目各建一包——scope 为伏笔 id，excerpt 为埋设场景与回收场景（有 recovered_in 时）的正文结尾片段，slices 为台账条目的文本、计划回收位置与状态；(3) causality（因果与动机）：对范围内每个场景各建一包——scope 为场景引用，excerpt 为场景正文，slices 为大纲节的 causes 与 events、每个起因事件声明场景的正文结尾（找不到声明场景或没有正文时省略该切片）；(4) pov-reveal（视角与揭示边界）：对范围内每个场景各建一包——excerpt 为场景正文，slices 为各节 reveal 与视角人物（解析与重放语义同 context 主规格 scene-context）：视角人物已知条目与读者已知人物未知条目（视角人物未声明或未解析到条目时省略知情切片）；(5) style（文风与情绪节奏）：对范围内每个章各建一包（纵向任务）——excerpt 的 text 为固定说明文字，slices 为章分层摘要（summary.yaml 的 text 与 stale）与章内各场景已记录的 AI 评分（metrics.yaml 最新会话的分值），没有数据时对应切片省略。每个包含 schema_version（1）、id、work、dimension、scope、excerpt（text 与 truncated；范围还没有正文时 text 为固定的占位说明）、slices、checklist 与 status（open）。固定检查清单：character 为 behavior-state（人物的言行与最新已确认状态一致吗）、naming（人物称谓与设定集一致吗）、knowledge-boundary（人物言行未超出其已知信息吗）、state-change（状态变化的过渡可信吗）；thread 为 plant-natural（伏笔的埋设自然吗）、payoff-earned（回收兑现了埋设的期待吗）、continuity（跨场景的伏笔提示连贯吗）；causality 为 cause-holds（场景起因在正文成立吗）、event-produced（契约声明的事件在正文产生了吗）、motivation（人物行动的动机可信吗）；pov-reveal 为 pov-consistent（视角与人称保持一致吗）、no-early-reveal（正文未提前透露揭示边界吗）、reader-knowledge（读者已知的信息运用得当吗）；style 为 style-consistent（文风与画像基线一致吗）、pacing-curve（情绪节奏符合评分与目标吗）、drift-check（评分与摘要中的异常核实了吗）。每个包的 excerpt、slices 与 checklist 按 Markdown 字符数（Unicode 码点）计入，总和不超过作品的上下文预算（context_budget）：checklist 与 slices 优先保留，excerpt 取剩余预算（不足 100 字符时仍截取 100 字符以内的最小可审片段），超出时截断并置 truncated 为 true。所有包先构造并统一预检（编码、重新解析与 Schema 校验），任一包不合法时不写任何文件（本次已生成的包全部不落盘）。重复运行时按（dimension, scope）匹配保留 status 为 done 的包（不重写、id 不被重编号复用），其余重建；--dimension 只生成该维度；给出 unit 时范围为该单元子树。--json 输出 packets 数组（每项含 id、dimension、scope、status、results、chars 与 truncated；没有可建包的内容时为空数组）与 changedPaths（写入与删除的包文件）；退出码为 0。不加 --json 时以人读文本按维度分组列出。 给出系列 id（.writing-anything/series/<id>.yaml 存在且成员多于一部）时，生成系列级任务包——新增 series-causality 维度（causes 引用另一作品声明事件的场景，切片含声明场景的正文结尾，清单为 cross-cause-holds、event-chain 与 motivation）；character 维度生成跨作品包（人物 × 其出场的全部作品的章合并一包，excerpt 按合并时间线的各场景正文，slices 含各作品的状态与知情；只在一部作品的章出场时不重复生成）；包写入 .writing-anything/packets/<series-id>/ 下，scope 与 message 标明系列与涉及作品；单作品路径（成员为一）退化为既有 Plan 行为。
+    scenarios:
+      plan-series-causality:
+        - GIVEN: 系列 guide 中 book-2/s1 的 causes 引用 book-1 声明的 ev-1
+        - WHEN: 运行 wa-cli review plan guide --dimension series-causality --dir D --json
+        - THEN: packets 含 book-2/s1 的 series-causality 包（切片含声明场景结尾），写入 packets/guide/ 下，退出码为 0
+      plan-series-character:
+        - GIVEN: 守灯人在 guide 两部作品的章都出场
+        - WHEN: 运行 wa-cli review plan guide --dimension character --dir D --json
+        - THEN: packets 含一个跨作品 character 包（scope 为两部章的合并），单作品人物包不再重复生成，退出码为 0
+  packet-submit:
+    strength: MUST
+    statement: 'wa-cli review submit <work>/<packet-id> 必须从 --file（相对 --dir 或为绝对路径）或标准输入读取结论输入（YAML：verdicts 数组，每项含 item（清单项 id）、verdict（pass、fail 或 na）与可选 note）并写回该任务包：引用不是 <work>/<packet-id> 形式、或 .writing-anything/packets/<work>/ 下没有该 id 的包文件时报告 packet.not-found（next 含 wa-cli review plan <work> --dir <dir> --json 与 wa-cli help review plan --json）；包 status 为 done 时报告 packet.already-done；输入不符合结论输入的 Schema 或无法解析时报告 artifact.schema-violation 或 artifact.parse-error（field 为输入中的位置，path 为空）；清单项缺结论报告 packet.missing-verdict（message 含缺失的 item id），item 不在清单中或同一 item 有多个结论报告 packet.unknown-item（message 含该 item）；这些失败不修改任何文件，退出码为 1。校验通过后把 results（逐项 {item, verdict, note}）与 status: done、recorded_at（UTC，YYYY-MM-DDTHH:MM:SSZ）写入包文件，只改这些字段并保留其他内容与 YAML 注释；changedPaths 为该包文件，--json 输出的 packet 字段含 id、dimension、scope、status 与 results，fails 为 verdict 为 fail 的结论数，退出码为 0。'
+    scenarios:
+      submit-ok:
+        - GIVEN: 包 character-1 的清单有四项，输入对每项给出结论（一项 fail 带 note）
+        - WHEN: 运行 wa-cli review submit my-novel/character-1 --file verdicts.yaml --dir D --json
+        - THEN: 包文件 status 为 done、results 四项、recorded_at 为 UTC 时间，fails 为 1，changedPaths 含该包文件，退出码为 0
+      submit-missing-verdict:
+        - GIVEN: 清单四项而输入只给三项结论
+        - WHEN: 运行 wa-cli review submit my-novel/character-1 --dir D --json（标准输入给三项）
+        - THEN: 报告 packet.missing-verdict（message 含缺失的 item id），包文件未变，退出码为 1
+      submit-not-found:
+        - GIVEN: packets/my-novel/ 下没有 nope-1.yaml
+        - WHEN: 运行 wa-cli review submit my-novel/nope-1 --dir D --json
+        - THEN: 报告 packet.not-found，退出码为 1
+  packet-report:
+    strength: MUST
+    statement: wa-cli review report <work> 必须只读地汇总该作品全部任务包：--json 输出 dimensions（每个维度的 open 与 done 包数）、failures（done 包中 verdict 为 fail 的结论，每项含 packet、scope、item、verdict 与 note）与 ready（全部包为 done 且 failures 为空时为 true；没有任何包时为 false，message 说明还没有生成任务包）；包文件不通过 Schema 或领域校验时报告其诊断（packet.invalid 汇总一条，message 含首个问题），changedPaths 为空数组。不加 --json 时以人读文本按维度列出进度、fail 结论与就绪结论。wa-cli validate 整体校验必须对 .writing-anything/packets/ 下每个作品的每个包文件做 Schema 与领域校验并计入 checked（id 与文件名一致、清单 id 不重复、done 时结论覆盖全部清单项且取值合法、途经符号链接按 artifact.not-found）；wa-cli validate <path> 对单个包文件执行同样的检查。
+    scenarios:
+      report-ready:
+        - GIVEN: my-novel 的全部包都 done 且无 fail 结论
+        - WHEN: 运行 wa-cli review report my-novel --dir D --json
+        - THEN: ready 为 true，failures 为空数组，退出码为 0
+      report-open-and-fail:
+        - GIVEN: character-1 done 且有一条 fail，thread-1 仍 open
+        - WHEN: 运行 wa-cli review report my-novel --dir D --json
+        - THEN: dimensions 中 character 的 done 为 1、thread 的 open 为 1，failures 含该 fail 项（含 packet 与 item），ready 为 false，退出码为 0
+      report-no-packets:
+        - GIVEN: my-novel 还没有生成任何任务包
+        - WHEN: 运行 wa-cli review report my-novel --dir D --json
+        - THEN: ready 为 false，dimensions 各维度为 0，退出码为 0
+      validate-packet-done-missing-verdict:
+        - GIVEN: 某包 status 为 done 但 results 缺一个清单项的结论
+        - WHEN: 运行 wa-cli validate --dir D --json
+        - THEN: 报告 packet.missing-verdict（path 为该包文件），退出码为 1

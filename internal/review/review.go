@@ -574,7 +574,12 @@ type GateInput struct {
 	Decisions   []Pending            // 关联该单元的 open 阻塞决策
 	DecisionRel string               // 决策队列的路径
 	QueueBad    []workspace.Problem  // 决策队列无法加载的问题：无法确认是否有阻塞决策，偏安全地阻塞验收
-	Confirmed   bool                 // 是否给出了 --confirmed-by-author 与确认原话摘要
+	Closeout    []workspace.Problem  // 写后收口（Close-out）阻塞项（场景契约要求收口而未收口、收口过期、提议未处理等，
+	//                                // 由调用方按 closeout 主规格计算）；原样作为所有关卡强度下的阻塞项输出
+	Volume []workspace.Problem // 卷末检查点（Volume Checkpoint）阻塞项（更早各部的检查点未确认或失效）：error 级
+	//   // 进入阻塞项、warning 级进入提示，由调用方按关卡强度填充严重级别
+	Continuity []workspace.Problem // 连续性审查（Continuity Review）阻塞项：error 级发现项原样进入阻塞项
+	Confirmed bool // 是否给出了 --confirmed-by-author 与确认原话摘要
 }
 
 // Gate 按关卡强度计算验收的阻塞项与 warning（review show 与 accept 共用，只读）：
@@ -595,6 +600,17 @@ func Gate(in GateInput) (blockers, warnings []Blocker) {
 	}
 	for _, d := range in.Decisions {
 		add("decision.blocking", in.DecisionRel, d.ID, fmt.Sprintf("阻塞决策（Blocking）%s 尚未决定：%s", d.ID, d.Text))
+	}
+	for _, p := range in.Closeout {
+		add(p.Code, p.Path, "", p.Message)
+	}
+	for _, p := range in.Volume {
+		if p.Severity == workspace.SeverityError {
+			add(p.Code, p.Path, "", p.Message)
+		}
+	}
+	for _, p := range in.Continuity {
+		add(p.Code, p.Path, "", p.Message)
 	}
 	strict := in.Level == "strict"
 	if strict || in.Level == "standard" {
@@ -629,6 +645,11 @@ func Gate(in GateInput) (blockers, warnings []Blocker) {
 		}
 		for _, f := range in.Feedback {
 			add(CodeOpenFeedback, in.FeedbackRel, f.ID, fmt.Sprintf("修订任务（Revision Task）：作者反馈（Feedback）%s 尚未处理：%s", f.ID, f.Text))
+		}
+	}
+	for _, p := range in.Volume {
+		if p.Severity != workspace.SeverityError {
+			warnings = append(warnings, Blocker{Code: p.Code, Path: p.Path, Message: p.Message})
 		}
 	}
 	if !in.Confirmed {

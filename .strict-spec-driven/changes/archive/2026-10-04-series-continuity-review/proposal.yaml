@@ -1,0 +1,35 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: series-continuity-review
+  status: proposed
+summary:
+  what:
+    - wa-cli continuity 扩展为跨作品检查：给出系列 id 或属于系列的单元/作品时，检查集扩展为系列级——(1) 跨作品时间线：全部成员作品的场景合并排序（timeline 主规格语义），unknown-scene、cycle、order-conflict 与 same-time-presence 跨作品报告；(2) 系列级设定引用：出场人物与 pov 按作用域解析（canon.Resolve），系列级条目缺失或失效的发现标明来源 series:<id>；(3) 跨作品状态与知情：同一设定条目在多部作品的状态台账出现相互矛盾的已确认状态（同一 entry 有一条以上 confirmed 且描述不同——需要作者裁决）报告 continuity.conflicting-state；发现项的 message 标明涉及的作品与场景，归入对应作品的场景（跨双作品的发现归先序更早的场景）
+    - wa-cli review plan 扩展为系列级：给出系列 id 时生成跨作品审查任务包——causality 维度按合并时间线（而非单元树先序）排列正文切片；character 维度增加跨作品包（系列级人物 × 章不再限单作品：该人物在多部作品出场的章合并为一个包，切片含各作品的状态与知情）；新增 series-causality 维度（跨作品因果：causes 引用另一作品声明的事件的场景，切片含声明场景的正文结尾）；每个包的 scope 标明涉及的作品
+    - 组稿关卡的跨作品阻塞：wa-cli assemble 对属于系列的作品，额外检查系列内其他作品的 open 复查标记（assemble.rechecks 扩展为系列范围）与未豁免的跨作品连续性发现（assemble.continuity 扩展），发现项标明作品；单作品（无系列）行为不变
+  why:
+    - 路线图 novel-series 里程碑最后一个计划变更 series-continuity-review：planned change details 的全部要求——同时检查系列级设定集、跨作品的状态快照与时间线，冲突发现标明涉及的作品与场景，跨作品语义审查拆成任务包，完成标准「测试夹具包含两部作品，验证第二部中与第一部冲突的场景会被阻塞」；依赖的 global-timeline 与 review-task-packets 均已归档
+    - 系列的连续性矛盾天然跨作品：第一部确立的设定、状态与时间线约束第二部；单作品检查看不见另一部的内容。前面的变更已把设定（作用域）、时间（时间线）与审查（任务包）的地基铺好，本变更把它们接成系列的连续性检查
+    - 跨作品语义审查同样分治：causality 的正文切片按合并时间线排列让审读者看到真实的因果流，character 的跨作品包让同一人物的弧光在一个任务内审完
+scope:
+  in:
+    - internal/continuity：系列范围的检查编排（合并成员作品的场景集合、时间线跨作品检查、canon.Resolve 的系列级解析、conflicting-state 跨作品状态矛盾、发现归场景与标明作品）
+    - internal/reviewpacket：--series 或给系列 id 时生成系列级包（character 跨作品包、causality 按合并时间线、新增 series-causality 维度、scope 标明作品）
+    - internal/assembly：组稿关卡的系列范围扩展（其他作品的 rechecks 与 continuity）
+    - internal/cli：continuity / review plan / assemble 接受系列 id（复用 timeline 的系列解析）；诊断 message 标明作品；sampleArgs 更新
+    - docs/GLOSSARY.md：跨作品连续性审查词条补充
+    - 测试夹具：两部作品的系列夹具（第一部确立设定/状态/时间线，第二部含冲突场景），验证第二部的冲突场景被阻塞
+  out:
+    - 系列级伏笔台账与跨作品回收：伏笔仍为作品级（cross-work-canon 的既有边界）
+    - 系列级审查报告的独立命令：汇总仍由 review report 承担（任务包状态与 fail 清单），本变更新增的是包的生成维度
+    - MCP 服务与内置技能不单独编写
+unchanged_behavior:
+  - 不属于系列的作品与单元：continuity、review plan、assemble 的输出、退出码与错误码完全不变（单作品路径原样）
+  - 时间线、作用域解析、审查任务包、复查标记的既有语义不变；本变更只扩展它们在系列范围的使用
+  - MCP 服务与内置技能内容不变
+roadmap:
+  milestone: novel-series
+  planned_change: series-continuity-review

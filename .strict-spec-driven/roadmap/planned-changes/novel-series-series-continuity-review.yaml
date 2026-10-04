@@ -5,7 +5,7 @@ schema_file: ../../templates/strict-spec-driven/schemas/planned-change.yaml
 planned_change:
   id: series-continuity-review
   milestone: novel-series
-status: planned
+status: complete
 summary: 跨作品连续性审查
 details: 扩展 wa-cli continuity 与 wa-cli review plan，同时检查系列级设定集、跨作品的状态快照与时间线，冲突发现项标明涉及的作品与场景；跨作品的语义审查同样拆成审查任务包。测试夹具包含两部作品，验证第二部中与第一部冲突的场景会被阻塞。
 depends_on:

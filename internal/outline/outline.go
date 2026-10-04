@@ -70,7 +70,7 @@ type Section struct {
 	Uses         []string       `json:"uses"`
 	Reason       string         `json:"reason"`
 	Characters   []string       `json:"characters"`
-	Beats         []string      `json:"beats"`
+	Beats        []string       `json:"beats"`
 	Reveal       string         `json:"reveal"`
 	Targets      map[string]int `json:"targets"`
 	Pov          string         `json:"pov"`      // 视角人物；空表示未声明
@@ -80,6 +80,8 @@ type Section struct {
 	Recovers     []string       `json:"recovers"` // 要回收的伏笔 id
 	Causes       []string       `json:"causes"`   // 起因：引用前文已发生事件的 id
 	Events       []string       `json:"events"`   // 预期产生的事件 id
+	Time         string         `json:"time"`     // 故事时间标记；空表示未声明
+	After        []string       `json:"after"`    // 声明晚于的前文场景引用（时间线）
 }
 
 // StateChange 是场景契约中必须发生的一条状态变化：id 供写后收口按稳定键对照提交，text 为描述。

@@ -1,0 +1,28 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: manuscript-assembly-export
+approach:
+  - 新包 internal/assembly：按单元树先序收集 done 场景、解析部/章/书标题（各级大纲首个节标题优先，无大纲时用单元 id）、渲染目录与正文（场景正文经 StripComments 去注释）、组装两种格式并追加 AI 参与说明；组稿关卡把未完成单元、continuity error 发现与 open 复查标记逐项列出；输出路径检查与原子写入复用 internal/export
+decisions:
+  title-from-outline:
+    decision: 部、章与书的标题取各自单元大纲（outline.yaml）首个节的 title；没有大纲或节时回退到单元 id。场景不渲染标题（正文直接拼接，场景之间的分隔由章标题承担）
+    rationale: 长篇的部/章名是作者在大纲中维护的自然信息；单元 id 是技术标识，回退使用保证无大纲也能组稿；场景级标题与章标题重复且打乱目录层级
+  gate-three-blockers:
+    decision: 组稿关卡的三类阻塞逐项列出：assemble.scenes-open（stage 不为 done 的场景引用，汇总单元按推导阶段折算为未完成场景清单）、assemble.continuity（每个未豁免 error 级连续性发现的场景与错误码，复用 internal/continuity 的只读 Blockers 语义）、assemble.rechecks（每个 open 复查标记的场景与目标，复用 internal/impact 的 OpenMarks）；任一存在即拒绝且不写文件
+    rationale: 完成标准原文的三类前置；逐项列出让 Agent 能直接给出下一步（推进场景、处理连续性、解除复查）；复用两包的只读计算避免第二套判定
+  reuse-export-layering:
+    decision: 输出路径检查、原子写入与 AI 参与说明的追加全部复用 internal/export 的既有函数（export-format-layering）；assemble 只新增书稿组装与目录渲染；输出默认 .writing-anything/exports/<work>-manuscript.md，--format text 渲染纯文本
+    rationale: export 主规格已确立输出防护（路径不逃逸、原子写、说明追加）；复制这些防护会分叉，违反 export-format-layering
+  done-scenes-only:
+    decision: 只拼接 stage 为 done 的场景正文；关卡保证此时全部场景 done（否则拒绝），收集逻辑本身对个别非 done 场景跳过以防关卡与收集的竞态描述
+    rationale: 关卡拒绝在前、收集在后；两处独立判断同一状态会让「关卡通过但收集跳过」成为不可达却需测试的分支，统一为收集跳过、关卡拦截
+alternatives:
+  - option: 组稿关卡并入 wa-cli export
+    reason: export 是单元级导出命令，把作品级组稿关卡挂进去会让每次单章导出都做全书检查；assemble 是独立的成书动作
+  - option: 复查标记只警告不阻塞
+    reason: 完成标准明确「需复查标记时拒绝组稿」；复查未清零就成书正是关卡要拦的带伤成书
+risks:
+  - 场景很多时书稿很长：组稿是一次性交付动作，内存拼接可接受（导出同规模）
+  - 部/章大纲节缺失导致标题回退到 id：目录与正文仍确定可读，作者可补大纲后重组稿

@@ -29,6 +29,6 @@ dependencies:
   - novel-continuity
 risks:
   - 跨作品数据量大，context 裁剪与检索性能需要控制
-status: proposed
+status: complete
 notes: []
 details: 建立在「规范包分发与系列文章」里程碑的系列共享模型，以及「长篇结构与记忆」「长篇连续性与组稿」两个里程碑的设定集、台账与连续性能力之上。时间线同时服务单部作品内与跨作品的时间检查。

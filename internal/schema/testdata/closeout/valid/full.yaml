@@ -1,0 +1,11 @@
+schema_version: 1
+draft_sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+events: [ev-2]
+canon: [canon-3]
+state:
+  - {id: state-4, contract: sc-1}
+  - {id: state-5}
+knowledge: [know-5]
+plants: [fs-2]
+recovers: [f-1]
+waived: [灯室, 老灯匠]

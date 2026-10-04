@@ -1,0 +1,35 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: session-handoff
+  status: proposed
+summary:
+  what:
+    - 新增 wa-cli handoff write：从 --file（相对 --dir 或为绝对路径）或标准输入读取交接记录（Handoff Note）输入（YAML：非空的 done（完成了什么，字符串数组）、todo（未完成事项，字符串数组）与可选的 instructions（作者的新指示，字符串数组）和 risks（需要注意的风险，字符串数组）），整体追加到工作区的 .writing-anything/handoffs.yaml（schema_version 1 与 notes 数组，每条含 id（handoff-<n> 递增）、written_at（UTC，RFC 3339）、done、todo、instructions 与 risks）——交接记录只能追加，不提供修改或删除命令；条目数上限 200（超出报告 handoff.too-many，提示归档清理）
+    - 新增 wa-cli handoff show [--last N]：只读输出交接记录，默认最近一条，--last N 输出最近 N 条（1 到 50），--json 输出 notes 数组（每项含 id、writtenAt、done、todo、instructions 与 risks），按写入顺序倒序（最近在前）；没有任何记录时 notes 为空数组、退出码为 0
+    - wa-cli next 的每个单元条目新增 handoff 字段：工作区有交接记录时为最近一条（id 与 todo，供新会话无损接续），没有时为 null——完成标准「新会话运行 wa-cli next 时能看到最近的交接记录」；next 的其余输出（blockers、commands、action）不变
+  why:
+    - 路线图 novel-continuity 里程碑最后一个计划变更 session-handoff：完成标准「新会话运行 wa-cli next 时能看到最近的交接记录」的承载者；依赖的 scene-close-out 已归档，当前与 novel-series 的变更同为可推荐（本变更属于先完成的里程碑）
+    - 没有任何会话装得下全书，长篇必然跨多个 Agent 会话推进：会话结束前把完成了什么、未完成的事项、作者的新指示与风险记到磁盘，新会话经 wa-cli next 直接看到，不依赖对话历史——正是里程碑 goal「会话之间通过交接记录无损接续」
+    - 只能追加（planned change details 原文）：交接是时间线与审计记录，修改或删除会破坏接续历史的可信度；上限 200 防止无界增长
+scope:
+  in:
+    - internal/workspace（或新包 internal/handoff）：handoffs.yaml 的加载、Schema 与领域校验、Write（追加，id 递增）、Show（最近 N 条）；上限检查
+    - internal/schema：新增 handoffs.schema.json 与 handoff-input.schema.json（路径模式 .writing-anything/handoffs.yaml），补夹具
+    - internal/cli：handoff write 与 handoff show 命令注册（args、flags、outputKeys、exitCodes、sampleArgs 与 mutatingSamples、--json 与人读输出、诊断与 next）；next 的单元条目加 handoff 字段；validate 整体校验纳入 handoffs.yaml 与 validate <path>
+    - docs/GLOSSARY.md：交接记录（Handoff Note）词条
+    - 测试夹具：多条交接记录的读写、上限拒绝、next 呈现最近一条、无记录时各命令行为不变
+  out:
+    - 跨作品共享设定、时间线与系列连续性审查——属 novel-series 里程碑
+    - 交接记录的编辑、删除或归档命令：只能追加，清理由作者直接处理文件（条目上限保护无界增长）
+    - 交接记录与具体单元的自动关联（如按场景过滤）：记录是工作区级的自由文本，结构化关联交给 todo 的内容本身
+    - MCP 服务与内置技能不单独编写（handoff 经命令注册表自动暴露）
+unchanged_behavior:
+  - 工作区没有 handoffs.yaml 时，next、validate、status 的输出、退出码与错误码不变（next 的 handoff 字段为 null）
+  - 既有命令组语义不变；handoffs.yaml 是新的工作区级产物，不进入任何单元目录
+  - MCP 服务与内置技能内容不变
+roadmap:
+  milestone: novel-continuity
+  planned_change: session-handoff

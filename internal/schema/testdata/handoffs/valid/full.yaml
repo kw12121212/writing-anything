@@ -1,0 +1,4 @@
+schema_version: 1
+notes:
+  - {id: handoff-1, written_at: "2026-10-04T08:00:00Z", done: [完成场景一], todo: [场景二待收口], instructions: [作者要求加快节奏], risks: [伏笔 f-1 接近回收位置]}
+  - {id: handoff-2, written_at: "2026-10-04T09:00:00Z", done: [场景二收口], todo: [场景三草拟]}

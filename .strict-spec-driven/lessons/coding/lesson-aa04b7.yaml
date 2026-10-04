@@ -1,0 +1,19 @@
+schema: strict-spec-driven/lesson/v1
+schema_version: 1
+artifact_type: lesson
+schema_file: templates/strict-spec-driven/schemas/lesson.yaml
+lesson:
+  id: lesson-aa04b7
+  title: 替换共享数据源的加载点时，空态的等价性要先对齐
+category: coding
+status: active
+created_at: '2026-10-04T03:10:26.217Z'
+updated_at: '2026-10-04T03:10:26.217Z'
+context: cross-work-canon 把 ctxpack/continuity 的 canon.List 换成带作用域的 canon.Resolve
+observation: Resolve 在没有任何设定时返回空的非 nil 切片，而 List 的约定是 nil 表示没有 canon.yaml；消费方以 entries != nil 判空态，替换后空设定被当成有一份空 canon，context 对没有 canon.yaml 的场景误报 character-not-in-canon（既有测试当场拦下）
+takeaway: 替换被多个消费方依赖的加载函数时，先列出旧函数的全部输出约定（nil/空/错误三态在各消费方的分支含义），新函数逐一对齐；「空切片非 nil」这类 Go 细节在跨包边界上就是行为契约，用既有消费方的测试做回归网
+applies_when: 为共享数据源引入解析层或合并层（作用域、继承、缓存）并替换原加载点时
+occurrences:
+  - origin: cross-work-canon 变更的自查与既有测试回归
+    date: '2026-10-04'
+    evidence: internal/canon/canon.go 的 Resolve 空态分支与 internal/ctxpack/sceneItems 的空态等价处理

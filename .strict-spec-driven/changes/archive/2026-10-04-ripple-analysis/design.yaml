@@ -1,0 +1,31 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: ripple-analysis
+approach:
+  - 新包 internal/impact 从磁盘引用图（场景大纲的契约字段、伏笔台账、recall 倒排索引）确定性计算受影响后续场景：impact 只读预览，impact mark 落盘复查标记并联动生成 causality 审查任务包，impact clear 以作者确认或重新审查通过解除
+decisions:
+  reference-graph:
+    decision: 引用图取四类已记录引用：场景大纲（causes 引用的事件、characters 与 pov 解析的条目、state_changes 绑定的条目）、伏笔台账（planted_in 与 recovered_in 指向的场景、条目 id 本身）、事件声明（每个事件 id 的声明场景与 causes 引用场景）与 recall 倒排索引（设定条目 name 与别名在各已验收场景正文的命中）。影响范围 = 先序晚于目标（或目标声明场景）且存在引用边的场景，再做一层传递：受影响场景声明的事件所及的更晚场景
+    rationale: 这些引用已全部在磁盘上且各校验保证可解析；一层传递覆盖「中间场景产出事件、下游消费」的最常见传播链；不做多层闭包——长链传播交给逐层 mark（每层复查后再 mark 下游），避免一次小改动标记半本书
+  mark-append-artifact:
+    decision: 复查标记落盘为 .writing-anything/rechecks/<work>.yaml：scenes 数组每项含（scene、target、via、reason、marked_at、status、cleared_at、confirmation）。追加式合并：同（scene， target）已有 open 标记时不重复；cleared 后同目标再标记追加新条目（历史保留，时间线可追溯）
+    rationale: 只能追加（details 原文）保住历史：何时标记、何时解除、凭什么解除都是审计线索；按（场景, 目标）粒度与豁免、审查包的键位一致
+  clear-two-paths:
+    decision: 解除有两条路径：作者确认无影响（--confirmed-by-author 与 --confirmation，写确认记录）；或重新审查通过（该场景的 review.yaml 基于当前正文，即 acceptance/review 的 draft_sha256 与当前一致，且 review 的 rubric 无 fail 结论）——此时可省略作者确认，wa-cli 校验后写入 cleared_at 与依据（review-based）
+    rationale: details 原文「复查完成后（重新审查通过，或作者确认无影响）解除标记」；review-based 路径让 Agent 复查后即可解除而无须作者逐条确认，但校验必须是确定性的（审稿指纹与当前正文一致），否则退回作者确认
+  next-action-hint:
+    decision: open 复查标记只在 wa-cli next 对应单元的 action 中提示（wa-cli impact list 与组稿关卡消费），不进入 blockers——与收口、连续性阻塞的呈现约定一致
+    rationale: 复查是作品级质量流程而非场景推进的硬关卡（场景可以继续推进，只是组稿被阻塞）；blockers 语义保留给确定性关卡
+alternatives:
+  - option: 自动检测修改并标记（validate 或 accept 时对照指纹）
+    reason: 设定条目与大纲没有写入指纹，自动检测要么不可行要么要在每次写入时记录指纹——那是另一个变更的范围；impact mark 显式、意图清晰，Agent 在修改后调用
+  - option: 多层传递闭包一次标到底
+    reason: 一次小改动标记半本书，复查成本失控；一层传播加逐层 mark 更符合分治原则
+  - option: 复查标记并入决策队列
+    reason: 标记是计算结果不是作者决定；解除时的作者确认才需要记录，且已在 rechecks 产物内有确认字段，不需要队列条目
+risks:
+  - 引用图依赖各场景大纲的声明完整性：漏声明的事件链不在影响范围内——via 与 reason 如实呈现依据，语义关联由审查任务包兜底
+  - recall 索引只覆盖已验收（stage 为 done）单元的正文：未验收场景的正文引用不进影响范围——与索引既有语义一致，先验收后传播
+  - mark 生成审查任务包改变 packets 目录：changedPaths 如实列出包文件；包生成规则与 review plan 相同（done 保留、预算截断）

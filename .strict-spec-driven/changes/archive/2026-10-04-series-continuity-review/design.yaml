@@ -1,0 +1,31 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: series-continuity-review
+approach:
+  - internal/continuity 增加系列编排：给出系列时合并成员作品的场景与声明，时间线检查经 internal/timeline 的多作品 Order/SameTimePresence，设定解析经 canon.Resolve（系列级来源标明），新增 conflicting-state（同一设定条目在多部作品有不同 confirmed 状态）；reviewpacket 增加 series-causality 维度与跨作品 character 包；assembly 关卡的复查与连续性检查扩展到系列范围
+decisions:
+  series-scope-orchestration:
+    decision: 系列检查在 continuity 包内编排：Run 接受多个作品（系列成员按 works 顺序），场景集合、时间线与设定解析都在合并集合上计算；发现归入 message 中提及的场景（跨双作品的归先序更早作品的场景），message 前缀标明涉及的作品；单作品调用路径（一个作品）与既有行为完全一致
+    rationale: 「扩展 wa-cli continuity」是 planned change details 的原文；复用单作品的发现结构、豁免通道与错误码，系列只是更大的输入集合；message 标明作品让 Agent 能定位到另一部作品的场景
+  conflicting-state-rule:
+    decision: 同一设定条目在多部作品的状态台账中各有一条以上 status 为 confirmed 的条目、且最后生效的状态描述不同（按条目归一比较）时，报告 continuity.conflicting-state（error，归先序更早作品的相关场景，message 含两部作品的场景与两个状态描述）；同一作品内的多条 confirmed（既有语义：后者生效）不报
+    rationale: 跨作品的状态矛盾是「第二部与第一部冲突」完成标准的核心形态；同作品内 later-wins 是既定语义，跨作品没有覆盖关系——两部作品对同一设定各自确认了不同状态，需要作者裁决哪部是正史
+  plan-series-dimensions:
+    decision: review plan 给系列 id 时：character 维度生成跨作品包（系列级人物在其出场的所有作品的章合并为一包，excerpt 按合并时间线取各场景正文，slices 含各作品的状态与知情）；causality 的正文切片顺序按合并时间线；新增 series-causality 维度（causes 引用跨作品事件的场景，切片含声明场景的正文结尾）；每包 scope 形如 <series>:<维度目标> 标明系列
+    rationale: 跨作品语义审查的分治原则：人物弧光与跨作品因果是系列特有的审查维度，一个任务包读多作品的相关切片（仍受预算约束），而不是让 Agent 读两部全书
+  assemble-series-gate:
+    decision: assemble 对系列成员作品：assemble.rechecks 检查系列内全部作品的 open 复查标记（message 标明作品）；assemble.continuity 以系列范围计算（跨作品发现同样阻塞）；非系列作品的行为不变
+    rationale: 系列成书（任一部）同样不能带着跨作品矛盾：第二部组稿时第一部的 open 复查标记或跨作品冲突都应可见；复用既有关卡结构，只是范围从作品扩到系列
+alternatives:
+  - option: 独立的 series-continuity 命令
+    reason: details 明确「扩展 wa-cli continuity」；新命令会复制发现结构、豁免通道与 CLI 接线，而且 Agent 要学两套调用
+  - option: conflicting-state 用决策队列预生成
+    reason: 发现的数量随系列规模增长；按需生成（阻塞时幂等追加）与 continuity 既有豁免一致，预生成会灌满队列
+  - option: review plan 的系列维度只按 works 顺序拼接单作品包
+    reason: 跨作品因果与人物弧光正是系列审查的价值；拼接单作品包看不到跨作品上下文，series-causality 与跨作品 character 包补上这一层
+risks:
+  - 系列检查的计算量随成员作品数增长：每命令每作品各加载一次（load-once-per-command），合并集合的计算与单作品同阶
+  - conflicting-state 的按条目归一比较：同一设定两个作品各自确认相同描述不报（一致不是冲突）；描述的等价性按精确文本，语义等价由语义审查兜底
+  - 跨作品 after 引用另一作品的场景在 outline 因果检查中本不解析（单元引用不跨作品）：时间线的跨作品解析自行处理（timeline 主规格），不改动 outline.Causality 的语义

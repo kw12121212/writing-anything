@@ -32,7 +32,7 @@ var knowledgeProposeCommand = &command{
 var knowledgeListCommand = &command{
 	name:    "knowledge list",
 	summary: "列出作品（Work）知情表（Knowledge State）中待作者确认（proposed）的知情事件（Knowledge Event）；--all 列出全部",
-	args:     []argSpec{workArg},
+	args:    []argSpec{workArg},
 	flags: []flagSpec{
 		dirFlag,
 		{"all", flagBool, "列出全部条目，不只列待确认（proposed）的"},

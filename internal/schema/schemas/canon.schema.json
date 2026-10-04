@@ -4,42 +4,164 @@
   "description": "作品根单元目录中的设定集（Canon）：人物、地点、物品、世界规则与人物关系条目，每条带出处（Source id）、别名（Alias）与保护级别。",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "entries"],
+  "required": [
+    "schema_version",
+    "entries"
+  ],
   "properties": {
-    "schema_version": {"const": 1},
+    "schema_version": {
+      "const": 1
+    },
     "entries": {
       "type": "array",
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["id", "type", "text", "sources", "protection"],
+        "required": [
+          "id",
+          "type",
+          "text",
+          "sources",
+          "protection"
+        ],
         "properties": {
-          "id": {"$ref": "common.schema.json#/$defs/id"},
-          "type": {"enum": ["character", "location", "item", "world-rule", "relationship"]},
-          "name": {"type": "string", "pattern": "\\S"},
+          "id": {
+            "$ref": "common.schema.json#/$defs/id"
+          },
+          "type": {
+            "enum": [
+              "character",
+              "location",
+              "item",
+              "world-rule",
+              "relationship"
+            ]
+          },
+          "name": {
+            "type": "string",
+            "pattern": "\\S"
+          },
           "aliases": {
             "type": "array",
-            "items": {"type": "string", "pattern": "\\S"},
+            "items": {
+              "type": "string",
+              "pattern": "\\S"
+            },
             "uniqueItems": true
           },
-          "text": {"type": "string", "pattern": "\\S"},
-          "sources": {"$ref": "common.schema.json#/$defs/ids"},
-          "protection": {"enum": ["normal", "author-pinned"]},
-          "members": {"$ref": "common.schema.json#/$defs/ids", "minItems": 2},
-          "decision": {"$ref": "common.schema.json#/$defs/id"}
+          "text": {
+            "type": "string",
+            "pattern": "\\S"
+          },
+          "sources": {
+            "$ref": "common.schema.json#/$defs/ids"
+          },
+          "protection": {
+            "enum": [
+              "normal",
+              "author-pinned"
+            ]
+          },
+          "members": {
+            "$ref": "common.schema.json#/$defs/ids",
+            "minItems": 2
+          },
+          "decision": {
+            "$ref": "common.schema.json#/$defs/id"
+          },
+          "scope": {
+            "enum": [
+              "work",
+              "series"
+            ],
+            "description": "条目作用域：work（作品级，缺省）或 series（系列级）；覆盖关系与 override 记录由领域校验检查"
+          },
+          "override": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "reason",
+              "confirmation",
+              "confirmed_at"
+            ],
+            "properties": {
+              "reason": {
+                "type": "string",
+                "pattern": "\\S",
+                "description": "作品级覆盖系列级同 id 条目的原因"
+              },
+              "confirmation": {
+                "type": "string",
+                "pattern": "\\S",
+                "description": "作者确认原话摘要"
+              },
+              "confirmed_at": {
+                "type": "string",
+                "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+              }
+            }
+          }
         },
         "allOf": [
           {
-            "if": {"properties": {"type": {"enum": ["character", "location", "item"]}}},
-            "then": {"required": ["name"]}
+            "if": {
+              "properties": {
+                "type": {
+                  "enum": [
+                    "character",
+                    "location",
+                    "item"
+                  ]
+                }
+              }
+            },
+            "then": {
+              "required": [
+                "name"
+              ]
+            }
           },
           {
-            "if": {"properties": {"type": {"const": "relationship"}}},
-            "then": {"required": ["members"]}
+            "if": {
+              "properties": {
+                "type": {
+                  "const": "relationship"
+                }
+              }
+            },
+            "then": {
+              "required": [
+                "members"
+              ]
+            }
           },
           {
-            "if": {"properties": {"type": {"enum": ["world-rule", "relationship"]}}},
-            "then": {"not": {"anyOf": [{"required": ["name"]}, {"required": ["aliases"]}]}}
+            "if": {
+              "properties": {
+                "type": {
+                  "enum": [
+                    "world-rule",
+                    "relationship"
+                  ]
+                }
+              }
+            },
+            "then": {
+              "not": {
+                "anyOf": [
+                  {
+                    "required": [
+                      "name"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "aliases"
+                    ]
+                  }
+                ]
+              }
+            }
           }
         ]
       }

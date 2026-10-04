@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "交接记录",
+  "description": "工作区的交接记录（Handoff Note）handoffs.yaml：Agent 会话结束前经 wa-cli handoff write 追加的接续记录（完成了什么、未完成事项、作者指示与风险），只能追加；wa-cli next 附上最近一条。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "notes"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "notes": {"type": "array", "maxItems": 200, "items": {"type": "object", "additionalProperties": false, "required": ["id", "written_at", "done", "todo"], "properties": {
+      "id": {"type": "string", "pattern": "^handoff-[0-9]+$"},
+      "written_at": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"},
+      "done": {"type": "array", "minItems": 1, "items": {"type": "string", "pattern": "\\S"}},
+      "todo": {"type": "array", "minItems": 1, "items": {"type": "string", "pattern": "\\S"}},
+      "instructions": {"type": "array", "items": {"type": "string", "pattern": "\\S"}},
+      "risks": {"type": "array", "items": {"type": "string", "pattern": "\\S"}}
+    }}}
+  }
+}

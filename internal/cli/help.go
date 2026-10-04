@@ -7,8 +7,8 @@ import (
 )
 
 var helpCommand = &command{
-	name:       "help",
-	summary:    "显示命令的用法；加 --json 列出参数、输出键和退出码",
+	name:    "help",
+	summary: "显示命令的用法；加 --json 列出参数、输出键和退出码",
 	args: []argSpec{
 		{"command", "要查看用法的命令；省略时列出全部命令", false},
 		{"subcommand", "命令组中的子命令，如 wa-cli help config set 中的 set", false},

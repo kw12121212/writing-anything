@@ -1,0 +1,42 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: session-handoff
+sections:
+  Implementation:
+    handoff-schema:
+      text: internal/schema 新增 handoffs.schema.json（schema_version=1；notes 数组，每项含 id（id 格式）、written_at（RFC 3339）、非空 done 与 todo 数组（元素非空文本）、可选 instructions 与 risks 数组）与 handoff-input.schema.json（done 与 todo 必填非空数组、instructions 与 risks 可选），注册路径模式 .writing-anything/handoffs.yaml；补合法与不合法夹具
+      status: complete
+    handoff-package:
+      text: 新包 internal/handoff：handoffs.yaml 的加载与领域校验（id 唯一且等于 handoff-<序号> 递增形态、条目数不超 200、符号链接按 artifact.not-found）；Write（输入 Schema 校验、上限检查 handoff.too-many、节点树追加保留注释、id 递增、written_at）；Show（最近 N 条，1 到 50 参数校验）；Latest（最近一条，供 next）；CheckArtifact 供 validate <path>（工作区级产物，整体校验由 CLI 的 workspace 检查挂接）
+      status: complete
+    handoff-cli:
+      text: internal/cli：handoff write（flags：--dir、--file；--json 输出 note 字段与 changedPaths）与 handoff show（flags：--dir、--last N；--json 输出 notes）命令注册（sampleArgs 与 mutatingSamples、人读输出、诊断与 next）；next 的单元条目新增 handoff 字段（有记录时最近一条的 {id, todo}，无记录时为 null）；validate <path> 纳入 handoffs.yaml
+      status: complete
+    handoff-glossary:
+      text: docs/GLOSSARY.md 增补交接记录（Handoff Note）词条：会话结束前经 wa-cli handoff write 追加到工作区 .writing-anything/handoffs.yaml 的接续记录（完成了什么、未完成事项、作者指示与风险），只能追加，新会话经 wa-cli next 看到最近一条
+      status: complete
+  Testing:
+    test-handoff-package:
+      text: internal/handoff 单元测试：Write 的追加（id 递增、保留注释、多条顺序）、输入校验（缺 done/todo、空数组、Schema）、上限 200 拒绝（handoff.too-many 且文件未变）、Show 的最近 N 与参数范围、Latest、领域校验（id 重复、超上限、符号链接）
+      status: complete
+    test-handoff-cli:
+      text: internal/cli 测试：handoff write 的 --file 与 stdin 两入口、--json 信封；handoff show 的 --last 与人读输出；next 的 handoff 字段（有记录含最近一条 todo、无记录为 null 且其余输出不变）；validate <path> 对 handoffs.yaml；sampleArgs 与 TestRegistryConsistency 通过
+      status: complete
+    run-regression:
+      text: 完整回归测试并确认覆盖率不低于阈值：go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    verify-change:
+      text: 已运行 ready 与 verify；实现含包测试（追加与注释保留、输入校验、上限拒绝、Show 倒序、领域校验）与 CLI 测试（两入口、--last 范围、next 的 handoff 字段有/无两态、validate <path>），完整回归通过（覆盖率 87.35% ≥ 80%）
+      status: complete
+      command: strict-spec-cli ready session-handoff && strict-spec-cli verify session-handoff
+    verify-archive-readiness:
+      text: 已核对归档合并路径：handoff 新主规格将写入 .strict-spec-driven/specs/handoff.yaml 并进入 specs/INDEX.yaml；strict-spec-cli verify 诊断清零
+      status: complete
+      command: strict-spec-cli verify session-handoff
+testing_gates:
+  validation_task: run-regression
+  unit_test_task: test-handoff-package

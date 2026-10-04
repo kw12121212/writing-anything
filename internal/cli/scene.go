@@ -36,6 +36,8 @@ var sceneContractCommand = &command{
 		{"recover", flagString, "要回收的伏笔 id，用逗号分隔；整体替换，空字符串时删除"},
 		{"cause", flagString, "起因（Cause）：引用前文已发生事件的 id，用逗号分隔；整体替换，空字符串时删除"},
 		{"event", flagString, "预期产生的事件（Event）id，用逗号分隔；整体替换，空字符串时删除"},
+		{"time", flagString, "故事时间（Story Time）标记（如 第三日夜）；相同文本视为同时；空字符串时删除"},
+		{"after", flagString, "时间线：声明本场景晚于的前文场景引用，用逗号分隔；整体替换，空字符串时删除"},
 	},
 	outputKeys: outlineKeys,
 	exitCodes:  standardExitCodes,
@@ -57,7 +59,7 @@ func sceneContractEdit(inv *invocation, existing *outline.Outline) (outline.Edit
 		}
 		return nil
 	}
-	e.Title, e.Reveal, e.Pov, e.Location = str("title"), str("reveal"), str("pov"), str("location")
+	e.Title, e.Reveal, e.Pov, e.Location, e.Time = str("title"), str("reveal"), str("pov"), str("location"), str("time")
 	if e.Title != nil && *e.Title == "" {
 		return e, []workspace.Problem{invalidValue("title", "", "大纲节必须有标题，--title 不能为空")}
 	}
@@ -82,7 +84,7 @@ func sceneContractEdit(inv *invocation, existing *outline.Outline) (outline.Edit
 		}
 		e.Characters = &list
 	}
-	for _, name := range []string{"beats", "plant", "recover", "cause", "event"} {
+	for _, name := range []string{"beats", "plant", "recover", "cause", "event", "after"} {
 		v, ok := inv.values[name]
 		if !ok {
 			continue
@@ -103,6 +105,8 @@ func sceneContractEdit(inv *invocation, existing *outline.Outline) (outline.Edit
 			e.Recovers = p
 		case "cause":
 			e.Causes = p
+		case "after":
+			e.TimelineAfter = p
 		default:
 			e.Events = p
 		}
@@ -140,7 +144,7 @@ func sceneContractEdit(inv *invocation, existing *outline.Outline) (outline.Edit
 		return e, []workspace.Problem{invalidValue("title", inv.values["title"], "新增大纲节时必须给出 --title")}
 	}
 	if exists && e.Title == nil && e.Pov == nil && e.Location == nil && e.Characters == nil && e.Beats == nil &&
-		e.Reveal == nil && e.StateChanges == nil && e.Plants == nil && e.Recovers == nil && e.Causes == nil && e.Events == nil {
+		e.Reveal == nil && e.StateChanges == nil && e.Plants == nil && e.Recovers == nil && e.Causes == nil && e.Events == nil && e.Time == nil && e.TimelineAfter == nil {
 		return e, []workspace.Problem{{Code: codeInvalidValue, Severity: workspace.SeverityError,
 			Message: "没有给出要修改的内容；至少给出 --title、--pov、--location、--characters、--beats、--reveal、--state-change、--plant、--recover、--cause 或 --event 之一"}}
 	}

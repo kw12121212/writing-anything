@@ -1,0 +1,3 @@
+schema_version: 1
+scenes:
+  - {scene: s, target: t, via: plot, reason: r, marked_at: "2026-10-04T08:00:00Z", status: open}

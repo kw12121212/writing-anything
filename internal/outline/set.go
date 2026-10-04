@@ -16,29 +16,31 @@ import (
 
 // sectionOrder 是大纲节中字段的固定顺序。
 var sectionOrder = []string{"id", "title", "role", "covers", "uses", "reason", "characters", "beats", "reveal", "targets",
-	"pov", "location", "state_changes", "plants", "recovers", "causes", "events"}
+	"pov", "location", "state_changes", "plants", "recovers", "causes", "events", "time", "after"}
 
 // Edit 是一次 outline set 或 scene contract 的修改：按 ID 新增或修改一节。指针为 nil 的字段不修改；取值为空（空字符串、
 // 空数组）表示删除该字段。After 或 Before 非空时把该节放到指定节之后或之前。新增时调用方须给出 Title，否则写前复查
 // 报告缺少 title。
 type Edit struct {
-	ID           string
-	Title        *string
-	Role         *string // 承担的写作法章节或节拍 id；空字符串表示删除
-	Covers       *[]string
-	Uses         *[]string
-	Reason       *string
-	Characters   *[]string       // 场景契约：出场人物；空数组表示删除
-	Beats        *[]string       // 场景契约：承担的情节节拍 id；空数组表示删除
-	Reveal       *string         // 场景契约：揭示边界；空字符串表示删除
-	Targets      *map[string]int // 场景契约：AI 评分指标 id → 目标锚定分值；空映射表示删除
-	Pov          *string         // 场景契约：视角人物；空字符串表示删除
-	Location     *string         // 场景契约：地点；空字符串表示删除
-	StateChanges *[]StateChange  // 场景契约：必须发生的状态变化，按 id 新增或更新；空数组表示删除
-	Plants       *[]string       // 场景契约：要埋设的伏笔 id；空数组表示删除
-	Recovers     *[]string       // 场景契约：要回收的伏笔 id；空数组表示删除
-	Causes       *[]string       // 场景契约：起因，引用前文已发生事件的 id；空数组表示删除
-	Events       *[]string       // 场景契约：预期产生的事件 id；空数组表示删除
+	ID            string
+	Title         *string
+	Role          *string // 承担的写作法章节或节拍 id；空字符串表示删除
+	Covers        *[]string
+	Uses          *[]string
+	Reason        *string
+	Characters    *[]string       // 场景契约：出场人物；空数组表示删除
+	Beats         *[]string       // 场景契约：承担的情节节拍 id；空数组表示删除
+	Reveal        *string         // 场景契约：揭示边界；空字符串表示删除
+	Targets       *map[string]int // 场景契约：AI 评分指标 id → 目标锚定分值；空映射表示删除
+	Pov           *string         // 场景契约：视角人物；空字符串表示删除
+	Location      *string         // 场景契约：地点；空字符串表示删除
+	StateChanges  *[]StateChange  // 场景契约：必须发生的状态变化，按 id 新增或更新；空数组表示删除
+	Plants        *[]string       // 场景契约：要埋设的伏笔 id；空数组表示删除
+	Recovers      *[]string       // 场景契约：要回收的伏笔 id；空数组表示删除
+	Causes        *[]string       // 场景契约：起因，引用前文已发生事件的 id；空数组表示删除
+	Events        *[]string       // 场景契约：预期产生的事件 id；空数组表示删除
+	Time          *string         // 场景契约：故事时间标记；空字符串表示删除
+	TimelineAfter *[]string       // 场景契约：时间线，声明晚于的前文场景引用；空数组表示删除
 	After, Before string
 }
 
@@ -62,8 +64,8 @@ func (e Edit) Candidate(o *Outline) *Outline {
 		s.Title = *e.Title
 	}
 	for _, kv := range []struct {
-		v    *string
-		dst  *string
+		v   *string
+		dst *string
 	}{
 		{e.Reveal, &s.Reveal}, {e.Pov, &s.Pov}, {e.Location, &s.Location},
 	} {
@@ -195,7 +197,7 @@ func paramOf(field string) string {
 	if !ok || !strings.HasPrefix(field, "sections[") {
 		return ""
 	}
-	if name, _, _ := strings.Cut(rest, "["); slices.Contains([]string{"title", "role", "covers", "uses", "reason", "characters", "beats", "reveal", "pov", "location", "plants", "recovers", "causes", "events"}, name) {
+	if name, _, _ := strings.Cut(rest, "["); slices.Contains([]string{"title", "role", "covers", "uses", "reason", "characters", "beats", "reveal", "pov", "location", "plants", "recovers", "causes", "events", "time", "after"}, name) {
 		return rest
 	}
 	if strings.HasPrefix(rest, "targets.") || strings.HasPrefix(rest, "state_changes") {
@@ -288,8 +290,9 @@ func apply(secs *yaml.Node, rel string, e Edit) *workspace.Problem {
 	}{
 		{"title", e.Title, nil}, {"role", e.Role, nil}, {"covers", nil, e.Covers}, {"uses", nil, e.Uses}, {"reason", e.Reason, nil},
 		{"characters", nil, e.Characters}, {"beats", nil, e.Beats}, {"reveal", e.Reveal, nil},
-		{"pov", e.Pov, nil}, {"location", e.Location, nil},
+		{"pov", e.Pov, nil}, {"location", e.Location, nil}, {"time", e.Time, nil},
 		{"plants", nil, e.Plants}, {"recovers", nil, e.Recovers}, {"causes", nil, e.Causes}, {"events", nil, e.Events},
+		{"after", nil, e.TimelineAfter},
 	} {
 		var n *yaml.Node
 		switch {

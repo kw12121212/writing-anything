@@ -652,6 +652,13 @@ func under(u, c *work.Unit) bool {
 // 不早于 plant 的场景时为 false。章节点在先序中先于其子场景，不能直接比较章与场景的位置，否则「埋设在章内场景、
 // 计划在该章回收」会被误判；还没有任何场景的空章按单元位置直接比较（自上而下建章后补场景）。
 // 单元解析不了时为 false（其问题由 threads.unknown-unit 报告）。
+// RecoverBeforePlant 报告回收位置 recover 按单元树先序是否早于埋设场景 plant（同一语义供收口等调用方预检复用）：
+// 计划回收单元子树内存在先序不早于埋设场景的场景时按不早于处理，还没有场景的空章按单元位置直接比较。
+func RecoverBeforePlant(w *work.Work, plant, recover string) bool {
+	pos, byRef := units(w)
+	return recoverBeforePlant(w, pos, byRef, plant, recover)
+}
+
 func recoverBeforePlant(w *work.Work, pos map[string]int, byRef map[string]*work.Unit, plant, recover string) bool {
 	pu, ok := byRef[plant]
 	if !ok || pu.Type != outline.SceneType {

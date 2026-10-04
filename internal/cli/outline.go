@@ -74,23 +74,25 @@ var outlineShowCommand = &command{
 }
 
 type sectionView struct {
-	ID           string              `json:"id"`
-	Title        string              `json:"title"`
-	Role         *string             `json:"role"`
-	Covers       []string            `json:"covers"`
-	Uses         []string            `json:"uses"`
-	Reason       *string             `json:"reason"`
-	Characters   []string            `json:"characters"`
-	Beats        []string            `json:"beats"`
-	Reveal       *string             `json:"reveal"`
-	Targets      map[string]int      `json:"targets"`
-	Pov          *string             `json:"pov"`
-	Location     *string             `json:"location"`
-	StateChanges []stateChangeView   `json:"state_changes"`
-	Plants       []string            `json:"plants"`
-	Recovers     []string            `json:"recovers"`
-	Causes       []string            `json:"causes"`
-	Events       []string            `json:"events"`
+	ID           string            `json:"id"`
+	Title        string            `json:"title"`
+	Role         *string           `json:"role"`
+	Covers       []string          `json:"covers"`
+	Uses         []string          `json:"uses"`
+	Reason       *string           `json:"reason"`
+	Characters   []string          `json:"characters"`
+	Beats        []string          `json:"beats"`
+	Reveal       *string           `json:"reveal"`
+	Targets      map[string]int    `json:"targets"`
+	Pov          *string           `json:"pov"`
+	Location     *string           `json:"location"`
+	Time         *string           `json:"time"`
+	After        []string          `json:"after"`
+	StateChanges []stateChangeView `json:"state_changes"`
+	Plants       []string          `json:"plants"`
+	Recovers     []string          `json:"recovers"`
+	Causes       []string          `json:"causes"`
+	Events       []string          `json:"events"`
 }
 
 // stateChangeView 是场景契约中一条必须发生的状态变化：id 供写后收口对照，text 为描述。
@@ -132,8 +134,8 @@ func (res *outlineResult) fill(ref string, o *outline.Outline, ms outline.Messag
 		for _, s := range o.Sections {
 			sv := sectionView{ID: s.ID, Title: s.Title, Role: optional(s.Role), Covers: nonNilStrings(s.Covers), Uses: nonNilStrings(s.Uses), Reason: optional(s.Reason),
 				Characters: nonNilStrings(s.Characters), Beats: nonNilStrings(s.Beats), Reveal: optional(s.Reveal), Targets: nonNilInts(s.Targets),
-				Pov: optional(s.Pov), Location: optional(s.Location), Plants: nonNilStrings(s.Plants), Recovers: nonNilStrings(s.Recovers),
-				Causes: nonNilStrings(s.Causes), Events: nonNilStrings(s.Events), StateChanges: []stateChangeView{}}
+				Pov: optional(s.Pov), Location: optional(s.Location), Time: optional(s.Time), Plants: nonNilStrings(s.Plants), Recovers: nonNilStrings(s.Recovers),
+				Causes: nonNilStrings(s.Causes), Events: nonNilStrings(s.Events), After: nonNilStrings(s.After), StateChanges: []stateChangeView{}}
 			for _, sc := range s.StateChanges {
 				sv.StateChanges = append(sv.StateChanges, stateChangeView{ID: sc.ID, Text: sc.Text})
 			}

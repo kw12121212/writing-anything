@@ -215,6 +215,36 @@ categories:
       status: active
       occurrences: 1
       path: .strict-spec-driven/lessons/coding/canon-list-canon-yaml-nil-nil-dac3b3.yaml
+    lesson-60a682:
+      title: 编排多个台账写入的命令，预检必须逐条覆盖每个写入函数会拒绝的输入
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/coding/lesson-60a682.yaml
+    lesson-839686:
+      title: 编排命令的规格语句要先枚举输出信封与裁剪行为，再写实现
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/coding/lesson-839686.yaml
+    lesson-2fdcfc:
+      title: 把只读复查命令与阻塞写入路径接上同一计算时，先拆出只读层
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/coding/lesson-2fdcfc.yaml
+    id-id-9e45ba:
+      title: 重建式生成命令的 id 分配要避开全部既有 id，保留项匹配要看文件自身
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/coding/id-id-9e45ba.yaml
+    schema-f67fa7:
+      title: 新产物的写入路径必须与注册的 Schema 路径模式当场对上
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/coding/schema-f67fa7.yaml
+    lesson-aa04b7:
+      title: 替换共享数据源的加载点时，空态的等价性要先对齐
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/coding/lesson-aa04b7.yaml
   documentation:
     must-must-6af326:
       title: 修改一条 MUST 需求时，要检查同一规格里相邻的 MUST 是否因此冲突

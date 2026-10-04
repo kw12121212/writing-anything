@@ -1,0 +1,31 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: global-timeline
+approach:
+  - 新包 internal/timeline：从各场景大纲节的 time/after 声明构建约束图，拓扑排序得全序（无声明按单元树先序稳定补位；环与未知引用报 timeline.cycle / timeline.unknown-scene）；同 time 文本视为同时标记做人物双出场近似检查；continuity 接入为新增发现项；CLI 以 timeline 命令只读输出
+decisions:
+  minimal-time-declaration:
+    decision: 故事时间用两个可选大纲字段表达：time（自由文本标记）与 after（前文场景引用数组，声明严格晚于）；不做时间解析或历法运算——time 只做相同性比较（相同文本视为同时），排序由 after 的偏序与单元树先序共同推导
+    rationale: planned change details 要求「绝对时间或相对顺序」的最小确定性形式：自由文本 time 保留作者的表达（第三日夜 / 具体日期），after 提供可校验的偏序；解析时间文本需要历法与语义假设，违反不调用模型的原则
+  shared-event-ids:
+    decision: 时间线不引入新的事件存储：排序对象是场景（事件的宿主），事件的顺序即其声明场景的顺序；状态快照与因果链继续按先序/after 推导，本变更不给 state at 换排序（保持先序重放的既有语义，时间线检查独立报告矛盾）
+    rationale: 共用事件 id 的要求由「场景为序」天然满足：事件属于场景、场景有全序，则事件有序；改 state at 的重放序会改变已归档的快照语义，属于行为变更，超出本变更范围
+  continuity-integration:
+    decision: continuity 新增三条时间线检查（只对声明了 time 或 after 的场景启用）：timeline.unknown-scene（after 引用不存在的场景）、timeline.order-conflict（after 声明与推导全序矛盾：引用的场景在推导序中不早于本场景）、timeline.same-time-presence（同一出场人物在两个相同 time 的场景出场且两场景间无 after 链分隔）；发现进入既有 error findings 与决策豁免通道
+    rationale: planned change details 明确「把这些检查接入 wa-cli continuity」；只对声明场景启用保持无声明作品零变化（unchanged behavior）；相同 time 即同时是最保守的确定性近似，未声明 time 的场景不参与，误报由决策豁免兜底
+  cross-work-merge:
+    decision: timeline <series> 把成员作品的场景按 works 顺序拼接为默认序，各作品内的 after 声明照常参与（跨作品 after 引用另一作品的场景单元引用，格式 <work>/<scene>）；拓扑排序在全集合上统一进行，环与矛盾跨作品报告
+    rationale: 系列的时间线跨作品才有意义；works 顺序是 series 主规格已有的稳定默认序；跨作品 after 作为显式声明参与排序，无声明时保持默认序（与分层摘要、系列继承的取向一致）
+alternatives:
+  - option: 结构化的时间轴（数值刻度或历法类型）
+    reason: 确定性解析需要约定历法与时区语义，作者的表达自由（黎明前三刻）会失去；相同性比较已覆盖「同时两地」这一核心检查
+  - option: 时间线检查独立成命令而不进 continuity
+    reason: details 明确要求接入 continuity；且发现项需要既有豁免通道（决策队列）才能被作者处理
+  - option: state at 改用时间线全序重放
+    reason: 改变已归档的快照语义（先序重放是 state 主规格的承诺），本变更只报告矛盾不改变重放
+risks:
+  - time 文本不相同但语义同时（同一天的两种写法）：same-time-presence 漏报——由语义审查（审查任务包）兜底，本检查为确定性近似
+  - after 引用密集时拓扑排序的稳定性： Kahn 算法 + 先序稳定选择使输出确定（同一输入同一输出）
+  - 跨作品 after 引用的单元引用格式：<work>/<scene> 是既有单元引用形态（unit-reference 不跨作品解析，本包自行解析两段），保持一致

@@ -1,0 +1,54 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: layered-summaries-and-budget
+sections:
+  Implementation:
+    volume-schema:
+      text: internal/schema 新增 checkpoint.schema.json（schema_version=1；part、scene 为非空文本；canon、states、threads、decisions 为 id 数组且不重复；sampled 为数组，每项含 scene、kind（state|knowledge 枚举）、id 与非空 text，至多 3 项且不重复；confirmed_by_author 布尔缺省 false；confirmation 与 confirmed_at 为取值化可空字段同确认记录模式）并注册命名 checkpoint（路径模式 .writing-anything/works/*/units/*/checkpoint.yaml）；补合法与不合法夹具及 schema 包测试
+      status: complete
+    layered-summary:
+      text: internal/series 的 summary set / summary show 支持汇总单元：汇总单元（作品文体声明 stage_from_children 的类型，如 novel 的 part 与 chapter，以及作品根单元）写入摘要前检查子层齐全——章（或混合层级的直接子场景）要求子树全部场景 stage 为 done 且各有 summary.yaml，部与根要求直接子层单元各有摘要，缺失报告 summary.children-missing（field 为空，message 列出缺失的单元引用，至多列 5 项加省略说明）；写入的 draft_sha256 为子树全部场景当前正文 SHA-256 按先序拼接后的 SHA-256；summary show 的 stale 对汇总单元为指纹重算不一致（子场景正文变化）或任一子场景摘要缺失时为 true；长度校验与整体替换语义不变；非汇总单元行为逐字节不变
+      status: complete
+    scene-context-items:
+      text: internal/ctxpack 与 internal/cli/context.go：scene 单元新增三个内容项——states：契约出场人物（各节 characters 顺序去重）与 pov 解析的 canon character 条目，按 internal/state 的 state at 本场景语义重放（confirmed 且先序严格早于本场景），每项含 entry、name、state、proposal 与 scene，按 entry 升序，人物重复时取首个；priorEndings：同作品先序最近两个 scene 单元（有 draft.md）去 HTML 注释后正文末尾至多 400 个 Unicode 码点，最近在前，每项含 unit 与 excerpt；summaries：所属章、部与根单元的 summary.yaml（存在即列，跳过无法加载的并 warning），每项含 unit、level（chapter/part/book）、text 与 stale（按汇总单元推导）；三项计入预算，裁剪 part 为 state、prior-ending、chapter-summary、part-summary、book-summary；context-trim 的 scene 优先级按 design 的 scene-priority-reorder 重排（契约最高、新项插入、既有项与 non-scene 顺序不变）；Markdown 新增「出场人物状态（Character States）」「前序场景结尾（Prior Endings）」「分层摘要（Layered Summaries）」小节
+      status: complete
+    volume-package:
+      text: 新包 internal/volume：checkpoint.yaml 的领域校验（part 与所在部一致、scene 为该部子树先序最后一个场景、各 id 数组元素符合 id 格式且不重复、sampled 每条 scene 为该部场景且 kind/id 取值合法、确认记录取值化检查 volume.incomplete-confirmation、途经符号链接按 artifact.not-found）；Checkpoint(root, w, part) 生成：子树全部场景 stage 为 done 否则 volume.scenes-open（message 列未完成场景），汇总 canon（各场景 closeout.yaml 的 canon 并集，按首次出现）、states（status 为 confirmed 的 state 提议 id）、threads（本部场景 planted_in 或 recovered_in 的伏笔 id）、decisions（生成时 status 为 open 的决策 id）、sampled（以 part 引用与子树正文串联指纹为种子的确定性洗牌，从各场景 closeout 的 state 与 knowledge 提交中取至多 3 条，text 取状态描述或设定条目 text），幂等（已存在且 scene 与指纹相同不写文件）；Confirm(root, w, part, confirmation) 写入确认记录；AcceptanceBlockers(root, w, unit, level) 计算严格阻塞：strict 且先序早于该单元的部存在 checkpoint.yaml 而 confirmed_by_author 缺失时报告 volume.unconfirmed；CheckWorks 与 CheckArtifact 供 validate
+      status: complete
+    volume-cli:
+      text: internal/cli：注册 volume checkpoint（args：part；flags：--dir；输出 checkpoint 字段）与 volume confirm（args：part；flags：--dir、--confirmed-by-author、--confirmation）命令（注册表声明、sampleArgs 与 mutatingSamples、--json 信封、人读输出、诊断 next）；validate 整体校验纳入每个部单元目录的 checkpoint.yaml（CheckWorks）与 validate <path> 分发（CheckArtifact）；accept 经 collectGate 填充 review.GateInput 的新增 Volume 字段（fast/standard 降为 warning），gateNext 增加 volume.unconfirmed 分支（next 含 wa-cli volume confirm 与 review show）
+      status: complete
+    layered-glossary:
+      text: docs/GLOSSARY.md 增补分层摘要（Layered Summary）与卷末检查点（Volume Checkpoint）词条：分层摘要是已验收场景摘要逐层汇总为章、部与全书摘要的机制，由 Agent 撰写、wa-cli 校验子层齐全与过期状态；卷末检查点是每部最后一个场景验收后生成的作者核对产物，汇总本部新增设定、已确认状态变化、伏笔变化与未处理决策并确定性抽取收口条目，strict 关卡下未经确认下一部的场景不能验收
+      status: complete
+  Testing:
+    test-volume-package:
+      text: internal/volume 单元测试：领域校验各失败分支（part 不一致、scene 非本部最后场景、id 重复、sampled 越界与非法 kind、确认记录不完整 volume.incomplete-confirmation、符号链接）；Checkpoint 的场景未完成拒绝（volume.scenes-open）、汇总内容正确（canon/states/threads/decisions 并集）、确定性抽样（同一夹具两次生成 sampled 完全一致、正文变化后抽样改变、不足 3 条取全部）、幂等（最后场景与指纹未变不写文件）；Confirm 写入确认记录；AcceptanceBlockers（strict 下前部未确认报 volume.unconfirmed、确认后清除、本部检查点不阻塞本部场景、fast/standard 不阻塞）
+      status: complete
+    test-layered-summary:
+      text: internal/series 测试：summary set 对章（子场景未 done 或缺摘要报告 summary.children-missing 并列出缺失项）、部与根（直接子层缺摘要拒绝）的就绪检查；写入的指纹与子场景正文变化后的 stale 推导；非汇总单元（场景）行为与既有断言逐字节一致
+      status: complete
+    test-scene-context-budget:
+      text: internal/ctxpack 与 internal/cli 测试（里程碑完成标准）：至少三章的长篇夹具（两部、各含章与场景，收口与摘要齐备），断言任一场景的 context used 不超过预算、被裁剪项不出现在对应字段且列入 trimmed（新 part 的 id 与 keptChars）、同一夹具连续两次运行输出完全一致；states 按 state at 语义（proposed 不进、confirmed 进、人物解析）；priorEndings 取至多两个场景各 400 字符；summaries 含章/部/书层级与 stale；非 scene 单元的既有 ctxpack 断言不回归
+      status: complete
+    test-volume-cli:
+      text: internal/cli 测试：volume checkpoint 与 volume confirm 的 --json 信封与人读输出、诊断与 next（scenes-open、not-strict 提示）、sampleArgs 与 TestRegistryConsistency 通过；validate 计入 checkpoint.yaml（合法零诊断、领域问题按错误码与 field 报告）；accept 在 strict 下被 volume.unconfirmed 拒绝、confirm 后通过、fast/standard 仅 warning
+      status: complete
+    run-regression:
+      text: 完整回归测试并确认覆盖率不低于阈值：go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    verify-change:
+      text: 已运行 ready 与 verify（就绪、任务齐备、无跨文件冲突）；fresh-context 独立审查的 10 个 MUST FIX（空场景 panic、states 无 pov、povID 收集、priorEndings 窗口与截断、volume/summary 诊断 next、空场景子层检查、确认的锚点守卫）与 SHOULD 项（台账每命令一次加载、stale 不看 stage、help 描述）已全部修复并补回归测试；修复后完整回归通过（覆盖率 88.77% ≥ 80%）
+      status: complete
+      command: strict-spec-cli ready layered-summaries-and-budget && strict-spec-cli verify layered-summaries-and-budget
+    verify-archive-readiness:
+      text: 已核对归档合并路径：series 的 summary-set 与 summary-show 为 MODIFIED；context 的 scene-context 与 context-trim 为 MODIFIED；volume 新主规格将写入 .strict-spec-driven/specs/volume.yaml 并进入 specs/INDEX.yaml（checkpoint-artifact 含 fingerprint 字段，与 Schema 一致）；strict-spec-cli verify 诊断清零
+      status: complete
+      command: strict-spec-cli verify layered-summaries-and-budget
+testing_gates:
+  validation_task: run-regression
+  unit_test_task: test-volume-package

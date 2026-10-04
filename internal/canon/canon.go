@@ -11,6 +11,7 @@ import (
 	"reflect"
 	"slices"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/kw12121212/writing-anything/internal/catalog"
@@ -67,15 +68,30 @@ const ChoiceAllow = "a"
 
 // Entry 是设定集中的一个设定条目（Canon Entry）；可选字段未设置时为 nil。
 type Entry struct {
-	ID         string   `json:"id"`
-	Type       string   `json:"type"`
-	Name       *string  `json:"name"`
-	Aliases    []string `json:"aliases"`
-	Text       string   `json:"text"`
-	Sources    []string `json:"sources"`
-	Protection string   `json:"protection"`
-	Members    []string `json:"members"`
-	Decision   *string  `json:"decision"`
+	ID         string    `json:"id"`
+	Type       string    `json:"type"`
+	Name       *string   `json:"name"`
+	Aliases    []string  `json:"aliases"`
+	Text       string    `json:"text"`
+	Sources    []string  `json:"sources"`
+	Protection string    `json:"protection"`
+	Members    []string  `json:"members"`
+	Decision   *string   `json:"decision"`
+	Scope      string    `json:"scope,omitempty"`    // work（缺省）或 series；所在文件决定层级
+	Override   *Override `json:"override,omitempty"` // 作品级覆盖系列级同 id 条目的确认记录
+}
+
+// Override 是作品级条目覆盖系列级条目的确认记录（作者确认覆盖原因）。
+type Override struct {
+	Reason       string `json:"reason"`
+	Confirmation string `json:"confirmation"`
+	ConfirmedAt  string `json:"confirmed_at"`
+}
+
+// ScopedEntry 是解析视图中的一个条目：条目与来源层级（work 或 series:<id>）。
+type ScopedEntry struct {
+	Entry
+	Scope string `json:"scope"`
 }
 
 // Names 返回条目的全部称谓：name 与别名（Alias），没有 name 时只有别名。
@@ -350,14 +366,17 @@ func recheck(root, rel string, doc *yaml.Node, paramIndex int, strict bool) (*ca
 
 // AddInput 是 canon add 的参数。
 type AddInput struct {
-	Type    string
-	Name    string // character、location 与 item 必填；其他类型不得给出
-	Aliases []string
-	Text    string
-	Sources []string
-	Members []string // relationship 必填
-	Pinned  bool
-	ID      string
+	Type            string
+	Name            string // character、location 与 item 必填；其他类型不得给出
+	Aliases         []string
+	Text            string
+	Sources         []string
+	Members         []string // relationship 必填
+	Pinned          bool
+	ID              string
+	Series          bool   // --scope series：写入系列级设定集（作品须属于该系列）
+	OverrideReason  string // 覆盖系列级同 id 条目的原因（覆盖时必填）
+	OverrideConfirm string // 作者确认原话摘要（覆盖时必填）
 }
 
 // Add 在作品 w 的设定集末尾追加一个设定条目。id 为空时取 canon-<n>，n 从已有条目数加一开始递增到不重复；
@@ -367,6 +386,50 @@ func Add(root string, w *work.Work, in AddInput) (*Entry, []string, []workspace.
 	for _, p := range slices.Concat(checkText("name", in.Name), checkText("text", in.Text)) {
 		return nil, nil, []workspace.Problem{p}
 	}
+	// 作用域：series 写入系列级文件；work 覆盖系列级同 id 条目须记录原因并经作者确认。
+	target := Path(w.ID)
+	scope := "work"
+	var override *Override
+	if in.Series {
+		sid := seriesOf(root, w)
+		if sid == "" {
+			return nil, nil, []workspace.Problem{errorAt(CodeNotInSeries, "", "scope",
+				"作品 "+w.ID+" 不属于任何系列，不能用 --scope series；先 wa-cli series add 把作品加入系列")}
+		}
+		target = SeriesPath(sid)
+		scope = "series"
+		if strings.TrimSpace(in.OverrideReason) != "" || strings.TrimSpace(in.OverrideConfirm) != "" {
+			return nil, nil, []workspace.Problem{{Code: "input.invalid-value", Severity: workspace.SeverityError, Field: "override-reason",
+				Message: "--override-reason 与 --confirmation 只用于作品级覆盖系列级条目；系列级条目本身不存在覆盖"}}
+		}
+	} else {
+		if sid := seriesOf(root, w); sid != "" {
+			if seriesEntries, sps := SeriesList(root, sid); sps == nil {
+				for _, e := range seriesEntries {
+					if e.ID == in.ID || in.ID == "" {
+						// 只在最终 id 相同时构成覆盖；id 缺省时无法预判，落到写入后的复查。
+						if e.ID == in.ID && in.ID != "" {
+							if strings.TrimSpace(in.OverrideReason) == "" || strings.TrimSpace(in.OverrideConfirm) == "" {
+								return nil, nil, []workspace.Problem{errorAt(CodeOverrideUnconfirmed, "", "override-reason",
+									"条目 "+in.ID+" 覆盖系列级同 id 条目，必须同时给出 --override-reason（覆盖原因）与 --confirmed-by-author、--confirmation（作者确认原话摘要）")}
+							}
+							override = &Override{Reason: strings.TrimSpace(in.OverrideReason), Confirmation: strings.TrimSpace(in.OverrideConfirm), ConfirmedAt: time.Now().UTC().Format("2006-01-02T15:04:05Z")}
+							break
+						}
+					}
+				}
+			}
+		}
+		if strings.TrimSpace(in.OverrideReason) != "" || strings.TrimSpace(in.OverrideConfirm) != "" {
+			if override == nil {
+				return nil, nil, []workspace.Problem{{Code: "input.invalid-value", Severity: workspace.SeverityError, Field: "override-reason",
+					Message: "--override-reason 只在作品级条目覆盖系列级同 id 条目时使用；该 id 不构成覆盖"}}
+			}
+		}
+	}
+	_ = target
+	_ = scope
+	_ = override
 	if len(in.Aliases) > 0 && (in.Type == TypeWorldRule || in.Type == TypeRelationship) {
 		return nil, nil, []workspace.Problem{{Code: schema.CodeSchemaViolation, Severity: workspace.SeverityError, Field: "aliases",
 			Message: "world-rule 与 relationship 条目不得有别名（Alias）；别名只用于 character、location 与 item 条目"}}
@@ -376,7 +439,7 @@ func Add(root string, w *work.Work, in AddInput) (*Entry, []string, []workspace.
 			return nil, nil, []workspace.Problem{errorAt(CodeUnknownSource, "", fmt.Sprintf("sources[%d]", i), unknownSource(s))}
 		}
 	}
-	rel := Path(w.ID)
+	rel := target
 	doc, f, ps := loadCanon(root, rel)
 	if len(ps) > 0 {
 		return nil, nil, ps
@@ -411,7 +474,7 @@ func Add(root string, w *work.Work, in AddInput) (*Entry, []string, []workspace.
 	if in.Pinned {
 		protection = ProtectionPinned
 	}
-	item := &yaml.Node{Kind: yaml.MappingNode, Content: []*yaml.Node{str("id"), str(id), str("type"), str(in.Type)}}
+	item := &yaml.Node{Kind: yaml.MappingNode, Content: []*yaml.Node{str("id"), str(id), str("type"), str(in.Type), str("scope"), str(scope)}}
 	if in.Name != "" {
 		item.Content = append(item.Content, str("name"), str(in.Name))
 	}
@@ -433,6 +496,8 @@ func Add(root string, w *work.Work, in AddInput) (*Entry, []string, []workspace.
 		return nil, nil, []workspace.Problem{errorAt(workspace.CodeWriteFailed, rel, "", "写入设定集失败："+err.Error())}
 	}
 	e := normalize(saved.Entries[index])
+	e.Scope = scope
+	e.Override = override
 	return &e, []string{rel}, nil
 }
 
@@ -812,4 +877,105 @@ func CharacterIDs(root string, w *work.Work) (ids map[string]bool, ok bool) {
 		}
 	}
 	return ids, true
+}
+
+// 作用域的错误码（Error Code）。已发布的错误码不得改名或复用。
+const (
+	CodeOverrideUnconfirmed = "canon.override-unconfirmed"
+	CodeNotInSeries         = "canon.not-in-series"
+)
+
+// SeriesPath 返回系列级设定集的路径（.writing-anything/series/<series>/canon.yaml）。
+func SeriesPath(seriesID string) string {
+	return ".writing-anything/series/" + seriesID + "/" + FileName
+}
+
+// seriesOf 返回作品所属系列 id（空表示不属于任何系列）；作品级缓存每命令一次。
+func seriesOf(root string, w *work.Work) string {
+	if w == nil {
+		return ""
+	}
+	if seriesMemberCache == nil {
+		seriesMemberCache = map[string]string{}
+	}
+	if id, ok := seriesMemberCache[w.ID]; ok {
+		return id
+	}
+	// 系列文件为平铺的 .writing-anything/series/<id>.yaml（series 主规格）；逐个读取 works 判定成员。
+	for _, name := range workspace.YAMLFiles(root, ".writing-anything/series") {
+		rel := ".writing-anything/series/" + name
+		doc, ps := workspace.Read(root, rel)
+		if doc == nil || len(ps) > 0 {
+			continue
+		}
+		var f struct {
+			ID    string   `json:"id"`
+			Works []string `json:"works"`
+		}
+		catalog.Decode(doc, &f)
+		if f.ID == "" {
+			f.ID = strings.TrimSuffix(name, ".yaml")
+		}
+		if slices.Contains(f.Works, w.ID) {
+			seriesMemberCache[w.ID] = f.ID
+			return f.ID
+		}
+	}
+	seriesMemberCache[w.ID] = ""
+	return ""
+}
+
+var seriesMemberCache map[string]string
+
+// seriesFileName 是系列文件的文件名（series 主规格）。
+
+// SeriesList 读取系列级设定集（不存在时返回空与 nil；不通过 Schema 或领域校验时返回 nil 与其问题）。
+func SeriesList(root, seriesID string) ([]Entry, []workspace.Problem) {
+	rel := SeriesPath(seriesID)
+	if _, ok, _ := workspace.ReadRegular(root, rel); !ok {
+		if info, err := os.Lstat(filepath.Join(root, filepath.FromSlash(rel))); err == nil && !info.Mode().IsRegular() {
+			return nil, []workspace.Problem{errorAt(schema.CodeNotFound, rel, "", "系列设定集途经符号链接或不是普通文件，按不存在处理")}
+		}
+		return nil, nil
+	}
+	doc, ps := workspace.Read(root, rel)
+	if doc == nil {
+		return nil, ps
+	}
+	if sps := schema.Named("canon").ValidateNode(doc); len(sps) > 0 {
+		return nil, workspace.FromSchema(rel, sps)
+	}
+	var f canonFile
+	catalog.Decode(doc, &f)
+	return f.Entries, nil
+}
+
+// Resolve 返回作品 w 的按作用域解析视图：作品级条目全部保留（scope 为 work），所属系列的系列级条目并入
+// （scope 为 series:<id>），系列级条目与作品级同 id 时被覆盖不出现；每项含来源层级。系列文件不通过校验时
+// 返回 nil 与其问题（调用方降级为作品级）。
+func Resolve(root string, w *work.Work) ([]ScopedEntry, []workspace.Problem) {
+	out := []ScopedEntry{}
+	workEntries, ps := List(root, w)
+	if workEntries == nil && len(ps) > 0 {
+		// 作品级文件不通过校验：解析视图失败（同 List 的 fatal 语义）。
+		return nil, ps
+	}
+	byID := map[string]bool{}
+	for _, e := range workEntries {
+		byID[e.ID] = true
+		out = append(out, ScopedEntry{Entry: e, Scope: "work"})
+	}
+	if sid := seriesOf(root, w); sid != "" {
+		seriesEntries, sps := SeriesList(root, sid)
+		if sps != nil {
+			return nil, sps
+		}
+		for _, e := range seriesEntries {
+			if byID[e.ID] {
+				continue // 被作品级覆盖
+			}
+			out = append(out, ScopedEntry{Entry: e, Scope: "series:" + sid})
+		}
+	}
+	return out, nil
 }

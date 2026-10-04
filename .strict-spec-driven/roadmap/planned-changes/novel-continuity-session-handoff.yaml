@@ -5,7 +5,7 @@ schema_file: ../../templates/strict-spec-driven/schemas/planned-change.yaml
 planned_change:
   id: session-handoff
   milestone: novel-continuity
-status: planned
+status: complete
 summary: 会话交接记录（Handoff Note）
 details: 每个 Agent 会话结束前，通过 wa-cli handoff write 记录：完成了什么、未完成的事项、作者的新指示、需要注意的风险。交接记录只能追加。wa-cli next 在输出下一步命令时附上最近的交接记录。配合 status、next、context，新会话不需要任何对话历史就能接续工作。
 depends_on:

@@ -4,7 +4,6 @@ import (
 	"slices"
 	"strings"
 	"testing"
-
 )
 
 // novelScenes 在 root 下写入三个场景（s1、s2、s3）的大纲并返回先序场景列表；content 为 nil 时跳过该场景。

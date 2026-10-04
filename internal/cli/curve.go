@@ -19,7 +19,7 @@ import (
 )
 
 var curveCommand = &command{
-	name:    "curve",
+	name: "curve",
 	summary: "把作品的 AI 评分按单元树先序汇总为曲线（如情绪曲线（Emotion Curve）与张力曲线（Tension Curve）），与场景契约目标或" +
 		"结构类写作法节拍的目标张力（Target Tension）对比，输出偏离发现项与文体声明的节奏检查（Pacing Check）；只读，" +
 		"发现项不阻塞验收，wa-cli 不调用模型",

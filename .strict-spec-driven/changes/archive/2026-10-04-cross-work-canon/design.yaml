@@ -1,0 +1,31 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: cross-work-canon
+approach:
+  - internal/canon 扩展作用域：条目新增可选 scope（work|series）与 override（覆盖确认记录）字段；系列级设定存放 .writing-anything/series/<series>/canon.yaml（同 Schema 与领域校验）；canon add / canon set 增加 --scope 与覆盖确认参数；Resolve 提供按作用域的解析视图（作品级优先、系列级按系列顺序并入、来源标明），context / continuity / recall 消费同一视图
+decisions:
+  series-canon-file:
+    decision: 系列级设定存放在 .writing-anything/series/<series>/canon.yaml（每个系列一份）：结构与作品级 canon.yaml 相同（同 Schema 与领域校验），成员作品共享；作品级覆盖通过同一 id 在两级各有一条目表达，不移动或删除系列级条目
+    rationale: 系列文件已有目录与加载机制（series-validation 按目录遍历）；一份系列一档避免多作品共享时写哪个作品 canon 的归属问题；覆盖不修改系列级原件，系列正史保持单一事实来源
+  override-confirmation:
+    decision: canon add --scope work 写入与系列级同 id 的条目、或 canon set 修改这样的条目时，必须同时给出 --override-reason（非空文本）与 --confirmed-by-author、--confirmation（作者原话摘要）：写入条目的 override 字段（reason、confirmation、confirmed_at）；缺失或摘要为空报告 canon.override-unconfirmed 且不写文件；--override-reason 等参数只对覆盖条目有意义（非覆盖条目给出时报告 input.invalid-value）
+    rationale: planned change details 原文「作品级条目可以覆盖系列级条目，但必须记录覆盖原因并经作者确认」；确认记录模式与状态变化提议、卷末检查点同源（--confirmed-by-author + --confirmation），每条覆盖独立可追溯；重新修改覆盖条目时要求重新确认，防止确认被一次写入永久消费
+  resolve-view:
+    decision: Resolve(root, w) 返回解析后的条目视图：作品级条目全部保留（scope 为 work），各所属系列的系列级条目按系列顺序并入（scope 为 series:<id>），系列级条目与作品级同 id 时被覆盖不出现；canon list 默认输出该视图（每项含 scope），--all-scope 时并列输出两级原始条目；context 的 characters 与 pov-reveal 知情解析、continuity 的称谓解析、recall 的别名词典都改用 Resolve
+    rationale: 「context 与连续性审查按作用域解析设定集，并在输出中标明条目来自哪一级」是 details 原文；单一 Resolve 避免四个消费方各自实现合并顺序（同 resolved-sources 的理由）；被覆盖的系列级条目不进解析视图——它的存在由 --all-scope 与系列文件本身可见
+  work-first-no-inherit-errors:
+    decision: 系列级 canon.yaml 不通过校验时：canon list 与 context 以 error 报告并按作品级解析继续（不并入坏条目）；continuity 与 recall 同样降级为作品级并在诊断中说明；系列文件不存在时零开销并入为空
+    rationale: subject-scoped-lookup 的既有取向：别的文件的坏数据不应让当前作品的命令崩溃；error 诊断保证整体校验能重新检出（per-work-merge-validated）
+alternatives:
+  - option: 系列级设定并入每部作品的 canon.yaml（复制同步）
+    reason: 复制即漂移：系列修订要改 N 份，且无法区分「作品本地新设定」与「系列设定过期的副本」
+  - option: '覆盖用标记字段（overridden: true）而不要求确认'
+    reason: details 明确要求记录覆盖原因并经作者确认；静默覆盖正是本变更要消除的漂移源
+  - option: Resolve 时同名（不同 id）也按覆盖处理
+    reason: 覆盖语义绑定同一 id（同一设定条目的作品级版本）；同名不同 id 是两个不同设定（canon 允许重名），按覆盖处理会静默吞掉一个
+risks:
+  - 系列级条目很多时每命令都加载系列 canon：单系列一档、每命令一次（load-once-per-command），系列规模与作品级同量级
+  - 作品属于多个系列（series-already-member 限制每个作品只属于一个系列）：现状单系列成员，Resolve 的系列顺序为单一；若未来放开多系列，顺序沿用 series show 的 works 序
+  - 既有作品级条目与新的系列级条目重名（不同 id）：解析视图两级都出现，context 按称谓匹配时同名多条目沿用「多义不解析」规则，不误合并

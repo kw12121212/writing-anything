@@ -11,9 +11,13 @@ import (
 	"github.com/kw12121212/writing-anything/internal/brief"
 	"github.com/kw12121212/writing-anything/internal/canon"
 	"github.com/kw12121212/writing-anything/internal/catalog"
+	"github.com/kw12121212/writing-anything/internal/closeout"
 	"github.com/kw12121212/writing-anything/internal/decision"
 	"github.com/kw12121212/writing-anything/internal/draft"
 	"github.com/kw12121212/writing-anything/internal/feedback"
+	"github.com/kw12121212/writing-anything/internal/handoff"
+	"github.com/kw12121212/writing-anything/internal/impact"
+	"github.com/kw12121212/writing-anything/internal/knowledge"
 	"github.com/kw12121212/writing-anything/internal/learn"
 	"github.com/kw12121212/writing-anything/internal/marketing"
 	"github.com/kw12121212/writing-anything/internal/metrics"
@@ -22,12 +26,13 @@ import (
 	"github.com/kw12121212/writing-anything/internal/plan"
 	"github.com/kw12121212/writing-anything/internal/resolve"
 	"github.com/kw12121212/writing-anything/internal/review"
+	"github.com/kw12121212/writing-anything/internal/reviewpacket"
 	"github.com/kw12121212/writing-anything/internal/schema"
 	"github.com/kw12121212/writing-anything/internal/series"
-	"github.com/kw12121212/writing-anything/internal/knowledge"
-	"github.com/kw12121212/writing-anything/internal/state"
 	"github.com/kw12121212/writing-anything/internal/source"
+	"github.com/kw12121212/writing-anything/internal/state"
 	"github.com/kw12121212/writing-anything/internal/threads"
+	"github.com/kw12121212/writing-anything/internal/volume"
 	"github.com/kw12121212/writing-anything/internal/work"
 	"github.com/kw12121212/writing-anything/internal/workspace"
 )
@@ -191,6 +196,16 @@ func runValidate(inv *invocation) int {
 					problems = append(problems, state.CheckArtifact(dir, checked[0])...)
 				case "knowledge":
 					problems = append(problems, knowledge.CheckArtifact(dir, checked[0])...)
+				case "closeout":
+					problems = append(problems, closeout.CheckArtifact(dir, checked[0])...)
+				case "checkpoint":
+					problems = append(problems, volume.CheckArtifact(dir, checked[0])...)
+				case "packet":
+					problems = append(problems, reviewpacket.CheckArtifact(dir, checked[0])...)
+				case "rechecks":
+					problems = append(problems, impact.CheckArtifact(dir, checked[0])...)
+				case "handoffs":
+					problems = append(problems, handoff.CheckArtifact(dir, checked[0])...)
 				case "brief":
 					problems = append(problems, brief.CheckArtifact(dir, checked[0])...)
 				case "outline":
@@ -492,9 +507,13 @@ func checkWorkspace(dir string) (checked []string, works []*work.Work, problems 
 	thchecked, thps := threads.CheckWorks(dir, works)
 	stchecked, stps := state.CheckWorks(dir, works)
 	knchecked, knps := knowledge.CheckWorks(dir, works)
+	cochecked, cops := closeout.CheckWorks(dir, works)
+	vpchecked, vpps := volume.CheckWorks(dir, works)
+	rpchecked, rpps := reviewpacket.CheckWorks(dir, works)
+	imchecked, imps := impact.CheckWorks(dir, works)
 	plchecked, plps := plan.CheckUnitArtifacts(dir, works, catalog.LoadMethods(dir), unitDefaultMethod)
-	checked = slices.Concat(checked, more, wchecked, schecked, uchecked, bchecked, ochecked, fchecked, rchecked, mchecked, dchecked, lchecked, xchecked, cchecked, pchecked, echecked, tchecked, ychecked, kchecked, thchecked, stchecked, knchecked, plchecked)
-	return checked, works, slices.Concat(problems, ps, wps, sps, ups, bps, ops, fps, rps, mps, dps, lps, xps, cps, pps, eps, tps, yps, kps, thps, stps, knps, plps)
+	checked = slices.Concat(checked, more, wchecked, schecked, uchecked, bchecked, ochecked, fchecked, rchecked, mchecked, dchecked, lchecked, xchecked, cchecked, pchecked, echecked, tchecked, ychecked, kchecked, thchecked, stchecked, knchecked, cochecked, vpchecked, rpchecked, imchecked, plchecked)
+	return checked, works, slices.Concat(problems, ps, wps, sps, ups, bps, ops, fps, rps, mps, dps, lps, xps, cps, pps, eps, tps, yps, kps, thps, stps, knps, cops, vpps, rpps, imps, plps)
 }
 
 // defaultMethodOf 返回单元产物 rel 适用的文体默认写作法：只有作品的根单元适用，子单元不继承；

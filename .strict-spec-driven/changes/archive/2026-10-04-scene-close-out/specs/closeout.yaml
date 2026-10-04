@@ -1,0 +1,112 @@
+schema: strict-spec-driven/delta-spec/v1
+schema_version: 1
+artifact_type: delta_spec
+schema_file: templates/strict-spec-driven/schemas/delta-spec.yaml
+target_spec: closeout
+spec:
+  title: 写后收口（Close-out）
+  path: .strict-spec-driven/specs/closeout.yaml
+operations:
+  ADDED:
+    closeout-artifact:
+      strength: MUST
+      statement: 场景单元目录下的 closeout.yaml 是写后收口（Close-out）的收口产物：含 schema_version（1）、draft_sha256（收口时正文 draft.md 原始字节的 SHA-256，64 位十六进制）、五个 id 数组 events、canon、knowledge、plants、recovers（未声明视为空数组，每个元素须符合 id 格式）、对象数组 state（未声明视为空数组，每项含符合 id 格式且非空的 id 与可选的 contract——关联契约节内 state_changes 的 id，须符合 id 格式）及文本数组 waived（豁免的疑似专有名词（Suspected Proper Noun）名单，元素非空且不重复，未声明视为空数组）。字段形态不符合上述要求时报告 artifact.schema-violation（field 为对应点分路径，如 state[0].id）。wa-cli validate 整体校验时必须对每个可加载作品的每个场景单元目录中存在的 closeout.yaml 做 Schema 与领域校验并计入 checked：state 数组每项的 id 必须是作品 state.yaml 中存在且 scene 为该场景的条目，knowledge 数组的每个 id 必须是 knowledge.yaml 中存在且 scene 为该场景的条目，plants 数组的每个 id 必须是 threads.yaml 中存在且 planted_in 为该场景的条目，recovers 数组的每个 id 必须是 threads.yaml 中存在且 status 为 paid、recovered_in 为该场景的条目，canon 数组的每个 id 必须在该作品 canon.yaml 的设定条目中（违反时报告 closeout.unknown-entry，field 为对应数组元素位置，message 含该 id），events 数组的每个 id 必须在该场景大纲（outline.yaml，全部节合并）声明的 events 中，否则报告 closeout.unknown-event（field 为对应位置，message 含该 id）。closeout.yaml 途经符号链接或不是普通文件时按 artifact.not-found 处理（path 为该 closeout.yaml，不读取也不覆盖它）。场景没有 closeout.yaml 时不做任何收口检查；wa-cli validate <path> 对该位置的 closeout.yaml 执行同样的检查（台账、设定集与大纲检查以该作品当前状态为准）。
+      scenarios:
+        invalid-sha:
+          - GIVEN: novel 文体作品 my-novel 的场景 s1 的 closeout.yaml 中 draft_sha256 为 abc
+          - WHEN: 运行 wa-cli validate --dir D --json
+          - THEN: 报告 artifact.schema-violation 且 field 含 draft_sha256，退出码为 1
+        dangling-state:
+          - GIVEN: closeout.yaml 的 state 数组含 state-9，作品的 state.yaml 没有 id 为 state-9 的条目
+          - WHEN: 运行 wa-cli validate --dir D --json
+          - THEN: 报告 closeout.unknown-entry（message 含 state-9），退出码为 1
+        unbound-knowledge:
+          - GIVEN: closeout.yaml 的 knowledge 数组含 know-1，know-1 的 scene 为另一场景 my-novel/c2/s1 而非该场景
+          - WHEN: 运行 wa-cli validate --dir D --json
+          - THEN: 报告 closeout.unknown-entry（field 指向 knowledge 数组中该元素），退出码为 1
+        unrecovered-thread:
+          - GIVEN: closeout.yaml 的 recovers 数组含 f-1，threads.yaml 中 f-1 的 status 为 open
+          - WHEN: 运行 wa-cli validate --dir D --json
+          - THEN: 报告 closeout.unknown-entry（message 含 f-1），退出码为 1
+        undeclared-event:
+          - GIVEN: closeout.yaml 的 events 数组含 ev-9，该场景大纲没有任何节声明 ev-9
+          - WHEN: 运行 wa-cli validate --dir D --json
+          - THEN: 报告 closeout.unknown-event（message 含 ev-9），退出码为 1
+        validate-symlink:
+          - GIVEN: 场景 s1 的 closeout.yaml 是指向项目目录之外的符号链接
+          - WHEN: 运行 wa-cli validate --dir D --json
+          - THEN: checked 含该 closeout.yaml，diagnostics 中有一条错误码为 artifact.not-found、path 为该文件的诊断，退出码为 1
+    closeout-submit:
+      strength: MUST
+      statement: wa-cli scene close-out <unit> [--file <路径>] [--replace] 必须从 --file（相对 --dir 或为绝对路径）或标准输入读取收口输入并完成场景的写后收口。输入为 YAML，含可选的 canon（新增设定条目数组，每项含 type、非空 text、可选 name、aliases、sources 与 id）、state_changes（状态变化提交数组，每项含 entry、非空 state、可选 contract（对应契约节内 state_changes 的 id）与 id）、knowledge（知情提交数组，每项含 entry、character 与可选 id）、plants（计划外埋设数组，每项含非空 text、recover_at 与可选 id）、recovers（回收的既有伏笔 id 数组）、events（确认产生的事件 id 数组）与 waived（豁免的疑似专有名词文本数组）七节，缺省视为空。命令必须先完成全部预检再写入：<unit> 引用的单元不存在时报告 unit.not-found，存在但类型不为 scene 时报告 scene.not-scene（message 含实际类型）；单元目录下没有 draft.md 时报告 draft.not-found；输入不符合收口输入的 Schema 或无法解析时报告 artifact.schema-violation 或 artifact.parse-error（field 为输入中的位置，path 为空）；目标台账（canon.yaml、state.yaml、knowledge.yaml、threads.yaml）已有 Schema、id 重复或确认记录不完整等既有诊断，或其追加点途经 YAML 锚点、别名或合并键时报告其诊断；closeout.yaml 已存在且未给出 --replace 时报告 closeout.already-closed（next 含 wa-cli help scene close-out --json）。预检还必须按写入后状态对照场景契约（合并该场景 outline.yaml 全部节的契约字段）：契约每个 state_changes 的节内 id 必须有载荷 state_changes 中 contract 等于它的提交，否则报告 closeout.missing-state-change（message 含契约 id 与要求的变化文本）；契约每个 recovers 伏笔 id 在写入后必须是 threads.yaml 中 status 为 paid 且 recovered_in 为该场景的条目，否则报告 closeout.missing-recovery；契约每个 plants 伏笔 id 在写入后必须是 planted_in 为该场景的条目，否则报告 closeout.missing-plant；载荷 events 必须恰好覆盖契约 events 声明的每个 id（缺漏报告 closeout.missing-event，含契约外 id 报告 closeout.unknown-event，message 含该 id）。这些诊断的 next 包含 wa-cli help scene close-out --json 与 wa-cli help scene contract --json。任一预检或对照失败时不得写入或创建任何文件，退出码为 1。全部通过时按 canon add、state propose、knowledge propose、threads add 与 threads set --status paid --recovered-in <该场景> 的既有语义与领域校验依次写入各台账（id 缺省沿用各自生成规则，追加保留其他内容与 YAML 注释），随后整体写出单元目录下的 closeout.yaml：draft_sha256 为当前 draft.md 原始字节的 SHA-256，canon、knowledge、plants、recovers 记录本次写入的条目 id，state 记录每条提交的 id 与 contract 关联（无关联时省略 contract），events 与 waived 为载荷取值；--replace 整体替换既有 closeout.yaml，不清理也不撤销已写入的台账条目。changedPaths 为本次实际写入的台账文件与 closeout.yaml，--json 输出的 closeout 字段含 unit、path、draftSha256、canon、state、knowledge、plants、recovers（各为 id 数组）、events、waived 与 suspected（疑似专有名词名单，见下），退出码为 0。写入成功的同时必须执行疑似专有名词扫描并以 warning 报告：取该场景大纲各节的 characters 取值、pov 与 location 文本为候选，与写入后 canon 条目的 name 与别名（Alias）完全相等匹配（同 recall 的解析规则），未命中且不在 waived 中的取值逐条报告 warning 级 closeout.suspected-name（message 含该取值与所在字段并说明补录或豁免的做法，next 含 wa-cli help canon add --json 与 wa-cli help scene close-out --json）；扫描不改变退出码。不加 --json 时以人读文本输出收口结果与疑似名单。
+      scenarios:
+        submit-full:
+          - GIVEN: 'novel 作品 my-novel 的场景 s1 有正文，其大纲节声明 state_changes [{id: sc-1, text: 精灵交出灯芯}]、plants [fs-1]（threads.yaml 已有 planted_in 为 s1 的 fs-1）、recovers [f-1] 与 events [ev-2]，canon.yaml 有条目 canon-1，threads.yaml 的 f-1 为 open'
+          - WHEN: '运行 wa-cli scene close-out my-novel/s1 --dir D --json，标准输入含 state_changes [{entry: canon-1, state: 灯芯易主给精灵, contract: sc-1}]、recovers [f-1]、events [ev-2] 与 knowledge [{entry: canon-1, character: reader}]'
+          - THEN: state.yaml 追加一条 scene 为 s1 的 proposed 条目，knowledge.yaml 追加一条 character 为 reader 的 proposed 条目，f-1 的 status 变为 paid 且 recovered_in 为 s1；closeout.yaml 的 draft_sha256 为当前正文的 SHA-256、state、knowledge、recovers、events 记录上述 id；changedPaths 含三个台账与 closeout.yaml，退出码为 0
+        missing-state-change:
+          - GIVEN: 同上夹具，但标准输入的 state_changes 不含 contract 为 sc-1 的提交
+          - WHEN: 运行 wa-cli scene close-out my-novel/s1 --dir D --json
+          - THEN: 报告 closeout.missing-state-change（message 含 sc-1），state.yaml、knowledge.yaml、threads.yaml 与 closeout.yaml 均未被修改或创建，退出码为 1
+        missing-recovery:
+          - GIVEN: 同上夹具，但标准输入不含 recovers
+          - WHEN: 运行 wa-cli scene close-out my-novel/s1 --dir D --json
+          - THEN: 报告 closeout.missing-recovery（message 含 f-1），没有任何文件被修改，退出码为 1
+        missing-event:
+          - GIVEN: 同上夹具，但标准输入的 events 为空
+          - WHEN: 运行 wa-cli scene close-out my-novel/s1 --dir D --json
+          - THEN: 报告 closeout.missing-event（message 含 ev-2），没有任何文件被修改，退出码为 1
+        unknown-event:
+          - GIVEN: 同上夹具，标准输入的 events 含 [ev-2, ev-9] 而 ev-9 不在该场景大纲声明中
+          - WHEN: 运行 wa-cli scene close-out my-novel/s1 --dir D --json
+          - THEN: 报告 closeout.unknown-event（message 含 ev-9），没有任何文件被修改，退出码为 1
+        canon-in-payload:
+          - GIVEN: '场景 s1 的大纲节声明 characters [守灯人, 精灵]，canon.yaml 只有 name 为守灯人的条目；标准输入含 canon [{type: character, name: 精灵, text: 灯之精灵}] 与 state_changes [{entry: <载荷精灵条目生成的 id>, state: 现身, contract: sc-1}]'
+          - WHEN: 运行 wa-cli scene close-out my-novel/s1 --dir D --json
+          - THEN: canon.yaml 追加 name 为精灵的条目，状态提交的 entry 指向该新条目，closeout.yaml 的 canon 数组含其 id；守灯人命中设定集不产生提示，退出码为 0
+        suspected-name-warning:
+          - GIVEN: 场景 s1 的大纲节声明 characters [守灯人, 精灵] 与 location 灯室，canon.yaml 只有 name 为守灯人的条目，载荷不含 canon 节与 waived
+          - WHEN: 运行 wa-cli scene close-out my-novel/s1 --dir D --json
+          - THEN: diagnostics 中有两条 severity 为 warning、错误码为 closeout.suspected-name 的诊断（精灵与灯室），收口照常完成（该场景无契约要求字段时合法），退出码为 0
+        suspected-name-waived:
+          - GIVEN: 同上，但载荷的 waived 含 [灯室]，且 canon.yaml 另有 name 为精灵的条目
+          - WHEN: 运行 wa-cli scene close-out my-novel/s1 --dir D --json
+          - THEN: 没有 closeout.suspected-name 诊断，closeout.yaml 的 waived 为 [灯室]，退出码为 0
+        not-scene:
+          - GIVEN: novel 作品 my-novel 有章单元 chapter-one（type 为 chapter）
+          - WHEN: 运行 wa-cli scene close-out my-novel/chapter-one --dir D --json，标准输入为空载荷
+          - THEN: 报告 scene.not-scene（message 含 chapter），没有任何文件被修改，退出码为 1
+        no-draft:
+          - GIVEN: 场景 s1 处于大纲阶段，单元目录下没有 draft.md
+          - WHEN: 运行 wa-cli scene close-out my-novel/s1 --dir D --json，标准输入为空载荷
+          - THEN: 报告 draft.not-found，没有任何文件被创建，退出码为 1
+        already-closed:
+          - GIVEN: 场景 s1 已成功收口，closeout.yaml 存在
+          - WHEN: 运行 wa-cli scene close-out my-novel/s1 --dir D --json，标准输入为合法载荷
+          - THEN: 报告 closeout.already-closed，没有任何文件被修改，退出码为 1
+        replace-reclose:
+          - GIVEN: 场景 s1 已收口（closeout.yaml 存在），之后作者修改了契约新增 state_changes 的 sc-2
+          - WHEN: 运行 wa-cli scene close-out my-novel/s1 --replace --dir D --json，标准输入含 contract 为 sc-1 与 sc-2 的提交
+          - THEN: closeout.yaml 被整体替换（state 数组含两条提交的 id），既有台账条目不被删除或撤销，退出码为 0
+        empty-payload-no-contract:
+          - GIVEN: 场景 s1 的大纲节只声明 characters 与 reveal（无 state_changes、plants、recovers、events），有正文，没有 closeout.yaml
+          - WHEN: 运行 wa-cli scene close-out my-novel/s1 --dir D --json，标准输入为空载荷（无任何节）
+          - THEN: 不修改任何台账，写出只含 draft_sha256 与空数组的 closeout.yaml，changedPaths 只含 closeout.yaml，退出码为 0
+    closeout-waive:
+      strength: MUST
+      statement: wa-cli scene close-out <unit> --waive <名字>（可重复给出，且不给出收口输入）必须把每个名字并入该场景 closeout.yaml 的 waived 数组（追加在末尾，已有的不重复追加）：只修改 closeout.yaml，不读写任何台账。closeout.yaml 不存在时报告 closeout.not-closed（next 含 wa-cli help scene close-out --json）；全部名字均已在 waived 中时不写文件（changedPaths 为空数组）；否则 changedPaths 为 [closeout.yaml]，--json 输出的 closeout 字段同 closeout-submit（suspected 以写入后状态重新扫描，含仍未命中且未豁免的取值），退出码为 0。<unit> 引用的单元不存在时报告 unit.not-found，存在但类型不为 scene 时报告 scene.not-scene；closeout.yaml 不通过 Schema 或领域校验（closeout-artifact 的检查）时报告其诊断；closeout.yaml 途经符号链接或不是普通文件时按 artifact.not-found 处理；--waive 的取值为空白时报告 input.invalid-value（field 为 waive）。这些失败情况都不修改文件，退出码为 1。不加 --json 时以人读文本输出更新后的豁免名单。
+      scenarios:
+        waive-appends:
+          - GIVEN: 场景 s1 已收口，closeout.yaml 的 waived 为 [灯室]，收口时的扫描曾提示 精灵 与 灯室
+          - WHEN: 运行 wa-cli scene close-out my-novel/s1 --waive 精灵 --dir D --json
+          - THEN: waived 为 [灯室, 精灵]，changedPaths 为 [closeout.yaml]，diagnostics 中不再有 精灵 的 closeout.suspected-name warning，退出码为 0
+        waive-idempotent:
+          - GIVEN: 场景 s1 的 closeout.yaml 的 waived 已含 灯室
+          - WHEN: 运行 wa-cli scene close-out my-novel/s1 --waive 灯室 --dir D --json
+          - THEN: changedPaths 为空数组，closeout.yaml 与运行前逐字节相同，退出码为 0
+        waive-not-closed:
+          - GIVEN: 场景 s1 没有 closeout.yaml
+          - WHEN: 运行 wa-cli scene close-out my-novel/s1 --waive 精灵 --dir D --json
+          - THEN: 报告 closeout.not-closed，没有任何文件被创建或修改，退出码为 1
+  MODIFIED: {}
+  REMOVED: {}

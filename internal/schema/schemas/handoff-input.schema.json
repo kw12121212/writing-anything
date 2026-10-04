@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "交接记录输入",
+  "description": "wa-cli handoff write 从 --file 或标准输入读取的接续记录输入：完成了什么与未完成事项必填，作者指示与风险可选。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["done", "todo"],
+  "properties": {
+    "done": {"type": "array", "minItems": 1, "items": {"type": "string", "pattern": "\\S"}},
+    "todo": {"type": "array", "minItems": 1, "items": {"type": "string", "pattern": "\\S"}},
+    "instructions": {"type": "array", "items": {"type": "string", "pattern": "\\S"}},
+    "risks": {"type": "array", "items": {"type": "string", "pattern": "\\S"}}
+  }
+}

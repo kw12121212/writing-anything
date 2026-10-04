@@ -353,6 +353,8 @@ func runSummarySet(inv *invocation) int {
 	res.Diagnostics = diagnostics(problems, dir)
 	for i, d := range res.Diagnostics {
 		switch d.Code {
+		case series.CodeChildrenMissing:
+			res.Diagnostics[i].Next = []string{"wa-cli help summary set --json"}
 		case series.CodeNotAccepted:
 			res.Diagnostics[i].Next = []string{shellCommand("wa-cli", "review", "show", ref, "--dir", dir, "--json")}
 		case series.CodeLength, codeInvalidValue, codeInputReadFailed:

@@ -548,15 +548,15 @@ func TestShortStoryCurve(t *testing.T) {
 	var cr struct {
 		ChangedPaths []string `json:"changedPaths"`
 		Curves       []struct {
-			Metric     string `json:"metric"`
-			Points     []struct {
+			Metric string `json:"metric"`
+			Points []struct {
 				Unit   string   `json:"unit"`
 				Value  *float64 `json:"value"`
 				Target *float64 `json:"target"`
 			} `json:"points"`
 			Deviations []struct {
-				Unit   string  `json:"unit"`
-				Metric string  `json:"metric"`
+				Unit   string `json:"unit"`
+				Metric string `json:"metric"`
 			} `json:"deviations"`
 		} `json:"curves"`
 	}

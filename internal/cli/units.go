@@ -9,6 +9,8 @@ import (
 	"github.com/kw12121212/writing-anything/internal/brief"
 	"github.com/kw12121212/writing-anything/internal/catalog"
 	"github.com/kw12121212/writing-anything/internal/decision"
+	"github.com/kw12121212/writing-anything/internal/handoff"
+	"github.com/kw12121212/writing-anything/internal/impact"
 	"github.com/kw12121212/writing-anything/internal/marketing"
 	"github.com/kw12121212/writing-anything/internal/outline"
 	"github.com/kw12121212/writing-anything/internal/review"
@@ -136,6 +138,12 @@ type blockerView struct {
 	Message  string  `json:"message"`
 }
 
+// handoffRef 是 next 条目附带的最近交接记录摘要。
+type handoffRef struct {
+	ID   string   `json:"id"`
+	Todo []string `json:"todo"`
+}
+
 type stepView struct {
 	Unit     string         `json:"unit"`
 	Stage    string         `json:"stage"`
@@ -145,6 +153,8 @@ type stepView struct {
 	Feedback []feedbackView `json:"feedback"`
 	// Progress 只对汇总单元（Aggregated Unit）非空：子单元树中走生命周期的单元的完成进度。
 	Progress *progressView `json:"progress"`
+	// Handoff 是工作区最近一条交接记录（Handoff Note）的 id 与待办，供新会话接续；没有记录时为 null。
+	Handoff *handoffRef `json:"handoff"`
 }
 
 // progressView 是汇总单元（Aggregated Unit）的进度：非汇总子孙单元的总数与其中已完成的数量。
@@ -392,6 +402,7 @@ func runNext(inv *invocation) int {
 func step(dir string, w *work.Work, u *work.Unit) stepView {
 	blockers, commands := progress(dir, w, u)
 	s := stepView{Unit: u.Ref, Stage: w.EffectiveStage(u), Blockers: blockers, Action: action(dir, w, u, blockers), Commands: commands,
+		Handoff:  latestHandoff(dir),
 		Feedback: pendingFeedback(dir, w, u)}
 	if w.Aggregated(u) {
 		done, total := w.Progress(u)
@@ -486,6 +497,15 @@ func artifactNext(dir, artifact, unitDir string) []string {
 	return nil
 }
 
+// latestHandoff 返回工作区最近一条交接记录的摘要（没有记录或文件不合法时为 nil，问题由命令层报告）。
+func latestHandoff(dir string) *handoffRef {
+	note, ps := handoff.Latest(dir)
+	if note == nil || len(ps) > 0 {
+		return nil
+	}
+	return &handoffRef{ID: note.ID, Todo: note.Todo}
+}
+
 // action 以人读文字说明单元的下一步。
 func action(dir string, w *work.Work, u *work.Unit, blockers []blockerView) string {
 	if w.Aggregated(u) {
@@ -551,6 +571,18 @@ func action(dir string, w *work.Work, u *work.Unit, blockers []blockerView) stri
 			todo = append(todo, "修复无法加载的决策队列（Decision Queue）")
 		}
 		return "先" + strings.Join(todo, "，并") + "，再推进"
+	}
+	if marks := impact.OpenMarks(dir, w.ID); len(marks) > 0 {
+		var mine []string
+		for _, m := range marks {
+			if m.Scene == u.Ref {
+				mine = append(mine, m.Target)
+			}
+		}
+		if len(mine) > 0 {
+			return fmt.Sprintf("阶段 %s 的必需产物已齐备，可以推进到 %s；注意：本场景有 %d 个 open 复查标记（Recheck Mark，目标 %s），复查通过后 wa-cli impact clear 解除（组稿前必须清零）",
+				u.Stage, w.NextStage(u), len(mine), strings.Join(mine, "、"))
+		}
 	}
 	return fmt.Sprintf("阶段 %s 的必需产物已齐备，可以推进到 %s", u.Stage, w.NextStage(u))
 }

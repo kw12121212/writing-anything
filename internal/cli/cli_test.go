@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"slices"
 	"sort"
@@ -252,6 +253,8 @@ func TestHelpJSON(t *testing.T) {
 // nullableFields 是命令样例 --json 输出中允许为 null 的字段名清单（对象字段）；数组字段一律不得为 null，
 // 没有元素时必须是空数组（cli-contract/shared-envelope）。新增合法可空的字段时在此登记。
 var nullableFields = map[string]bool{
+	"handoff":          true,
+	"time":             true,
 	"acceptance":       true,
 	"aiDisclosure":     true,
 	"answer":           true,
@@ -416,7 +419,7 @@ func TestRegistryConsistency(t *testing.T) {
 }
 
 // mutatingSamples 列出只能通过变更产物才能成功的命令；它们的样例在临时工作区中变更产物。
-var mutatingSamples = map[string]bool{"new": true, "unit add": true, "unit move": true, "advance": true, "source add": true, "claim add": true, "claim remove": true, "review record": true, "accept": true, "export": true, "preview": true, "marketing ask": true, "mcp install": true, "skills install": true, "feedback add": true, "decision add": true, "decide": true, "outline remove": true, "pack install": true, "pack remove": true, "metrics record": true, "metrics calibrate": true, "pack learn": true, "series add": true, "series fact": true, "summary set": true, "pack confirm": true, "pack reject": true, "canon add": true, "canon remove": true, "scene contract": true, "threads add": true, "plan step": true, "plan confirm": true, "state propose": true, "state confirm": true, "state reject": true, "state set": true, "knowledge propose": true, "knowledge confirm": true, "knowledge reject": true, "knowledge set": true}
+var mutatingSamples = map[string]bool{"new": true, "unit add": true, "unit move": true, "advance": true, "source add": true, "claim add": true, "claim remove": true, "review record": true, "accept": true, "export": true, "preview": true, "marketing ask": true, "mcp install": true, "skills install": true, "feedback add": true, "decision add": true, "decide": true, "outline remove": true, "pack install": true, "pack remove": true, "metrics record": true, "metrics calibrate": true, "pack learn": true, "series add": true, "series fact": true, "summary set": true, "pack confirm": true, "pack reject": true, "canon add": true, "canon remove": true, "scene contract": true, "threads add": true, "plan step": true, "plan confirm": true, "state propose": true, "state confirm": true, "state reject": true, "state set": true, "knowledge propose": true, "knowledge confirm": true, "knowledge reject": true, "knowledge set": true, "scene close-out": true, "volume checkpoint": true, "volume confirm": true, "review plan": true, "review submit": true, "impact mark": true, "impact clear": true, "assemble": true, "handoff write": true}
 
 // sampleArgs 返回命令的一次成功调用：除 mutatingSamples 中的命令外都不变更任何产物；工作区命令在已初始化的
 // 临时工作区中运行。
@@ -529,6 +532,69 @@ func sampleArgs(t *testing.T, name string) []string {
 		run(t, "new", "short-story", "my-story", "--dir", dir)
 		run(t, "unit", "add", "my-story", "scene", "s1", "--dir", dir)
 		return []string{"scene", "contract", "my-story/s1", "sc1", "--title", "灯下对峙", "--pov", "守灯人", "--dir", dir, "--json"}
+	case "timeline":
+		dir := packetWork(t)
+		return []string{"timeline", "my-story/s1", "--dir", dir, "--json"}
+	case "handoff write":
+		dir := newWorkspace(t)
+		writeFile(t, filepath.Join(dir, "handoff-in.yaml"), "done: [完成场景一]\ntodo: [场景二待收口]\n")
+		return []string{"handoff", "write", "--file", "handoff-in.yaml", "--dir", dir, "--json"}
+	case "handoff show":
+		dir := newWorkspace(t)
+		writeFile(t, filepath.Join(dir, "handoff-in.yaml"), "done: [完成场景一]\ntodo: [场景二待收口]\n")
+		run(t, "handoff", "write", "--file", "handoff-in.yaml", "--dir", dir)
+		return []string{"handoff", "show", "--dir", dir, "--json"}
+	case "assemble":
+		// novel 两场景走完生命周期（gate fast）后组稿。
+		dir := assemblyWork(t)
+		return []string{"assemble", "my-novel", "--dir", dir, "--json"}
+	case "impact":
+		dir := packetWork(t)
+		return []string{"impact", "my-story/s1", "--dir", dir, "--json"}
+	case "impact mark":
+		dir := impactSampleWork(t)
+		return []string{"impact", "mark", "my-story/canon-1", "--dir", dir, "--json"}
+	case "impact clear":
+		dir := impactSampleWork(t)
+		run(t, "impact", "mark", "my-story/canon-1", "--dir", dir)
+		return []string{"impact", "clear", "my-story/s2", "canon-1", "--confirmed-by-author", "--confirmation", "作者确认无影响", "--dir", dir, "--json"}
+	case "impact list":
+		dir := packetWork(t)
+		return []string{"impact", "list", "my-story", "--dir", dir, "--json"}
+	case "review plan":
+		// 只有 causality 维度且场景有正文：一包，mutating。
+		dir := packetWork(t)
+		return []string{"review", "plan", "my-story/s1", "--dimension", "causality", "--dir", dir, "--json"}
+	case "review submit":
+		dir := packetWork(t)
+		run(t, "review", "plan", "my-story/s1", "--dimension", "causality", "--dir", dir)
+		writeFile(t, filepath.Join(dir, "verdicts.yaml"),
+			"verdicts:\n  - {item: cause-holds, verdict: pass}\n  - {item: event-produced, verdict: na}\n  - {item: motivation, verdict: pass}\n")
+		return []string{"review", "submit", "my-story/causality-1", "--file", "verdicts.yaml", "--dir", dir, "--json"}
+	case "review report":
+		dir := packetWork(t)
+		return []string{"review", "report", "my-story", "--dir", dir, "--json"}
+	case "continuity":
+		// 只读检查：没有发现、不变更产物。
+		dir := newWorkspace(t)
+		run(t, "new", "short-story", "my-story", "--dir", dir)
+		run(t, "unit", "add", "my-story", "scene", "s1", "--dir", dir)
+		return []string{"continuity", "my-story/s1", "--dir", dir, "--json"}
+	case "volume checkpoint":
+		dir := volumeWork(t)
+		return []string{"volume", "checkpoint", "my-novel/part-one", "--dir", dir, "--json"}
+	case "volume confirm":
+		dir := volumeWork(t)
+		run(t, "volume", "checkpoint", "my-novel/part-one", "--dir", dir)
+		return []string{"volume", "confirm", "my-novel/part-one", "--confirmed-by-author", "--confirmation", "作者：本部核对无误", "--dir", dir, "--json"}
+	case "scene close-out":
+		dir := newWorkspace(t)
+		run(t, "new", "short-story", "my-story", "--dir", dir)
+		run(t, "unit", "add", "my-story", "scene", "s1", "--dir", dir)
+		run(t, "scene", "contract", "my-story/s1", "sc1", "--title", "灯下对峙", "--dir", dir)
+		writeFile(t, filepath.Join(dir, ".writing-anything", "works", "my-story", "units", "s1", "draft.md"), "正文。")
+		writeFile(t, filepath.Join(dir, "closeout-input.yaml"), "{}\n")
+		return []string{"scene", "close-out", "my-story/s1", "--file", "closeout-input.yaml", "--dir", dir, "--json"}
 	case "plan show":
 		dir := newWork(t)
 		run(t, "brief", "set", "my-post", "--method", "snowflake", "--dir", dir)
@@ -908,4 +974,99 @@ func TestParseListFlag(t *testing.T) {
 	if !strings.Contains(c.usage(), "[--option <value>]...") {
 		t.Errorf("usage = %q", c.usage())
 	}
+}
+
+// volumeWork 构造一个部内场景全部 done 且有收口的 novel 工作区，供 volume 命令登记样例调用。
+func volumeWork(t *testing.T) string {
+	t.Helper()
+	dir := newWorkspace(t, "--genre", "novel", "--gate-level", "fast")
+	for _, args := range [][]string{
+		{"new", "novel", "my-novel"},
+		{"unit", "add", "my-novel", "part", "part-one"},
+		{"unit", "add", "my-novel/part-one", "chapter", "chapter-one"},
+		{"unit", "add", "my-novel/chapter-one", "scene", "scene-1"},
+	} {
+		if code, stdout, stderr := run(t, append(args, "--dir", dir)...); code != 0 {
+			t.Fatalf("%v: exit code = %d; stdout: %s; stderr: %s", args, code, stdout, stderr)
+		}
+	}
+	sceneDir := filepath.Join(dir, ".writing-anything", "works", "my-novel", "units", "scene-1")
+	if err := os.MkdirAll(sceneDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(sceneDir, "brief.yaml"), "schema_version: 1\n")
+	writeFile(t, filepath.Join(sceneDir, "outline.yaml"),
+		"schema_version: 1\nsections:\n  - {id: sc1, title: 灯下, reason: 推进}\n")
+	writeFile(t, filepath.Join(sceneDir, "draft.md"), "正文。\n")
+	run(t, "advance", "my-novel/scene-1", "--dir", dir)
+	run(t, "advance", "my-novel/scene-1", "--dir", dir)
+	run(t, "advance", "my-novel/scene-1", "--dir", dir)
+	run(t, "review", "record", "my-novel/scene-1", "--file", reviewInput(t, dir), "--dir", dir)
+	run(t, "accept", "my-novel/scene-1", "--confirmed-by-author", "--confirmation", "作者：可以", "--dir", dir)
+	run(t, "advance", "my-novel/scene-1", "--dir", dir)
+	return dir
+}
+
+// packetWork 构造一个可生成任务包的 short-story 工作区（一个场景，契约轻量即可）。
+// impactSampleWork 构造两个场景与一个设定条目的 short-story 工作区（修改条目影响第二个场景）。
+func impactSampleWork(t *testing.T) string {
+	t.Helper()
+	dir := packetWork(t)
+	run(t, "canon", "add", "my-story", "--type", "character", "--name", "守灯人", "--text", "五十岁", "--dir", dir)
+	run(t, "unit", "add", "my-story", "scene", "s2", "--dir", dir)
+	s2 := filepath.Join(dir, ".writing-anything", "works", "my-story", "units", "s2")
+	if err := os.MkdirAll(s2, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(s2, "outline.yaml"), "schema_version: 1\nsections:\n  - {id: sc1, title: 场景, pov: 守灯人, characters: [守灯人]}\n")
+	writeFile(t, filepath.Join(s2, "draft.md"), "正文。\n")
+	return dir
+}
+
+func packetWork(t *testing.T) string {
+	t.Helper()
+	dir := newWorkspace(t)
+	run(t, "new", "short-story", "my-story", "--dir", dir)
+	run(t, "unit", "add", "my-story", "scene", "s1", "--dir", dir)
+	sceneDir := filepath.Join(dir, ".writing-anything", "works", "my-story", "units", "s1")
+	if err := os.MkdirAll(sceneDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(sceneDir, "draft.md"), "守灯人点亮了灯。\n")
+	return dir
+}
+
+// assemblyWork 构造两部各一场景全部 done 的 novel 工作区（组稿最小夹具）。
+func assemblyWork(t *testing.T) string {
+	t.Helper()
+	dir := newWorkspace(t, "--genre", "novel", "--gate-level", "fast")
+	for _, args := range [][]string{
+		{"new", "novel", "my-novel"},
+		{"unit", "add", "my-novel", "part", "part-one"},
+		{"unit", "add", "my-novel/part-one", "chapter", "chapter-one"},
+		{"unit", "add", "my-novel/chapter-one", "scene", "scene-1"},
+		{"unit", "add", "my-novel", "part", "part-two"},
+		{"unit", "add", "my-novel/part-two", "chapter", "chapter-two"},
+		{"unit", "add", "my-novel/chapter-two", "scene", "scene-9"},
+	} {
+		if code, stdout, stderr := run(t, append(args, "--dir", dir)...); code != 0 {
+			t.Fatalf("%v: exit code = %d; stdout: %s; stderr: %s", args, code, stdout, stderr)
+		}
+	}
+	for _, s := range []string{"scene-1", "scene-9"} {
+		sceneDir := filepath.Join(dir, ".writing-anything", "works", "my-novel", "units", s)
+		if err := os.MkdirAll(sceneDir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		writeFile(t, filepath.Join(sceneDir, "brief.yaml"), "schema_version: 1\n")
+		run(t, "advance", "my-novel/"+s, "--dir", dir)
+		writeFile(t, filepath.Join(sceneDir, "outline.yaml"), "schema_version: 1\nsections:\n  - {id: sc1, title: 场景, reason: 推进情节}\n")
+		run(t, "advance", "my-novel/"+s, "--dir", dir)
+		writeFile(t, filepath.Join(sceneDir, "draft.md"), "正文，没有批注。\n")
+		run(t, "advance", "my-novel/"+s, "--dir", dir)
+		run(t, "review", "record", "my-novel/"+s, "--file", reviewInput(t, dir), "--dir", dir)
+		run(t, "accept", "my-novel/"+s, "--confirmed-by-author", "--confirmation", "作者：可以", "--dir", dir)
+		run(t, "advance", "my-novel/"+s, "--dir", dir)
+	}
+	return dir
 }

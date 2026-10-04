@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "写后收口输入",
+  "description": "wa-cli scene close-out 从 --file 或标准输入读取的收口输入（YAML）：Agent 抽取的新增设定、状态变化、知情变化、伏笔埋设与回收、确认产生的事件与豁免的疑似专有名词。各节缺省视为空。",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "canon": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["type", "text"], "properties": {
+      "id": {"$ref": "common.schema.json#/$defs/id"},
+      "type": {"enum": ["character", "location", "item", "world-rule", "relationship"], "description": "设定集（Canon）条目类型；各类型的 name、aliases、sources 约束由 canon add 的领域校验检查"},
+      "name": {"type": "string", "pattern": "\\S", "description": "character、location 与 item 条目必填；world-rule 与 relationship 条目不得给出（由 canon add 的领域校验检查）"},
+      "text": {"type": "string", "pattern": "\\S"},
+      "aliases": {"type": "array", "items": {"type": "string", "pattern": "\\S"}, "uniqueItems": true},
+      "sources": {"type": "array", "items": {"$ref": "common.schema.json#/$defs/id"}}
+    }}},
+    "state_changes": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["entry", "state"], "properties": {
+      "id": {"$ref": "common.schema.json#/$defs/id"},
+      "contract": {"$ref": "common.schema.json#/$defs/id", "description": "对应的契约节内 state_changes 的 id；契约要求的提交必须给出（closeout.missing-state-change）"},
+      "entry": {"$ref": "common.schema.json#/$defs/id", "description": "被改变的设定集条目 id；可以是本次 canon 节新增的条目"},
+      "state": {"type": "string", "pattern": "\\S", "description": "变化后的状态描述"}
+    }}},
+    "knowledge": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["entry", "character"], "properties": {
+      "id": {"$ref": "common.schema.json#/$defs/id"},
+      "entry": {"$ref": "common.schema.json#/$defs/id"},
+      "character": {"$ref": "common.schema.json#/$defs/id", "description": "获知者：设定集 character 条目 id 或 reader 表示读者（Reader）"}
+    }}},
+    "plants": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["text", "recover_at"], "properties": {
+      "id": {"$ref": "common.schema.json#/$defs/id"},
+      "text": {"type": "string", "pattern": "\\S", "description": "伏笔内容"},
+      "recover_at": {"type": "string", "pattern": "\\S", "description": "计划回收位置；chapter 或 scene 单元引用（由 threads add 的领域校验检查）"}
+    }}},
+    "recovers": {"type": "array", "items": {"$ref": "common.schema.json#/$defs/id"}, "uniqueItems": true, "description": "回收的既有伏笔 id；写入后 status 为 paid 且 recovered_in 为该场景"},
+    "events": {"type": "array", "items": {"$ref": "common.schema.json#/$defs/id"}, "uniqueItems": true, "description": "确认产生的事件 id；必须恰好覆盖契约 events 声明的每个 id"},
+    "waived": {"type": "array", "items": {"type": "string", "pattern": "\\S"}, "uniqueItems": true, "description": "豁免的疑似专有名词：这些取值不再触发 closeout.suspected-name 提示"}
+  }
+}

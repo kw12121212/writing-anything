@@ -16,7 +16,7 @@ var contextCommand = &command{
 	summary:    "输出单元（Unit）的有界上下文包（Context Pack）：不加 --json 时为 Markdown；超出上下文预算（Context Budget）时按优先级裁剪",
 	args:       []argSpec{{"unit", unitRefHelp, true}},
 	flags:      []flagSpec{dirFlag},
-	outputKeys: []outputKey{{"context", "上下文包：unit、type、stage、genre、budget（value、source）、used、brief、outline、section、characters（场景级：出场人物在设定集中的当前设定 id、name、text、protection；非 scene 单元为空数组）、knowledge（场景级：视角人物已知的设定条目 entry、name、text、event、scene；非 scene 单元为空数组）、readerOnly（场景级：读者已知、视角人物未知的设定条目，字段同 knowledge；非 scene 单元为空数组）、priorScenes（前序场景的已验收摘要 unit、text、stale）、reveal（揭示边界 section、text）、threads（场景级：与本场景契约相关的未回收伏笔 id、text、planted_in、planned_recover、overdue；非 scene 单元或作品没有伏笔台账时为空数组）、feedback、decisions、norms、sources、neighbors、series（所属系列的 id、title、facts 与前序作品的 summaries：work、text、stale；不属于系列时为 null）与 trimmed；失败时为 null"}},
+	outputKeys: []outputKey{{"context", "上下文包：unit、type、stage、genre、budget（value、source）、used、brief、outline、section、characters（场景级：出场人物在设定集中的当前设定 id、name、text、protection；非 scene 单元为空数组）、knowledge（场景级：视角人物已知的设定条目 entry、name、text、event、scene；非 scene 单元为空数组）、readerOnly（场景级：读者已知、视角人物未知的设定条目，字段同 knowledge；非 scene 单元为空数组）、priorScenes（前序场景的已验收摘要 unit、text、stale）、reveal（揭示边界 section、text）、threads（场景级：与本场景契约相关的未回收伏笔 id、text、planted_in、planned_recover、overdue；非 scene 单元或作品没有伏笔台账时为空数组）、feedback、decisions、norms、sources、neighbors、series（所属系列的 id、title、facts 与前序作品的 summaries：work、text、stale；不属于系列时为 null）与 trimmed；失败时为 null；scene 单元另含 states（出场人物状态快照）、priorEndings（前序场景结尾）与 summaries（分层摘要）"}},
 	exitCodes:  standardExitCodes,
 	run:        runContext,
 }
@@ -148,28 +148,31 @@ type ctxTrim struct {
 }
 
 type ctxView struct {
-	Unit        string            `json:"unit"`
-	Type        string            `json:"type"`
-	Stage       string            `json:"stage"`
-	Genre       string            `json:"genre"`
-	Budget      resolve.Value     `json:"budget"`
-	Used        int               `json:"used"`
-	Brief       *ctxBrief         `json:"brief"`
-	Outline     *ctxOutline       `json:"outline"`
-	Section     *ctxSection       `json:"section"`
-	Characters  []ctxCharacter    `json:"characters"`
-	Knowledge   []ctxKnowledge    `json:"knowledge"`
-	ReaderOnly  []ctxKnowledge    `json:"readerOnly"`
-	PriorScenes []ctxSceneSummary `json:"priorScenes"`
-	Reveal      []ctxReveal       `json:"reveal"`
-	Threads     []ctxThread       `json:"threads"`
-	Feedback    []feedbackView    `json:"feedback"`
-	Decisions   []ctxDecision     `json:"decisions"`
-	Norms       ctxNorms          `json:"norms"`
-	Sources     []ctxSource       `json:"sources"`
-	Neighbors   []ctxNeighbor     `json:"neighbors"`
-	Series      *ctxSeries        `json:"series"`
-	Trimmed     []ctxTrim         `json:"trimmed"`
+	Unit         string              `json:"unit"`
+	Type         string              `json:"type"`
+	Stage        string              `json:"stage"`
+	Genre        string              `json:"genre"`
+	Budget       resolve.Value       `json:"budget"`
+	Used         int                 `json:"used"`
+	Brief        *ctxBrief           `json:"brief"`
+	Outline      *ctxOutline         `json:"outline"`
+	Section      *ctxSection         `json:"section"`
+	Characters   []ctxCharacter      `json:"characters"`
+	States       []ctxState          `json:"states"`
+	PriorEndings []ctxPriorEnding    `json:"priorEndings"`
+	Summaries    []ctxLayeredSummary `json:"summaries"`
+	Knowledge    []ctxKnowledge      `json:"knowledge"`
+	ReaderOnly   []ctxKnowledge      `json:"readerOnly"`
+	PriorScenes  []ctxSceneSummary   `json:"priorScenes"`
+	Reveal       []ctxReveal         `json:"reveal"`
+	Threads      []ctxThread         `json:"threads"`
+	Feedback     []feedbackView      `json:"feedback"`
+	Decisions    []ctxDecision       `json:"decisions"`
+	Norms        ctxNorms            `json:"norms"`
+	Sources      []ctxSource         `json:"sources"`
+	Neighbors    []ctxNeighbor       `json:"neighbors"`
+	Series       *ctxSeries          `json:"series"`
+	Trimmed      []ctxTrim           `json:"trimmed"`
 }
 
 type ctxSeries struct {
@@ -181,6 +184,26 @@ type ctxSeries struct {
 
 type ctxSummaryRef struct {
 	Work  string `json:"work"`
+	Text  string `json:"text"`
+	Stale bool   `json:"stale"`
+}
+
+type ctxState struct {
+	Entry    string  `json:"entry"`
+	Name     *string `json:"name"`
+	State    string  `json:"state"`
+	Proposal string  `json:"proposal"`
+	Scene    string  `json:"scene"`
+}
+
+type ctxPriorEnding struct {
+	Unit    string `json:"unit"`
+	Excerpt string `json:"excerpt"`
+}
+
+type ctxLayeredSummary struct {
+	Unit  string `json:"unit"`
+	Level string `json:"level"`
 	Text  string `json:"text"`
 	Stale bool   `json:"stale"`
 }
@@ -202,7 +225,7 @@ func messagesView(ms []ctxpack.Message) []ctxMessage {
 // viewContext 把上下文包转换为 --json 输出；数组永不为 null（cli-contract/shared-envelope）。
 func viewContext(p *ctxpack.Pack) *ctxView {
 	v := &ctxView{Unit: p.Unit, Type: p.Type, Stage: p.Stage, Genre: p.Genre, Budget: p.Budget, Used: p.Used,
-		Characters: []ctxCharacter{}, Knowledge: []ctxKnowledge{}, ReaderOnly: []ctxKnowledge{}, PriorScenes: []ctxSceneSummary{}, Reveal: []ctxReveal{}, Threads: []ctxThread{},
+		Characters: []ctxCharacter{}, States: []ctxState{}, PriorEndings: []ctxPriorEnding{}, Summaries: []ctxLayeredSummary{}, Knowledge: []ctxKnowledge{}, ReaderOnly: []ctxKnowledge{}, PriorScenes: []ctxSceneSummary{}, Reveal: []ctxReveal{}, Threads: []ctxThread{},
 		Feedback: []feedbackView{}, Decisions: []ctxDecision{}, Sources: []ctxSource{}, Neighbors: []ctxNeighbor{}, Trimmed: []ctxTrim{},
 		Norms: ctxNorms{Rules: []ctxRule{}, Glossary: []ctxTerm{}, BannedTerms: []ctxBannedTerm{}, Style: nonNilStrings(p.Norms.Style)}}
 	if b := p.Brief; b != nil {
@@ -220,6 +243,15 @@ func viewContext(p *ctxpack.Pack) *ctxView {
 	}
 	for _, c := range p.Characters {
 		v.Characters = append(v.Characters, ctxCharacter{ID: c.ID, Name: c.Name, Text: c.Text, Protection: c.Protection})
+	}
+	for _, s := range p.States {
+		v.States = append(v.States, ctxState{Entry: s.Entry, Name: s.Name, State: s.State, Proposal: s.Proposal, Scene: s.Scene})
+	}
+	for _, e := range p.PriorEndings {
+		v.PriorEndings = append(v.PriorEndings, ctxPriorEnding{Unit: e.Unit, Excerpt: e.Excerpt})
+	}
+	for _, s := range p.Summaries {
+		v.Summaries = append(v.Summaries, ctxLayeredSummary{Unit: s.Unit, Level: s.Level, Text: s.Text, Stale: s.Stale})
 	}
 	for _, k := range p.Knowledge {
 		v.Knowledge = append(v.Knowledge, ctxKnowledge{Entry: k.Entry, Name: k.Name, Text: k.Text, Event: k.Event, Scene: k.Scene})

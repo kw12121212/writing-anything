@@ -1,0 +1,42 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: ripple-analysis
+sections:
+  Implementation:
+    rechecks-schema:
+      text: internal/schema 新增 rechecks.schema.json（schema_version=1；scenes 数组，每项含 scene 非空、target 非空、via 枚举 cause-event|character|state|knowledge|thread、reason 非空、marked_at（RFC 3339）、status 枚举 open|cleared，cleared 时 cleared_at 非空且为 RFC 3339 与可选 confirmation（作者原话）或 review_based 布尔之一，open 时不得含 cleared_at；（scene, target）重复条目允许（时间线）但同（scene, target, status=open）至多一条由领域校验检查），注册路径模式 .writing-anything/rechecks/*.yaml；补合法与不合法夹具
+      status: complete
+    impact-package:
+      text: 新包 internal/impact：引用图构建（场景大纲的 causes/events/characters/pov/state_changes 解析、threads.List 的 planted_in 与 recovered_in、recall 倒排索引的场景命中）；Affected(root, w, target) 解析目标（scene 单元、canon 条目 id、事件 id 或伏笔 id）并计算受影响后续场景（先序更晚 + 引用边 + 一层事件传递），每项含 scene、via 与 reason，目标无法解析报告 impact.unknown-target；Mark(root, w, target, now) 计算受影响并追加写入 rechecks/<work>.yaml（同（scene, target）open 不重复；无受影响场景不写文件），并为每个受影响场景调用 reviewpacket.Plan 生成 causality 维度任务包（changedPaths 汇总）；Clear(root, w, scene, target, confirmation, now)（作者确认或 review-based 校验：review.Load 的 draft_sha256 与当前正文一致且 rubric 无 fail，否则要求 --confirmed-by-author 与 --confirmation，缺报告 impact.incomplete-confirmation）；List(root, w)（open 与全部标记）；CheckWorks 与 CheckArtifact 供 validate
+      status: complete
+    impact-cli:
+      text: internal/cli：impact（args：unit 或 entry；只读预览，--json 输出 affected 数组）、impact mark（同 args；--json 输出 marked 与 changedPaths）、impact clear（args：scene、target；flags：--confirmed-by-author、--confirmation；--json 输出 cleared 标记）、impact list（args：work；--json 输出 marks）四个命令注册（注册表声明、sampleArgs 与 mutatingSamples、人读输出、诊断与 next）；validate 整体校验纳入 rechecks（CheckWorks）与 validate <path>（CheckArtifact）；next 对有 open 复查标记的场景在 action 追加提示（不改 blockers）
+      status: complete
+    impact-glossary:
+      text: docs/GLOSSARY.md 增补影响传播（Ripple Analysis）与复查标记（Recheck Mark）词条：按磁盘引用图确定性计算修改的受影响后续场景并标记复查（阻塞组稿），复查通过或作者确认无影响后解除
+      status: complete
+  Testing:
+    test-impact-package:
+      text: internal/impact 单元测试：已实现并通过——引用图与先序过滤、事件一层传递、canon 经契约/状态知情绑定/recall 正文命中三路、伏笔 planted/planned/recovered 三向、目标不可解析；Mark 幂等追加与任务包联动（先包后标记的事务顺序）；Clear 的作者确认与 review-based 两路径（合格审稿免确认、无审稿要求确认）；List/OpenMarks 与 CheckWorks 领域校验
+      status: complete
+    test-impact-cli:
+      text: internal/cli 测试：impact 预览、impact mark（changedPaths 含 rechecks 与包文件、幂等）、impact clear（作者确认、review-based、缺确认被拒）、impact list、next 的 action 提示（blockers 不变）、validate 计入 rechecks；sampleArgs 与 TestRegistryConsistency 通过
+      status: complete
+    run-regression:
+      text: 完整回归测试并确认覆盖率不低于阈值：go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    verify-change:
+      text: 已运行 ready 与 verify；fresh-context 独立审查的 3 个 MUST FIX（rechecks 路径与 schema 模式不一致、引用图缺 recall 与状态知情两条边、mark 的两个副作用非事务）与 SHOULD 项（review-based 快乐路径与 OpenMarks 的测试、Clear 以 SetKey 替换避免重复键、死代码）已全部修复并补测试；修复后完整回归通过（覆盖率 87.54% ≥ 80%）
+      status: complete
+      command: strict-spec-cli ready ripple-analysis && strict-spec-cli verify ripple-analysis
+    verify-archive-readiness:
+      text: 已核对归档合并路径：impact 新主规格将写入 .strict-spec-driven/specs/impact.yaml 并进入 specs/INDEX.yaml（四个需求：预览、标记、解除与校验，语句与实现同步——平铺路径 rechecks/<work>.yaml、先包后标记的事务顺序、Clear 的 SetKey 替换）；strict-spec-cli verify 诊断清零
+      status: complete
+      command: strict-spec-cli verify ripple-analysis
+testing_gates:
+  validation_task: run-regression
+  unit_test_task: test-impact-package

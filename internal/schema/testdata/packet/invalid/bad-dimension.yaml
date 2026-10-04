@@ -1,0 +1,11 @@
+schema_version: 1
+id: x-1
+work: my-novel
+dimension: plot
+scope: my-novel/scene-1
+excerpt:
+  text: t
+  truncated: false
+checklist:
+  - {id: a-one, question: q}
+status: open

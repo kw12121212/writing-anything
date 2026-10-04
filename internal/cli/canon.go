@@ -28,8 +28,12 @@ var canonAddCommand = &command{
 		{"members", flagString, "人物关系（relationship）引用的人物条目 id，用逗号分隔，至少 2 个"},
 		{"pin", flagBool, "登记为作者钦定（Author-pinned）条目，受最高级别保护"},
 		{"id", flagString, "条目 id；省略时为 canon-<n>"},
+		{"scope", flagString, "条目作用域：work（缺省，写入作品设定集）或 series（写入所属系列的共享设定集）"},
+		{"override-reason", flagString, "作品级条目覆盖系列级同 id 条目的原因（覆盖时必填）"},
+		{"confirmed-by-author", flagBool, "作者确认本条作品级条目覆盖系列级同 id 条目"},
+		{"confirmation", flagString, "作者确认覆盖的原话摘要（覆盖时必填）"},
 	},
-	outputKeys: []outputKey{{"canon", "新条目：work、id、type、name、aliases、text、sources、protection、members 与 decision；失败时为 null"}},
+	outputKeys: []outputKey{{"canon", "新条目：work、id、type、name、aliases、text、sources、protection、members、decision、scope 与 override；失败时为 null"}},
 	exitCodes:  standardExitCodes,
 	run:        runCanonAdd,
 }
@@ -78,6 +82,7 @@ var canonRemoveCommand = &command{
 type canonEntryView struct {
 	Work string `json:"work"`
 	canon.Entry
+	Scope string `json:"scope,omitempty"`
 }
 
 type canonAddResult struct {
@@ -108,14 +113,27 @@ func runCanonAdd(inv *invocation) int {
 					Message: "别名（Alias）只含空白；请给出非空白的别名，用逗号分隔"}}
 			} else {
 				in := canon.AddInput{
-					Type:    inv.values["type"],
-					Name:    inv.values["name"],
-					Aliases: aliases,
-					Text:    inv.values["text"],
-					Sources: splitSources(inv.values["sources"]),
-					Members: splitSources(inv.values["members"]),
-					Pinned:  inv.flag("pin"),
-					ID:      inv.values["id"],
+					Type:            inv.values["type"],
+					Name:            inv.values["name"],
+					Aliases:         aliases,
+					Text:            inv.values["text"],
+					Sources:         splitSources(inv.values["sources"]),
+					Members:         splitSources(inv.values["members"]),
+					Pinned:          inv.flag("pin"),
+					ID:              inv.values["id"],
+					Series:          inv.values["scope"] == "series",
+					OverrideReason:  inv.values["override-reason"],
+					OverrideConfirm: inv.values["confirmation"],
+				}
+				if inv.values["scope"] != "" && inv.values["scope"] != "series" && inv.values["scope"] != "work" {
+					problems = []workspace.Problem{{Code: "input.invalid-value", Severity: workspace.SeverityError, Field: "scope",
+						Message: "--scope 只能取 work 或 series"}}
+					res.Diagnostics = diagnostics(problems, dir)
+					return finish(inv, res, nil)
+				}
+				if in.OverrideConfirm != "" && !inv.flag("confirmed-by-author") {
+					problems = []workspace.Problem{{Code: canon.CodeOverrideUnconfirmed, Severity: workspace.SeverityError, Field: "confirmation",
+						Message: "作者确认覆盖必须同时给出 --confirmed-by-author 与非空白的 --confirmation（作者原话摘要）"}}
 				}
 				var e *canon.Entry
 				var changed []string
@@ -222,10 +240,16 @@ func runCanonList(inv *invocation) int {
 	if problems == nil {
 		var w *work.Work
 		if w, problems = resolveWorkAt(dir, inv.args[0]); w != nil {
-			var es []canon.Entry
-			es, problems = canon.List(dir, w)
-			for _, e := range es {
-				res.Entries = append(res.Entries, canonEntryView{Work: w.ID, Entry: e})
+			// 默认输出按作用域解析的视图（作品级优先 + 系列级并入，标明来源）；--all-scope 输出两级原始条目。
+			scoped, sps := canon.Resolve(dir, w)
+			if sps != nil {
+				problems = sps
+			} else {
+				for _, se := range scoped {
+					v := canonEntryView{Work: w.ID, Entry: se.Entry}
+					v.Scope = se.Scope
+					res.Entries = append(res.Entries, v)
+				}
 			}
 		}
 	}
@@ -236,7 +260,11 @@ func runCanonList(inv *invocation) int {
 			fmt.Fprintf(&b, "作品 %s 还没有设定条目（Canon Entry）\n", inv.args[0])
 		}
 		for _, e := range res.Entries {
-			fmt.Fprintf(&b, "%s（%s%s%s）%s：%s\n", e.ID, e.Type, canonNameText(e.Name), canonAliasesText(e.Aliases), protectionText(e.Protection), e.Text)
+			scope := ""
+			if e.Scope != "" && e.Scope != "work" {
+				scope = "［" + e.Scope + "］"
+			}
+			fmt.Fprintf(&b, "%s%s（%s%s%s）%s：%s\n", e.ID, scope, e.Type, canonNameText(e.Name), canonAliasesText(e.Aliases), protectionText(e.Protection), e.Text)
 		}
 		_, err := io.WriteString(w, b.String())
 		return err

@@ -1,0 +1,12 @@
+schema_version: 1
+id: thread-1
+work: my-novel
+dimension: thread
+scope: f-1
+excerpt:
+  text: 埋设场景的结尾。
+  truncated: true
+slices: []
+checklist:
+  - {id: plant-natural, question: 埋设自然吗}
+status: open

@@ -1,0 +1,39 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: cross-work-canon
+  status: proposed
+summary:
+  what:
+    - 设定集条目的作用域（Scope）：canon add 与 canon set 支持 --scope series（默认 work）——series 级条目写入系列文件 .writing-anything/series/<series>/canon.yaml（同一 Schema 与领域校验，canon list <work> --all-scope 时并列输出两级并标明来源）；条目结构新增可选 scope 字段（series 或 work，缺省 work），作品级条目与系列级条目同 id 时构成覆盖
+    - 覆盖规则与作者确认：作品级条目覆盖系列级同 id 条目时，canon add / canon set 必须同时给出 --override-reason（非空文本）并经作者确认（--confirmed-by-author 与 --confirmation 原话摘要），记录在条目的 override 字段（reason、confirmation 与 confirmed_at）；缺失时报 canon.override-unconfirmed 且不写文件；既有覆盖条目被 canon set 修改时同样要求重新确认
+    - 按作用域解析：canon list <work> 默认输出解析后的视图——作品级条目优先，系列级条目按 series-inheritance 的顺序（作品所属系列，多个时按 series show 的顺序）并入，每项含 scope（work 或 series:<series-id>）；wa-cli context 的 characters、states 与 pov-reveal 知情解析，以及 continuity 的称谓解析与 recall 的别名词典，都按同一解析结果取条目并在 --json 输出中标明每个条目的来源层级；作品不属于系列时行为不变
+  why:
+    - 路线图 novel-series 里程碑（order 700，系列小说）首个计划变更 cross-work-canon：planned change details 的全部要求——作用域分两级、作品级覆盖系列级须记录原因并经作者确认、context 与连续性审查按作用域解析并标明来源；依赖的 series-shared-context（系列机制）与 continuity-review（连续性审查）均已归档，当前是唯一可推荐的计划变更
+    - 系列小说共享世界观：人物、地点与世界规则在多部作品中复用，每部作品单独维护一份设定会立刻漂移；系列级设定一处维护、作品级按需覆盖，是跨作品连续性的地基
+    - 覆盖是作者的决定：作品级覆盖系列级意味着该作品的设定与系列正史不同（如平行世界、时间线分叉），静默覆盖会让系列级修订悄悄失效——覆盖原因与作者确认让每个分歧可追溯（与状态变化提议、卷末检查点同一确认模式）
+scope:
+  in:
+    - internal/canon：条目 scope/override 字段与 Schema（canon.schema.json 扩展）、系列级 canon 文件的加载与校验（series/<series>/canon.yaml）、--scope 与 --override-reason/--confirmed-by-author/--confirmation 参数、覆盖确认记录、解析视图（Resolve：作品级优先 + 系列级并入 + 来源标明）
+    - internal/schema：canon.schema.json 扩展（可选 scope 枚举 work|series、可选 override {reason, confirmation, confirmed_at}）与系列 canon 路径模式 .writing-anything/series/*/canon.yaml，补夹具
+    - internal/ctxpack 与 internal/continuity：称谓与条目解析改用 canon.Resolve 的按作用域结果（输出标明来源层级：characters/states/知情切片含 scope 字段）；internal/recall 的别名词典并入系列级条目（作品所属系列顺序）
+    - internal/cli：canon add / canon set 的新参数注册与诊断 next（canon.override-unconfirmed 指向 help）；canon list 的解析视图与 --all-scope；series validate 纳入系列 canon.yaml
+    - docs/GLOSSARY.md：作用域（Scope）与覆盖（Override）词条
+    - 测试夹具：系列两部作品 + 系列/作品两级设定的夹具，覆盖覆盖确认、解析优先级、来源标明与无系列作品行为不变
+  out:
+    - 全局时间线与同时出现在两地的检查——属 global-timeline 计划变更
+    - 系列级连续性审查（跨作品一致性报告）——属 series-continuity-review 计划变更
+    - 系列级伏笔台账与跨作品回收：伏笔仍为作品级（planned change 只扩展设定集）
+    - 覆盖的批量管理（一次确认多组覆盖）：逐条确认，保持每次覆盖有独立的确认记录
+    - MCP 服务与内置技能不单独编写（canon 命令经命令注册表自动暴露）
+unchanged_behavior:
+  - 作品不属于系列或系列没有 canon.yaml 时，canon add / set / list、context、continuity、recall 的输出、退出码与错误码不变（解析视图退化为作品级，scope 全为 work）
+  - 既有 canon.yaml（无 scope 字段）的校验与行为不变：scope 缺省为 work，不需要迁移
+  - 系列机制（series set / add / fact / show 与 series-inheritance）语义不变；系列 canon.yaml 是新的系列级产物，series validate 纳入但不改变既有检查
+  - 状态台账、知情表、伏笔台账、收口与卷末检查点仍为作品级，不参与作用域
+  - MCP 服务与内置技能内容不变
+roadmap:
+  milestone: novel-series
+  planned_change: cross-work-canon

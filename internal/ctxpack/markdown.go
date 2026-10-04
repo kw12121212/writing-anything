@@ -18,6 +18,11 @@ var partTitles = map[string]string{
 	PartOutline:      "## 本单元大纲（Outline）",
 	PartSection:      "## 本节大纲条目",
 	PartCharacter:    "## 出场人物（Characters）",
+	PartState:        "## 出场人物状态（Character States）",
+	PartPriorEnding:  "## 前序场景结尾（Prior Endings）",
+	PartChapSummary:  "## 分层摘要（Layered Summaries）",
+	PartPartSummary:  "## 分层摘要（Layered Summaries）",
+	PartBookSummary:  "## 分层摘要（Layered Summaries）",
 	PartKnowledge:    "## 视角人物已知（POV Knowledge）",
 	PartReaderOnly:   "## 读者已知、人物未知（Reader Only）",
 	PartReveal:       "## 揭示边界（Reveal Boundary）",
@@ -190,6 +195,27 @@ func (c Character) markdown() string {
 
 func (r RevealBoundary) markdown() string {
 	return fmt.Sprintf("- 节 %s 不能提前透露：%s\n", r.Section, oneLine(r.Text))
+}
+
+func (s StateItem) markdown() string {
+	name := ""
+	if s.Name != nil {
+		name = "（" + *s.Name + "）"
+	}
+	return fmt.Sprintf("- %s%s：%s（自 %s 生效）\n", s.Entry, name, s.State, s.Scene)
+}
+
+func (e PriorEnding) markdown() string {
+	return fmt.Sprintf("### %s 的结尾\n\n%s\n", e.Unit, e.Excerpt)
+}
+
+func (s LayeredSummary) markdown() string {
+	level := map[string]string{"chapter": "章", "part": "部", "book": "全书"}[s.Level]
+	stale := ""
+	if s.Stale {
+		stale = "（已过期：下层内容在摘要之后被修改）"
+	}
+	return fmt.Sprintf("### %s 摘要（%s%s）\n\n%s\n", level, s.Unit, stale, s.Text)
 }
 
 func (k KnowledgeItem) markdown() string {

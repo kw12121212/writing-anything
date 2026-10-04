@@ -26,10 +26,10 @@ type planStepOut struct {
 type planOut struct {
 	result
 	Plan *struct {
-		Method string         `json:"method"`
-		Source string         `json:"source"`
-		Path   *string        `json:"path"`
-		Steps  []planStepOut  `json:"steps"`
+		Method string        `json:"method"`
+		Source string        `json:"source"`
+		Path   *string       `json:"path"`
+		Steps  []planStepOut `json:"steps"`
 	} `json:"plan"`
 	CurrentStep *string `json:"currentStep"`
 }
@@ -96,7 +96,7 @@ func containsPath(paths []string, want string) bool {
 }
 
 // 新建的 novel 作品：plan show 列出 snowflake 十步，全部 pending，currentStep 为 one-sentence
-//（show-fresh 与 novel-default-method）。
+// （show-fresh 与 novel-default-method）。
 func TestPlanShowFresh(t *testing.T) {
 	dir := newNovelPlan(t)
 	code, r := runPlan(t, dir, "plan", "show", "my-novel")
@@ -129,7 +129,7 @@ func TestPlanShowFresh(t *testing.T) {
 }
 
 // 未选用规划类写作法的单元：plan show 以 warning 报告 plan.not-planning，plan 与 currentStep 为 null，退出码 0
-//（show-not-planning）。
+// （show-not-planning）。
 func TestPlanShowNotPlanning(t *testing.T) {
 	dir := newWork(t)
 	code, r := runPlan(t, dir, "plan", "show", "my-post")

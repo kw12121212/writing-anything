@@ -76,7 +76,7 @@ func noNulls(t *testing.T, v any, path string) {
 	switch v := v.(type) {
 	case map[string]any:
 		for k, c := range v {
-			if c == nil && !slices.Contains([]string{"parent", "work", "unit", "config", "defaultGenre", "note", "quote", "line", "paragraph", "decision", "recommendation", "rationale", "choice", "answer", "confirmation", "decidedAt", "text", "recorded", "diff", "brief", "audience", "purpose", "length", "outline", "reason", "keyMessage", "section", "contextBudget", "aiDisclosure", "method", "role", "premise", "theme", "pov", "character", "reveal", "location", "progress"}, k) {
+			if c == nil && !slices.Contains([]string{"parent", "work", "unit", "config", "defaultGenre", "note", "quote", "line", "paragraph", "decision", "recommendation", "rationale", "choice", "answer", "confirmation", "decidedAt", "text", "recorded", "diff", "brief", "audience", "purpose", "length", "outline", "reason", "keyMessage", "section", "contextBudget", "aiDisclosure", "method", "role", "premise", "theme", "pov", "character", "reveal", "location", "progress", "handoff", "time"}, k) {
 				t.Errorf("%s.%s is null", path, k)
 			}
 			noNulls(t, c, path+"."+k)

@@ -1,0 +1,39 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: series-continuity-review
+sections:
+  Implementation:
+    series-continuity-package:
+      text: internal/continuity：Run 扩展为多作品（RunMany）：合并成员作品的场景集合（works 顺序）、时间线跨作品检查（timeline.Order/SameTimePresence 在合并集合）、canon.Resolve 的系列级解析（发现 message 标明 series:<id> 来源）、conflicting-state（同一设定条目在多部作品的 confirmed 最后状态不同，报告 continuity.conflicting-state，归先序更早作品场景）；发现归场景与 message 标明作品；单作品路径零变化
+      status: complete
+    series-plan-package:
+      text: internal/reviewpacket：Plan 接受系列（多作品）——character 维度生成跨作品包（人物 × 其出场的全部作品的章合并一包，excerpt 按合并时间线，slices 含各作品状态与知情）；causality 的切片顺序按合并时间线；新增 series-causality 维度（causes 引用跨作品事件的场景，切片含声明场景结尾）；scope 标明系列与涉及作品；单作品路径零变化
+      status: complete
+    series-cli-and-gate:
+      text: internal/cli：continuity 与 review plan 接受系列 id（复用 timeline 的系列解析，错误码与 next 一致）；assemble 对系列成员作品扩展 assemble.rechecks（系列内全部作品的 open 标记）与 assemble.continuity（系列范围发现）；sampleArgs 更新
+      status: complete
+    series-glossary:
+      text: docs/GLOSSARY.md 的连续性审查词条补跨作品语义：系列范围的确定性检查（跨作品时间线、系列级设定、跨作品状态矛盾）与跨作品审查任务包，发现标明涉及的作品与场景
+      status: complete
+  Testing:
+    test-series-continuity:
+      text: 测试（完成标准：两部作品夹具验证第二部的冲突场景被阻塞）：系列夹具（第一部确立 canon-1 状态 受伤 与时间线，第二部含冲突场景）——跨作品时间线发现阻塞第二部场景、修正后通过；conflicting-state（第二部把 canon-1 确认为不同状态）阻塞并标明两部作品；系列级设定缺失的发现标明 series:<id>；跨作品 character 包与 series-causality 包生成（scope 标明系列、预算不超）；assemble 对系列成员被其他作品的 rechecks 阻塞；非系列作品全部既有断言不回归
+      status: complete
+    run-regression:
+      text: 完整回归测试并确认覆盖率不低于阈值：go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    verify-change:
+      text: 已运行 ready 与 verify；实现含包测试（跨作品 same-time 归属与修正、conflicting-state 两分支与一致不报、单作品退化一致）与 CLI 测试（continuity guide 跨作品发现与修正、review plan 系列维度包、assemble 系列关卡），完整回归通过（覆盖率 86.33% ≥ 80%）
+      status: complete
+      command: strict-spec-cli ready series-continuity-review && strict-spec-cli verify series-continuity-review
+    verify-archive-readiness:
+      text: 已核对归档合并路径：continuity 的 continuity-command、reviewpacket 的 packet-plan、assembly 的 assemble-gate 均为 MODIFIED（系列范围扩展段）；strict-spec-cli verify 诊断清零
+      status: complete
+      command: strict-spec-cli verify series-continuity-review
+testing_gates:
+  validation_task: run-regression
+  unit_test_task: test-series-continuity

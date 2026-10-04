@@ -102,4 +102,3 @@ func runDiff(inv *invocation) int {
 		return err
 	})
 }
-

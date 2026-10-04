@@ -26,6 +26,8 @@
 | 汇总单元 | Aggregated Unit | 汇总单元 | 单元类型声明 `stage_from_children` 的单元（如 novel 的部与章）：阶段不由推进得出，而由子单元树中走生命周期的单元汇总；`work.yaml` 中的存储阶段仅为占位，生效阶段以推导为准，`wa-cli advance` 对其报告 `lifecycle.derived-stage` |
 | 推导阶段 | Derived Stage | 推导阶段 | 汇总单元的生效阶段：取子单元树中最落后者（最短板）；没有子孙单元时为文体第一个阶段，全部 done 时为 done；`wa-cli status` 与 `next` 按此输出，另附 progress（done 计数与总数） |
 | 系列 | Series | 系列 | 共享规范与设定的多部作品；文章领域也称"专栏"；定义在 `.writing-anything/series/<id>.yaml`，成员作品继承其规范包、素材与事实 |
+| 时间线 | Timeline | 时间线 | 场景按大纲声明的 time（故事时间标记）与 after（晚于的前文场景引用）推导的全序；`wa-cli timeline` 只读输出，成环、引用不存在、声明矛盾与同 time 双出场经 `wa-cli continuity` 检查 |
+| 故事时间 | Story Time | 故事时间 | 场景大纲的 time 字段：自由文本的时间标记（如 第三日夜），相同文本视为同时（时间线检查），不做历法解析 |
 | 作用域 | Scope | 作用域 | 设定或配置生效的范围，如系列级、作品级 |
 | 内置 | Built-in | 内置 | 随 `wa-cli` 二进制提供的文体与规范包，如 `default` 规范包 |
 | 配置层 | Config Layer | 配置层 | 参与合并的一层设置：文体默认、规范包、项目配置，后者覆盖前者；来源写作 `genre:<id>`、`pack:<id>`、`project` |
@@ -55,6 +57,9 @@
 | 导出 | Export | 导出 | 生成 Markdown、HTML 等交付格式 |
 | 纯文本 | Plain Text | 纯文本 | `--format text` 导出的交付格式：去掉 Markdown 标记、只保留文字内容的 `.txt` 文件 |
 | 文件头元数据 | Front Matter | front matter | 导出文件开头的 YAML 元数据块（标题、描述、文体、单元与验收时间），供博客平台读取 |
+| 作用域 | Scope | 作用域 | 设定集条目的两级归属：系列级（.writing-anything/series/<series>/canon.yaml，成员作品共享）与作品级（canon.yaml）；context、连续性审查与 recall 按作用域解析（作品级优先）并标明来源 |
+| 覆盖 | Override | 覆盖 | 作品级条目覆盖系列级同 id 条目：`wa-cli canon add / set` 须同时给出 --override-reason 与作者确认（--confirmed-by-author 与 --confirmation），记录在条目的 override 字段 |
+| 交接记录 | Handoff Note | 交接记录 | Agent 会话结束前经 `wa-cli handoff write` 追加到工作区 .writing-anything/handoffs.yaml 的接续记录（完成了什么、未完成事项、作者指示与风险），只能追加（上限 200 条），新会话经 `wa-cli next` 看到最近一条 |
 | 组稿 | Assembly | 组稿 | 把已验收单元按顺序合成完整书稿 |
 
 ## 内容与出处
@@ -93,7 +98,13 @@
 | 事件 | Event | 事件 | 场景契约中预期产生的事件 id，在作品内唯一，是因果链与事件溯源（Event Sourcing）的引用对象 |
 | 状态变化 | State Change | 状态变化 | 场景契约中声明的必须发生的变化，每条带 id 与描述，写后收口（Close-out）按 id 对照提交 |
 | 场景契约 | Scene Contract | 场景契约 | 动笔前声明场景的出场人物、承担的情节节拍（Story Beat）与揭示边界（Reveal Boundary）；长篇在此基础上扩展视角（POV）、地点、状态变化、伏笔与因果链，由 `wa-cli scene contract` 写入 |
-| 写后收口 | Close-out | 收口 | 场景写完后提交抽取结果，使台账与正文同步 |
+| 写后收口 | Close-out | 收口 | 场景写完后提交抽取结果，使台账与正文同步；由 `wa-cli scene close-out` 一次提交，收口产物 closeout.yaml 记录正文 SHA-256、提交的台账条目 id、确认的事件与豁免名单，收口未完成或提议未经作者处理时场景不能验收 |
+| 分层摘要 | Layered Summary | 分层摘要 | 已验收场景的摘要逐层汇总为章、部与全书摘要：由 Agent 撰写，`wa-cli summary set` 校验子层齐全（缺失报 summary.children-missing）与过期状态（子场景正文变化的串联指纹） |
+| 卷末检查点 | Volume Checkpoint | 卷末检查点 | 每部最后一个场景验收后由 `wa-cli volume checkpoint` 生成的作者核对产物：汇总本部新增设定、已确认状态变化、伏笔变化与未处理决策，并确定性抽取收口条目；strict 关卡下未经 `wa-cli volume confirm` 确认，下一部的场景不能验收 |
+| 组稿 | Assembly | 组稿 | `wa-cli assemble` 按单元树先序把已验收场景组成整书（书名、目录、部/章标题、去注释正文与按出处的 AI 参与说明），导出 Markdown 或纯文本；存在未完成场景、连续性阻塞或 open 复查标记时拒绝组稿 |
+| 影响传播 | Ripple Analysis | 影响传播 | 按磁盘引用图（场景契约、事件、知情表、伏笔台账、recall 索引）确定性计算修改的受影响后续场景：`wa-cli impact` 预览，`wa-cli impact mark` 标记复查并生成审查任务包，复查通过或作者确认后解除 |
+| 复查标记 | Recheck Mark | 复查标记 | 影响传播落盘的受影响场景标记（rechecks/<work>.yaml，只能追加）：open 时阻塞组稿，经 `wa-cli impact clear`（作者确认或重新审查通过）解除 |
+| 疑似专有名词 | Suspected Proper Noun | 疑似专有名词 | 写后收口扫描中以场景大纲声明（characters、pov、location）为候选、未能解析到设定集条目 name 或别名的取值，以 warning 提示补录或豁免 |
 | 别名 | Alias | 别名 | 同一人物、地点、物品的其他称呼 |
 
 ## 质量与规则
@@ -122,7 +133,7 @@
 | 覆盖追踪 | Coverage Tracing | 覆盖追踪 | 检查每个核心观点都被大纲的某一节覆盖 |
 | 覆盖缺口 | Coverage Gap | 覆盖缺口 | 没有被任何大纲节覆盖的核心观点，或既不覆盖也没写理由的大纲节；选用写作法时，还包括没有大纲节承担的写作法章节或节拍、顺序颠倒的章节与不属于写作法的 `role` |
 | 连续性审查 | Continuity Review | 连续性审查 | 检查新正文与设定集、前文是否矛盾 |
-| 审查任务包 | Review Task Packet | 审查任务包 | 只含一段正文、相关台账切片与检查清单的小型审查任务 |
+| 审查任务包 | Review Task Packet | 任务包 | `wa-cli review plan` 按维度（人物一致性、伏笔回收质量、因果与动机、视角与揭示边界、文风与情绪节奏）生成的不超过上下文预算的语义审查任务（一段正文切片、台账切片与检查清单），由接入的 Agent 调度执行，结论经 `wa-cli review submit` 校验齐全后写回并汇总为作品级报告 |
 | 影响传播 | Ripple Analysis | 影响传播 | 修改早期内容后，找出受影响、需复查的后续内容 |
 | 预审 | Pre-review | 预审 | 由 AI 完成的第一遍审稿，默认不阻塞，作者做最终判断 |
 | 指标 | Metric | 指标 | 可计算或可打分的量化数据，如平均句长、紧张度 |

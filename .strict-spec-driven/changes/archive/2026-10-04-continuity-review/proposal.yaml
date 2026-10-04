@@ -1,0 +1,39 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: continuity-review
+  status: proposed
+summary:
+  what:
+    - 新增 wa-cli continuity <unit|work>：在全书范围对该单元（或作品全部场景）执行确定性连续性检查，不调用大语言模型（LLM），输出 findings 数组（每项含 scene、code、severity 与 message）——(1) continuity.unknown-character：场景契约出场人物（characters、pov）在设定集中没有同名 character 条目；(2) continuity.dead-acting：出场人物的最新已确认状态精确等于保留词（死亡、已死亡、已亡故、失踪、已退场）而该场景仍声明其出场；(3) continuity.alias-mismatch：同一场景契约的多个出场人物称谓解析到同一设定条目；(4) continuity.dangling-reference：绑定该场景的台账条目或大纲引用失效（state、knowledge、threads 的悬空引用，closeout 记录的引用失效，大纲 plants、recovers、causes、events 的既有交叉问题按场景过滤）；(5) continuity.thread-anomaly：与该场景契约相关的伏笔超过计划回收位置未回收（overdue）
+    - 单元级阻塞与验收联动：novel 文体（或声明了场景契约扩展字段的）场景存在 error 级 continuity finding 时，wa-cli accept 被拒绝（每个 finding 一条诊断，next 含 wa-cli continuity 与复查命令）；wa-cli next 的 blockers 不变（与收口阻塞一致，由 review show 呈现）；非契约场景与既有文体验收行为不变
+    - 作者豁免走决策队列（Decision Queue）：continuity 阻塞项按（场景、错误码）幂等地生成阻塞决策（同一场景同一错误码已有 open 决策或作者已选择保持不变时不重复追加；问题文本固定格式），作者允许后（--decision 携带决策 id 重试或决策已允许）对应 finding 不再阻塞；修改正文使 finding 消失后决策不再生成；wa-cli continuity 在输出中标注每条 finding 是否已被豁免
+  why:
+    - 路线图 novel-continuity 里程碑（order 650）首个计划变更 continuity-review：完成标准「与状态快照、知情表、伏笔台账或因果链冲突的场景被 wa-cli continuity 标为阻塞，不能验收」的承载者；依赖的 state-change-proposals、knowledge-state、foreshadowing-ledger、recall-index 与 scene-close-out 均已归档，当前与 review-task-packets 同为可推荐（本变更是其依赖）
+    - 长篇的连续性错误（死亡人物再出场、人物说出不该知道的话、伏笔超期）靠人通读全书才能发现，而没有任何会话读得完全书：确定性检查把这些结构性冲突交给 wa-cli 全书扫描，发现即阻塞验收，语义类矛盾留给后续审查任务包（review-task-packets）
+    - 豁免必须是作者的决定：确定性规则有边界（保留词只覆盖规范写法的死亡等终态，别名共用可能是有意的），Agent 不能自己豁免；沿决策队列的既有幂等模式（canon 作者钦定、伏笔放弃同源），豁免可追溯且不淹没队列
+scope:
+  in:
+    - 新包 internal/continuity：检查集实现（canon 解析复用 recall 的称谓匹配、状态重放复用 internal/state、伏笔复用 internal/threads、悬空引用与因果问题按场景过滤各包既有校验）、findings 汇总、（场景、 错误码）粒度的决策生成（问题文本固定格式、幂等，复用 decision 包）与豁免判定，供 CLI 与 accept 复用
+    - internal/cli：continuity 命令注册（args：unit 或 work；flags：--dir；--json 输出 findings 与 changedPaths（生成决策时含决策队列）、人读输出按场景分组）；accept 经 review.GateInput 新增 Continuity 字段接线（同一模式）；gateNext 增加 continuity 分支
+    - internal/review：GateInput 增加 Continuity []workspace.Problem（error 级进入阻塞项），Gate 循环输出
+    - 测试夹具：多部长篇夹具覆盖每个检查的命中与不命中分支、豁免生成与幂等、验收阻塞与解除
+    - docs/GLOSSARY.md：连续性审查（Continuity Review）词条
+  out:
+    - 语义审查任务包的生成、执行与汇总——属 review-task-packets 计划变更（依赖本变更）
+    - 依赖时间的检查（如人物同时出现在两地）、跨作品连续性、时间线——属 novel-series 里程碑
+    - 年龄等数值事实矛盾的抽取与比对：设定 text 为自由文本，数值抽取无确定性规则，由语义审查（review-task-packets）负责，本变更不实现
+    - 知情矛盾的语义判定（人物是否「提及」了未知信息需理解正文）：本变更只检查知情台账的结构性失效引用，语义判定留给审查任务包
+    - 新的产物类型：continuity 为只读命令，不写入检查结果（豁免经决策队列记录）；不新增工作区产物
+    - MCP 服务与内置技能不单独编写（continuity 经命令注册表自动暴露）
+unchanged_behavior:
+  - 没有 error 级 finding（或全部已豁免）时，accept、advance、next、validate 的输出、退出码与错误码不变；非契约场景与既有文体（minimal、tech-blog、wechat-marketing、short-story 轻量契约）不受影响
+  - state、knowledge、threads、canon、closeout、volume 命令组语义不变；continuity 只读消费既有台账与大纲，校验逻辑复用各包导出函数，不在本包重写
+  - 决策队列的既有语义不变：continuity 生成的决策与其他阻塞决策同样阻塞 advance 与 next（decision-blocking），作者经 wa-cli decide 决定
+  - wa-cli validate 不新增检查（continuity 的检查经独立命令与验收关卡触达，validate 输出不变）
+  - MCP 服务与内置技能内容不变
+roadmap:
+  milestone: novel-continuity
+  planned_change: continuity-review

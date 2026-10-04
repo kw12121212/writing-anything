@@ -1,0 +1,41 @@
+schema: strict-spec-driven/delta-spec/v1
+schema_version: 1
+artifact_type: delta_spec
+schema_file: templates/strict-spec-driven/schemas/delta-spec.yaml
+target_spec: series
+operations:
+  ADDED: {}
+  MODIFIED:
+    summary-set:
+      strength: MUST
+      statement: wa-cli summary set <unit> 必须以 --text（或 --file，相对 --dir 或为绝对路径）给出的文字写入单元目录的摘要（Summary）summary.yaml：schema_version 1、text、draft_sha256 与 recorded_at（UTC，YYYY-MM-DDTHH:MM:SSZ），整体替换已有的摘要。单元为非汇总单元（不走 stage_from_children 推导的单元）时：必须已验收——没有 acceptance.yaml、它不通过校验或其 draft_sha256 与当前正文不同时报告 summary.not-accepted（next 含 wa-cli review show <unit> --dir <dir> --json）；draft_sha256 为当前 draft.md 的 SHA-256，summary show 的 stale 为指纹不同或没有 draft.md。单元为汇总单元（Summarized Unit：作品文体声明 stage_from_children 的类型，以及作品根单元）时：draft_sha256 为其子树全部场景（type 为 scene 的单元）当前 draft.md 的 SHA-256 按单元树先序逐个拼接后再取 SHA-256；写入前必须子层齐全——该单元子树全部场景的 stage 为 done 且各有 summary.yaml（场景层就绪），且非场景子层的直接子单元（如章之于部）各有 summary.yaml（存在即视为子层就绪，其内部是否齐备由该层自己的写入检查保证），缺失时报告 summary.children-missing（field 为空，message 列出缺失的单元引用，至多 5 项后加「等 N 项」），next 含 wa-cli summary set --json；场景子树为空时（没有场景的汇总单元）不做子层检查。摘要为空白或不是 UTF-8 文本、同时给出 --text 与 --file 时报告 input.invalid-value；省略两者时从标准输入读取；摘要的非空白字符数不在作品文体的 summary_length（min 与 max，未声明时为 20 到 500）内时报告 summary.length（message 给出范围与实际字数）；这些情况不写文件，退出码为 1。--json 输出的 summary 含 unit、path、text、chars、draftSha256 与 stale（为 false），changedPaths 为 [summary.yaml]（内容未变时为空数组），退出码为 0。摘要由 Agent 撰写，wa-cli 只校验。
+      scenarios:
+        chapter-missing-scene-summary:
+          - GIVEN: novel 作品 my-novel 的 chapter-one 下 scene-1 已验收并有摘要，scene-2 已验收但没有摘要
+          - WHEN: 运行 wa-cli summary set my-novel/chapter-one --text 第一章：守灯人接下委托（80 字） --dir D --json
+          - THEN: 报告 summary.children-missing（message 含 my-novel/scene-2），没有写出章摘要，退出码为 1
+        chapter-summary-ok:
+          - GIVEN: chapter-one 下全部场景已验收且有摘要
+          - WHEN: 运行 wa-cli summary set my-novel/chapter-one --text 第一章摘要（60 字） --dir D --json
+          - THEN: 章 summary.yaml 的 draft_sha256 为两个场景正文 SHA-256 按先序拼接后的 SHA-256，changedPaths 含该 summary.yaml，退出码为 0
+        part-missing-chapter-summary:
+          - GIVEN: part-one 的 chapter-one 有摘要而 chapter-two 没有
+          - WHEN: 运行 wa-cli summary set my-novel/part-one --text 第一部摘要 --dir D --json
+          - THEN: 报告 summary.children-missing（message 含 my-novel/chapter-two），退出码为 1
+        scene-summary-unchanged:
+          - GIVEN: 场景 my-novel/scene-1 已验收，文体没有声明 summary_length
+          - WHEN: 运行 wa-cli summary set my-novel/scene-1 --text 太短 --dir D --json
+          - THEN: 报告 summary.length（message 含 20 到 500），不创建 summary.yaml，退出码为 1（非汇总单元行为不变）
+    summary-show:
+      strength: MUST
+      statement: wa-cli summary show <unit> 必须只读地输出单元的摘要：summary 含 unit、path、text、chars、draftSha256 与 stale；单元没有摘要时 summary 为 null；changedPaths 为空数组。非汇总单元的 stale 为当前 draft.md 的 SHA-256 不等于 draft_sha256，或没有 draft.md。汇总单元（summary-set 所定义）的 stale 为：其子树任一场景没有 draft.md 或其当前 SHA-256 拼接指纹不等于 draft_sha256，或任一子层摘要缺失（场景或直接子单元的 summary.yaml 不存在）时为 true。summary.yaml 不通过校验时报告其诊断，退出码为 1；无法推导（所在作品无法加载）时按非汇总单元的正文指纹推导。
+      scenarios:
+        chapter-stale-on-scene-edit:
+          - GIVEN: chapter-one 有摘要，之后作者直接修改了其子场景 scene-2 的正文
+          - WHEN: 运行 wa-cli summary show my-novel/chapter-one --dir D --json
+          - THEN: summary.stale 为 true（子场景正文指纹变化），退出码为 0
+        scene-stale-unchanged:
+          - GIVEN: 场景 scene-1 写入摘要后，作者修改了 draft.md
+          - WHEN: 运行 wa-cli summary show my-novel/scene-1 --dir D --json
+          - THEN: summary.stale 为 true，退出码为 0（非汇总单元行为不变）
+  REMOVED: {}

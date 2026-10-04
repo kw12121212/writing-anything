@@ -44,6 +44,12 @@ func (d *Disclosure) metadata() bool { return d != nil && d.Placement != Placeme
 
 // disclose 汇总导出单元 units 的段落出处：出处为 agent 与 agent-draft-human-edited 的段落算作 AI 参与；无法推导出处的单元给出
 // warning 并全部算作 AI 参与。没有 AI 参与段落或 cfg 为 nil 时返回 nil。
+// DisclosureOf 是 disclose 的导出包装：供组稿（assembly）等整书交付复用按出处的 AI 参与说明。
+func DisclosureOf(root string, w *work.Work, units []*work.Unit, cfg *DisclosureConfig) *Disclosure {
+	d, _ := disclose(root, w, units, cfg)
+	return d
+}
+
 func disclose(root string, w *work.Work, units []*work.Unit, cfg *DisclosureConfig) (*Disclosure, []workspace.Problem) {
 	if cfg == nil {
 		return nil, nil

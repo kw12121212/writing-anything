@@ -3,15 +3,24 @@ schema_version: 1
 artifact_type: spec_index
 schema_file: ../schemas/spec-index.yaml
 specs:
+  - id: assembly
+    title: 组稿（Assembly）
+    path: .strict-spec-driven/specs/assembly.yaml
   - id: brief
     title: 写作简报（Brief）
     path: .strict-spec-driven/specs/brief.yaml
   - id: cli
     title: 命令行工具（CLI）
     path: .strict-spec-driven/specs/cli.yaml
+  - id: closeout
+    title: 写后收口（Close-out）
+    path: .strict-spec-driven/specs/closeout.yaml
   - id: context
     title: 上下文包（Context Pack）
     path: .strict-spec-driven/specs/context.yaml
+  - id: continuity
+    title: 连续性审查（Continuity Review）
+    path: .strict-spec-driven/specs/continuity.yaml
   - id: decisions
     title: 决策队列（Decision Queue）
     path: .strict-spec-driven/specs/decisions.yaml
@@ -24,6 +33,12 @@ specs:
   - id: genres-and-packs
     title: 文体与规范包（Genre and Pack）
     path: .strict-spec-driven/specs/genres-and-packs.yaml
+  - id: handoff
+    title: 交接记录（Handoff Note）
+    path: .strict-spec-driven/specs/handoff.yaml
+  - id: impact
+    title: 影响传播（Ripple Analysis）
+    path: .strict-spec-driven/specs/impact.yaml
   - id: knowledge
     title: 知情表（Knowledge State）
     path: .strict-spec-driven/specs/knowledge.yaml
@@ -60,6 +75,9 @@ specs:
   - id: review
     title: 审稿与验收（Review and Acceptance）
     path: .strict-spec-driven/specs/review.yaml
+  - id: reviewpacket
+    title: 审查任务包（Review Task Packet）
+    path: .strict-spec-driven/specs/reviewpacket.yaml
   - id: series
     title: 系列与摘要（Series and Summary）
     path: .strict-spec-driven/specs/series.yaml
@@ -78,9 +96,15 @@ specs:
   - id: threads
     title: 伏笔台账（Foreshadowing Ledger）
     path: .strict-spec-driven/specs/threads.yaml
+  - id: timeline
+    title: 时间线（Timeline）
+    path: .strict-spec-driven/specs/timeline.yaml
   - id: units-and-lifecycle
     title: 单元树与生命周期（Unit Tree and Lifecycle）
     path: .strict-spec-driven/specs/units-and-lifecycle.yaml
+  - id: volume
+    title: 卷末检查点（Volume Checkpoint）
+    path: .strict-spec-driven/specs/volume.yaml
   - id: workspace
     title: 工作区（Workspace）
     path: .strict-spec-driven/specs/workspace.yaml

@@ -99,7 +99,7 @@ type planningView struct {
 type planResult struct {
 	Result
 	Plan        *planningView `json:"plan"`
-	CurrentStep *string   `json:"currentStep"`
+	CurrentStep *string       `json:"currentStep"`
 }
 
 // planStatusText 是步骤状态的人读名称。
@@ -264,7 +264,7 @@ func splitList(name, v string) ([]string, []workspace.Problem, bool) {
 }
 
 // planParamNext 为参数引起的问题（不填 path）给出用法与相关的查看命令；已有产物中的问题保留默认的复查命令
-//（next-rechecks-problem）。
+// （next-rechecks-problem）。
 func planParamNext(res *planResult, dir, ref, methodID, sub string) {
 	for i, d := range res.Diagnostics {
 		if d.Path != "" {

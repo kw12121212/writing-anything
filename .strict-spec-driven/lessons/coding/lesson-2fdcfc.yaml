@@ -1,0 +1,19 @@
+schema: strict-spec-driven/lesson/v1
+schema_version: 1
+artifact_type: lesson
+schema_file: templates/strict-spec-driven/schemas/lesson.yaml
+lesson:
+  id: lesson-2fdcfc
+  title: 把只读复查命令与阻塞写入路径接上同一计算时，先拆出只读层
+category: coding
+status: active
+created_at: '2026-10-03T18:28:27.637Z'
+updated_at: '2026-10-03T18:28:27.637Z'
+context: continuity-review 的阻塞计算同时被 accept（阻塞时要生成豁免决策）与 review show（只读呈现）复用
+observation: fresh-context 审查发现 review show 因复用 accept 的阻塞计算而在只读路径写入了 decisions.yaml 且 changedPaths 为空——违反 precheck-before-side-effects 与 refusal-side-decision-gating 的如实报告；根因是收集函数无条件执行了副作用版本
+takeaway: 为关卡收集类函数拆出只读层（Blockers）与副作用层（EnsureWaivers），只读命令只调只读层；副作用只在确认阻塞的路径上发生，其 changedPaths 由该路径如实并入；补一条「只读命令不写决策队列」的回归测试
+applies_when: 任何被只读命令与写入命令共同复用的关卡或校验计算需要产生决策、豁免或缓存写入时
+occurrences:
+  - origin: continuity-review 变更的 fresh-context 独立审查
+    date: '2026-10-03'
+    evidence: internal/continuity/continuity.go 的 Blockers/EnsureWaivers 拆分与 TestContinuityReviewShowReadOnly

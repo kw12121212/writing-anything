@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/kw12121212/writing-anything/internal/catalog"
+	"github.com/kw12121212/writing-anything/internal/closeout"
+	"github.com/kw12121212/writing-anything/internal/continuity"
 	"github.com/kw12121212/writing-anything/internal/decision"
 	"github.com/kw12121212/writing-anything/internal/draft"
 	"github.com/kw12121212/writing-anything/internal/feedback"
@@ -15,6 +17,7 @@ import (
 	"github.com/kw12121212/writing-anything/internal/review"
 	"github.com/kw12121212/writing-anything/internal/schema"
 	"github.com/kw12121212/writing-anything/internal/series"
+	"github.com/kw12121212/writing-anything/internal/volume"
 	"github.com/kw12121212/writing-anything/internal/work"
 	"github.com/kw12121212/writing-anything/internal/workspace"
 )
@@ -281,6 +284,7 @@ type gateState struct {
 	feedback  []feedbackView
 	decisions []decision.Decision
 	problems  []workspace.Problem // 无法收集关卡输入的问题（如没有正文、合并失败）以及不影响关卡的 warning
+	changed   []string            // 收集关卡时产生的副作用路径（如连续性豁免决策的决策队列）
 }
 
 // collectGate 为单元 u 收集验收关卡的输入：文本检查、审稿、未处理的作者反馈、关联的决策与评分标准。
@@ -334,6 +338,18 @@ func collectGate(dir string, w *work.Work, u *work.Unit) *gateState {
 	for _, d := range decision.BlockingIn(all, u.Ref) {
 		g.in.Decisions = append(g.in.Decisions, review.Pending{ID: d.ID, Text: d.Question})
 	}
+	// 写后收口（Close-out）阻塞项在所有关卡强度下生效：契约要求收口的场景未收口、收口过期、提议未处理或
+	// 契约对照失败时阻塞验收（closeout 主规格）；review show 的 gate.blockers 与 accept 共用这份输入。
+	g.in.Closeout = closeout.AcceptanceBlockers(dir, w, u)
+	// 卷末检查点（Volume Checkpoint）阻塞项按关卡强度定级：strict 为阻塞项，fast 与 standard 为提示
+	// （volume 主规格的 volume-accept-gate）。
+	g.in.Volume = volume.AcceptanceBlockers(dir, w, u, g.in.Level)
+	// 连续性审查（Continuity Review）：只读计算 error 级阻塞项（review show 同用此路径，不产生副作用）；
+	// 豁免决策只在 accept 的阻塞路径上生成（见 accept 函数），只读命令不得写入决策队列。
+	var cps []workspace.Problem
+	if g.in.Continuity, cps = continuity.Blockers(dir, w, u); len(cps) > 0 {
+		g.problems = append(g.problems, cps...)
+	}
 	return g
 }
 
@@ -341,6 +357,10 @@ func collectGate(dir string, w *work.Work, u *work.Unit) *gateState {
 func gateNext(dir, ref string, b review.Blocker) []string {
 	show := shellCommand("wa-cli", "review", "show", ref, "--dir", dir, "--json")
 	lintCmd := shellCommand("wa-cli", "lint", ref, "--dir", dir, "--json")
+	if strings.HasPrefix(b.Code, "continuity.") {
+		return []string{shellCommand("wa-cli", "continuity", ref, "--dir", dir, "--json"),
+			shellCommand("wa-cli", "decisions", "--dir", dir, "--json"), show}
+	}
 	switch b.Code {
 	case review.CodeLintErrors:
 		return []string{lintCmd, "wa-cli help draft write --json", show}
@@ -356,6 +376,25 @@ func gateNext(dir, ref string, b review.Blocker) []string {
 		return []string{shellCommand("wa-cli", "feedback", "list", ref, "--dir", dir, "--json"), "wa-cli help feedback resolve --json", show}
 	case review.CodeUnconfirmed:
 		return []string{"wa-cli help accept --json", show}
+	case closeout.CodeMissing, closeout.CodeStale, closeout.CodeInvalid,
+		closeout.CodeMissingStateChange, closeout.CodeMissingRecovery, closeout.CodeMissingPlant, closeout.CodeMissingEvent:
+		return []string{shellCommand("wa-cli", "scene", "close-out", ref, "--dir", dir, "--json"),
+			"wa-cli help scene close-out --json", show}
+	case volume.CodeUnconfirmed, volume.CodeInvalid:
+		next := []string{"wa-cli help volume confirm --json", show}
+		if b.Path != "" {
+			next = append([]string{shellCommand("wa-cli", "volume", "confirm", volumePartRef(ref, b.Path), "--dir", dir, "--json")}, next...)
+		}
+		return next
+	case closeout.CodePendingProposals:
+		work := ref
+		if w, _, found := strings.Cut(ref, "/"); found {
+			work = w
+		}
+		return []string{shellCommand("wa-cli", "state", "list", work, "--dir", dir, "--json"),
+			shellCommand("wa-cli", "knowledge", "list", work, "--dir", dir, "--json"),
+			shellCommand("wa-cli", "scene", "close-out", ref, "--dir", dir, "--json"),
+			"wa-cli help scene close-out --json", show}
 	}
 	if schema.KindFor(b.Path) != nil {
 		return []string{shellCommand("wa-cli", "validate", b.Path, "--dir", dir, "--json"), show}
@@ -581,11 +620,22 @@ func accept(inv *invocation, dir string, w *work.Work, u *work.Unit, res *accept
 	g := collectGate(dir, w, u)
 	g.in.Confirmed = confirmed
 	blockers, warnings := review.Gate(g.in)
+	// 阻塞项里有连续性发现时，为未豁免的（场景， 错误码）幂等生成豁免决策（阻塞路径的副作用，如实计入
+	// changedPaths；只读的 review show 不走这里）。
+	if slices.ContainsFunc(blockers, func(b review.Blocker) bool { return strings.HasPrefix(b.Code, "continuity.") }) {
+		changed, cps := continuity.EnsureWaivers(dir, w, u)
+		if len(cps) > 0 {
+			problems = append(problems, cps...)
+		}
+		g.changed = append(g.changed, changed...)
+	}
 	problems = g.problems
 	for _, b := range blockers {
 		gate = append(gate, workspace.Problem{Code: b.Code, Severity: workspace.SeverityError, Path: b.Path, Message: b.Message})
 	}
 	if len(blockers) > 0 {
+		// 关卡收集阶段的副作用（如连续性豁免决策）如实计入 changedPaths，即使验收被拒。
+		res.ChangedPaths = append(res.ChangedPaths, g.changed...)
 		return problems, gate
 	}
 	for _, b := range warnings {
@@ -599,4 +649,25 @@ func accept(inv *invocation, dir string, w *work.Work, u *work.Unit, res *accept
 		ConfirmedByAuthor: a.ConfirmedByAuthor, Confirmation: a.Confirmation, AcceptedAt: a.AcceptedAt}
 	res.ChangedPaths = changed
 	return problems, gate
+}
+
+// refUnitOf 把验收单元引用与其中的部名组合为 wa-cli volume confirm 可用的部引用（部是作品的直接或更深层
+// 子单元，按单元引用规则 <work>/<unit-id> 拼接）。
+func refUnitOf(ref, unitID string) string {
+	if w, _, found := strings.Cut(ref, "/"); found {
+		return w + "/" + unitID
+	}
+	return unitID
+}
+
+// volumePartRef 从检查点产物路径推导部单元引用（.writing-anything/works/<work>/units/<part>/checkpoint.yaml →
+// <work>/<part>；固定结构前缀逐段解析，workspace-artifacts/structural-path-parsing）。
+func volumePartRef(ref, path string) string {
+	parts := strings.Split(strings.TrimSuffix(path, "/checkpoint.yaml"), "/")
+	if len(parts) >= 2 {
+		if w, _, found := strings.Cut(ref, "/"); found {
+			return w + "/" + parts[len(parts)-1]
+		}
+	}
+	return ref
 }

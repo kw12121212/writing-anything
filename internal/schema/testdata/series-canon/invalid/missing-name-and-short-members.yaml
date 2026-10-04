@@ -1,0 +1,14 @@
+schema_version: 1
+entries:
+  # character 条目缺 name；relationship 的 members 只有一个成员。
+  - id: canon-1
+    type: character
+    text: 没有名字的人物
+    sources: []
+    protection: normal
+  - id: canon-2
+    type: relationship
+    text: 自己与自己
+    sources: []
+    protection: normal
+    members: [canon-1]
