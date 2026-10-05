@@ -1,0 +1,48 @@
+schema: strict-spec-driven/question-list/v1
+schema_version: 1
+artifact_type: question_list
+schema_file: templates/strict-spec-driven/schemas/question-list.yaml
+change: corpus-authoring
+open: []
+resolved:
+  - id: corpus-provenance
+    question: 语料的「真实创作」以什么为准？
+    context: corpus-authoring 要求以 wa-cli 完整生命周期真实创作；影响实现方式、脚本忠实度与测试断言（影响提案范围与语料实现文件）
+    answer: 在仓库外临时工作区真实执行全部 wa-cli 命令一遍，commands.yaml 记录真实发生的序列（含真实负向关卡步骤），正文与文本输入先检入 inputs/ 再被命令引用；不虚构、不事后补写命令
+    status: resolved
+    answered_by: roadmap
+  - id: requirement-problem
+    question: What is concretely going wrong today, and for whom?
+    context: 'Why this is asked: the change is planned against a need, and the need lives only with the requester. A "problem" here means what someone does or suffers today — not a feature that is missing. If the answer names a button, a field, a page, or an endpoint, it is a solution, and the underlying problem is still unstated. What a sufficient answer contains: who is affected, what they do today instead, and how often. Worked example: "every Monday one person spends forty minutes copying order rows into a spreadsheet to send the weekly report". What it changes: this becomes the proposal''s why, and it decides whether the change is worth making.'
+    answer: corpus-design 只交付了设计文档、测试矩阵与脚本格式；语料本体（正文、命令序列、文本输入）尚不存在，replay-harness 与 golden-assertions 没有可重放、可比对的输入
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-trigger
+    question: Why now — what forced this?
+    context: 'Why this is asked: work that nothing forced is the work most often thrown away later. This question catches a request that sounds reasonable but has no real driver behind it. What a sufficient answer contains: the concrete event, deadline, incident, or cost that made this surface now, or an honest statement that nothing did. Worked example: "the report was missed last month and it was raised with the team". What it changes: a change with no trigger is a candidate for deferral, and the answer is weighed at review before archive.'
+    answer: corpus-design 已归档完成，corpus-authoring 的唯一依赖已满足，成为 novel-e2e 里程碑当前唯一可推荐的规划变更
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-interpretation
+    question: Which reading of the request is intended, where more than one is possible?
+    context: 'Why this is asked: a short request usually admits several readings, and building the wrong one is indistinguishable from building nothing. What a sufficient answer contains: the reading that is meant, stated plainly enough to rule the others out — or a statement that only one reading exists and what it is. Worked example: "export means the version sent to the manager, not the one I read myself". What it changes: this fixes the scope boundary before any code is written, and settles disputes about what was asked for.'
+    answer: 按 DESIGN.md 的设定（人物、场景表、伏笔链、知情点、状态变更、雪花十步映射）真实创作《停在四点十七分》九个场景正文（每场 1400–2000 字，共约 1.5 万字），在临时工作区以 wa-cli 走完完整生命周期，并把真实命令序列按 script-format.md 记为 commands.yaml、文本输入检入 inputs/
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-non-goals
+    question: What must explicitly not change?
+    context: 'Why this is asked: the requester knows which nearby behavior other people depend on, and the agent does not. A "non-goal" is something the change must leave alone even though it sits close to the work. What a sufficient answer contains: the behavior, setting, or output that must survive untouched, and who relies on it. Worked example: "do not change the saved filters — several people rely on their own". What it changes: these become the proposal''s unchanged_behavior items, which review checks the finished result against.'
+    answer: 不实现重放测试、黄金文件、注入式负向断言、矩阵对账与 README（后续变更）；不改产品代码与主规格；不引入内容生成机制；corpus-design 三份设计产物除勘误外不变
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-outcome
+    question: What observable difference proves the problem is solved?
+    context: 'Why this is asked: without a success condition, nobody can tell afterwards whether the change worked. "Observable" means someone outside the system can check it without reading the code. What a sufficient answer contains: what a person will see, or no longer have to do, once this is done. Worked example: "the report is in the manager''s inbox on Monday morning without anyone assembling it". What it changes: this becomes the delta spec''s scenarios and the acceptance evidence at review time.'
+    answer: internal/cli/testdata/e2e/novel/ 下存在 commands.yaml 与 inputs/ 全部文本输入；结构校验测试通过（阶段齐备、input_ref 可解析、九场景各 1400–2000 字、三类真实负向步骤在位）；完整回归通过
+    status: resolved
+    kind: requirement
+    answered_by: roadmap

@@ -1,0 +1,22 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: replay-harness
+  status: proposed
+summary:
+  what:
+    - 在 internal/cli 新增小说语料重放测试 TestNovelCorpusReplay：解析 internal/cli/testdata/e2e/novel/commands.yaml，在临时目录按序重放全部步骤（wa-cli 命令与作者直编 write_file 文件级参与点），逐步断言 expect_exit、expect_code（逗号分隔全部出现）、stdout_contains；变异类命令断言 changedPaths 非空；冻结 now 时间源；同一环境连续重放两次，两棵工作区目录树逐文件 SHA-256 比对完全一致（含导出的 book.md 与 novel-export.md），作为可重复性的显式验证
+  why:
+    - corpus-authoring 已交付真实录制、经一次性脚本验证的命令脚本与全部文本输入；把它固化为 go test 默认执行的进程内重放测试，长篇写作生命周期的端到端回归才真正进入完整回归命令，golden-assertions 与 matrix-check 也以该重放为基座；前置缺陷 fix-state-knowledge-clock 已归档，双跑一致性已具备
+scope:
+  in:
+    - internal/cli/novel_corpus_replay_test.go（重放器：解析 commands.yaml、runWSIn 进程内执行、冻结时间源、逐步断言、变异命令 changedPaths 校验、目录树快照比对）；重放测试纳入 go test 默认执行且无跳过
+  out:
+    - 不落盘黄金文件与注入式负向断言（golden-assertions）；不做矩阵对账（matrix-check）与 README（docs-runbook）；不改产品代码与主规格；不重复 corpus 结构校验测试已覆盖的断言
+unchanged_behavior:
+  - wa-cli 产品行为完全不变；语料（commands.yaml 与 inputs/）与三份设计产物不变；internal/cli 既有测试不变
+roadmap:
+  milestone: novel-e2e
+  planned_change: replay-harness

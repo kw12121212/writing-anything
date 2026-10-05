@@ -1,0 +1,16 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: docs-runbook
+approach:
+  - README 以语料目录实际内容为准编写五个部分：目录结构（逐个文件/子目录的职责与消费方）、运行方式（go test 单跑六个语料测试与完整回归命令，说明重放约 4 秒、负向与黄金各约 2 秒）、UPDATE_GOLDEN（一键再生成九个黄金文件、<dir> 归一约定、何时需要再生成）、修订流程（改 inputs/ 或 commands.yaml → 跑 TestNovelCorpusScript/Replay 校验 → UPDATE_GOLDEN=1 → TestNovelCorpusMatrix 对账全绿 → 完整回归）、矩阵维护约定（新增特性或断言时先加矩阵条目与 evidence，双向对账会拒绝虚写与漏登）
+decisions:
+  readme-as-data:
+    decision: README 是检入语料目录的纯文档，不新增测试断言；其中的命令与流程均引用真实存在的测试与脚本
+    rationale: 完成标准把 README 定位为可读性与维护入口；文档正确性由其引用的测试与脚本锚定，无需为文档另建断言
+  no-delta-spec:
+    decision: docs-runbook 是技术专用变更：只新增 README 文档
+    rationale: 文档不构成主规格需求
+alternatives: []
+risks: []

@@ -1,0 +1,40 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: golden-assertions
+sections:
+  Implementation:
+    refactor-replay-helper:
+      text: 把 novel_corpus_replay_test.go 的重放闭包抽为同包共享助手 replayNovelCorpus(t, dir)（保留全部逐步断言与变异键控自检），重放测试改用助手，断言语义不变
+      status: complete
+    golden-test:
+      text: 新增 novel_corpus_golden_test.go 的 TestNovelCorpusGolden：冻结时钟重放后采集九类黄金对象（knowledge.yaml、threads.yaml、book.md 文件字节与 state at、continuity、context、review report、novel-export.md、novel-export.txt 命令输出），与 testdata/e2e/novel/golden/ 同名文件逐字节比对；UPDATE_GOLDEN=1 时写出
+      status: complete
+    golden-files:
+      text: UPDATE_GOLDEN=1 生成九个黄金文件检入 testdata/e2e/novel/golden/，普通模式校验通过
+      status: complete
+    negative-test:
+      text: 新增 TestNovelCorpusNegativeInjections：重放副本上注入四类违例并断言——canon set 钦定条目被拒（canon.author-pinned，error）；close-out --replace 注入越界知情后 knowledge at 暴露泄漏（空→非空），原始载荷恢复后回基线；threads set th-a 回退 open 后 continuity 报 continuity.thread-anomaly（error），恢复 paid 后全绿；scene contract 互指 after 后 timeline 报 timeline.cycle 与 timeline.order-conflict（error），--after 空值删除后全绿
+      status: complete
+  Testing:
+    golden-and-negative:
+      text: 黄金比对与负向注入测试全部通过且纳入默认执行
+      status: complete
+      command: go test ./internal/cli/ -run "TestNovelCorpusGolden|TestNovelCorpusNegativeInjections" -v
+    full-regression:
+      text: 完整项目回归（含覆盖率阈值 80%）
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    ready-check:
+      text: strict-spec-cli ready golden-assertions
+      status: complete
+      command: strict-spec-cli ready golden-assertions
+    verify-check:
+      text: strict-spec-cli verify golden-assertions
+      status: complete
+      command: strict-spec-cli verify golden-assertions
+testing_gates:
+  validation_task: full-regression
+  unit_test_task: golden-and-negative

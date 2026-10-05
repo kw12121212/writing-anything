@@ -1,0 +1,31 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: replay-harness
+sections:
+  Implementation:
+    replay-test:
+      text: internal/cli/novel_corpus_replay_test.go：TestNovelCorpusReplay 解析 commands.yaml，冻结 now 时间源，在 t.TempDir() 以 runWSIn 进程内按序重放全部步骤（write_file 写入工作区、命令以 input_ref 为标准输入），逐步断言 expect_exit/expect_code/stdout_contains，变异类动词断言 changedPaths 非空
+      status: complete
+  Testing:
+    double-replay-determinism:
+      text: 同一测试内换新临时目录完整重放第二次，对两棵目录树做全量文件集合与逐文件 SHA-256 比对（含导出产物）
+      status: complete
+      command: go test ./internal/cli/ -run TestNovelCorpusReplay -v
+    full-regression:
+      text: 完整项目回归（含覆盖率阈值 80%），重放测试纳入默认执行且无跳过
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    ready-check:
+      text: strict-spec-cli ready replay-harness
+      status: complete
+      command: strict-spec-cli ready replay-harness
+    verify-check:
+      text: strict-spec-cli verify replay-harness
+      status: complete
+      command: strict-spec-cli verify replay-harness
+testing_gates:
+  validation_task: full-regression
+  unit_test_task: double-replay-determinism

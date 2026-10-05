@@ -1,0 +1,52 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: corpus-authoring
+sections:
+  Implementation:
+    inputs-sources:
+      text: 建立 internal/cli/testdata/e2e/novel/inputs/：写三份作者素材（premise-note 题材与基调、setting-note 人物与世界规则、letter-text 信件全文）并真实 source add 到临时工作区
+      status: complete
+    brief-plan:
+      text: 写作简报（premise/pov/length/key_messages，前提与关键转折链接素材出处）+ 雪花写作法规划：plan step/plan confirm 十步，人物卡/关系/物品/钦定规则经 canon add、单元树（3 部 1 章 3 场景）经 unit add、九份场景契约经 scene contract（含 ch2-s2 的 time/after 倒叙声明）
+      status: complete
+    author-part1:
+      text: 第一部（ch1-s1/s2/s3）：逐场景 outline 节 → draft write（inputs/chN-sM.md，每场 1400–2000 字）→ lint 零 error → scene close-out（TH-A/TH-B 埋设、KN-01/KN-02 提议确认）→ review record → accept（作者确认记录）；至少一处作者直接编辑正文（人工编辑保护生效后再收口）与一个决策队列确认；章/部级 summary set
+      status: complete
+    author-part2:
+      text: 第二部（ch2-s1/s2/s3）：倒叙场景契约与正文（2006 故事时间）、TH-C 埋设（计划回收 ch3-s3）、KN-03 读者知情、ch2-s3 交信与 ST-1 怀表修复、KN-04；审查任务包生成与提交；recall 三查；影响传播预览、复查标记与组稿阻塞（assemble.scenes-open + assemble.rechecks）后作者确认解除；章/部级 summary；volume checkpoint part-2 生成但暂不确认（负向关卡留到 part-3 首场景验收时触发）；handoff
+      status: complete
+    author-part3:
+      text: 第三部（ch3-s1/s2/s3）：ST-2 林晚留下、KN-05..07 揭示、ST-3 大钟修复提议、TH-A/TH-B 回收、KN-08/09 启信、TH-C 超期 error 经决策队列豁免后验收；章/部级 summary；volume checkpoint/confirm；handoff write 每部末
+      status: complete
+    recall-impact:
+      text: recall 三次查询（RQ-1 四点十七、RQ-2 怀表称谓、RQ-3 铁盒）记录预期命中；impact 预览修改 item-pocketwatch 波及面、impact mark 落盘复查标记、open 标记时 assemble 被拒的真实序列、impact clear 作者确认解除
+      status: complete
+    assemble-export:
+      text: assemble 组稿成功（书名/目录/部章标题/去注释正文/AI 参与说明）+ export markdown 整书导出成功；核对导出正文总规模约 1.5 万字、九场景齐全
+      status: complete
+    record-script:
+      text: 按真实执行序列汇编 internal/cli/testdata/e2e/novel/commands.yaml：分阶段（init/sources/brief/plan/outline/draft/closeout/review/accept/summary/volume/recall/impact/handoff/assemble/export）、每步 command/input_ref/expect_exit/expect_code/stdout_contains 如实记录，正文输入全部走 inputs/ 相对引用
+      status: complete
+  Testing:
+    corpus-structure-test:
+      text: 新增 internal/cli 语料结构校验测试：加载 commands.yaml 断言八阶段结构、每步字段语义合法（expect_exit 0/1/2、失败步骤有 expect_code、command/write_file 二选一）、全部 input_ref 指向检入存在的文件、九个场景草稿各 1400–2000 字、五类六码真实负向步骤在位、--base 哈希承诺等于 ch1-s3-author.md 的 SHA-256、生命周期命令面覆盖
+      status: complete
+      command: go test ./internal/cli/ -run TestNovelCorpusScript
+    full-regression:
+      text: 运行完整项目回归（含覆盖率阈值 80%）
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    ready-check:
+      text: strict-spec-cli ready corpus-authoring 确认就绪
+      status: complete
+      command: strict-spec-cli ready corpus-authoring
+    verify-check:
+      text: strict-spec-cli verify corpus-authoring 确认产物有效
+      status: complete
+      command: strict-spec-cli verify corpus-authoring
+testing_gates:
+  validation_task: full-regression
+  unit_test_task: corpus-structure-test

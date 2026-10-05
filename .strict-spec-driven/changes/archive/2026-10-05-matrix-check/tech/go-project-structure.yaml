@@ -1,0 +1,16 @@
+schema: strict-spec-driven/delta-tech/v1
+schema_version: 1
+artifact_type: delta_tech
+schema_file: templates/strict-spec-driven/schemas/delta-tech.yaml
+target_standard: go-project-structure
+operations:
+  ADDED:
+    matrix-assertion-reconciliation:
+      strength: SHOULD
+      statement: 以清单（测试矩阵、对账表等）登记断言意图时，应附双向对账校验测试：每条清单条目都必须解析到真实存在的断言（缺失项清单化输出），且全部实质断言（黄金文件、负向断言码、脚本内嵌断言等）都必须被至少一条清单条目引用。两条硬性细则：(1) 无断言过滤的宽匹配锚点只作存在性锚点，不得作为反向登记来源；(2) 反向清单的输入必须从断言源（测试源码字面量、脚本 YAML、黄金目录）机械推导，不得手工转录。
+      rationale: matrix-check 建立了该模式：对账测试首轮就抓到 6 处 evidence 与脚本事实不符、以及宽 token 使三个负向码的反向覆盖变成顺带命中的漏洞；手工转录的负向码清单与机械推导的清单之间的差距正是「断言漏登」的温床。
+      enforcement:
+        method: test
+        detail: 强制实例：internal/cli TestNovelCorpusMatrix（负向码从 novel_corpus_golden_test.go 源码 diagCode/codes 字面量推导；黄金目录与黄金测试采集清单一一对应）。
+  MODIFIED: {}
+  REMOVED: {}

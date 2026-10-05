@@ -1,0 +1,22 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: golden-assertions
+  status: proposed
+summary:
+  what:
+    - 新增小说语料黄金文件比对与四类负向断言测试：重放后在临时目录采集九类黄金对象（知情表 knowledge.yaml、伏笔台账 threads.yaml、状态快照 state at ch3-s3、连续性审查报告 continuity、场景上下文包 context ch3-s2、审查任务包汇总 review report、组稿 book.md、整书导出 Markdown 与纯文本）与 testdata/e2e/novel/golden/ 逐字节比对，UPDATE_GOLDEN=1 一键再生成；负向断言在重放副本上注入四类违例并断言对应审查以 error 级报告且诊断码正确，修回合规后恢复全绿——修改钦定条目（canon.author-pinned）、知情违例（提前引用秘密，经 close-out --replace 注入后 knowledge at 立即暴露越界，并记录产品当前无 prose 级 error 检查的缺口）、伏笔悬空（删除伏笔回收→continuity.thread-anomaly）、时间线倒置（场景契约互指 after→timeline.cycle 与 timeline.order-conflict）
+  why:
+    - replay-harness 已固化重放与双跑一致性；黄金文件把语料定稿的结构化产物与整书导出固化为逐字节基线，负向断言验证四类审查关卡真的会拦住违例——可验证性完成标准的主体
+scope:
+  in:
+    - internal/cli/novel_corpus_golden_test.go（黄金比对 + UPDATE_GOLDEN；四类注入负向断言与恢复）；testdata/e2e/novel/golden/ 下九个黄金文件；重放逻辑与 novel_corpus_replay_test.go 共享（抽取同包助手）
+  out:
+    - 不做矩阵对账（matrix-check）与 README（docs-runbook）；不改产品代码与主规格；不为知情违例新增 prose 级检查器（产品缺口记录在矩阵与 README，属里程碑外的产品变更）；不引入内容生成
+unchanged_behavior:
+  - wa-cli 产品行为不变；语料 commands.yaml 与 inputs/ 不变；internal/cli 既有测试不变（重放测试仅抽取共享助手，断言语义不变）
+roadmap:
+  milestone: novel-e2e
+  planned_change: golden-assertions

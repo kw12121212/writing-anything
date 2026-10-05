@@ -1,0 +1,48 @@
+schema: strict-spec-driven/question-list/v1
+schema_version: 1
+artifact_type: question_list
+schema_file: templates/strict-spec-driven/schemas/question-list.yaml
+change: replay-harness
+open: []
+resolved:
+  - id: corpus-validated
+    question: commands.yaml 已被验证过可重放吗？
+    context: 重放器以语料为输入，输入若有断言缺口会直接落到本变更
+    answer: corpus-authoring 归档前已用一次性脚本全量重放 280 步通过；fix-state-knowledge-clock 归档后 TestNovelCorpusReplay 双跑目录树比对也已通过
+    status: resolved
+    answered_by: roadmap
+  - id: requirement-problem
+    question: What is concretely going wrong today, and for whom?
+    context: 'Why this is asked: the change is planned against a need, and the need lives only with the requester. A "problem" here means what someone does or suffers today — not a feature that is missing. If the answer names a button, a field, a page, or an endpoint, it is a solution, and the underlying problem is still unstated. What a sufficient answer contains: who is affected, what they do today instead, and how often. Worked example: "every Monday one person spends forty minutes copying order rows into a spreadsheet to send the weekly report". What it changes: this becomes the proposal''s why, and it decides whether the change is worth making.'
+    answer: corpus-authoring 的 280 步可重放验证只是一次性脚本与单次 Go 验证，未纳入完整回归命令；长篇生命周期的回归证据缺一环
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-trigger
+    question: Why now — what forced this?
+    context: 'Why this is asked: work that nothing forced is the work most often thrown away later. This question catches a request that sounds reasonable but has no real driver behind it. What a sufficient answer contains: the concrete event, deadline, incident, or cost that made this surface now, or an honest statement that nothing did. Worked example: "the report was missed last month and it was raised with the team". What it changes: a change with no trigger is a candidate for deferral, and the answer is weighed at review before archive.'
+    answer: corpus-authoring 与前置缺陷 fix-state-knowledge-clock 均已归档，依赖满足，成为当前唯一可推荐的规划变更
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-interpretation
+    question: Which reading of the request is intended, where more than one is possible?
+    context: 'Why this is asked: a short request usually admits several readings, and building the wrong one is indistinguishable from building nothing. What a sufficient answer contains: the reading that is meant, stated plainly enough to rule the others out — or a statement that only one reading exists and what it is. Worked example: "export means the version sent to the manager, not the one I read myself". What it changes: this fixes the scope boundary before any code is written, and settles disputes about what was asked for.'
+    answer: 把已验证的 commands.yaml 重放固化为 internal/cli 进程内 Go 测试：解析脚本、冻结时间源、逐步断言退出码/诊断码/stdout、变异命令 changedPaths，同一测试内连续重放两次比对目录树逐字节一致
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-non-goals
+    question: What must explicitly not change?
+    context: 'Why this is asked: the requester knows which nearby behavior other people depend on, and the agent does not. A "non-goal" is something the change must leave alone even though it sits close to the work. What a sufficient answer contains: the behavior, setting, or output that must survive untouched, and who relies on it. Worked example: "do not change the saved filters — several people rely on their own". What it changes: these become the proposal''s unchanged_behavior items, which review checks the finished result against.'
+    answer: 不做黄金文件与注入式负向断言（golden-assertions）、矩阵对账（matrix-check）、README（docs-runbook）；不改产品代码与主规格；不重复结构校验测试的断言
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-outcome
+    question: What observable difference proves the problem is solved?
+    context: 'Why this is asked: without a success condition, nobody can tell afterwards whether the change worked. "Observable" means someone outside the system can check it without reading the code. What a sufficient answer contains: what a person will see, or no longer have to do, once this is done. Worked example: "the report is in the manager''s inbox on Monday morning without anyone assembling it". What it changes: this becomes the delta spec''s scenarios and the acceptance evidence at review time.'
+    answer: TestNovelCorpusReplay 纳入 go test 默认执行且通过（280 步全绿、两次重放目录树逐文件一致）；完整回归命令通过且覆盖率不低于阈值
+    status: resolved
+    kind: requirement
+    answered_by: roadmap

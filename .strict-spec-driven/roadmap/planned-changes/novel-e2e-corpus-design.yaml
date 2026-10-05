@@ -5,7 +5,7 @@ schema_file: ../../templates/strict-spec-driven/schemas/planned-change.yaml
 planned_change:
   id: corpus-design
   milestone: novel-e2e
-status: planned
+status: complete
 summary: 设计测试小说的设定与测试矩阵：人物、关系、世界规则、时间线、伏笔链、知情点、状态变更、长篇写作法与检索逐条映射到长篇特性与可断言结果
 details: 产出检入 internal/cli/testdata/e2e/novel/ 的设计文档与测试矩阵（每条带稳定编号）：人物卡与关系（供设定集与场景上下文匹配）、至少一条作者钦定世界规则；场景时间递进与至少一处跨章倒叙（供时间线检查）；至少 2 条跨章伏笔（埋设、强化、回收）与 1 条悬空伏笔（供负向断言）；至少 2 个秘密的知情边界（谁在哪场得知，此前场景不得引用）；至少 2 次可断言的状态快照变更；章内场景因果承接。矩阵同时覆盖长篇规划写作法（Long-form Planning Method，雪花写作法或网文结构任选其一）与 recall 全文检索（Full-text Search）：写作法步骤对应大纲与人物设定的展开方式，检索查询点断言命中预期的场景与素材。可重放命令脚本的文件格式：阶段、命令、输入文本引用、期望退出码与诊断码，另设可选的 stdout 包含断言（供 recall 等只读命令使用）。矩阵每条标注：所在场景、对应 wa-cli 命令、期望结果（发现项或全绿）。
 depends_on: []

@@ -1,0 +1,16 @@
+schema: strict-spec-driven/delta-tech/v1
+schema_version: 1
+artifact_type: delta_tech
+schema_file: templates/strict-spec-driven/schemas/delta-tech.yaml
+target_standard: go-project-structure
+operations:
+  ADDED:
+    testdata-design-artifact-validation:
+      strength: SHOULD
+      statement: 检入 testdata/ 且作为跨变更契约（稳定编号、稳定字段）被后续变更解析的设计产物（测试矩阵、命令脚本、黄金索引等），应附带同包结构校验测试，断言：标识符唯一且格式一致、必填字段齐备、清单覆盖约定面（如特性枚举）完备、对其他设计文档的引用（编号、单元或条目 id）可解析。引用不一致应在设计产物的校验层失败，而不是在使用方（重放器、对账器）落地时才暴露。
+      rationale: corpus-design 变更建立了该模式：TestNovelCorpusDesign 以结构校验测试锁住测试矩阵与设计文档的契约面，直接缓解 novel-e2e 里程碑风险清单中的「断言与矩阵脱节」；后续 corpus-authoring、replay-harness、matrix-check 都以矩阵编号为锚点，缺字段或编号冲突越早拦截返工面越小。
+      enforcement:
+        method: test
+        detail: 校验测试与产物同包放置（如 internal/cli），随 go test 默认执行；数量类约束（如最少伏笔链数）以枚举或正则锚点计数，断言钉住具体事实而非超集。
+  MODIFIED: {}
+  REMOVED: {}

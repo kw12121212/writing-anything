@@ -1,0 +1,19 @@
+schema: strict-spec-driven/lesson/v1
+schema_version: 1
+artifact_type: lesson
+schema_file: templates/strict-spec-driven/schemas/lesson.yaml
+lesson:
+  id: lint-ecb1a8
+  title: 中文虚构正文的 lint 规则对「」直角引号全绿是假象
+category: testing
+status: active
+created_at: '2026-10-04T15:46:29.805Z'
+updated_at: '2026-10-04T15:46:29.805Z'
+context: corpus-authoring 为 novel 文体创作真实中文小说语料，九场景正文使用「」直角引号，lint 全绿即认为达标
+observation: dialogue-punctuation 与 pov-consistency 的引号配对只识别 " 与 “”；语料用「」时规则完全失明：22 处对话句号违规与多处引号内「我」全部漏报，lint 零 error 是假绿。另外中文字数断言用 len() 会得到 3 倍字节虚高，必须用 utf8.RuneCountInString。
+takeaway: 为中文虚构正文制作夹具或断言时：先确认 lint 规则的引号配对覆盖语料实际引号风格（「」需先与作者确认文体约定），或把语料统一为 “”；字数区间断言一律用 rune 计数。规则盲区要作为发现上报（本例已立案 dialogue 规则不含「」的产品缺口），不要默认全绿即达标。
+applies_when: 为 novel/short-story 文体编写正文夹具、lint 期望或任何中文字数断言，且正文包含对话引号时
+occurrences:
+  - origin: corpus-authoring
+    date: '2026-10-04'
+    evidence: internal/cli/testdata/e2e/novel/inputs 九场景原用「」时 lint 全绿但存在 22 处 dialogue-punctuation 违规；internal/lint/fiction.go quotePairs 仅配对 " 与 “”

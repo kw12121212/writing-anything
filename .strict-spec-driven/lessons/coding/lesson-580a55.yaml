@@ -1,0 +1,19 @@
+schema: strict-spec-driven/lesson/v1
+schema_version: 1
+artifact_type: lesson
+schema_file: templates/strict-spec-driven/schemas/lesson.yaml
+lesson:
+  id: lesson-580a55
+  title: 跨文件隐式约定要静态强制；机械正则改签名会把测试常量漏进生产代码
+category: coding
+status: active
+created_at: '2026-10-04T16:13:19.108Z'
+updated_at: '2026-10-04T16:13:19.108Z'
+context: fix-state-knowledge-clock 把 7 个领域包与 10 个 cli 调用点接入可注入时钟
+observation: 时钟注入约定此前只存在于部分包（decision/handoff/volume/review），后加的时间戳全部漏网且没有任何机制发现；机械正则批量给测试补参数时，把冻结日期 time.Date(2026,…) 一并替换进了 internal/cli/sources.go 的生产调用点（评审以 MUST FIX 抓出）。
+takeaway: 跨多文件的隐式工程约定（时钟注入、路径相对化之类）一旦确认，立即写成带静态扫描强制的 MUST 规则（如 TestInjectableClock），不要依赖评审逐处核对；批量机械修改签名后，grep 一遍测试专有常量（冻结日期、临时路径）是否被带进非测试源码。
+applies_when: 新增或批量修改跨 internal 多包的函数签名，或把某个工程约定推广到既有代码时
+occurrences:
+  - origin: fix-state-knowledge-clock
+    date: '2026-10-04'
+    evidence: internal/cli/injectable_clock_test.go（静态强制）；评审 MUST FIX 1：sources.go:303 曾硬编码 time.Date(2026-06-20)

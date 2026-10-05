@@ -1,0 +1,30 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: fix-state-knowledge-clock
+  status: proposed
+summary:
+  what:
+    - 统一时间戳的可注入时钟：internal/cli 的 now 变量（review.go）是既有注入点，但三类调用绕过了它——(1) internal/state 与 internal/knowledge 的 Confirm/Reject/Set 在包内直取 time.Now()；(2) internal/plan 的 Confirm 与 internal/canon 的覆盖确认路径同样包内直取；(3) internal/cli 对 handoff/volume/decision/reviewpacket/impact 的调用虽已支持 now time.Time 参数，却传了 time.Now() 而非 now()
+    - 统一时间戳的可注入时钟与确定性生成：internal/cli 的 now 变量（review.go）是既有注入点，但多类调用绕过了它——(1) internal/state 与 internal/knowledge 的 Confirm/Reject/Set 在包内直取 time.Now() 写 decided_at；(2) internal/plan 的 Confirm 与 internal/draft 的修改记录（edits.yaml recorded_at）包内私取时钟；(3) internal/cli 对 handoff/volume/decision/reviewpacket/impact 的调用传 time.Now() 而非 now()；(4) internal/reviewpacket 的 character 维度任务包按 map 迭代序生成，多包内容随运行随机——全部接入注入时钟并按设定条目 id 排序生成
+  why:
+    - 小说语料重放测试（novel-e2e 的 replay-harness）冻结 internal/cli 的 now 时间源后连续重放两次，state.yaml 与 knowledge.yaml 的 decided_at 仍取真实时钟导致两次产物不一致，直接违反里程碑完成标准「重放测试在同一环境连续执行两次结果完全一致」；这是 E2E 语料暴露的产品缺陷，按里程碑约定走独立缺陷变更
+    - 小说语料重放测试（novel-e2e 的 replay-harness）冻结 internal/cli 的 now 时间源后连续重放两次，state.yaml、plan.yaml、handoffs.yaml、checkpoint.yaml、decisions.yaml、任务包与复查标记的时间戳仍取真实时钟，两次产物不一致，直接违反里程碑完成标准「重放测试在同一环境连续执行两次结果完全一致」；这是 E2E 语料暴露的产品缺陷，按里程碑约定走独立缺陷变更
+    - 小说语料重放测试（novel-e2e 的 replay-harness）冻结 internal/cli 的 now 时间源后连续重放两次，state.yaml、plan.yaml、edits.yaml、审查任务包的时间戳与内容仍随运行变化，两次产物不一致，直接违反里程碑完成标准「重放测试在同一环境连续执行两次结果完全一致」；这是 E2E 语料暴露的产品缺陷，按里程碑约定走独立缺陷变更
+scope:
+  in:
+    - internal/state：Confirm/Reject/Set 增加 now time.Time 参数并以此格式化 decided_at，删除包内 timestamp()；internal/knowledge：同样处理；internal/cli 的 runStateDecide/runStateSet 与 runKnowledgeDecide/runKnowledgeSet 传入 now()；internal/state、internal/knowledge 及 internal/cli 中直接调用这些函数的既有测试随签名更新；新增时钟注入回归测试（冻结 now 断言 decided_at 等于冻结时刻）
+    - internal/state 与 internal/knowledge：Confirm/Reject/Set 增加 now time.Time 参数并以此格式化 decided_at，删除包内 timestamp()；internal/plan：Confirm 增加 now 参数；internal/canon：覆盖确认（Override 的 ConfirmedAt）改为注入参数；internal/cli：全部时间戳调用统一传 now()（state/knowledge/handoff/volume/decision/reviewpacket/impact/plan/canon）；既有直接调用方测试机械更新签名；新增时钟注入回归测试（冻结 now 断言 decided_at/confirmed_at 等于冻结时刻，且两次执行一致）
+    - internal/state 与 internal/knowledge：Confirm/Reject/Set 增加 now time.Time 参数并以此格式化 decided_at，删除包内 timestamp()；internal/plan：Confirm 增加 now 参数；internal/cli：全部时间戳调用统一传 now()（state/knowledge/plan/handoff/volume/decision/reviewpacket/impact）；既有直接调用方测试机械更新签名；新增时钟注入回归测试（冻结 now 断言 decided_at/confirmed_at 等于冻结时刻，且两次执行一致）
+    - internal/state 与 internal/knowledge：Confirm/Reject/Set 增加 now time.Time 参数，删除包内 timestamp()；internal/plan：Confirm 增加 now 参数；internal/draft：Write/Precheck 与修改记录追加改为注入时钟（删除包内私取）；internal/cli：全部时间戳调用统一传 now()（含原先直传 time.Now() 的 handoff/volume/decision/reviewpacket/impact 调用点）；internal/reviewpacket：character 维度任务包按设定条目 id 排序生成；既有直接调用方测试机械更新签名；新增时钟注入回归测试（冻结 now 断言 decided_at 等于冻结时刻且两次执行一致）
+  out:
+    - 不改 decided_at 的格式与语义（仍为 UTC RFC3339）；不改 propose 路径（不写时间戳）；不处理 state/knowledge 之外的任何时间戳；不做无关重构
+    - 不改任何时间戳的格式与语义（UTC RFC3339 或现状格式）；不改不写时间戳的路径（如 propose）；不处理与时间戳无关的任何行为；不做无关重构
+    - 不改任何时间戳的格式与语义（UTC RFC3339 或现状格式）；不改不写时间戳的路径（如 propose）；internal/canon 覆盖确认路径的 ConfirmedAt 仍直取系统时钟，属相邻问题且不在语料重放时间戳面内，本变更不扩签名，留待需要系列覆盖确定性的变更处理；不做无关重构
+    - 不改任何时间戳的格式与语义；不改不写时间戳的路径（如 propose）；internal/canon 覆盖确认路径的 ConfirmedAt 仍直取系统时钟，属相邻问题且不在语料重放时间戳面内，本变更不扩签名，留待需要系列覆盖确定性的变更处理；不做无关重构
+unchanged_behavior:
+  - 除 decided_at 的取时钟来源外，全部产品行为不变：命令参数、输出信封、退出码、错误码、产物 Schema 与目录结构都不变；decision/handoff/volume/review 的时间戳注入方式不变
+  - 除时间戳取时钟来源外，全部产品行为不变：命令参数、输出信封、退出码、错误码、产物 Schema 与目录结构都不变
+  - 除时间戳取时钟来源与任务包生成的确定序外，全部产品行为不变：命令参数、输出信封、退出码、错误码、产物 Schema 与目录结构都不变

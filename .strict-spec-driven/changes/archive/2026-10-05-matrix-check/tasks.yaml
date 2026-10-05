@@ -1,0 +1,34 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: matrix-check
+sections:
+  Implementation:
+    matrix-evidence:
+      text: matrix.yaml 全部条目增加 evidence 字段（script/golden/negative/structure 锚点），负向条目与 DESIGN.md 预留段按 golden-assertions 实测机制勘误（canon.author-pinned、continuity.thread-anomaly、timeline.cycle+order-conflict、知情台账注入+knowledge at 暴露与产品缺口标注）
+      status: complete
+    matrix-test:
+      text: 新增 internal/cli/novel_corpus_matrix_test.go 的 TestNovelCorpusMatrix：加载矩阵与 commands.yaml，正向逐条解析 evidence（缺失项清单化），反向校验全部黄金文件、负向诊断码、脚本带断言步骤都被矩阵引用
+      status: complete
+  Testing:
+    matrix-reconcile:
+      text: 对账测试通过：全部矩阵条目可解析、反向引用无缺口
+      status: complete
+      command: go test ./internal/cli/ -run TestNovelCorpusMatrix -v
+    full-regression:
+      text: 完整项目回归（含覆盖率阈值 80%）
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    ready-check:
+      text: strict-spec-cli ready matrix-check
+      status: complete
+      command: strict-spec-cli ready matrix-check
+    verify-check:
+      text: strict-spec-cli verify matrix-check
+      status: complete
+      command: strict-spec-cli verify matrix-check
+testing_gates:
+  validation_task: full-regression
+  unit_test_task: matrix-reconcile

@@ -245,12 +245,22 @@ categories:
       status: active
       occurrences: 1
       path: .strict-spec-driven/lessons/coding/lesson-aa04b7.yaml
+    lesson-580a55:
+      title: 跨文件隐式约定要静态强制；机械正则改签名会把测试常量漏进生产代码
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/coding/lesson-580a55.yaml
   documentation:
     must-must-6af326:
       title: 修改一条 MUST 需求时，要检查同一规格里相邻的 MUST 是否因此冲突
       status: active
       occurrences: 1
       path: .strict-spec-driven/lessons/documentation/must-must-6af326.yaml
+    lesson-cdee49:
+      title: 夹具文档同样执行术语表首现双语；量化声明须带可复验锚点
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/documentation/lesson-cdee49.yaml
   performance:
     lesson-d20dc5:
       title: 按词表计数复用已有匹配器
@@ -273,3 +283,18 @@ categories:
       status: active
       occurrences: 1
       path: .strict-spec-driven/lessons/testing/lesson-a5269b.yaml
+    lint-ecb1a8:
+      title: 中文虚构正文的 lint 规则对「」直角引号全绿是假象
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/testing/lint-ecb1a8.yaml
+    lesson-fe239b:
+      title: 清单键控与命令形态不一致时断言静默失效
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/testing/lesson-fe239b.yaml
+    lesson-ee8ae5:
+      title: 负向断言必须诚实对应真实存在的检查
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/testing/lesson-ee8ae5.yaml

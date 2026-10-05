@@ -6,4 +6,4 @@ milestones:
   novel-e2e:
     title: 真实小说端到端测试（Real-novel E2E）
     path: roadmap/milestones/novel-e2e.yaml
-    status: proposed
+    status: complete

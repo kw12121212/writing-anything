@@ -1,0 +1,16 @@
+schema: strict-spec-driven/delta-tech/v1
+schema_version: 1
+artifact_type: delta_tech
+schema_file: templates/strict-spec-driven/schemas/delta-tech.yaml
+target_standard: go-project-structure
+operations:
+  ADDED:
+    replay-corpus-hash-commitments:
+      strength: SHOULD
+      statement: 检入的可重放命令脚本中以内容哈希作承诺的参数（如 draft write --base 的正文 SHA-256）必须等于对应检入输入文件内容的 SHA-256，由同包结构校验测试复算断言；修订语料输入文件时同步复算脚本中的哈希承诺，不一致应在语料校验层失败，而不是在重放器落地时才暴露。
+      rationale: corpus-authoring 的 --base 哈希是「真实执行、可重放」最硬的证据（280 步全量重放通过），但此前没有测试钉住它；不沉淀则修订正文时哈希漂移只会在 replay-harness 落地时才暴露，违背 testdata-design-artifact-validation 的 rationale。
+      enforcement:
+        method: test
+        detail: 断言实现在 internal/cli 的 TestNovelCorpusScript：遍历脚本步骤中的 --base 参数与 ch1-s3-author.md 的 SHA-256 比对。
+  MODIFIED: {}
+  REMOVED: {}
