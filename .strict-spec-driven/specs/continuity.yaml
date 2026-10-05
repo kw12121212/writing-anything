@@ -46,3 +46,19 @@ requirements:
         - GIVEN: 场景 s1 有未豁免的 error 级 finding
         - WHEN: 运行 wa-cli review show s1 --dir D --json
         - THEN: gate.blockers 呈现该 finding，changedPaths 为空数组，没有创建或修改 decisions.yaml
+  continuity-knowledge-early:
+    strength: MUST
+    statement: wa-cli continuity 的 Run 必须增加知情揭示词检查：对每个存在非空 terms 的设定条目 E（词表为该条目全部已确认事件揭示词的并集），取每个获知者（出场人物或读者（reader））对 E 的已确认获知点——按时间线（Timeline）全序最早的该获知者 confirmed 事件所在场景，无论该事件是否携带揭示词；获知者没有已确认事件时不做该获知者的检查。任一场景 X（带长篇场景契约且有正文）的正文命中 E 的任一揭示词（多词匹配与 internal/lint 同口径）时：若 X 按全序严格早于读者对 E 的获知点，报告 error 级 continuity.knowledge-early（归属场景 X，message 含 E 的条目 id、获知者 reader 与命中的揭示词）；若 X 的契约出场人物中存在人物 C 使 X 严格早于 C 对 E 的获知点，报告 error 级 continuity.knowledge-early（message 含 C 与其条目 id）。发现进入既有的验收（Acceptance）阻塞与决策豁免通道（（场景，错误码）粒度，同其他连续性发现）；没有任何非空 terms 时本检查完全不产生发现，连续性、accept 与 validate 的输出与错误码与引入本规格前完全一致。所有诊断的 next 含 wa-cli knowledge list <work> --all --dir <dir> --json 与 wa-cli continuity <work> --dir <dir> --json。
+    scenarios:
+      early-reveal-error:
+        - GIVEN: 条目 E 的揭示词为「为了救人」，读者与人物 C 对 E 的已确认获知点都在场景 S2，场景 S1 按全序早于 S2 且 S1 的契约出场人物含 C
+        - WHEN: S1 的正文包含「他是为了救人才走的」，运行 wa-cli continuity <work>
+        - THEN: 报告 error 级 continuity.knowledge-early（归属 S1，message 含 reader 与 C），验收被阻塞，退出码语义与其他 error 级连续性发现一致
+      reveal-at-point-clean:
+        - GIVEN: 同上，但揭示词只出现在 S2 的正文
+        - WHEN: 运行 wa-cli continuity <work>
+        - THEN: 没有 knowledge-early 发现，退出码 0
+      no-terms-unchanged:
+        - GIVEN: 作品的全部知情事件 terms 为空
+        - WHEN: 运行 wa-cli continuity <work> 与 wa-cli accept <场景>
+        - THEN: 输出与错误码和没有本检查时完全一致

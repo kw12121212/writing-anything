@@ -1,0 +1,44 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: knowledge-reveal-terms
+sections:
+  Implementation:
+    knowledge-terms:
+      text: internal/knowledge：Event.Terms 与事件序、ProposeInput/SetInput 增词（写入/整体替换/空值删除）、领域校验（非空唯一，artifact.schema-violation）、knowledge.schema.json 增加 terms 属性、--json 输出含 terms；internal/cli：knowledge propose/set 注册 --terms 旗标
+      status: complete
+    continuity-early:
+      text: internal/continuity：Run 增加揭示词检查——confirmed 事件按 entry 分组取 terms 并集，lint 多词匹配扫描场景正文，timeline.Order 全序判定「早于获知点」，产出 error 级 continuity.knowledge-early（reader 与出场人物两条判定），无 terms 零影响
+      status: complete
+    glossary:
+      text: docs/GLOSSARY.md 增「揭示词（Reveal Terms）」词条
+      status: complete
+    corpus-wiring:
+      text: 语料接入：commands.yaml 在 kn-05/07 与 kn-08/09 确认后补 knowledge set --terms + 重新确认步骤；重放全绿；UPDATE_GOLDEN 再生成（核对仅 knowledge.yaml 变化）；负向断言升级为 prose 注入（ch1-s3 注入「为了救人」句 → continuity.knowledge-early → 恢复全绿）；matrix T-NEG-02 升级 error 级并更新 evidence；DESIGN 负向段与 README 缺口记录改为已补齐
+      status: complete
+  Testing:
+    unit-tests:
+      text: internal/knowledge 单测（terms 写入/替换/删除/重复拒绝/已确认须重确认/--json 含 terms）与 internal/continuity 单测（提前揭示 error、获知点及之后干净、无 terms 输出不变）
+      status: complete
+      command: go test ./internal/knowledge/ ./internal/continuity/ -v
+    corpus-tests:
+      text: 语料六测全绿（含升级后的负向断言与再生成的黄金）
+      status: complete
+      command: go test ./internal/cli/ -run "TestNovelCorpus" -v
+    full-regression:
+      text: 完整项目回归（含覆盖率阈值 80%）
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    ready-check:
+      text: strict-spec-cli ready knowledge-reveal-terms
+      status: complete
+      command: strict-spec-cli ready knowledge-reveal-terms
+    verify-check:
+      text: strict-spec-cli verify knowledge-reveal-terms
+      status: complete
+      command: strict-spec-cli verify knowledge-reveal-terms
+testing_gates:
+  validation_task: full-regression
+  unit_test_task: unit-tests

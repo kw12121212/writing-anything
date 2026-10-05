@@ -106,3 +106,19 @@ requirements:
         - GIVEN: 同一多章长篇夹具
         - WHEN: 连续两次运行 wa-cli knowledge at my-novel/c3/s1 --character canon-1 --dir D --json
         - THEN: 两次输出的 knowledge 完全一致，退出码为 0
+  knowledge-reveal-terms:
+    strength: MUST
+    statement: 知情事件（Knowledge Event）可携带揭示词（Reveal Terms）：terms 为字符串数组，每项去除首尾空白后非空且数组内不重复，缺省为空数组；字段形态不符时报告 artifact.schema-violation（field 为 events[i].terms 或 events[i].terms[j]）。wa-cli knowledge propose <work> ... [--terms <词1,词2>] 必须把逗号分隔的揭示词写入新条目（空白项忽略后为空数组时等同缺省）；wa-cli knowledge set <work> <id> --terms <词1,词2> 必须整体替换该条目的揭示词，取值为空字符串时删除该字段（恢复缺省空数组）；修改已确认（confirmed）条目的 terms 与修改其他字段一致：条目回到 proposed，须作者重新确认。--json 输出（propose、set、list、confirm 等）的条目字段含 terms（空数组输出为 []）。terms 不参与 knowledge at 的已知列表计算（获知语义只由 scene 与 character 决定）。由参数引起的诊断不填 path，next 含 wa-cli help knowledge propose --json 或 wa-cli help knowledge set --json。
+    scenarios:
+      propose-terms:
+        - GIVEN: my-novel 的 canon.yaml 有条目 canon-5
+        - WHEN: 运行 wa-cli knowledge propose my-novel --scene my-novel/c1/s1 --entry canon-5 --character reader --terms 为了救人,救了潮生 --dir D --json
+        - THEN: 新条目 terms 为 [为了救人, 救了潮生]，changedPaths 含 knowledge.yaml，退出码为 0
+      set-terms-reconfirm:
+        - GIVEN: 条目 know-1 已确认且 terms 为空
+        - WHEN: 运行 wa-cli knowledge set my-novel know-1 --terms 出生的时刻 --confirmed-by-author --confirmation 作者确认补登揭示词 --dir D --json
+        - THEN: terms 更新为 [出生的时刻] 且保持 confirmed，退出码为 0
+      terms-invalid:
+        - GIVEN: my-novel 存在
+        - WHEN: 运行 wa-cli knowledge propose my-novel --scene my-novel/c1/s1 --entry canon-5 --character reader --terms 为了救人,为了救人 --dir D --json
+        - THEN: 报告 artifact.schema-violation（field 为 terms），knowledge.yaml 未被修改，退出码为 1

@@ -1,0 +1,19 @@
+schema: strict-spec-driven/lesson/v1
+schema_version: 1
+artifact_type: lesson
+schema_file: templates/strict-spec-driven/schemas/lesson.yaml
+lesson:
+  id: lesson-a287df
+  title: 词表与时点解耦：条目级词表检查的获知点不得共用词表过滤条件
+category: coding
+status: active
+created_at: '2026-10-05T03:43:14.432Z'
+updated_at: '2026-10-05T03:43:14.432Z'
+context: knowledge-reveal-terms 为 continuity 实现揭示词检查（条目级词表 + 获知者级时点）
+observation: 初版把 revealTerms 并集与 knowledgePoint 获知点写在同一个  过滤里，评审指出规格明确要求获知点取「该获知者全部 confirmed 事件的最早场景」：共用条件会在「更早的无词获知」形态下误报或漏报，语料与单测恰好都没覆盖该形态。
+takeaway: 凡「条目级词表 + 获知者级时点」的确定性检查，两个索引必须独立构建：词表来自任一声明的并集，时点来自全部相关事件的最早场景；并为解耦形态写专门的单测（有更早无词事件时不报、唯一获知点晚时报）。
+applies_when: 在 continuity 或类似台账检查中实现按词表匹配 + 按时点判定的组合规则时
+occurrences:
+  - origin: knowledge-reveal-terms
+    date: '2026-10-05'
+    evidence: internal/continuity/continuity.go 揭示词索引（词表并集与获知点两段独立构建）；TestKnowledgeEarly/point-decoupled-from-terms

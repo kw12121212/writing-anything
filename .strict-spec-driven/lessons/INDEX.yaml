@@ -250,6 +250,11 @@ categories:
       status: active
       occurrences: 1
       path: .strict-spec-driven/lessons/coding/lesson-580a55.yaml
+    lesson-a287df:
+      title: 词表与时点解耦：条目级词表检查的获知点不得共用词表过滤条件
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/coding/lesson-a287df.yaml
   documentation:
     must-must-6af326:
       title: 修改一条 MUST 需求时，要检查同一规格里相邻的 MUST 是否因此冲突
@@ -261,6 +266,11 @@ categories:
       status: active
       occurrences: 1
       path: .strict-spec-driven/lessons/documentation/lesson-cdee49.yaml
+    spec-next-7d39fd:
+      title: spec 语句里的 next 命令必须写成可执行形态
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/documentation/spec-next-7d39fd.yaml
   performance:
     lesson-d20dc5:
       title: 按词表计数复用已有匹配器

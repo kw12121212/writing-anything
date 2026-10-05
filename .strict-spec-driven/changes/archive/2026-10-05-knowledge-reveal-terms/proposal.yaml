@@ -1,0 +1,19 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: knowledge-reveal-terms
+  status: proposed
+summary:
+  what:
+    - 为知情表（Knowledge State）事件增加可选的揭示词（Reveal Terms，terms 数组），并让确定性连续性审查（Continuity Review）据此检查正文级知情违例：knowledge propose 与 knowledge set 接受 --terms（逗号分隔整体写入/替换，空字符串删除）；任一场景正文出现某条目的揭示词，且该场景按时间线（Timeline）全序早于某获知者（出场人物或读者（reader））对该条目的已确认获知点时，报告 error 级 continuity.knowledge-early 并进入既有验收阻塞与豁免通道——补上 novel-e2e 语料记录的产品缺口（此前正文提前揭示秘密没有任何确定性检查）
+  why:
+    - novel-e2e 里程碑的负向断言暴露：设定冲突、伏笔悬空、时间线倒置都有 error 级确定性检查，唯有知情违例只能靠台账注入 + knowledge at 间接暴露；作者声明的揭示词让「正文不得早于获知点揭秘密」成为可机械执行的契约（术语表词条与规格同步）
+scope:
+  in:
+    - internal/knowledge：Event.Terms、ProposeInput/SetInput 增词、事件序与 JSON Schema（terms 为非空唯一字符串数组）与领域校验、--json 输出含 terms；internal/cli：knowledge propose/set 注册 --terms 旗标；internal/continuity：新增 continuity.knowledge-early 检查（复用 lint 多词匹配与时间线全序，terms 为空的作品零新增检查）；internal/schema 的 knowledge.schema.json；单测（knowledge 包：terms 写入/替换/校验/已确认须重确认；continuity 包：提前揭示报 error、获知点及之后干净、无 terms 不变）；docs/GLOSSARY.md 增「揭示词（Reveal Terms）」；小说语料接入（脚本补 knowledge set --terms 与重新确认步骤、负向断言升级为 prose 注入 + error 断言、矩阵/DESIGN/README 同步、黄金再生成）
+  out:
+    - 不改既有 knowledge 命令的既有参数语义（--terms 是新增可选旗标）；不新增 canon 条目类型；不把揭示词挂到场景契约或设定条目（单一事实源在知情事件上）；不做语义级（模型）检查——揭示词由作者声明，工具只做机械匹配；不改黄金比对与对账框架本身
+unchanged_behavior:
+  - 没有声明任何揭示词的作品：knowledge 与 continuity 的全部输出、错误码与退出码完全不变（零新增检查）；既有事件的字段、确认流程与 knowledge at 重放语义不变；其他命令行为不变
