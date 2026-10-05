@@ -1,0 +1,508 @@
+# 测试矩阵（Test Matrix）：长篇特性面 → 语料可断言事实。每条带稳定编号（T-<特性>-<序号>）；
+# scene 为单元 id（book / part-N / ch-N / chN-sM）；command 为 wa-cli 命令（示意，参数由 commands.yaml 录制）；
+# expected 为期望结果（发现项诊断码或全绿）；assertion 为重放测试要断言的要点；
+# evidence 为对账锚点（见 TestNovelCorpusMatrix）：script=commands.yaml 步骤（token 子串定位，
+# 可选 stdout_contains/expect_code 断言值）、golden=golden/ 文件、negative=负向注入断言码、
+# structure=结构校验测试。特性枚举与覆盖清单见 TestNovelCorpusDesign。
+entries:
+- id: T-UNITS-01
+  feature: units
+  scene: book
+  command: wa-cli init --genre novel --gate-level strict + new novel stopped-at-417
+  expected: 全绿（exit 0）
+  assertion: 工作区初始化，根单元《停在四点十七分》创建，文体 novel、关卡 strict。
+  evidence:
+  - kind: script
+    token: new novel stopped-at-417
+  - kind: script
+    token: init --genre novel
+- id: T-UNITS-02
+  feature: units
+  scene: book
+  command: wa-cli unit add part-1..3 / ch-1..3 / ch1-s1..ch3-s3
+  expected: 全绿（exit 0）
+  assertion: 四层单元树成型：小说→部→章→场景；3 部各 1 章 3 场景，部与章为汇总单元。
+  evidence:
+  - kind: script
+    token: unit add stopped-at-417/part-1
+  - kind: script
+    token: unit add stopped-at-417/ch-1 scene ch1-s3
+- id: T-UNITS-03
+  feature: units
+  scene: book
+  command: wa-cli next / status
+  expected: 全绿（exit 0）
+  assertion: 汇总单元阶段与阻塞项由子场景汇总（最短板规则），场景未完成时部/章不显示完成。
+  evidence:
+  - kind: script
+    token: next stopped-at-417/ch1-s1
+    stdout_contains: ch1-s1
+- id: T-CONTRACT-01
+  feature: scene-contract
+  scene: ch1-s1
+  command: wa-cli scene contract ch1-s1 --pov .. --characters .. --beats .. --reveal-boundary ..
+  expected: 全绿（exit 0）
+  assertion: 九个场景逐一写入契约：视角、地点、出场人物、节拍（beats 为指向根大纲故事节拍的 id）、必须发生的状态变化、伏笔、揭示边界与起因，与 DESIGN.md 场景表逐列一致。
+  evidence:
+  - kind: script
+    token: scene contract stopped-at-417/ch1-s1 sc
+  - kind: structure
+    test: TestNovelCorpusDesign
+- id: T-CONTRACT-02
+  feature: scene-contract
+  scene: ch2-s1
+  command: wa-cli scene contract ch2-s1 --cause <ch1-s3 的等配件事件>
+  expected: 全绿（exit 0）
+  assertion: 起因引用已发生的既有事件被接受；引用不存在的事件时被拒绝（章间与章内因果承接均落地）。
+  evidence:
+  - kind: script
+    token: --cause ev-watch-accepted
+- id: T-CONTRACT-03
+  feature: scene-contract
+  scene: ch2-s2
+  command: wa-cli scene contract ch2-s2 --time 2006-06-20 09:00 --after ch2-s1
+  expected: 全绿（exit 0）
+  assertion: 倒叙场景声明故事时间标记与晚于关系，跨章倒叙进入大纲节。
+  evidence:
+  - kind: script
+    token: --after stopped-at-417/ch2-s1
+- id: T-CAUSAL-01
+  feature: causality
+  scene: ch2-s2
+  command: wa-cli timeline stopped-at-417
+  expected: 全绿（exit 0）
+  assertion: 全序由 after 声明推导：ch1-s1→ch1-s2→ch1-s3→ch2-s1→ch2-s2→ch2-s3→ch3-s1→ch3-s2→ch3-s3，无 cycle / unknown-scene / order-conflict
+    / same-time-presence。
+  evidence:
+  - kind: script
+    token: timeline stopped-at-417
+    stdout_contains: ch3-s3
+- id: T-CAUSAL-02
+  feature: causality
+  scene: ch1-s3
+  command: wa-cli scene close-out ch1-s3
+  expected: 全绿（exit 0）
+  assertion: 收口提交的事件被后续场景契约的起因引用，因果链闭环（ch2-s1 引用 ch1-s3）。
+  evidence:
+  - kind: script
+    token: --cause ev-letter-undelivered
+- id: T-STATE-01
+  feature: state
+  scene: ch2-s3
+  command: wa-cli state propose --scene ch2-s3 --entry item-pocketwatch（ST-1）+ state confirm
+  expected: 全绿（exit 0）
+  assertion: 怀表 stopped→running 提议登记并经作者确认；未确认的提议不参与快照。
+  evidence:
+  - kind: script
+    token: state confirm stopped-at-417 st-1
+- id: T-STATE-02
+  feature: state
+  scene: ch3-s2
+  command: wa-cli state propose --scene ch3-s2 --entry char-lin-wan（ST-2）+ state confirm
+  expected: 全绿（exit 0）
+  assertion: 林晚 visitor→staying 确认后参与快照计算。
+  evidence:
+  - kind: script
+    token: state confirm stopped-at-417 st-2
+- id: T-STATE-03
+  feature: state
+  scene: ch3-s3
+  command: wa-cli state at ch3-s3
+  expected: 全绿（exit 0）
+  assertion: ch3-s3 开始时快照：怀表 running、林晚 staying；同一输入两次执行结果逐字节一致（可重复性）。
+  evidence:
+  - kind: script
+    token: state at stopped-at-417/ch3-s3
+    stdout_contains: item-pocketwatch
+  - kind: golden
+    file: state-at-ch3-s3.json
+- id: T-KNOW-01
+  feature: knowledge
+  scene: ch1-s1
+  command: wa-cli knowledge propose --scene ch1-s1 --character char-chen-shouzhuo --entry char-shen-wangshu（KN-01）+ knowledge
+    confirm
+  expected: 全绿（exit 0）
+  assertion: 开篇已知登记约定：知情事件绑定获知者首个在场场景，SECT-1 绑定 char-shen-wangshu、SECT-2 绑定 item-letter 条目；KN-01..KN-09 经收口提交与作者确认全部登记。
+  evidence:
+  - kind: script
+    token: knowledge confirm stopped-at-417 kn-01
+- id: T-KNOW-02
+  feature: knowledge
+  scene: ch3-s2
+  command: wa-cli knowledge at ch3-s1 --character char-lin-wan
+  expected: 全绿（exit 0）
+  assertion: ch3-s2 揭示前一场景，林晚的已知列表不含 SECT-1（KN-05 之前正文不得引用）。
+  evidence:
+  - kind: script
+    token: knowledge at stopped-at-417/ch3-s1
+    stdout_contains: '"knowledge":[]'
+- id: T-KNOW-03
+  feature: knowledge
+  scene: ch3-s3
+  command: wa-cli knowledge at ch3-s3 --character reader
+  expected: 全绿（exit 0）
+  assertion: ch3-s3 开始时读者已知 SECT-1（KN-07）与 SECT-2 的存在（KN-03），尚未知信的内容（KN-09 在 ch3-s3 收口确认）。
+  evidence:
+  - kind: script
+    token: knowledge at stopped-at-417/ch3-s3
+    stdout_contains: item-letter
+  - kind: golden
+    file: knowledge.yaml
+- id: T-THREAD-01
+  feature: threads
+  scene: ch1-s1
+  command: wa-cli threads add TH-A（planted ch1-s1, 回收 ch3-s3）/ threads add TH-B（planted ch1-s2）/ threads add TH-C（planted
+    ch2-s1, 计划回收 ch3-s3）
+  expected: 全绿（exit 0）
+  assertion: 三条伏笔按埋设场景登记，计划回收位置与 DESIGN.md 伏笔链一致。
+  evidence:
+  - kind: script
+    token: threads add stopped-at-417 --id th-a
+  - kind: script
+    token: threads add stopped-at-417 --id th-c
+- id: T-THREAD-02
+  feature: threads
+  scene: ch3-s3
+  command: wa-cli threads set TH-A/TH-B --recovered-in ch3-s3 + threads
+  expected: 全绿（exit 0）
+  assertion: TH-A、TH-B 标记回收后不再列在未回收输出中。
+  evidence:
+  - kind: golden
+    file: threads.yaml
+- id: T-THREAD-03
+  feature: threads
+  scene: ch3-s3
+  command: wa-cli threads --all
+  expected: 发现项（TH-C 超期标记）
+  assertion: 悬空伏笔 TH-C 超过计划回收位置被标出（overdue）；其收束经决策队列：threads set dropped 被 threads.author-confirmation 拒绝并生成阻塞决策，作者 decide
+    允许后带 --decision 放弃，th-a/th-b 为 paid、th-c 为 dropped（语料内生负向路径）。
+  evidence:
+  - kind: script
+    token: threads stopped-at-417 --all
+    stdout_contains: th-c
+  - kind: script
+    token: threads set stopped-at-417 th-c --status dropped
+    expect_code: threads.author-confirmation
+  - kind: negative
+    code: continuity.thread-anomaly
+  - kind: golden
+    file: threads.yaml
+- id: T-CLOSEOUT-01
+  feature: closeout
+  scene: ch1-s1
+  command: wa-cli scene close-out ch1-s1 --file inputs/ch1-s1-closeout.yaml
+  expected: 全绿（exit 0）
+  assertion: 九场景逐一收口：新增设定、状态变化、知情变化、伏笔埋设与回收、确认产生的事件，对照场景契约检查齐备后记忆台账与正文同步。
+  evidence:
+  - kind: script
+    token: scene close-out stopped-at-417/ch1-s1
+  - kind: script
+    token: scene close-out stopped-at-417/ch3-s3
+- id: T-CLOSEOUT-02
+  feature: closeout
+  scene: ch2-s3
+  command: wa-cli scene close-out ch2-s3
+  expected: 全绿（exit 0）
+  assertion: 收口提交 ST-1 状态变化与 KN-04 知情变化，契约声明的必发变化齐备；疑似专有名词扫描无未处理提示。
+  evidence:
+  - kind: script
+    token: scene close-out stopped-at-417/ch2-s3
+- id: T-SUMMARY-01
+  feature: summary
+  scene: ch-1
+  command: wa-cli summary set ch-1（及 ch-2、ch-3）
+  expected: 全绿（exit 0）
+  assertion: 章验收后写分层摘要：字数符合文体规定、记录正文 SHA-256；正文再被修改时摘要过期。
+  evidence:
+  - kind: script
+    token: summary set stopped-at-417/ch-1
+- id: T-SUMMARY-02
+  feature: summary
+  scene: part-1
+  command: wa-cli summary set part-1（及 part-2、part-3）
+  expected: 全绿（exit 0）
+  assertion: 部级摘要聚合章摘要，形成场景→章→部的分层摘要链，供上下文包携带。
+  evidence:
+  - kind: script
+    token: summary set stopped-at-417/part-1
+- id: T-CTX-01
+  feature: context
+  scene: ch3-s2
+  command: wa-cli context ch3-s2
+  expected: 全绿（exit 0）
+  assertion: 上下文包携带前部前章摘要、设定集相关条目、伏笔台账与场景契约，篇幅在 novel 文体 16000 预算内。
+  evidence:
+  - kind: script
+    token: context stopped-at-417/ch3-s2
+    stdout_contains: 四点十七分
+  - kind: golden
+    file: context-ch3-s2.json
+- id: T-CTX-02
+  feature: context
+  scene: ch3-s3
+  command: wa-cli context ch3-s3 --json
+  expected: 全绿（exit 0）
+  assertion: 同一单元状态两次输出的上下文包逐字节一致（预算裁剪确定性）。
+  evidence:
+  - kind: structure
+    test: TestNovelCorpusReplay
+  - kind: golden
+    file: context-ch3-s2.json
+- id: T-METHOD-01
+  feature: method
+  scene: book
+  command: wa-cli method list + method show snowflake
+  expected: 全绿（exit 0）
+  assertion: snowflake 模板可列出并展示十步（one-sentence..start-writing）与评分标准条目。
+  evidence:
+  - kind: script
+    token: method show snowflake
+    stdout_contains: one-sentence
+  - kind: script
+    token: method list
+    stdout_contains: snowflake
+- id: T-METHOD-02
+  feature: method
+  scene: book
+  command: wa-cli plan step + plan confirm ×10（产物步骤 --link canon/unit/scene contract）
+  expected: 全绿（exit 0）
+  assertion: 雪花写作法十步逐步经作者确认推进；产物步骤的 --link 分别为设定集条目 id（characters）、场景单元引用（scenes）与 <场景单元引用>:<大纲节 id>（scene-contracts），未确认不能进入下一步（映射见
+    DESIGN.md 十步表）。
+  evidence:
+  - kind: script
+    token: plan confirm stopped-at-417 one-sentence
+- id: T-METHOD-03
+  feature: method
+  scene: book
+  command: wa-cli plan show stopped-at-417
+  expected: 全绿（exit 0）
+  assertion: 只读展示每个步骤的状态与当前待作者确认的步骤。
+  evidence:
+  - kind: script
+    token: plan show stopped-at-417
+- id: T-RECALL-01
+  feature: recall
+  scene: ch3-s1
+  command: wa-cli recall 四点十七
+  expected: 全绿（exit 0）
+  assertion: RQ-1（ch3-s1 调用时点）：命中 ch1-s1、ch1-s2、ch1-s3、ch2-s1、ch2-s2、ch2-s3 六场已验收正文，stdout_contains ch1-s1。
+  evidence:
+  - kind: script
+    token: recall 四点十七
+    stdout_contains: ch1-s1
+- id: T-RECALL-02
+  feature: recall
+  scene: ch3-s1
+  command: wa-cli recall item-pocketwatch
+  expected: 全绿（exit 0）
+  assertion: RQ-2：以设定条目称谓（怀表）检索，命中 ch1-s1、ch1-s2、ch1-s3、ch2-s3（ch2-s1 正文只称「表」，倒叙场景 ch2-s2 无怀表今名），stdout_contains ch2-s3。
+  evidence:
+  - kind: script
+    token: recall item-pocketwatch
+    stdout_contains: ch2-s3
+- id: T-RECALL-03
+  feature: recall
+  scene: ch3-s1
+  command: wa-cli recall 铁盒
+  expected: 全绿（exit 0）
+  assertion: RQ-3：命中 ch1-s1、ch2-s2、ch2-s3（开篇怀表来自家中铁盒一句亦命中），stdout_contains ch2-s2。
+  evidence:
+  - kind: script
+    token: recall 铁盒
+    stdout_contains: ch2-s2
+- id: T-CONT-01
+  feature: continuity
+  scene: book
+  command: wa-cli continuity stopped-at-417（th-c 放弃前）
+  expected: 发现项（continuity.thread-anomaly error，归属 ch2-s1 与 ch3-s3）
+  assertion: 全书连续性审查：TH-C 超期报 error 并阻塞组稿（assemble.continuity）；th-c 经作者决策放弃后连续性全绿、组稿通过。
+  evidence:
+  - kind: negative
+    code: continuity.thread-anomaly
+  - kind: golden
+    file: continuity.json
+- id: T-CONT-02
+  feature: continuity
+  scene: book
+  command: wa-cli continuity stopped-at-417（豁免后）
+  expected: 全绿（exit 0）
+  assertion: th-c 放弃后全书无未建卡出场人物、无终态人物出场、无悬空引用、无伏笔超期。
+  evidence:
+  - kind: golden
+    file: continuity.json
+- id: T-REVIEWPK-01
+  feature: reviewpacket
+  scene: ch2-s3
+  command: wa-cli review plan stopped-at-417/ch-2 --dimension character + review plan stopped-at-417/ch2-s3（全维度）
+  expected: 全绿（exit 0）
+  assertion: 按维度生成审查任务包：character 维度按章 × 人物生成（章级单元），thread/causality/pov-reveal 按场景生成；每个任务包只含正文切片、相关台账切片与检查清单，不超过上下文预算。
+  evidence:
+  - kind: script
+    token: review plan stopped-at-417/ch-2 --dimension character
+- id: T-REVIEWPK-02
+  feature: reviewpacket
+  scene: ch2-s3
+  command: wa-cli review submit + review report stopped-at-417
+  expected: 全绿（exit 0）
+  assertion: 每个清单项有且仅有一个结论（pass/fail/na），齐全后任务包 done；report 汇总各维度 open/done 与 fail 清单。
+  evidence:
+  - kind: script
+    token: review submit stopped-at-417/character-1
+  - kind: golden
+    file: review-report.json
+- id: T-IMPACT-01
+  feature: impact
+  scene: ch2-s3
+  command: wa-cli impact stopped-at-417/item-pocketwatch
+  expected: 全绿（exit 0）
+  assertion: 只读预览修改怀表条目的受影响场景与引用依据；录制时点（第二部完成后）为 ch1-s1/ch1-s2/ch1-s3（称谓出现）、ch2-s1（起因链 ev-wait-parts）、ch2-s3（状态绑定）。
+  evidence:
+  - kind: script
+    token: impact stopped-at-417/item-pocketwatch
+- id: T-IMPACT-02
+  feature: impact
+  scene: ch3-s1
+  command: wa-cli impact mark + impact list + impact clear（作者确认）
+  expected: 全绿（exit 0）
+  assertion: 复查标记落盘 rechecks/、生成 causality 维度任务包；open 标记期间组稿被拒（见 T-ASSEMBLE-02）；作者确认后解除。
+  evidence:
+  - kind: script
+    token: impact mark stopped-at-417/item-pocketwatch
+  - kind: script
+    token: impact clear stopped-at-417/ch2-s3 item-pocketwatch
+- id: T-HANDOFF-01
+  feature: handoff
+  scene: part-1
+  command: wa-cli handoff write（每部末会话）+ handoff show --last N + next
+  expected: 全绿（exit 0）
+  assertion: 部末写交接记录（完成了什么/未完成/作者新指示/风险），新会话经 next 接续；只能追加。
+  evidence:
+  - kind: script
+    token: handoff show
+    stdout_contains: handoff
+- id: T-VOLUME-01
+  feature: volume
+  scene: part-1
+  command: wa-cli volume checkpoint part-1（及 part-2、part-3）
+  expected: 全绿（exit 0）
+  assertion: 部内全部场景完成后生成卷末检查点：canon/states/threads/decisions 并集与确定性抽样核对样本；同指纹重生成不写文件。
+  evidence:
+  - kind: script
+    token: volume checkpoint stopped-at-417/part-1
+- id: T-VOLUME-02
+  feature: volume
+  scene: part-1
+  command: wa-cli volume confirm part-1 --confirmed-by-author --confirmation <原话>
+  expected: 全绿（exit 0）
+  assertion: 作者确认写入 confirmed_by_author/confirmation/confirmed_at，保留其他内容。
+  evidence:
+  - kind: script
+    token: volume confirm stopped-at-417/part-1
+- id: T-VOLUME-03
+  feature: volume
+  scene: part-2
+  command: wa-cli accept stopped-at-417/ch3-s1（part-2 未确认时）
+  expected: 发现项 volume.unconfirmed（error）
+  assertion: strict 关卡下前一部检查点未确认，下一部场景验收被阻塞；volume confirm part-2 后重放同一命令通过——创作流程真实发生并被录制。
+  evidence:
+  - kind: script
+    token: accept stopped-at-417/ch3-s1
+    expect_code: volume.unconfirmed
+- id: T-ASSEMBLE-01
+  feature: assembly
+  scene: book
+  command: wa-cli assemble stopped-at-417
+  expected: 全绿（exit 0）
+  assertion: 全部场景验收、无连续性阻塞、无 open 复查标记后组稿成功：书名、目录、部/章标题、去注释正文与 AI 参与说明，按单元树先序。
+  evidence:
+  - kind: script
+    token: assemble stopped-at-417 --output book.md
+  - kind: golden
+    file: book.md
+- id: T-ASSEMBLE-02
+  feature: assembly
+  scene: book
+  command: wa-cli assemble stopped-at-417（存在 open 复查标记与未完成场景时）
+  expected: 发现项 assemble.scenes-open,assemble.rechecks（error）
+  assertion: open 复查标记期间组稿被拒并列出阻塞项；五个受影响场景逐条 impact clear（作者确认）后重放通过——创作流程真实发生并被录制。
+  evidence:
+  - kind: script
+    token: assemble stopped-at-417
+    expect_code: assemble.rechecks
+- id: T-EXPORT-01
+  feature: export
+  scene: book
+  command: wa-cli export stopped-at-417 --format markdown
+  expected: 全绿（exit 0）
+  assertion: 整书导出按单元树先序拼接已验收正文、去批注与单处豁免注释；汇总单元（作品/部/章）无正文，以 export.unaccepted（warning）提示后仍导出全部九场正文；产物与黄金文件逐字节一致（UPDATE_GOLDEN=1
+    再生成）。
+  evidence:
+  - kind: script
+    token: export stopped-at-417
+  - kind: golden
+    file: novel-export.md
+  - kind: golden
+    file: novel-export.txt
+- id: T-NEG-01
+  feature: continuity
+  scene: book
+  command: wa-cli canon set stopped-at-417 rule-clock-freeze（无 --decision）
+  expected: 发现项 canon.author-pinned（error）并生成阻塞决策
+  assertion: 设定冲突类注入：修改作者钦定条目被拒，唯一写入为决策队列；见 TestNovelCorpusNegativeInjections (1)。
+  evidence:
+  - kind: negative
+    code: canon.author-pinned
+- id: T-NEG-02
+  feature: knowledge
+  scene: ch2-s2
+  command: wa-cli scene close-out --replace（注入 kn-x）+ knowledge confirm
+  expected: knowledge at ch2-s3 林晚已知列表由空变为含 char-shen-wangshu
+  assertion: 知情违例类注入：台账层注入提前获知并以 knowledge at 暴露（空→非空），撤销后回基线；产品当前无 prose 级确定性检查（已记录的产品缺口）。
+  evidence:
+  - kind: negative
+    code: knowledge-at-leak
+- id: T-NEG-03
+  feature: threads
+  scene: ch3-s3
+  command: wa-cli threads set stopped-at-417 th-a --status open
+  expected: 发现项 continuity.thread-anomaly（error）
+  assertion: 伏笔悬空类注入：删除伏笔回收后连续性审查报 error、组稿被 assemble.continuity 阻塞；恢复 paid 后全绿。
+  evidence:
+  - kind: negative
+    code: continuity.thread-anomaly
+  - kind: script
+    token: assemble stopped-at-417
+    expect_code: assemble.continuity
+- id: T-NEG-04
+  feature: causality
+  scene: ch2-s1
+  command: wa-cli scene contract stopped-at-417/ch2-s1 sc --after stopped-at-417/ch2-s2
+  expected: 发现项 timeline.cycle 与 timeline.order-conflict（error）
+  assertion: 时间线倒置类注入：互指 after 成环，timeline 与连续性审查双通道报 error；--after 空值删除后全绿。
+  evidence:
+  - kind: negative
+    code: timeline.cycle
+  - kind: negative
+    code: timeline.order-conflict
+- id: T-NEG-05
+  feature: closeout
+  scene: ch1-s3
+  command: wa-cli draft write（作者直编后无 --base 覆写）
+  expected: 发现项 draft.human-edited（error）
+  assertion: 人工编辑保护（语料内生负向）：作者直编后 Agent 覆写被拒，diff 后以 --base 哈希承诺合并；哈希承诺由 TestNovelCorpusScript 复算。
+  evidence:
+  - kind: script
+    token: draft write stopped-at-417/ch1-s3
+    expect_code: draft.human-edited
+  - kind: structure
+    test: TestNovelCorpusScript
+- id: T-NEG-06
+  feature: assembly
+  scene: book
+  command: wa-cli assemble stopped-at-417（悬空伏笔未收束时）
+  expected: 发现项 assemble.continuity（error）
+  assertion: 组稿连续性阻塞（语料内生负向）：th-c 超期阻塞组稿，作者决策放弃后通过。
+  evidence:
+  - kind: script
+    token: assemble stopped-at-417
+    expect_code: assemble.continuity

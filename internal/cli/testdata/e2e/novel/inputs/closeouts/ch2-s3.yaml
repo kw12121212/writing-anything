@@ -1,0 +1,5 @@
+state_changes:
+  - {id: st-1, contract: sc-1, entry: item-pocketwatch, state: 换上钟楼拆件旧发条重新走动，stopped 变为 running}
+knowledge:
+  - {id: kn-04, entry: item-letter, character: char-chen-shouzhuo}
+events: [ev-watch-fixed, ev-letter-handed]

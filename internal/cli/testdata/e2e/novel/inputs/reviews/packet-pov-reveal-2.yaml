@@ -1,0 +1,4 @@
+verdicts:
+  - {item: pov-consistent, verdict: pass, note: 陈守拙单视角贯穿}
+  - {item: no-early-reveal, verdict: pass, note: 未提前透露真相与信的内容}
+  - {item: reader-knowledge, verdict: pass, note: 读者先知信的存在，运用得当}

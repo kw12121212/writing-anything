@@ -1,0 +1,4 @@
+verdicts:
+  - {item: cause-holds, verdict: pass, note: 承接倒叙的铁盒来历}
+  - {item: event-produced, verdict: pass, note: 交信与修表两个事件都发生}
+  - {item: motivation, verdict: pass, note: 韩江托信的动机可信}
