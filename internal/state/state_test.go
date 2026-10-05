@@ -1,6 +1,7 @@
 package state
 
 import (
+	"time"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -156,10 +157,10 @@ func TestConfirmRejectTransitions(t *testing.T) {
 		t.Fatal(ps)
 	}
 	// 摘要为空白。
-	if _, _, ps := Confirm(root, w, "state-1", " "); !has(ps, CodeIncompleteConfirmation, "confirmation") {
+	if _, _, ps := Confirm(root, w, "state-1", " ", time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)); !has(ps, CodeIncompleteConfirmation, "confirmation") {
 		t.Fatalf("want incomplete-confirmation, got %v", ps)
 	}
-	e, changed, ps := Confirm(root, w, "state-1", "作者确认旧伤复发")
+	e, changed, ps := Confirm(root, w, "state-1", "作者确认旧伤复发", time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC))
 	if len(ps) > 0 {
 		t.Fatal(ps)
 	}
@@ -170,11 +171,11 @@ func TestConfirmRejectTransitions(t *testing.T) {
 		t.Fatalf("changed = %v", changed)
 	}
 	// 重复确认。
-	if _, _, ps := Confirm(root, w, "state-1", "再次确认"); !has(ps, CodeAlreadyDecided, "") {
+	if _, _, ps := Confirm(root, w, "state-1", "再次确认", time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)); !has(ps, CodeAlreadyDecided, "") {
 		t.Fatalf("want already-decided, got %v", ps)
 	}
 	// 撤销已确认条目。
-	e, _, ps = Reject(root, w, "state-1", "作者撤销该变化")
+	e, _, ps = Reject(root, w, "state-1", "作者撤销该变化", time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC))
 	if len(ps) > 0 {
 		t.Fatal(ps)
 	}
@@ -182,14 +183,14 @@ func TestConfirmRejectTransitions(t *testing.T) {
 		t.Fatalf("rejected event = %+v", e)
 	}
 	// rejected 是终态。
-	if _, _, ps := Reject(root, w, "state-1", "再拒绝"); !has(ps, CodeAlreadyDecided, "") {
+	if _, _, ps := Reject(root, w, "state-1", "再拒绝", time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)); !has(ps, CodeAlreadyDecided, "") {
 		t.Fatalf("want already-decided for rejected, got %v", ps)
 	}
-	if _, _, ps := Confirm(root, w, "state-1", "再确认"); !has(ps, CodeAlreadyDecided, "") {
+	if _, _, ps := Confirm(root, w, "state-1", "再确认", time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)); !has(ps, CodeAlreadyDecided, "") {
 		t.Fatalf("want already-decided confirming rejected, got %v", ps)
 	}
 	// 条目不存在。
-	if _, _, ps := Confirm(root, w, "state-9", "x"); !has(ps, CodeNotFound, "") {
+	if _, _, ps := Confirm(root, w, "state-9", "x", time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)); !has(ps, CodeNotFound, "") {
 		t.Fatalf("want not-found, got %v", ps)
 	}
 }
@@ -199,7 +200,7 @@ func TestSetRules(t *testing.T) {
 	Propose(root, w, ProposeInput{Scene: "my-novel/scene-1", Entry: "canon-1", State: "左手旧伤复发", ID: "p-1"})
 	Propose(root, w, ProposeInput{Scene: "my-novel/scene-1", Entry: "canon-1", State: "旧伤复发，握不住灯杆", ID: "c-1"})
 	// proposed 条目自由修改。
-	e, changed, ps := Set(root, w, "p-1", SetInput{State: ptr("旧伤复发，隐痛")})
+	e, changed, ps := Set(root, w, "p-1", SetInput{State: ptr("旧伤复发，隐痛")}, time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC))
 	if len(ps) > 0 {
 		t.Fatal(ps)
 	}
@@ -207,7 +208,7 @@ func TestSetRules(t *testing.T) {
 		t.Fatalf("set proposed = %+v, changed = %v", e, changed)
 	}
 	// 取值未变不写文件。
-	_, changed, ps = Set(root, w, "p-1", SetInput{State: ptr("旧伤复发，隐痛")})
+	_, changed, ps = Set(root, w, "p-1", SetInput{State: ptr("旧伤复发，隐痛")}, time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC))
 	if len(ps) > 0 {
 		t.Fatal(ps)
 	}
@@ -215,11 +216,11 @@ func TestSetRules(t *testing.T) {
 		t.Fatalf("no-op set changed = %v", changed)
 	}
 	// confirmed 条目缺作者重新确认。
-	Confirm(root, w, "c-1", "作者确认")
-	if _, _, ps := Set(root, w, "c-1", SetInput{State: ptr("重伤")}); !has(ps, CodeIncompleteConfirmation, "confirmation") {
+	Confirm(root, w, "c-1", "作者确认", time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC))
+	if _, _, ps := Set(root, w, "c-1", SetInput{State: ptr("重伤")}, time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)); !has(ps, CodeIncompleteConfirmation, "confirmation") {
 		t.Fatalf("want incomplete-confirmation, got %v", ps)
 	}
-	e, _, ps = Set(root, w, "c-1", SetInput{State: ptr("重伤"), ConfirmedByAuthor: true, Confirmation: "作者修正为重伤"})
+	e, _, ps = Set(root, w, "c-1", SetInput{State: ptr("重伤"), ConfirmedByAuthor: true, Confirmation: "作者修正为重伤"}, time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC))
 	if len(ps) > 0 {
 		t.Fatal(ps)
 	}
@@ -227,19 +228,19 @@ func TestSetRules(t *testing.T) {
 		t.Fatalf("set confirmed = %+v", e)
 	}
 	// rejected 条目是终态。
-	Reject(root, w, "p-1", "作者拒绝")
-	if _, _, ps := Set(root, w, "p-1", SetInput{State: ptr("x")}); !has(ps, CodeAlreadyDecided, "") {
+	Reject(root, w, "p-1", "作者拒绝", time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC))
+	if _, _, ps := Set(root, w, "p-1", SetInput{State: ptr("x")}, time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)); !has(ps, CodeAlreadyDecided, "") {
 		t.Fatalf("want already-decided, got %v", ps)
 	}
 	// --scene 校验与空白 --state。
 	Propose(root, w, ProposeInput{Scene: "my-novel/scene-1", Entry: "canon-1", State: "x", ID: "p-2"})
-	if _, _, ps := Set(root, w, "p-2", SetInput{Scene: ptr("my-novel/chapter-one")}); !has(ps, CodeUnknownUnit, "scene") {
+	if _, _, ps := Set(root, w, "p-2", SetInput{Scene: ptr("my-novel/chapter-one")}, time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)); !has(ps, CodeUnknownUnit, "scene") {
 		t.Fatalf("want unknown-unit, got %v", ps)
 	}
-	if _, _, ps := Set(root, w, "p-2", SetInput{State: ptr(" ")}); !has(ps, "artifact.schema-violation", "state") {
+	if _, _, ps := Set(root, w, "p-2", SetInput{State: ptr(" ")}, time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)); !has(ps, "artifact.schema-violation", "state") {
 		t.Fatalf("want schema-violation, got %v", ps)
 	}
-	if _, _, ps := Set(root, w, "state-9", SetInput{State: ptr("x")}); !has(ps, CodeNotFound, "") {
+	if _, _, ps := Set(root, w, "state-9", SetInput{State: ptr("x")}, time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)); !has(ps, CodeNotFound, "") {
 		t.Fatalf("want not-found, got %v", ps)
 	}
 }
@@ -249,7 +250,7 @@ func TestListFilterAndOrder(t *testing.T) {
 	Propose(root, w, ProposeInput{Scene: "my-novel/scene-2", Entry: "canon-1", State: "b", ID: "ev-2"})
 	Propose(root, w, ProposeInput{Scene: "my-novel/scene-1", Entry: "canon-1", State: "a", ID: "ev-1"})
 	Propose(root, w, ProposeInput{Scene: "my-novel/scene-3", Entry: "canon-2", State: "c", ID: "ev-3"})
-	Confirm(root, w, "ev-1", "作者确认 a")
+	Confirm(root, w, "ev-1", "作者确认 a", time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC))
 	events, ps := List(root, w, false)
 	if len(ps) > 0 {
 		t.Fatal(ps)
@@ -274,8 +275,8 @@ func TestSnapshotReplay(t *testing.T) {
 	Propose(root, w, ProposeInput{Scene: "my-novel/scene-1", Entry: "canon-1", State: "左手旧伤复发", ID: "ev-1"})
 	Propose(root, w, ProposeInput{Scene: "my-novel/scene-1", Entry: "canon-2", State: "灯枯", ID: "ev-2"})
 	Propose(root, w, ProposeInput{Scene: "my-novel/scene-2", Entry: "canon-1", State: "误写的状态", ID: "ev-3"})
-	Confirm(root, w, "ev-1", "作者确认旧伤复发")
-	Reject(root, w, "ev-3", "作者撤销")
+	Confirm(root, w, "ev-1", "作者确认旧伤复发", time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC))
+	Reject(root, w, "ev-3", "作者撤销", time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC))
 	scene1 := unitByRef(t, w, "my-novel/scene-1")
 	scene2 := unitByRef(t, w, "my-novel/scene-2")
 	scene3 := unitByRef(t, w, "my-novel/scene-3")
@@ -301,7 +302,7 @@ func TestSnapshotReplay(t *testing.T) {
 
 	// 后写覆盖：scene-2 上 canon-1 的 confirmed 提议生效后，scene-3 看到的是它。
 	Propose(root, w, ProposeInput{Scene: "my-novel/scene-2", Entry: "canon-1", State: "伤愈", ID: "ev-4"})
-	Confirm(root, w, "ev-4", "作者确认伤愈")
+	Confirm(root, w, "ev-4", "作者确认伤愈", time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC))
 	items, _ = Snapshot(root, w, scene3)
 	if len(items) != 1 || items[0].State != "伤愈" || items[0].Proposal != "ev-4" {
 		t.Fatalf("later event should win, got %+v", items)
@@ -314,10 +315,10 @@ func TestSnapshotReplay(t *testing.T) {
 	}
 
 	// 修改早期条目并重新确认后，后续快照随之变化。
-	if _, _, ps := Set(root, w, "ev-1", SetInput{State: ptr("重伤"), ConfirmedByAuthor: true, Confirmation: "作者修正为重伤"}); len(ps) > 0 {
+	if _, _, ps := Set(root, w, "ev-1", SetInput{State: ptr("重伤"), ConfirmedByAuthor: true, Confirmation: "作者修正为重伤"}, time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)); len(ps) > 0 {
 		t.Fatal(ps)
 	}
-	if _, _, ps := Set(root, w, "ev-4", SetInput{State: ptr("重伤初愈"), ConfirmedByAuthor: true, Confirmation: "作者修正"}); len(ps) > 0 {
+	if _, _, ps := Set(root, w, "ev-4", SetInput{State: ptr("重伤初愈"), ConfirmedByAuthor: true, Confirmation: "作者修正"}, time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)); len(ps) > 0 {
 		t.Fatal(ps)
 	}
 	// scene-2 仍看到 ev-1 的新描述。
@@ -326,14 +327,14 @@ func TestSnapshotReplay(t *testing.T) {
 		t.Fatalf("early edit should recompute snapshot, got %+v", items)
 	}
 	// 撤销早期条目后，后续快照不再含该状态。
-	if _, _, ps := Reject(root, w, "ev-4", "作者撤销伤愈"); len(ps) > 0 {
+	if _, _, ps := Reject(root, w, "ev-4", "作者撤销伤愈", time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)); len(ps) > 0 {
 		t.Fatal(ps)
 	}
 	items, _ = Snapshot(root, w, scene3)
 	if len(items) != 1 || items[0].State != "重伤" {
 		t.Fatalf("after rejecting ev-4, scene-3 should fall back to ev-1, got %+v", items)
 	}
-	if _, _, ps := Reject(root, w, "ev-1", "作者撤销重伤"); len(ps) > 0 {
+	if _, _, ps := Reject(root, w, "ev-1", "作者撤销重伤", time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)); len(ps) > 0 {
 		t.Fatal(ps)
 	}
 	items, _ = Snapshot(root, w, scene3)
@@ -347,8 +348,8 @@ func TestSnapshotCrossChapterOrder(t *testing.T) {
 	root, w := newNovel(t)
 	Propose(root, w, ProposeInput{Scene: "my-novel/scene-3", Entry: "canon-1", State: "章二的变化", ID: "ev-late"})
 	Propose(root, w, ProposeInput{Scene: "my-novel/scene-1", Entry: "canon-1", State: "章一的变化", ID: "ev-early"})
-	Confirm(root, w, "ev-late", "作者确认")
-	Confirm(root, w, "ev-early", "作者确认")
+	Confirm(root, w, "ev-late", "作者确认", time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC))
+	Confirm(root, w, "ev-early", "作者确认", time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC))
 	items, ps := Snapshot(root, w, unitByRef(t, w, "my-novel/scene-3"))
 	if len(ps) > 0 {
 		t.Fatal(ps)
@@ -564,7 +565,7 @@ func TestAnchoredEventsRejected(t *testing.T) {
 func TestUnitRefUsedByStateAt(t *testing.T) {
 	root, w := newNovel(t)
 	Propose(root, w, ProposeInput{Scene: "my-novel/scene-1", Entry: "canon-2", State: "灯枯", ID: "ev-1"})
-	Confirm(root, w, "ev-1", "作者确认")
+	Confirm(root, w, "ev-1", "作者确认", time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC))
 	items, ps := Snapshot(root, w, unitByRef(t, w, "my-novel/scene-2"))
 	if len(ps) > 0 {
 		t.Fatal(ps)

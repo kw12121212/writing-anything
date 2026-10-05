@@ -82,7 +82,7 @@ func TestListCommentsAndImport(t *testing.T) {
 func TestResolveComment(t *testing.T) {
 	root := newWork(t)
 	w, u := unit(t, root, "my-post")
-	draft.Write(root, w, u, []byte("Agent 第一段。\n\nAgent 第二段。\n"), "")
+	draft.Write(root, w, u, []byte("Agent 第一段。\n\nAgent 第二段。\n"), "", time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC))
 	body := "Agent 第一段。\n\nAgent 第二段。<!-- @me: 这里要给数据 -->\n"
 	write(t, root, rootDraft, body)
 	id := Comments([]byte(body), nil)[0].ID
@@ -102,7 +102,7 @@ func TestResolveComment(t *testing.T) {
 	}
 	// Agent 以含批注的正文写入后（正文未被作者改过），解决批注时重建写入记录。
 	body2 := "Agent 第一段。<!-- @me(question): 为什么 -->\n\nAgent 第二段。\n"
-	draft.Write(root, w, u, []byte(body2), source.Hash([]byte(read(t, root, rootDraft))))
+	draft.Write(root, w, u, []byte(body2), source.Hash([]byte(read(t, root, rootDraft))), time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC))
 	id2 := Comments([]byte(body2), nil)[0].ID
 	_, changed, ps = Resolve(root, w, u, id2, "rejected", "", false)
 	record := ".writing-anything/works/my-post/provenance.yaml"
@@ -149,7 +149,7 @@ func TestCommentBoundaries(t *testing.T) {
 func TestDuplicateComments(t *testing.T) {
 	root := newWork(t)
 	w, u := unit(t, root, "my-post")
-	draft.Write(root, w, u, []byte("A。\n\nB。\n"), "")
+	draft.Write(root, w, u, []byte("A。\n\nB。\n"), "", time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC))
 	write(t, root, rootDraft, "A。<!-- @me: 同一句 -->\n\nB。<!-- @me: 同一句 -->\n")
 	items, _ := List(root, w, u)
 	if len(items) != 2 || items[1].ID != items[0].ID+"-2" {

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"time"
 
 	"github.com/kw12121212/writing-anything/internal/knowledge"
 	"github.com/kw12121212/writing-anything/internal/outline"
@@ -223,7 +224,7 @@ func runKnowledgeList(inv *invocation) int {
 }
 
 // runKnowledgeDecide 是 knowledge confirm 与 knowledge reject 的共同入口；name 为命令名（用于诊断的 next）。
-func runKnowledgeDecide(inv *invocation, name, verb string, decide func(root string, w *work.Work, id, confirmation string) (*knowledge.Event, []string, []workspace.Problem)) int {
+func runKnowledgeDecide(inv *invocation, name, verb string, decide func(root string, w *work.Work, id, confirmation string, now time.Time) (*knowledge.Event, []string, []workspace.Problem)) int {
 	dir := projectDir(inv)
 	res := &knowledgeEventResult{}
 	problems := workspace.Require(dir)
@@ -236,7 +237,7 @@ func runKnowledgeDecide(inv *invocation, name, verb string, decide func(root str
 			} else {
 				var e *knowledge.Event
 				var changed []string
-				if e, changed, problems = decide(dir, w, inv.args[1], inv.values["confirmation"]); e != nil {
+				if e, changed, problems = decide(dir, w, inv.args[1], inv.values["confirmation"], now()); e != nil {
 					res.Event, res.ChangedPaths = &knowledgeEventView{Work: w.ID, Event: *e}, changed
 				}
 			}
@@ -284,7 +285,7 @@ func runKnowledgeSet(inv *invocation) int {
 			in.Confirmation = inv.values["confirmation"]
 			var e *knowledge.Event
 			var changed []string
-			if e, changed, problems = knowledge.Set(dir, w, inv.args[1], in); e != nil {
+			if e, changed, problems = knowledge.Set(dir, w, inv.args[1], in, now()); e != nil {
 				res.Event, res.ChangedPaths = &knowledgeEventView{Work: w.ID, Event: *e}, changed
 			}
 		}

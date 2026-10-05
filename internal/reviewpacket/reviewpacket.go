@@ -6,6 +6,7 @@
 package reviewpacket
 
 import (
+	"maps"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -388,7 +389,7 @@ func Plan(root string, w *work.Work, u *work.Unit, dimension string, budget int,
 						}
 					}
 				}
-				for id, names := range perCharacter {
+				for _, id := range slices.Sorted(maps.Keys(perCharacter)) {
 					var slicesOf []Slice
 					for _, e := range stateEvents {
 						if e.Entry == id {
@@ -413,7 +414,6 @@ func Plan(root string, w *work.Work, u *work.Unit, dimension string, budget int,
 					f := newPacket(w.ID, DimCharacter, ch.Ref, slicesOf)
 					f.Excerpt.Text, f.Excerpt.Truncated = budgetExcerpt(body.String(), slicesOf, f.Checklist, budget)
 					packets = append(packets, f)
-					_ = names
 				}
 			}
 		case DimThread:

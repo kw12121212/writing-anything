@@ -1,6 +1,7 @@
 package draft
 
 import (
+	"time"
 	"os"
 	"path/filepath"
 	"slices"
@@ -108,7 +109,7 @@ func TestCheckUnitArtifacts(t *testing.T) {
 	addSource(t, root, "interview-ceo")
 	w, u := unit(t, root, "my-post")
 	_, child := unit(t, root, "my-post/intro")
-	if _, _, ps := Write(root, w, u, []byte("正文"), ""); len(ps) > 0 {
+	if _, _, ps := Write(root, w, u, []byte("正文"), "", time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)); len(ps) > 0 {
 		t.Fatal(ps)
 	}
 	if _, _, ps := AddClaim(root, w, child, "experience", "x", "", []string{"interview-ceo"}); len(ps) > 0 {

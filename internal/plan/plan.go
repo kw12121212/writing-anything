@@ -580,7 +580,7 @@ func stepNode(s Step) *yaml.Node {
 
 // Confirm 记录当前步骤的作者确认（确认记录（Confirmation Record））：只确认第一个未确认的步骤，要求它已有草稿；
 // 声明了规划产物（Planning Product）的步骤必须已有至少一个链接且全部可解析。返回复查后的规划、变更的路径与问题。
-func Confirm(root string, w *work.Work, unitDir string, m *catalog.Method, step, confirmation string, ensure func() ([]string, []workspace.Problem)) (*File, []string, []workspace.Problem) {
+func Confirm(root string, w *work.Work, unitDir string, m *catalog.Method, step, confirmation string, ensure func() ([]string, []workspace.Problem), now time.Time) (*File, []string, []workspace.Problem) {
 	if ps := checkText("confirmation", confirmation); len(ps) > 0 {
 		return nil, nil, ps
 	}
@@ -629,7 +629,7 @@ func Confirm(root string, w *work.Work, unitDir string, m *catalog.Method, step,
 			}
 		}
 	}
-	confirmedAt := time.Now().UTC().Format(TimeFormat)
+	confirmedAt := now.UTC().Format(TimeFormat)
 	record.ConfirmedByAuthor = true
 	record.Confirmation = &confirmation
 	record.ConfirmedAt = &confirmedAt

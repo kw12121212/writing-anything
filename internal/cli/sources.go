@@ -299,13 +299,13 @@ func runDraftWrite(inv *invocation) int {
 				base := inv.values["base"]
 				var imported []string
 				// 检查通过后、覆盖正文之前，把当前正文中的批注记入反馈，使它们不因新正文而丢失。
-				if problems = draft.Precheck(dir, w, u, content, base); problems == nil {
+				if problems = draft.Precheck(dir, w, u, content, base, now()); problems == nil {
 					imported, problems = feedback.ImportComments(dir, w, u)
 				}
 				var written *draft.Written
 				var changed []string
 				if problems == nil {
-					if written, changed, problems = draft.Write(dir, w, u, content, base); written != nil {
+					if written, changed, problems = draft.Write(dir, w, u, content, base, now()); written != nil {
 						res.Draft = &draftView{Unit: u.Ref, Path: written.Path, Paragraphs: written.Paragraphs, SHA256: written.SHA256}
 					}
 				}

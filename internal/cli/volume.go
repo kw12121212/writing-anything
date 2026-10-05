@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io"
 	"strings"
-	"time"
 
 	"github.com/kw12121212/writing-anything/internal/volume"
 	"github.com/kw12121212/writing-anything/internal/work"
@@ -54,7 +53,7 @@ func runVolumeCheckpoint(inv *invocation) int {
 		if w, u, problems = work.Resolve(dir, inv.args[0]); u != nil {
 			var v *volume.View
 			var changed []string
-			if v, changed, problems = volume.Checkpoint(dir, w, u, time.Now()); v != nil {
+			if v, changed, problems = volume.Checkpoint(dir, w, u, now()); v != nil {
 				res.Checkpoint, res.ChangedPaths = v, changed
 			}
 		}
@@ -84,7 +83,7 @@ func runVolumeConfirm(inv *invocation) int {
 			} else {
 				var v *volume.View
 				var changed []string
-				if v, changed, problems = volume.Confirm(dir, w, u, inv.values["confirmation"], time.Now()); v != nil {
+				if v, changed, problems = volume.Confirm(dir, w, u, inv.values["confirmation"], now()); v != nil {
 					res.Checkpoint, res.ChangedPaths = v, changed
 				}
 			}

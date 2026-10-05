@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"time"
 
 	"github.com/kw12121212/writing-anything/internal/outline"
 	"github.com/kw12121212/writing-anything/internal/state"
@@ -219,7 +220,7 @@ func deref(p *string) string {
 }
 
 // runStateDecide 是 state confirm 与 state reject 的共同入口；name 为命令名（用于诊断的 next）。
-func runStateDecide(inv *invocation, name, verb string, decide func(root string, w *work.Work, id, confirmation string) (*state.Event, []string, []workspace.Problem)) int {
+func runStateDecide(inv *invocation, name, verb string, decide func(root string, w *work.Work, id, confirmation string, now time.Time) (*state.Event, []string, []workspace.Problem)) int {
 	dir := projectDir(inv)
 	res := &stateEventResult{}
 	problems := workspace.Require(dir)
@@ -232,7 +233,7 @@ func runStateDecide(inv *invocation, name, verb string, decide func(root string,
 			} else {
 				var e *state.Event
 				var changed []string
-				if e, changed, problems = decide(dir, w, inv.args[1], inv.values["confirmation"]); e != nil {
+				if e, changed, problems = decide(dir, w, inv.args[1], inv.values["confirmation"], now()); e != nil {
 					res.Event, res.ChangedPaths = &stateEventView{Work: w.ID, Event: *e}, changed
 				}
 			}
@@ -277,7 +278,7 @@ func runStateSet(inv *invocation) int {
 			in.Confirmation = inv.values["confirmation"]
 			var e *state.Event
 			var changed []string
-			if e, changed, problems = state.Set(dir, w, inv.args[1], in); e != nil {
+			if e, changed, problems = state.Set(dir, w, inv.args[1], in, now()); e != nil {
 				res.Event, res.ChangedPaths = &stateEventView{Work: w.ID, Event: *e}, changed
 			}
 		}

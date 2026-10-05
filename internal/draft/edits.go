@@ -25,8 +25,7 @@ const (
 // CodeEditsAnchored 是修改记录的 edits 经由锚点、别名或合并键得到、无法追加时的错误码。已发布的错误码不得改名或复用。
 const CodeEditsAnchored = "draft.edits-anchored"
 
-// now 是记录修改对的时间，测试可以替换。
-var now = time.Now
+// recorded_at 的时钟由调用方以参数注入（与 state、plan 等一致）。。
 
 // Edit 是作者对一个 Agent 段落的修改：Before 为 Agent 写入的原文，After 为作者修改后的文字。
 type Edit struct {
@@ -117,7 +116,7 @@ func loadEdits(root, dir string) (*yaml.Node, []Edit, []byte, []workspace.Proble
 
 // appendEdits 返回把 add 中尚未记入的修改对追加到单元目录 dir 的 edits.yaml 后的内容（超过 MaxEdits 时丢弃最早的）；没有要追加的时返回 nil。
 // 已有文件时在节点树上追加，保留其他内容与注释；写出前重新解析并校验。
-func appendEdits(root, dir string, add []Edit) ([]byte, []workspace.Problem) {
+func appendEdits(root, dir string, add []Edit, now time.Time) ([]byte, []workspace.Problem) {
 	if len(add) == 0 {
 		return nil, nil
 	}
@@ -130,7 +129,7 @@ func appendEdits(root, dir string, add []Edit) ([]byte, []workspace.Problem) {
 	for _, e := range add {
 		dup := func(o Edit) bool { return o.Before == e.Before && o.After == e.After }
 		if !slices.ContainsFunc(existing, dup) && !slices.ContainsFunc(fresh, dup) {
-			e.RecordedAt = now().UTC().Format("2006-01-02T15:04:05Z")
+			e.RecordedAt = now.UTC().Format("2006-01-02T15:04:05Z")
 			fresh = append(fresh, e)
 		}
 	}

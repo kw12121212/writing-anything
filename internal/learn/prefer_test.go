@@ -1,6 +1,7 @@
 package learn
 
 import (
+	"time"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -23,7 +24,7 @@ func editedWork(t *testing.T, agent, author string) (string, *work.Work, *work.U
 		t.Fatal(ps)
 	}
 	w, u, _ := work.Resolve(root, "post")
-	if _, _, ps := draft.Write(root, w, u, []byte(agent), ""); len(ps) > 0 {
+	if _, _, ps := draft.Write(root, w, u, []byte(agent), "", time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)); len(ps) > 0 {
 		t.Fatal(ps)
 	}
 	if author != "" {
@@ -110,7 +111,7 @@ func TestPreferLoggedEditsAccumulate(t *testing.T) {
 	draftFile := filepath.Join(root, ".writing-anything/works/post/draft.md")
 	base := sha(t, draftFile)
 	for i, pair := range [][2]string{{"然后赋能业务。\n", "然后理清业务。\n"}, {"最后赋能用户。\n", "最后服务用户。\n"}} {
-		if _, _, ps := draft.Write(root, w, u, []byte(pair[0]), base); len(ps) > 0 {
+		if _, _, ps := draft.Write(root, w, u, []byte(pair[0]), base, time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)); len(ps) > 0 {
 			t.Fatalf("write %d: %+v", i, ps)
 		}
 		os.WriteFile(draftFile, []byte(pair[1]), 0o644)

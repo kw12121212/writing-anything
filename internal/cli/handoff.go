@@ -5,7 +5,6 @@ import (
 	"io"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/kw12121212/writing-anything/internal/handoff"
 	"github.com/kw12121212/writing-anything/internal/workspace"
@@ -56,7 +55,7 @@ func runHandoffWrite(inv *invocation) int {
 			if in, problems = handoff.ParseInput(data); len(problems) == 0 {
 				var v *handoff.View
 				var changed []string
-				if v, changed, problems = handoff.Write(dir, in, time.Now()); v != nil {
+				if v, changed, problems = handoff.Write(dir, in, now()); v != nil {
 					res.Note, res.ChangedPaths = v, changed
 				}
 			}

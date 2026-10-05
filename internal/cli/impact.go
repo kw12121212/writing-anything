@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io"
 	"strings"
-	"time"
 
 	"github.com/kw12121212/writing-anything/internal/impact"
 	"github.com/kw12121212/writing-anything/internal/resolve"
@@ -155,7 +154,7 @@ func runImpactMark(inv *invocation) int {
 			} else {
 				var marked []impact.FileMark
 				var changed []string
-				if marked, changed, problems = impact.MarkTarget(dir, w, target, budgetOf(dir, w), time.Now()); marked != nil {
+				if marked, changed, problems = impact.MarkTarget(dir, w, target, budgetOf(dir, w), now()); marked != nil {
 					res.Marked, res.ChangedPaths = impact.ViewAll(marked), changed
 				} else if problems == nil {
 					res.Marked, res.ChangedPaths = []impact.MarkView{}, []string{}
@@ -195,7 +194,7 @@ func runImpactClear(inv *invocation) int {
 			if problems == nil {
 				var m *impact.FileMark
 				var changed []string
-				if m, changed, problems = impact.Clear(dir, w, inv.args[0], inv.args[1], confirmation, time.Now()); m != nil {
+				if m, changed, problems = impact.Clear(dir, w, inv.args[0], inv.args[1], confirmation, now()); m != nil {
 					v := impact.ViewOf(*m)
 					res.Cleared, res.ChangedPaths = &v, changed
 				}

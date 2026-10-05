@@ -5,7 +5,6 @@ import (
 	"io"
 	"slices"
 	"strings"
-	"time"
 
 	"github.com/kw12121212/writing-anything/internal/catalog"
 	"github.com/kw12121212/writing-anything/internal/decision"
@@ -213,7 +212,7 @@ func runDecide(inv *invocation) int {
 	problems := workspace.Require(dir)
 	if problems == nil {
 		var d *decision.Decision
-		if d, problems = decision.Decide(dir, id, inv.values["option"], inv.values["answer"], inv.values["confirmation"], time.Now()); d != nil {
+		if d, problems = decision.Decide(dir, id, inv.values["option"], inv.values["answer"], inv.values["confirmation"], now()); d != nil {
 			v := decisionOf(*d)
 			res.Decision, res.ChangedPaths = &v, []string{decision.Path}
 		}

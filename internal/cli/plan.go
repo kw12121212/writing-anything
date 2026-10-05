@@ -358,7 +358,7 @@ func runPlanConfirm(inv *invocation) int {
 				} else {
 					var f *plan.File
 					var changed []string
-					if f, changed, problems = plan.Confirm(dir, w, unitDir, m, stepID, inv.values["confirmation"], ensure); f != nil {
+					if f, changed, problems = plan.Confirm(dir, w, unitDir, m, stepID, inv.values["confirmation"], ensure, now()); f != nil {
 						res.Plan = buildPlanView(m, source, plan.Path(unitDir), f)
 						res.CurrentStep = currentStepOf(res.Plan)
 						res.ChangedPaths = changed

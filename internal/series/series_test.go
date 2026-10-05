@@ -148,7 +148,7 @@ func TestCheckProblems(t *testing.T) {
 func accepted(t *testing.T, root, ref, body string) (*work.Work, *work.Unit) {
 	t.Helper()
 	w, u, _ := work.Resolve(root, ref)
-	if _, _, ps := draft.Write(root, w, u, []byte(body), ""); len(ps) > 0 {
+	if _, _, ps := draft.Write(root, w, u, []byte(body), "", time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)); len(ps) > 0 {
 		t.Fatal(ps)
 	}
 	if _, _, ps := review.Accept(root, w.UnitDir(u), "fast", review.SHA256([]byte(body)), false, "", now); len(ps) > 0 {

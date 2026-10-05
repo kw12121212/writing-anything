@@ -1,6 +1,7 @@
 package plan
 
 import (
+	"time"
 	"os"
 	"path/filepath"
 	"strings"
@@ -89,14 +90,14 @@ func TestWriteStepOrder(t *testing.T) {
 		t.Fatalf("unknown step: %v", ps)
 	}
 	// 确认后：改写已确认步骤被拒绝，重确认被拒绝，当前步可以继续写。
-	if _, _, ps = Confirm(root, w, unitDir, m, "one-sentence", "作者：可以", ensureNone); len(ps) > 0 {
+	if _, _, ps = Confirm(root, w, unitDir, m, "one-sentence", "作者：可以", ensureNone, time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)); len(ps) > 0 {
 		t.Fatalf("confirm: %v", ps)
 	}
 	_, _, ps = WriteStep(root, w, unitDir, m, StepInput{Step: "one-sentence", Text: "重写"}, ensureNone)
 	if hasCode(ps, "plan.step-order") == nil {
 		t.Fatalf("confirmed immutable: %v", ps)
 	}
-	if _, _, ps = Confirm(root, w, unitDir, m, "one-sentence", "作者：再确认", ensureNone); hasCode(ps, "plan.step-order") == nil {
+	if _, _, ps = Confirm(root, w, unitDir, m, "one-sentence", "作者：再确认", ensureNone, time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)); hasCode(ps, "plan.step-order") == nil {
 		t.Fatalf("re-confirm: %v", ps)
 	}
 	if _, _, ps = WriteStep(root, w, unitDir, m, StepInput{Step: "one-paragraph", Text: "一段话"}, ensureNone); len(ps) > 0 {
@@ -112,17 +113,17 @@ func TestWriteStepOrder(t *testing.T) {
 func TestConfirmPreconditions(t *testing.T) {
 	root, w, m := newNovel(t)
 	unitDir := work.Dir("my-novel")
-	if _, _, ps := Confirm(root, w, unitDir, m, "one-sentence", "   ", ensureNone); hasCode(ps, "plan.incomplete-confirmation") == nil {
+	if _, _, ps := Confirm(root, w, unitDir, m, "one-sentence", "   ", ensureNone, time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)); hasCode(ps, "plan.incomplete-confirmation") == nil {
 		t.Fatalf("blank confirmation: %v", ps)
 	}
-	_, _, ps := Confirm(root, w, unitDir, m, "one-sentence", "作者：好", ensureNone)
+	_, _, ps := Confirm(root, w, unitDir, m, "one-sentence", "作者：好", ensureNone, time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC))
 	if hasCode(ps, "plan.not-drafted") == nil {
 		t.Fatalf("no plan yet: %v", ps)
 	}
 	if _, _, ps = WriteStep(root, w, unitDir, m, StepInput{Step: "one-sentence", Text: "一句话"}, ensureNone); len(ps) > 0 {
 		t.Fatal(ps)
 	}
-	f, _, ps := Confirm(root, w, unitDir, m, "one-sentence", "作者：好", ensureNone)
+	f, _, ps := Confirm(root, w, unitDir, m, "one-sentence", "作者：好", ensureNone, time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC))
 	if len(ps) > 0 {
 		t.Fatalf("confirm: %v", ps)
 	}
@@ -131,7 +132,7 @@ func TestConfirmPreconditions(t *testing.T) {
 		t.Fatalf("confirmed step = %+v", step)
 	}
 	// 下一步没有草稿时确认报告 plan.not-drafted。
-	if _, _, ps = Confirm(root, w, unitDir, m, "one-paragraph", "作者：好", ensureNone); hasCode(ps, "plan.not-drafted") == nil {
+	if _, _, ps = Confirm(root, w, unitDir, m, "one-paragraph", "作者：好", ensureNone, time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)); hasCode(ps, "plan.not-drafted") == nil {
 		t.Fatalf("next not drafted: %v", ps)
 	}
 }
@@ -154,13 +155,13 @@ func TestCharacterProductAndSources(t *testing.T) {
 	if _, _, ps = WriteStep(root, w, unitDir, m, StepInput{Step: "one-sentence", Text: "一句话"}, ensureNone); len(ps) > 0 {
 		t.Fatal(ps)
 	}
-	if _, _, ps = Confirm(root, w, unitDir, m, "one-sentence", "作者：好", ensureNone); len(ps) > 0 {
+	if _, _, ps = Confirm(root, w, unitDir, m, "one-sentence", "作者：好", ensureNone, time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)); len(ps) > 0 {
 		t.Fatal(ps)
 	}
 	if _, _, ps = WriteStep(root, w, unitDir, m, StepInput{Step: "one-paragraph", Text: "一段话"}, ensureNone); len(ps) > 0 {
 		t.Fatal(ps)
 	}
-	if _, _, ps = Confirm(root, w, unitDir, m, "one-paragraph", "作者：好", ensureNone); len(ps) > 0 {
+	if _, _, ps = Confirm(root, w, unitDir, m, "one-paragraph", "作者：好", ensureNone, time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)); len(ps) > 0 {
 		t.Fatal(ps)
 	}
 	// 链接指向不存在的条目。
@@ -175,14 +176,14 @@ func TestCharacterProductAndSources(t *testing.T) {
 	if _, _, ps = WriteStep(root, w, unitDir, m, StepInput{Step: "character-sketch", Text: "人物概要"}, ensureNone); len(ps) > 0 {
 		t.Fatal(ps)
 	}
-	_, _, ps = Confirm(root, w, unitDir, m, "character-sketch", "作者：好", ensureNone)
+	_, _, ps = Confirm(root, w, unitDir, m, "character-sketch", "作者：好", ensureNone, time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC))
 	if p := hasCode(ps, "plan.missing-links"); p == nil || p.Field != "links" {
 		t.Fatalf("missing links: %v", ps)
 	}
 	if _, _, ps = WriteStep(root, w, unitDir, m, StepInput{Step: "character-sketch", Text: "人物概要", Links: []string{"canon-1"}}, ensureNone); len(ps) > 0 {
 		t.Fatal(ps)
 	}
-	if _, _, ps = Confirm(root, w, unitDir, m, "character-sketch", "作者：好", ensureNone); len(ps) > 0 {
+	if _, _, ps = Confirm(root, w, unitDir, m, "character-sketch", "作者：好", ensureNone, time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)); len(ps) > 0 {
 		t.Fatalf("confirm with link: %v", ps)
 	}
 }
@@ -203,7 +204,7 @@ func TestSceneProducts(t *testing.T) {
 		if _, _, ps := WriteStep(root, w, unitDir, m, in, ensureNone); len(ps) > 0 {
 			t.Fatalf("step %s: %v", s, ps)
 		}
-		if _, _, ps := Confirm(root, w, unitDir, m, s, "作者：好", ensureNone); len(ps) > 0 {
+		if _, _, ps := Confirm(root, w, unitDir, m, s, "作者：好", ensureNone, time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)); len(ps) > 0 {
 			t.Fatalf("confirm %s: %v", s, ps)
 		}
 	}
@@ -230,7 +231,7 @@ func TestSceneProducts(t *testing.T) {
 	if _, _, ps = WriteStep(root, w, unitDir, m, StepInput{Step: "scene-list", Text: "场景表", Links: []string{"my-novel/scene-1"}}, ensureNone); len(ps) > 0 {
 		t.Fatal(ps)
 	}
-	if _, _, ps = Confirm(root, w, unitDir, m, "scene-list", "作者：好", ensureNone); len(ps) > 0 {
+	if _, _, ps = Confirm(root, w, unitDir, m, "scene-list", "作者：好", ensureNone, time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)); len(ps) > 0 {
 		t.Fatal(ps)
 	}
 	// 场景详述：链接形如 <场景单元引用>:<大纲节 id>，该节要声明契约字段。
@@ -243,7 +244,7 @@ func TestSceneProducts(t *testing.T) {
 	if _, _, ps = WriteStep(root, w, unitDir, m, StepInput{Step: "scene-details", Text: "场景详述", Links: []string{"my-novel/scene-1:sc1"}}, ensureNone); len(ps) > 0 {
 		t.Fatal(ps)
 	}
-	if _, _, ps = Confirm(root, w, unitDir, m, "scene-details", "作者：好", ensureNone); len(ps) > 0 {
+	if _, _, ps = Confirm(root, w, unitDir, m, "scene-details", "作者：好", ensureNone, time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)); len(ps) > 0 {
 		t.Fatal(ps)
 	}
 }
@@ -257,7 +258,7 @@ func TestRedo(t *testing.T) {
 		if _, _, ps := WriteStep(root, w, unitDir, m, StepInput{Step: s, Text: s}, ensureNone); len(ps) > 0 {
 			t.Fatal(ps)
 		}
-		if _, _, ps := Confirm(root, w, unitDir, m, s, "作者：好", ensureNone); len(ps) > 0 {
+		if _, _, ps := Confirm(root, w, unitDir, m, s, "作者：好", ensureNone, time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)); len(ps) > 0 {
 			t.Fatal(ps)
 		}
 	}

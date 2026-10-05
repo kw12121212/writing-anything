@@ -1,6 +1,7 @@
 package closeout
 
 import (
+	"time"
 	"go.yaml.in/yaml/v3"
 	"os"
 	"path/filepath"
@@ -492,10 +493,10 @@ func TestAcceptanceBlockers(t *testing.T) {
 		t.Fatalf("problems = %+v, want %s", ps, CodePendingProposals)
 	}
 	// 作者处理全部提议后不再阻塞。
-	if _, _, ps := state.Confirm(root, w, "state-1", "作者确认灯芯易主"); len(ps) != 0 {
+	if _, _, ps := state.Confirm(root, w, "state-1", "作者确认灯芯易主", time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)); len(ps) != 0 {
 		t.Fatal(ps)
 	}
-	if _, _, ps := knowledge.Confirm(root, w, "know-1", "作者确认读者知情"); len(ps) != 0 {
+	if _, _, ps := knowledge.Confirm(root, w, "know-1", "作者确认读者知情", time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)); len(ps) != 0 {
 		t.Fatal(ps)
 	}
 	if ps := AcceptanceBlockers(root, w, u); len(ps) != 0 {

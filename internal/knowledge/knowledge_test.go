@@ -1,6 +1,7 @@
 package knowledge
 
 import (
+	"time"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -188,10 +189,10 @@ func TestConfirmRejectTransitions(t *testing.T) {
 		t.Fatal(ps)
 	}
 	// 摘要为空白。
-	if _, _, ps := Confirm(root, w, "know-1", " "); !has(ps, CodeIncompleteConfirmation, "confirmation") {
+	if _, _, ps := Confirm(root, w, "know-1", " ", time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)); !has(ps, CodeIncompleteConfirmation, "confirmation") {
 		t.Fatalf("want incomplete-confirmation, got %v", ps)
 	}
-	e, changed, ps := Confirm(root, w, "know-1", "作者确认守灯人得知灯油规则")
+	e, changed, ps := Confirm(root, w, "know-1", "作者确认守灯人得知灯油规则", time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC))
 	if len(ps) > 0 {
 		t.Fatal(ps)
 	}
@@ -202,11 +203,11 @@ func TestConfirmRejectTransitions(t *testing.T) {
 		t.Fatalf("changed = %v", changed)
 	}
 	// 重复确认。
-	if _, _, ps := Confirm(root, w, "know-1", "再次确认"); !has(ps, CodeAlreadyDecided, "") {
+	if _, _, ps := Confirm(root, w, "know-1", "再次确认", time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)); !has(ps, CodeAlreadyDecided, "") {
 		t.Fatalf("want already-decided, got %v", ps)
 	}
 	// 撤销已确认条目。
-	e, _, ps = Reject(root, w, "know-1", "作者撤销该知情")
+	e, _, ps = Reject(root, w, "know-1", "作者撤销该知情", time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC))
 	if len(ps) > 0 {
 		t.Fatal(ps)
 	}
@@ -214,14 +215,14 @@ func TestConfirmRejectTransitions(t *testing.T) {
 		t.Fatalf("rejected event = %+v", e)
 	}
 	// rejected 是终态。
-	if _, _, ps := Reject(root, w, "know-1", "再拒绝"); !has(ps, CodeAlreadyDecided, "") {
+	if _, _, ps := Reject(root, w, "know-1", "再拒绝", time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)); !has(ps, CodeAlreadyDecided, "") {
 		t.Fatalf("want already-decided for rejected, got %v", ps)
 	}
-	if _, _, ps := Confirm(root, w, "know-1", "再确认"); !has(ps, CodeAlreadyDecided, "") {
+	if _, _, ps := Confirm(root, w, "know-1", "再确认", time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)); !has(ps, CodeAlreadyDecided, "") {
 		t.Fatalf("want already-decided confirming rejected, got %v", ps)
 	}
 	// 条目不存在。
-	if _, _, ps := Confirm(root, w, "know-9", "x"); !has(ps, CodeNotFound, "") {
+	if _, _, ps := Confirm(root, w, "know-9", "x", time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)); !has(ps, CodeNotFound, "") {
 		t.Fatalf("want not-found, got %v", ps)
 	}
 }
@@ -231,7 +232,7 @@ func TestSetRules(t *testing.T) {
 	Propose(root, w, ProposeInput{Scene: "my-novel/scene-1", Entry: "canon-2", Character: "canon-1", ID: "p-1"})
 	Propose(root, w, ProposeInput{Scene: "my-novel/scene-1", Entry: "canon-2", Character: Reader, ID: "c-1"})
 	// proposed 条目自由修改。
-	e, changed, ps := Set(root, w, "p-1", SetInput{Character: ptr("reader")})
+	e, changed, ps := Set(root, w, "p-1", SetInput{Character: ptr("reader")}, time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC))
 	if len(ps) > 0 {
 		t.Fatal(ps)
 	}
@@ -239,7 +240,7 @@ func TestSetRules(t *testing.T) {
 		t.Fatalf("set proposed = %+v, changed = %v", e, changed)
 	}
 	// 取值未变不写文件。
-	_, changed, ps = Set(root, w, "p-1", SetInput{Character: ptr(Reader)})
+	_, changed, ps = Set(root, w, "p-1", SetInput{Character: ptr(Reader)}, time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC))
 	if len(ps) > 0 {
 		t.Fatal(ps)
 	}
@@ -247,11 +248,11 @@ func TestSetRules(t *testing.T) {
 		t.Fatalf("no-op set changed = %v", changed)
 	}
 	// confirmed 条目缺作者重新确认。
-	Confirm(root, w, "c-1", "作者确认")
-	if _, _, ps := Set(root, w, "c-1", SetInput{Entry: ptr("canon-1")}); !has(ps, CodeIncompleteConfirmation, "confirmation") {
+	Confirm(root, w, "c-1", "作者确认", time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC))
+	if _, _, ps := Set(root, w, "c-1", SetInput{Entry: ptr("canon-1")}, time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)); !has(ps, CodeIncompleteConfirmation, "confirmation") {
 		t.Fatalf("want incomplete-confirmation, got %v", ps)
 	}
-	e, _, ps = Set(root, w, "c-1", SetInput{Entry: ptr("canon-1"), ConfirmedByAuthor: true, Confirmation: "作者改绑条目"})
+	e, _, ps = Set(root, w, "c-1", SetInput{Entry: ptr("canon-1"), ConfirmedByAuthor: true, Confirmation: "作者改绑条目"}, time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC))
 	if len(ps) > 0 {
 		t.Fatal(ps)
 	}
@@ -259,22 +260,22 @@ func TestSetRules(t *testing.T) {
 		t.Fatalf("set confirmed = %+v", e)
 	}
 	// rejected 条目是终态。
-	Reject(root, w, "p-1", "作者拒绝")
-	if _, _, ps := Set(root, w, "p-1", SetInput{Character: ptr("canon-1")}); !has(ps, CodeAlreadyDecided, "") {
+	Reject(root, w, "p-1", "作者拒绝", time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC))
+	if _, _, ps := Set(root, w, "p-1", SetInput{Character: ptr("canon-1")}, time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)); !has(ps, CodeAlreadyDecided, "") {
 		t.Fatalf("want already-decided, got %v", ps)
 	}
 	// --scene / --entry / --character 参数校验。
 	Propose(root, w, ProposeInput{Scene: "my-novel/scene-1", Entry: "canon-2", Character: "canon-1", ID: "p-2"})
-	if _, _, ps := Set(root, w, "p-2", SetInput{Scene: ptr("my-novel/chapter-one")}); !has(ps, CodeUnknownUnit, "scene") {
+	if _, _, ps := Set(root, w, "p-2", SetInput{Scene: ptr("my-novel/chapter-one")}, time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)); !has(ps, CodeUnknownUnit, "scene") {
 		t.Fatalf("want unknown-unit, got %v", ps)
 	}
-	if _, _, ps := Set(root, w, "p-2", SetInput{Entry: ptr("canon-9")}); !has(ps, CodeUnknownEntry, "entry") {
+	if _, _, ps := Set(root, w, "p-2", SetInput{Entry: ptr("canon-9")}, time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)); !has(ps, CodeUnknownEntry, "entry") {
 		t.Fatalf("want unknown-entry, got %v", ps)
 	}
-	if _, _, ps := Set(root, w, "p-2", SetInput{Character: ptr("canon-2")}); !has(ps, CodeUnknownCharacter, "character") {
+	if _, _, ps := Set(root, w, "p-2", SetInput{Character: ptr("canon-2")}, time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)); !has(ps, CodeUnknownCharacter, "character") {
 		t.Fatalf("want unknown-character, got %v", ps)
 	}
-	if _, _, ps := Set(root, w, "know-9", SetInput{Character: ptr(Reader)}); !has(ps, CodeNotFound, "") {
+	if _, _, ps := Set(root, w, "know-9", SetInput{Character: ptr(Reader)}, time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)); !has(ps, CodeNotFound, "") {
 		t.Fatalf("want not-found, got %v", ps)
 	}
 }
@@ -284,7 +285,7 @@ func TestListFilterAndOrder(t *testing.T) {
 	Propose(root, w, ProposeInput{Scene: "my-novel/scene-2", Entry: "canon-2", Character: "canon-1", ID: "ev-2"})
 	Propose(root, w, ProposeInput{Scene: "my-novel/scene-1", Entry: "canon-2", Character: Reader, ID: "ev-1"})
 	Propose(root, w, ProposeInput{Scene: "my-novel/scene-3", Entry: "canon-2", Character: "canon-1", ID: "ev-3"})
-	Confirm(root, w, "ev-1", "作者确认 a")
+	Confirm(root, w, "ev-1", "作者确认 a", time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC))
 	events, ps := List(root, w, false)
 	if len(ps) > 0 {
 		t.Fatal(ps)
@@ -311,8 +312,8 @@ func TestKnownAtReplay(t *testing.T) {
 	Propose(root, w, ProposeInput{Scene: "my-novel/scene-1", Entry: "canon-2", Character: "canon-1", ID: "ev-1"})
 	Propose(root, w, ProposeInput{Scene: "my-novel/scene-1", Entry: "canon-2", Character: Reader, ID: "ev-r"})
 	Propose(root, w, ProposeInput{Scene: "my-novel/scene-2", Entry: "canon-2", Character: "canon-1", ID: "ev-2"})
-	Confirm(root, w, "ev-1", "作者确认守灯人得知")
-	Confirm(root, w, "ev-r", "作者确认读者得知")
+	Confirm(root, w, "ev-1", "作者确认守灯人得知", time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC))
+	Confirm(root, w, "ev-r", "作者确认读者得知", time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC))
 	scene1 := unitByRef(t, w, "my-novel/scene-1")
 	scene2 := unitByRef(t, w, "my-novel/scene-2")
 	scene3 := unitByRef(t, w, "my-novel/scene-3")
@@ -337,7 +338,7 @@ func TestKnownAtReplay(t *testing.T) {
 	}
 
 	// 重复登记不改变结果：earliest wins——scene-2 上 canon-1 再次获知 canon-2（confirmed）。
-	Confirm(root, w, "ev-2", "作者确认再次获知")
+	Confirm(root, w, "ev-2", "作者确认再次获知", time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC))
 	items, _ = KnownAt(root, w, scene3, "canon-1")
 	if len(items) != 1 || items[0].Event != "ev-1" || items[0].Scene != "my-novel/scene-1" {
 		t.Fatalf("earliest event should win, got %+v", items)
@@ -359,7 +360,7 @@ func TestKnownAtReplay(t *testing.T) {
 	}
 	// name 来自设定集：canon-1（人物）获知 canon-1 自身（人物条目）时 name 为守灯人。
 	Propose(root, w, ProposeInput{Scene: "my-novel/scene-1", Entry: "canon-1", Character: "canon-1", ID: "ev-self"})
-	Confirm(root, w, "ev-self", "作者确认自知")
+	Confirm(root, w, "ev-self", "作者确认自知", time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC))
 	items, _ = KnownAt(root, w, scene3, "canon-1")
 	if len(items) != 2 || items[0].Entry != "canon-1" || items[0].Name == nil || *items[0].Name != "守灯人" {
 		t.Fatalf("items with name = %+v", items)
@@ -367,7 +368,7 @@ func TestKnownAtReplay(t *testing.T) {
 
 	// 修改早期条目并重新确认后，已知列表随之变化：ev-1 的获知者改为 reader，canon-2 回落到 ev-2，
 	// canon-1 自身（ev-self）不受影响。
-	if _, _, ps := Set(root, w, "ev-1", SetInput{Character: ptr(Reader), ConfirmedByAuthor: true, Confirmation: "作者改判为读者获知"}); len(ps) > 0 {
+	if _, _, ps := Set(root, w, "ev-1", SetInput{Character: ptr(Reader), ConfirmedByAuthor: true, Confirmation: "作者改判为读者获知"}, time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)); len(ps) > 0 {
 		t.Fatal(ps)
 	}
 	items, _ = KnownAt(root, w, scene3, "canon-1")
@@ -375,7 +376,7 @@ func TestKnownAtReplay(t *testing.T) {
 		t.Fatalf("after re-assigning ev-1 to reader, canon-1 should know canon-1 via ev-self and canon-2 via ev-2, got %+v", items)
 	}
 	// 撤销早期条目后，已知列表不再含该条目带来的信息。
-	if _, _, ps := Reject(root, w, "ev-r", "作者撤销读者获知"); len(ps) > 0 {
+	if _, _, ps := Reject(root, w, "ev-r", "作者撤销读者获知", time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)); len(ps) > 0 {
 		t.Fatal(ps)
 	}
 	readerItems, _ = KnownAt(root, w, scene3, Reader)
@@ -389,8 +390,8 @@ func TestKnownAtCrossChapterOrder(t *testing.T) {
 	root, w := newNovel(t)
 	Propose(root, w, ProposeInput{Scene: "my-novel/scene-3", Entry: "canon-2", Character: "canon-1", ID: "ev-late"})
 	Propose(root, w, ProposeInput{Scene: "my-novel/scene-1", Entry: "canon-2", Character: "canon-1", ID: "ev-early"})
-	Confirm(root, w, "ev-late", "作者确认")
-	Confirm(root, w, "ev-early", "作者确认")
+	Confirm(root, w, "ev-late", "作者确认", time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC))
+	Confirm(root, w, "ev-early", "作者确认", time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC))
 	items, ps := KnownAt(root, w, unitByRef(t, w, "my-novel/scene-3"), "canon-1")
 	if len(ps) > 0 {
 		t.Fatal(ps)
@@ -636,9 +637,9 @@ events:
 		name string
 		run  func() []workspace.Problem
 	}{
-		{"confirm", func() []workspace.Problem { _, _, ps := Confirm(root, w, "know-1", "作者确认"); return ps }},
-		{"reject", func() []workspace.Problem { _, _, ps := Reject(root, w, "know-1", "作者确认"); return ps }},
-		{"set", func() []workspace.Problem { _, _, ps := Set(root, w, "know-1", SetInput{Character: ptr(Reader)}); return ps }},
+		{"confirm", func() []workspace.Problem { _, _, ps := Confirm(root, w, "know-1", "作者确认", time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)); return ps }},
+		{"reject", func() []workspace.Problem { _, _, ps := Reject(root, w, "know-1", "作者确认", time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)); return ps }},
+		{"set", func() []workspace.Problem { _, _, ps := Set(root, w, "know-1", SetInput{Character: ptr(Reader)}, time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)); return ps }},
 	} {
 		if ps := call.run(); !has(ps, CodeAnchoredValue, "events[0]") {
 			t.Fatalf("%s: want knowledge.anchored-value on the target entry, got %v", call.name, ps)

@@ -5,6 +5,7 @@
 package draft
 
 import (
+	"time"
 	"bytes"
 	"errors"
 	"fmt"
@@ -117,7 +118,7 @@ type Written struct {
 
 // Precheck 执行 Write 在修改任何文件之前的全部检查：内容非空、段落数不超过上限、Guard。命令层在记入批注等写入
 // 之前调用它，保证检查失败时不修改任何文件。
-func Precheck(root string, w *work.Work, u *work.Unit, content []byte, base string) []workspace.Problem {
+func Precheck(root string, w *work.Work, u *work.Unit, content []byte, base string, now time.Time) []workspace.Problem {
 	if strings.TrimSpace(string(content)) == "" {
 		return []workspace.Problem{errorAt(CodeEmpty, "", "", "正文为空或只含空白，没有可以写入的内容")}
 	}
@@ -141,7 +142,7 @@ func Precheck(root string, w *work.Work, u *work.Unit, content []byte, base stri
 	if len(ps) > 0 {
 		return ps
 	}
-	_, ps = appendEdits(root, dir, pairs(paras, rec))
+	_, ps = appendEdits(root, dir, pairs(paras, rec), now)
 	return ps
 }
 
@@ -176,8 +177,8 @@ func Guard(root string, w *work.Work, u *work.Unit, content []byte, base string)
 // Write 把 content 逐字节写入单元 u 的 draft.md，并写出写入记录；写入前执行 Guard。新正文中与写入前正文里出处为
 // human 或 agent-draft-human-edited 的段落哈希相同的段落保留该出处，其余为 agent。返回写入结果与变更的路径（新建的
 // 单元目录与内容变化的文件）；正文与记录都不变时不写文件。
-func Write(root string, w *work.Work, u *work.Unit, content []byte, base string) (*Written, []string, []workspace.Problem) {
-	if ps := Precheck(root, w, u, content, base); len(ps) > 0 {
+func Write(root string, w *work.Work, u *work.Unit, content []byte, base string, now time.Time) (*Written, []string, []workspace.Problem) {
+	if ps := Precheck(root, w, u, content, base, now); len(ps) > 0 {
 		return nil, nil, ps
 	}
 	dir := w.UnitDir(u)
@@ -191,7 +192,7 @@ func Write(root string, w *work.Work, u *work.Unit, content []byte, base string)
 	if len(ps) > 0 {
 		return nil, nil, ps
 	}
-	editsData, ps := appendEdits(root, dir, pairs(oldParas, rec))
+	editsData, ps := appendEdits(root, dir, pairs(oldParas, rec), now)
 	if len(ps) > 0 {
 		return nil, nil, ps
 	}

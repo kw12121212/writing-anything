@@ -1,6 +1,7 @@
 package draft
 
 import (
+	"time"
 	"os"
 	"path/filepath"
 	"slices"
@@ -14,7 +15,7 @@ import (
 func TestRecordKeepsAgentText(t *testing.T) {
 	root, _ := newWork(t)
 	w, u := unit(t, root, "my-post")
-	if _, _, ps := Write(root, w, u, []byte("第一段。\n\n第二段。\n"), ""); len(ps) > 0 {
+	if _, _, ps := Write(root, w, u, []byte("第一段。\n\n第二段。\n"), "", time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)); len(ps) > 0 {
 		t.Fatal(ps)
 	}
 	rec, _ := loadRecord(root, w.UnitDir(u))
@@ -23,7 +24,7 @@ func TestRecordKeepsAgentText(t *testing.T) {
 	}
 	// 作者加的段落保留为 human，不记原文。
 	write(t, root, ".writing-anything/works/my-post/draft.md", "第一段。\n\n第二段。\n\n作者的。\n")
-	if _, _, ps := Write(root, w, u, []byte("第一段。\n\n第二段改。\n\n作者的。\n"), sha(t, root, ".writing-anything/works/my-post/draft.md")); len(ps) > 0 {
+	if _, _, ps := Write(root, w, u, []byte("第一段。\n\n第二段改。\n\n作者的。\n"), sha(t, root, ".writing-anything/works/my-post/draft.md"), time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)); len(ps) > 0 {
 		t.Fatal(ps)
 	}
 	rec, _ = loadRecord(root, w.UnitDir(u))
@@ -45,12 +46,12 @@ func TestEditsLogged(t *testing.T) {
 	root, _ := newWork(t)
 	w, u := unit(t, root, "my-post")
 	draftRel, editsRel := ".writing-anything/works/my-post/draft.md", ".writing-anything/works/my-post/edits.yaml"
-	Write(root, w, u, []byte("首先，我们需要赋能团队。\n\n第二段。\n"), "")
+	Write(root, w, u, []byte("首先，我们需要赋能团队。\n\n第二段。\n"), "", time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC))
 	write(t, root, draftRel, "先让团队上手。\n\n第二段。\n")
 	if ps, _ := Pairs(root, w, u); len(ps) != 1 || ps[0].Before != "首先，我们需要赋能团队。" || ps[0].After != "先让团队上手。" {
 		t.Fatalf("pairs = %+v", ps)
 	}
-	_, changed, ps := Write(root, w, u, []byte("先让团队上手。\n\n第二段改写。\n"), sha(t, root, draftRel))
+	_, changed, ps := Write(root, w, u, []byte("先让团队上手。\n\n第二段改写。\n"), sha(t, root, draftRel), time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC))
 	if len(ps) > 0 || !slices.Contains(changed, editsRel) {
 		t.Fatalf("write: %v %+v", changed, ps)
 	}
@@ -64,7 +65,7 @@ func TestEditsLogged(t *testing.T) {
 	}
 	// 没有新的修改：不追加、不改动 edits.yaml。
 	before, _ := os.ReadFile(filepath.Join(root, editsRel))
-	_, changed, _ = Write(root, w, u, []byte("先让团队上手。\n\n又一版。\n"), "")
+	_, changed, _ = Write(root, w, u, []byte("先让团队上手。\n\n又一版。\n"), "", time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC))
 	if slices.Contains(changed, editsRel) {
 		t.Fatalf("edits rewritten: %v", changed)
 	}
@@ -84,7 +85,7 @@ func TestAppendEditsLimitAndDedup(t *testing.T) {
 		add = append(add, Edit{Before: "前" + strings.Repeat("x", i+1), After: "后"})
 	}
 	add = append(add, add[0]) // 同一对只记一次
-	data, ps := appendEdits(root, dir, add)
+	data, ps := appendEdits(root, dir, add, time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC))
 	if len(ps) > 0 {
 		t.Fatal(ps)
 	}
@@ -93,11 +94,11 @@ func TestAppendEditsLimitAndDedup(t *testing.T) {
 	if len(edits) != MaxEdits || edits[0].Before != "前"+strings.Repeat("x", 6) {
 		t.Fatalf("edits = %d, first %q", len(edits), edits[0].Before)
 	}
-	if data, ps := appendEdits(root, dir, add[len(add)-3:len(add)-1]); data != nil || len(ps) > 0 {
+	if data, ps := appendEdits(root, dir, add[len(add)-3:len(add)-1], time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)); data != nil || len(ps) > 0 {
 		t.Fatalf("existing pairs appended again: %v %+v", data != nil, ps)
 	}
 	write(t, root, dir+"/edits.yaml", "schema_version: 1\nedits: &e []\n")
-	if _, ps := appendEdits(root, dir, add[:1]); len(ps) != 1 || ps[0].Code != "draft.edits-anchored" {
+	if _, ps := appendEdits(root, dir, add[:1], time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)); len(ps) != 1 || ps[0].Code != "draft.edits-anchored" {
 		t.Fatalf("anchored: %+v", ps)
 	}
 	write(t, root, dir+"/edits.yaml", "edits: [")

@@ -61,7 +61,7 @@ var Statuses = map[string]string{
 }
 
 // timestamp 返回决定时间的统一格式（UTC，RFC 3339）。
-func timestamp() string { return time.Now().UTC().Format(time.RFC3339) }
+func timestamp(now time.Time) string { return now.UTC().Format(time.RFC3339) }
 
 // Event 是知情表中的一条知情事件（Knowledge Event）；confirmation 与 decided_at 未设置时为 nil。
 type Event struct {
@@ -423,7 +423,7 @@ type SetInput struct {
 // 照常修改；confirmed 条目必须同时给出 --confirmed-by-author 与非空白的 --confirmation（改动会改变已生效的
 // 知情），写入后 confirmation 与 decided_at 更新为本次取值；rejected 为终态，报告 knowledge.already-decided。
 // 取值未变时不写文件。返回修改后的条目、变更的路径与其他条目悬空引用的 warning；出错时不修改文件。
-func Set(root string, w *work.Work, id string, in SetInput) (*Event, []string, []workspace.Problem) {
+func Set(root string, w *work.Work, id string, in SetInput, now time.Time) (*Event, []string, []workspace.Problem) {
 	for _, f := range []struct {
 		field string
 		v     *string
@@ -499,8 +499,8 @@ func Set(root string, w *work.Work, id string, in SetInput) (*Event, []string, [
 	}
 	if entry.Status == StatusConfirmed && in.ConfirmedByAuthor {
 		next.Confirmation = &in.Confirmation
-		now := timestamp()
-		next.DecidedAt = &now
+		stamp := timestamp(now)
+		next.DecidedAt = &stamp
 	}
 	before := schema.Decode(doc)
 	if p := editEvent(events, at, rel, next); p != nil {
@@ -528,8 +528,8 @@ func Set(root string, w *work.Work, id string, in SetInput) (*Event, []string, [
 // Confirm 把作品 w 知情表中 id 的条目确认为 confirmed 并写入确认记录（confirmation 与 decided_at）。
 // 条目必须是 proposed；摘要为空白时报告 knowledge.incomplete-confirmation。返回修改后的条目、变更的路径与其他
 // 条目悬空引用的 warning；出错时不修改文件。
-func Confirm(root string, w *work.Work, id, confirmation string) (*Event, []string, []workspace.Problem) {
-	return decide(root, w, id, confirmation, StatusConfirmed,
+func Confirm(root string, w *work.Work, id, confirmation string, now time.Time) (*Event, []string, []workspace.Problem) {
+	return decide(root, w, id, confirmation, now, StatusConfirmed,
 		"条目 "+id+" 已是 "+StatusConfirmed+"，不能重复确认",
 		"作者确认必须给出 --confirmed-by-author 与非空白的 --confirmation（作者原话摘要）")
 }
@@ -537,14 +537,14 @@ func Confirm(root string, w *work.Work, id, confirmation string) (*Event, []stri
 // Reject 把作品 w 知情表中 id 的条目改为 rejected 并写入确认记录：条目为 proposed 时即作者拒绝该提议，为
 // confirmed 时即作者撤销已生效的知情事件（此后该获知者的已知列表不再含该条目带来的信息）。已是 rejected 时
 // 报告 knowledge.already-decided。其余同 Confirm。
-func Reject(root string, w *work.Work, id, confirmation string) (*Event, []string, []workspace.Problem) {
-	return decide(root, w, id, confirmation, StatusRejected,
+func Reject(root string, w *work.Work, id, confirmation string, now time.Time) (*Event, []string, []workspace.Problem) {
+	return decide(root, w, id, confirmation, now, StatusRejected,
 		"条目 "+id+" 已被作者拒绝（rejected），是终态；重新登记请用 wa-cli knowledge propose 提交新条目",
 		"作者拒绝或撤销必须给出 --confirmed-by-author 与非空白的 --confirmation（作者原话摘要）")
 }
 
 // decide 是 confirm 与 reject 的共同实现：status 为 to（confirmed 或 rejected），拒绝重复决定与终态操作。
-func decide(root string, w *work.Work, id, confirmation, to string, already, incomplete string) (*Event, []string, []workspace.Problem) {
+func decide(root string, w *work.Work, id, confirmation string, now time.Time, to, already, incomplete string) (*Event, []string, []workspace.Problem) {
 	if strings.TrimSpace(confirmation) == "" {
 		return nil, nil, []workspace.Problem{{Code: CodeIncompleteConfirmation, Severity: workspace.SeverityError, Field: "confirmation", Message: incomplete}}
 	}
@@ -576,8 +576,8 @@ func decide(root string, w *work.Work, id, confirmation, to string, already, inc
 	}
 	entry.Status = to
 	entry.Confirmation = &confirmation
-	now := timestamp()
-	entry.DecidedAt = &now
+	stamp := timestamp(now)
+	entry.DecidedAt = &stamp
 	if p := editEvent(events, at, rel, entry); p != nil {
 		return nil, nil, []workspace.Problem{*p}
 	}

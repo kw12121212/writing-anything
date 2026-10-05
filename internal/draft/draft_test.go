@@ -148,7 +148,7 @@ func TestWriteAndProvenance(t *testing.T) {
 	root, _ := newWork(t)
 	w, u := unit(t, root, "my-post")
 	body := "第一段。\n\n第二段。\n\n第三段。\n"
-	res, changed, ps := Write(root, w, u, []byte(body), "")
+	res, changed, ps := Write(root, w, u, []byte(body), "", time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC))
 	if len(ps) > 0 {
 		t.Fatal(ps)
 	}
@@ -169,7 +169,7 @@ func TestWriteAndProvenance(t *testing.T) {
 	// 同样的内容再次写入：不写文件。
 	info, _ := os.Stat(filepath.Join(root, filepath.FromSlash(recordRel)))
 	time.Sleep(10 * time.Millisecond)
-	if _, changed, ps := Write(root, w, u, []byte(body), ""); len(ps) > 0 || len(changed) != 0 {
+	if _, changed, ps := Write(root, w, u, []byte(body), "", time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)); len(ps) > 0 || len(changed) != 0 {
 		t.Fatalf("rewrite: changed = %v, %v", changed, ps)
 	}
 	if after, _ := os.Stat(filepath.Join(root, filepath.FromSlash(recordRel))); !after.ModTime().Equal(info.ModTime()) {
@@ -190,7 +190,7 @@ func TestWriteAndProvenance(t *testing.T) {
 	}
 
 	// Agent 保留作者的段落、改写第一段后重写：作者段落的出处保留。
-	_, _, ps = Write(root, w, u, []byte("改写后的第一段。\n\n第二段，作者改过。\n\n第三段。\n\n作者新增。\n"), source.Hash([]byte(read(t, root, draftRel))))
+	_, _, ps = Write(root, w, u, []byte("改写后的第一段。\n\n第二段，作者改过。\n\n第三段。\n\n作者新增。\n"), source.Hash([]byte(read(t, root, draftRel))), time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC))
 	if len(ps) > 0 {
 		t.Fatal(ps)
 	}
@@ -203,13 +203,13 @@ func TestWriteAndProvenance(t *testing.T) {
 func TestWriteChildCreatesUnitDir(t *testing.T) {
 	root, _ := newWork(t)
 	w, u := unit(t, root, "my-post/intro")
-	_, changed, ps := Write(root, w, u, []byte("引言"), "")
+	_, changed, ps := Write(root, w, u, []byte("引言"), "", time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC))
 	dir := ".writing-anything/works/my-post/units/intro"
 	if len(ps) > 0 || !slices.Equal(changed, []string{dir, dir + "/draft.md", dir + "/provenance.yaml"}) {
 		t.Fatalf("changed = %v, %v", changed, ps)
 	}
 	// 单元目录已存在时不再列出。
-	if _, changed, _ := Write(root, w, u, []byte("引言二"), ""); slices.Contains(changed, dir) {
+	if _, changed, _ := Write(root, w, u, []byte("引言二"), "", time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)); slices.Contains(changed, dir) {
 		t.Errorf("changed = %v lists an existing unit directory", changed)
 	}
 }
@@ -217,7 +217,7 @@ func TestWriteChildCreatesUnitDir(t *testing.T) {
 func TestWriteRejects(t *testing.T) {
 	root, _ := newWork(t)
 	w, u := unit(t, root, "my-post")
-	if _, _, ps := Write(root, w, u, []byte(" \n\t\n"), ""); len(ps) != 1 || ps[0].Code != "draft.empty" {
+	if _, _, ps := Write(root, w, u, []byte(" \n\t\n"), "", time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)); len(ps) != 1 || ps[0].Code != "draft.empty" {
 		t.Fatalf("empty: %v", ps)
 	}
 	if _, err := os.Stat(filepath.Join(root, ".writing-anything", "works", "my-post", "draft.md")); err == nil {
@@ -226,7 +226,7 @@ func TestWriteRejects(t *testing.T) {
 	// 写入记录不合法时拒绝写入，也拒绝报告。
 	write(t, root, ".writing-anything/works/my-post/draft.md", "作者")
 	write(t, root, ".writing-anything/works/my-post/provenance.yaml", "schema_version: 1\n")
-	if _, _, ps := Write(root, w, u, []byte("x"), ""); len(ps) == 0 || ps[0].Code != "artifact.schema-violation" {
+	if _, _, ps := Write(root, w, u, []byte("x"), "", time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)); len(ps) == 0 || ps[0].Code != "artifact.schema-violation" {
 		t.Fatalf("invalid record: %v", ps)
 	}
 	if _, ps := Provenance(root, w, u); len(ps) == 0 || ps[0].Code != "artifact.schema-violation" {
@@ -242,7 +242,7 @@ func TestWriteRejects(t *testing.T) {
 	w2, u2 := unit(t, root2, "my-post/intro")
 	outside := t.TempDir()
 	os.Symlink(outside, filepath.Join(root2, ".writing-anything", "works", "my-post", "units"))
-	if _, _, ps := Write(root2, w2, u2, []byte("x"), ""); len(ps) != 1 || ps[0].Code != "workspace.write-failed" {
+	if _, _, ps := Write(root2, w2, u2, []byte("x"), "", time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)); len(ps) != 1 || ps[0].Code != "workspace.write-failed" {
 		t.Fatalf("symlinked units/: %v", ps)
 	}
 	if entries, _ := os.ReadDir(outside); len(entries) != 0 {
@@ -283,7 +283,7 @@ func TestSymlinkedUnitDirNotRead(t *testing.T) {
 	if checked, ps := CheckUnitArtifacts(root, []*work.Work{w}); len(checked) != 0 || len(ps) != 0 {
 		t.Fatalf("CheckUnitArtifacts through a symlink = %v, %v", checked, ps)
 	}
-	if _, _, ps := Write(root, w, u, []byte("x"), ""); len(ps) != 1 || ps[0].Code != "workspace.write-failed" {
+	if _, _, ps := Write(root, w, u, []byte("x"), "", time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)); len(ps) != 1 || ps[0].Code != "workspace.write-failed" {
 		t.Fatalf("Write through a symlink = %v", ps)
 	}
 }
@@ -292,7 +292,7 @@ func TestTooManyParagraphs(t *testing.T) {
 	root, _ := newWork(t)
 	w, u := unit(t, root, "my-post")
 	big := strings.Repeat("段\n\n", MaxParagraphs+1)
-	if _, _, ps := Write(root, w, u, []byte(big), ""); len(ps) != 1 || ps[0].Code != "draft.too-large" {
+	if _, _, ps := Write(root, w, u, []byte(big), "", time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)); len(ps) != 1 || ps[0].Code != "draft.too-large" {
 		t.Fatalf("Write(too large) = %v", ps)
 	}
 	write(t, root, ".writing-anything/works/my-post/draft.md", big)
@@ -323,14 +323,14 @@ func TestGuard(t *testing.T) {
 			t.Errorf("%q/%q: %v", tc.content, tc.base, ps)
 		}
 	}
-	if _, _, ps := Write(root, w, u, []byte("新内容"), ""); len(ps) != 1 || ps[0].Code != "draft.human-edited" || read(t, root, draftRel) != "作者写的。" {
+	if _, _, ps := Write(root, w, u, []byte("新内容"), "", time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)); len(ps) != 1 || ps[0].Code != "draft.human-edited" || read(t, root, draftRel) != "作者写的。" {
 		t.Fatalf("Write over author draft = %v", ps)
 	}
 	// 原样写回建立基线，之后不改动时不需要 --base；给出的 --base 仍必须正确。
-	if _, _, ps := Write(root, w, u, []byte("作者写的。"), ""); len(ps) > 0 {
+	if _, _, ps := Write(root, w, u, []byte("作者写的。"), "", time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)); len(ps) > 0 {
 		t.Fatal(ps)
 	}
-	if _, _, ps := Write(root, w, u, []byte("Agent 改写。"), ""); len(ps) > 0 {
+	if _, _, ps := Write(root, w, u, []byte("Agent 改写。"), "", time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)); len(ps) > 0 {
 		t.Fatal(ps)
 	}
 	if ps := Guard(root, w, u, []byte("再改"), "bad"); len(ps) != 1 || ps[0].Code != "draft.base-mismatch" {
@@ -349,7 +349,7 @@ func TestDiff(t *testing.T) {
 	if _, ps := Diff(root, w, u); len(ps) != 1 || ps[0].Code != "draft.not-found" {
 		t.Fatalf("no draft = %v", ps)
 	}
-	Write(root, w, u, []byte("A。\n\nB。\n\nC。\n"), "")
+	Write(root, w, u, []byte("A。\n\nB。\n\nC。\n"), "", time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC))
 	c, ps := Diff(root, w, u)
 	if len(ps) > 0 || c.Edited || len(c.Changes) != 0 || c.Base != c.Recorded || c.Path != draftRel {
 		t.Fatalf("clean = %+v, %v", c, ps)
@@ -389,13 +389,13 @@ func TestRebaseline(t *testing.T) {
 	w, u := unit(t, root, "my-post")
 	draftRel := ".writing-anything/works/my-post/draft.md"
 	old := "Agent 第一段。<!-- 注 -->\n\n作者段。\n"
-	Write(root, w, u, []byte("Agent 第一段。<!-- 注 -->\n\nAgent 第二段。\n"), "")
+	Write(root, w, u, []byte("Agent 第一段。<!-- 注 -->\n\nAgent 第二段。\n"), "", time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC))
 	write(t, root, draftRel, old)
 	// 正文已被作者改过：不重建。
 	if changed, ps := Rebaseline(root, w, u, []byte(old), []byte("x")); changed != nil || ps != nil {
 		t.Fatalf("edited draft rebaselined: %v %v", changed, ps)
 	}
-	Write(root, w, u, []byte(old), "")
+	Write(root, w, u, []byte(old), "", time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC))
 	now := "Agent 第一段。\n\n作者段。\n"
 	write(t, root, draftRel, now)
 	changed, ps := Rebaseline(root, w, u, []byte(old), []byte(now))

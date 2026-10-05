@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io"
 	"strings"
-	"time"
 
 	"github.com/kw12121212/writing-anything/internal/resolve"
 	"github.com/kw12121212/writing-anything/internal/reviewpacket"
@@ -84,7 +83,7 @@ func runReviewPlan(inv *invocation) int {
 		if ws := seriesWorksOf(dir, inv.args[0]); len(ws) > 1 {
 			var pk []reviewpacket.Packet
 			var ch []string
-			if pk, ch, problems = reviewpacket.PlanSeries(dir, inv.args[0], ws, inv.values["dimension"], budgetOf(dir, ws[0]), time.Now()); pk != nil {
+			if pk, ch, problems = reviewpacket.PlanSeries(dir, inv.args[0], ws, inv.values["dimension"], budgetOf(dir, ws[0]), now()); pk != nil {
 				res.Packets, res.ChangedPaths = pk, ch
 			}
 			res.Diagnostics = diagnostics(problems, dir)
@@ -102,7 +101,7 @@ func runReviewPlan(inv *invocation) int {
 				problems = warnings
 			}
 			var changed []string
-			if res.Packets, changed, problems = reviewpacket.Plan(dir, w, u, inv.values["dimension"], budget, time.Now()); res.Packets != nil {
+			if res.Packets, changed, problems = reviewpacket.Plan(dir, w, u, inv.values["dimension"], budget, now()); res.Packets != nil {
 				res.ChangedPaths = changed
 			}
 		}
@@ -149,7 +148,7 @@ func runReviewSubmit(inv *invocation) int {
 				if data, _, problems = readInput(inv, dir); len(problems) == 0 {
 					var in reviewpacket.SubmitInput
 					if in, problems = reviewpacket.ParseInput(data); len(problems) == 0 {
-						f, changed, ps := reviewpacket.Submit(dir, w, id, in, time.Now())
+						f, changed, ps := reviewpacket.Submit(dir, w, id, in, now())
 						problems = ps
 						if f != nil {
 							pkt := reviewpacket.ViewOf(f)
