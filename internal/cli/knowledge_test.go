@@ -512,3 +512,26 @@ func TestContextKnowledge(t *testing.T) {
 		t.Fatalf("context should be null with broken ledger")
 	}
 }
+
+// --terms 的 CLI 边界解析：逗号分隔、逐项去空白、忽略空白项；空字符串得到空切片（set 删除字段）。
+func TestParseTerms(t *testing.T) {
+	for _, tt := range []struct {
+		in   string
+		want []string
+	}{
+		{"", []string{}},
+		{"  ", []string{}},
+		{"为了救人", []string{"为了救人"}},
+		{" 为了救人 , 救了潮生 ,", []string{"为了救人", "救了潮生"}},
+	} {
+		got := parseTerms(tt.in)
+		if len(got) != len(tt.want) {
+			t.Fatalf("parseTerms(%q) = %v, 期望 %v", tt.in, got, tt.want)
+		}
+		for i := range got {
+			if got[i] != tt.want[i] {
+				t.Fatalf("parseTerms(%q) = %v, 期望 %v", tt.in, got, tt.want)
+			}
+		}
+	}
+}

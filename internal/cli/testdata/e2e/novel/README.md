@@ -63,5 +63,6 @@ UPDATE_GOLDEN=1 go test ./internal/cli/ -run TestNovelCorpusGolden
   矩阵条目引用；无断言过滤的宽 token 只作存在性锚点，不登记反向引用。
 
 新增长篇特性或新增断言时：先加矩阵条目（含 evidence），再落断言；对账失败会给出缺失项清单。
-负向断言必须对应真实存在的确定性检查，产品没有的检查如实记录缺口（参见 T-NEG-02 的知情违例
-条目与 DESIGN.md「负向断言」节），不要伪造 error 断言。
+负向断言必须对应真实存在的确定性检查，产品没有的检查如实记录缺口而不是伪造 error 断言——
+知情违例的 prose 级检查缺口即按此原则先记录、后由 knowledge-reveal-terms 变更补齐
+（知情事件 --terms 声明揭示词，continuity 报 continuity.knowledge-early）。

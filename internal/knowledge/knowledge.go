@@ -65,13 +65,44 @@ func timestamp(now time.Time) string { return now.UTC().Format(time.RFC3339) }
 
 // Event 是知情表中的一条知情事件（Knowledge Event）；confirmation 与 decided_at 未设置时为 nil。
 type Event struct {
-	ID           string  `json:"id"`
-	Scene        string  `json:"scene"`
-	Entry        string  `json:"entry"`
-	Character    string  `json:"character"`
-	Status       string  `json:"status"`
-	Confirmation *string `json:"confirmation"`
-	DecidedAt    *string `json:"decided_at"`
+	ID           string   `json:"id"`
+	Scene        string   `json:"scene"`
+	Entry        string   `json:"entry"`
+	Character    string   `json:"character"`
+	Terms        []string `json:"terms"`
+	Status       string   `json:"status"`
+	Confirmation *string  `json:"confirmation"`
+	DecidedAt    *string  `json:"decided_at"`
+}
+
+// checkTerms 校验揭示词（Reveal Terms）：每项去除首尾空白后非空且不重复；空切片或缺省合法。
+func checkTerms(terms []string) []workspace.Problem {
+	seen := map[string]bool{}
+	for i, term := range terms {
+		trimmed := strings.TrimSpace(term)
+		if trimmed == "" {
+			return []workspace.Problem{errorAt(schema.CodeSchemaViolation, "", fmt.Sprintf("terms[%d]", i),
+				"揭示词（terms）去除首尾空白后不能为空；--terms 用逗号分隔多个揭示词，空白项会被忽略")}
+		}
+		if seen[trimmed] {
+			return []workspace.Problem{errorAt(schema.CodeSchemaViolation, "", fmt.Sprintf("terms[%d]", i),
+				"揭示词（terms）不能重复："+trimmed)}
+		}
+		seen[trimmed] = true
+	}
+	return nil
+}
+
+// termsSeq 构造揭示词的 YAML 序列节点；空切片返回 nil（删除该字段，恢复缺省空数组）。
+func termsSeq(terms []string) *yaml.Node {
+	if len(terms) == 0 {
+		return nil
+	}
+	seq := &yaml.Node{Kind: yaml.SequenceNode}
+	for _, term := range terms {
+		seq.Content = append(seq.Content, str(term))
+	}
+	return seq
 }
 
 // Item 是已知列表中一个设定条目的获知情况。
@@ -123,7 +154,17 @@ func load(root, rel string, w *work.Work) (*yaml.Node, *file, []workspace.Proble
 	}
 	var f file
 	catalog.Decode(doc, &f)
+	normalizeTerms(&f)
 	return doc, &f, nil
+}
+
+// normalizeTerms 把 terms 为 nil 的条目归一为空数组：输出信封的数组字段不允许为 null（cli-contract/shared-envelope）。
+func normalizeTerms(f *file) {
+	for i := range f.Events {
+		if f.Events[i].Terms == nil {
+			f.Events[i].Terms = []string{}
+		}
+	}
 }
 
 // canonByID 返回作品设定集（Canon）条目按 id 的索引。canon.yaml 无法加载（不通过 Schema 校验或条目 id 重复）时
@@ -177,6 +218,13 @@ func checkEvents(rel string, f file, w *work.Work, canonEntries map[string]canon
 			problems = append(problems, errorAt(catalog.CodeDuplicateID, rel, fmt.Sprintf("events[%d].id", i), "条目 id "+e.ID+" 重复"))
 		}
 		seen[e.ID] = true
+		if ps := checkTerms(e.Terms); len(ps) > 0 {
+			for j := range ps {
+				ps[j].Path = rel
+				ps[j].Field = fmt.Sprintf("events[%d].%s", i, ps[j].Field)
+			}
+			problems = append(problems, ps...)
+		}
 		if byRef != nil {
 			if u, ok := byRef[e.Scene]; !ok || u.Type != outline.SceneType {
 				problems = append(problems, errorAt(CodeUnknownUnit, rel, fmt.Sprintf("events[%d].scene", i),
@@ -253,7 +301,7 @@ func eventsNode(doc *yaml.Node) *yaml.Node {
 }
 
 // eventOrder 是知情事件中字段的固定顺序。
-var eventOrder = []string{"id", "scene", "entry", "character", "status", "confirmation", "decided_at"}
+var eventOrder = []string{"id", "scene", "entry", "character", "terms", "status", "confirmation", "decided_at"}
 
 // checkText 检查写入产物的文本参数是合法的 UTF-8（workspace-artifacts/yaml-text-utf8）。
 func checkText(field, v string) []workspace.Problem {
@@ -294,6 +342,7 @@ func recheck(root, rel string, doc *yaml.Node, w *work.Work, canonEntries map[st
 	}
 	var f file
 	catalog.Decode(written, &f)
+	normalizeTerms(&f)
 	if canonEntries == nil {
 		// 设定集无法加载时跳过 entry 与 character 引用检查（其问题由 canon 校验报告）。
 		canonEntries, _ = canonByID(root, w)
@@ -325,6 +374,7 @@ type ProposeInput struct {
 	Entry     string
 	Character string
 	ID        string
+	Terms     []string
 }
 
 // Propose 在作品 w 的知情表末尾追加一条知情事件（初始 status 为 proposed）。scene 必须是本作品的 scene 单元，
@@ -390,9 +440,17 @@ func Propose(root string, w *work.Work, in ProposeInput) (*Event, []string, []wo
 		return nil, nil, []workspace.Problem{errorAt(CodeAnchoredValue, rel, "events",
 			"events 经由 YAML 锚点、别名或合并键得到，wa-cli 无法只追加一项；请先去掉锚点、别名与合并键")}
 	}
-	item := &yaml.Node{Kind: yaml.MappingNode, Content: []*yaml.Node{
+	if ps := checkTerms(in.Terms); len(ps) > 0 {
+		return nil, nil, ps
+	}
+	itemContent := []*yaml.Node{
 		str("id"), str(id), str("scene"), str(in.Scene), str("entry"), str(in.Entry),
-		str("character"), str(in.Character), str("status"), str(StatusProposed)}}
+		str("character"), str(in.Character)}
+	if seq := termsSeq(in.Terms); seq != nil {
+		itemContent = append(itemContent, str("terms"), seq)
+	}
+	itemContent = append(itemContent, str("status"), str(StatusProposed))
+	item := &yaml.Node{Kind: yaml.MappingNode, Content: itemContent}
 	index := len(events.Content)
 	workspace.BlockSequence(doc.Content[0], "events")
 	events.Content = append(events.Content, item)
@@ -415,6 +473,7 @@ type SetInput struct {
 	Scene             *string
 	Entry             *string
 	Character         *string
+	Terms             *[]string
 	ConfirmedByAuthor bool
 	Confirmation      string
 }
@@ -432,6 +491,11 @@ func Set(root string, w *work.Work, id string, in SetInput, now time.Time) (*Eve
 			if ps := checkText(f.field, *f.v); len(ps) > 0 {
 				return nil, nil, ps
 			}
+		}
+	}
+	if in.Terms != nil {
+		if ps := checkTerms(*in.Terms); len(ps) > 0 {
+			return nil, nil, ps
 		}
 	}
 	_, byRef := units(w)
@@ -496,6 +560,9 @@ func Set(root string, w *work.Work, id string, in SetInput, now time.Time) (*Eve
 	}
 	if in.Character != nil {
 		next.Character = *in.Character
+	}
+	if in.Terms != nil {
+		next.Terms = *in.Terms
 	}
 	if entry.Status == StatusConfirmed && in.ConfirmedByAuthor {
 		next.Confirmation = &in.Confirmation
@@ -612,7 +679,7 @@ func editEvent(events *yaml.Node, at int, rel string, next Event) *workspace.Pro
 		n   *yaml.Node // nil 表示删除该字段
 	}
 	kvs := []kv{{"scene", str(next.Scene)}, {"entry", str(next.Entry)}, {"character", str(next.Character)},
-		{"status", str(next.Status)}, {"confirmation", node(next.Confirmation)}, {"decided_at", node(next.DecidedAt)}}
+		{"terms", termsSeq(next.Terms)}, {"status", str(next.Status)}, {"confirmation", node(next.Confirmation)}, {"decided_at", node(next.DecidedAt)}}
 	for _, pair := range kvs {
 		if f, ok := workspace.SetKey(item, eventOrder, pair.key, pair.n); !ok {
 			return &workspace.Problem{Code: CodeAnchoredValue, Severity: workspace.SeverityError, Path: rel, Field: field + "." + f,

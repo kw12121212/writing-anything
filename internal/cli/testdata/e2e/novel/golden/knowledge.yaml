@@ -34,8 +34,10 @@ events:
     scene: stopped-at-417/ch3-s2
     entry: char-shen-wangshu
     character: char-lin-wan
+    terms:
+      - 为了救人
     status: confirmed
-    confirmation: 作者：林晚当晚知道真相。
+    confirmation: 作者：补登溺亡真相的揭示词。
     decided_at: "2026-06-20T12:00:00Z"
   - id: kn-06
     scene: stopped-at-417/ch3-s2
@@ -48,20 +50,26 @@ events:
     scene: stopped-at-417/ch3-s2
     entry: char-shen-wangshu
     character: reader
+    terms:
+      - 为了救人
     status: confirmed
-    confirmation: 作者：读者与林晚同时知道。
+    confirmation: 作者：读者同场获知，揭示词一致。
     decided_at: "2026-06-20T12:00:00Z"
   - id: kn-08
     scene: stopped-at-417/ch3-s3
     entry: item-letter
     character: char-lin-wan
+    terms:
+      - 出生的时刻
     status: confirmed
-    confirmation: 作者：林晚启信，登记。
+    confirmation: 作者：信件内容的揭示词。
     decided_at: "2026-06-20T12:00:00Z"
   - id: kn-09
     scene: stopped-at-417/ch3-s3
     entry: item-letter
     character: reader
+    terms:
+      - 出生的时刻
     status: confirmed
-    confirmation: 作者：读者同场读到信。
+    confirmation: 作者：读者启信，揭示词一致。
     decided_at: "2026-06-20T12:00:00Z"

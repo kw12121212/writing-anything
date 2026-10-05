@@ -171,7 +171,7 @@
 重放副本上的注入负向（TestNovelCorpusNegativeInjections）：
 
 - 设定冲突：修改作者钦定 rule-clock-freeze 被拒（canon.author-pinned，error）并生成阻塞决策，设定集不变。
-- 知情违例：向倒叙场景注入林晚提前获知溺亡真相的知情事件（close-out --replace + confirm），knowledge at 立即暴露越界（空→非空），撤销后回基线；产品当前没有 prose 级知情边界确定性检查（已记录的产品缺口，留待后续产品变更）。
+- 知情违例（两条断言）：正文注入——把含揭示词「为了救人」的句子写进 ch1-s3（kn-05/kn-07 的获知点在 ch3-s2），continuity 报 error 级 continuity.knowledge-early（reader 与出场人物林晚双通道），恢复原文后全绿；台账注入——提前登记获知事件，knowledge at 暴露（空→非空）后撤销回基线。揭示词（Reveal Terms）机制由 knowledge-reveal-terms 变更补齐，语料在 kn-05/07（为了救人）与 kn-08/09（出生的时刻）上声明揭示词。
 - 伏笔悬空：th-a 回退 open 后连续性审查报 continuity.thread-anomaly（error），恢复 paid 后全绿。
 - 时间线倒置：场景契约互指 after 成环，timeline 与连续性审查报 timeline.cycle 与 timeline.order-conflict（error），删除声明后全绿。
 

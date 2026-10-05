@@ -102,6 +102,11 @@ func continuityWorks(dir, ref string) ([]*work.Work, []workspace.Problem) {
 func continuityNext(ds []Diagnostic, ref, dir string) {
 	for i := range ds {
 		switch {
+		case ds[i].Code == "continuity.knowledge-early":
+			ds[i].Next = []string{
+				shellCommand("wa-cli", "knowledge", "list", ref, "--all", "--dir", dir, "--json"),
+				shellCommand("wa-cli", "continuity", ref, "--dir", dir, "--json"),
+			}
 		case strings.HasPrefix(ds[i].Code, "continuity."):
 			ds[i].Next = []string{
 				shellCommand("wa-cli", "continuity", ref, "--dir", dir, "--json"),

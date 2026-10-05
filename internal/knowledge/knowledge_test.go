@@ -646,3 +646,72 @@ events:
 		}
 	}
 }
+
+// 揭示词（Reveal Terms）：propose 写入、set 整体替换与删除、重复拒绝、已确认条目须重新确认、
+// 读取时形态校验。
+func TestTermsLifecycle(t *testing.T) {
+	root, w := newNovel(t)
+	T := time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)
+
+	// propose 携带揭示词。
+	e, _, ps := Propose(root, w, ProposeInput{Scene: "my-novel/scene-1", Entry: "canon-2", Character: Reader, ID: "kn-t", Terms: []string{"为了救人", "救了潮生"}})
+	if len(ps) > 0 {
+		t.Fatal(ps)
+	}
+	if len(e.Terms) != 2 || e.Terms[0] != "为了救人" {
+		t.Fatalf("terms = %v", e.Terms)
+	}
+	if _, _, ps := Confirm(root, w, "kn-t", "作者确认", T); len(ps) > 0 {
+		t.Fatal(ps)
+	}
+
+	// 重复揭示词拒绝且不写文件。
+	if _, _, ps := Propose(root, w, ProposeInput{Scene: "my-novel/scene-1", Entry: "canon-2", Character: Reader, Terms: []string{"为了救人", "为了救人"}}); !has(ps, "artifact.schema-violation", "terms[1]") {
+		t.Fatalf("want schema-violation on duplicate term, got %v", ps)
+	}
+
+	// 修改已确认条目的揭示词须作者重新确认。
+	terms := []string{"出生的时刻"}
+	if _, _, ps := Set(root, w, "kn-t", SetInput{Terms: &terms}, T); !has(ps, CodeIncompleteConfirmation, "confirmation") {
+		t.Fatalf("want incomplete-confirmation, got %v", ps)
+	}
+	e, changed, ps := Set(root, w, "kn-t", SetInput{Terms: &terms, ConfirmedByAuthor: true, Confirmation: "作者：更新揭示词"}, T)
+	if len(ps) > 0 {
+		t.Fatal(ps)
+	}
+	if len(e.Terms) != 1 || e.Terms[0] != "出生的时刻" || e.Status != StatusConfirmed {
+		t.Fatalf("set terms event = %+v", e)
+	}
+	if len(changed) != 1 {
+		t.Fatalf("changed = %v", changed)
+	}
+
+	// 空值删除该字段（恢复缺省空数组），文件里不再有 terms 键。
+	empty := []string{}
+	if _, changed, ps := Set(root, w, "kn-t", SetInput{Terms: &empty, ConfirmedByAuthor: true, Confirmation: "作者：清空揭示词"}, T); len(ps) > 0 {
+		t.Fatal(ps)
+	} else if len(changed) != 1 {
+		t.Fatalf("changed = %v", changed)
+	}
+	data, err := os.ReadFile(filepath.Join(root, ".writing-anything", "works", "my-novel", "knowledge.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), "terms:") {
+		t.Fatalf("清空后不应残留 terms 键：\n%s", data)
+	}
+
+	// 读取时形态校验：空白揭示词在 List 时报 schema-violation。
+	writeAtKnowledge(t, root, "schema_version: 1\nevents:\n  - id: kn-bad\n    scene: my-novel/scene-1\n    entry: canon-2\n    character: reader\n    terms: [\"  \"]\n    status: proposed\n")
+	if _, ps := List(root, w, true); !has(ps, "artifact.schema-violation", "events[0].terms[0]") {
+		t.Fatalf("want schema-violation on blank term, got %v", ps)
+	}
+}
+
+func writeAtKnowledge(t *testing.T, root, content string) {
+	t.Helper()
+	path := filepath.Join(root, ".writing-anything", "works", "my-novel", "knowledge.yaml")
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}

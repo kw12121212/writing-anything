@@ -22,6 +22,7 @@ var knowledgeProposeCommand = &command{
 		dirFlag,
 		{"scene", flagString, "获知发生的场景；本作品的 scene 类型单元引用"},
 		{"entry", flagString, "被获知的设定集（Canon）条目 id"},
+		{"terms", flagString, "揭示词（Reveal Terms），用逗号分隔：该条目被获知后才允许出现在正文中的词，供连续性审查机械检查；空白项忽略"},
 		{"character", flagString, "获知者；设定集 character 条目 id 或固定值 reader（读者）"},
 		{"id", flagString, "条目 id；省略时为 know-<n>"},
 	},
@@ -89,6 +90,7 @@ var knowledgeSetCommand = &command{
 		{"scene", flagString, "获知发生的场景；省略时不修改，仍须是 scene 单元"},
 		{"entry", flagString, "被获知的设定集条目 id；省略时不修改"},
 		{"character", flagString, "获知者；省略时不修改，仍须是 character 条目或 reader"},
+		{"terms", flagString, "揭示词（Reveal Terms），用逗号分隔，整体替换；给出空值时删除该字段（恢复缺省空数组）；空白项忽略"},
 		{"confirmed-by-author", flagBool, "作者重新确认本条已确认条目的修改"},
 		{"confirmation", flagString, "作者重新确认的原话摘要；修改已确认（confirmed）条目时必填"},
 	},
@@ -167,7 +169,7 @@ func runKnowledgePropose(inv *invocation) int {
 		if w, problems = resolveKnowledgeWork(dir, inv.args[0]); w != nil {
 			var e *knowledge.Event
 			var changed []string
-			in := knowledge.ProposeInput{Scene: inv.values["scene"], Entry: inv.values["entry"], Character: inv.values["character"], ID: inv.values["id"]}
+			in := knowledge.ProposeInput{Scene: inv.values["scene"], Entry: inv.values["entry"], Character: inv.values["character"], ID: inv.values["id"], Terms: parseTerms(inv.values["terms"])}
 			if e, changed, problems = knowledge.Propose(dir, w, in); e != nil {
 				res.Event, res.ChangedPaths = &knowledgeEventView{Work: w.ID, Event: *e}, changed
 			}
@@ -280,6 +282,10 @@ func runKnowledgeSet(inv *invocation) int {
 			}
 			if v, ok := inv.values["character"]; ok {
 				in.Character = &v
+			}
+			if v, ok := inv.values["terms"]; ok {
+				terms := parseTerms(v)
+				in.Terms = &terms
 			}
 			in.ConfirmedByAuthor = inv.flag("confirmed-by-author")
 			in.Confirmation = inv.values["confirmation"]
@@ -422,4 +428,15 @@ func knowledgeCharacterNext(ds []Diagnostic, ref, dir string) {
 			}
 		}
 	}
+}
+
+// parseTerms 解析 --terms：逗号分隔、逐项去空白、忽略空白项；空字符串得到空切片（set 语义为删除该字段）。
+func parseTerms(v string) []string {
+	out := []string{}
+	for _, s := range strings.Split(v, ",") {
+		if s = strings.TrimSpace(s); s != "" {
+			out = append(out, s)
+		}
+	}
+	return out
 }

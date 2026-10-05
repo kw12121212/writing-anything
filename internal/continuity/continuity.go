@@ -10,13 +10,16 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"sort"
 	"strings"
 
 	"github.com/kw12121212/writing-anything/internal/canon"
 	"github.com/kw12121212/writing-anything/internal/catalog"
 	"github.com/kw12121212/writing-anything/internal/closeout"
 	"github.com/kw12121212/writing-anything/internal/decision"
+	"github.com/kw12121212/writing-anything/internal/draft"
 	"github.com/kw12121212/writing-anything/internal/knowledge"
+	"github.com/kw12121212/writing-anything/internal/lint"
 	"github.com/kw12121212/writing-anything/internal/outline"
 	"github.com/kw12121212/writing-anything/internal/schema"
 	"github.com/kw12121212/writing-anything/internal/state"
@@ -33,6 +36,7 @@ const (
 	CodeAliasMismatch     = "continuity.alias-mismatch"
 	CodeDanglingReference = "continuity.dangling-reference"
 	CodeThreadAnomaly     = "continuity.thread-anomaly"
+	CodeKnowledgeEarly    = "continuity.knowledge-early"
 )
 
 // TerminalStates 是 dead-acting 检查的保留词：出场人物最新已确认状态的完整描述精确等于其中之一时，
@@ -107,13 +111,25 @@ func Run(root string, w *work.Work, u *work.Unit) ([]Finding, []workspace.Proble
 		}
 	}
 	var timelineProblems []workspace.Problem
+	// 场景全序（供揭示词检查的「早于获知点」判定）：有时间线声明时用推导全序，否则按单元树先序。
+	scenePos := map[string]int{}
+	for i, u := range w.Units() {
+		if u.Type == outline.SceneType {
+			scenePos[u.Ref] = i
+		}
+	}
+	var ordered []timeline.Entry
 	if timeline.HasDeclaration(root, w) {
 		tw := []*timeline.Work{{W: w}}
 		if sid, _, ok := seriesOfForTimeline(root, w); ok {
 			tw[0].SeriesID = sid
 		}
-		ordered, tops := timeline.Order(root, tw)
+		var tops []workspace.Problem
+		ordered, tops = timeline.Order(root, tw)
 		timelineProblems = tops
+		for _, e := range ordered {
+			scenePos[e.Unit] = e.Position - 1
+		}
 		var canonFlat map[string]canon.Entry
 		if scopedFlat, sps2 := canon.Resolve(root, w); sps2 == nil {
 			canonFlat = map[string]canon.Entry{}
@@ -128,6 +144,43 @@ func Run(root string, w *work.Work, u *work.Unit) ([]Finding, []workspace.Proble
 	if !threadFatal {
 		contractProblems = threads.ContractProblems(root, w, w.Scenes())
 	}
+	// 揭示词（Reveal Terms）索引：条目 → 揭示词并集；条目+获知者 → 最早 confirmed 获知场景位置。
+	// 没有任何非空 terms 时两个索引为空，后续检查整段跳过（零新增发现）。
+	revealTerms := map[string][]string{}
+	knowledgePoint := map[[2]string]int{}
+	if !knowFatal {
+		// 词表并集：来自任一 confirmed 事件的非空 terms。
+		for _, e := range knowEvents {
+			if e.Status != knowledge.StatusConfirmed || len(e.Terms) == 0 {
+				continue
+			}
+			revealTerms[e.Entry] = append(revealTerms[e.Entry], e.Terms...)
+		}
+		// 获知点：对进入词表的条目，取该获知者全部 confirmed 事件的最早场景——
+		// 与词表条件解耦：更早的无 terms 获知同样是获知点（否则会误报或漏报）。
+		for _, e := range knowEvents {
+			if e.Status != knowledge.StatusConfirmed {
+				continue
+			}
+			if _, watched := revealTerms[e.Entry]; !watched {
+				continue
+			}
+			key := [2]string{e.Entry, e.Character}
+			if p, ok := scenePos[e.Scene]; ok {
+				if old, seen := knowledgePoint[key]; !seen || p < old {
+					knowledgePoint[key] = p
+				}
+			}
+		}
+		for entry, terms := range revealTerms {
+			revealTerms[entry] = slices.Compact(slices.Sorted(slices.Values(terms))) // 去重并稳定词序
+		}
+	}
+	revealEntries := make([]string, 0, len(revealTerms))
+	for entry := range revealTerms {
+		revealEntries = append(revealEntries, entry)
+	}
+	sort.Strings(revealEntries)
 
 	var out []Finding
 	for _, s := range scenes {
@@ -251,6 +304,29 @@ func Run(root string, w *work.Work, u *work.Unit) ([]Finding, []workspace.Proble
 				if related && it.Status == threads.StatusOpen && it.Overdue {
 					out = append(out, Finding{Scene: s.Ref, Code: CodeThreadAnomaly, Severity: "error",
 						Message: fmt.Sprintf("伏笔 %s（%s）已超过计划回收位置 %s 仍未回收；请回收（wa-cli threads set）或调整计划", it.ID, it.Text, it.PlannedRecover)})
+				}
+			}
+		}
+		// (6) 知情揭示词：正文出现某条目的揭示词，且本场景早于某获知者（读者或出场人物）的获知点。
+		if len(revealEntries) > 0 {
+			if text, ok := draftText(root, w, s); ok {
+				for _, entry := range revealEntries {
+					for _, term := range lint.MatchedTerms(text, revealTerms[entry]) {
+						if p, ok := knowledgePoint[[2]string{entry, "reader"}]; ok && scenePos[s.Ref] < p {
+							out = append(out, Finding{Scene: s.Ref, Code: CodeKnowledgeEarly, Severity: "error",
+								Message: fmt.Sprintf("正文出现设定条目 %s 的揭示词「%s」，但本场景早于读者（reader）获知该条目的场景；请移到获知点之后，或修正知情表/揭示词", entry, term)})
+						}
+						for _, n := range names {
+							hits := resolved[n]
+							if len(hits) != 1 {
+								continue
+							}
+							if p, ok := knowledgePoint[[2]string{entry, hits[0].ID}]; ok && scenePos[s.Ref] < p {
+								out = append(out, Finding{Scene: s.Ref, Code: CodeKnowledgeEarly, Severity: "error",
+									Message: fmt.Sprintf("正文出现设定条目 %s 的揭示词「%s」，但出场人物「%s」（%s）在本场景尚未获知该条目；请移到获知点之后，或修正知情表/揭示词", entry, term, n, hits[0].ID)})
+							}
+						}
+					}
 				}
 			}
 		}
@@ -752,3 +828,12 @@ func firstMentionedScene(message string, ws []*work.Work) string {
 
 // CodeConflictingState 是跨作品状态矛盾的错误码。
 const CodeConflictingState = "continuity.conflicting-state"
+
+// draftText 读取场景 s 的正文；正文不存在或无法读取时返回 false（跳过揭示词检查，不产生发现）。
+func draftText(root string, w *work.Work, u *work.Unit) (string, bool) {
+	content, ok, ps := draft.Read(root, w, u)
+	if len(ps) > 0 || !ok {
+		return "", false
+	}
+	return string(content), true
+}

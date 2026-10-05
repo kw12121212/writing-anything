@@ -1,4 +1,4 @@
-# 《停在四点十七分》可重放命令脚本（corpus-authoring 一次性真实创作录制）。
+# 《停在四点十七分》可重放命令脚本（corpus-authoring 一次性真实创作录制；knowledge-reveal-terms 变更补录揭示词步骤）。
 # 格式见 script-format.md；--dir/--json 由重放器补齐，文本输入统一经 input_ref 提供标准输入
 #（原命令的 --file 已折算为 input_ref，stdin 步骤原样保留）。
 stages:
@@ -2447,6 +2447,20 @@ stages:
     stdout_contains: null
   - command:
     - knowledge
+    - set
+    - stopped-at-417
+    - kn-05
+    - --terms
+    - 为了救人
+    - --confirmed-by-author
+    - --confirmation
+    - 作者：补登溺亡真相的揭示词。
+    input_ref: null
+    expect_exit: 0
+    expect_code: null
+    stdout_contains: null
+  - command:
+    - knowledge
     - confirm
     - stopped-at-417
     - kn-06
@@ -2465,6 +2479,20 @@ stages:
     - --confirmed-by-author
     - --confirmation
     - 作者：读者与林晚同时知道。
+    input_ref: null
+    expect_exit: 0
+    expect_code: null
+    stdout_contains: null
+  - command:
+    - knowledge
+    - set
+    - stopped-at-417
+    - kn-07
+    - --terms
+    - 为了救人
+    - --confirmed-by-author
+    - --confirmation
+    - 作者：读者同场获知，揭示词一致。
     input_ref: null
     expect_exit: 0
     expect_code: null
@@ -2606,12 +2634,40 @@ stages:
     stdout_contains: null
   - command:
     - knowledge
+    - set
+    - stopped-at-417
+    - kn-08
+    - --terms
+    - 出生的时刻
+    - --confirmed-by-author
+    - --confirmation
+    - 作者：信件内容的揭示词。
+    input_ref: null
+    expect_exit: 0
+    expect_code: null
+    stdout_contains: null
+  - command:
+    - knowledge
     - confirm
     - stopped-at-417
     - kn-09
     - --confirmed-by-author
     - --confirmation
     - 作者：读者同场读到信。
+    input_ref: null
+    expect_exit: 0
+    expect_code: null
+    stdout_contains: null
+  - command:
+    - knowledge
+    - set
+    - stopped-at-417
+    - kn-09
+    - --terms
+    - 出生的时刻
+    - --confirmed-by-author
+    - --confirmation
+    - 作者：读者启信，揭示词一致。
     input_ref: null
     expect_exit: 0
     expect_code: null

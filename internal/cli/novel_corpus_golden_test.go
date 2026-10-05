@@ -103,8 +103,8 @@ func TestNovelCorpusGolden(t *testing.T) {
 }
 
 // 四类注入违例的负向断言：重放副本上逐类注入，断言对应审查以 error 级报告且诊断码正确，
-// 修回合规后恢复全绿。知情违例因产品暂无 prose 级确定性检查，采用台账注入 + knowledge at
-// 暴露断言（空→非空），产品缺口记录在测试注释与矩阵负向条目。
+// 修回合规后恢复全绿。知情违例有两条断言：台账注入（提前登记获知事件，knowledge at 暴露）与
+// prose 注入（正文提前出现揭示词，continuity.knowledge-early，error 级——knowledge-reveal-terms 变更补齐）。
 func TestNovelCorpusNegativeInjections(t *testing.T) {
 	frozen := time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)
 	now = func() time.Time { return frozen }
@@ -189,6 +189,28 @@ func TestNovelCorpusNegativeInjections(t *testing.T) {
 	}
 	if codes := findings(); len(codes) > 0 {
 		t.Fatalf("恢复知情边界后应全绿，实际 %v", codes)
+	}
+
+	// (2b) 知情违例（prose 级）：把含揭示词的句子注入 ch1-s3 正文 → continuity.knowledge-early（error）。
+	// 揭示词挂在 kn-05/kn-07（溺亡真相，获知点 ch3-s2）与 kn-08/kn-09（信件内容，获知点 ch3-s3）上；
+	// ch1-s3 早于两个获知点且出场人物含林晚（kn-05 获知者），reader 与林晚双通道都应报。
+	original, err := os.ReadFile(filepath.Join("testdata", "e2e", "novel", "inputs", "ch1-s3-final.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	injectedProse := string(original) + "\n他想起韩江说过的那句话：沈先生是为了救人才走的，这一点他从未怀疑。\n"
+	if code, res := runWSIn(t, dir, injectedProse, "draft", "write", "stopped-at-417/ch1-s3"); code != 0 {
+		t.Fatalf("注入揭示词正文: exit = %d, diagnostics = %+v", code, res.Diagnostics)
+	}
+	if codes := findings(); !codes["continuity.knowledge-early"] {
+		t.Fatalf("正文提前揭示应报 continuity.knowledge-early，实际 %v", codes)
+	}
+	// 修回合规：重写原始正文后全绿。
+	if code, res := runWSIn(t, dir, string(original), "draft", "write", "stopped-at-417/ch1-s3"); code != 0 {
+		t.Fatalf("恢复原始正文: exit = %d, diagnostics = %+v", code, res.Diagnostics)
+	}
+	if codes := findings(); len(codes) > 0 {
+		t.Fatalf("恢复正文后应全绿，实际 %v", codes)
 	}
 
 	// (3) 伏笔悬空：删除伏笔回收（th-a 回退 open）→ continuity.thread-anomaly（error）。

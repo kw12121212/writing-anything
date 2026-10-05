@@ -251,3 +251,26 @@ func CountTerms(content string, terms []string) int {
 	hits, _ := newMatcher(terms).find(prepare(content))
 	return len(hits)
 }
+
+// MatchedTerms 返回 terms 中在正文 content 里出现过的词（去重、按词表顺序），屏蔽区域与匹配口径与 CountTerms
+// 相同；供需要知道「命中了哪些词」的检查（如连续性审查的揭示词）复用，一次扫描完成。
+func MatchedTerms(content string, terms []string) []string {
+	terms = dedupe(terms)
+	if len(terms) == 0 {
+		return nil
+	}
+	hits, _ := newMatcher(terms).find(prepare(content))
+	present := make([]bool, len(terms))
+	for _, h := range hits {
+		if h.term >= 0 && h.term < len(present) {
+			present[h.term] = true
+		}
+	}
+	out := make([]string, 0, len(terms))
+	for i, term := range terms {
+		if present[i] {
+			out = append(out, term)
+		}
+	}
+	return out
+}
