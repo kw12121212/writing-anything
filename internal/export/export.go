@@ -295,7 +295,8 @@ func cleanOutput(out, code string) (string, *workspace.Problem) {
 		return bad("输出路径 " + out + " 必须是项目目录之内的文件路径")
 	}
 	// 工作区中的产物只能由对应的 wa-cli 命令修改：导出只能写到工作区之外，或工作区的 exports/ 之下。按不区分大小写比较
-	// （macOS 与 Windows 的默认文件系统不区分大小写）；写入前 ensureParents 再按文件身份复查。
+	// （macOS 与 Windows 的默认文件系统不区分大小写）；写入前 ensureParents 再按文件身份复查。这里的 EqualFold 只是快路径，
+	// 大小写变体（如 EXPORTS）最终由 ensureParents 按文件身份与字面段名拒绝，两处口径以 ensureParents 为准。
 	segs := strings.Split(rel, "/")
 	if strings.EqualFold(segs[0], workspace.Dir) && !(len(segs) > 2 && strings.EqualFold(segs[1], path.Base(ExportsDir))) {
 		return bad(workspaceOutput(out))
@@ -335,7 +336,9 @@ func parents(root, rel, code string, create bool) ([]string, []workspace.Problem
 		info, err := os.Lstat(filepath.Join(root, filepath.FromSlash(p)))
 		last := i == len(segs)
 		if inWorkspace {
-			isExports := err == nil && exErr == nil && os.SameFile(info, exports) || err != nil && segs[i-1] == path.Base(ExportsDir)
+			// 段名必须与 exports 字面严格相等：大小写不敏感的文件系统上 Lstat 大小写变体也能命中
+			// 同一目录，仅靠文件身份会把 EXPORTS 这类变体误判为 exports（export-output 规格的「只能是 exports」）。
+			isExports := segs[i-1] == path.Base(ExportsDir) && (err == nil && exErr == nil && os.SameFile(info, exports) || err != nil)
 			if last || !isExports {
 				return nil, bad(p, workspaceOutput(rel))
 			}

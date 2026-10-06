@@ -187,6 +187,11 @@ func Install(root, target string, force bool) (*Result, []workspace.Problem) {
 	if err != nil {
 		return nil, []workspace.Problem{{Code: workspace.CodeReadFailed, Severity: workspace.SeverityError, Message: "无法确定项目目录：" + err.Error()}}
 	}
+	// 归一化项目目录的拼写：同一目录可经符号链接以两种拼写到达（如 macOS 的 /var 与 /private/var），
+	// 拼写不一致会让 locator 的 Rel 前缀比较把项目目录之内误判为之外。
+	if resolved, evalErr := filepath.EvalSymlinks(rootAbs); evalErr == nil {
+		rootAbs = resolved
+	}
 	l := locator{rootAbs}
 	base := target
 	if !filepath.IsAbs(base) {
@@ -196,12 +201,14 @@ func Install(root, target string, force bool) (*Result, []workspace.Problem) {
 	var problems []workspace.Problem
 	// 技能目录：向上找到第一个已存在的路径，它必须是真实目录；其下缺少的目录在写入时创建。
 	var missing []string
+	ancestor := ""
 	for p := base; ; p = filepath.Dir(p) {
 		info, err := os.Lstat(p)
 		if err == nil {
 			if !info.IsDir() {
 				return nil, []workspace.Problem{l.problem(CodeInvalidPath, p, "不是真实目录（如符号链接），wa-cli 不会在其中写入技能")}
 			}
+			ancestor = p
 			break
 		}
 		if !errors.Is(err, fs.ErrNotExist) {
@@ -210,6 +217,20 @@ func Install(root, target string, force bool) (*Result, []workspace.Problem) {
 		missing = append(missing, p)
 		if filepath.Dir(p) == p {
 			break
+		}
+	}
+	// 目标以绝对路径给出且拼写与项目目录不一致时，把已存在的祖先归一到真实路径后重算 base 与 missing，
+	// 其后的判定与显示才与项目目录同一拼写。
+	if ancestor != "" {
+		if resolved, evalErr := filepath.EvalSymlinks(ancestor); evalErr == nil && resolved != ancestor {
+			if rest, relErr := filepath.Rel(ancestor, base); relErr == nil {
+				base = filepath.Join(resolved, rest)
+				for i, m := range missing {
+					if r, relErr := filepath.Rel(ancestor, m); relErr == nil {
+						missing[i] = filepath.Join(resolved, r)
+					}
+				}
+			}
 		}
 	}
 	var plans []plan

@@ -1,0 +1,23 @@
+schema: strict-spec-driven/delta-tech/v1
+schema_version: 1
+artifact_type: delta_tech
+schema_file: templates/strict-spec-driven/schemas/delta-tech.yaml
+target_standard: go-project-structure
+operations:
+  ADDED:
+    project-skill-location:
+      strength: MUST
+      statement: 仓库级项目技能（指导开发流程、不随二进制分发的 Agent Skills）放在 .agents/skills/<name>/SKILL.md：frontmatter 只含 name 与 description，name 与目录名相同，格式与内置技能一致；格式与引用完整性由 internal/skills 的结构校验测试覆盖。产品运行时（wa-cli、内置技能、MCP 服务）不得依赖这些文件
+      rationale: 复用既有目录约定：skills install --agent codex 的目标目录就是 .agents/skills（Codex 在仓库中扫描的位置），internal/skills.Parse 已实现同一格式约束；校验测试使技能引用的仓库路径漂移在回归中失败
+      enforcement:
+        method: test
+        detail: internal/skills 的 TestProjectSkills 遍历 .agents/skills/*/SKILL.md，用 skills.Parse 校验格式，并断言技能正文引用的关键仓库路径存在
+    path-spelling-normalization:
+      strength: SHOULD
+      statement: 对来自不同 API 的路径（os.Getwd、TMPDIR 派生的临时目录、用户或测试给出的绝对路径等）做包含判定、前缀比较或按目录分组显示时，不得只做字符串前缀比较：先把两侧已存在的前缀用 filepath.EvalSymlinks 归一为 OS 报告的真实路径拼写再比较，或按文件身份（os.SameFile）逐级确认；路径不存在导致归一失败时保持原拼写，并以身份检查兜底
+      rationale: macOS 的 TMPDIR（/var → /private/var 符号链接）使同一目录呈现两种拼写，字符串比较会把之内误判为之外：本变更一次修复了两处（internal/skills.Install 的 inside 判定与显示、internal/cli fakeGit 测试的 TMPDIR 拼写失配），干净 HEAD 复现证明是既有陷阱，未来接受绝对路径的命令与测试还会踩到
+      enforcement:
+        method: review
+        detail: internal/skills.Install（rootAbs 与已存在祖先 EvalSymlinks 后重算 base 与 missing）、internal/cli fakeGit（TMPDIR 归一）；与 workspace-artifacts 相关规则中按 os.SameFile 身份确认的手段并列
+  MODIFIED: {}
+  REMOVED: {}

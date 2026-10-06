@@ -240,6 +240,11 @@ func fakeGit(t *testing.T) string {
 		t.Skip("假 git 是 shell 脚本")
 	}
 	bin := t.TempDir()
+	// 归一化 TMPDIR 拼写：被测代码的临时目录取自 TMPDIR 原文（macOS 上为 /var/...），而脚本的 pwd
+	// 经 getcwd 返回真实路径拼写（/private/var/...，/var 是指向它的符号链接）；两侧拼写一致断言才可靠。
+	if resolved, err := filepath.EvalSymlinks(os.TempDir()); err == nil {
+		t.Setenv("TMPDIR", resolved)
+	}
 	log := filepath.Join(bin, "log")
 	script := "#!/bin/sh\necho \"$(pwd)|$GIT_TERMINAL_PROMPT|$*\" >> " + log + "\necho 'fatal: repository not found'\nexit 128\n"
 	if err := os.WriteFile(filepath.Join(bin, "git"), []byte(script), 0o755); err != nil {

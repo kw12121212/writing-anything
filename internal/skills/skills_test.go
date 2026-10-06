@@ -82,13 +82,15 @@ func TestInstall(t *testing.T) {
 	if info, _ := os.Stat(file); info.Mode().Perm() != 0o600 {
 		t.Errorf("overwrite changed permissions to %v", info.Mode().Perm())
 	}
-	// 项目目录之外的目标：输出绝对路径，诊断不填 path、把绝对路径写进 message。
+	// 项目目录之外的目标：输出绝对路径，诊断不填 path、把绝对路径写进 message；
+	// message 中的绝对路径是归一化后的真实路径拼写（Install 用 EvalSymlinks 归一）。
 	abs := t.TempDir()
 	if r, ps := Install(root, abs, false); len(ps) > 0 || !filepath.IsAbs(r.Skills[0].Path) || len(r.Created) != 0 {
 		t.Fatalf("absolute target: %+v %+v", r, ps)
 	}
 	os.WriteFile(filepath.Join(abs, "wa-init", FileName), []byte("改过"), 0o644)
-	if _, ps := Install(root, abs, false); len(ps) != 1 || ps[0].Path != "" || !strings.Contains(ps[0].Message, abs) {
+	absResolved, _ := filepath.EvalSymlinks(abs)
+	if _, ps := Install(root, abs, false); len(ps) != 1 || ps[0].Path != "" || !strings.Contains(ps[0].Message, absResolved) {
 		t.Fatalf("outside diagnostic: %+v", ps)
 	}
 	// 相对的项目目录：路径仍相对项目目录，项目之外的为绝对路径。

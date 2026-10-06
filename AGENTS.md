@@ -46,4 +46,5 @@ writing-anything 是面向 AI 智能体（Agent）的规范化辅助写作工具
 
 - `main`：主分支，只接收从 `dev` 合并的稳定版本，不直接在上面开发。
 - `dev`：主力开发分支，日常提交与变更都在 `dev` 上进行；需要隔离的工作从 `dev` 拉出功能分支，完成后合并回 `dev`。
+- 正式发布（Release）通过项目技能（Project Skill）`.agents/skills/release` 执行：完整回归通过后把 `dev` 合并到 `main`，版本号（Version）经 `v*` 标签（Tag）更新，最后提交推送。本项目不使用持续集成与持续交付（CI/CD），仓库中不放置任何工作流文件。
 - `CLAUDE.md` 是指向本文件的软链接，只修改 `AGENTS.md`。

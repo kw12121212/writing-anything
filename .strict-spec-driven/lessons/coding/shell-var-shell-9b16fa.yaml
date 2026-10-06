@@ -1,0 +1,19 @@
+schema: strict-spec-driven/lesson/v1
+schema_version: 1
+artifact_type: lesson
+schema_file: templates/strict-spec-driven/schemas/lesson.yaml
+lesson:
+  id: shell-var-shell-9b16fa
+  title: shell 脚本的 $var 后紧跟全角字符时，部分 shell 会把多字节首字节并入变量名
+category: coding
+status: active
+created_at: '2026-10-06T02:35:03.334Z'
+updated_at: '2026-10-06T02:35:03.334Z'
+context: install.sh 经 curl | sh 分发、由 /bin/sh（macOS 为 bash 3.2）解释；报错信息里大量「$var全角标点」写法。release-skill 的完整回归中 TestInstallShFailures 在 macOS 全线失败：set -u 下报 unbound variable，变量名形如 actual\xef（$actual 后接全角逗号，首字节 EF 被并入名字）
+observation: 实测 /bin/sh -c 'os=FreeBSD; echo "$os（支持）"' 在 macOS（bash 3.2.57, darwin26）输出空值加乱码而不是 FreeBSD（支持）：$os（ 的名字扫描吞掉了 0xEF 字节，绑定的是另一个从未赋值的变量
+takeaway: 跨平台 shell 脚本的命名变量展开一律加 ${} 花括号，使名字边界与多字节字符无关；位置参数（$1、$@）与单引号内应字面输出的变量（如提示用户写入配置的 $PATH）不受影响
+applies_when: 编写或修改 install.sh 这类经 /bin/sh 解释、报错或提示文案含中文的 shell 脚本时
+occurrences:
+  - origin: release-skill
+    date: '2026-10-06'
+    evidence: install.sh 全量加花括号；internal/tools/release/install_test.go 的 TestInstallShFailures 四个子用例在修复前于 macOS 必失败，修复后通过

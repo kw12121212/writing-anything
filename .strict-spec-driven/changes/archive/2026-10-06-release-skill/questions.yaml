@@ -1,0 +1,54 @@
+schema: strict-spec-driven/question-list/v1
+schema_version: 1
+artifact_type: question_list
+schema_file: templates/strict-spec-driven/schemas/question-list.yaml
+change: release-skill
+open: []
+resolved:
+  - id: requirement-problem
+    question: 今天具体出了什么问题，对谁？
+    context: 正式发布没有可重复执行的入口：步骤散落在 AGENTS.md（分支约定）、config.yaml（回归命令）、internal/tools/release（打包）与 install.sh（下载渠道）中，每次发布都要临时拼凑；且仓库保留着与本项目「不使用 CI/CD」约定冲突的 release.yml，推 v* 标签会误触 GitHub Actions。影响的是执行发布的人与 Agent
+    answer: 正式发布流程没有固化为项目技能，发布要靠临时拼步骤；仓库里还留着与「不使用 CI/CD」约定冲突的 release.yml
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-outcome
+    question: 什么可观察的变化证明问题解决了？
+    context: 以可观察事实表述完成标准，避免把「写了文档」当完成
+    answer: 仓库中存在 .agents/skills/release/SKILL.md；Agent 按它执行即可完成一次正式发布：完整回归通过、dev 合并到 main、版本号以新 v* 标签更新、本地构建发布产物、gh CLI 创建 GitHub Release、提交并推送；仓库不再包含任何 CI/CD 配置（release.yml 删除）
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-trigger
+    question: 为什么是现在，是什么迫使这件事？
+    context: 确认触发条件真实存在（不是假设性改进）
+    answer: dev 已领先 main 33 个提交，首次正式发布在即；同时项目确认不使用 CI/CD，发布流程需要本地化并固化为技能
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-non-goals
+    question: 哪些东西明确不能变？
+    context: 圈住边界，防止把产品行为、打包工具或安装渠道卷进本次变更
+    answer: 不改 wa-cli 产品行为与八个内置技能；不改 internal/tools/release、install.sh、install.ps1、docs/INSTALL.md 的行为；本次不实际执行发布（不合并、不打标签、不推送）；不引入任何 CI/CD
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-interpretation
+    question: 存在多种读法时，采用哪一种？
+    context: 「项目技能」与「版本号要更新」都有多种读法；以下读法经用户在本次请求与选择中确认
+    answer: 「项目技能」指仓库内的开发流程技能（.agents/skills/release/SKILL.md），不是 wa-cli 内置写作技能；「版本号要更新」指通过新的 v* git 标签表达（构建时注入），不落版本文件；发布产物本地构建并用 gh CLI 发布到 GitHub Release；.github/workflows/release.yml 删除；首个正式版本 v0.1.0；本次只交付技能，不实际执行发布
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: scope-expansion
+    question: TestInstall 的既有失败（macOS 符号链接别名导致路径拼写不一致）如何处置？
+    context: 干净 HEAD 上复现同一失败，证明是 dev 既有缺陷，与发布技能无关；但它使完整回归永远不过，阻塞包括本变更在内的一切归档。影响：修复涉及产品代码（超出「只交付技能」的原始范围）或只改测试（保留产品边缘缺陷）。推荐扩入本变更（用户选择）
+    answer: 扩入当前变更（用户确认）：internal/skills.Install 路径归一化修复 + TestInstall 断言拼写调整，作为本变更的一部分实现、测试与审查
+    status: resolved
+    answered_by: human
+  - id: env-regressions
+    question: 完整回归暴露的另外三个既有失败（install.sh 全角解析、export 大小写、pack 测试拼写）如何处置？
+    context: 干净 HEAD 复现确认均为 dev 既有失败，与发布技能无关，但同样阻塞完整回归关卡。修复形态：install.sh 花括号（真实产品缺陷，macOS 安装必坏）、export isExports 段名严格化（对齐 export-output 规格的「只能是 exports」）、pack 测试拼写归一（纯测试）。影响：前两项触及产品文件，超出「只交付技能」原始范围。曾向用户确认，未获回复；按用户此前对同类问题「扩入当前变更」的决定继续，归档前可再调整
+    answer: 扩入当前变更（延续用户先例）：三项修复作为本变更的一部分实现、测试与审查
+    status: resolved
+    answered_by: human

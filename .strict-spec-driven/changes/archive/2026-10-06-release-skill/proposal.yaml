@@ -1,0 +1,37 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: release-skill
+  status: proposed
+summary:
+  what:
+    - 把「正式发布（Release）」固化为仓库内的项目技能（Project Skill）.agents/skills/release/SKILL.md：Agent 按它即可在本地完成一次正式发布——完整回归、把 dev 合并到 main、确定新的版本号（Version，经 git 标签（Tag）注入）、本地构建发布产物（Release Asset）、用 gh CLI 创建 GitHub Release，最后提交并推送；同时删除 .github/workflows/release.yml，使仓库不再包含任何持续集成（CI/CD）配置
+    - 修复 internal/skills.Install 在同一目录出现两种拼写（符号链接别名，如 macOS 的 /var 与 /private/var）时的问题：产物路径显示为绝对路径、Created 遗漏新建目录；把项目目录与目标的第一个已存在祖先归一到真实路径（EvalSymlinks）后再比较与显示（用户确认扩入本次变更）
+    - 修复完整回归暴露的三个 dev 既有失败（干净 HEAD 复现确认与发布技能无关；处置延续用户此前对同类问题「扩入当前变更」的决定）：install.sh 变量展开加花括号（bash 3.2 把 $var 后紧跟的全角字符首字节并入变量名，macOS 默认 shell 上安装脚本必坏）、export 的 exports 段名严格校验（大小写不敏感文件系统上 SameFile 身份检查绕过规格的「只能是 exports」）、pack fake git 测试的路径拼写归一
+  why:
+    - 发布步骤目前散落各处：分支约定在 AGENTS.md，回归命令在 .strict-spec-driven/config.yaml，打包在 internal/tools/release，下载渠道在 install.sh 与 docs/INSTALL.md，没有可重复执行的发布入口；dev 已领先 main 33 个提交，首次正式发布在即；且本项目确定不使用 CI/CD，现有 release.yml 与该约定冲突，推送 v* 标签会误触 GitHub Actions
+scope:
+  in:
+    - 新增项目技能 .agents/skills/release/SKILL.md（frontmatter 与内置技能同格式），正文为正式发布完整流程与必须停下来问发布者的确认点
+    - 删除 .github/workflows/release.yml，随之为空时一并移除 .github/ 目录
+    - AGENTS.md 补充正式发布入口（指向项目技能）与不使用 CI/CD 的约定
+    - internal/skills 新增仓库级项目技能的结构校验测试（复用 Parse，校验 release 技能存在且引用的仓库路径存在）
+    - docs/GLOSSARY.md 补充本次引入的新术语（如标签（Tag））
+    - delta tech：go-project-structure 新增项目技能存放位置与格式规则
+    - internal/skills.Install 路径拼写归一化：root 与 base 的第一个已存在祖先 EvalSymlinks 归一后重算 base 与 missing，使 inside 判定与路径显示在符号链接别名下一致；同步调整 TestInstall 对外部目标 message 拼写的断言
+    - install.sh：变量展开一律加 ${} 花括号，消除 $var 紧跟全角字符时的解析缺陷；行为在不误解析变量的 shell 上不变
+    - internal/export：parents() 的 isExports 判定在身份检查外要求段名与 exports 字面严格相等，使大小写变体（如 EXPORTS）在大写不敏感文件系统上也被按规格拒绝
+    - internal/cli：fakeGit 测试助手把 TMPDIR 归一为 EvalSymlinks 后的真实路径拼写，使被测代码临时目录参数与脚本 pwd 记录的拼写一致
+    - docs/INSTALL.md 的「发布新版本（维护者）」一节改为描述经项目技能的本地发布流程（审查发现：删除 CI/CD 后原文描述 GitHub Actions 已失实）
+  out:
+    - 不在本次变更中实际执行发布（不合并、不打标签、不推送）
+    - 不引入任何 CI/CD
+    - 不改变 wa-cli 的写作生命周期行为与八个内置技能；skills install 的变化仅限本变更扩入的路径归一化修复（同一目录两种拼写时路径显示与 Created 记录恢复一致）
+unchanged_behavior:
+  - internal/tools/release 的参数与产物布局不变（技能只调用它，不改它）
+  - install.sh、install.ps1 的下载渠道与校验逻辑不变（仍从 GitHub Release 下载发布产物与校验文件（Checksum File））
+  - 完整回归命令与覆盖率阈值不变（技能引用 config.yaml 已声明的命令，不另立标准）
+  - main 与 dev 的分支约定本身不变，技能只是执行它
+  - 除 scope.in 所列缺陷修复（路径归一化、exports 段名校验、install.sh 花括号、pack 测试拼写）外，wa-cli 命令的输出与行为不变；skills list 与 skills install 仍只针对八个内置技能，不感知 .agents/skills/release

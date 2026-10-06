@@ -98,7 +98,7 @@ categories:
     lesson-a9dd44:
       title: 按字符串前缀限制写入位置，在不区分大小写的文件系统上会被绕过
       status: active
-      occurrences: 2
+      occurrences: 3
       path: .strict-spec-driven/lessons/coding/lesson-a9dd44.yaml
     lesson-234cd1:
       title: 安装到第三方工具的目录前，要按其官方文档核对目录约定
@@ -255,6 +255,11 @@ categories:
       status: active
       occurrences: 1
       path: .strict-spec-driven/lessons/coding/lesson-a287df.yaml
+    shell-var-shell-9b16fa:
+      title: shell 脚本的 $var 后紧跟全角字符时，部分 shell 会把多字节首字节并入变量名
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/coding/shell-var-shell-9b16fa.yaml
   documentation:
     must-must-6af326:
       title: 修改一条 MUST 需求时，要检查同一规格里相邻的 MUST 是否因此冲突

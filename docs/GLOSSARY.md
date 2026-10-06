@@ -376,6 +376,13 @@
 | 回归测试 | Regression Test | 回归测试 | 每次变更后运行的完整测试 |
 | 覆盖率 | Coverage | 覆盖率 | 测试执行到的代码比例 |
 | 交叉编译 | Cross-compilation | 交叉编译 | 在一个平台上编译出其他平台的二进制 |
+| 标签 | Tag | 标签 | 指向特定提交的命名标记；`wa-cli` 的版本号通过 `v*` 标签在构建时注入 |
+| 版本号 | Version | 版本号 | `wa-cli` 的版本，构建时由 `v*` 标签经 `-ldflags` 注入，未注入时为 `dev` |
+| 语义化版本 | Semantic Versioning | 语义化版本 | `v主.次.补` 的版本号约定：破坏性变更升主号，新功能升次号，缺陷修复升补丁号 |
+| 正式发布 | Release | 正式发布 | 一次对外发版：完整回归通过后在 `main` 上打 `v*` 标签，本地构建发布产物并发布到 GitHub Release；由项目技能 `.agents/skills/release` 执行 |
+| 预发布版 | Prerelease | 预发布版 | 带连字符的版本号（如 `v0.1.0-rc1`）；GitHub Release 标记为 pre-release，安装脚本默认不下载 |
+| 项目技能 | Project Skill | 项目技能 | 放在仓库 `.agents/skills/<name>/SKILL.md`、指导开发流程的 Agent Skills（如正式发布）；不随二进制分发，产品运行时不依赖它 |
+| 持续集成与持续交付 | CI/CD | CI/CD | 推送后由服务端自动构建、测试与发布的机制；本项目不使用，仓库中不放置任何工作流文件 |
 | 发布产物 | Release Asset | 发布产物 | 随版本发布的文件：各平台的 `wa-cli-<os>-<arch>` 二进制与 `SHA256SUMS` |
 | 校验文件 | Checksum File | 校验文件 | 记录每个发布产物 SHA-256 的 `SHA256SUMS`，格式与 `sha256sum` 兼容 |
 | 安装脚本 | Install Script | 安装脚本 | `install.sh`（Linux、macOS）与 `install.ps1`（Windows）：下载、校验并把 `wa-cli` 安装到用户级目录 |
