@@ -3,39 +3,7 @@ schema_version: 2
 artifact_type: roadmap_index
 schema_file: ../schemas/roadmap-index.yaml
 milestones:
-  kernel-foundation:
-    title: 内核地基（Kernel Foundation）
-    path: roadmap/milestones/kernel-foundation.yaml
-    status: proposed
-  tech-blog-workflow:
-    title: 技术博客工作流（Tech Blog Workflow）
-    path: roadmap/milestones/tech-blog-workflow.yaml
-    status: proposed
-  wechat-marketing-and-mcp:
-    title: 营销/公众号（Marketing & WeChat）
-    path: roadmap/milestones/wechat-marketing-and-mcp.yaml
-    status: proposed
-  mcp-integration:
-    title: MCP 集成（MCP Integration）
-    path: roadmap/milestones/mcp-integration.yaml
-    status: proposed
-  packs-and-series:
-    title: 规范包、文风量化与系列文章（Packs, Style Metrics & Series）
-    path: roadmap/milestones/packs-and-series.yaml
-    status: proposed
-  short-story:
-    title: 短篇小说（Short Story）
-    path: roadmap/milestones/short-story.yaml
-    status: proposed
-  novel:
-    title: 长篇结构与记忆（Novel Structure & Memory）
-    path: roadmap/milestones/novel.yaml
-    status: proposed
-  novel-continuity:
-    title: 长篇连续性与组稿（Novel Continuity & Assembly）
-    path: roadmap/milestones/novel-continuity.yaml
-    status: proposed
-  novel-series:
-    title: 系列小说（Novel Series）
-    path: roadmap/milestones/novel-series.yaml
-    status: proposed
+  novel-e2e:
+    title: 真实小说端到端测试（Real-novel E2E）
+    path: roadmap/milestones/novel-e2e.yaml
+    status: complete

@@ -1,0 +1,45 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: decision-queue
+sections:
+  Implementation:
+    schema-kind:
+      text: internal/schema：新增 decisions.schema.json 并登记 decisions 产物类型（.writing-anything/decisions.yaml），准备合法与不合法夹具
+      status: complete
+    list-flag:
+      text: internal/cli 命令注册表新增可重复的 list 参数类型：解析器按出现顺序收集，help 输出其类型
+      status: complete
+    decision-package:
+      text: 新增 internal/decision：追加待决事项（dec-<n>、选项编号、推荐检查、关联单元检查函数）、记录决定（decision.not-found、decision.already-decided、decision.unknown-option、decision.answer-required、确认原话必填、decided_at）、列出与分组、校验（id 唯一、推荐与选择为已有选项、decided 含确认记录、decision.unknown-unit）
+      status: complete
+    work-blockers:
+      text: internal/work 的 Work.Blockers 追加决策阻塞来源（decision.blocking、decision.invalid-queue），Blocker 新增 Decision 字段
+      status: complete
+    cli-commands:
+      text: 在 internal/cli 新增 decision add、decisions、decide 命令，登记 sampleArgs/mutatingSamples；next 与 status 的阻塞项输出 decision 字段，被决策阻塞时 commands 给出 wa-cli decisions；validate 校验 decisions.yaml
+      status: complete
+  Testing:
+    unit-tests:
+      text: 为 schema、decision、work 与 cli 编写单元测试：追加与各错误码、分组列出、决定与确认记录、阻塞决策阻止 advance 而非阻塞与已决定的不阻止、损坏队列偏安全阻塞、next/status 的 decision 字段与 commands、validate 的检查、list 参数解析；断言使用规格中的字面量
+      status: complete
+      command: go test ./internal/...
+    full-regression:
+      text: 运行完整回归命令，覆盖率不低于 80%
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    spec-alignment:
+      text: 对照 decisions、units-and-lifecycle 与 workspace delta spec 的每个场景确认实现与测试覆盖，并按实际实现修正 delta spec 与 delta tech
+      status: complete
+    strict-ready:
+      text: 运行 strict-spec-cli ready 与 strict-spec-cli verify，确认变更产物有效
+      status: complete
+      command: strict-spec-cli ready decision-queue && strict-spec-cli verify decision-queue
+    archive-readiness:
+      text: 确认 delta spec 能合并进 units-and-lifecycle、workspace 主规格与新建的 decisions 主规格，delta tech 能合并进 cli-contract 与 workspace-artifacts，归档后路线图中的 decision-queue 标记为完成
+      status: complete
+testing_gates:
+  validation_task: full-regression
+  unit_test_task: unit-tests

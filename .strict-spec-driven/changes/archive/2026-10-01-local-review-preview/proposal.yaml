@@ -1,0 +1,32 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: local-review-preview
+  status: proposed
+summary:
+  what:
+    - 新增 wa-cli preview <unit>：把单元及其后代（单元树先序）的正文生成一个可离线打开的静态阅读页（Reading View）HTML，逐段展示原文与出处（Provenance，可按出处着色）、文本检查（Lint）发现项与审稿（Review）发现项；默认写到 .writing-anything/exports/<work>.preview.html，--output 规则与 export 相同。
+    - 新增 wa-cli preview <unit> --serve：启动只监听 127.0.0.1 的本地服务，访问需要随机令牌（Token）并校验 Host 头；作者在页面选中文字即可写意见，或用快捷标记（阅读卡点（Sticking Point）、好、疑问）标记，意见立即按 wa-cli feedback add 的规则保存为作者反馈（Feedback），从而出现在 feedback list 与 feedback watch 中；--json 时首行输出页面地址，之后每保存一条反馈输出一行信封；--max 保存指定条数后结束，命令结束即关闭服务。
+  why:
+    - 里程碑 wechat-marketing-and-mcp 的完成标准要求：在阅读页中选中文字提交的意见，立即出现在 wa-cli feedback list 与 feedback watch 的输出中；wa-cli preview 不加 --serve 时生成可离线阅读的静态 HTML。
+    - 作者审读成稿时要在终端与编辑器之间来回切换才能提意见；阅读页让作者边读边提，意见以结构化反馈进入 Agent 的修订流程。
+scope:
+  in:
+    - internal/preview：阅读页的数据（单元、段落、出处、文本检查与审稿发现项）与 HTML 生成（html/template 转义，样式内联，静态页不含脚本）
+    - internal/cli：preview 命令（注册表、样例调用）、静态输出、--serve 本地服务（令牌、Host 校验、安全响应头、POST /feedback、--port、--max）
+    - internal/export：把输出路径校验与原子写入抽成可复用的函数，供 preview 的 --output 使用（错误码由调用方给出）
+    - 新增 preview 主规格；cli-contract 技术标准：streaming-envelopes 的轮询间隔参数只要求按间隔轮询的命令，新增只监听回环地址的本地服务规则
+    - wa-revise 技能说明何时运行 wa-cli preview --serve
+  out:
+    - 在线编辑正文、多人协作或常驻服务：阅读页只做阅读与反馈
+    - Markdown 渲染为富文本：正文按原文逐段展示（保留换行），富文本导出由 wechat-html-export 负责
+    - 在页面中处理（resolve）反馈或审稿发现项：仍由 wa-cli feedback resolve 与 review resolve 完成
+unchanged_behavior:
+  - wa-cli feedback add、list、resolve、watch 的行为与输出不变；阅读页保存的反馈与 feedback add 保存的完全一致
+  - wa-cli export 的输出路径规则、错误码与行为不变
+  - 除 --serve 模式下保存反馈外，preview 只写阅读页文件，不修改任何工作区产物
+roadmap:
+  milestone: wechat-marketing-and-mcp
+  planned_change: local-review-preview

@@ -1,0 +1,376 @@
+schema: strict-spec-driven/main-spec/v1
+schema_version: 1
+artifact_type: main_spec
+schema_file: templates/strict-spec-driven/schemas/main-spec.yaml
+spec:
+  id: genres-and-packs
+  title: 文体与规范包（Genre and Pack）
+requirements:
+  builtin-catalog:
+    strength: MUST
+    statement: wa-cli 必须随二进制提供内置（Built-in）的 default 规范包（Pack）与 minimal 文体（Genre），不需要网络访问或额外文件；minimal 文体声明单元类型、生命周期阶段（Stage）序列与每阶段必需产物，只用于内核验证。内置文体与规范包的内容都必须通过与工作区规范包相同的校验。
+    scenarios:
+      builtin-genre-resolves:
+        - GIVEN: 用 wa-cli init --dir D --genre minimal 创建的工作区，只把 wa-cli 二进制复制到另一个目录运行
+        - WHEN: 运行 wa-cli config resolved --dir D --json
+        - THEN: valid 为 true，resolved.genre.id 为 minimal，resolved.unitTypes 与 resolved.stages 非空且每项的 source 为 genre:minimal，退出码为 0
+  config-resolved:
+    strength: MUST
+    statement: wa-cli config resolved 必须按 文体默认 → 规范包（按 config.yaml 中 packs 的顺序）→ 项目配置 的顺序合并 --dir 下工作区生效的设置，只读取、不修改任何产物，changedPaths 为空数组。--json 输出的 resolved 字段包含 genre（生效文体的 id 与 origin；未设置 default_genre 时为 null）、packs（按应用顺序的规范包，每项含 id、origin（builtin 或 workspace），工作区规范包另含 path）、unitTypes、stages、rules、glossary、bannedTerms、style、rubric、contextBudget（见 context 主规格的 context-budget）、htmlTheme（见 pack-html-theme：每个元素名对应 value 与 source，没有规范包覆盖的元素来源为 default）与 aiDisclosure（placement 与 template 各含 value 与 source，见 export 主规格的 ai-disclosure）。每项设置都必须带 source 字段，取值为 genre:<id>、pack:<id> 或 project（没有任何配置层给出 contextBudget 时，其来源为 default），指明最终值来自哪个配置层（Config Layer）；rules 以规则 id 为键，其中 type、severity 与 params 的每个顶层键都各自带 value 与 source，任何配置层都没有给出 severity 时为 warning，来源为定义该规则的配置层。glossary 与 bannedTerms 按 term、rubric 按 id 合并，后面的配置层整项替换前面的同名项并保留其位置；style 按配置层顺序追加。存在 error 级诊断时 resolved 为 null，退出码为 1。未加 --json 时以人读文本输出同样的信息。未找到工作区时按 workspace-not-found 处理。
+    scenarios:
+      later-pack-wins:
+        - GIVEN: packs 为 [a, b]，a 与 b 都在 glossary 中定义词条「规范包」但写法不同
+        - WHEN: 运行 wa-cli config resolved --dir D --json
+        - THEN: resolved.glossary 中只有一条「规范包」词条，内容与 b 相同，source 为 pack:b
+      resolved-read-only:
+        - GIVEN: 合法的工作区
+        - WHEN: 运行 wa-cli config resolved --dir D --json
+        - THEN: changedPaths 为空数组，工作区内所有文件的内容与修改时间不变
+      pack-overrides-genre:
+        - GIVEN: '工作区的 default_genre 为 minimal（内置规则 length：type 为 length-range，severity 为 warning，params 为 {min: 300, max: 5000}），packs 为 [house]，house 规范包把 length 的 severity 设为 error、params.max 设为 20'
+        - WHEN: 运行 wa-cli config resolved --dir D --json
+        - THEN: 'resolved.rules.length 的 severity 为 {value: error, source: pack:house}，params.max 为 {value: 20, source: pack:house}，params.min 为 {value: 300, source: genre:minimal}，type 为 {value: length-range, source: genre:minimal}，退出码为 0'
+      project-overrides-pack:
+        - GIVEN: 同上，config.yaml 的 rules 中把 length 的 params.max 设为 30
+        - WHEN: 运行 wa-cli config resolved --dir D --json
+        - THEN: 'resolved.rules.length.params.max 为 {value: 30, source: project}，severity 仍来自 pack:house'
+      errors-null-resolved:
+        - GIVEN: packs 为 [house]，house 规范包定义了没有 type 的新规则 r9
+        - WHEN: 运行 wa-cli config resolved --dir D --json
+        - THEN: valid 为 false，resolved 为 null，退出码为 1
+      resolved-ai-disclosure:
+        - GIVEN: config.yaml 的 ai_disclosure 为 metadata，packs 为 [default, brand]，brand 声明了 ai_disclosure_template
+        - WHEN: 运行 wa-cli config resolved --dir D --json
+        - THEN: 'resolved.aiDisclosure.placement 为 {value: metadata, source: project}，template 的 source 为 pack:brand；没有这些配置时 placement 为 {value: both, source: default}、template 的 source 为 default'
+  rule-merge:
+    strength: MUST
+    statement: 合并规则（Rule）时，首次定义某个规则 id 的配置层必须给出 type，否则报告错误码 rule.missing-type（field 为 rules.<id>）；后续配置层给出与已有值不同的 type 时报告错误码 rule.type-conflict（field 为 rules.<id>.type）。两种情况下 wa-cli config resolved 与 wa-cli validate 都以退出码 1 退出，诊断的 path 为出问题的配置层的产物路径；内置文体或规范包不填 path，message 以「内置文体 <id>：」或「内置规范包 <id>：」开头指明出处。
+    scenarios:
+      missing-type:
+        - GIVEN: house 规范包的 rules 中定义了文体与之前的规范包都没有的规则 r9，但没有 type
+        - WHEN: 运行 wa-cli config resolved --dir D --json
+        - THEN: diagnostics 中有一条错误码为 rule.missing-type、path 为 .writing-anything/packs/house.yaml、field 为 rules.r9 的诊断，valid 为 false，退出码为 1
+      type-conflict:
+        - GIVEN: default_genre 为 minimal（length 的 type 为 length-range），house 规范包把 length 的 type 写成 paragraph-length
+        - WHEN: 运行 wa-cli config resolved --dir D --json
+        - THEN: diagnostics 中有一条错误码为 rule.type-conflict、path 为 .writing-anything/packs/house.yaml、field 为 rules.length.type 的诊断，退出码为 1
+      builtin-layer-problem:
+        - GIVEN: packs 为 [a, default]，工作区规范包 a 把规则 ai-cliche 定义为 banned-terms 类型，内置 default 规范包中 ai-cliche 的类型为 ai-cliche
+        - WHEN: 运行 wa-cli config resolved --dir D --json
+        - THEN: diagnostics 中有一条错误码为 rule.type-conflict 的诊断，不含 path，message 以「内置规范包 default：」开头，退出码为 1
+  waivers:
+    strength: MUST
+    statement: 规范包与项目配置可以用 waivers 豁免（Waiver）一条规则，每项豁免必须写明非空的 reason。被豁免的规则在 resolved.rules 中 enabled 为 false，并带 waiver（reason 与 source）；未被豁免的规则 enabled 为 true、waiver 为 null。豁免缺少 reason 时报告 artifact.schema-violation；豁免指向合并后不存在的规则时报告错误码 rule.unknown-waiver-target；两种情况都以退出码 1 退出。
+    scenarios:
+      waiver-disables:
+        - GIVEN: 'house 规范包的 waivers 为 [{rule: r1, reason: 本团队不限制段落长度}]'
+        - WHEN: 运行 wa-cli config resolved --dir D --json
+        - THEN: 'resolved.rules.r1.enabled 为 false，waiver 为 {reason: 本团队不限制段落长度, source: pack:house}，退出码为 0'
+      waiver-without-reason:
+        - GIVEN: house 规范包的豁免缺少 reason
+        - WHEN: 运行 wa-cli validate --dir D --json
+        - THEN: diagnostics 中有一条错误码为 artifact.schema-violation、field 为 waivers[0].reason 的诊断，退出码为 1
+      waiver-unknown-rule:
+        - GIVEN: house 规范包豁免了不存在的规则 nope
+        - WHEN: 运行 wa-cli config resolved --dir D --json
+        - THEN: diagnostics 中有一条错误码为 rule.unknown-waiver-target、field 为 waivers[0].rule 的诊断，退出码为 1
+  data-only-packs:
+    strength: MUST
+    statement: 规范包、文体与 config.yaml 只能包含数据。出现 YAML 核心标签（!!str、!!int、!!float、!!bool、!!null、!!map、!!seq、!!timestamp）以外的标签，或在任意深度出现名为（不区分大小写）script、scripts、command、commands、exec、shell、hook、hooks、plugin、plugins、run、eval 的字段时，wa-cli validate 与 wa-cli config resolved 都必须报告错误码 artifact.executable-content（path 为该产物路径，field 为出现位置，message 给出行号），以退出码 1 退出；wa-cli 在任何情况下都不得执行产物中的内容。
+    scenarios:
+      custom-tag:
+        - GIVEN: .writing-anything/packs/house.yaml 中某个值带有 !exec 标签
+        - WHEN: 运行 wa-cli validate .writing-anything/packs/house.yaml --dir D --json
+        - THEN: diagnostics 中有一条错误码为 artifact.executable-content、path 为 .writing-anything/packs/house.yaml 的诊断，message 含该标签所在的行号，退出码为 1
+      script-field-in-params:
+        - GIVEN: house 规范包某条规则的 params 中含有 script 字段
+        - WHEN: 运行 wa-cli config resolved --dir D --json
+        - THEN: diagnostics 中有一条错误码为 artifact.executable-content、field 指向该 script 字段的诊断，valid 为 false，退出码为 1
+  known-rule-types:
+    strength: MUST
+    statement: 规则的 type 必须是已知规则类型（Rule Type）之一：cjk-typography、ai-cliche、banned-terms、term-consistency、length-range、paragraph-length、required-sections、claim-sources、claim-candidates、code-block-language、link-format、reference-sources、ad-compliance、dialogue-punctuation、pov-consistency。出现其他 type 时，wa-cli validate 与 wa-cli config resolved 必须报告错误码 rule.unknown-type（field 为该规则的 type，message 列出已知类型），以退出码 1 退出。
+    scenarios:
+      unknown-rule-type:
+        - GIVEN: house 规范包定义规则 r9，type 为 run-shell
+        - WHEN: 运行 wa-cli validate --dir D --json
+        - THEN: diagnostics 中有一条错误码为 rule.unknown-type、field 为 rules.r9.type 的诊断，message 列出已知的规则类型（含 dialogue-punctuation 与 pov-consistency），退出码为 1
+  workspace-pack-files:
+    strength: MUST
+    statement: 作者可以把自有规范包放在 .writing-anything/packs/<id>.yaml，并在 config.yaml 的 packs 中按 id 引用；wa-cli validate <path> 必须把该位置的文件识别为规范包并校验。文件内的 id 与文件名（去掉 .yaml）不一致时报告错误码 pack.id-mismatch；id 与内置规范包相同时报告错误码 pack.id-conflict；两者都以退出码 1 退出。wa-cli init 不创建 packs/ 目录，缺少该目录不是错误。
+    scenarios:
+      id-mismatch:
+        - GIVEN: .writing-anything/packs/house.yaml 中 id 为 office
+        - WHEN: 运行 wa-cli validate --dir D --json
+        - THEN: diagnostics 中有一条错误码为 pack.id-mismatch、path 为 .writing-anything/packs/house.yaml、field 为 id 的诊断，退出码为 1
+      id-conflict:
+        - GIVEN: .writing-anything/packs/default.yaml 是 id 为 default 的合法规范包
+        - WHEN: 运行 wa-cli validate --dir D --json
+        - THEN: diagnostics 中有一条错误码为 pack.id-conflict、path 为 .writing-anything/packs/default.yaml 的诊断，退出码为 1
+      no-packs-dir:
+        - GIVEN: 刚用 wa-cli init --dir D 创建的工作区，没有 packs/ 目录
+        - WHEN: 运行 wa-cli validate --dir D --json
+        - THEN: valid 为 true，退出码为 0
+  default-pack:
+    strength: MUST
+    statement: 'config.yaml 的 packs 为空数组时，wa-cli config resolved 必须隐式应用内置 default 规范包，resolved.packs 为 [{id: default, origin: builtin}]；packs 非空时只按列出的顺序应用列出的规范包，需要 default 时须显式列出。'
+    scenarios:
+      empty-packs-uses-default:
+        - GIVEN: 刚用 wa-cli init --dir D 创建的工作区，packs 为空
+        - WHEN: 运行 wa-cli config resolved --dir D --json
+        - THEN: resolved.packs 只含 default，resolved.genre 为 null，resolved.rules 中每条规则的 source 都为 pack:default，退出码为 0
+      explicit-packs-replace-default:
+        - GIVEN: packs 为 [house]
+        - WHEN: 运行 wa-cli config resolved --dir D --json
+        - THEN: resolved.packs 只含 house，不含 default
+  duplicate-entries:
+    strength: MUST
+    statement: 同一个规范包中 glossary 或 banned_terms 的 term 重复、rubric 的 id 重复，或同一个文体中 unit_types、stages、rubric 的 id 重复时，必须报告错误码 artifact.duplicate-id，field 指向重复出现的那一项；文体的单元类型 children 引用未声明的单元类型时报告 genre.unknown-unit-type；文体声明 id 为 done 的阶段时报告 genre.reserved-stage-id（done 保留为生命周期终点，field 指向该阶段的 id）。三种情况都以退出码 1 退出。
+    scenarios:
+      duplicate-glossary-term:
+        - GIVEN: .writing-anything/packs/house.yaml 的 glossary 中「规范包」出现两次
+        - WHEN: 运行 wa-cli validate --dir D --json
+        - THEN: diagnostics 中有一条错误码为 artifact.duplicate-id、field 为 glossary[1].term 的诊断，退出码为 1
+  tech-blog-genre:
+    strength: MUST
+    statement: 'wa-cli 必须随二进制提供内置的 tech-blog 文体（技术博客（Tech Blog））：单元类型 article（子单元类型 section，简报必填项为 audience、purpose 与 key_messages）与 section；阶段依次为 brief（必需产物 brief）、outline（outline）、draft（draft）与 review（review 与 acceptance）；默认写作法为 pyramid-scqa；规则 claims（claim-sources，error）、claim-candidates（warning）、code-language（code-block-language，error）、links（link-format，error）、references（reference-sources，warning）与 length（length-range，warning，800 到 8000 字）；评分标准为 accuracy（技术准确，blocking: true）、reproducible（可复现）、audience-fit（受众匹配）与 doc-type（文档类型明确：属于 Diátaxis 的教程、操作指南、参考或解释之一）；上下文预算为 16000。它与其他内置文体一样通过文体的校验。'
+    scenarios:
+      new-tech-blog:
+        - GIVEN: 刚用 wa-cli init --dir D 初始化的工作区
+        - WHEN: 运行 wa-cli new tech-blog post --dir D --json，再运行 wa-cli config resolved --dir D --json（config.yaml 的 default_genre 为 tech-blog）
+        - THEN: work.yaml 的 genre 为 tech-blog、type 为 article、stage 为 brief；resolved.rules 含 code-language、links 与 references，resolved.rubric 含 accuracy 且 blocking 为 true，退出码都为 0
+  wechat-marketing-genre:
+    strength: MUST
+    statement: 'wa-cli 必须随二进制提供内置的 wechat-marketing 文体（公众号营销文章）：单元类型 article（子单元类型 section，简报必填项为 audience、purpose 与 key_messages）与 section；阶段依次为 brief（必需产物 brief）、outline（outline）、draft（draft 与 marketing，见 marketing 主规格的 marketing-gate）与 review（review 与 acceptance）；默认写作法为 aida；规则 claims（claim-sources，error）、claim-candidates（warning）、ads（ad-compliance，error）、length（length-range，warning，1500 到 4000 字）与 paragraphs（paragraph-length，warning，每段不超过 150 字）；评分标准为 reader-benefit（读者收益）、hook（开头钩子）、cta（行动号召）、compliance（合规可信，blocking: true）与 4U 标题法的 headline-useful（有用）、headline-urgent（紧迫）、headline-unique（独特）、headline-specific（具体），标题类评分项针对作者选定的标题；上下文预算为 12000。它与其他内置文体一样通过文体的校验。'
+    scenarios:
+      new-wechat-marketing:
+        - GIVEN: 用 wa-cli init --genre wechat-marketing --dir D 初始化的工作区
+        - WHEN: 运行 wa-cli new wechat-marketing post --dir D --json，再运行 wa-cli config resolved --dir D --json
+        - THEN: work.yaml 的 genre 为 wechat-marketing、type 为 article、stage 为 brief；resolved.rules.ads.type.value 为 ad-compliance、severity 为 error；resolved.rubric 含 headline-useful 与 blocking 为 true 的 compliance；退出码都为 0
+      superlative-fails-lint:
+        - GIVEN: wechat-marketing 作品 post 的 draft.md 含「全网最低价」
+        - WHEN: 运行 wa-cli lint post --dir D --json
+        - THEN: findings 含一项 rule 为 ads、type 为 ad-compliance、source 为 genre:wechat-marketing 的发现项，退出码为 1
+      wechat-e2e:
+        - GIVEN: 用 wa-cli init --genre wechat-marketing --gate-level strict 初始化的工作区
+        - WHEN: 只用 wa-cli 命令完成：new、source add、brief set、advance、按 aida 的章节 outline set、advance、draft write、claim add、marketing set、marketing ask、decide、lint（没有 error 级发现项）、advance、review record（含 4U 评分项）、accept（给出作者确认）、advance 与 export
+        - THEN: 作品 stage 为 done，导出文件含正文，validate 通过；缺少某个营销要素或标题未决定时 advance 被拒绝
+  pack-html-theme:
+    strength: MUST
+    statement: '规范包可以用 html_theme 声明 HTML 导出的样式主题（HTML Theme）：键必须是元素名 wrapper、h1、h2、h3、h4、p、strong、em、code、pre、blockquote、ul、ol、li、hr、figure、caption、footnote 与 references 之一，值为 CSS 声明（一个或多个「属性: 值」，用分号分隔；属性名由小写字母与连字符组成，值只能由英文字母、数字、空格、制表符与 # % . , ( ) + - 组成（字符白名单），且不区分大小写地不含 url(、expression 与 javascript）；元素名不在列表中或取值不符合时 wa-cli validate 与 wa-cli config resolved 报告 artifact.schema-violation（field 为 html_theme.<元素名>），config resolved 的 resolved 为 null，以退出码 1 退出。合并时以内置默认主题为基础，按 config.yaml 中 packs 的顺序逐个元素覆盖，后面的规范包覆盖前面的；resolved.htmlTheme 的每个元素含 value 与 source（规范包为 pack:<id>，内置默认为 default）。文体与 config.yaml 不能声明 html_theme。'
+    scenarios:
+      theme-override:
+        - GIVEN: '工作区规范包 brand 的 html_theme 为 {h2: "color: #c00"}，config.yaml 的 packs 为 [default, brand]'
+        - WHEN: 运行 wa-cli config resolved --dir D --json，再导出已验收的作品 --format wechat-html
+        - THEN: 'resolved.htmlTheme.h2 为 {value: "color: #c00", source: pack:brand}，htmlTheme.p 的 source 为 default；导出的 h2 标签 style 为 color: #c00'
+      theme-unsafe:
+        - GIVEN: '规范包 brand 的 html_theme 为 {p: "background: url(http://x/a.png)"}'
+        - WHEN: 运行 wa-cli validate --dir D --json
+        - THEN: diagnostics 中有一条错误码为 artifact.schema-violation、field 为 html_theme.p 的诊断，退出码为 1
+  pack-install:
+    strength: MUST
+    statement: wa-cli pack install <source> 必须把规范包（Pack）安装到 --dir 下工作区的 .writing-anything/packs/<id>.yaml（id 取自规范包文件的 id 字段），并在锁定文件（Lock File）中记录来源与版本（见 pack-lock-file）。source 以 https://、http://、ssh://、git:// 或 file:// 开头，或形如 user@host:path 时为 git 地址：wa-cli 调用系统 git 克隆（不递归子模块、不运行仓库中的钩子、不交互提示，超过 2 分钟视为失败），检出 --ref 给出的分支、标签或提交（未给出时为默认分支），读取仓库根目录的 pack.yaml（必须是普通文件，不是符号链接）；其他 source 为相对 --dir 或绝对的本地路径，指向 .yaml 文件时读取该文件，指向目录时读取其中的 pack.yaml。规范包文件大小不超过 1 MiB，内容逐字节复制。写入前必须完成与工作区规范包相同的全部校验（Schema、可执行内容、重复项、已知规则类型），这些问题的诊断不填 path，message 以「规范包来源 <source>：」开头，next 为 wa-cli help pack install --json；任何一项失败都不写入任何文件，changedPaths 为空，退出码为 1。id 与内置规范包相同时报告 pack.id-conflict；packs/<id>.yaml 已存在但没有锁定条目（或不是普通文件）时报告 pack.exists（next 含 wa-cli pack list），不覆盖；已有锁定条目时替换文件与条目；来源、提交与内容都未变时不写入任何文件；工作区目录或 packs/ 不是真实目录（如符号链接）时报告 workspace.write-failed，不经由它写入。source 不是 git 地址、不是已存在的路径，且形如 <owner>/<name> 时报告 pack.registry-unsupported（中心化仓库（Registry）尚未支持）；其他不存在的路径报告 pack.source-not-found；目录中没有 pack.yaml、文件不是 .yaml、不是普通文件或超过大小上限时报告 pack.invalid-source；找不到 git 时报告 pack.git-unavailable；git 以非 0 退出或超时时报告 pack.git-failed，message 含截断后的 git 输出；--ref 只用于 git 地址，以 - 开头、含空白或用于本地路径时报告 input.invalid-value。--json 输出的 pack 含 id、title、path、source（git 与 ref，或 path）、commit（本地路径为 null）、sha256 与 status（installed、updated 或 unchanged），失败时为 null；changedPaths 列出写入的规范包文件与锁定文件。pack install 不修改 config.yaml，启用规范包仍通过 wa-cli config set packs；wa-cli 不执行规范包或其仓库中的任何内容。
+    scenarios:
+      install-from-path:
+        - GIVEN: 工作区 D 之外的 ../house/pack.yaml 是 id 为 house 的合法规范包
+        - WHEN: 运行 wa-cli pack install ../house --dir D --json
+        - THEN: D/.writing-anything/packs/house.yaml 与来源文件逐字节相同；pack.status 为 installed，source.path 为 ../house，commit 为 null，sha256 为该文件的 SHA-256；changedPaths 为 [.writing-anything/packs/house.yaml, .writing-anything/packs.lock.yaml]；config.yaml 不变；退出码为 0
+      install-from-git:
+        - GIVEN: file:// 地址指向的 git 仓库根目录有 id 为 house 的 pack.yaml，标签 v1 指向提交 C
+        - WHEN: 运行 wa-cli pack install file:///repo/house.git --ref v1 --dir D --json
+        - THEN: 'pack.source 为 {git: file:///repo/house.git, ref: v1}，pack.commit 为 C 的完整 40 位提交号，锁定文件中 house 的 commit 与 sha256 与之相同，退出码为 0'
+      install-idempotent:
+        - GIVEN: 已按 install-from-path 安装 house，来源未改变
+        - WHEN: 再运行一次同样的命令
+        - THEN: pack.status 为 unchanged，changedPaths 为空数组，两个文件的内容与修改时间不变，退出码为 0
+      install-update:
+        - GIVEN: 已安装 house，随后来源文件中 title 被修改
+        - WHEN: 再运行同样的 pack install 命令
+        - THEN: pack.status 为 updated，packs/house.yaml 为新内容，锁定条目的 sha256 随之更新，退出码为 0
+      install-invalid-writes-nothing:
+        - GIVEN: 来源规范包某条规则的 params 含 script 字段
+        - WHEN: 运行 wa-cli pack install ../bad --dir D --json
+        - THEN: diagnostics 中有一条错误码为 artifact.executable-content 的诊断，packs/ 与锁定文件都不被创建或修改，changedPaths 为空数组，退出码为 1
+      install-keeps-handwritten:
+        - GIVEN: packs/house.yaml 是作者手写的规范包，锁定文件中没有 house
+        - WHEN: 运行 wa-cli pack install ../house --dir D --json
+        - THEN: diagnostics 中有一条错误码为 pack.exists、path 为 .writing-anything/packs/house.yaml 的诊断，该文件不变，退出码为 1
+      install-builtin-id:
+        - GIVEN: 来源规范包的 id 为 default
+        - WHEN: 运行 wa-cli pack install ../default-copy --dir D --json
+        - THEN: diagnostics 中有一条错误码为 pack.id-conflict 的诊断，不写入任何文件，退出码为 1
+      install-registry-reserved:
+        - GIVEN: 项目目录下不存在路径 acme/house
+        - WHEN: 运行 wa-cli pack install acme/house --dir D --json
+        - THEN: diagnostics 中有一条错误码为 pack.registry-unsupported 的诊断，message 说明需要使用 git 地址或本地路径，退出码为 1
+      install-git-failure:
+        - GIVEN: git 地址指向不存在的仓库
+        - WHEN: 运行 wa-cli pack install file:///nope.git --dir D --json
+        - THEN: diagnostics 中有一条错误码为 pack.git-failed 的诊断，message 含 git 的输出，不写入任何文件，退出码为 1
+  pack-lock-file:
+    strength: MUST
+    statement: 锁定文件 .writing-anything/packs.lock.yaml 必须由 wa-cli pack install 与 wa-cli pack remove 维护：schema_version 为 1，packs 为按 id 排序的锁定条目数组，每项含 id、source（git 来源为 git 与可选的 ref；本地来源为 path：参数给出绝对路径时写规整后的绝对路径，给出相对路径时写规整后相对 --dir 的路径，无法表示为相对路径时写绝对路径）、commit（只有 git 来源有，为 40 位十六进制提交号）与 sha256（已安装规范包文件内容的 SHA-256）。wa-cli validate .writing-anything/packs.lock.yaml 必须按其 JSON Schema 校验该文件，不合法时报告 artifact.schema-violation；条目 id 重复时报告 artifact.duplicate-id（field 为重复的 packs[i].id）；退出码都为 1。修改锁定文件时只改目标条目，保留其他条目与注释；目标条目或 packs 带 YAML 锚点、是别名或含合并键时报告 pack.anchored-value，不写入任何文件。工作区没有锁定文件不是错误；wa-cli init 不创建它。
+    scenarios:
+      lock-entry:
+        - GIVEN: 已从本地路径安装 house、从 git 地址安装 brand
+        - WHEN: 读取 .writing-anything/packs.lock.yaml 并运行 wa-cli validate .writing-anything/packs.lock.yaml --dir D --json
+        - THEN: packs 依次为 brand 与 house；brand 含 source.git、commit 与 sha256，house 含 source.path 与 sha256、没有 commit；validate 的 valid 为 true，退出码为 0
+      lock-schema-violation:
+        - GIVEN: 锁定文件中某个条目的 sha256 不是 64 位十六进制
+        - WHEN: 运行 wa-cli validate --dir D --json
+        - THEN: diagnostics 中有一条错误码为 artifact.schema-violation、path 为 .writing-anything/packs.lock.yaml、field 为 packs[0].sha256 的诊断，退出码为 1
+      lock-duplicate:
+        - GIVEN: 锁定文件中两个条目的 id 都为 a
+        - WHEN: 运行 wa-cli validate .writing-anything/packs.lock.yaml --dir D --json
+        - THEN: diagnostics 中有一条错误码为 artifact.duplicate-id、field 为 packs[1].id 的诊断，退出码为 1
+      lock-keeps-comments:
+        - GIVEN: 锁定文件含作者写的注释与条目 zeta
+        - WHEN: 运行 wa-cli pack install 安装 id 为 house 的规范包
+        - THEN: 锁定文件保留原注释，house 条目排在 zeta 之前
+  pack-lock-verify:
+    strength: MUST
+    statement: 不带位置参数的 wa-cli validate 必须校验锁定文件与已安装规范包的一致性：锁定条目对应的 packs/<id>.yaml 不存在时报告错误码 pack.lock-missing-file，存在但内容的 SHA-256 与锁定的 sha256 不同时报告错误码 pack.lock-mismatch；两者的 path 为 .writing-anything/packs/<id>.yaml（field 为空），next 含按锁定来源重新安装的 wa-cli pack install 命令（git 来源带锁定的提交作为 --ref）与 wa-cli pack remove <id> 命令，退出码为 1。没有锁定条目的工作区规范包不做此检查。
+    scenarios:
+      verify-passes:
+        - GIVEN: 已安装 house，未做修改
+        - WHEN: 运行 wa-cli validate --dir D --json
+        - THEN: valid 为 true，退出码为 0
+      verify-modified:
+        - GIVEN: 已安装 house，随后 packs/house.yaml 被手工修改
+        - WHEN: 运行 wa-cli validate --dir D --json
+        - THEN: diagnostics 中有一条错误码为 pack.lock-mismatch、path 为 .writing-anything/packs/house.yaml 的诊断，next 含 wa-cli pack install 的重新安装命令，退出码为 1
+      verify-missing:
+        - GIVEN: 已安装 house，随后 packs/house.yaml 被删除
+        - WHEN: 运行 wa-cli validate --dir D --json
+        - THEN: diagnostics 中有一条错误码为 pack.lock-missing-file 的诊断，退出码为 1
+  pack-list:
+    strength: MUST
+    statement: wa-cli pack list 必须只读地列出可用的规范包，不修改任何产物，changedPaths 为空数组。--json 输出的 packs 依次为内置规范包（按 id 排序）、工作区中的规范包与锁定文件中有条目但文件缺失的规范包（按 id 排序），每项含 id、title（文件缺失或无法加载时为 null）、origin（builtin 或 workspace）、path（内置为 null）、enabled（是否在 config.yaml 的 packs 中；packs 为空时只有 default 为 true）、status 与 lock（锁定条目的 source、commit 与 sha256；没有锁定条目时为 null）。status 取值 builtin（内置）、local（作者手写、没有锁定条目）、installed（与锁定一致）、modified（内容与锁定的 sha256 不同）与 missing（有锁定条目但文件不存在）；modified 与 missing 各给出一条 warning 级诊断（错误码同 pack-lock-verify），不使命令失败。锁定文件无法解析或不符合 Schema 时报告对应的错误，退出码为 1。未加 --json 时以人读文本输出同样的信息。
+    scenarios:
+      list-statuses:
+        - GIVEN: 工作区有手写的 office、已安装未修改的 house 与已安装后被修改的 brand，config.yaml 的 packs 为 [house]
+        - WHEN: 运行 wa-cli pack list --dir D --json
+        - THEN: packs 依次含 default（status 为 builtin、enabled 为 false）、brand（modified）、house（installed、enabled 为 true、lock 非 null）与 office（local、lock 为 null）；diagnostics 中有一条 warning 级 pack.lock-mismatch，valid 为 true，changedPaths 为空数组，退出码为 0
+  pack-remove:
+    strength: MUST
+    statement: wa-cli pack remove <id> 必须删除已安装规范包的文件 .writing-anything/packs/<id>.yaml 并从锁定文件中移除其条目（文件已缺失时只移除条目），changedPaths 列出两者，退出码为 0。id 不是 id 格式时报告 input.invalid-value；id 没有锁定条目（内置规范包、作者手写的规范包或不存在）时报告错误码 pack.not-installed，不删除任何文件；规范包仍在 config.yaml 的 packs 中时报告错误码 pack.in-use，next 为去掉该 id 后的 wa-cli config set packs 命令，不删除任何文件；这些情况的退出码为 1。
+    scenarios:
+      remove-installed:
+        - GIVEN: 已安装 house，config.yaml 的 packs 为空
+        - WHEN: 运行 wa-cli pack remove house --dir D --json
+        - THEN: packs/house.yaml 不存在，锁定文件中没有 house 条目，changedPaths 含 .writing-anything/packs/house.yaml 与 .writing-anything/packs.lock.yaml，退出码为 0
+      remove-in-use:
+        - GIVEN: 已安装 house，config.yaml 的 packs 为 [default, house]
+        - WHEN: 运行 wa-cli pack remove house --dir D --json
+        - THEN: diagnostics 中有一条错误码为 pack.in-use 的诊断，next 含 wa-cli config set packs default --dir D --json，文件与锁定条目都不变，退出码为 1
+      remove-handwritten:
+        - GIVEN: packs/office.yaml 是作者手写的规范包
+        - WHEN: 运行 wa-cli pack remove office --dir D --json
+        - THEN: diagnostics 中有一条错误码为 pack.not-installed 的诊断，office.yaml 不变，退出码为 1
+  scored-metrics:
+    strength: MUST
+    statement: 文体与规范包可以用 scored_metrics 声明 AI 评分指标（Metric）：每项含 id、title、可选的 description、scale（min 与 max 为整数，max − min 为 1 到 25）、anchors（锚定评分（Anchored Scale）：scale 内每个整数分值恰有一项，含 score、description 与 example 示例片段）以及可选的 sessions（需要的独立打分会话数，1 到 9，默认 3）、max_spread（分歧阈值，默认 1）、tolerance（校准时视为相符的最大差值，默认 1）、min_samples（判断降级所需的最少校准样本数，默认 5）与 min_agreement（0 到 1 的一致率阈值，默认 0.7）。config.yaml 不能声明 scored_metrics。同一文体或规范包中指标 id 重复时报告 artifact.duplicate-id；max 不大于 min 或 max − min 大于 25 时报告 metrics.invalid-scale（field 为 scored_metrics[i].scale）；anchors 缺少或重复某个分值、含 scale 之外的分值时报告 metrics.invalid-anchors（field 为 scored_metrics[i].anchors）；wa-cli validate 与 wa-cli config resolved 都以退出码 1 退出。合并时按 文体 → 规范包（按 packs 的顺序）的顺序，后面的配置层按 id 整项替换前面的同名指标并保留其位置；resolved.scoredMetrics 的每项含 id、title、description、scale、anchors、sessions、maxSpread、tolerance、minSamples、minAgreement（未声明的取默认值）与 source（genre:<id> 或 pack:<id>）；没有任何配置层声明时为空数组。
+    scenarios:
+      pack-declares-metric:
+        - GIVEN: 工作区规范包 house 声明 AI 评分指标 tension：scale 为 1 到 5，anchors 含 1 到 5 分各一项，sessions 为 2；config.yaml 的 packs 为 [house]
+        - WHEN: 运行 wa-cli config resolved --dir D --json
+        - THEN: resolved.scoredMetrics 只含 tension，source 为 pack:house，sessions 为 2，maxSpread 为 1，tolerance 为 1，minSamples 为 5，minAgreement 为 0.7，退出码为 0
+      missing-anchor:
+        - GIVEN: house 规范包的 tension 的 scale 为 1 到 5，anchors 缺少 4 分
+        - WHEN: 运行 wa-cli validate --dir D --json
+        - THEN: diagnostics 中有一条错误码为 metrics.invalid-anchors、path 为 .writing-anything/packs/house.yaml、field 为 scored_metrics[0].anchors 的诊断，message 指出缺少 4 分，退出码为 1
+      later-pack-replaces-metric:
+        - GIVEN: packs 为 [a, b]，a 与 b 都声明了指标 tension 但 title 不同
+        - WHEN: 运行 wa-cli config resolved --dir D --json
+        - THEN: resolved.scoredMetrics 只有一项 tension，内容与 b 相同，source 为 pack:b
+  pack-style-profile:
+    strength: MUST
+    statement: 规范包可以用 style_profile 声明文风画像（Style Profile）：sources（素材 id）、chars、sentences、paragraphs、punctuation 与 terms，结构同 style-profile 主规格的 style-stats；通常由 wa-cli pack confirm 写入。文体与 config.yaml 不能声明。wa-cli config resolved 的 resolved.styleProfile 为 packs 中最后一个声明 style_profile 的规范包的取值，含 value 与 source（pack:<id>）；没有规范包声明时为 null。
+    scenarios:
+      profile-resolved:
+        - GIVEN: packs 为 [a, b]，a 与 b 都声明了 style_profile
+        - WHEN: 运行 wa-cli config resolved --dir D --json
+        - THEN: resolved.styleProfile.source 为 pack:b，value 与 b 的 style_profile 相同；packs 为 [default] 时 styleProfile 为 null
+  drift-threshold:
+    strength: MUST
+    statement: 规范包可以用 drift_threshold（大于 0、不超过 10 的数，表示标准差的倍数）设置文风漂移（Style Drift）的阈值；按 packs 的顺序合并，后面的规范包覆盖前面的；文体与 config.yaml 不能声明。wa-cli config resolved 的 resolved.driftThreshold 含 value 与 source（pack:<id>）；都没有声明时 value 为 2、source 为 default。
+    scenarios:
+      threshold-default:
+        - GIVEN: 文体与规范包都没有 drift_threshold
+        - WHEN: 运行 wa-cli config resolved --dir D --json
+        - THEN: 'resolved.driftThreshold 为 {value: 2, source: default}；规范包 mine 声明 1.5 且启用时为 {value: 1.5, source: pack:mine}'
+  short-story-genre:
+    strength: MUST
+    statement: wa-cli 必须随二进制提供内置的 short-story 文体（短篇小说（Short Story））：单元类型 story（子单元类型 scene，简报必填项为 premise、pov、length 与 key_messages，关键转折复用核心观点条目）与 scene（不声明简报必填项）；阶段依次为 brief（必需产物 brief）、outline（outline）、draft（draft）与 review（review 与 acceptance）；默认写作法为 three-act（三幕结构（Three-Act Structure）：setup、confrontation、climax 与 resolution 四个节拍，每个节拍含位置范围与目标张力（Target Tension），作者可通过写作简报的 method 改选其他写作法或用 none 退出）；不声明论断类规则（claims 与 claim-candidates），论断出处检查对虚构内容关闭；规则为 length（length-range，warning，1000 到 20000 字）、fiction-cliches（ai-cliche，warning，terms 为小说 AI 腔词表：眼底闪过一丝、嘴角勾起一抹、不易察觉的笑、空气仿佛凝固、时间仿佛静止、心中五味杂陈、命运的车轮、岁月静好、说不清道不明、仿佛在诉说着什么、内心深处、无声地呐喊）、dialogue（dialogue-punctuation，warning）与 pov（pov-consistency，warning，视角与人称一致，启发式检测，见 lint 主规格的 fiction-rule-types）；评分标准为 conflict（冲突清晰）、pacing（节奏得当）与 motivation（人物动机可信）；上下文预算为 16000。它与其他内置文体一样通过文体的校验。
+    scenarios:
+      new-short-story:
+        - GIVEN: 刚用 wa-cli init --genre short-story --dir D 初始化的工作区
+        - WHEN: 运行 wa-cli new short-story my-story --dir D --json，再运行 wa-cli config resolved --dir D --json
+        - THEN: work.yaml 的 genre 为 short-story、type 为 story、stage 为 brief；resolved.rules 含 length、fiction-cliches、dialogue 与 pov 且不含 claims 与 claim-candidates，fiction-cliches 的 terms 含「眼底闪过一丝」，三条新规则的 severity 均为 warning，resolved.rubric 含 conflict、pacing 与 motivation，unitTypes 中 story 的 briefRequired 为 [premise, pov, length, key_messages]、scene 的为空数组；退出码都为 0
+      default-structure-method:
+        - GIVEN: short-story 作品 my-story 的写作简报满足校验且没有 method，根单元 outline.yaml 有一节但没有 role
+        - WHEN: 运行 wa-cli outline show my-story --dir D --json，再运行 wa-cli brief set my-story --method none --dir D --json 与 wa-cli outline show my-story --dir D --json
+        - THEN: 第一次 gaps 含四项 code 为 outline.missing-method-part 的缺口（setup、confrontation、climax 与 resolution，即默认写作法 three-act 的节拍）；brief set --method none 后同样的大纲没有写作法缺口；退出码都为 0
+      fiction-claims-off:
+        - GIVEN: short-story 作品 my-story 的 draft.md 含亲历式叙述，作品没有关联素材的论断
+        - WHEN: 运行 wa-cli lint my-story --dir D --json
+        - THEN: findings 不含 type 为 claim-sources 或 claim-candidates 的发现项，退出码为 0
+      fiction-cliche-hit:
+        - GIVEN: short-story 作品 my-story 的 draft.md 含「她的眼底闪过一丝慌乱。」
+        - WHEN: 运行 wa-cli lint my-story --dir D --json
+        - THEN: findings 含一项 rule 为 fiction-cliches、severity 为 warning、source 为 genre:short-story 的发现项，退出码为 0
+      short-story-e2e:
+        - GIVEN: 用 wa-cli init --genre short-story --dir D 初始化的工作区，以及含违例文本与合规文本的测试夹具
+        - WHEN: 只用 wa-cli 命令完成：new、source add（作者的前提笔记）、brief set（premise 关联素材、pov、length 与作为关键转折的 key_messages，转折关联素材）、advance、根单元按情节节拍 outline set（每节同时以 --role 承担默认写作法 three-act 的 setup、confrontation、climax 或 resolution 节拍）、advance、canon add 出场人物（人物卡，带 name）、unit add 两个场景、场景 outline set（characters、beats 与 reveal）、场景一 draft write（合规文本，lint 无 error 级与论断类发现项；以违例文本夹具断言 dialogue、pov 与 fiction-cliches 的发现项）、advance、review record、accept（给出作者确认）、advance、summary set 场景一摘要、场景二 draft write 前运行 context（断言 characters、priorScenes 与 reveal）、完成场景二生命周期、最后 export --format text 与 export
+        - THEN: 两个场景 stage 为 done，纯文本导出文件只含已验收场景的正文且不含 Markdown 标记（未验收的根单元以 warning 跳过），validate 通过；前提或关键转折没有关联作者素材或确认记录时 advance 被拒绝；根单元大纲缺少默认写作法要求的节拍时 advance 同样被拒绝
+  genre-pacing-checks:
+    strength: MUST
+    statement: 文体（Genre）可以用 pacing_checks 声明节奏检查（Pacing Check）：每项含 id、metric（AI 评分指标 id）、min_score（片段取值达到该分值视为节拍点）与 max_gap_chars（正整数，相邻两个节拍点片段之间允许的最大非空白字符数）。规范包（Pack）与 config.yaml 不能声明 pacing_checks（出现时报告 artifact.schema-violation）。wa-cli config resolved 的 resolved.pacingChecks 按声明顺序输出，每项含 id、metric、minScore、maxGapChars 与 source（genre:<id>）；没有声明时为空数组。同一文体中 id 重复时报告 artifact.duplicate-id；max_gap_chars 不是正整数时报告 pacing.invalid-params（field 为 pacing_checks[i].max_gap_chars）；合并后 metric 不在已声明指标（resolved.scoredMetrics）中时报告 pacing.unknown-metric（field 为 pacing_checks[i].metric），min_score 不在该指标的 scale 内时报告 pacing.invalid-params（field 为 pacing_checks[i].min_score）；这些情况 wa-cli validate 与 wa-cli config resolved 都以退出码 1 退出。节奏检查的判定由 wa-cli curve 执行（见 metrics 主规格的 curve-command），发现项不阻塞验收。
+    scenarios:
+      pacing-unknown-metric:
+        - GIVEN: 文体的 pacing_checks 引用未在任何配置层声明的指标 nope
+        - WHEN: 运行 wa-cli validate --dir D --json
+        - THEN: diagnostics 中有一条错误码为 pacing.unknown-metric、field 为 pacing_checks[0].metric 的诊断，退出码为 1
+      declare-pacing-check:
+        - GIVEN: '刚用 wa-cli init --genre short-story --dir D 初始化的工作区：short-story 文体声明 pacing_checks 为 [{id: emotional-beat-gap, metric: emotion, min_score: 3, max_gap_chars: 2000}]'
+        - WHEN: 运行 wa-cli config resolved --dir D --json
+        - THEN: resolved.pacingChecks 只含 emotional-beat-gap，minScore 为 3、maxGapChars 为 2000、source 为 genre:short-story，退出码为 0
+  short-story-scored-metrics:
+    strength: MUST
+    statement: short-story 文体必须声明 AI 评分指标 emotion（情绪）与 tension（张力）：scale 都为 1 到 5，anchors 含 scale 内每个分值的 description 与 example，字段与校验同 scored-metrics；作者与规范包可按 id 整项覆盖（合并规则同 scored-metrics）。文体另声明节奏检查 emotional-beat-gap：emotion 取值达到 3 分的片段之间最多 2000 个非空白字符（见本规格 genre-pacing-checks）。这两个指标使 wa-cli curve 在 short-story 作品上输出情绪曲线（Emotion Curve）与张力曲线（Tension Curve），并执行节奏检查。
+    scenarios:
+      resolve-story-metrics:
+        - GIVEN: 刚用 wa-cli init --genre short-story --dir D 初始化的工作区
+        - WHEN: 运行 wa-cli config resolved --dir D --json
+        - THEN: resolved.scoredMetrics 含 emotion 与 tension，source 都为 genre:short-story，scale 为 1 到 5、anchors 各 5 项；resolved.pacingChecks 含 emotional-beat-gap，退出码为 0
+  aggregated-unit-types:
+    strength: MUST
+    statement: 文体（Genre）的单元类型可以用布尔字段 stage_from_children 声明汇总单元（Aggregated Unit）：取值为 true 时，该单元类型的单元的阶段由子单元汇总得出（见 units-and-lifecycle 主规格的 derived-stage），省略或为 false 时单元各自独立推进。stage_from_children 只允许出现在声明了 children 的单元类型上：在不带 children 的单元类型上声明时，wa-cli validate 与 wa-cli config resolved 必须报告错误码 artifact.schema-violation（field 为 unit_types[i].stage_from_children），以退出码 1 退出。wa-cli config resolved 的 resolved.unitTypes 每项必须含 stageFromChildren（布尔，未声明为 false）与既有字段。规范包（Pack）与 config.yaml 不能声明单元类型（既有约束不变）。
+    scenarios:
+      resolve-stage-from-children:
+        - GIVEN: 刚用 wa-cli init --genre novel --dir D 初始化的工作区
+        - WHEN: 运行 wa-cli config resolved --dir D --json
+        - THEN: resolved.unitTypes 中 part 与 chapter 的 stageFromChildren 为 true，novel 与 scene 的为 false，退出码为 0
+      leaf-aggregation-rejected:
+        - GIVEN: '测试夹具文体把 stage_from_children: true 声明在不带 children 的单元类型 scene 上'
+        - WHEN: 运行 wa-cli validate --dir D --json
+        - THEN: diagnostics 中有一条错误码为 artifact.schema-violation、field 为 unit_types[1].stage_from_children 的诊断，退出码为 1
+  novel-genre:
+    strength: MUST
+    statement: 'wa-cli 必须随二进制提供内置的 novel 文体（长篇小说（Novel））：单元类型 novel（根，子单元类型 part，简报必填项为 premise、pov、length 与 key_messages）、part（子单元类型 chapter，stage_from_children: true）、chapter（子单元类型 scene，stage_from_children: true）与 scene（不声明简报必填项与汇总）；阶段依次为 brief（必需产物 brief）、outline（outline）、draft（draft）与 review（review 与 acceptance）；规则 fiction-cliches（ai-cliche，warning，小说 AI 腔词表同 short-story）、dialogue（dialogue-punctuation，warning）、pov（pov-consistency，warning）与 length（length-range，warning，1000 到 20000 字），不声明论断类规则；默认写作法（default_method）为 snowflake（内置规划类写作法，见 methods 主规格 method-data；根单元经 method-selection 选用它，规划步骤不由大纲承担，见 method-outline-check，分步确认见 plan 主规格），不声明 AI 评分指标（scored_metrics）与节奏检查（pacing_checks）；上下文预算为 16000。场景（scene）是唯一走完整生命周期的单元层：部与章为汇总单元（见本规格 aggregated-unit-types 与 units-and-lifecycle 主规格的 derived-stage）。它与其他内置文体一样通过文体的校验。'
+    scenarios:
+      new-novel:
+        - GIVEN: 刚用 wa-cli init --genre novel --dir D 初始化的工作区
+        - WHEN: 运行 wa-cli new novel my-novel --dir D --json，再运行 wa-cli config resolved --dir D --json
+        - THEN: work.yaml 的 genre 为 novel、type 为 novel、stage 为 brief；resolved.unitTypes 含 novel、part、chapter 与 scene，part 与 chapter 的 stageFromChildren 为 true；resolved.rules 含 fiction-cliches、dialogue、pov 与 length 且不含 claims 与 claim-candidates；退出码都为 0
+      novel-default-method:
+        - GIVEN: 刚创建的 novel 作品 my-novel，写作简报没有 method，没有 plan.yaml
+        - WHEN: 运行 wa-cli plan show my-novel --dir D --json
+        - THEN: 根单元选用 snowflake（plan.method 为 snowflake、source 为 builtin），steps 为十步且全部 pending，currentStep 为 one-sentence，退出码为 0
+      novel-hierarchy:
+        - GIVEN: novel 作品 my-novel 已创建
+        - WHEN: 依次运行 wa-cli unit add my-novel part part-one --dir D --json、wa-cli unit add my-novel/part-one chapter chapter-one --dir D --json 与 wa-cli unit add my-novel/part-one/chapter-one scene scene-1 --dir D --json
+        - THEN: 三次都成功，work.yaml 中 part-one 含 chapter-one、chapter-one 含 scene-1（scene-1 的 stage 为 brief）；my-novel 的 type 只允许 part 子单元、part 只允许 chapter、chapter 只允许 scene，违反时报告 work.child-type-not-allowed，退出码都为 0
+      novel-scene-lifecycle:
+        - GIVEN: novel 作品 my-novel 的场景 scene-1 处于 brief 阶段，单元目录下无 brief 产物
+        - WHEN: 运行 wa-cli advance my-novel/scene-1 --dir D --json（单元引用不写出层级路径，见 unit-reference）
+        - THEN: 同现有 advance 语义：缺少必需产物时报告 lifecycle.missing-artifact（path 为 scene-1 的单元目录）；补齐产物后可逐阶段推进到 done；场景推进不改变 part-one 与 chapter-one 的存储 stage（其生效阶段为推导阶段），退出码与诊断同既有行为

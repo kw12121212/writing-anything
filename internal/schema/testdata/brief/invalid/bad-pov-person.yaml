@@ -1,0 +1,6 @@
+schema_version: 1
+premise:
+  text: 守灯人的前提
+pov:
+  person: omniscient
+  character: 守灯人

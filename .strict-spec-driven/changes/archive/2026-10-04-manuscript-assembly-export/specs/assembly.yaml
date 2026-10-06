@@ -1,0 +1,48 @@
+schema: strict-spec-driven/delta-spec/v1
+schema_version: 1
+artifact_type: delta_spec
+schema_file: templates/strict-spec-driven/schemas/delta-spec.yaml
+target_spec: assembly
+spec:
+  title: 组稿（Assembly）
+  path: .strict-spec-driven/specs/assembly.yaml
+operations:
+  ADDED:
+    assemble-command:
+      strength: MUST
+      statement: wa-cli assemble <work> [--output <路径>] [--format markdown|text] 必须把作品中 stage 为 done 的场景按单元树先序组成整书并写出交付文件。组装：书名取根单元大纲首个节的 title（无大纲或无节时为作品 id）；部标题取部大纲首个节 title（无则部单元 id）、章标题取章大纲首个节 title（无则章单元 id），场景不渲染标题，正文为场景 draft.md 去掉 HTML 注释（包括作者批注）后的内容；书稿含自动生成的目录（部、章两级；Markdown 格式带锚点链接，text 格式为纯文本行）与头部的验收摘要（已验收场景数）。--format 缺省为 markdown；--output 缺省为 .writing-anything/exports/<work>-manuscript.md；输出路径检查、原子写入与文末按出处的 AI 参与说明沿用 export 主规格的既有规则（deliverable-outputs 与 pack-text-in-deliverables），说明由整体导出的合并配置给出时按配置追加，没有配置说明模板时不追加。--json 输出 manuscript 字段（work、path、format、scenes（场景数）、parts（部数）与 chars（书稿字符数）），changedPaths 为写出的交付文件，退出码为 0。
+      scenarios:
+        assemble-ok:
+          - GIVEN: my-novel 两部各一章共四个场景全部 done，部与章有大纲节标题，正文含作者批注注释
+          - WHEN: 运行 wa-cli assemble my-novel --dir D --json
+          - THEN: 书稿按先序含书名、目录（两部两级锚点）、部标题、章标题与去注释正文，头部含验收摘要（4 个场景），changedPaths 含 exports/my-novel-manuscript.md，退出码为 0
+        assemble-text-format:
+          - GIVEN: 同上
+          - WHEN: 运行 wa-cli assemble my-novel --format text --dir D --json
+          - THEN: 输出为纯文本（标题为文本行、目录无链接），交付文件扩展名不变（路径按 --output 或缺省，内容为 text 渲染），退出码为 0
+        assemble-no-outline-titles:
+          - GIVEN: 某章没有 outline.yaml
+          - WHEN: 运行 wa-cli assemble my-novel --dir D --json
+          - THEN: 该章标题回退为章单元 id，组稿照常完成，退出码为 0
+    assemble-gate:
+      strength: MUST
+      statement: wa-cli assemble 在组稿前必须检查三类前置，任一存在时逐项给出 error 级诊断、不写任何文件、退出码为 1：(1) assemble.scenes-open——作品中存在 stage 不为 done 的场景（汇总单元按其子树场景折算，未完成场景的引用逐个列出，至多 5 项后加省略说明，next 含 wa-cli status --dir <dir> --json）；(2) assemble.continuity——任一场景存在未豁免的 error 级连续性发现（按 continuity 主规格的阻塞语义逐场景列出：场景引用、错误码与 message，next 含 wa-cli continuity <场景> --dir <dir> --json 与 wa-cli decisions --dir <dir> --json）；(3) assemble.rechecks——存在 open 复查标记（Recheck Mark，逐项列出场景与目标，next 含 wa-cli impact list <work> --dir <dir> --json 与 wa-cli help impact clear --json）。三类都为空时才组稿；连续性台账无法加载（error 级）时按 assemble.continuity 报告其诊断并拒绝。
+      scenarios:
+        gate-scenes-open:
+          - GIVEN: my-novel 的 scene-4 仍在 review 阶段，其余 done
+          - WHEN: 运行 wa-cli assemble my-novel --dir D --json
+          - THEN: diagnostics 中有一条错误码为 assemble.scenes-open、message 含 my-novel/scene-4 的诊断，没有写出任何文件，退出码为 1
+        gate-continuity:
+          - GIVEN: 全部场景 done，但 scene-2 有未豁免的 continuity.dead-acting 发现
+          - WHEN: 运行 wa-cli assemble my-novel --dir D --json
+          - THEN: diagnostics 中有一条错误码为 assemble.continuity、message 含 my-novel/scene-2 与 dead-acting 的诊断，退出码为 1
+        gate-rechecks:
+          - GIVEN: 全部场景 done、连续性干净，但 scene-3 有 target 为 canon-1 的 open 复查标记
+          - WHEN: 运行 wa-cli assemble my-novel --dir D --json
+          - THEN: diagnostics 中有一条错误码为 assemble.rechecks、message 含 my-novel/scene-3 与 canon-1 的诊断，next 含 wa-cli impact list，退出码为 1
+        gate-all-clear:
+          - GIVEN: 全部场景 done、连续性干净、复查清零
+          - WHEN: 运行 wa-cli assemble my-novel --dir D --json
+          - THEN: 没有 assemble.* 阻塞诊断，书稿写出，退出码为 0
+  MODIFIED: {}
+  REMOVED: {}

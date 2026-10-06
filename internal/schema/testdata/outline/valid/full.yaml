@@ -1,0 +1,23 @@
+schema_version: 1
+sections:
+  - id: why
+    title: 为什么需要连接池
+    covers: [km-1]
+    uses: [src-a]
+  - id: background
+    title: 背景
+    reason: 交代背景，不承载核心观点
+  - id: scene-1
+    title: 灯下对峙
+    characters: [守灯人, 精灵]
+    beats: [why]
+    reveal: 精灵的真实身份
+    pov: 守灯人
+    location: 灯室
+    state_changes:
+      - id: sc-1
+        text: 精灵交出灯芯
+    plants: [fs-1]
+    recovers: []
+    causes: [ev-1]
+    events: [ev-2]

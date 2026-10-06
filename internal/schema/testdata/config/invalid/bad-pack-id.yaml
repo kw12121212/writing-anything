@@ -1,0 +1,5 @@
+schema_version: 1
+language: zh-CN
+packs:
+  - Not_A_Id
+gate_level: standard

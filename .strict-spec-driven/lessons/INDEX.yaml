@@ -1,10 +1,315 @@
 schema: strict-spec-driven/lessons-index/v2
 schema_version: 2
 artifact_type: lessons_index
-schema_file: ../schemas/lessons-index.yaml
-# Lessons record reusable engineering experience — a pitfall, a path that failed, or diagnostic
-# knowledge — that specs and technical standards deliberately exclude. Create them with
-# `strict-spec-cli lesson-create`; this index is rebuilt from the lesson files and is not
-# hand-edited. A lesson that becomes general enough to bind is promoted into a technical standard
-# rule and keeps its original text as the motivating context that rule omits.
-categories: {}
+schema_file: templates/strict-spec-driven/schemas/lessons-index.yaml
+categories:
+  architecture:
+    lesson-8f8885:
+      title: 为文体补默认配置时，默认值会沿每个单元级应用点生效，子单元会被父级规则卡死
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/architecture/lesson-8f8885.yaml
+    lesson-e43bdb:
+      title: 比较章与场景的单元树先序时，章节点先于其子场景，不能直接比位置
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/architecture/lesson-e43bdb.yaml
+  coding:
+    go-flag-bd930f:
+      title: Go flag 包的默认报错不符合中文术语约定
+      status: active
+      occurrences: 2
+      path: .strict-spec-driven/lessons/coding/go-flag-bd930f.yaml
+    yaml-v3-0-24efd9:
+      title: yaml.v3 解析器错误的行号从 0 开始，第一行时不给行号
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/coding/yaml-v3-0-24efd9.yaml
+    nil-null-1d1e16:
+      title: 嵌套在命令专属输出中的 nil 切片会编码成 null
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/coding/nil-null-1d1e16.yaml
+    lesson-c2d85f:
+      title: 复用整体校验做写前检查时，错误码取决于整体校验的检查顺序
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/coding/lesson-c2d85f.yaml
+    lesson-db34bd:
+      title: 只在写入路径防符号链接不够，读取单元产物也会被途经的符号链接带出项目目录
+      status: active
+      occurrences: 5
+      path: .strict-spec-driven/lessons/coding/lesson-db34bd.yaml
+    yaml-v3-a5c850:
+      title: 向流式序列追加元素改为块式时，yaml.v3 会丢掉挂在序列上的行尾注释
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/coding/yaml-v3-a5c850.yaml
+    lesson-ccfda7:
+      title: 按「字段不以产物路径开头」判断参数问题，会把已有产物的根级问题误当作参数问题
+      status: active
+      occurrences: 2
+      path: .strict-spec-driven/lessons/coding/lesson-ccfda7.yaml
+    wa-cli-f2cd1e:
+      title: wa-cli 会据以删除作者正文的解析规则，必须把边界限死在最小范围
+      status: active
+      occurrences: 2
+      path: .strict-spec-driven/lessons/coding/wa-cli-f2cd1e.yaml
+    irm-iex-powershell-bom-iex-4cdfc3:
+      title: 通过 irm | iex 分发的 PowerShell 脚本不能带 BOM，测试必须走 iex 路径
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/coding/irm-iex-powershell-bom-iex-4cdfc3.yaml
+    lesson-1da63c:
+      title: 引用其他产物的产物，编辑命令不能因已有的悬空引用拒绝修改
+      status: active
+      occurrences: 3
+      path: .strict-spec-driven/lessons/coding/lesson-1da63c.yaml
+    id-2ef97e:
+      title: 组合多个单元的产物时，按引用所属的产物解析 id，不要用继承得到的那份
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/coding/id-2ef97e.yaml
+    lesson-fdf0c2:
+      title: 从每个开头标记向后查找结束标记，在结束标记缺失时是平方级的
+      status: active
+      occurrences: 2
+      path: .strict-spec-driven/lessons/coding/lesson-fdf0c2.yaml
+    agent-2b2430:
+      title: 由 Agent 写入正文就能解除的关卡，等于没有关卡
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/coding/agent-2b2430.yaml
+    lesson-65573d:
+      title: 启发式检查的「已登记」判断必须按触发区间覆盖，不能按句子包含子串
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/coding/lesson-65573d.yaml
+    lesson-660304:
+      title: 按错误码挑选下一步命令，会漏掉保留原错误码的阻塞项
+      status: active
+      occurrences: 2
+      path: .strict-spec-driven/lessons/coding/lesson-660304.yaml
+    lesson-65fb6a:
+      title: 记录关卡结论的产物要记下关卡强度，强度提高后旧结论不再有效
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/coding/lesson-65fb6a.yaml
+    lesson-a9dd44:
+      title: 按字符串前缀限制写入位置，在不区分大小写的文件系统上会被绕过
+      status: active
+      occurrences: 3
+      path: .strict-spec-driven/lessons/coding/lesson-a9dd44.yaml
+    lesson-234cd1:
+      title: 安装到第三方工具的目录前，要按其官方文档核对目录约定
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/coding/lesson-234cd1.yaml
+    lesson-74afa7:
+      title: 可以被参数配置成什么也不检查的规则，会让检查静默通过
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/coding/lesson-74afa7.yaml
+    lesson-ff5a78:
+      title: 提问内容改变后另建决策，会留下作者无法撤回、一直阻塞单元的旧决策
+      status: active
+      occurrences: 2
+      path: .strict-spec-driven/lessons/coding/lesson-ff5a78.yaml
+    lesson-b1071b:
+      title: 先插入带第三方样式的标签再对整串做正则替换，第三方取值能改写标签结构
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/coding/lesson-b1071b.yaml
+    ai-3e00aa:
+      title: 把出处推导的任何问题都当作写入记录损坏，会把作者写的正文误标为 AI 参与
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/coding/ai-3e00aa.yaml
+    json-map-null-nil-map-676fe1:
+      title: 把 JSON 解码进 map 后直接赋值，内容为 null 的文件会让 nil map 崩溃
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/coding/json-map-null-nil-map-676fe1.yaml
+    exec-commandcontext-ad4f1b:
+      title: exec.CommandContext 的超时在子进程持有输出管道时失效
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/coding/exec-commandcontext-ad4f1b.yaml
+    file-mcp-tool-bbeb9c:
+      title: 接受本地路径或 file:// 来源的新命令会自动成为 MCP tool，越过项目目录读取文件
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/coding/file-mcp-tool-bbeb9c.yaml
+    lesson-792658:
+      title: 查看命令依赖只有写入命令保证的不变量，合法的手写产物会让它崩溃
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/coding/lesson-792658.yaml
+    filepath-glob-8c2d1f:
+      title: filepath.Glob 拼接项目目录，目录名含 [ ] 时整体校验静默跳过文件
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/coding/filepath-glob-8c2d1f.yaml
+    lesson-c75cb7:
+      title: 每次写入都重新编码整个子树，取值未变也会重写文件并丢掉内部注释
+      status: active
+      occurrences: 2
+      path: .strict-spec-driven/lessons/coding/lesson-c75cb7.yaml
+    yaml-utf-8-aa654e:
+      title: 把正文写进 YAML 产物前不检查 UTF-8，原本能成功的写入会失败
+      status: active
+      occurrences: 2
+      path: .strict-spec-driven/lessons/coding/yaml-utf-8-aa654e.yaml
+    wa-cli-8ee649:
+      title: 由正文推导作者修改时没去掉 wa-cli 自己的批注，只加批注就被当成改写
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/coding/wa-cli-8ee649.yaml
+    write-ad3855:
+      title: 写入命令新增附带产物时，只在 Write 里检查它，会在命令层的其他写入之后才失败
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/coding/write-ad3855.yaml
+    lesson-e6ebe3:
+      title: 统计判定中的浮点相等
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/coding/lesson-e6ebe3.yaml
+    lesson-6d8efb:
+      title: 布尔参数表达不了反向取值，需要反向语义时必须单设参数或改用取值参数
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/coding/lesson-6d8efb.yaml
+    lesson-2c7047:
+      title: 按既有产物字段写启发式规则的识别条件，先核对字段的真实结构
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/coding/lesson-2c7047.yaml
+    lesson-1f07b0:
+      title: 只有内置文体能声明的配置，没有任何内置文体使用时，其校验与合并路径无法从工作区触发
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/coding/lesson-1f07b0.yaml
+    yaml-3ffa64:
+      title: 在 YAML 节点树上按解析时的下标导航，任何改变兄弟序列的操作都会使其后单元的下标左移
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/coding/yaml-3ffa64.yaml
+    lesson-63f5fd:
+      title: 倒排索引的候选裁剪必须是命中判定的超集，整词词条对部分子串查询会漏报
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/coding/lesson-63f5fd.yaml
+    lesson-7cc0c9:
+      title: 写前检查的候选模型必须与实际写入共用同一套字段合并逻辑
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/coding/lesson-7cc0c9.yaml
+    null-schema-37e8c0:
+      title: 规格写「未确认为 null」时，产物 Schema 不得用键存在性表达条件
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/coding/null-schema-37e8c0.yaml
+    canon-list-canon-yaml-nil-nil-dac3b3:
+      title: canon.List 对不存在的 canon.yaml 返回 (nil, nil)，与无法加载无法按返回值区分
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/coding/canon-list-canon-yaml-nil-nil-dac3b3.yaml
+    lesson-60a682:
+      title: 编排多个台账写入的命令，预检必须逐条覆盖每个写入函数会拒绝的输入
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/coding/lesson-60a682.yaml
+    lesson-839686:
+      title: 编排命令的规格语句要先枚举输出信封与裁剪行为，再写实现
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/coding/lesson-839686.yaml
+    lesson-2fdcfc:
+      title: 把只读复查命令与阻塞写入路径接上同一计算时，先拆出只读层
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/coding/lesson-2fdcfc.yaml
+    id-id-9e45ba:
+      title: 重建式生成命令的 id 分配要避开全部既有 id，保留项匹配要看文件自身
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/coding/id-id-9e45ba.yaml
+    schema-f67fa7:
+      title: 新产物的写入路径必须与注册的 Schema 路径模式当场对上
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/coding/schema-f67fa7.yaml
+    lesson-aa04b7:
+      title: 替换共享数据源的加载点时，空态的等价性要先对齐
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/coding/lesson-aa04b7.yaml
+    lesson-580a55:
+      title: 跨文件隐式约定要静态强制；机械正则改签名会把测试常量漏进生产代码
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/coding/lesson-580a55.yaml
+    lesson-a287df:
+      title: 词表与时点解耦：条目级词表检查的获知点不得共用词表过滤条件
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/coding/lesson-a287df.yaml
+    shell-var-shell-9b16fa:
+      title: shell 脚本的 $var 后紧跟全角字符时，部分 shell 会把多字节首字节并入变量名
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/coding/shell-var-shell-9b16fa.yaml
+  documentation:
+    must-must-6af326:
+      title: 修改一条 MUST 需求时，要检查同一规格里相邻的 MUST 是否因此冲突
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/documentation/must-must-6af326.yaml
+    lesson-cdee49:
+      title: 夹具文档同样执行术语表首现双语；量化声明须带可复验锚点
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/documentation/lesson-cdee49.yaml
+    spec-next-7d39fd:
+      title: spec 语句里的 next 命令必须写成可执行形态
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/documentation/spec-next-7d39fd.yaml
+  performance:
+    lesson-d20dc5:
+      title: 按词表计数复用已有匹配器
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/performance/lesson-d20dc5.yaml
+  testing:
+    json-9d7a25:
+      title: 规格场景里的错误码只有在 --json 模式下才能被观察到
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/testing/json-9d7a25.yaml
+    feedback-watch-watch-7d2b50:
+      title: 在后台启动 feedback watch 后立刻写入反馈，watch 可能把它当作启动时已有的反馈而不输出
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/testing/feedback-watch-watch-7d2b50.yaml
+    lesson-a5269b:
+      title: 自动生成的接口只检查存在、不逐个调用，会漏掉参数映射错误
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/testing/lesson-a5269b.yaml
+    lint-ecb1a8:
+      title: 中文虚构正文的 lint 规则对「」直角引号全绿是假象
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/testing/lint-ecb1a8.yaml
+    lesson-fe239b:
+      title: 清单键控与命令形态不一致时断言静默失效
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/testing/lesson-fe239b.yaml
+    lesson-ee8ae5:
+      title: 负向断言必须诚实对应真实存在的检查
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/testing/lesson-ee8ae5.yaml

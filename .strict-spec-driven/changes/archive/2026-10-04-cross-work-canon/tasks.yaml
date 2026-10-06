@@ -1,0 +1,45 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: cross-work-canon
+sections:
+  Implementation:
+    canon-scope-schema:
+      text: internal/schema：canon.schema.json 扩展（条目新增可选 scope 枚举 work|series（缺省 work 由领域承担）与可选 override 对象 {非空 reason、非空 confirmation、RFC 3339 confirmed_at}，override 存在时 scope 必须为 work——键存在性条件不进 Schema、由领域校验检查）；新增系列 canon 路径模式 .writing-anything/series/*/canon.yaml（复用同一 Schema）；补夹具
+      status: complete
+    canon-scope-package:
+      text: internal/canon：系列级文件加载（SeriesCanon(root, seriesID)）与领域校验；canon add / canon set 的 --scope 参数（series 时写入系列文件：给出子单元或无系列成员时拒绝 canon.not-in-series；work 为缺省）与覆盖确认（--override-reason、--confirmed-by-author、--confirmation：作品级条目与系列级同 id 时必填，写 override 记录；缺失报告 canon.override-unconfirmed；非覆盖条目给出覆盖参数报告 input.invalid-value；修改既有覆盖条目要求重新确认）；Resolve(root, w) 解析视图（作品级全部 + 所属系列条目按序并入、同 id 被覆盖不出现、每项含 scope 来源标明；系列文件坏时 error 诊断并降级作品级）；ResolveAll（两级原始条目并列）；List 改用视图；CheckWorks/CheckArtifact 纳入系列 canon 文件（override 记录完整性、series 文件内领域校验）
+      status: complete
+    canon-scope-consumers:
+      text: 消费方接入 Resolve：internal/ctxpack 的 characters 匹配、pov-reveal 知情切片的称谓解析与 pov 解析改用解析视图并在输出项加 scope 字段（canon 条目相关的 KnowledgeItem/Character/StateItem 切片标注来源层级）；internal/continuity 的 matchCharacters 与 canonIDByName 改用视图；internal/recall 的别名词典并入系列级条目（作品所属系列）；各消费方对系列文件坏的降级（error 诊断 + 作品级继续）
+      status: complete
+    canon-scope-cli:
+      text: internal/cli：canon add / canon set 注册新 flags（--scope、--override-reason、--confirmed-by-author、--confirmation）与诊断 next（canon.override-unconfirmed 指向 help canon set --json；canon.not-in-series 指向 series show）；canon list 默认解析视图（每项含 scope）、--all-scope 两级并列；validate 整体校验纳入系列 canon.yaml（CheckWorks）与 validate <path>（CheckArtifact）；sampleArgs 更新
+      status: complete
+    canon-scope-glossary:
+      text: docs/GLOSSARY.md 增补作用域（Scope）与覆盖（Override）词条：设定集条目的两级作用域（系列级 .writing-anything/series/<series>/canon.yaml 与作品级 canon.yaml），作品级同 id 覆盖系列级须记录原因并经作者确认（override 记录），context 与连续性按作用域解析并标明来源
+      status: complete
+  Testing:
+    test-canon-scope-package:
+      text: internal/canon 单元测试：--scope series 写入系列文件（无系列成员拒绝）；覆盖确认的必填与记录（缺 reason/确认拒绝且文件未变、非覆盖条目给覆盖参数拒绝、修改覆盖条目重新确认）；Resolve 的优先级与来源标明（作品级覆盖系列级同 id、系列级并入顺序、被覆盖条目不出现）；系列文件坏的降级；领域校验（override 记录不完整）
+      status: complete
+    test-canon-scope-cli:
+      text: 已覆盖：既有 canon/context/continuity/recall 全量回归通过（无系列作品行为不变）；新增夹具经包测试与既有 CLI 断言验证（canon list 视图、context 称谓经解析、continuity 系列级人物不误报）；sampleArgs 与 TestRegistryConsistency 通过
+      status: complete
+    run-regression:
+      text: 完整回归测试并确认覆盖率不低于阈值：go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    verify-change:
+      text: 已运行 ready 与 verify；实现含包测试（--scope series 写入系列文件、覆盖确认必填与记录、Resolve 优先级与来源标明、系列文件坏降级、无成员拒绝）与全量回归（context/continuity/recall 消费 Resolve 且无系列作品零回归），覆盖率 87.34% ≥ 80%
+      status: complete
+      command: strict-spec-cli ready cross-work-canon && strict-spec-cli verify cross-work-canon
+    verify-archive-readiness:
+      text: 已核对归档合并路径：sources-and-provenance 的 canon-add / canon-edit / canon-list / canon-validation 为 MODIFIED（语句含作用域、覆盖确认与系列文件校验的追加段）；strict-spec-cli verify 诊断清零
+      status: complete
+      command: strict-spec-cli verify cross-work-canon
+testing_gates:
+  validation_task: run-regression
+  unit_test_task: test-canon-scope-package

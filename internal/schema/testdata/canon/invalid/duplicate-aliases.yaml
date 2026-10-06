@@ -1,0 +1,10 @@
+schema_version: 1
+entries:
+  # aliases 条目内不得重复。
+  - id: canon-1
+    type: item
+    name: 长命灯
+    aliases: [青焰灯, 青焰灯]
+    text: 藏在阁楼的旧灯
+    sources: []
+    protection: normal

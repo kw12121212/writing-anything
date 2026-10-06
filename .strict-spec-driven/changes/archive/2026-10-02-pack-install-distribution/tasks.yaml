@@ -1,0 +1,49 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: pack-install-distribution
+sections:
+  Implementation:
+    schema:
+      text: internal/schema：登记产物类型 pack-lock（.writing-anything/packs.lock.yaml）与 pack-lock.schema.json；字段名不与可执行内容保留字段冲突
+      status: complete
+    package:
+      text: internal/packinstall：来源解析（git 地址、本地文件、含 pack.yaml 的目录、保留的 <owner>/<name>）、可注入 Env 调用 git（固定子命令、关闭钩子与提示、超时、截断输出）、读取并校验规范包、冲突判断、锁定文件读写与一致性检查、移除
+      status: complete
+    cli:
+      text: internal/cli：pack install、pack list、pack remove 命令（参数检查、诊断与 next、changedPaths、人读输出）登记到注册表与 sampleArgs；resolve.Check 追加锁定一致性检查
+      status: complete
+    docs:
+      text: docs/GLOSSARY.md 确认锁定文件（Lock File）等术语；wa-cli 内置技能中涉及规范包的说明补充 pack install 用法（如有）
+      status: complete
+    review-fixes:
+      text: 审查修复：pack install 不作为 MCP tool（mcp 主规格 mcp-tools）；外部程序设 WaitDelay（packinstall 与 mcpinstall）并测试；pack list 人读文本补全 origin、path 与锁定信息；绝对路径来源按绝对路径记录；截断不切断多字节字符；补充符号链接工作区、合并键、移除锚点等测试
+      status: complete
+  Testing:
+    lint:
+      text: gofmt 检查本变更的 Go 文件
+      status: complete
+      command: test -z "$(gofmt -l internal/packinstall internal/cli/pack.go internal/cli/pack_test.go internal/cli/workspace.go internal/cli/registry.go internal/cli/cli_test.go internal/catalog internal/schema)"
+    unit-tests:
+      text: 单元测试：internal/packinstall 的来源解析、git 命令行（假 git 与真实 file:// 仓库）、校验失败不写文件、冲突与更新幂等、锁定一致性、移除；CLI：pack install/list/remove 的输出、诊断、退出码与 MCP 样例调用
+      status: complete
+      command: go test ./internal/...
+    full-regression:
+      text: 运行完整回归命令，覆盖率不低于 80%
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    spec-alignment:
+      text: 对照 genres-and-packs delta spec 与 cli-contract delta tech 的每个场景与规则确认实现与测试覆盖，并按实际实现修正
+      status: complete
+    strict-ready:
+      text: 运行 strict-spec-cli ready 与 strict-spec-cli verify，确认变更产物有效
+      status: complete
+      command: strict-spec-cli ready pack-install-distribution && strict-spec-cli verify pack-install-distribution
+    archive-readiness:
+      text: 确认 delta spec 与 delta tech 能合并，归档后路线图中的 pack-install-distribution 标记为完成
+      status: complete
+testing_gates:
+  validation_task: full-regression
+  unit_test_task: unit-tests

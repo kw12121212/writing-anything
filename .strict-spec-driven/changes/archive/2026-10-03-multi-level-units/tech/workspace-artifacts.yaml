@@ -1,0 +1,21 @@
+schema: strict-spec-driven/delta-tech/v1
+schema_version: 1
+artifact_type: delta_tech
+schema_file: templates/strict-spec-driven/schemas/delta-tech.yaml
+target_standard: workspace-artifacts
+operations:
+  ADDED:
+    stale-node-index:
+      strength: MUST
+      statement: 在同一 YAML 节点树上需要触碰多个节点（如同时摘除一个子树并挂到另一个父单元之下）时，必须先按解析时的下标取到本次要修改的全部目标节点与序列节点，再执行第一次序列修改；序列被删除或移动元素后不得再用解析时的下标导航，插入位置按锚点 id 在序列内容中重新扫描。修改后的产物照常经重新解析与校验写出，但校验不能替代结构断言：树形位置写错（挂到错误父单元之下）仍是合法产物，测试必须用允许递归或混合层级的夹具文体断言单元树的父子结构与顺序本身。
+      rationale: 解析时记录的下标只在文档未被修改前有效：摘除同级元素会使其后元素左移，旧下标随即指错节点——不越界时静默写错位置并通过全部校验，越界时把合法操作误报成别的错误码（如 work.anchored-value）。内置文体的严格分层会让类型检查先挡住这类错误，只有递归或混合层级的夹具才能暴露，因此结构断言必须显式覆盖。
+      enforcement:
+        method: test
+        detail: internal/work 的 TestMoveUnderLaterSibling 用允许 sec 递归嵌套的夹具文体（testdata/genres/nested.yaml）断言移动后各级 units 的 id 顺序与父子关系；TestDerivedStageMixedLevels 与 TestMoveIntoBareParentAndAdvanceDone 覆盖混合层级与无 units 键的父单元。
+      examples:
+        good:
+          - unit move 先经 childSeq 取到目标序列并转换块式，再从原序列摘除子树，插入位置按锚点在摘除后的序列内容中重新扫描。
+        bad:
+          - 先从序列删除元素，再按解析时的 index 走树取目标父单元的序列节点。
+  MODIFIED: {}
+  REMOVED: {}

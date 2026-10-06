@@ -1,0 +1,19 @@
+schema: strict-spec-driven/lesson/v1
+schema_version: 1
+artifact_type: lesson
+schema_file: templates/strict-spec-driven/schemas/lesson.yaml
+lesson:
+  id: lesson-ee8ae5
+  title: 负向断言必须诚实对应真实存在的检查
+category: testing
+status: active
+created_at: '2026-10-04T16:39:24.795Z'
+updated_at: '2026-10-04T16:39:24.795Z'
+context: golden-assertions 为小说语料编写四类违例注入的负向断言（设定冲突、知情违例、伏笔悬空、时间线倒置）
+observation: 产品没有 prose 级知情边界确定性检查器：注入『林晚提前说破真相』的正文不会触发任何 error；只有台账层注入 + knowledge at 才能暴露越界。另发现被拒的钦定修改并非零写入（会生成阻塞决策），验证『零写入』的断言反而失败。
+takeaway: 负向断言前先在代码里核实每类违例对应的确定性检查与诊断码真实存在；产品没有的检查就如实记录缺口并用最接近的可断言机制（如台账注入+查询暴露），不要为凑数伪造 error 断言；对『被拒命令零写入』这类预期要在副本上实测，关卡类拒绝常常伴随决策入队这类合法写入。
+applies_when: 为端到端语料或集成测试编写注入式负向断言，或断言被拒命令的副作用语义时
+occurrences:
+  - origin: golden-assertions
+    date: '2026-10-04'
+    evidence: internal/cli/novel_corpus_golden_test.go 四类注入（知情类为台账注入 + knowledge at 断言并注释缺口）；canon.author-pinned 实测 changedPaths 含决策队列

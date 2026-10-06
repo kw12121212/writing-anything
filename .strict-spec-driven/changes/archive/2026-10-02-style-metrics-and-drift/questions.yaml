@@ -1,0 +1,42 @@
+schema: strict-spec-driven/question-list/v1
+schema_version: 1
+artifact_type: question_list
+schema_file: templates/strict-spec-driven/schemas/question-list.yaml
+change: style-metrics-and-drift
+open: []
+resolved:
+  - id: requirement-problem
+    question: What is concretely going wrong today, and for whom?
+    context: 'Why this is asked: the change is planned against a need, and the need lives only with the requester. What it changes: this becomes the proposal''s why.'
+    answer: 据里程碑 packs-and-series 与规划变更 style-metrics-and-drift：作者无法确定性地知道新写的单元在文风与节奏上是否偏离自己的文风画像或前面已验收的内容。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-outcome
+    question: What observable difference proves the problem is solved?
+    context: 'Why this is asked: without a success condition, nobody can tell afterwards whether the change worked. What it changes: this becomes the delta spec''s scenarios.'
+    answer: 据里程碑 done_criteria：偏离文风画像超过阈值的单元输出漂移发现项，附带指标数值与段落位置。据规划变更 details：wa-cli metrics compute 不调用模型，计算句长与段长分布、对话比例、标点习惯、用词丰富度、虚词与口头禅、四字词密度、AI 腔密度、字数与局部句长变化；与文风画像和同作品已验收单元两类基准对比，阈值默认 2 个标准差；漂移默认不阻塞验收。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-trigger
+    question: Why now — what forced this?
+    context: 'Why this is asked: work that nothing forced is the work most often thrown away later.'
+    answer: 据路线图：依赖的 pack-learn-style-profile 与 rule-engine-and-lint 都已归档，这是里程碑 packs-and-series 的最后一项；short-story 的情绪曲线依赖它。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-non-goals
+    question: What must explicitly not change?
+    context: 'Why this is asked: the requester knows which nearby behavior other people depend on. What it changes: these become the proposal''s unchanged_behavior items.'
+    answer: 据规划变更 details：指标只衡量偏离，不评判好坏；漂移发现项默认不阻塞验收；据项目约束：wa-cli 不调用模型。已写入 proposal 的 out 与 unchanged。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-interpretation
+    question: Which reading of the request is intended, where more than one is possible?
+    context: 'Why this is asked: a short request usually admits several readings. What it changes: this fixes the scope boundary before any code is written.'
+    answer: 据规划变更 details 的指标清单与两类基准；「口头禅」以文风画像的常用词之外的固定虚词表近似，「局部句长变化」以段落平均句长对文风画像句长分布的偏离表示，阈值由规范包设定、默认 2 个标准差。具体定义写在 design 的决策中。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap

@@ -1,0 +1,9 @@
+schema_version: 1
+entries:
+  - id: f-1
+    text: 灯芯的来历
+    planted_in: my-novel/c1/s1
+    planned_recover: my-novel/c3/s2
+    status: paid
+    recovered_in: my-novel/c2/s4
+    decision: d-3

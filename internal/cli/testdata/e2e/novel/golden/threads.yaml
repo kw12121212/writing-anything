@@ -1,0 +1,22 @@
+# 伏笔台账（Foreshadowing Ledger）；请用 wa-cli threads add 登记伏笔条目。
+
+schema_version: 1
+entries:
+  - id: th-a
+    text: 怀表内盖的刻字「赠晚晚 2006.6」
+    planted_in: stopped-at-417/ch1-s1
+    planned_recover: stopped-at-417/ch3-s3
+    status: paid
+    recovered_in: stopped-at-417/ch3-s3
+  - id: th-b
+    text: 钟楼大钟为何二十年不修（镇规：停摆之约）
+    planted_in: stopped-at-417/ch1-s2
+    planned_recover: stopped-at-417/ch3-s3
+    status: paid
+    recovered_in: stopped-at-417/ch3-s3
+  - id: th-c
+    text: 全家福信封里的黄铜小钥匙（红绳，柄上有数）
+    planted_in: stopped-at-417/ch2-s1
+    planned_recover: stopped-at-417/ch3-s3
+    status: dropped
+    decision: dec-1

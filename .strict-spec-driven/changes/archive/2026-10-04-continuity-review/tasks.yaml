@@ -1,0 +1,40 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: continuity-review
+sections:
+  Implementation:
+    continuity-package:
+      text: 新包 internal/continuity：Run(root, w, unit 或 work) 返回按场景分组的 findings——(1) unknown-character：场景大纲各节 characters 与首个 pov 按 canon name/aliases 完全匹配解析（同名多卡不解析），无命中报 error；(2) dead-acting：解析到唯一 character 条目的出场人物，其最新已确认状态（state 包先序重放，场景开始时）完整描述属保留词集合（死亡、已死亡、已亡故、失踪、已退场）时报 error；(3) alias-mismatch：同一场景多个称谓解析到同一 canon 条目时报 error（message 含称谓与条目）；(4) dangling-reference：state.List/knowledge.List 的 error 级问题中绑定该场景的条目、closeout.Load 的领域问题、threads 交叉检查（ContractProblems）中 path 为该场景大纲的、outline 因果诊断（CausalityOn）中 path 为该场景大纲的，全部按场景过滤转 error findings；(5) thread-anomaly：threads.List 中 planted_in 或 planned_recover 为该场景、或大纲 recovers 引用的 open 条目 overdue 为 true 报 error；canon/threads/knowledge 台账无法加载（error）时该场景的检查降级为返回其问题；AcceptanceBlockers(root, w, unit) 计算 error 级 findings 并按（场景、 错误码）做决策豁免判定（决策问题文本固定格式「是否豁免场景 <场景> 的连续性检查 <错误码>：<message 摘要>？」，选项 允许/保持不变，推荐保持不变，幂等追加：已有 open 或作者选保持不变的不重复，作者已允许的豁免），生成时 changedPaths 含决策队列
+      status: complete
+    continuity-cli:
+      text: internal/cli：continuity 命令注册（args：unit；给 scene 输出该场景 findings，给其他单元或作品输出其子树全部场景；flags：--dir；--json 输出 findings（每项含 scene、code、severity、waived 与 message）与 changedPaths，人读输出按场景分组列出并标注已豁免）；accept 经 collectGate 填充 review.GateInput.Continuity（internal/review 的 GateInput 增加该字段并在 Gate 循环输出为阻塞项）；gateNext 增加 continuity 分支（next 含 wa-cli continuity <场景>、wa-cli decisions 与 review show）；sampleArgs 登记（mutating：豁免决策可能生成）
+      status: complete
+    continuity-glossary:
+      text: docs/GLOSSARY.md 增补连续性审查（Continuity Review）词条：wa-cli continuity 在全书范围执行的确定性连续性检查（未建卡出场人物、保留词终态人物出场、同场景多名一卡、悬空引用与伏笔超期），发现即阻塞验收，作者经决策队列豁免；语义矛盾由审查任务包负责
+      status: complete
+  Testing:
+    test-continuity-package:
+      text: |
+        internal/continuity 单元测试：每个检查的命中与不命中分支（unknown-character 命中/别名命中/同名多卡不判；dead-acting 保留词精确匹配与非保留词（殒命）不判、proposed 不参与、先序边界；alias-mismatch 两称谓同卡；dangling-reference 各来源按场景过滤且不串场；thread-anomaly overdue 判定）；给 work 与给 scene 的输出范围；台账无法加载的降级；AcceptanceBlockers 的豁免判定（无决策阻塞、open 幂等不重复、允许后清除、保持不变后不再追加）
+      status: complete
+    test-continuity-cli:
+      text: internal/cli 测试：continuity 命令的 --json 信封（findings/waived 标注/changedPaths 含决策队列）与人读输出；accept 被拒绝（错误码 + next 断言）、作者 decide 允许后通过；无 finding 与非契约场景验收不变；sampleArgs 与 TestRegistryConsistency 通过
+      status: complete
+    run-regression:
+      text: 完整回归测试并确认覆盖率不低于阈值：go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    verify-change:
+      text: 已运行 ready 与 verify；fresh-context 独立审查的 4 个 MUST FIX（review show 误写决策队列、canon 失效绕过触发跳过、台账无法加载未转 findings、问题文本无逐字断言）与 SHOULD 项（threads 交叉检查每命令一次、发现码统一为 continuity.dangling-reference、术语表去重、补充队列不可加载与轻量契约跳过测试）已全部修复并补回归测试；修复后完整回归通过（覆盖率 88.39% ≥ 80%）
+      status: complete
+      command: strict-spec-cli ready continuity-review && strict-spec-cli verify continuity-review
+    verify-archive-readiness:
+      text: 已核对归档合并路径：continuity 新主规格将写入 .strict-spec-driven/specs/continuity.yaml 并进入 specs/INDEX.yaml（continuity-command 含触发条件与轻量契约跳过、continuity-accept-gate 含只读路径不生成决策）；review 的 accept-gate 再次 MODIFIED（收口、卷末检查点之后并列连续性阻塞项）；strict-spec-cli verify 诊断清零
+      status: complete
+      command: strict-spec-cli verify continuity-review
+testing_gates:
+  validation_task: run-regression
+  unit_test_task: test-continuity-package

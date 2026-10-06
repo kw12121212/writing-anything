@@ -1,0 +1,190 @@
+schema: strict-spec-driven/main-tech/v1
+schema_version: 1
+artifact_type: main_tech
+schema_file: templates/strict-spec-driven/schemas/main-tech.yaml
+standard:
+  id: cli-contract
+  title: wa-cli 命令契约
+  category: architecture
+rules:
+  registry-declared:
+    strength: MUST
+    statement: 每条 wa-cli 命令必须在 internal/cli 的命令注册表（Command Registry）中声明 name、summary、位置参数、flags、outputKeys 与 exitCodes，参数解析与 help 输出都只从注册表派生；参数类型为 bool、string 或 list（可重复出现、按出现顺序收集的多个取值）；不得绕过注册表单独解析参数。
+    rationale: 注册表是 help --json、后续 MCP tools 生成与 Skill 命令校验的唯一依据，绕过它会使帮助与实际行为漂移。
+    enforcement:
+      method: test
+      detail: internal/cli 的 TestRegistryConsistency 遍历 help --json：断言每条命令 --json 输出的顶层字段恰好等于声明的 outputKeys，声明的每个 flag 都被解析器接受，且 exitCodes 非空；未声明的参数由解析器拒绝（usage.unknown-flag）。list 参数由 TestParseListFlag 覆盖重复出现与顺序。
+    examples:
+      good:
+        - 新增命令时在注册表加一项并声明其 flags 与 outputKeys
+      bad:
+        - 在某个命令的 run 函数里手写 for 循环解析 os.Args
+  shared-envelope:
+    strength: MUST
+    statement: 命令的 --json 输出必须通过共享的输出信封（Output Envelope）类型写出，顶层始终含 valid、diagnostics、changedPaths；任何层级的数组字段（包括嵌套在命令专属字段中的数组，如 resolved.unitTypes[].children）都不得为 null，没有元素时为空数组；命令专属字段与之并列，且必须在 outputKeys 中声明。
+    rationale: Agent 与 MCP 按同一形状解析所有命令输出；逐命令自定义 JSON 会破坏契约，嵌套数组为 null 同样会让按数组遍历的调用方出错。
+    enforcement:
+      method: test
+      detail: internal/cli 的测试递归遍历 config resolved 的 JSON 输出，断言除可为 null 的对象字段外没有 null；TestRegistryConsistency 另对每条命令登记的样例调用做递归扫描：任何为 null 的字段名都必须登记在测试内的 nullableFields 清单（合法可空的对象字段），数组字段一律不得为 null——逐命令手写断言漏检嵌套数组为 null 的缝隙由此获得统一防线（characters-and-light-canon 的 canon add members:null 即从该缝隙漏出）。
+  stable-error-codes:
+    strength: MUST
+    statement: 诊断（Diagnostic）的错误码（Error Code）采用 <领域>.<kebab-case> 格式，以常量定义在产生它的包中；已发布的错误码不得改名、删除后复用或改变含义，新增错误码不得与已有错误码重名。
+    rationale: Agent、MCP 与 Skill 依据错误码分支处理，改名或复用会让它们静默出错。
+    enforcement:
+      method: review
+    examples:
+      good:
+        - usage.unknown-flag
+      bad:
+        - 把 usage.unknown-flag 改名为 usage.bad-flag
+  exit-code-convention:
+    strength: MUST
+    statement: 命令只使用退出码（Exit Code）0（成功）、1（校验失败或执行失败）、2（用法错误），并在注册表的 exitCodes 中逐一声明含义。
+    rationale: 统一退出码让脚本与 Agent 不解析输出也能判断结果类别。
+    enforcement:
+      method: test
+  contract-literals-in-tests:
+    strength: SHOULD
+    statement: 测试断言错误码、JSON 输出键与退出码时使用规格中的字面量（如 "usage.unknown-flag"），不引用实现包中的常量。
+    rationale: 以常量断言时，常量被改名或改值后测试会一并通过，stable-error-codes 就失去自动化防线。
+    enforcement:
+      method: review
+    examples:
+      good:
+        - if d.Code != "usage.unknown-flag"
+      bad:
+        - if d.Code != codeUnknownFlag
+  runnable-next:
+    strength: MUST
+    statement: 诊断的 next 中每一条都必须是可以直接粘贴到 shell 运行的完整命令：参数按 shell 规则加引号（internal/cli 的 shellCommand），不得包含 <value> 这类需要替换的占位符；需要作者给出取值时，在 message 中说明，next 给出 wa-cli help <command> --json 或列出每个允许取值的命令。
+    rationale: Agent 会直接执行 next；占位符中的 < 与 > 会被 shell 当作重定向，可能截断或创建文件。
+    enforcement:
+      method: test
+      detail: internal/cli 的 runWS 测试辅助函数断言每条工作区命令的诊断 next 都不含 < 或 >；TestShellCommandQuoting 覆盖带空格与单引号的参数。
+    examples:
+      good:
+        - wa-cli config set gate_level strict --dir . --json
+      bad:
+        - wa-cli config set gate_level <value> --dir .
+  sample-invocation:
+    strength: MUST
+    statement: 每条命令都必须在 internal/cli 的 sampleArgs 中登记一次成功的调用：只读命令，以及能以取值不变的方式成功的命令（如 config set 设为当前值、init 重复运行），登记不变更产物的调用；只能通过变更产物才能成功的命令（如 new、unit add、advance）登记一次在临时工作区中变更产物的调用，并在 mutatingSamples 中列出。工作区命令在临时工作区中通过 --dir 运行，测试不得在包目录中创建 .writing-anything/。
+    rationale: TestRegistryConsistency 依靠这些调用检查 --json 输出键与声明一致；创建作品、追加单元与推进阶段的命令不存在不变更产物的成功调用，要求它们不变更产物会使这些命令无法登记；显式列出会变更产物的样例，测试才能对其 changedPaths 断言非空、对其他命令断言为空。不带 --dir 的工作区命令会在包目录中创建真实工作区。
+    enforcement:
+      method: test
+      detail: TestRegistryConsistency 对 help --json 列出的每条命令调用 sampleArgs，缺少登记时测试失败；mutatingSamples 中的命令断言 changedPaths 为非空数组，其余命令断言为空数组。
+    examples:
+      good:
+        - sampleArgs 为 advance 返回一个已有作品与 brief.yaml 的临时工作区中的 advance 调用，并把 advance 列入 mutatingSamples
+      bad:
+        - 为 new 登记一次会报告 work.exists 的失败调用，以满足不变更产物的要求
+  workspace-dir-flag:
+    strength: MUST
+    statement: 读写工作区的命令都必须声明 internal/cli 共享的 --dir 参数（项目目录，默认当前目录），只在该目录下寻找 .writing-anything/，不向上查找父目录；找不到工作区时报告 workspace.not-found，next 为 wa-cli init --dir <dir> --json。
+    rationale: 显式目录让命令行为确定、易于在进程内测试，也避免 Agent 在子目录中意外操作到上层的另一个工作区；统一的参数与诊断让 Agent 用同一套方式调用所有工作区命令。
+    enforcement:
+      method: review
+    examples:
+      good:
+        - 'flags: []flagSpec{dirFlag}'
+      bad:
+        - 新命令用 os.Getwd() 向上逐级查找 .writing-anything/
+  next-rechecks-problem:
+    strength: SHOULD
+    statement: 诊断 next 中给出的复查命令必须能重新检出该问题：涉及多个产物的问题（引用、合并、内置产物与工作区产物的冲突）给出整体校验 wa-cli validate --dir <dir> --json，不得给出只校验单个文件、会报告 valid 为 true 的命令；命令按自身改写 next（如指向 wa-cli help <command>）时，只改写由本次参数引起的问题，已有产物中存在的问题保留默认的复查命令。判断问题是否由本次参数引起时，按诊断字段是否为参数名（或其下标、子字段）的白名单判断，不以「字段不以产物内路径开头」推断：已有产物的根级问题（如 schema_version、未定义的字段）也属于已有产物。修改已有产物的命令在写前复查（修改后重新解析与校验）中发现、而修改前的产物本身合法的问题，同样由本次参数引起：诊断不填 path，字段换成对应的参数名，next 给出 wa-cli help <command> --json；能在修改前检查的参数取值（如只含空白的文本、重复的 id）应在修改前报告。
+    rationale: Agent 按 next 复查；复查命令检不出问题时，Agent 会误以为问题已经解决；把已有产物的问题也改成查看用法，Agent 会反复调整参数而问题始终存在；以前缀排除会漏掉根级字段（fresh-context 审查在 decision add 与 claim add 中都复现）。写前复查的问题若带上产物路径，next 给出的单文件复查会报通过，因为文件并未写入（brief set 的审查复现）。
+    enforcement:
+      method: test
+      detail: internal/cli 的测试对跨产物错误码断言 next 为整体校验并能重新检出；TestClaimAdd、TestFeedbackAdd 与 TestDecisionAdd 断言已有产物的问题（含根级字段）保留默认的复查命令。TestBriefSetRejects 断言空白文本、重复 id 等参数问题不填 path、next 为 wa-cli help brief set --json；internal/brief 的 TestSetRejects 断言写前复查问题的字段为参数名。
+    examples:
+      good:
+        - paramField(d.Field, "question", "options", "id", "recommendation") 为真时才改写为 wa-cli help decision add --json
+        - brief.Set 在写前复查失败时清空 path，把 key_messages[0].text 映射为 message-text
+      bad:
+        - '!strings.HasPrefix(d.Field, "decisions") 时改写 next，schema_version 的问题也被改成查看用法'
+        - 写前复查失败时返回 path 为 brief.yaml 的诊断，next 为 wa-cli validate brief.yaml，复查报告 valid 为 true
+  streaming-envelopes:
+    strength: MUST
+    statement: 持续输出事件的流式命令（如 feedback watch、preview --serve）在 --json 模式下每个事件输出一行完整的输出信封（valid、diagnostics、changedPaths 与声明的输出键），不得输出不带信封的裸对象；流式命令必须提供使其在输出指定条数后结束的参数（如 --max），按间隔轮询的流式命令另须提供轮询间隔参数（如 --interval），以便在进程内测试并登记样例调用；事件驱动、没有轮询的命令（如本地服务）不需要间隔参数。
+    rationale: Agent 与 MCP 用同一方式解析所有命令的输出，逐行信封让流式事件也符合 shared-envelope；可结束的参数让 TestRegistryConsistency 与行为测试不必启动子进程或依赖超时；间隔参数只对轮询命令有意义，事件驱动的服务按请求即时响应。
+    enforcement:
+      method: test
+      detail: internal/cli 的 TestRegistryConsistency 以 --all --max 1 调用 feedback watch 并断言输出为一行信封；TestFeedbackWatch 在并发追加反馈时断言每行都是信封；preview --serve --max 的测试断言首行与每条反馈行都是信封。
+    examples:
+      good:
+        - feedback watch --max 1 --json 输出一行 {"valid":true,"diagnostics":[],"changedPaths":[],"feedback":{...}}
+      bad:
+        - feedback watch --json 每行只输出 {"id":"fb-2",...}
+  invalid-value-code:
+    strength: SHOULD
+    statement: 参数取值不合法（如应为正整数、应为枚举取值）且不对应任何产物字段时，统一报告错误码 input.invalid-value，诊断不填 path，message 说明参数名、给出的取值与期望，next 为 wa-cli help <command> --json；取值写入产物字段时仍由 Schema 校验报告 artifact.schema-violation。
+    rationale: Agent 依据错误码分支处理，同一类参数错误各命令各自造错误码会让分支逻辑膨胀；与写入产物的字段错误区分开，Agent 才知道该改参数还是改产物。
+    enforcement:
+      method: review
+    examples:
+      good:
+        - feedback watch --interval 0 报告 input.invalid-value，next 为 wa-cli help feedback watch --json
+      bad:
+        - feedback watch --interval 0 报告 feedback.bad-interval
+  precheck-before-side-effects:
+    strength: MUST
+    statement: 一条命令会写入多个产物时，必须在第一次写入之前完成全部可能失败的检查（包括针对已有产物的检查，如段落上限、写入记录的校验），领域包提供的预检查函数（如 draft.Precheck）与实际写入共用同一套检查；任一检查失败时所有产物逐字节不变，changedPaths 为空。只读命令不得因读到推导出的数据（如正文批注）而写文件，推导出的记录只在显式的变更命令中记入，并出现在该命令的 changedPaths 中。
+    rationale: draft write 先记入批注再写正文，若只在写正文时才发现已有正文过大，feedback.yaml 已被修改而命令报告失败，Agent 看到的结果与工作区不一致（fresh-context 审查实测）；读取命令写文件会让 watch 轮询反复写入、changedPaths 失真。
+    enforcement:
+      method: test
+      detail: internal/cli 的 TestRejectedWriteTouchesNothing 断言被拒绝与过大正文的 draft write 不创建 feedback.yaml；TestCommentFeedback 断言 feedback list 不创建 feedback.yaml。
+    examples:
+      good:
+        - draft.Precheck 通过后才调用 feedback.ImportComments，再调用 draft.Write
+      bad:
+        - 先记入批注，draft.Write 发现现有正文过大后返回 draft.too-large
+  loopback-only-server:
+    strength: MUST
+    statement: 'wa-cli 中监听网络的命令（如 preview --serve）只能监听回环地址 127.0.0.1，不得监听 0.0.0.0 或其他网卡，给出的访问地址必须取自实际监听的套接字；必须为每次运行生成至少 128 位的随机令牌，并对每个请求在读取或修改任何产物之前校验令牌（常量时间比较）与 Host 头（端口为 80 时同时接受不带端口的写法），不符合时返回 403；响应必须带 Cache-Control: no-store 与 Referrer-Policy: no-referrer，服务只在命令运行期间存在，不作为常驻服务；请求体必须限制大小，服务端日志写到命令的标准错误。测试必须断言访问地址是回环地址，并覆盖拒绝无令牌、令牌错误与 Host 不符的请求。'
+    rationale: 本地阅读页是项目中唯一的网络监听，同一台机器上的其他网页或进程也能访问回环地址：令牌防止伪造提交，Host 校验防 DNS 重绑定，no-referrer 防止令牌随 Referer 外泄，限制请求体防止占满内存；地址取自实际套接字，测试才能发现误改为监听全部网卡。
+    enforcement:
+      method: test
+      detail: internal/cli 的 TestPreviewServe 断言首行地址的主机为 127.0.0.1 且是回环地址，并对无令牌、令牌错误与错误 Host 的 GET 与 POST 断言 403 且 feedback.yaml 不变。
+    examples:
+      good:
+        - ln, _ := net.Listen("tcp", "127.0.0.1:0")；url 由 ln.Addr() 生成；请求先经 authorized(r) 校验 Host 与令牌
+      bad:
+        - http.ListenAndServe(":8080", mux)；或地址写死为 "http://127.0.0.1:" 加端口；或只在 POST 上校验令牌
+  mcp-thin-wrapper:
+    strength: MUST
+    statement: MCP 服务只做命令注册表到 MCP 的映射：每个 tool 由注册表中的命令生成，tools/call 在进程内运行同一条 wa-cli 命令（命令接受 --dir 时加 --dir，并加 --json）并原样返回其输出信封，资源只读取产物或运行只读命令；internal/mcp 不 import internal/cli 与任何领域包，命令信息与执行函数由命令层传入。新增命令时不得为 MCP 单独编写逻辑。每次 tools/call 必须不等待作者或其他外部事件即结束（会一直等待的命令不对应 tool）；tool 的参数不得让客户端读写项目目录之外的文件（路径类参数只能经已有的输出路径检查，否则不作为 tool 参数）；协议错误码按所实现的协议版本的规范选用。测试逐一调用每个 tool（按命令登记的样例），断言成功，并断言同一操作经 MCP 与 CLI 调用的结果一致。wa-cli mcp 的标准输出只写 MCP 消息，不受输出信封规则约束。
+    rationale: wa-cli 是唯一真相来源：MCP 与 CLI 共用一份实现，结果天然一致，后续命令自动获得 tool；依赖方向让协议层无法另写业务逻辑。只检查 tool 存在而不调用会漏掉参数映射错误（本变更的审查发现 version、help、skills list 的 tool 都会失败）；一直等待的调用会阻塞整个服务；只用 MCP 的 Agent 往往没有文件系统权限，路径参数会扩大它的能力。
+    enforcement:
+      method: test
+      detail: internal/cli 的 TestMCPEveryTool 按样例调用每个 tool 并断言 isError 为 false，TestMCPToolPerCommand 断言 tool 与命令一一对应、隐藏的参数不出现，TestMCPSameAsCLI 比较 MCP 与 CLI 的输出与产物；internal/mcp 的 TestNoInternalImports 确认协议层不依赖 wa-cli 的其他包。
+    examples:
+      good:
+        - tools/call feedback_add → Run([feedback add my-post --text=太长 --dir D --json])；version → Run([version --json])
+      bad:
+        - 在 internal/mcp 中直接调用 feedback.Add；或给每个 tool 都加 --dir，使不接受它的命令总是失败
+  external-processes:
+    strength: MUST
+    statement: wa-cli 运行外部程序（MCP 客户端的官方 CLI、pack install 拉取 git 来源时的 git）时必须经可注入的环境接口（查找与执行分离，测试可以替换），用 exec 直接传参数列表、不经 shell，不连接 wa-cli 自己的标准输入与输出，设时长上限（超时视为失败），并设 cmd.WaitDelay，使超时杀掉主进程后即使它派生的子进程仍持有输出管道，调用也在上限加 WaitDelay 内返回；把合并后的标准输出与标准错误截断（不切断多字节字符）后写入诊断；命令层测试用写入 PATH 的假可执行文件断言实际的命令行与工作目录。外部程序只能是固定的客户端 CLI 与 git，参数列表只由固定的子命令与经过校验的参数组成，不得执行来自产物或规范包的命令。调用 git 时必须关闭钩子（-c core.hooksPath 指向空目录）、ext 传输协议（-c protocol.ext.allow=never）与交互提示（GIT_TERMINAL_PROMPT=0）、不递归子模块，在临时目录中操作，用 -- 把来源地址与选项分开，拒绝以 - 开头或含空白的 ref。
+    rationale: stdio 上的 MCP 会话与 --json 输出不能被子进程的输出污染；官方 CLI 首次运行的引导或自动更新会卡住；不少 CLI 把错误写在标准输出；只断言命令行就能独立更新各客户端的参数。输出写到内存缓冲区时 Wait 要等所有持有管道的进程退出，只杀主进程会让超时失效（git 会派生 ssh 与 git-remote-https）。git 拉取的是第三方仓库：关闭钩子、ext 协议与子模块保证不执行仓库内容（规范包只能是数据），关闭交互提示避免等待凭据而卡住会话，-- 与 ref 检查防止参数注入。
+    enforcement:
+      method: test
+      detail: internal/mcpinstall 与 internal/packinstall 的 TestSystemEnv 覆盖合并输出、截断、GIT_TERMINAL_PROMPT 与超时后子进程仍持有管道时按时返回；TestFetchGitCommandLine 断言 git 的参数列表；internal/cli 的 TestMCPInstall* 与 TestPackInstallFakeGit 用 PATH 中的假可执行文件断言命令行、工作目录与失败输出；TestInstallFromGit 与 TestPackInstallFromGit 用真实 git 与 file:// 仓库覆盖克隆与检出。
+  third-party-config-merge:
+    strength: MUST
+    statement: wa-cli 写入第三方的配置文件（如 MCP 客户端的 mcpServers 文件）时必须只改自己负责的字段，保留其余的键、条目与自己条目中的其他字段；文件不存在、为空或为 null 时从空对象开始，结构不符时报告错误而不覆盖；取值未变时不写；写入时先写同目录的临时文件再重命名并保留原有权限，拒绝写入符号链接；JSON 编码不转义 HTML 字符。配置文件路径不得落在工作区之内（按文件身份逐级比较，不只比较文字），项目之外的路径不列在 changedPaths 与诊断的 path 中。
+    rationale: 这些文件属于作者与其他工具，wa-cli 不知道其他字段的含义；本变更的审查发现整条覆盖会丢掉作者加的 env、JSON null 会让对 nil map 赋值崩溃、文字比较的路径检查可被指向工作区的符号链接绕过。
+    enforcement:
+      method: test
+      detail: internal/mcpinstall 的 TestJSONConfig 与 internal/cli 的 TestMCPInstallJSON、TestMCPInstallGuards 覆盖合并、null、权限、符号链接与工作区检查。
+  unit-aware-defaults:
+    strength: SHOULD
+    statement: 按单元消费的文体默认值（如 default_method）的应用点必须经过单元感知的统一入口（internal/cli 的 unitDefaultMethod 与 internal/work 的 Work.picker），不得在应用点直接读取 Work.Genre.DefaultMethod；新增应用点时先检查是否已有入口可复用。
+    rationale: story-structure-templates 把 default_method 的语义改为只作用于作品的根单元时，需要同步修改六个分散的应用点（大纲关卡、整体校验、单产物校验、outline set/remove/show、审稿、lint）；直接读 Genre.DefaultMethod 的新增点会静默恢复「所有单元继承」的旧行为，使子单元被父级规则卡死（lesson-8f8885）。
+    enforcement:
+      method: review
+      detail: 检查方式：在 internal/ 下搜索 Genre.DefaultMethod，只应命中单元感知的入口（unitDefaultMethod、Work.picker、defaultMethodOf）及其定义。
+    examples:
+      good:
+        - 'outline.Picker{Methods: catalog.LoadMethods(dir), Default: unitDefaultMethod(w, u)}'
+      bad:
+        - 'outline.Picker{Methods: catalog.LoadMethods(dir), Default: w.Genre.DefaultMethod}'

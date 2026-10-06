@@ -1,0 +1,54 @@
+schema: strict-spec-driven/question-list/v1
+schema_version: 1
+artifact_type: question_list
+schema_file: templates/strict-spec-driven/schemas/question-list.yaml
+change: long-form-planning-methods
+open: []
+resolved:
+  - id: requirement-problem
+    question: What is concretely going wrong today, and for whom?
+    context: 'Why this is asked: the change is planned against a need, and the need lives only with the requester. A "problem" here means what someone does or suffers today — not a feature that is missing. If the answer names a button, a field, a page, or an endpoint, it is a solution, and the underlying problem is still unstated. What a sufficient answer contains: who is affected, what they do today instead, and how often. Worked example: "every Monday one person spends forty minutes copying order rows into a spreadsheet to send the weekly report". What it changes: this becomes the proposal''s why, and it decides whether the change is worth making.'
+    answer: '写长篇的作者与协助的 Agent：长篇小说在任何单个会话都装不下全书（novel 里程碑 goal），动笔前需要分步规划并经作者确认，但今天没有规范通道——规划类写作法的数据模型（kind: planning 与 steps）已存在，却没有内置规划写作法，也没有逐步产出与作者确认的关卡；人物、场景、契约的规划产物与规划步骤之间没有可验证的关联。'
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-outcome
+    question: What observable difference proves the problem is solved?
+    context: 'Why this is asked: without a success condition, nobody can tell afterwards whether the change worked. "Observable" means someone outside the system can check it without reading the code. What a sufficient answer contains: what a person will see, or no longer have to do, once this is done. Worked example: "the report is in the manager''s inbox on Monday morning without anyone assembling it". What it changes: this becomes the delta spec''s scenarios and the acceptance evidence at review time.'
+    answer: 里程碑 done 判据即验收证据：雪花写作法的某一步未经作者确认（wa-cli plan confirm）时，不能进入下一步；场景列表与场景详述分别关联单元树中的场景和场景契约（确认时校验链接）。另可观察：wa-cli method list/show 列出 snowflake、golden-three 与 volume-structure；新建 novel 作品的根单元默认选用 snowflake（plan show 的 currentStep 为 one-sentence）。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-trigger
+    question: Why now — what forced this?
+    context: 'Why this is asked: work that nothing forced is the work most often thrown away later. This question catches a request that sounds reasonable but has no real driver behind it. What a sufficient answer contains: the concrete event, deadline, incident, or cost that made this surface now, or an honest statement that nothing did. Worked example: "the report was missed last month and it was raised with the team". What it changes: a change with no trigger is a candidate for deferral, and the answer is weighed at review before archive.'
+    answer: novel 里程碑的前置计划变更已全部归档（multi-level-units、scene-context-and-fiction-rules、scene-contract-and-causality、characters-and-light-canon、writing-method-templates 等，depends_on 全部完成），roadmap-recommend 将本变更列为当前可推荐变更；novel 文体注明明示「默认写作法由长篇规划写作法这一后续变更声明」。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-non-goals
+    question: What must explicitly not change?
+    context: 'Why this is asked: the requester knows which nearby behavior other people depend on, and the agent does not. A "non-goal" is something the change must leave alone even though it sits close to the work. What a sufficient answer contains: the behavior, setting, or output that must survive untouched, and who relies on it. Worked example: "do not change the saved filters — several people rely on their own". What it changes: these become the proposal''s unchanged_behavior items, which review checks the finished result against.'
+    answer: 既有文章类与结构类写作法的数据与选用流程、wa-cli brief set --method、规划类写作法步骤不由大纲承担 role 的既有行为、canon add / canon set、unit add / unit move、scene contract 的命令语义、决策队列与验收关卡、其他文体（tech-blog、wechat-marketing、short-story）的默认写作法都必须不变（proposal 的 unchanged_behavior 已按此列出）。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-interpretation
+    question: Which reading of the request is intended, where more than one is possible?
+    context: 'Why this is asked: a short request usually admits several readings, and building the wrong one is indistinguishable from building nothing. What a sufficient answer contains: the reading that is meant, stated plainly enough to rule the others out — or a statement that only one reading exists and what it is. Worked example: "export means the version sent to the manager, not the one I read myself". What it changes: this fixes the scope boundary before any code is written, and settles disputes about what was asked for.'
+    answer: 取链接式读法（设计决定 plan-links-materialization）：「人物概要/详述/宝典写入设定集的人物卡、场景列表生成单元树中的场景、场景详述生成场景契约」指产物经既有命令（canon add、unit add、scene contract）落地，规划步骤以 --link 记录引用并在 plan confirm 时按 product 校验存在与类型；不是让 plan 命令自带结构化参数直接生成。「网文结构模板」读作内置结构类写作法（节拍含 position 与 tension），由作者或 Agent 在章单元（golden-three）与部单元（volume-structure）经写作简报选用，不由文体按单元层级自动指派。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: confirmed-step-revision
+    question: 雪花写作法本质是迭代方法，后面的步骤常常需要回头修改已确认的前一步（例如四页纲要推翻一句话概括）；本变更是否允许修订已确认的规划步骤？
+    context: 设计决定已确认步骤构成方法 steps 的前缀、不可再改写（plan step 与 plan confirm 都报告 plan.step-order），但各步产物本身仍可经既有命令修改（人物卡经 canon set、结构经 unit move、契约经 scene contract），因此冻结的只是 plan.yaml 中的步骤文本。不确定性影响：proposal 范围、plan 主规格的 plan-step 与 plan-confirm 要求、internal/plan 实现、internal/plan 与 internal/cli 的测试。推荐：本变更保持冻结；若作者确需修订，再以独立变更评估 --redo（作者确认后重置该步及后续步骤的确认状态，产物不动）的语义。
+    answer: 支持 --redo 修订：wa-cli plan step 对已确认步骤给出 --redo --confirmed-by-author --confirmation <作者原话摘要> 与新的 --text/--source/--link 时，重置该步骤为新的未确认草稿，并删除其后全部步骤的记录（产物不动，须重新逐级起草与确认）；对未确认步骤给出 --redo 报告 plan.not-confirmed（直接改写即可，无需 --redo）。
+    status: resolved
+    answered_by: human
+  - id: plan-advance-coupling
+    question: 生命周期推进（例如 novel 根单元从 brief 推进到 outline）是否要求规划已完成（全部规划步骤经作者确认）？
+    context: 里程碑 done 判据只要求步骤之间的确认关卡（某一步未经确认不能进入下一步），没有把规划完成度接入单元生命周期。接入会扩大改动面。不确定性影响：spec delta（是否需要 MODIFIED units-and-lifecycle 主规格的 advance-stage）、internal/work 与 internal/cli 实现、相关测试与依赖关系。推荐：不耦合，规划与生命周期正交，由 Agent 按 Skill 工作流在动笔前完成规划；如需强关卡再另立计划变更。
+    answer: 不耦合：规划与生命周期正交，步骤确认关卡只在 wa-cli plan 命令组内把关，advance 不检查规划完成度；Agent 按 Skill 工作流在动笔前完成规划。
+    status: resolved
+    answered_by: human

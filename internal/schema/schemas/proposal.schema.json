@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "规范包提议",
+  "description": "规范包提议（Pack Proposal）：从作者素材得到的文风统计与待作者逐项确认的条目；确认后的条目由 wa-cli pack confirm 写入作者自己的规范包，未确认的条目不影响任何规则。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "id", "pack", "sources", "items"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "id": {"$ref": "common.schema.json#/$defs/id"},
+    "pack": {"$ref": "common.schema.json#/$defs/id"},
+    "sources": {"$ref": "common.schema.json#/$defs/ids"},
+    "stats": {"$ref": "common.schema.json#/$defs/styleStats", "properties": {"sources": false}},
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "kind", "status"],
+        "properties": {
+          "id": {"$ref": "common.schema.json#/$defs/id"},
+          "kind": {"enum": ["baseline", "style", "banned-term"]},
+          "text": {"type": "string", "pattern": "\\S"},
+          "term": {"type": "string", "pattern": "\\S"},
+          "status": {"enum": ["proposed", "confirmed", "rejected"]},
+          "confirmation": {"type": "string", "pattern": "\\S"},
+          "decided_at": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"},
+          "key": {"type": "string", "pattern": "^[a-z]+:\\S+$", "description": "作者偏好（Author Preference）的稳定标识，如 removed:赋能"},
+          "evidence": {
+            "type": "array",
+            "maxItems": 3,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["unit", "text"],
+              "properties": {"unit": {"type": "string", "pattern": "\\S"}, "text": {"type": "string", "pattern": "\\S"}}
+            }
+          }
+        },
+        "allOf": [
+          {"if": {"properties": {"kind": {"const": "style"}}, "required": ["kind"]}, "then": {"required": ["text"], "properties": {"term": false}}},
+          {"if": {"properties": {"kind": {"const": "banned-term"}}, "required": ["kind"]}, "then": {"required": ["term"], "properties": {"text": false}}},
+          {"if": {"properties": {"kind": {"const": "baseline"}}, "required": ["kind"]}, "then": {"properties": {"text": false, "term": false}}},
+          {"if": {"properties": {"status": {"const": "confirmed"}}, "required": ["status"]}, "then": {"required": ["confirmation", "decided_at"]}},
+          {"if": {"properties": {"status": {"const": "proposed"}}, "required": ["status"]}, "then": {"properties": {"confirmation": false, "decided_at": false}}},
+          {"if": {"properties": {"status": {"const": "rejected"}}, "required": ["status"]}, "then": {"required": ["decided_at"], "properties": {"confirmation": false}}}
+        ]
+      }
+    }
+  }
+}

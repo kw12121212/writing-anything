@@ -1,0 +1,12 @@
+schema: strict-spec-driven/planned-change/v1
+schema_version: 1
+artifact_type: planned_change
+schema_file: ../../templates/strict-spec-driven/schemas/planned-change.yaml
+planned_change:
+  id: mcp-client-registration
+  milestone: mcp-integration
+status: complete
+summary: wa-cli mcp install 客户端注册
+details: wa-cli mcp install --client claude-code|codex|json 把 wa-cli mcp 注册到对应客户端：claude-code 与 codex 优先调用各自官方 CLI 注册，找不到官方 CLI 时跳过并给出诊断；json 写入 --config 指定的文件。支持项目级与用户级两种范围。重复执行结果幂等，并保留配置中已有的其他条目。每个客户端的注册逻辑相互隔离，测试覆盖幂等与保留已有条目。
+depends_on:
+  - mcp-server

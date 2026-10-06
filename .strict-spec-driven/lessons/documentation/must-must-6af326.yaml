@@ -1,0 +1,19 @@
+schema: strict-spec-driven/lesson/v1
+schema_version: 1
+artifact_type: lesson
+schema_file: templates/strict-spec-driven/schemas/lesson.yaml
+lesson:
+  id: must-must-6af326
+  title: 修改一条 MUST 需求时，要检查同一规格里相邻的 MUST 是否因此冲突
+category: documentation
+status: active
+created_at: '2026-09-30T07:05:57.363Z'
+updated_at: '2026-09-30T07:05:57.363Z'
+context: fix-cli-help-usage-nits 修改 cli 规格 exit-codes，规定写入失败即使发生在写出用法错误时也返回 1。
+observation: delta spec 最初只 MODIFIED 了 exit-codes 和 help-command；usage-error 仍无条件写着「必须以退出码 2 退出」，两条 MUST 合并后字面冲突。verify 与 ready 都不做需求间的语义检查，是独立审查发现的。
+takeaway: 改动一条需求的例外或优先级时，先在主规格里搜索与它约束同一可观察结果（如退出码、输出流）的其他需求；有冲突就在同一 delta 中一并 MODIFIED，并在语句里写明谁优先，同时完整重述其原有场景。
+applies_when: 编写 MODIFIED delta spec，尤其是为某条 MUST 需求增加例外、优先级或新的退出码/输出规则时
+occurrences:
+  - origin: fix-cli-help-usage-nits
+    date: '2026-09-30'
+    evidence: changes/fix-cli-help-usage-nits/specs/cli.yaml 在审查后补充 MODIFIED usage-error，语句加上「写出用法错误本身失败时按 exit-codes 以退出码 1 退出」，并重述原有 6 个场景。

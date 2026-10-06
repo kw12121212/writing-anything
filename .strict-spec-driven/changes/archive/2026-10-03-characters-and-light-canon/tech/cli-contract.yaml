@@ -1,0 +1,16 @@
+schema: strict-spec-driven/delta-tech/v1
+schema_version: 1
+artifact_type: delta_tech
+schema_file: templates/strict-spec-driven/schemas/delta-tech.yaml
+target_standard: cli-contract
+operations:
+  ADDED: {}
+  MODIFIED:
+    shared-envelope:
+      strength: MUST
+      statement: 命令的 --json 输出必须通过共享的输出信封（Output Envelope）类型写出，顶层始终含 valid、diagnostics、changedPaths；任何层级的数组字段（包括嵌套在命令专属字段中的数组，如 resolved.unitTypes[].children）都不得为 null，没有元素时为空数组；命令专属字段与之并列，且必须在 outputKeys 中声明。
+      rationale: Agent 与 MCP 按同一形状解析所有命令输出；逐命令自定义 JSON 会破坏契约，嵌套数组为 null 同样会让按数组遍历的调用方出错。
+      enforcement:
+        method: test
+        detail: internal/cli 的测试递归遍历 config resolved 的 JSON 输出，断言除可为 null 的对象字段外没有 null；TestRegistryConsistency 另对每条命令登记的样例调用做递归扫描：任何为 null 的字段名都必须登记在测试内的 nullableFields 清单（合法可空的对象字段），数组字段一律不得为 null——逐命令手写断言漏检嵌套数组为 null 的缝隙由此获得统一防线（characters-and-light-canon 的 canon add members:null 即从该缝隙漏出）。
+  REMOVED: {}

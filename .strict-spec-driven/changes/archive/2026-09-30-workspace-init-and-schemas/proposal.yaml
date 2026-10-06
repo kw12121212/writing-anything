@@ -1,0 +1,43 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: workspace-init-and-schemas
+  status: proposed
+summary:
+  what:
+    - 新增 wa-cli init：在 --dir 指定的项目目录（默认当前目录）创建工作区（Workspace）.writing-anything/，包含 config.yaml（schema_version、语言 language、默认文体 default_genre、启用的规范包 packs、关卡强度（Gate Level）gate_level）以及 sources/、works/ 目录；重复运行只补齐缺失的文件与目录，不覆盖已有内容。
+    - 新增产物（Artifact）的 JSON Schema 校验：Schema 用 embed 打包进二进制；wa-cli validate 校验整个工作区或 validate <path> 校验单个产物，问题以带错误码、产物路径、字段路径与下一步命令的诊断（Diagnostic）报告。
+    - 新增 wa-cli status：汇总工作区路径、生效的配置、素材与作品数量以及校验结果。
+    - 新增 wa-cli config set <key> <value>：通过 wa-cli 修改工作区配置的 language、default_genre、packs、gate_level，先用 Schema 校验再写入；为此命令注册表支持两词命令名（命令组 + 子命令）与必需的位置参数。
+  why:
+    - 后续所有内核命令（文体与规范包加载、new、advance、source add、draft write）都要读写 .writing-anything/ 下的产物；没有工作区与统一的 Schema 校验入口，它们只能各自检查字段，损坏的产物也无法给出可执行的修复诊断。
+    - 里程碑完成标准要求：wa-cli init 创建的工作区通过 wa-cli validate；损坏的产物返回带错误码、产物路径与修复命令的 --json 诊断。
+scope:
+  in:
+    - internal/schema：以 JSON Schema（draft 2020-12）声明工作区配置 config.yaml，用 embed 打包；按产物在工作区内的相对路径确定产物类型；统一校验入口返回字段路径与行号
+    - internal/workspace：定位工作区、按需补齐创建（不覆盖已有文件）、读取配置、统计 sources/ 与 works/ 条目
+    - wa-cli init [--dir <path>] [--language <value>] [--genre <value>] [--gate-level <value>]：写入前先用 Schema 校验将要写出的配置，不合法则不写任何文件；配置已存在且参数与之不同时给出 warning 诊断并保留原文件
+    - wa-cli validate [<path>] [--dir <path>]：整体校验（config.yaml 与必需目录）或单个产物校验；覆盖未找到工作区、产物不存在、未知产物类型、YAML 语法错误与 Schema 违规
+    - wa-cli status [--dir <path>]：输出工作区路径、配置摘要、素材与作品数量，校验失败时附带诊断
+    - 引入 YAML 解析与 JSON Schema 校验的第三方依赖，并在 design 中说明理由（go-project-structure/stdlib-first）
+    - 新增主规格 workspace（delta spec）、新增技术标准 workspace-artifacts（delta tech）、在 docs/GLOSSARY.md 加入「产物（Artifact）」
+    - 各包 testdata/ 下的测试夹具：合法与损坏的配置、缺目录的工作区等
+    - wa-cli config set <key> <value> [--dir <path>]：packs 的取值用逗号分隔，空字符串表示清空；default_genre 为空字符串时删除该字段；被设置的字段取值不合法时不写入；其他字段与 YAML 注释保持不变；未知的键报 config.unknown-key
+    - internal/cli 命令框架：注册表支持两词命令名（如 config set），run、help <command> [<subcommand>] 与 <command> <subcommand> --help 按完整命令名识别；位置参数可声明为必需，缺少时报 usage.missing-argument；同步修改 cli 主规格（delta spec）
+  out:
+    - 文体（Genre）与规范包（Pack）的定义、加载与合并，以及 wa-cli config resolved（由 genre-and-pack-loading 负责）；本变更只校验 default_genre 与 packs 的 id 格式，不检查其是否存在
+    - 作品、单元树与生命周期（wa-cli new / advance / next，由 unit-tree-and-lifecycle 负责）；status 只统计 works/ 下的条目数，不输出单元阶段
+    - 素材登记（wa-cli source add）与出处；status 只统计 sources/ 下的条目数
+    - 从子目录向上查找工作区；命令只在 --dir（默认当前目录）下寻找 .writing-anything/
+    - 工作区格式迁移与 schema_version 升级
+    - wa-cli 调用 LLM
+    - config 命令组中 set 以外的子命令（如 config get、config unset；config resolved 由 genre-and-pack-loading 负责）
+unchanged_behavior:
+  - 输出信封（Output Envelope）字段 valid、diagnostics、changedPaths 与退出码约定 0/1/2 保持不变
+  - 仓库根目录不创建 .writing-anything/；产品二进制不依赖 internal/tools/**
+  - wa-cli version 的文本与 --json 输出、wa-cli help 对单词命令的用法输出、已有 usage.* 错误码的含义与退出码保持不变；help 列表只多出新命令；help --json 的 args 每项新增 required 字段，help 自身新增可选位置参数 subcommand
+roadmap:
+  milestone: kernel-foundation
+  planned_change: workspace-init-and-schemas

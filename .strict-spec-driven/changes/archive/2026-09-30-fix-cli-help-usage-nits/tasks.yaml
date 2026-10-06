@@ -1,0 +1,52 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: fix-cli-help-usage-nits
+sections:
+  Implementation:
+    repro-failing-tests:
+      text: 先写回归测试并确认在修复前失败：wa-cli --help 与 --help --json 等同 help；help version --help 输出 version 的用法；usageError 写入失败返回 1 并报告；用法说明不含中文占位符（<命令>、<值>）
+      status: complete
+      command: go test ./internal/cli/... -run 'TestRootHelpFlag|TestHelpCommandHelpFlag|TestUsageErrorWriteFailure|TestPlaceholders'
+    root-help-flag:
+      text: internal/cli/cli.go：首个参数为 --help 时把其余参数交给 help 命令
+      status: complete
+    help-positional:
+      text: internal/cli/cli.go：help 带位置参数时 --help 不截获，由 runHelp 输出目标命令用法
+      status: complete
+    usage-write-failure:
+      text: internal/cli/cli.go：usageError 检查写入错误，失败时经 writeFailed 返回 1
+      status: complete
+    english-placeholders:
+      text: internal/cli/help.go：总览改为「用法：wa-cli <command> [<args>]」「运行 wa-cli help <command> …」，string 参数占位符改为 <value>；同步更新依赖旧文本的测试
+      status: complete
+  Testing:
+    cli-unit-test:
+      text: 运行 internal/cli 全部测试，确认新回归测试通过、原有测试无回退
+      status: complete
+      command: go test ./internal/cli/...
+    binary-test:
+      text: 运行 cmd/wa-cli 二进制级测试，含 wa-cli --help 与 nope --json 写 /dev/full 返回 1
+      status: complete
+      command: go test ./cmd/wa-cli/...
+    full-regression:
+      text: 在干净仓库运行完整回归命令，确认覆盖率不低于 80%
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    ready-check:
+      text: 运行 strict-spec-cli ready fix-cli-help-usage-nits 无阻塞诊断
+      status: complete
+      command: strict-spec-cli ready fix-cli-help-usage-nits
+    verify-check:
+      text: 运行 strict-spec-cli verify fix-cli-help-usage-nits，确认任务完成且 delta spec 与实现一致
+      status: complete
+      command: strict-spec-cli verify fix-cli-help-usage-nits
+    archive-readiness:
+      text: 确认归档会把 usage-error、help-command、exit-codes 的 MODIFIED 合并进 cli 主规格，且合并后三条需求不再冲突
+      status: complete
+      command: strict-spec-cli verify fix-cli-help-usage-nits
+testing_gates:
+  validation_task: full-regression
+  unit_test_task: cli-unit-test

@@ -1,0 +1,13 @@
+schema: strict-spec-driven/planned-change/v1
+schema_version: 1
+artifact_type: planned_change
+schema_file: ../../templates/strict-spec-driven/schemas/planned-change.yaml
+planned_change:
+  id: story-structure-templates
+  milestone: short-story
+status: complete
+summary: 结构类写作法：三幕结构、救猫咪、七点结构、起承转合、英雄之旅
+details: 内置结构类写作法模板：三幕结构（Three-Act Structure）、救猫咪节拍表（Save the Cat! Beat Sheet，15 个节拍）、七点结构（Seven-Point Story Structure）、起承转合、英雄之旅（Hero's Journey）。每个模板声明节拍名称、在全文中的位置范围和目标张力，作为情绪曲线与张力曲线的目标走势。短篇默认使用起承转合或三幕结构，作者可以改选或不用。大纲缺少模板要求的节拍时 validate 失败；成稿后节拍位置超出范围只提示、不阻塞。
+depends_on:
+  - short-story-genre
+  - writing-method-templates

@@ -1,0 +1,14 @@
+schema: strict-spec-driven/planned-change/v1
+schema_version: 1
+artifact_type: planned_change
+schema_file: ../../templates/strict-spec-driven/schemas/planned-change.yaml
+planned_change:
+  id: layered-summaries-and-budget
+  milestone: novel
+status: complete
+summary: 分层摘要（Layered Summary）、按契约组装上下文与卷末检查点
+details: 在系列阶段引入的摘要机制上扩展：已验收场景的摘要逐层汇总为章、部（网文常称卷）、全书摘要，由 Agent 撰写，wa-cli 校验结构与过期状态。wa-cli context <scene> 按场景契约的显式引用组装，优先级从高到低为：契约本身、出场人物的状态快照、视角人物的知情表、相关的未回收伏笔、前一两个场景的原文结尾、各层摘要、规范包要点；超出上下文预算时从低优先级开始裁剪，并报告实际占用和被裁剪的内容。每部最后一个场景验收后，wa-cli 生成卷末检查点（Volume Checkpoint）：汇总本部新增设定、已确认的状态变化、伏笔变化和未处理决策，并随机抽取若干条收口抽取结果供作者核对原文；strict 关卡下检查点未经作者确认，下一部的场景不能验收，其他关卡强度只提示。测试夹具包含至少三章的长篇，验证任一场景的 context 都不超过预算，且同一输入的输出完全一致。
+depends_on:
+  - multi-level-units
+  - series-shared-context
+  - scene-close-out

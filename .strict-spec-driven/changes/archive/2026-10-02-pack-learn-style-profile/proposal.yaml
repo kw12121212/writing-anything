@@ -1,0 +1,33 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: pack-learn-style-profile
+  status: proposed
+summary:
+  what:
+    - 新增 wa-cli pack learn <proposal>：以 past-article 类型的素材为输入，计算确定性的文风统计（句长与段长的分布、每千字的标点频率、常用词），生成或更新工作区中的规范包提议（Pack Proposal）.writing-anything/proposals/<proposal>.yaml；Agent 用 --style 与 --avoid 命名参数补充定性条目
+    - 新增 wa-cli pack confirm <proposal> --item <id> --confirmation：作者逐项确认后，把条目写入作者自己的规范包 .writing-anything/packs/<pack>.yaml（统计基准写为 style_profile，文风描述追加到 style，禁用写法追加到 banned_terms）；wa-cli pack reject 记录被拒绝的条目，之后不再重复提出
+    - 规范包新增 style_profile 字段（文风画像（Style Profile）的统计基准）；wa-cli config resolved 输出 styleProfile（来源为声明它的规范包），供后续的文风漂移检测使用
+  why:
+    - 里程碑 packs-and-series 要求作者能从过往文章得到文风画像提议，且文风画像只以提议形式出现，作者确认前不影响规则
+    - 后续的 style-metrics-and-drift 以作者的文风画像为基准检测漂移，author-preference-learning 复用同一套提议与确认流程
+scope:
+  in:
+    - past-article 素材的确定性统计：句子按句末标点与换行切分、段落按空行切分，长度为非空白字符数；标点频率按每千字计；常用词为 CJK 2 到 4 字的字串与长度不小于 3 的拉丁字母词，按出现次数取前 20 项
+    - 规范包提议产物 proposals/<id>.yaml 的 JSON Schema、产物类型登记与 validate 校验；条目的状态（proposed、confirmed、rejected）、作者确认与时间
+    - pack learn、pack confirm、pack reject 三条命令；pack.schema.json 的 style_profile 与 resolved.styleProfile
+    - 命令注册表、help、样例调用与自动生成的 MCP tool；docs/GLOSSARY.md 的规范包提议等术语；wa-init 技能说明如何生成与确认文风画像
+    - 工作区目录的列举（packs/ 的整体校验、pack list 与 proposals/）改用 os.ReadDir：项目目录名含 [ ] * ? 时 filepath.Glob 会静默漏掉文件（审查发现，已有的 packs/ 校验同样受影响）
+  out:
+    - wa-cli 调用模型做定性分析；分词与语义层面的用词分析
+    - 文风漂移检测（style-metrics-and-drift）与从修改和反馈中归纳偏好（author-preference-learning）
+    - 把条目写入已安装（有锁定条目）的规范包或内置规范包
+unchanged_behavior:
+  - 未确认的提议不影响任何规则：config resolved、lint、context 与审稿的结果与提议是否存在无关
+  - 素材原文不被改写；没有 style_profile 的规范包，config resolved 的其他字段不变，styleProfile 为 null
+  - wa-cli 不调用大语言模型
+roadmap:
+  milestone: packs-and-series
+  planned_change: pack-learn-style-profile

@@ -1,0 +1,14 @@
+schema: strict-spec-driven/planned-change/v1
+schema_version: 1
+artifact_type: planned_change
+schema_file: ../../templates/strict-spec-driven/schemas/planned-change.yaml
+planned_change:
+  id: local-review-preview
+  milestone: wechat-marketing-and-mcp
+status: complete
+summary: 本地即时阅读与反馈页
+details: wa-cli preview <unit|work> --serve 启动一个只监听 127.0.0.1 的本地阅读页，访问需要随机令牌，命令结束即关闭，不作为常驻服务。页面展示正文（可按出处着色）、文本检查与审稿发现项；作者选中文字即可写意见，并立即保存为作者反馈；提供快捷标记：阅读卡点（这里读不下去了）、好、疑问。新反馈会出现在 wa-cli feedback watch 的输出中。不加 --serve 时生成静态 HTML，便于离线阅读。只做阅读与反馈，不做在线编辑，也不做成完整的 Web 产品。
+depends_on:
+  - human-edit-protection-and-comments
+  - author-feedback
+  - review-and-acceptance

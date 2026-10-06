@@ -1,0 +1,42 @@
+schema: strict-spec-driven/question-list/v1
+schema_version: 1
+artifact_type: question_list
+schema_file: templates/strict-spec-driven/schemas/question-list.yaml
+change: ai-scored-metrics
+open: []
+resolved:
+  - id: requirement-problem
+    question: What is concretely going wrong today, and for whom?
+    context: 'Why this is asked: the change is planned against a need, and the need lives only with the requester. What it changes: this becomes the proposal''s why.'
+    answer: 据里程碑 packs-and-series 的 goal 与规划变更 ai-scored-metrics：文风与节奏没有可衡量的 AI 量化评分，单次 AI 打分波动大、无法判断是否可信。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-outcome
+    question: What observable difference proves the problem is solved?
+    context: 'Why this is asked: without a success condition, nobody can tell afterwards whether the change worked. What it changes: this becomes the delta spec''s scenarios.'
+    answer: 据里程碑 done_criteria：分歧超过阈值的 AI 评分转为作者决策；与作者一致率低于阈值的评分维度被降级为仅供参考。据规划变更 details：锚定评分、metrics plan / record / calibrate、取中位数并报告分歧。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-trigger
+    question: Why now — what forced this?
+    context: 'Why this is asked: work that nothing forced is the work most often thrown away later.'
+    answer: 据路线图：依赖的 review-and-acceptance 与 pack-install-distribution 都已归档，roadmap-recommend 推荐本变更；后续 emotion-pacing-curve 依赖它。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-non-goals
+    question: What must explicitly not change?
+    context: 'Why this is asked: the requester knows which nearby behavior other people depend on. What it changes: these become the proposal''s unchanged_behavior items.'
+    answer: 据规划变更 details：wa-cli 只负责任务、结构与统计，不调用模型；据里程碑 intake 问题 metric-blocking 的建议：指标默认不阻塞验收。已写入 proposal 的 out 与 unchanged。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-interpretation
+    question: Which reading of the request is intended, where more than one is possible?
+    context: 'Why this is asked: a short request usually admits several readings. What it changes: this fixes the scope boundary before any code is written.'
+    answer: 据规划变更 details：文体或规范包声明评分维度，锚定评分每个分值附示例片段；Agent 用多个独立会话打分，wa-cli 取中位数并报告分歧，分歧片段转为作者决策；calibrate 让作者给少量样本打分计算一致率，低于阈值的维度在该规范包中降级为仅供参考。片段粒度、默认阈值与存放位置等取舍写在 design 的决策中。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap

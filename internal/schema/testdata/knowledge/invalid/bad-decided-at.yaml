@@ -1,0 +1,9 @@
+schema_version: 1
+events:
+  - id: know-1
+    scene: my-novel/c1/s1
+    entry: canon-5
+    character: reader
+    status: confirmed
+    confirmation: 作者确认
+    decided_at: 2026-10-03 08:00

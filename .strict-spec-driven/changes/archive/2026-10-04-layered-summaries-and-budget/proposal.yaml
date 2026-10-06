@@ -1,0 +1,42 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: layered-summaries-and-budget
+  status: proposed
+summary:
+  what:
+    - 分层摘要（Layered Summary）：wa-cli summary set 支持汇总单元（章 chapter、部 part 与作品根单元）——章摘要要求其子树全部场景已验收且有摘要，部与根摘要要求直接子层摘要齐全（缺失报告 summary.children-missing，message 列出缺失项）；汇总单元 summary.yaml 的 draft_sha256 记录其子树全部场景当前正文的串联 SHA-256（按单元树先序），任一子场景正文变化或子摘要缺失时 summary show 的 stale 为 true；摘要仍由 Agent 撰写，wa-cli 只校验结构与过期状态
+    - 场景上下文按契约组装并重排裁剪优先级：wa-cli context 对 scene 单元新增三个内容项——states（出场人物的状态快照：契约 characters 与 pov 解析的 canon 人物，按 state at 本场景语义重放，每项含 entry、name、state、proposal 与 scene）、priorEndings（前一两个场景的原文结尾：先序最近两个场景 draft.md 去批注后的末尾，各取至多 400 个字符，含 unit 与 excerpt）、summaries（各层摘要：所属章、部与全书根单元的摘要，按层级从近到远，每项含 unit、level（chapter/part/book）、text 与 stale）；context-trim 的优先级对 scene 单元从高到低重排为：场景契约（本单元大纲节）、状态快照、视角人物已知、读者已知人物未知、揭示边界、未回收伏笔、前序场景结尾、章摘要、部摘要、全书摘要、作者反馈、决策、规范要点（规则、术语表、禁用词、文风）、素材原文、相邻节；非 scene 单元的既有优先级不变
+    - 卷末检查点（Volume Checkpoint）：wa-cli volume checkpoint <part> 在本部全部场景验收（stage 为 done）后生成部单元目录下的 checkpoint.yaml——含 part、scene（本部最后一个场景）、canon（本部各场景收口新增设定 id 的并集）、states（本部已确认状态变化提议 id）、threads（本部埋设与回收的伏笔 id）、decisions（生成时未处理的决策 id）与 sampled（确定性抽取的收口核对样本：从本部各场景收口提交的状态变化与知情提议中抽取至多 3 条，以 part 引用与子树场景正文指纹为种子，同一输入同一抽取结果），每条含 scene、kind（state/knowledge）、id 与 text；已存在且最后场景未变时不写文件；wa-cli volume confirm <part> --confirmed-by-author --confirmation 写入作者确认记录
+    - 验收联动：strict 关卡强度下，按单元树先序存在早于待验收场景的部、其 checkpoint.yaml 存在但未经作者确认时，wa-cli accept 被拒绝（volume.unconfirmed）；其他关卡强度只以 warning 提示；没有前部检查点的场景验收行为不变
+  why:
+    - 路线图 novel 里程碑（order 600）最后一个计划变更 layered-summaries-and-budget：完成标准「已验收单元的分层摘要（场景 → 章 → 部 → 全书）与卷末作者检查点」「测试夹具中包含至少三章的长篇，任一场景的 context 输出都不超过文体配置的上下文预算」的承载者；依赖的 multi-level-units、series-shared-context（摘要机制）与 scene-close-out 均已归档，当前是唯一可推荐的计划变更
+    - 长篇超出任何单个会话的容量：逐场景推进时，后续场景需要的是分层的记忆压缩（章/部/全书摘要）与精确的契约上下文，而不是全量台账；按契约显式引用组装让上下文可复现且不调用大语言模型（LLM），从低优先级裁剪保证预算内最重要的内容（契约、状态、知情）永远在场
+    - 漏抽风险需要作者抽查兜底（novel 里程碑 intake question extraction-completeness 的推荐「每卷结束由作者抽查」）：卷末检查点把本部的新增设定、状态变化、伏笔变化与未处理决策汇总成一处，并确定性抽取收口条目供作者对照原文核对；strict 关卡下未经作者确认，下一部的场景不能验收
+scope:
+  in:
+    - internal/series：summary set / summary show 支持汇总单元（子层齐全检查 summary.children-missing、子树正文串联指纹与 stale 推导）、summary.schema.json 不变（字段复用）
+    - internal/ctxpack 与 internal/cli/context.go：scene 单元新增 states、priorEndings、summaries 内容项与预算计入，裁剪 part（state、prior-ending、chapter-summary、part-summary、book-summary）与 scene 优先级重排；Markdown 输出新增「出场人物状态（Character States）」「前序场景结尾（Prior Endings）」「分层摘要（Layered Summaries）」小节
+    - 新包 internal/volume：checkpoint.yaml 的生成（子场景 done 检查、确定性抽样、幂等写入）、确认记录写入、accept 阻塞计算（strict 下前部未确认），含 schema 与校验
+    - internal/schema：新增 checkpoint.schema.json 与命名注册，补合法与不合法夹具
+    - internal/cli：volume checkpoint 与 volume confirm 命令注册（args、flags、outputKeys、exitCodes、sampleArgs、--json 与人读输出、诊断与 next）；validate 整体校验与 validate <path> 纳入 checkpoint.yaml；accept 集成 volume.unconfirmed
+    - docs/GLOSSARY.md：分层摘要（Layered Summary）与卷末检查点（Volume Checkpoint）词条
+    - 测试夹具：至少三章的长篇夹具（部一含两章各两场景、部二含一章），场景收口与摘要齐备，验证任一场景 context 不超预算且同一输入两次输出完全一致
+  out:
+    - 连续性审查、审查任务包、影响传播、会话交接与组稿——属 novel-continuity 里程碑的计划变更
+    - 摘要的自动生成：摘要由 Agent 撰写，wa-cli 只校验结构、长度与过期状态，不调用大语言模型（LLM）
+    - 上下文预算度量方式的变化：沿用技术博客阶段确定的字符数度量与 config resolved 的 context_budget 合并，不引入按词条数或 token 的第二套预算
+    - 跨作品共享设定集与时间线——属 novel-series 里程碑
+    - MCP 服务与内置技能不单独编写（volume 命令经命令注册表自动暴露）
+unchanged_behavior:
+  - 非 scene 单元与不声明契约的场景：context 的输出键、内容与裁剪优先级与既有行为一致；无汇总单元摘要的作品 context 不含分层摘要项
+  - wa-cli summary set 对非汇总单元的行为（已验收检查、长度校验、整体替换）不变；series 主规格 series-set/add/fact/show 与系列继承语义不变
+  - state、knowledge、threads、canon、closeout 命令组语义不变；状态快照按 state at 语义只读重放，不新增台账字段
+  - fast 与 standard 关卡强度下的验收行为不变（卷末检查点只提示不阻塞）；部内场景的验收不检查本部检查点（只检查更早的部）
+  - context 的既有内容项（brief、outline、section、feedback、decisions、norms、sources、neighbors、series、characters、priorScenes、reveal、threads、knowledge、readerOnly）字段与语义不变，只在 scene 优先级序列中重新排列
+  - MCP 服务与内置技能内容不变
+roadmap:
+  milestone: novel
+  planned_change: layered-summaries-and-budget

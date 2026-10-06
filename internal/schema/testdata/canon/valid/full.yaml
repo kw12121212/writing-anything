@@ -1,0 +1,40 @@
+schema_version: 1
+entries:
+  - id: canon-1
+    type: character
+    name: 守灯人
+    aliases: [老灯匠]
+    text: 五十岁，左手有旧伤
+    sources: [author-notes]
+    protection: normal
+  - id: canon-2
+    type: character
+    name: 精灵
+    text: 只在夜里出现
+    sources: []
+    protection: author-pinned
+    decision: dec-1
+  - id: canon-3
+    type: location
+    name: 灯塔
+    text: 建在悬崖尽头
+    sources: []
+    protection: normal
+  - id: canon-6
+    type: item
+    name: 长命灯
+    aliases: [青焰灯]
+    text: 藏在阁楼的旧灯
+    sources: []
+    protection: normal
+  - id: canon-4
+    type: world-rule
+    text: 灯油只能燃烧到黎明
+    sources: [author-notes]
+    protection: author-pinned
+  - id: canon-5
+    type: relationship
+    text: 守灯人是精灵的旧识
+    sources: []
+    protection: normal
+    members: [canon-1, canon-2]

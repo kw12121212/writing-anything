@@ -1,0 +1,34 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: project-scaffold
+approach:
+  - 入口 cmd/wa-cli 保持最薄：main 调用 cli.Run(os.Args[1:], os.Stdout, os.Stderr) 并 os.Exit 其返回值，全部逻辑放在 internal/ 下以纳入覆盖率统计；命令与工具的实现都接收 args 与 stdout/stderr 并返回退出码，以便进程内测试。covercheck 用标准库自行解析 coverage.out（首行 mode:，其余行 file:startLine.startCol,endLine.endCol numStmts count），不引入 golang.org/x/tools。
+decisions:
+  thin-main:
+    decision: cmd/wa-cli/main.go 只转交参数与输出流，命令逻辑位于 internal/cli.Run 并返回退出码
+    rationale: 覆盖率范围只含 internal/**；把逻辑放进 internal 才能被测试与统计，main 保持无需测试的最小形态
+  version-ldflags:
+    decision: 版本号是 internal/version 包的 Version 变量，默认 dev，发布构建通过 -ldflags "-X github.com/kw12121212/writing-anything/internal/version.Version=<v>" 注入
+    rationale: 标准 Go 做法，零依赖；发布流程由后续 binary-release-and-install 接入
+  version-output:
+    decision: 'wa-cli version 输出一行 ''wa-cli <version>'' 到标准输出并以 0 退出；wa-cli version --json 输出 JSON 对象 {"version": "<version>"}；无命令或未知命令时把用法写到 stderr，version 只接受 --json（或 -json），其他任何参数都报告「未知参数：<原样参数>」并附用法，均以 2 退出；参数解析不使用 flag 包，以便报错文字遵循术语表且原样回显用户输入'
+    rationale: 满足所有命令支持 --json 的约定，同时不预先定义 cli-json-diagnostics 负责的统一输出信封；退出码 2 与该规划变更中的用法错误约定一致；flag 包的英文报错会把 --unknown 显示为 -unknown
+  coverage-weighting:
+    decision: covercheck 以语句数加权：覆盖率 = 范围内 count>0 的块的语句数之和 / 范围内全部块的语句数之和；同一块（文件+位置）多次出现时合并，任一记录 count>0 即视为已覆盖
+    rationale: 与 go tool cover -func 的总计口径一致，作为行覆盖率的近似；合并重复块避免多测试二进制重复计数
+  coverage-scope:
+    decision: covercheck 从目标目录（默认当前目录）的 go.mod 读取模块路径，去掉前缀后得到仓库相对路径；internal/ 开头且不以 internal/tools/ 开头的文件计入统计；-profile 默认 coverage.out，相对路径同样相对目标目录解析；-min 默认 80，必须在 0 到 100 之间，否则以 2 退出
+    rationale: 与 config.yaml review_evidence.coverage.scope 一致，避免硬编码模块路径；profile 与 go.mod 使用同一基准便于测试默认值；拒绝 NaN 等非法阈值避免关卡空洞通过
+  coverage-failure:
+    decision: 覆盖率低于 -min、范围内没有任何语句、profile 无法读取或格式错误（含位置字段不符合 startLine.startCol,endLine.endCol）时，covercheck 在 stderr 报告原因并以 1 退出；通过时在 stdout 打印两位小数的覆盖率与阈值并以 0 退出
+    rationale: 范围为空时视为失败，防止回归命令在无测试时空洞通过；两位小数避免 79.96% 显示为 80.0% 却判为不达标
+alternatives:
+  - option: 使用 golang.org/x/tools/cover 解析 profile
+    reason: 引入第三方依赖，而格式简单，标准库足够
+  - option: 在 cmd/wa-cli 中直接实现命令
+    reason: cmd/ 不在覆盖率范围内，逻辑无法被关卡约束
+risks:
+  - Go 1.22+ 对无测试的包也输出 0 覆盖记录；internal 下新增无测试代码会直接拉低覆盖率，这是预期的约束效果
+  - version --json 的对象形状会在 cli-json-diagnostics 中被统一信封替代，届时需同步修改规格与测试

@@ -1,0 +1,35 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: ai-scored-metrics
+  status: proposed
+summary:
+  what:
+    - 文体与规范包可以用 scored_metrics 声明 AI 评分指标（Metric）：每个指标是锚定评分（Anchored Scale），整数分值范围内的每个分值都附带说明与示例片段，并可声明会话数、分歧阈值与校准阈值；wa-cli config resolved 输出合并后的 scoredMetrics
+    - 新增 wa-cli metrics plan <unit>：只读地生成打分任务（按段落的片段、指标与锚定说明、需要的独立会话数），供 Agent 在多个全新的独立会话中分别打分
+    - 新增 wa-cli metrics record <unit>：从 --file 或标准输入记录一次打分会话到单元目录的 metrics.yaml；会话数达到要求后，分歧（最高分与最低分之差）超过阈值的片段登记为作者决策，不自动下结论
+    - 新增 wa-cli metrics show <unit>：只读地汇总每个片段每个指标的打分、中位数、分歧与作者决定，以及每个指标的校准一致率（Agreement Rate）与是否仅供参考
+    - 新增 wa-cli metrics calibrate <unit>：记录作者对片段的打分（带作者确认）到工作区的 calibration.yaml；样本足够且一致率低于阈值的指标在其声明的配置层中降级为仅供参考
+  why:
+    - 里程碑 packs-and-series 要求文风与节奏可以用 AI 量化评分衡量：分歧超过阈值的评分转为作者决策，与作者一致率低于阈值的评分维度降级为仅供参考
+    - 单次 AI 打分波动大；锚定评分与多次独立打分可以降低波动并暴露分歧，作者校准检验 AI 评分是否可信；后续的情绪曲线与审查任务包依赖这套打分结构
+scope:
+  in:
+    - genre.schema.json 与 pack.schema.json 的 scored_metrics；文体与规范包的指标校验（id 重复、锚定分值覆盖整个范围）；internal/resolve 合并为 resolved.scoredMetrics（按 id 后者整项替换前者，带 source）
+    - 单元产物 metrics.yaml 与工作区产物 calibration.yaml 的 JSON Schema、产物类型登记与 validate 校验
+    - wa-cli metrics plan、metrics record、metrics show、metrics calibrate 四条命令；分歧决策写入决策队列（非阻塞），产物只记录决策 id
+    - 命令注册表、help、样例调用与自动生成的 MCP tool；docs/GLOSSARY.md 的打分会话、分歧、仅供参考等术语
+  out:
+    - wa-cli 调用任何大语言模型；打分由接入的 Agent 在独立会话中完成
+    - 确定性文风指标与文风漂移检测（style-metrics-and-drift）；情绪曲线与张力曲线（short-story）
+    - 让指标阻塞验收或进入关卡；内置文体声明 AI 评分指标
+    - 把作者对分歧决策的决定自动当作校准样本
+unchanged_behavior:
+  - 审稿（Review）、评分标准（Rubric）与验收关卡的行为不变；指标结果不阻塞 advance 与 accept
+  - 没有声明 scored_metrics 的文体与规范包，config resolved 的其他字段与结果不变，scoredMetrics 为空数组
+  - wa-cli 不调用大语言模型，只负责任务、结构与统计
+roadmap:
+  milestone: packs-and-series
+  planned_change: ai-scored-metrics

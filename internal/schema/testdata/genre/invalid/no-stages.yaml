@@ -1,0 +1,7 @@
+schema_version: 1
+id: tiny
+title: 极简
+unit_types:
+  - id: article
+    title: 文章
+stages: []

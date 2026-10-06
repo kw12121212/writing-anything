@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "摘要",
+  "description": "已验收单元的摘要（Summary）：由 Agent 撰写，记录写入时正文的 SHA-256，正文之后被修改时摘要过期。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "text", "draft_sha256", "recorded_at"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "text": {"type": "string", "pattern": "\\S"},
+    "draft_sha256": {"$ref": "common.schema.json#/$defs/sha256"},
+    "recorded_at": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"}
+  }
+}

@@ -1,0 +1,19 @@
+schema: strict-spec-driven/lesson/v1
+schema_version: 1
+artifact_type: lesson
+schema_file: templates/strict-spec-driven/schemas/lesson.yaml
+lesson:
+  id: wa-cli-8ee649
+  title: 由正文推导作者修改时没去掉 wa-cli 自己的批注，只加批注就被当成改写
+category: coding
+status: active
+created_at: '2026-10-01T17:58:39.347Z'
+updated_at: '2026-10-01T17:58:39.347Z'
+context: 修改对比较 Agent 原文与作者当前的段落文字，用于归纳作者偏好。
+observation: '作者只在段落末尾加 <!-- @me: … --> 批注，比较结果就是「文字不同」：修改记录被写入批注、偏好归纳得出「写得更长 145%」，批注里的词还被算作加入，永久挡住删除词提议。'
+takeaway: 推导作者改动前先去掉批注等 wa-cli 标记（feedback.StripComments），只差标记的段落不算修改；包之间有依赖方向限制时用注入的钩子，而不是复制解析规则。
+applies_when: 比较正文的两个版本来推导作者做了什么（修改对、偏好、编辑统计），而正文中可能含有批注等 wa-cli 定义的标记时
+occurrences:
+  - origin: author-preference-learning
+    date: '2026-10-01'
+    evidence: internal/draft StripMarkup 钩子与 pairs；internal/feedback StripComments；TestDraftWriteEditsPrecheckAndMarkup

@@ -1,0 +1,53 @@
+schema: strict-spec-driven/roadmap-milestone/v2
+schema_version: 2
+artifact_type: roadmap_milestone
+schema_file: ../schemas/roadmap-milestone.yaml
+milestone:
+  kernel-foundation:
+    title: 内核地基（Kernel Foundation）
+order: 100
+goal: 交付可构建、可测试的 wa-cli 命令行工具（CLI）骨架：Agent 能初始化 .writing-anything/ 工作区（Workspace），加载文体（Genre）与规范包（Pack），创建作品（Work）与单元（Unit）并推进其生命周期（Lifecycle），作者素材（Source）与出处（Provenance）被显式记录，决策队列（Decision Queue）与人工编辑保护（Human Edit Protection）可用，所有命令输出 --json 诊断（Diagnostic）。
+scope:
+  in:
+    - 命令框架与 --json 输出契约（错误码、产物路径、下一步命令）
+    - wa-cli init / validate / status，产物 JSON Schema 校验
+    - 通用单元树与按单元推进的生命周期状态机、status / next
+    - 决策队列（阻塞 / 非阻塞）与 decide 命令
+    - Go 1.27 工程骨架：cmd/wa-cli 入口、internal/ 实现、embed 打包、覆盖率 80% 的完整回归命令（含 internal/tools/covercheck）
+    - 作者反馈模型：文本锚点与重新定位、状态流转、feedback watch 即时输出
+    - 声明式文体与规范包加载、内置默认规范包、规范包覆盖文体默认规则
+    - 作者素材库（原文存档）、wa-cli draft write 正文写入、段落级出处标记 human / agent / agent-draft-human-edited
+    - 人工编辑检测与保护；正文批注解析为作者反馈
+  out:
+    - wa-cli 自身调用任何 LLM
+    - 规则引擎与具体文本检查规则、审稿与验收（tech-blog-workflow）
+    - MCP 服务、公众号文体、规范包远程安装、小说相关能力
+done_criteria:
+  - wa-cli init 创建的工作区通过 wa-cli validate；损坏的产物返回带错误码、产物路径与修复命令的 --json 诊断
+  - 能用 CLI 创建一篇文章单元、登记作者素材，并通过 status / next 看到当前阶段与下一步命令
+  - go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out 在干净仓库通过
+  - wa-cli config resolved --json 输出 文体 → 规范包 → 项目配置 的合并结果与每项来源；含未知规则类型或可执行内容的规范包校验失败
+  - 存在未解决的阻塞决策时，wa-cli advance 拒绝推进关联单元
+  - 反馈按文本锚点定位；正文修改后能重新定位，无法定位时标为失去锚点；wa-cli feedback watch 能输出新增的反馈
+  - Agent 通过 wa-cli draft write 写入正文；作者直接修改 draft.md 后，draft write 拒绝覆盖并提示用 wa-cli diff 查看人工改动；正文批注被解析为作者反馈
+intake_questions:
+  - id: lifecycle-owner
+    question: 生命周期阶段序列由内核固定，还是由文体声明？
+    context: 文章与小说的阶段差异较大（小说需要设定维护与连续性审查）。
+    impact: 决定状态机数据模型，以及后续小说阶段是否需要迁移。
+    recommendation: 由文体声明阶段序列与每阶段的必需产物，内核提供通用状态机、转换校验与关卡钩子。
+  - id: provenance-granularity
+    question: 出处标记的粒度是段落、句子还是整个单元？
+    context: 粒度越细越准确，但维护成本与 diff 复杂度越高。
+    impact: 影响出处数据结构、人工编辑检测与 AI 标识导出。
+    recommendation: 以段落为最小粒度，单元级汇总；句子级留作后续需要时扩展。
+planned_changes: {}
+dependencies:
+  - 无前置里程碑；这是所有后续里程碑的地基
+risks:
+  - 单元树与生命周期抽象若过度贴合文章，后续小说阶段需要重写；需用测试夹具同时覆盖单层文章与多层单元树的数据形状
+  - 人工编辑检测依赖 Agent 遵守通过 draft write 写正文的约定；Agent 直接改文件会被判为人工编辑，这是偏安全的误判方向
+status: complete
+notes:
+  - wa-cli 不内置 LLM 调用：生成与审稿由接入的 Agent 完成，CLI 只负责结构、规则、状态与出处，保持确定性且无需 API key
+details: 内核（Kernel）是三层架构中的最小可用集合。生命周期的阶段（Stage）序列由文体声明，内核提供通用状态机、转换校验与关卡（Gate）钩子。结构化产物（写作简报、大纲、论断、决策等）只能通过 wa-cli 命令创建和修改；Agent 通过 wa-cli draft write 写入正文，作者可以直接编辑正文，凡不经 draft write 产生的正文变化都视为人工编辑。技术栈为 Go 1.27，JSON Schema 与内置文体、规范包用 embed 打包进二进制。测试夹具（Test Fixture）放在各包的 testdata/ 下，不在仓库根目录创建 .writing-anything/。面向用户的文字遵循 docs/GLOSSARY.md。

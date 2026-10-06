@@ -1,0 +1,42 @@
+schema: strict-spec-driven/question-list/v1
+schema_version: 1
+artifact_type: question_list
+schema_file: templates/strict-spec-driven/schemas/question-list.yaml
+change: layered-summaries-and-budget
+open: []
+resolved:
+  - id: requirement-problem
+    question: What is concretely going wrong today, and for whom?
+    context: 'Why this is asked: the change is planned against a need, and the need lives only with the requester. A "problem" here means what someone does or suffers today — not a feature that is missing. If the answer names a button, a field, a page, or an endpoint, it is a solution, and the underlying problem is still unstated. What a sufficient answer contains: who is affected, what they do today instead, and how often. Worked example: "every Monday one person spends forty minutes copying order rows into a spreadsheet to send the weekly report". What it changes: this becomes the proposal''s why, and it decides whether the change is worth making.'
+    answer: 长篇超出任何单个会话的容量（novel 里程碑 goal）：逐场景推进需要分层记忆压缩（场景 → 章 → 部 → 全书摘要）与按契约的精确上下文组装，超出预算时从低优先级裁剪；漏抽风险由卷末作者抽查兜底（里程碑 intake question extraction-completeness 的推荐），strict 关卡下检查点未经确认下一部场景不能验收
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-interpretation
+    question: Which reading of the request is intended, where more than one is possible?
+    context: 'Why this is asked: a short request usually admits several readings, and building the wrong one is indistinguishable from building nothing. What a sufficient answer contains: the reading that is meant, stated plainly enough to rule the others out — or a statement that only one reading exists and what it is. Worked example: "export means the version sent to the manager, not the one I read myself". What it changes: this fixes the scope boundary before any code is written, and settles disputes about what was asked for.'
+    answer: 按计划变更 details 执行：分层摘要扩展既有 summary 机制（Agent 撰写、wa-cli 校验结构与过期状态）；context 按契约显式引用组装并按给定优先级（契约 > 状态快照 > 知情 > 伏笔 > 前一两个场景原文结尾 > 各层摘要 > 规范包要点）裁剪；卷末检查点汇总本部变化并随机抽取收口结果供作者核对
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-outcome
+    question: What observable difference proves the problem is solved?
+    context: 'Why this is asked: without a success condition, nobody can tell afterwards whether the change worked. "Observable" means someone outside the system can check it without reading the code. What a sufficient answer contains: what a person will see, or no longer have to do, once this is done. Worked example: "the report is in the manager''s inbox on Monday morning without anyone assembling it". What it changes: this becomes the delta spec''s scenarios and the acceptance evidence at review time.'
+    answer: novel 里程碑 done_criteria 的可观察断言：已验收单元的分层摘要（场景 → 章 → 部 → 全书）可写入并有 stale 推导；卷末检查点在每部最后一个场景验收后可生成，strict 下未经确认下一部场景不能验收；至少三章的长篇夹具中任一场景的 context 不超过文体配置的上下文预算，同一输入两次输出完全一致
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-trigger
+    question: Why now — what forced this?
+    context: 'Why this is asked: work that nothing forced is the work most often thrown away later. This question catches a request that sounds reasonable but has no real driver behind it. What a sufficient answer contains: the concrete event, deadline, incident, or cost that made this surface now, or an honest statement that nothing did. Worked example: "the report was missed last month and it was raised with the team". What it changes: a change with no trigger is a candidate for deferral, and the answer is weighed at review before archive.'
+    answer: roadmap-recommend 脚本推荐：依赖的 multi-level-units、series-shared-context 与 scene-close-out 均已归档，它是 novel 里程碑当前唯一可推荐的计划变更；完成后 novel 里程碑全部计划变更完成，novel-continuity 里程碑解锁
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-non-goals
+    question: What must explicitly not change?
+    context: 'Why this is asked: the requester knows which nearby behavior other people depend on, and the agent does not. A "non-goal" is something the change must leave alone even though it sits close to the work. What a sufficient answer contains: the behavior, setting, or output that must survive untouched, and who relies on it. Worked example: "do not change the saved filters — several people rely on their own". What it changes: these become the proposal''s unchanged_behavior items, which review checks the finished result against.'
+    answer: 不能改变的行为（proposal 的 unchanged_behavior）：非 scene 单元与无契约场景的 context 行为一致；summary set 对非汇总单元行为不变；state/knowledge/threads/canon/closeout 命令组语义不变；fast 与 standard 关卡下验收不因检查点阻塞；连续性审查与组稿属 novel-continuity，跨作品设定与时间线属 novel-series，摘要自动生成（调模型）不做
+    status: resolved
+    kind: requirement
+    answered_by: roadmap

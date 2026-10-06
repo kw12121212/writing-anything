@@ -1,0 +1,62 @@
+# 技术博客（Tech Blog）：写作简报 → 大纲 → 草稿 → 审稿与验收。默认写作法为金字塔原理与 SCQA（结论先行），文章按 Diátaxis
+# 分类确定类型（教程、操作指南、参考或解释）；作者可以在写作简报中改选写作法，如 diataxis-tutorial。
+schema_version: 1
+id: tech-blog
+title: 技术博客
+description: 面向工程师的技术文章：结论先行，代码块标注语言，版本号与 API 说法有出处，亲历与数据出自作者素材。
+default_method: pyramid-scqa
+unit_types:
+  - id: article
+    title: 文章
+    children: [section]
+    brief_required: [audience, purpose, key_messages]
+  - id: section
+    title: 节
+stages:
+  - id: brief
+    title: 写作简报
+    required_artifacts: [brief]
+  - id: outline
+    title: 大纲
+    required_artifacts: [outline]
+  - id: draft
+    title: 草稿
+    required_artifacts: [draft]
+  - id: review
+    title: 审稿与验收
+    required_artifacts: [review, acceptance]
+rules:
+  claims:
+    type: claim-sources
+    severity: error
+  claim-candidates:
+    type: claim-candidates
+    severity: warning
+  code-language:
+    type: code-block-language
+    severity: error
+  links:
+    type: link-format
+    severity: error
+  references:
+    type: reference-sources
+    severity: warning
+  length:
+    type: length-range
+    severity: warning
+    params: {min: 800, max: 8000}
+rubric:
+  - id: accuracy
+    title: 技术准确
+    description: 技术陈述、命令与代码正确，版本号与 API 说法与所引资料一致。
+    blocking: true
+  - id: reproducible
+    title: 可复现
+    description: 读者按文中的步骤与代码能得到文中描述的结果。
+  - id: audience-fit
+    title: 受众匹配
+    description: 深度与术语适合写作简报中的受众，不跳步也不啰嗦。
+  - id: doc-type
+    title: 文档类型明确
+    description: 文章明确属于 Diátaxis 的教程、操作指南、参考或解释之一，不混杂多种类型。
+context_budget: 16000

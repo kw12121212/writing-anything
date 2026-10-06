@@ -1,0 +1,30 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: author-preference-learning
+  status: proposed
+summary:
+  what:
+    - wa-cli draft write 的写入记录为出处为 agent 的段落保存段落原文；覆盖写入记录之前，把作者对 Agent 段落的修改（修改前的 Agent 原文与修改后的文字）追加到单元目录的修改记录（Edit Record）edits.yaml，使作者的修改在下一次写入后仍可用于归纳
+    - 新增 wa-cli pack prefer <proposal>：对工作区中全部修改记录（含尚未覆盖的当前修改）与作者反馈做确定性归纳，生成带证据片段的作者偏好（Author Preference）提议条目：反复被删除的词转为禁用写法提议，修改前后的长度变化、反馈中反复出现的意见与集中在长段落的反馈转为文风条目
+    - 偏好条目写入规范包提议（与文风画像共用 proposals/ 与 pack confirm / pack reject），带稳定的 key 与证据；作者确认后转为规范包的文风条目或禁用写法，被拒绝的 key 不再重复提出
+  why:
+    - 里程碑 packs-and-series 要求作者能从自己的修改中得到作者偏好提议，且偏好只以提议形式出现，作者确认前不影响规则
+    - 写入记录目前只保存段落哈希，作者改过的 Agent 原文在下一次 draft write 后就丢失，无法归纳作者反复删改的写法
+scope:
+  in:
+    - provenance.schema.json：agent 段落的 text；draft write 与 wa-cli 自己的改写（如移除批注后的重建）照常写入；edits.yaml 的 Schema、产物类型登记、上限（每个单元最多保留 200 条）与 validate 校验
+    - internal/learn 的偏好归纳：修改对的词频差、长度比、反馈主题词与长段落反馈；条目的 key、evidence 与按 key 的合并与拒绝记忆；proposal.schema.json 的 key、evidence，pack prefer 创建的提议没有 stats
+    - wa-cli pack prefer 命令、注册表、help、样例调用与自动生成的 MCP tool；docs/GLOSSARY.md 的修改记录、作者偏好等术语；wa-revise 技能说明在修订后请作者确认偏好
+  out:
+    - 把偏好转为规则参数（如段落长度上限）；语义层面的意见聚类；wa-cli 调用模型
+    - 修改记录之外的历史版本管理（如保存每一版正文）
+unchanged_behavior:
+  - 出处推导、人工编辑保护、wa-cli diff 与 wa-cli provenance 的结果不变；写入记录中段落的 hash 与 origin 不变
+  - 未确认的偏好提议不影响任何规则；文风画像提议（pack learn）的行为不变
+  - wa-cli 不调用大语言模型
+roadmap:
+  milestone: packs-and-series
+  planned_change: author-preference-learning

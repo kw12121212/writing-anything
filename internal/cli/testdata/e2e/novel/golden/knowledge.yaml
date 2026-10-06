@@ -1,0 +1,75 @@
+# 知情表（Knowledge State）；请用 wa-cli knowledge propose 登记知情事件（Knowledge Event），作者经 wa-cli knowledge confirm 确认后生效。
+
+schema_version: 1
+events:
+  - id: kn-01
+    scene: stopped-at-417/ch1-s1
+    entry: char-shen-wangshu
+    character: char-chen-shouzhuo
+    status: confirmed
+    confirmation: 作者：陈守拙二十年前就知道真相，登记无误。
+    decided_at: "2026-06-20T12:00:00Z"
+  - id: kn-02
+    scene: stopped-at-417/ch1-s2
+    entry: item-letter
+    character: char-han-jiang
+    status: confirmed
+    confirmation: 作者：老韩揣着那封信二十年，登记无误。
+    decided_at: "2026-06-20T12:00:00Z"
+  - id: kn-03
+    scene: stopped-at-417/ch2-s2
+    entry: item-letter
+    character: reader
+    status: confirmed
+    confirmation: 作者：倒叙里读者看见了铁盒里的信，登记到读者名下。
+    decided_at: "2026-06-20T12:00:00Z"
+  - id: kn-04
+    scene: stopped-at-417/ch2-s3
+    entry: item-letter
+    character: char-chen-shouzhuo
+    status: confirmed
+    confirmation: 作者：信交到陈守拙手上，知情登记。
+    decided_at: "2026-06-20T12:00:00Z"
+  - id: kn-05
+    scene: stopped-at-417/ch3-s2
+    entry: char-shen-wangshu
+    character: char-lin-wan
+    terms:
+      - 为了救人
+    status: confirmed
+    confirmation: 作者：补登溺亡真相的揭示词。
+    decided_at: "2026-06-20T12:00:00Z"
+  - id: kn-06
+    scene: stopped-at-417/ch3-s2
+    entry: char-shen-wangshu
+    character: char-zhou-huifang
+    status: confirmed
+    confirmation: 作者：周慧芳当晚才听全。
+    decided_at: "2026-06-20T12:00:00Z"
+  - id: kn-07
+    scene: stopped-at-417/ch3-s2
+    entry: char-shen-wangshu
+    character: reader
+    terms:
+      - 为了救人
+    status: confirmed
+    confirmation: 作者：读者同场获知，揭示词一致。
+    decided_at: "2026-06-20T12:00:00Z"
+  - id: kn-08
+    scene: stopped-at-417/ch3-s3
+    entry: item-letter
+    character: char-lin-wan
+    terms:
+      - 出生的时刻
+    status: confirmed
+    confirmation: 作者：信件内容的揭示词。
+    decided_at: "2026-06-20T12:00:00Z"
+  - id: kn-09
+    scene: stopped-at-417/ch3-s3
+    entry: item-letter
+    character: reader
+    terms:
+      - 出生的时刻
+    status: confirmed
+    confirmation: 作者：读者启信，揭示词一致。
+    decided_at: "2026-06-20T12:00:00Z"

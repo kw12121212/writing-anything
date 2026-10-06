@@ -1,0 +1,19 @@
+schema: strict-spec-driven/lesson/v1
+schema_version: 1
+artifact_type: lesson
+schema_file: templates/strict-spec-driven/schemas/lesson.yaml
+lesson:
+  id: lesson-65fb6a
+  title: 记录关卡结论的产物要记下关卡强度，强度提高后旧结论不再有效
+category: coding
+status: active
+created_at: '2026-10-01T02:01:23.805Z'
+updated_at: '2026-10-01T02:01:23.805Z'
+context: review-and-acceptance 的 acceptance.yaml 起初只按正文 SHA-256 判断是否过期。
+observation: fresh-context 审查复现：在 fast 下未经作者确认验收，再把工作区切到 strict，advance 仍推进到 done，绕开了 strict 下必须有作者确认记录的完成标准。
+takeaway: 按可配置强度通过的关卡，产物要记录当时的强度；读取时与当前配置比较，当前更严时视为失效并给出重新通过关卡的命令。
+applies_when: 关卡结果写入产物、且关卡的阻塞项取决于可修改的配置（如 gate_level）时
+occurrences:
+  - origin: review-and-acceptance
+    date: '2026-10-01'
+    evidence: internal/review 的 AcceptanceBlockers 比较 strictness，新增 acceptance.weaker-gate；work_test 与 TestAcceptGateRechecks 覆盖。

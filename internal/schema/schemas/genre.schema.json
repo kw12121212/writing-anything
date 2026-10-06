@@ -1,0 +1,159 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "文体",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "id",
+    "title",
+    "unit_types",
+    "stages"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "id": {
+      "$ref": "common.schema.json#/$defs/id"
+    },
+    "title": {
+      "$ref": "common.schema.json#/$defs/text"
+    },
+    "description": {
+      "type": "string"
+    },
+    "unit_types": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "title"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "common.schema.json#/$defs/id"
+          },
+          "title": {
+            "$ref": "common.schema.json#/$defs/text"
+          },
+          "children": {
+            "$ref": "common.schema.json#/$defs/ids"
+          },
+          "brief_required": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "enum": [
+                "audience",
+                "purpose",
+                "premise",
+                "theme",
+                "pov",
+                "key_messages",
+                "length",
+                "avoid",
+                "sources"
+              ]
+            }
+          },
+          "stage_from_children": {
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    "stages": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "title"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "common.schema.json#/$defs/id"
+          },
+          "title": {
+            "$ref": "common.schema.json#/$defs/text"
+          },
+          "required_artifacts": {
+            "$ref": "common.schema.json#/$defs/ids"
+          }
+        }
+      }
+    },
+    "rules": {
+      "$ref": "common.schema.json#/$defs/rules"
+    },
+    "rubric": {
+      "$ref": "common.schema.json#/$defs/rubric"
+    },
+    "scored_metrics": {
+      "$ref": "common.schema.json#/$defs/scoredMetrics"
+    },
+    "pacing_checks": {
+      "type": "array",
+      "description": "节奏检查（Pacing Check）：文体声明的、基于已记录分数与确定性指标的节奏约束，由 wa-cli curve 执行",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "metric",
+          "min_score",
+          "max_gap_chars"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "common.schema.json#/$defs/id"
+          },
+          "metric": {
+            "$ref": "common.schema.json#/$defs/id",
+            "description": "判定的 AI 评分指标（Metric）id"
+          },
+          "min_score": {
+            "type": "integer",
+            "description": "片段取值达到该分值视为节拍点"
+          },
+          "max_gap_chars": {
+            "type": "integer",
+            "description": "相邻两个节拍点片段之间允许的最大非空白字符数"
+          }
+        }
+      }
+    },
+    "context_budget": {
+      "$ref": "common.schema.json#/$defs/budget"
+    },
+    "summary_length": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "min",
+        "max"
+      ],
+      "description": "已验收单元摘要（Summary）的字数范围（非空白字符），未声明时为 20 到 500",
+      "properties": {
+        "min": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "max": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "default_method": {
+      "$ref": "common.schema.json#/$defs/id",
+      "description": "默认写作法模板（Method Template）的 id：写作简报没有选择写作法时使用"
+    }
+  }
+}

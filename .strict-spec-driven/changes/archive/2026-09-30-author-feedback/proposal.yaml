@@ -1,0 +1,36 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: author-feedback
+  status: proposed
+summary:
+  what:
+    - 新增作者反馈（Feedback）产物：单元目录下的 feedback.yaml 以结构化形式记录作者意见，每条含类型（must-fix 必须改、suggestion 建议、question 疑问、praise 赞）、状态（open 待处理、accepted 已采纳、resolved 已解决、rejected 不采纳）、意见内容、可选的处理说明，以及可选的锚点（Anchor）：被评论的原文片段、前后文与所在段落的哈希。
+    - 新增 wa-cli feedback add <unit>：供 Agent 在对话中记录作者意见，给出 --quote 时在当前正文中定位原文并记录锚点；wa-cli feedback list [<unit>] 列出反馈并按锚点在当前正文中重新定位，无法定位时标为失去锚点（Orphaned Anchor）；wa-cli feedback resolve <unit> <id> 修改反馈状态。
+    - 新增 wa-cli feedback watch：持续检查工作区，每发现一条新增的反馈就输出一行 JSON 输出信封，供能在后台运行命令的 Agent 即时响应；wa-cli next 的每个步骤列出该单元尚未处理完（open 或 accepted）的反馈。
+  why:
+    - 里程碑 kernel-foundation 的完成标准要求反馈按文本锚点定位、正文修改后能重新定位、无法定位时标为失去锚点，并且 wa-cli feedback watch 能输出新增的反馈；目前作者在对话中提出的意见只存在于 Agent 的上下文里，换一个会话或正文一改就无从追溯，作者也无法确认每条意见是否被处理。
+    - human-edit-protection-and-comments 要把正文批注解析为作者反馈，后续的修订工作流与作者偏好学习也消费反馈；它们需要一个统一的反馈模型与锚点定位规则。
+scope:
+  in:
+    - internal/schema：新增 feedback 产物类型与 feedback.schema.json，同时匹配根单元目录与子单元目录下的 feedback.yaml
+    - 新的领域包 internal/feedback：追加反馈（默认 id 为 fb-<n>、在正文中唯一定位原文、记录前后文与段落哈希）、按锚点重新定位（精确匹配原文，多处匹配时按段落哈希与前后文择优，找不到时为 orphaned）、修改状态、列出工作区中的反馈、校验 feedback.yaml（id 唯一）
+    - wa-cli feedback add、feedback list、feedback resolve、feedback watch 四条命令；feedback watch 以轮询检测新增反馈，--interval 指定毫秒间隔，--all 先输出已有的未处理反馈，--max 在输出指定条数后退出
+    - wa-cli next 的 steps 每项新增 feedback 字段；wa-cli validate 校验每个单元目录中的 feedback.yaml；修改 units-and-lifecycle 主规格的 next-steps 与 workspace 主规格的 validate-workspace（delta spec），新增 feedback 主规格
+    - internal/draft 导出安全读取单元正文的函数，供反馈定位复用；新增 cli-contract 技术标准规则（delta tech）：流式命令每行输出一个完整的输出信封
+    - 审查后纳入：向流式序列追加元素改为块式时保留行尾注释（feedback.yaml、claims.yaml、work.yaml 共用 internal/workspace.BlockSequence）；validate <path> 途经符号链接时报告 artifact.not-found（修改 workspace 主规格的 validate-single-artifact）；修改 workspace-artifacts 的 structured-edits、validated-path-segments、input-limits，新增 cli-contract/invalid-value-code 与 go-project-structure/output-sync-in-tests（delta tech）
+  out:
+    - '正文批注 <!-- @me: ... --> 解析为反馈、反馈解决后移除批注（由 human-edit-protection-and-comments 负责）'
+    - 反馈与修订记录的结构化关联（由后续修订工作流负责）；本变更只提供自由文本的处理说明 note
+    - 阅读页（Reading View）与 preview --serve 等其他反馈渠道；反馈的删除与内容编辑；模糊匹配重新定位
+    - 未处理的反馈阻止 advance 推进；wa-cli 调用 LLM
+unchanged_behavior:
+  - 输出信封字段 valid、diagnostics、changedPaths 与退出码约定 0/1/2 不变；已发布错误码的含义不变
+  - wa-cli next 已有的 unit、stage、blockers、action、commands 字段与阻塞项判断不变，只新增 feedback 字段；advance 不因反馈拒绝推进
+  - source、draft write、provenance、claim add 与其他已有命令的参数、输出与诊断不变；status 的字段与含义不变
+  - 仓库根目录不创建 .writing-anything/；产品二进制不依赖 internal/tools/** 与 strict-spec-driven
+roadmap:
+  milestone: kernel-foundation
+  planned_change: author-feedback

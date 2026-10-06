@@ -1,0 +1,24 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: agent-skills-package
+approach:
+  - 技能文件放在 internal/skills/skills/<name>/SKILL.md，用 embed 打包；skills.Parse 校验文件头（name 与目录名一致、格式与长度、description 非空、只有这两个字段）与正文非空，skills.Commands 从正文中提取 wa-cli 之后的一或两个小写词作为引用的命令。
+  - skills install 先完成全部检查（技能目录、各技能目录与技能文件的类型，以及与内置内容的比较），任何一项不通过都不写；然后逐级创建缺少的目录，用 workspace.WriteFile 原子写入（覆盖时保留权限）。--agent 选定项目目录下的 .claude/skills 或 .agents/skills，--target 给出任意目录；路径先解析为绝对路径，再按是否在项目目录之内决定输出相对路径还是绝对路径。skills list 的 commands 按命令注册表规范化。
+decisions:
+  skill-scope:
+    decision: 技能只引用 wa-cli 命令并写明何时停下来询问作者：wa-init（初始化与素材）、wa-brief（写作简报）、wa-outline（大纲）、wa-draft（草稿与论断）、wa-review（预审）、wa-revise（修订）、wa-publish（验收与导出）、wa-auto（按 wa-cli next 推进）。
+    rationale: 规划变更：每个 Skill 只说明何时调用哪些 wa-cli 命令、何时必须停下来询问作者，不实现业务逻辑；wa-cli 是唯一真相来源，MCP 与 Skill 只做薄封装。
+  no-overwrite:
+    decision: 安装先完成全部检查再写入：有技能文件被改过（与内置内容不同）时报告 skills.modified 且不写任何文件，--force 才覆盖；有路径不是真实目录或普通文件时同样不写。
+    rationale: 作者或团队可能改过技能，静默覆盖会丢失修改；先检查后写入避免安装到一半（workspace-artifacts/precheck-before-side-effects）。
+  install-paths:
+    decision: 参数 --agent claude-code 写入 .claude/skills，--agent codex 写入 .agents/skills（Codex 在仓库中扫描的技能目录），都相对 --dir；用户级目录用 --target 的绝对路径给出。--dir 与 --target 先解析为绝对路径；changedPaths 只列项目目录之内新建的目录与写入的文件，项目之外的安装路径在 skills 中以绝对路径列出，诊断不填 path、把绝对路径写进 message。--agent 取值不合法、两者都没有、--target 落在工作区中时报告 input.invalid-value。不需要工作区。
+    rationale: 项目级技能目录随项目一起管理；用户级目录因 Agent 与平台不同，交给作者显式给出；输出的路径遵守 cli-contract/workspace-relative-paths；技能安装通常发生在 wa-cli init 之前；--agent 是枚举参数，取值不合法按 invalid-value-code 报告。
+  symlink-policy:
+    decision: 从技能目录向上第一个已存在的路径、各技能目录与技能文件本身都不能是符号链接；更上层的目录（如作者用符号链接管理的 ~/.claude）不限制。
+    rationale: 技能文件不是工作区产物；常见的 dotfiles 管理会把 ~/.claude 做成符号链接，全路径禁止符号链接会让用户级安装不可用，而直接写入的位置不跟随符号链接。
+alternatives: []
+risks:
+  - Agent 不一定遵守技能中的「停下来询问作者」；关卡由 wa-cli 执行（如 strict 下的作者确认），技能只是指引。

@@ -1,0 +1,21 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: fix-state-knowledge-clock
+approach:
+  - 与既有注入约定对齐的最小修复：state 与 knowledge 的 Confirm/Reject/Set 增加 now time.Time 参数（与 decision.Decide、handoff.Write、volume.Checkpoint/Confirm、review.Accept 完全同构），函数内以 now.UTC().Format(time.RFC3339) 取代包内 timestamp()；internal/cli 的包装函数传入包级 now()（review.go 的可替换变量，测试可冻结）。先写冻结时钟的回归测试证明缺陷（修复前失败），再实施修复，之后该测试与其他全部回归通过
+  - 三层同构修复：(1) 无注入参数的领域函数（state/knowledge 的 Confirm/Reject/Set、plan 的 Confirm、canon 的覆盖确认）补 now time.Time 参数，函数内以注入时钟格式化，删除包内私取系统时钟的 timestamp()；(2) internal/cli 全部时间戳调用点统一传包级 now()（该变量在 review.go 定义、测试可替换）；(3) 先写冻结时钟回归测试证明缺陷（覆盖 state/knowledge 双跑一致与代表性 confirmed_at/writtenAt 断言），修复后与完整回归全部通过，并以小说语料全量重放双跑目录树比对作为最终证据
+  - 与既有注入约定同构的多层修复：无注入参数的领域函数（state/knowledge 的 Confirm/Reject/Set、plan 的 Confirm、draft 的 Write/Precheck 与修改记录追加）补 now time.Time 参数，包内私取系统时钟的 timestamp()/now 全部删除；internal/cli 全部时间戳调用点统一传包级 now()；reviewpacket 的 character 维度任务包改为按设定条目 id 排序后生成，消除 map 迭代序的不确定。先写冻结时钟回归测试证明缺陷（state/knowledge 双跑一致；TestNovelCorpusReplay 全量重放双跑目录树逐字节比对为端到端证据），修复后该测试与完整回归全部通过
+decisions:
+  inject-now-param:
+    decision: 以参数注入取代包内直取系统时钟，internal/cli 统一传包级 now()；签名与 decision.Decide、handoff.Write、volume.Checkpoint/Confirm、review.Accept 完全同构
+    rationale: 项目已有统一注入约定，包内私取与 cli 层直传 time.Now() 都是漏网；参数注入改动面最小、可测试性一致，无需引入新的时钟接口
+  no-delta-spec:
+    decision: 纯内部缺陷：decided_at 的格式与语义在主规格中不变，只是取时钟来源改为可注入
+    rationale: 行为对外完全一致，不构成规格变更
+alternatives: []
+risks:
+  - 函数签名变更会波及直接调用这些函数的既有测试——只做机械的参数补充，不改测试断言
+  - 函数签名变更波及直接调用的既有测试——只做机械参数补充，不改断言；canon 覆盖确认的调用链较深（canon add/set 两处），沿 SetInput/AddInput 既有参数传递方式注入
+  - 函数签名变更波及直接调用的既有测试——只做机械参数补充，不改断言；canon 覆盖确认路径（系列级同 id 覆盖的 ConfirmedAt）仍直取系统时钟，属相邻问题且不在语料重放时间戳面内，本变更不扩签名；reviewpacket 的 character 维度任务包原按 map 迭代序生成，多包内容随运行变化——改为按设定条目 id 排序后生成，这既是确定性修复也让包编号与人物卡顺序一致

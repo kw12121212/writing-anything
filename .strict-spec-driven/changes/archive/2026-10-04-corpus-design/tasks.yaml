@@ -1,0 +1,37 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: corpus-design
+sections:
+  Implementation:
+    design-doc:
+      text: 撰写 internal/cli/testdata/e2e/novel/DESIGN.md：按里程碑已定题材（南方小镇修表匠与停在特定时刻的旧怀表，温情底色悬疑）写人物卡（不超过 5 人）与关系、至少 1 条作者钦定世界规则、3 章 9 场景场景表（每场含 id、time、after、地点、出场人物、节拍、揭示边界、状态变化）、时间线与至少一处跨章倒叙、两个秘密的知情点（谁在哪场得知）、至少 2 条跨章伏笔链（第一章埋设/第二章强化/第三章回收）与 1 条悬空伏笔、至少 2 次状态快照变更、章内场景因果承接、雪花写作法十步与本设计的对应展开
+      status: complete
+    script-format:
+      text: 撰写 internal/cli/testdata/e2e/novel/script-format.md：可重放命令脚本文件格式规范——分阶段（stage）注释段、command（wa-cli 参数序列）、input_ref（正文输入以语料目录内相对路径文件引用，不内联长文本）、expect_exit（期望退出码）、expect_code（期望诊断码）、可选 stdout_contains（recall 等只读命令的输出包含断言）；说明该格式由 corpus-authoring 录制、replay-harness 解析，字段以本文档为单一来源
+      status: complete
+    test-matrix:
+      text: 撰写 internal/cli/testdata/e2e/novel/matrix.yaml：测试矩阵每条含 id（稳定编号如 T-UNITS-01）、feature、scene（场景 id 或 book 级）、command（wa-cli 命令）、expected（期望结果：发现项诊断码或全绿）、assertion（断言要点）；覆盖里程碑 scope 的全部长篇特性面：多层单元、场景契约与因果链、状态快照、知情表、伏笔台账、写后收口、分层摘要与上下文预算、长篇规划写作法（雪花写作法）、recall 全文检索、连续性审查、审查任务包、影响传播、会话交接、卷末检查点、组稿与整书导出；recall 查询点断言命中预期的场景与素材
+      status: complete
+  Testing:
+    matrix-validation-test:
+      text: 新增 internal/cli 包的结构校验测试：加载 testdata/e2e/novel/matrix.yaml 与 DESIGN.md，断言矩阵编号唯一且格式一致、每条含 feature/scene/command/expected/assertion、feature 枚举覆盖里程碑特性面清单、scene 引用 DESIGN.md 中的场景 id（或 book 级标记）、最低数量约束满足（≥2 跨章伏笔链、≥1 悬空伏笔、≥2 秘密知情点、≥2 状态快照变更、≥1 跨章倒叙、≥1 作者钦定世界规则、人物 ≤5、3 章 9 场景）
+      status: complete
+      command: go test ./internal/cli/ -run TestNovelCorpusDesign
+    full-regression:
+      text: 运行完整项目回归（含覆盖率阈值 80%）：go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    ready-check:
+      text: 运行 strict-spec-cli ready corpus-design 确认变更就绪无阻塞
+      status: complete
+      command: strict-spec-cli ready corpus-design
+    verify-check:
+      text: 运行 strict-spec-cli verify corpus-design 确认变更产物全部有效
+      status: complete
+      command: strict-spec-cli verify corpus-design
+testing_gates:
+  validation_task: full-regression
+  unit_test_task: matrix-validation-test

@@ -1,0 +1,51 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: state-change-proposals
+sections:
+  Implementation:
+    state-schema:
+      text: internal/schema 新增 state.schema.json（schema_version=1；events 数组：id 符合 id 格式必填、scene 与 entry 非空必填、state 非空文本必填、status 枚举 proposed|confirmed|rejected 必填、confirmation 与 decided_at 仅 status 非 proposed 时必填且此时必填、decided_at 为 RFC 3339），在 schema.go 注册命名 state 并纳入 embed 清单；补合法与不合法夹具及 schema 包测试
+      status: complete
+    state-package:
+      text: 新包 internal/state：state.yaml 的加载与领域校验（id 唯一报 artifact.duplicate-id；scene 单元不存在或类型不为 scene 报 state.unknown-unit；entry 不在作品 canon.yaml 设定条目中报 state.unknown-entry；proposed 不得带 confirmation/decided_at、confirmed 与 rejected 必带；途经符号链接按 artifact.not-found）；Propose（scene/entry/state/id，id 缺省 state-<n> 递增不重复）、List（默认 proposed 过滤、--all、按 scene 单元树先序排序、先序相同按文件顺序）、Confirm/Reject（记录 confirmation 与 decided_at；confirm 仅作用于 proposed，reject 可拒绝 proposed 或撤销 confirmed，rejected 终态）、Set（修改 scene/state：proposed 无需确认、confirmed 需 confirmation 重新确认并更新记录、rejected 拒绝）；Snapshot(unit) 取 confirmed 且 scene 按先序严格早于目标场景的条目，同场景按文件顺序应用、每条目取最后生效，输出 entry/name/state/proposal/scene 并按 entry 升序，供 validate 与 CLI 复用
+      status: complete
+    state-cli:
+      text: internal/cli 注册六个命令：state propose（args：work；flags：--scene/--entry/--state/--id）、state list（args：work；flags：--all）、state confirm（args：work、id；flags：--confirmation）、state reject（同 confirm）、state set（args：work、id；flags：--scene/--state/--confirmation）、state at（args：unit）：outputKeys、exitCodes、sampleArgs、--json 信封（propose/confirm/reject/set 输出 event，list 输出 events，at 输出 snapshot）与人读输出；诊断与 next（state list --all 复查、canon list 补登记、help 用法、state at 的 unit 类型提示）
+      status: complete
+    state-validate:
+      text: wa-cli validate 整体校验按 CheckWorks 模式纳入每个可加载作品 state.yaml 的 Schema 与领域校验（计入 checked，entry 检查以该作品 canon.yaml 为准），validate <path> 支持对 state.yaml 直接校验；无 state.yaml 的作品零新增诊断，既有 checked 与诊断不变
+      status: complete
+    state-glossary:
+      text: docs/GLOSSARY.md 增补状态台账（State Ledger）词条：作品根单元目录 state.yaml 中按场景登记的状态变更提议（State Change Proposal）总账，作者确认后生效，已确认条目按单元树先序重放得出状态快照（State Snapshot）；与既有伏笔台账（Foreshadowing Ledger）、状态快照（State Snapshot）、事件溯源（Event Sourcing）词条写法一致
+      status: complete
+  Testing:
+    test-state-package:
+      text: internal/state 单元测试：Schema 各失败分支（status 非法、decided_at 非 RFC 3339、空白 state、多余字段；confirmation 与 decided_at 为取值化可空字段，proposed 且为 null 合法、不因键存在性报错）；领域校验错误码（artifact.duplicate-id、state.unknown-unit 单元不存在或类型不符、state.unknown-entry 含无 canon.yaml 时、state.incomplete-confirmation 的三种形态——已决定而 confirmation 为 null、缺 confirmation、缺 decided_at）；Propose 的 id 缺省生成与重复拒绝（参数问题不填 path）；Confirm/Reject/Set 的状态迁移（confirm 非 proposed 报 state.already-decided、reject 撤销 confirmed、set 修改 confirmed 缺 --confirmed-by-author/--confirmation 拒绝且文件未变、rejected 终态三命令均拒绝）；List 的 proposed 过滤、--all 与先序排序
+      status: complete
+    test-state-cli:
+      text: internal/cli 测试：state propose（--json 信封与 event 字段、state.unknown-entry/state.unknown-unit 不写文件、--id 缺省与重复）；state list（默认 proposed、--all、无台账空数组退出码 0、人读输出）；state confirm（记录 confirmation 与 RFC 3339 的 decided_at、重复确认报 state.already-decided）；state reject（撤销 confirmed 后条目 rejected）；state set（confirmed 缺 --confirmation 拒绝、带 --confirmation 写入并更新确认记录）；state at（unit 不存在或非 scene 报 state.unknown-unit）；退出码与 next 断言
+      status: complete
+    test-state-replay:
+      text: 重放语义测试（里程碑完成标准）：多章夹具中断言 state at 只含按先序严格早于目标场景的 confirmed 条目（目标场景自身与 proposed/rejected 条目排除）；同一设定条目多条按先序后写覆盖（later wins，proposal 与 scene 指向最后生效条目）；同一夹具连续两次运行 snapshot 完全一致（确定性）；经 state set 修改早期 confirmed 条目并重新确认后，后续场景快照的 state 随之变化；经 state reject 撤销早期条目后，后续快照不再含该状态；无条目设定条目不出现在快照中
+      status: complete
+    test-state-e2e:
+      text: internal/cli e2e 与 validate 测试：带 state.yaml 的多章长篇夹具整体校验（state.yaml 计入 checked、领域问题按错误码与 field 报告、合法台账零诊断退出码 0）；无台账作品的 validate 输出与既有断言一致（无新增诊断）；validate <path> 对单个 state.yaml 的检查（entry 以该作品 canon.yaml 为准）
+      status: complete
+    run-regression:
+      text: 完整回归测试并确认覆盖率不低于阈值：go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    verify-change:
+      text: 运行 strict-spec-cli ready state-change-proposals 与 strict-spec-cli verify state-change-proposals：确认变更就绪、规格与任务一致、诊断清零
+      status: complete
+      command: strict-spec-cli ready state-change-proposals && strict-spec-cli verify state-change-proposals
+    verify-archive-readiness:
+      text: 核对归档合并路径：state 新主规格将写入 .strict-spec-driven/specs/state.yaml 并进入 specs/INDEX.yaml（本变更为唯一 delta spec，无 MODIFIED/REMOVED，不触碰既有规格语句）；运行 strict-spec-cli verify state-change-proposals 确认无跨文件冲突
+      status: complete
+      command: strict-spec-cli verify state-change-proposals
+testing_gates:
+  validation_task: run-regression
+  unit_test_task: test-state-package

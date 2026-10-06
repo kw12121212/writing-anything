@@ -1,0 +1,12 @@
+schema: strict-spec-driven/planned-change/v1
+schema_version: 1
+artifact_type: planned_change
+schema_file: ../../templates/strict-spec-driven/schemas/planned-change.yaml
+planned_change:
+  id: scene-contract-and-causality
+  milestone: novel
+status: complete
+summary: 场景契约（Scene Contract）与因果链（Causality Chain）
+details: 在短篇的轻量场景契约上扩展：细纲中每个场景在草拟前声明视角、出场人物、地点、承担的节拍、必须发生的状态变化、要埋设或回收的伏笔、揭示边界，以及起因（引用前文已发生事件的 id）和预期产生的事件。wa-cli scene contract 通过命名参数写入。起因引用不存在或尚未发生的事件时 validate 失败。契约是 context 组装、写后收口和各项审查的共同依据。
+depends_on:
+  - multi-level-units

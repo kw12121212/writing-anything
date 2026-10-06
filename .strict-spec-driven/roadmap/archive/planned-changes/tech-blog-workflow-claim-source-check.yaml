@@ -1,0 +1,13 @@
+schema: strict-spec-driven/planned-change/v1
+schema_version: 1
+artifact_type: planned_change
+schema_file: ../../templates/strict-spec-driven/schemas/planned-change.yaml
+planned_change:
+  id: claim-source-check
+  milestone: tech-blog-workflow
+status: complete
+summary: 论断（Claim）出处检查：亲历、观点、数据必须链接作者素材
+details: 正文中的第一人称经历、个人观点、客户案例和具体数据，必须登记为论断，并关联作者提供的素材（author-note、interview、transcript）。文本检查用启发式规则检测疑似未登记的论断（第一人称经历句式、数字与百分比），并报告已登记但缺少素材的论断。该规则按文体启用，小说类文体可以关闭或替换。
+depends_on:
+  - rule-engine-and-lint
+  - author-sources-and-provenance

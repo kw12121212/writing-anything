@@ -1,0 +1,38 @@
+# 只用于验证内核（Kernel）的最小文体：单层单元树与三个阶段。面向作者的文体（如 tech-blog）另行提供。
+schema_version: 1
+id: minimal
+title: 最小文体
+description: 只用于验证内核的最小文体，不面向实际写作。
+unit_types:
+  - id: article
+    title: 文章
+    children: [section]
+    brief_required: [audience, purpose]
+  - id: section
+    title: 节
+stages:
+  - id: brief
+    title: 写作简报
+    required_artifacts: [brief]
+  - id: draft
+    title: 草稿
+    required_artifacts: [draft]
+  - id: review
+    title: 审稿
+    required_artifacts: [review, acceptance]
+rules:
+  claims:
+    type: claim-sources
+    severity: error
+  claim-candidates:
+    type: claim-candidates
+    severity: warning
+  length:
+    type: length-range
+    severity: warning
+    params: {min: 300, max: 5000}
+rubric:
+  - id: clarity
+    title: 清晰
+    description: 读者读一遍就能说出核心观点。
+context_budget: 12000

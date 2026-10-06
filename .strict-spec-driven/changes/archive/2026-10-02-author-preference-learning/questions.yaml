@@ -1,0 +1,42 @@
+schema: strict-spec-driven/question-list/v1
+schema_version: 1
+artifact_type: question_list
+schema_file: templates/strict-spec-driven/schemas/question-list.yaml
+change: author-preference-learning
+open: []
+resolved:
+  - id: requirement-problem
+    question: What is concretely going wrong today, and for whom?
+    context: 'Why this is asked: the change is planned against a need, and the need lives only with the requester. What it changes: this becomes the proposal''s why.'
+    answer: 据里程碑 packs-and-series 的 goal 与规划变更 author-preference-learning：作者反复删改 Agent 写法、反复给出同类意见，这些偏好没有被积累，Agent 下次照样会写出作者不喜欢的东西。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-outcome
+    question: What observable difference proves the problem is solved?
+    context: 'Why this is asked: without a success condition, nobody can tell afterwards whether the change worked. What it changes: this becomes the delta spec''s scenarios.'
+    answer: 据规划变更 details：对 Agent 写入版本与作者修改版本的差异、以及作者反馈中反复出现的同类意见做确定性归纳，生成带证据片段的偏好提议；作者确认后转为规范包中的规则参数或文风条目；被拒绝的提议会被记住，不再重复提出。据里程碑 done_criteria：偏好只以提议形式出现，作者确认前不影响规则。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-trigger
+    question: Why now — what forced this?
+    context: 'Why this is asked: work that nothing forced is the work most often thrown away later.'
+    answer: 据路线图：依赖的 pack-learn-style-profile 与 human-edit-protection-and-comments 都已归档，roadmap-recommend 推荐本变更。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-non-goals
+    question: What must explicitly not change?
+    context: 'Why this is asked: the requester knows which nearby behavior other people depend on. What it changes: these become the proposal''s unchanged_behavior items.'
+    answer: 据项目约束：作者的编辑优先、出处推导与人工编辑保护不变，wa-cli 不调用模型；据里程碑：偏好确认前不影响规则。已写入 proposal 的 out 与 unchanged。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-interpretation
+    question: Which reading of the request is intended, where more than one is possible?
+    context: 'Why this is asked: a short request usually admits several readings. What it changes: this fixes the scope boundary before any code is written.'
+    answer: 据规划变更 details：两类输入（Agent 版本与作者修改版本的差异、作者反馈中的同类意见），确定性归纳，带证据的提议，确认后转为规则参数或文风条目，拒绝被记住。本变更按「或」取文风条目与禁用写法两种落地形式，规则参数留待以后；修改记录的保存方式与归纳阈值写在 design 的决策中。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap

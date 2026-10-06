@@ -1,0 +1,164 @@
+schema: strict-spec-driven/main-spec/v1
+schema_version: 1
+artifact_type: main_spec
+schema_file: templates/strict-spec-driven/schemas/main-spec.yaml
+spec:
+  id: metrics
+  title: AI 评分指标（Scored Metrics）
+requirements:
+  metrics-plan:
+    strength: MUST
+    statement: wa-cli metrics plan <unit> 必须只读地为单元生成打分任务（Scoring Task），不修改任何产物，changedPaths 为空数组。指标为按作品文体合并的 resolved.scoredMetrics（见 genres-and-packs 主规格的 scored-metrics），可用可重复的 --metric <id> 只规划其中一部分。--json 输出的 plan 含 unit、draftSha256（当前 draft.md 的 SHA-256）、segments（按正文段落切分的片段（Segment），编号与 wa-cli provenance 相同，每项含 paragraph、text 与 sha256）、metrics（每项含 id、title、description、source、scale（min、max）、anchors（每个分值的 score、description 与 example）、sessions（需要的独立打分会话数）、maxSpread 与 advisory（是否已降级为仅供参考，见 metrics-calibrate））与 instructions（说明：每个打分会话（Scoring Session）必须是全新的独立会话、只依据锚定说明打分，一次会话给某个指标打分时覆盖全部片段，用 wa-cli metrics record 写入）。单元没有正文时报告 draft.not-found；合并后没有任何 AI 评分指标时报告 metrics.none-declared；--metric 不是已声明的指标时报告 metrics.unknown-metric（message 列出已声明的指标）；这些情况退出码为 1。wa-cli 不调用任何模型。
+    scenarios:
+      plan-segments:
+        - GIVEN: 作品 post 的文体与启用的规范包 house 声明了 AI 评分指标 tension（scale 1 到 5），draft.md 有 3 个段落
+        - WHEN: 运行 wa-cli metrics plan post --dir D --json
+        - THEN: plan.segments 依次为第 1、2、3 段，每项含原文与 sha256；plan.metrics 只含 tension，source 为 pack:house，anchors 依次为 1 到 5 分，sessions 为 3；changedPaths 为空数组，退出码为 0
+      plan-no-metrics:
+        - GIVEN: 合并后没有任何 AI 评分指标的工作区
+        - WHEN: 运行 wa-cli metrics plan post --dir D --json
+        - THEN: diagnostics 中有一条错误码为 metrics.none-declared 的诊断，退出码为 1
+  metrics-record:
+    strength: MUST
+    statement: wa-cli metrics record <unit> 必须从 --file（相对 --dir 或为绝对路径）或标准输入读取一次打分会话并写入单元目录的 metrics.yaml。输入为 YAML：session（会话 id，id 格式）与 scores（数组，每项含 metric、paragraph、score（整数）与可选的 rationale）。输入不符合 Schema 时报告 artifact.schema-violation 或 artifact.parse-error；metric 不是按作品文体合并的 AI 评分指标时报告 metrics.unknown-metric；paragraph 大于正文段落数时报告 metrics.unknown-paragraph；score 不在该指标的 scale 内时报告 metrics.score-out-of-range；同一会话中同一指标同一段落出现多次时报告 artifact.duplicate-id；会话给某个指标打分但没有覆盖全部段落时报告 metrics.incomplete-session（message 列出缺少的段落）；这些诊断的 path 为空、field 为输入中的位置（如 scores[2].score），next 含 wa-cli help metrics record --json 与 wa-cli metrics plan <unit> --dir <dir> --json，都不修改任何文件，退出码为 1。单元没有正文时报告 draft.not-found（path 为该单元的 draft.md，next 含 wa-cli help draft write --json）；记录后 metrics.yaml 将超过可处理的规模时报告 metrics.too-large（path 为空），都不修改文件，退出码为 1。成功时 metrics.yaml 含 schema_version 1、draft_sha256（当前正文的 SHA-256）、sessions（按记录顺序，每项含 id 与 scores）与 decisions（见 metrics-disagreement）；同一会话 id 再次记录时整体替换该会话；metrics.yaml 记录的 draft_sha256 与当前正文不同时，先丢弃已有的会话与 decisions，给出 warning 级 metrics.sessions-dropped。--json 输出的 session 含 id 与 replaced（是否替换了同 id 的会话），decisions 为本次新建的分歧决策 id 数组；changedPaths 列出写入的 decisions.yaml（有新决策时）与 metrics.yaml，退出码为 0。metrics.yaml 中要替换的会话、sessions 或 decisions 经由 YAML 锚点、别名或合并键得到时报告 metrics.anchored-value，不修改任何文件。
+    scenarios:
+      record-session:
+        - GIVEN: 作品 post 有 3 个段落，指标 tension 的 scale 为 1 到 5
+        - WHEN: '用标准输入 {session: s1, scores: 三个段落的 tension 分数} 运行 wa-cli metrics record post --dir D --json'
+        - THEN: 'metrics.yaml 的 sessions 含 s1 与三个分数，draft_sha256 为当前正文的 SHA-256；session 为 {id: s1, replaced: false}，changedPaths 含 metrics.yaml，退出码为 0'
+      record-incomplete:
+        - GIVEN: 同上
+        - WHEN: 输入只给第 1、2 段的 tension 打分
+        - THEN: diagnostics 中有一条错误码为 metrics.incomplete-session 的诊断，message 指出缺少第 3 段，metrics.yaml 不被创建，退出码为 1
+      record-out-of-range:
+        - GIVEN: 同上
+        - WHEN: 输入中第 1 段的 tension 分数为 7
+        - THEN: diagnostics 中有一条错误码为 metrics.score-out-of-range、field 为 scores[0].score 的诊断，退出码为 1
+      record-after-edit:
+        - GIVEN: 已记录会话 s1 与 s2，随后作者修改了 draft.md
+        - WHEN: 记录会话 s3
+        - THEN: diagnostics 中有一条 warning 级 metrics.sessions-dropped，metrics.yaml 的 sessions 只含 s3，draft_sha256 为新正文的 SHA-256，退出码为 0
+  metrics-disagreement:
+    strength: MUST
+    statement: 'metrics record 写入后，对会话数达到该指标 sessions、且不是仅供参考的每个指标，每个分歧（Score Disagreement，该片段各次打分的最高分减最低分）大于 max_spread 的片段：metrics.yaml 的 decisions 中还没有记录时，必须在决策队列中新建一个非阻塞（blocking: false）、关联该单元的决策：question 写明单元、段落与指标标题；options 依次为 scale 内的每个分值，文本为「<分值>：<该分值的锚定说明>」；recommendation 为中位数四舍五入（远离零）后的分值对应的选项；rationale 写明各次打分与中位数。已有记录、且该决策尚未决定时，各次打分、推荐或选项改变后必须原地更新该决策的 options、recommendation 与 rationale（workspace-artifacts/author-choice-decisions），不另建决策；作者已决定的决策不再修改。metrics.yaml 的 decisions 记录每个决策的 metric、paragraph 与 decision（决策 id），不记录作者的选择；正文改变、丢弃旧会话时，只保留尚未决定的决策的记录。新建或更新决策与写入 metrics.yaml 之前必须完成全部检查；wa-cli 不自动为分歧片段下结论。'
+    scenarios:
+      dispute-not-repeated:
+        - GIVEN: 同上，分歧决策已创建
+        - WHEN: 以同样内容再次记录会话 s3
+        - THEN: 不新建决策，输出的 decisions 为空数组，session.replaced 为 true
+      pending-no-decision:
+        - GIVEN: sessions 为 3，只记录了 s1 与 s2，第 2 段的打分为 1 与 5
+        - WHEN: 记录完 s2 后
+        - THEN: 决策队列中没有新决策
+      dispute-updated-in-place:
+        - GIVEN: 分歧决策 dec-1 尚未决定，第 2 段的打分为 2、3、5
+        - WHEN: 以新的分数重新记录会话 s3，第 2 段仍有分歧
+        - THEN: 不新建决策；dec-1 的 rationale 改为新的各次打分与中位数，question 不变，changedPaths 含 decisions.yaml
+      dispute-after-edit:
+        - GIVEN: 分歧决策 dec-1 尚未决定，随后作者修改了正文
+        - WHEN: 重新记录足够的会话，第 2 段再次出现分歧
+        - THEN: 更新 dec-1 而不新建决策；dec-1 已被作者决定时则新建决策
+      dispute-becomes-decision:
+        - GIVEN: 指标 tension 的 sessions 为 3、max_spread 为 1，会话 s1、s2 已记录，第 2 段的打分为 2 与 3
+        - WHEN: 记录会话 s3，第 2 段打 5 分，其余段落各次打分相同
+        - THEN: '决策队列中新增一个 blocking 为 false、units 为 [post] 的决策，question 含第 2 段与紧张度，rationale 含 2、3、5 与中位数 3，options 为 1 到 5 分，recommendation 对应 3 分；输出的 decisions 只含该决策 id；metrics.yaml 的 decisions 含 {metric: tension, paragraph: 2, decision: 该 id}；changedPaths 含 decisions.yaml 与 metrics.yaml'
+  metrics-show:
+    strength: MUST
+    statement: wa-cli metrics show <unit> 必须只读地汇总单元的 AI 评分，changedPaths 为空数组。--json 输出的 metrics 含 unit、path（metrics.yaml 的路径）、stale（metrics.yaml 的 draft_sha256 与当前正文不同；没有 metrics.yaml 时为 false）、sessions（已记录的会话 id）与 items：按 resolved.scoredMetrics 的顺序，每个指标含 metric、title、source、advisory、sessions（给该指标打过分的会话数）、required（该指标的 sessions）、agreement（samples、agreed 与 rate；没有样本时 rate 为 null，见 metrics-calibrate）与 segments（每个段落含 paragraph、scores（按会话记录顺序的分数）、median（没有分数时为 null；偶数个时为中间两值的平均）、spread、status、decision 与 value）。status 为 pending（会话数少于 required、stale，或该片段没有分数）、agreed（分歧不大于 max_spread）、disputed（分歧大于 max_spread 且决策未决定）或 decided（分歧决策已被作者决定）；decision 为分歧决策 id（没有时为 null）；value 在 agreed 时为中位数、decided 时为作者选择的分值（按决策选项文本中的分值解释，不按当前 scale 反推；该分值已不在当前 scale 内时状态为 disputed），其他为 null。metrics.yaml 中不再声明的指标的分数不列出，并给出 warning 级 metrics.unknown-metric。单元没有正文时 segments 为空数组；metrics.yaml 不通过校验时报告其诊断，退出码为 1。
+    scenarios:
+      show-statuses:
+        - GIVEN: 按 dispute-becomes-decision 记录了三个会话
+        - WHEN: 运行 wa-cli metrics show post --dir D --json
+        - THEN: tension 的 sessions 为 3、required 为 3；第 2 段 scores 为 [2, 3, 5]、median 为 3、spread 为 3、status 为 disputed、decision 为该决策 id、value 为 null；其他段落 status 为 agreed、value 为中位数；作者用 wa-cli decide 选择 4 分后，第 2 段 status 为 decided、value 为 4
+      show-stale:
+        - GIVEN: 记录会话后作者修改了正文
+        - WHEN: 运行 wa-cli metrics show post --dir D --json
+        - THEN: metrics.stale 为 true，每个片段的 status 为 pending
+  metrics-calibrate:
+    strength: MUST
+    statement: wa-cli metrics calibrate <unit> 必须以 --metric、--paragraph、--score 与 --confirmation（作者原话摘要，不为空白）记录作者对一个片段的打分到工作区的 .writing-anything/calibration.yaml，即校准（Calibration）样本：schema_version 1 与 samples 数组，每项含 metric、source（声明该指标的配置层）、unit、paragraph、paragraph_sha256、ai_median（记录时该片段的 AI 中位数）、author_score、confirmation 与 recorded_at（UTC，YYYY-MM-DDTHH:MM:SSZ）。同一单元、指标、段落与 paragraph_sha256 已有样本时替换它。该片段的 AI 打分未完成（会话数少于 sessions 或 metrics.yaml 已过期）时报告 metrics.not-scored；指标、段落或分值不合法时分别报告 metrics.unknown-metric、metrics.unknown-paragraph 与 metrics.score-out-of-range；缺少参数、--paragraph 或 --score 不是整数、--confirmation 为空白时报告 input.invalid-value；这些情况不写文件，退出码为 1。一致率（Agreement Rate）按 (source, metric) 统计全部样本中 |ai_median − author_score| 不大于该指标 tolerance 的比例；样本数不少于 min_samples 且一致率低于 min_agreement 时，该指标为仅供参考（Advisory）：metrics plan 与 metrics show 中 advisory 为 true，metrics record 不再为它新建分歧决策。--json 输出的 calibration 含 metric、source、samples、agreed、rate 与 advisory，changedPaths 为 [.writing-anything/calibration.yaml]，退出码为 0。calibration.yaml 中要替换的样本或 samples 经由 YAML 锚点、别名或合并键得到时报告 metrics.anchored-value，不写文件。
+    scenarios:
+      calibrate-sample:
+        - GIVEN: 第 1 段的 tension 已完成 3 次打分，中位数为 3
+        - WHEN: 运行 wa-cli metrics calibrate post --metric tension --paragraph 1 --score 3 --confirmation 作者：这段紧张度 3 分 --dir D --json
+        - THEN: calibration.yaml 新增一条 ai_median 为 3、author_score 为 3、source 为 pack:house 的样本；calibration 的 samples 为 1、agreed 为 1、rate 为 1、advisory 为 false，退出码为 0
+      calibrate-downgrade:
+        - GIVEN: 指标 tension 的 min_samples 为 5、min_agreement 为 0.7、tolerance 为 1，已有 4 个样本其中 2 个相符
+        - WHEN: 再记录一个 ai_median 为 2、author_score 为 5 的样本
+        - THEN: calibration 的 samples 为 5、agreed 为 2、rate 为 0.4、advisory 为 true；之后记录新会话时不再为 tension 新建分歧决策，metrics show 中 tension 的 advisory 为 true
+      calibrate-not-scored:
+        - GIVEN: 第 1 段的 tension 只记录了 1 次打分
+        - WHEN: 运行 wa-cli metrics calibrate post --metric tension --paragraph 1 --score 3 --confirmation 作者确认 --dir D --json
+        - THEN: diagnostics 中有一条错误码为 metrics.not-scored 的诊断，calibration.yaml 不被创建，退出码为 1
+  metrics-validation:
+    strength: MUST
+    statement: wa-cli validate 整体校验时，必须对每个可加载作品的每个单元目录中存在的 metrics.yaml 与工作区的 .writing-anything/calibration.yaml 做 Schema 校验并计入 checked；metrics.yaml 另须满足会话 id 不重复、同一会话中同一指标同一段落不重复、decisions 中同一指标同一段落不重复，否则报告 artifact.duplicate-id。wa-cli validate <path> 按产物所在位置识别这两种产物并执行相同的检查。
+    scenarios:
+      duplicate-session:
+        - GIVEN: metrics.yaml 中两个会话的 id 都为 s1
+        - WHEN: 运行 wa-cli validate --dir D --json
+        - THEN: diagnostics 中有一条错误码为 artifact.duplicate-id、field 为 sessions[1].id 的诊断，退出码为 1
+  metrics-compute:
+    strength: MUST
+    statement: wa-cli metrics compute <unit> 必须只读地为单元及其每个有 draft.md 的子孙单元（按单元树先序）计算确定性的文风与节奏指标（见 deterministic-metrics），并与两类基准对比输出文风漂移（Style Drift）发现项（见 drift-detection），不修改任何产物，changedPaths 为空数组，wa-cli 不调用模型。--json 输出的 units 为数组，每项含 unit、metrics（标量指标）、paragraphs（每段的 paragraph、line、sentences 与 sentenceMean）与 drift（漂移发现项）；baselines 含 profile（作者文风画像的来源 source，没有时为 null）、accepted（使用的已验收单元引用数组，不足 3 个时为空数组）与 threshold（value 与 source）。单元及其子孙都没有正文时报告 draft.not-found，退出码为 1；漂移发现项不影响退出码（为 0）。
+    scenarios:
+      compute-work:
+        - GIVEN: 作品 post 的根单元与子单元 intro 都有正文
+        - WHEN: 运行 wa-cli metrics compute post --dir D --json
+        - THEN: units 依次为 post 与 post/intro，各含 metrics 与 paragraphs；changedPaths 为空数组，退出码为 0
+  deterministic-metrics:
+    strength: MUST
+    statement: '指标必须只由正文确定（先去掉作者批注 <!-- @me: … -->，按 style-profile 主规格 style-stats 的规则切分段落与句子）：chars（非空白字符数）、sentenceMean 与 sentenceStdev（句长的均值与总体标准差）、paragraphMean（段长均值）、dialogueRatio（“”「」『』内的非空白字符占比，四位小数；引号按段落计，不闭合的引号不延续到下一段）、vocabularyRichness（汉字二元组的类型数除以词例数，四位小数，没有二元组时为 0）、functionWords（虚词 的、了、是、在、和、就、都、也、而、着 的每千字次数）、fourChar（被标点、空白或非汉字字符分隔、恰为 4 个汉字的片段的每千字个数）、aiCliche（按作品合并的、生效的 ai-cliche 规则 terms 每千字出现次数，计数口径与 lint 的 ai-cliche 规则相同：同样的屏蔽区域、去重后的词表与一次扫描；没有该规则时为 0）与 punctuation（style-stats 标点集合的每千字次数）；除比例外保留两位小数。段落指标为每段的 sentences（句数）与 sentenceMean。同样的正文与配置总是得到同样的指标。'
+    scenarios:
+      four-char:
+        - GIVEN: 正文为「一石二鸟，事半功倍。今天」
+        - WHEN: 计算指标
+        - THEN: fourChar 计入「一石二鸟」与「事半功倍」两个片段，不计「今天」
+      dialogue:
+        - GIVEN: 正文为「他说：“走吧。”」
+        - WHEN: 运行 wa-cli metrics compute post --dir D --json
+        - THEN: metrics.dialogueRatio 为 0.375（“”内 3 个字，共 8 个非空白字符）
+  drift-detection:
+    strength: MUST
+    statement: 漂移判定必须为：值与基准均值之差的绝对值大于 阈值 × 基准标准差；基准标准差按四位小数为 0、或已验收单元的取值完全相同时不判定。阈值为按作品合并的 driftThreshold（见 genres-and-packs 主规格的 drift-threshold）。基准一为作者文风画像 resolved.styleProfile：单元的 sentenceMean 对 sentences 的 mean 与 stdev、paragraphMean 对 paragraphs，以及每个至少 2 句的段落的 sentenceMean 对 sentences（段落级，表示局部节奏变化）；没有文风画像时不使用。基准二为同一作品中 acceptance.yaml 通过校验且与当前正文一致、且不在本次计算范围内的单元，不少于 3 个时对每个标量指标取它们的均值与总体标准差；不足 3 个时不使用。每项漂移发现项含 metric、baseline（profile 或 accepted）、value、mean 与 stdev（保留四位小数）、threshold、paragraph 与 line（单元级为 null）与 message（说明偏高或偏低，只衡量偏离、不评判好坏）。漂移发现项不阻塞验收：wa-cli accept、advance 与 lint 都不读取它们。
+    scenarios:
+      profile-drift:
+        - GIVEN: 规范包 mine 的 style_profile 中 sentences 的 mean 为 10、stdev 为 2，packs 为 [mine]；单元正文的平均句长为 20
+        - WHEN: 运行 wa-cli metrics compute post --dir D --json
+        - THEN: 'drift 含 {metric: sentenceMean, baseline: profile, value: 20, mean: 10, stdev: 2, threshold: 2} 的单元级发现项，退出码为 0'
+      paragraph-drift:
+        - GIVEN: 同上，第 3 段由 3 个 1 字的短句组成
+        - WHEN: 运行 wa-cli metrics compute post --dir D --json
+        - THEN: drift 含 metric 为 sentenceMean、paragraph 为 3、line 为该段首行行号的段落级发现项
+      not-blocking:
+        - GIVEN: 单元有漂移发现项且已满足其他验收条件
+        - WHEN: 运行 wa-cli accept 与 wa-cli lint
+        - THEN: 结果与没有漂移时相同
+      accepted-baseline:
+        - GIVEN: 作品 post 有 3 个已验收的子单元，对话占比都很低（只有一个含一句很短的引语），另一个子单元 new 的正文大半在引号内
+        - WHEN: 运行 wa-cli metrics compute post/new --dir D --json
+        - THEN: baselines.accepted 含这 3 个单元，drift 含 metric 为 dialogueRatio、baseline 为 accepted 的发现项；已验收单元的某项指标完全相同（标准差为 0）时不判定该项
+  curve-command:
+    strength: MUST
+    statement: wa-cli curve <work> 必须只读地汇总作品的 AI 评分走势，不修改任何产物，changedPaths 为空数组，wa-cli 不调用模型。对按作品文体合并的每个已声明 AI 评分指标输出一条曲线：数据点按单元树先序（与 metrics compute 相同）排列，每个单元一个点；点值 value 为该单元各片段取值（取值语义同 metrics show：agreed 为中位数、decided 为作者选择的分值）的中位数，偶数个时为中间两值的平均；没有任何可取值片段（片段 pending、disputed，或 metrics.yaml 过期）时为 null。目标分值 target 按三层解析：优先取该单元大纲节声明的 targets（见 outline 主规格的 scene-contract-targets，取第一个为该指标声明目标的节）；未声明且指标 id 为 tension 时，取该单元大纲节 beats 引用的根单元大纲节 role 对应的结构类写作法节拍的目标张力（Target Tension，0 到 10），按 min + tension ÷ 10 × (max − min) 线性映射到该指标的 scale，多个节拍取映射值的平均，四舍五入（远离零）；其他情况无目标（null）。单元的 value 与 target 都存在且 |value − target| 大于该指标的 tolerance 时输出一条偏离发现项，含 unit、metric、value、target、difference 与 message（说明偏高或偏低，只衡量偏离、不评判好坏）；value 或 target 为 null 时不输出。文体声明的节奏检查（见 genres-and-packs 主规格的 genre-pacing-checks）同样由 curve 输出：按单元树先序拼接各单元正文片段，片段取值达到 min_score 为节拍点，相邻两个节拍点片段之间的非空白字符数（其间所有片段的非空白字符数之和，相邻片段间隔为 0）大于 max_gap_chars 时输出一条节奏发现项，含 check、metric、from（前一节拍点的单元与段落）、to（后一节拍点的单元与段落）、gapChars 与 message。曲线以 --json 输出：curves 数组每项含 metric、title、source、scale、advisory、points（unit、value、target）与 deviations（该指标的偏离发现项）；pacing 为节奏发现项数组。未加 --json 时以文本图表输出：每个指标一段、按单元先序排列的字符条形（标注单元、值与目标）及发现项列表。合并后没有任何 AI 评分指标时报告 metrics.none-declared（同 metrics plan），退出码为 1；发现项不影响退出码（为 0）。
+    scenarios:
+      curve-contract-target:
+        - GIVEN: 'short-story 作品 my-story 的场景 s1 与 s2 都有 agreed 的 tension 分数（单元中位数分别为 2 与 4），文体声明 tension 指标（scale 1 到 5、tolerance 1），s1 的大纲节声明 targets 为 {tension: 4}'
+        - WHEN: 运行 wa-cli curve my-story --dir D --json
+        - THEN: curves 中 tension 的 points 依次为 s1（value 2、target 4）与 s2；deviations 含一条 unit 为 s1、difference 为 −2 的发现项；changedPaths 为空数组，退出码为 0
+      curve-not-blocking:
+        - GIVEN: 作品存在曲线偏离发现项或节奏发现项且已满足其他验收条件
+        - WHEN: 运行 wa-cli accept 与 wa-cli advance
+        - THEN: 结果与没有发现项时相同，发现项不阻塞验收
+      curve-no-metrics:
+        - GIVEN: 合并后没有任何 AI 评分指标的工作区
+        - WHEN: 运行 wa-cli curve post --dir D --json
+        - THEN: diagnostics 中有一条错误码为 metrics.none-declared 的诊断，退出码为 1
+      curve-method-default:
+        - GIVEN: s2 未声明 targets，其大纲节 beats 引用根单元大纲中 role 为 setup 的节（默认写作法 three-act 的 setup 节拍目标张力为 3，线性映射 1 + 3 ÷ 10 × 4 = 2.2 后四舍五入为 2），s2 的 value 为 4，tension 指标的 tolerance 为 1
+        - WHEN: 运行 wa-cli curve my-story --dir D --json
+        - THEN: s2 的 target 为 2，|4 − 2| 大于 1，deviations 含 s2 的发现项
+      curve-pacing-gap:
+        - GIVEN: short-story 作品 my-story 的正文中，第 1 段与第 4 段的 emotion 取值为 4 与 5（文体声明的节奏检查 emotional-beat-gap：emotion 达到 3 分为节拍点、间隔不超过 2000 个非空白字符），两段之间的片段共有 3000 个非空白字符
+        - WHEN: 运行 wa-cli curve my-story --dir D --json
+        - THEN: pacing 含一条 check 为 emotional-beat-gap、gapChars 为 3000 的发现项，from 与 to 分别指向第 1 段与第 4 段，退出码为 0

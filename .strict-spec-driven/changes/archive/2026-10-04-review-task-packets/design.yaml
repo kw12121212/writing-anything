@@ -1,0 +1,34 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: review-task-packets
+approach:
+  - 新包 internal/reviewpacket 以只读方式从正文、台账、分层摘要与曲线数据切出五个维度的任务包，写入 .writing-anything/packets/<work>/（每包一个 YAML，整体替换 open 包、按 dimension+scope 保留 done 包）；submit 校验结论齐全后写回；report 只读汇总。CLI 以 review plan / review submit / review report 三个子命令接入既有 review 命令组
+decisions:
+  packet-artifact-per-file:
+    decision: 每个任务包一个 YAML 文件（.writing-anything/packets/<work>/<dimension>-<n>.yaml，id 为文件名去扩展名）：包是 Agent 并行调度的单元，独立文件让并行会话各取所需、submit 按 id 直达，也避免一个汇总文件成为写入竞争点
+    rationale: 任务包的生命周期独立（生成→执行→提交），按文件存放使每个包的提交互不干扰；目录前缀 <work> 让 validate 的 CheckWorks 按作品遍历
+  fixed-checklists:
+    decision: 每个维度的检查清单为固定问题集（各 3 到 4 项，kebab-case id 与中文问题在规格中列全）：character（言行与状态一致、称谓一致、知情边界、状态变化兑现）、thread（埋设自然、回收兑现、跨场景提示连贯）、causality（起因成立、事件产生、动机可信）、pov-reveal（视角一致、未提前透露、读者知情运用）、style（文风一致、节奏符合曲线、漂移发现项核实）
+    rationale: 固定清单让结果可校验（每项必须有结论）且跨包可比；清单内容来自计划变更 details 的维度描述，不引入作者自定义（那是后续规范包扩展的空间，YAGNI）
+  budget-truncation:
+    decision: 每个包的内容（excerpt+slices+checklist 的 Markdown 字符数）不超过作品的 context_budget：优先保 slices 与 checklist，excerpt 从剩余预算中取正文（causality 与 pov-reveal 从头取、character 按场景序取、thread 取结尾），不足时截断并标注 truncated
+    rationale: 完成标准要求每个任务包不超过预算；切片与清单是任务的结构部分必须完整，正文片段是审读对象可截断（Agent 可用 wa-cli context 与 recall 补全上下文）
+  done-preserved-on-replan:
+    decision: review plan 重建时按（dimension, scope）匹配保留 status 为 done 的包（结果不丢），其余整体重建；--dimension 与 unit 参数收窄生成范围
+    rationale: 长篇的审查包随正文演进而过时，重建 open 包让切片保持新鲜；已提交的结果是已完成的审查工作，丢弃会浪费 Agent 与作者的工作量
+  no-accept-linkage:
+    decision: 任务包不阻塞场景验收（accept 不变）：它是作品级语义审查，完成标准只约束包的预算与提交校验；组稿侧的阻塞由 manuscript-assembly-export 引入
+    rationale: 单元级验收已有确定性关卡（lint、收口、连续性）；语义审查的完成时机由作者掌握，把它挂进每个场景的 accept 会让逐场景推进被全书审查卡死
+alternatives:
+  - option: 任务包汇总为单个 packets.yaml
+    reason: 并行 Agent 会话提交时互相覆盖；validate 与 submit 都要整体重写，文件随包数增长
+  - option: 结论写入独立 results 文件
+    reason: 结果与任务分离会让 submit 与 report 各读一半；包文件自身就是任务的唯一事实来源
+  - option: 包生成时不落盘、由 Agent 持有
+    reason: 并行与跨会话执行需要磁盘上的任务清单；report 也无法汇总 Agent 内存中的包
+risks:
+  - character 维度的人物 × 章包数随规模增长（人物多、章多）：只为在章内场景大纲中声明出场的人物建包（未出场不建），长篇单部规模可控
+  - style 维度依赖曲线与漂移数据的存在：没有 metrics.yaml 与文风画像时包只含分层摘要与对应清单项（线索为空数组），任务仍然成立
+  - done 包保留按（dimension, scope）匹配：同 scope 重建后 id 可能变化（n 重排）；submit 只按 id 定位，report 按 scope 汇总，id 变化不影响已完成结果的保留

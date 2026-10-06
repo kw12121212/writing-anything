@@ -1,0 +1,15 @@
+schema_version: 1
+id: dupes
+title: 重复的词条
+glossary:
+  - term: 规范包
+  - term: 规范包
+banned_terms:
+  - term: 赋能
+  - term: 赋能
+rubric:
+  - {id: clarity, title: 清晰}
+  - {id: clarity, title: 清楚}
+rules:
+  r9:
+    type: run-shell

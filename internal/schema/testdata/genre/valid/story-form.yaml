@@ -1,0 +1,21 @@
+schema_version: 1
+id: story-form
+title: 故事体
+unit_types:
+  - id: story
+    title: 故事
+    children: [scene]
+    brief_required: [premise, theme, pov, length, key_messages]
+  - id: scene
+    title: 场景
+stages:
+  - id: brief
+    title: 写作简报
+    required_artifacts: [brief]
+  - id: draft
+    title: 草稿
+    required_artifacts: [draft]
+rubric:
+  - id: conflict
+    title: 冲突清晰
+context_budget: 16000

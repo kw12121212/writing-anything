@@ -1,0 +1,6 @@
+schema_version: 1
+id: outline-first
+title: 先大纲后动笔
+kind: planning
+steps:
+  - {id: cast, title: 人物表, product: robots}

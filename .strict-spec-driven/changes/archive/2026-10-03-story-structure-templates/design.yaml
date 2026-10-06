@@ -1,0 +1,22 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: story-structure-templates
+approach:
+  - 纯数据 + 最小内核扩展：五个结构类模板以 YAML 文件加入 internal/catalog/builtin/methods/（embed 自动打包），节拍沿用既有 MethodPart；唯一的数据模型扩展是结构类节拍可选的 tension（目标张力，0 到 10 整数，随 method list/show 的 beats 序列化输出），Schema（common.schema.json methodBody.beats）与 checkMethod 同步放行并校验；short-story 文体的 default_method 指向新的内置结构类写作法（推荐 qichengzhuanhe）。大纲节拍缺口校验、成稿节拍位置提示、写作法选用与退出机制全部复用 writing-method-templates 已交付的通用逻辑，不新增命令。tension 在本变更中只是随模板输出的数据，供后续 emotion-pacing-curve 变更作为默认目标走势消费
+decisions:
+  tension-scale:
+    decision: 目标张力采用 0 到 10 的整数：0 为最平静，10 为最高张力；tension 为结构类节拍的可选字段（规范包模板可省略，省略表示不给出目标走势），给出时必须是 0 到 10 的整数，否则报告 method.invalid-tension（field 指向 beats[i].tension）
+    rationale: AI 评分指标（scored metrics）的 scale 为整数刻度并用锚定分值（anchored score）描述每个分值，情绪/张力曲线（emotion-pacing-curve）将把 AI 打分与模板张力对比，整数 0–10 与其兼容且粒度足够画出走势；决策队列每个决策最多 26 个选项（MaxScaleRange），0–10 在界内。position 已用 0–1 比例，若张力也用 0–1 浮点会与位置语义混淆且难与整数打分对比。是否采用该刻度作为开放问题留给作者确认
+  default-method-choice:
+    decision: short-story 文体的 default_method 设为 three-act（三幕结构：setup 0–0.3、confrontation 0.2–0.6、climax 0.7–1、resolution 0.85–1），作者已确认
+    rationale: 路线图原文『短篇默认使用起承转合或三幕结构』给出两个候选，作者在开放问题 default-method 中拍板选 three-act：三幕结构是通用的叙事结构默认，且其 setup 0–30% 与 climax 70–100% 已与 methods 主规格 beat-positions 场景的既有引用一致。作者可用写作简报 method 改选任意写作法或 none，默认值影响面小
+  template-ids:
+    decision: 五个模板 id 定为 three-act、save-the-cat、seven-point、qichengzhuanhe、hero-journey；三幕结构节拍为 setup（0–0.3）、confrontation（0.2–0.6）、climax（0.7–1）、resolution（0.85–1），救猫咪节拍表为标准 15 拍（opening-image 到 final-image），七点结构为 hook、plot-turn-1、pinch-1、midpoint、pinch-2、plot-turn-2、resolution，起承转合为 qi、cheng、zhuan、he，英雄之旅为坎贝尔 12 阶段（ordinary-world 到 return-with-elixir）
+    rationale: three-act 的 setup 0–30% 与 climax 70–100% 与 methods 主规格 beat-positions 场景中既有引用保持一致，避免规格自相矛盾；id 遵循内置写作法的小写连字符惯例（如 pyramid-scqa、inverted-pyramid）；起承转合用拼音 qichengzhuanhe 而非日文罗马字 kishotenketsu，与术语表中文条目及产品中文定位一致
+  default-method-scope:
+    decision: 文体的 default_method 只作用于作品的根单元：子单元未在自己的写作简报中选用写作法时不用写作法，也不做写作法缺口检查；子单元仍可在自己的写作简报中选用任意写作法
+    rationale: 作者确认（开放问题 default-method-scope）：写作简报 method 未设置时所有单元继承文体 default_method 的既有语义，会让 short-story 的每个场景大纲都被要求承担 three-act 全部四个节拍而无法推进——结构类写作法描述的是全文（整篇故事）的节拍位置，只对根单元有意义；tech-blog 的 section 子单元存在同类问题（未被测试暴露）。改为根单元独享默认也符合文章类写作法的实际用法（SCQA 组织整篇文章而非每一节）。实现上是大纲关卡 Picker、validate、outline 命令、审稿与 lint 五处应用点传入单元感知的默认值（unitDefaultMethod / Work.picker），brief set --method / none 的选用机制不变
+alternatives: []
+risks: []

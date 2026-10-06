@@ -1,0 +1,22 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: docs-runbook
+  status: proposed
+summary:
+  what:
+    - 在 internal/cli/testdata/e2e/novel/ 新增语料 README：说明目录结构（素材、正文输入、命令脚本、黄金文件、矩阵与设计文档的布局）、运行方式（单个测试命令与完整回归命令）、UPDATE_GOLDEN 用法与黄金比对的 <dir> 路径归一约定、修订语料的完整步骤（改设定或正文 → 重放全部命令 → UPDATE_GOLDEN=1 更新黄金 → 矩阵对账）、矩阵维护约定（新增长篇特性时矩阵同步扩充并保持 evidence 对账，引用 TestNovelCorpusMatrix）
+  why:
+    - 六个规划变更中前五个已交付，语料目录已完整但对外不可自解释；README 是完成标准「语料正文人工可读：README 描述目录结构与维护方式」的最后一块，也让后续维护者不改坏可重放性与对账
+scope:
+  in:
+    - internal/cli/testdata/e2e/novel/README.md；如 README 中的目录清单与实际有出入，以实际目录为准勘正 README
+  out:
+    - 不改产品代码与主规格；不改语料本体（commands.yaml、inputs/、golden/、matrix.yaml、DESIGN.md、script-format.md 均不变）；不新增测试（目录清单的存在性由对账与既有测试保证，README 是文档）
+unchanged_behavior:
+  - wa-cli 产品行为不变；语料与测试全部不变
+roadmap:
+  milestone: novel-e2e
+  planned_change: docs-runbook

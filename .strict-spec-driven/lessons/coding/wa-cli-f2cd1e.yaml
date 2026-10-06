@@ -1,0 +1,22 @@
+schema: strict-spec-driven/lesson/v1
+schema_version: 1
+artifact_type: lesson
+schema_file: templates/strict-spec-driven/schemas/lesson.yaml
+lesson:
+  id: wa-cli-f2cd1e
+  title: wa-cli 会据以删除作者正文的解析规则，必须把边界限死在最小范围
+category: coding
+status: active
+created_at: '2026-09-30T13:35:49.543Z'
+updated_at: '2026-10-01T02:56:33.267Z'
+context: human-edit-protection-and-comments 用 (?s)<!-- @me:(.*?)--> 解析正文批注，并在反馈解决后按匹配范围从 draft.md 中删除批注。
+observation: 作者漏写 --> 时，非贪婪匹配跨过空行一直延伸到后面某个批注的 -->，解决它会把中间作者的段落一起删掉，甚至拆坏围栏代码块；行内代码里演示批注语法的文字也被当作批注删除。全部测试通过，直到 fresh-context 审查构造未闭合批注才发现。
+takeaway: 凡是匹配结果会被 wa-cli 用来修改作者正文的解析，都要显式限制边界（不跨空行、不嵌套、开头与结尾都不在代码块或行内代码中），并为漏写结束符、嵌套、代码块内的写法各写一条「删除后作者文字仍在」的测试。
+applies_when: 新增会按匹配范围修改、删除作者可编辑正文的解析规则（批注、标记、占位符）时
+occurrences:
+  - origin: human-edit-protection-and-comments
+    date: '2026-09-30'
+    evidence: internal/feedback/comments.go Comments 改为手工扫描；TestCommentBoundaries
+  - origin: tech-blog-genre-and-export
+    date: '2026-10-01'
+    evidence: export 去注释的正则 [\s\S]*? 没有边界：漏写 --> 的作者批注会一直匹配到后面的单处豁免，删掉中间的作者段落；围栏只看前三个字符，会改动四反引号代码块中的内容。改为沿用作者反馈的批注边界与文本检查的围栏规则，internal/export 的 TestStripComments 覆盖漏写 -->、嵌套、四反引号围栏与相似写法。

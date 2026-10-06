@@ -1,0 +1,38 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: global-timeline
+  status: proposed
+summary:
+  what:
+    - 场景大纲契约新增 story-time 字段（故事时间）：每场景可声明 time（自由文本的故事时间标记，如 第三日夜 或 1014-03-02）与 after（相对顺序：引用前文场景的单元引用数组，声明本场景在它们之后）；时间线事件与状态快照、因果链共用同一套事件 id 与场景绑定，不引入新的独立事件存储
+    - 新增 wa-cli timeline <unit|work|series>：只读输出时间线——按声明的 time 与 after 推导的全序（拓扑排序，time 相同或未声明的按单元树先序稳定排列），--json 输出 timeline 数组（每项含 unit、time（未声明为 null）、after 与 position），给出场景集合的排序；环（after 成环）报告 timeline.cycle 并列出成环的场景
+    - 事件顺序检查接入 continuity：continuity 对声明了 after 或 time 的场景新增 timeline 检查——after 引用的场景不存在报告 timeline.unknown-scene；after 引用的场景按声明的全序不早于本场景（即声明与拓扑序矛盾）报告 timeline.order-conflict；同一人物（契约出场人物）在两个声明了相同 time 的场景中出场且两场景无 after 关系分隔（既不同时也不先后）报告 timeline.same-time-presence（确定性近似：相同 time 文本视为同时，未声明 time 的场景不参与）；这些发现按既有豁免机制（决策队列）阻塞验收
+    - 跨作品时间线：wa-cli timeline <series> 输出系列内全部成员作品的场景合并时间线（按各作品 time 与 after 的声明推导，作品间无声明时按 series.yaml 的 works 顺序），跨作品的事件顺序检查（causes 引用另一作品的事件）沿用同一 order-conflict 检查
+  why:
+    - 路线图 novel-series 里程碑计划变更 global-timeline：planned change details 的全部要求——事件补充故事时间（绝对或相对）、时间线与状态快照/因果链共用事件 id、检查作品内与跨作品的事件顺序矛盾与人物同时两地、并接入 continuity；依赖的 cross-work-canon 已归档，当前是唯一可推荐的计划变更
+    - novel 里程碑曾明确把「依赖时间的检查（例如人物同时出现在两地）放在系列小说里程碑的时间线」（milestone details）：确定性检查需要结构化的时间声明，time + after 是最小的确定性表达（绝对时间文本 + 相对顺序引用），不调用模型
+    - 时间线与状态/因果共用事件 id：事件的归属（哪个场景发生）、状态（谁知道了什么）与顺序（何时发生）是同一事实的三个视图，独立的事件存储会漂移
+scope:
+  in:
+    - internal/schema：outline.schema.json 的节新增可选 time（非空文本）与 after（单元引用数组，不重复）字段，补夹具
+    - 新包 internal/timeline：从各场景大纲收集 time/after 声明、拓扑排序（环检测 timeline.cycle、未知引用 timeline.unknown-scene）、全序推导、跨作品合并（series works 顺序为默认序）、同人物同 time 出场检查（timeline.same-time-presence）
+    - internal/continuity：接入时间线检查（声明了 time/after 的场景才参与；发现进入既有 findings 与豁免机制）
+    - internal/cli：timeline 命令注册（args：unit|work|series；只读；--json 与人读输出、诊断与 next）；scene contract 的 --time 与 --after 参数
+    - docs/GLOSSARY.md：时间线（Timeline）与故事时间（Story Time）词条
+    - 测试夹具：带 time/after 声明的多场景夹具（含环、矛盾声明、同 time 双出场、跨作品 after）
+  out:
+    - 真实历法或时间运算（时间文本不做解析比较，仅相同文本视为同时标记）：绝对时间的语义由作者与 Agent 约定，wa-cli 只比较相同性
+    - 时间线编辑命令：time/after 经 scene contract 声明（既有写入路径），timeline 只读
+    - 系列级连续性审查报告——属 series-continuity-review 计划变更（依赖本变更）
+    - MCP 服务与内置技能不单独编写（timeline 经命令注册表自动暴露）
+unchanged_behavior:
+  - 不声明 time/after 的作品：timeline 输出按单元树先序的全序（无诊断），continuity、accept、validate、context 的输出与错误码完全不变
+  - 状态快照、知情表、伏笔台账、因果链（causality）的语义不变；时间线只读消费场景大纲的声明与既有事件 id
+  - continuity 的既有检查集与豁免机制不变，时间线检查作为新增发现项进入同一通道
+  - MCP 服务与内置技能内容不变
+roadmap:
+  milestone: novel-series
+  planned_change: global-timeline

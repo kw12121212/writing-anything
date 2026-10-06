@@ -1,0 +1,42 @@
+schema: strict-spec-driven/question-list/v1
+schema_version: 1
+artifact_type: question_list
+schema_file: templates/strict-spec-driven/schemas/question-list.yaml
+change: author-sources-and-provenance
+open: []
+resolved:
+  - id: requirement-problem
+    question: What is concretely going wrong today, and for whom?
+    context: 'Why this is asked: the change is planned against a need, and the need lives only with the requester. A "problem" here means what someone does or suffers today — not a feature that is missing. If the answer names a button, a field, a page, or an endpoint, it is a solution, and the underlying problem is still unstated. What a sufficient answer contains: who is affected, what they do today instead, and how often. Worked example: "every Monday one person spends forty minutes copying order rows into a spreadsheet to send the weekly report". What it changes: this becomes the proposal''s why, and it decides whether the change is worth making.'
+    answer: 据里程碑 kernel-foundation 与规划变更 author-sources-and-provenance：工作区目前只有空的 sources/ 目录，没有登记作者素材、写入正文或记录出处的命令。受影响的是接入 wa-cli 的 Agent（只能直接改 draft.md，无法按项目约定把亲历、观点与数据链接到作者素材）、作者（分辨不出正文中哪些段落出自 Agent、哪些是自己写或改过的），以及 author-feedback、human-edit-protection-and-comments 与 claim-source-check 等后续变更（没有段落、写入哈希与论断到素材的关联可以依赖）。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-outcome
+    question: What observable difference proves the problem is solved?
+    context: 'Why this is asked: without a success condition, nobody can tell afterwards whether the change worked. "Observable" means someone outside the system can check it without reading the code. What a sufficient answer contains: what a person will see, or no longer have to do, once this is done. Worked example: "the report is in the manager''s inbox on Monday morning without anyone assembling it". What it changes: this becomes the delta spec''s scenarios and the acceptance evidence at review time.'
+    answer: 据规划变更 details 与里程碑 done_criteria：能用 wa-cli source add 登记作者素材并得到稳定 id，原文逐字节存档且改动会被 validate 发现；Agent 通过 wa-cli draft write 写入正文后，wa-cli provenance 能逐段给出 human、agent 或 agent-draft-human-edited，并汇总单元级各类出处的占比；wa-cli claim add 把论断关联到素材 id。具体场景写在 sources-and-provenance 与 workspace delta spec 中。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-trigger
+    question: Why now — what forced this?
+    context: 'Why this is asked: work that nothing forced is the work most often thrown away later. This question catches a request that sounds reasonable but has no real driver behind it. What a sufficient answer contains: the concrete event, deadline, incident, or cost that made this surface now, or an honest statement that nothing did. Worked example: "the report was missed last month and it was raised with the team". What it changes: a change with no trigger is a candidate for deferral, and the answer is weighed at review before archive.'
+    answer: 据路线图：本规划变更只依赖已归档的 unit-tree-and-lifecycle，而 author-feedback、human-edit-protection-and-comments 与 claim-source-check 都依赖它；roadmap-recommend 推荐它为下一项。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-non-goals
+    question: What must explicitly not change?
+    context: 'Why this is asked: the requester knows which nearby behavior other people depend on, and the agent does not. A "non-goal" is something the change must leave alone even though it sits close to the work. What a sufficient answer contains: the behavior, setting, or output that must survive untouched, and who relies on it. Worked example: "do not change the saved filters — several people rely on their own". What it changes: these become the proposal''s unchanged_behavior items, which review checks the finished result against.'
+    answer: 据规划变更 details 与里程碑 scope：不实现人工编辑保护、wa-cli diff 与正文批注（human-edit-protection-and-comments），不实现作者反馈（author-feedback），不实现论断出处的启发式检查（claim-source-check），wa-cli 不调用 LLM；init、config、new、unit add、advance、next 与 status 的行为，输出信封与退出码约定保持不变。已写入 proposal 的 out 与 unchanged。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-interpretation
+    question: Which reading of the request is intended, where more than one is possible?
+    context: 'Why this is asked: a short request usually admits several readings, and building the wrong one is indistinguishable from building nothing. What a sufficient answer contains: the reading that is meant, stated plainly enough to rule the others out — or a statement that only one reading exists and what it is. Worked example: "export means the version sent to the manager, not the one I read myself". What it changes: this fixes the scope boundary before any code is written, and settles disputes about what was asked for.'
+    answer: 据规划变更 details 与里程碑 intake_questions：出处以段落为最小粒度、单元级汇总（provenance-granularity 已确认）；段落出处由写入记录与当前内容的哈希对比推导，不另存人工标注；素材原文不做改写；论断只做登记与素材关联。draft write 保留作者段落出处、区间配对区分改写与新增等技术取舍写在 design 的决策中。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap

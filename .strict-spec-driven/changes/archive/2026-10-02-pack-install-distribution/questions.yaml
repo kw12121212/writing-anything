@@ -1,0 +1,42 @@
+schema: strict-spec-driven/question-list/v1
+schema_version: 1
+artifact_type: question_list
+schema_file: templates/strict-spec-driven/schemas/question-list.yaml
+change: pack-install-distribution
+open: []
+resolved:
+  - id: requirement-problem
+    question: What is concretely going wrong today, and for whom?
+    context: 'Why this is asked: the change is planned against a need, and the need lives only with the requester. What it changes: this becomes the proposal''s why.'
+    answer: 据规划变更 pack-install-distribution 与里程碑 packs-and-series 的 goal：第三方与作者只能手工复制规范包文件，无法通过 git 地址或本地路径安装，也无法得知已用规范包的来源、版本与是否被改动。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-outcome
+    question: What observable difference proves the problem is solved?
+    context: 'Why this is asked: without a success condition, nobody can tell afterwards whether the change worked. What it changes: this becomes the delta spec''s scenarios.'
+    answer: 据里程碑 done_criteria：从 git 地址安装的规范包被锁定到具体版本，并能校验通过；据规划变更 details：pack install 记录解析到的提交或内容哈希，pack list 与 pack remove 管理已安装规范包，安装时校验规范包只含数据、规则类型都已知。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-trigger
+    question: Why now — what forced this?
+    context: 'Why this is asked: work that nothing forced is the work most often thrown away later.'
+    answer: 据路线图：依赖的 genre-and-pack-loading 已归档，前一里程碑 mcp-integration 已完成；roadmap-recommend 推荐本变更为 packs-and-series 的第一项，pack-learn-style-profile 与 ai-scored-metrics 依赖它。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-non-goals
+    question: What must explicitly not change?
+    context: 'Why this is asked: the requester knows which nearby behavior other people depend on. What it changes: these become the proposal''s unchanged_behavior items.'
+    answer: 据里程碑 scope.out：不做中心化的规范包仓库与托管服务；据项目约束：规范包只能是数据，不执行第三方代码；手写工作区规范包与 config resolved 的合并行为不变。已写入 proposal 的 out 与 unchanged。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-interpretation
+    question: Which reading of the request is intended, where more than one is possible?
+    context: 'Why this is asked: a short request usually admits several readings. What it changes: this fixes the scope boundary before any code is written.'
+    answer: 据规划变更 details 与里程碑 intake 问题 pack-registry 的建议：只支持 git 地址与本地路径，规范包标识为 <owner>/<name> 预留命名空间；锁定文件记录提交或内容哈希。git 调用方式、来源布局、不自动启用等取舍写在 design 的决策中。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap

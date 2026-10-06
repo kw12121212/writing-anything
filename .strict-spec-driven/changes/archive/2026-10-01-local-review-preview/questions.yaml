@@ -1,0 +1,42 @@
+schema: strict-spec-driven/question-list/v1
+schema_version: 1
+artifact_type: question_list
+schema_file: templates/strict-spec-driven/schemas/question-list.yaml
+change: local-review-preview
+open: []
+resolved:
+  - id: requirement-problem
+    question: What is concretely going wrong today, and for whom?
+    context: 'Why this is asked: the change is planned against a need, and the need lives only with the requester. What it changes: this becomes the proposal''s why.'
+    answer: 据里程碑 wechat-marketing-and-mcp 与规划变更 local-review-preview：作者审读成稿时只能在编辑器里写批注或在对话中描述位置，提意见与阅读割裂；里程碑把阅读反馈页提前，让作者尽早获得即时反馈的体验。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-outcome
+    question: What observable difference proves the problem is solved?
+    context: 'Why this is asked: without a success condition, nobody can tell afterwards whether the change worked. What it changes: this becomes the delta spec''s scenarios.'
+    answer: 据里程碑 done_criteria：在阅读页选中文字提交的意见，立即出现在 wa-cli feedback list 与 feedback watch 的输出中；wa-cli preview 不加 --serve 时生成可离线阅读的静态 HTML。风险项：只监听回环地址并校验随机令牌，测试覆盖拒绝无令牌请求。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-trigger
+    question: Why now — what forced this?
+    context: 'Why this is asked: work that nothing forced is the work most often thrown away later.'
+    answer: 据路线图：依赖的 human-edit-protection-and-comments、author-feedback 与 review-and-acceptance 都已归档；roadmap-recommend 推荐本变更为下一项。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-non-goals
+    question: What must explicitly not change?
+    context: 'Why this is asked: the requester knows which nearby behavior other people depend on. What it changes: these become the proposal''s unchanged_behavior items.'
+    answer: 据规划变更 details：只做阅读与反馈，不做在线编辑，也不做成完整的 Web 产品，不作为常驻服务；feedback 与 export 的现有行为不变。已写入 proposal 的 out 与 unchanged。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-interpretation
+    question: Which reading of the request is intended, where more than one is possible?
+    context: 'Why this is asked: a short request usually admits several readings. What it changes: this fixes the scope boundary before any code is written.'
+    answer: 据规划变更 details：preview <unit|work> 按单元引用（作品即根单元）展示该单元及其后代；页面展示正文（可按出处着色）、文本检查与审稿发现项；快捷标记为阅读卡点、好、疑问。正文以原文展示、快捷标记与反馈类型的对应、静态页位置写在 design 的决策中。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap

@@ -1,0 +1,21 @@
+schema: strict-spec-driven/delta-tech/v1
+schema_version: 1
+artifact_type: delta_tech
+schema_file: templates/strict-spec-driven/schemas/delta-tech.yaml
+target_standard: workspace-artifacts
+operations:
+  ADDED:
+    load-once-per-command:
+      strength: SHOULD
+      statement: 工作区级产物（如 decisions.yaml）参与每个单元的推导时，每条命令只加载并校验一次（如 Work 首次计算阻塞项时缓存决策队列），再用于逐单元计算；不得在逐单元循环中重复读取文件与做 Schema 校验；按单元引用检查存在性时同样按作品缓存。
+      rationale: 逐单元重复加载让开销变为单元数乘以产物大小（fresh-context 审查实测 300 个单元、150 条决策时 next 慢约 100 倍），也会让同一命令内的不同单元读到不同版本的数据。
+      enforcement:
+        method: review
+        detail: 审查时确认 Work.Blockers 通过 Work.queue 读取决策队列，internal/cli 的 unitExists 按作品缓存解析结果。
+      examples:
+        good:
+          - w.queue(root) 首次调用时 decision.Load，之后复用
+        bad:
+          - 在 Work.Blockers 中对每个单元调用 decision.Load
+  MODIFIED: {}
+  REMOVED: {}

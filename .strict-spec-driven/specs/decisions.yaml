@@ -1,0 +1,92 @@
+schema: strict-spec-driven/main-spec/v1
+schema_version: 1
+artifact_type: main_spec
+schema_file: templates/strict-spec-driven/schemas/main-spec.yaml
+spec:
+  id: decisions
+  title: 决策队列（Decision Queue）
+requirements:
+  decision-add:
+    strength: MUST
+    statement: wa-cli decision add --question <text> 必须在工作区的决策队列（Decision Queue）.writing-anything/decisions.yaml 的 decisions 末尾追加一个待决事项：每个 --option <文本>（可重复）按出现顺序成为一个选项，id 依次为 a、b、c…（最多 26 个），没有 --option 时表示自由答复；--recommend <选项 id> 与 --rationale <文本> 记录 Agent 的推荐与理由；--blocking 时 blocking 为 true，否则为 false；每个 --unit <单元引用>（可重复，重复的只记录一次）成为一个关联单元；status 为 open；id 由 --id 指定，省略时为 dec-<n>，n 从已有决策数加一开始递增到不重复。decisions.yaml 不存在时创建（含 schema_version 1），已存在时只追加该项，保留其他内容与 YAML 注释。成功时退出码为 0，changedPaths 为 .writing-anything/decisions.yaml，--json 输出的 decision 字段为新决策（字段见 decisions-list）。--recommend 不是已有选项时报告 decision.unknown-option（field 为 recommendation）；--unit 无法解析时按 units-and-lifecycle 主规格的 unit-reference 报告 work.not-found 或 unit.not-found；question 为空、选项超过 26 个或 --id 不符合 id 格式时报告 artifact.schema-violation（field 为 question、options 或 id）；id 与已有决策相同时报告 artifact.duplicate-id（field 为 id）；这些情况的 next 包含 wa-cli help decision add --json；已有 decisions.yaml 不通过校验时报告其诊断（保留能复查它的命令），decisions 经由 YAML 锚点、别名或合并键得到时报告 decision.anchored-value；这些情况都不修改文件，退出码为 1。
+    scenarios:
+      add-blocking:
+        - GIVEN: 已用 wa-cli new minimal my-post --dir D 创建作品
+        - WHEN: 运行 wa-cli decision add --question 标题用哪个 --option 迁移实录 --option 踩坑复盘 --recommend b --rationale 更贴近读者 --blocking --unit my-post --dir D --json
+        - THEN: 'decisions.yaml 的 decisions 为一项：id 为 dec-1，options 为 [{id: a, text: 迁移实录}, {id: b, text: 踩坑复盘}]，recommendation 为 b，blocking 为 true，units 为 [my-post]，status 为 open；changedPaths 为 [.writing-anything/decisions.yaml]，退出码为 0'
+      add-unknown-recommendation:
+        - GIVEN: 刚初始化的工作区 D
+        - WHEN: 运行 wa-cli decision add --question q --option x --recommend c --dir D --json
+        - THEN: diagnostics 中有一条错误码为 decision.unknown-option、field 为 recommendation 的诊断，没有创建 decisions.yaml，退出码为 1
+      add-unknown-unit:
+        - GIVEN: 刚初始化的工作区 D
+        - WHEN: 运行 wa-cli decision add --question q --unit nope --dir D --json
+        - THEN: diagnostics 中有一条错误码为 work.not-found 的诊断，退出码为 1
+  decisions-list:
+    strength: MUST
+    statement: wa-cli decisions 必须只读地列出决策队列：--json 输出 blocking 与 nonBlocking 两个数组，分别含 blocking 为 true 与 false 的决策，按文件内顺序；默认只含 status 为 open 的决策，--all 时也含已决定的。每项含 id、question、options（每项含 id 与 text）、recommendation 与 rationale（没有时为 null）、blocking、units、status，以及 choice、answer、confirmation 与 decidedAt（未决定或没有时为 null）。decisions.yaml 不存在时两个数组都为空；不通过校验时报告其诊断，两个数组为空，退出码为 1；否则退出码为 0，changedPaths 为空数组。不加 --json 时先列阻塞的、再列非阻塞的待决事项，每项列出问题、选项与推荐，便于一次性询问作者。
+    scenarios:
+      list-grouped:
+        - GIVEN: 决策队列有阻塞的 dec-1（open）、非阻塞的 dec-2（open）与阻塞的 dec-3（decided）
+        - WHEN: 运行 wa-cli decisions --dir D --json
+        - THEN: blocking 只含 dec-1，nonBlocking 只含 dec-2，changedPaths 为空数组，退出码为 0
+      list-all:
+        - GIVEN: 同上
+        - WHEN: 运行 wa-cli decisions --all --dir D --json
+        - THEN: blocking 依次为 dec-1 与 dec-3，dec-3 的 status 为 decided 且 confirmation 不为 null，退出码为 0
+  decide:
+    strength: MUST
+    statement: wa-cli decide <id> --confirmation <原话摘要> 必须记录作者对决策 id 的决定并形成确认记录（Confirmation Record）：status 改为 decided，confirmation 为作者确认原话的摘要，decided_at 为确认时的 UTC 时间（RFC 3339 格式）；决策有选项时必须给出 --option <选项 id>，记为 choice；没有选项时必须给出 --answer <文本>；有选项时 --answer 可选，作为补充说明记为 answer。只修改该决策的节点，保留其他内容与 YAML 注释。成功时退出码为 0，changedPaths 为 .writing-anything/decisions.yaml，--json 输出的 decision 字段为决定后的决策。决策不存在时报告 decision.not-found（next 包含 wa-cli decisions --all 命令）；已决定时报告 decision.already-decided；--option 不是该决策的选项时报告 decision.unknown-option（field 为 choice）；缺少必需的 --option 或 --answer 时报告 decision.choice-required；--confirmation 缺失或为空时报告 artifact.schema-violation（field 为 confirmation）；目标决策或其字段经由 YAML 锚点、别名或合并键得到时报告 decision.anchored-value；这些情况都不修改文件，退出码为 1。
+    scenarios:
+      decide-option:
+        - GIVEN: 决策队列有带选项 a、b 的 open 决策 dec-1
+        - WHEN: 运行 wa-cli decide dec-1 --option b --confirmation 作者说就用踩坑复盘 --dir D --json
+        - THEN: dec-1 的 status 为 decided、choice 为 b、confirmation 为「作者说就用踩坑复盘」，decided_at 为 RFC 3339 格式的时间；decision.decidedAt 与之相同；changedPaths 为 [.writing-anything/decisions.yaml]，退出码为 0
+      decide-free-answer:
+        - GIVEN: 决策队列有没有选项的 open 决策 dec-2
+        - WHEN: 运行 wa-cli decide dec-2 --answer 控制在 3000 字 --confirmation 作者确认 3000 字 --dir D --json
+        - THEN: dec-2 的 answer 为「控制在 3000 字」，没有 choice，退出码为 0
+      decide-missing-confirmation:
+        - GIVEN: 决策队列有 open 决策 dec-1
+        - WHEN: 运行 wa-cli decide dec-1 --option a --dir D --json
+        - THEN: diagnostics 中有一条错误码为 artifact.schema-violation、field 为 confirmation 的诊断，decisions.yaml 不变，退出码为 1
+      decide-twice:
+        - GIVEN: dec-1 已决定
+        - WHEN: 运行 wa-cli decide dec-1 --option a --confirmation x --dir D --json
+        - THEN: diagnostics 中有一条错误码为 decision.already-decided 的诊断，decisions.yaml 不变，退出码为 1
+  decision-blocking:
+    strength: MUST
+    statement: status 为 open、blocking 为 true 且 units 含某单元引用的每个决策，都必须是该单元的阻塞项（Blocker）：code 为 decision.blocking，artifact 为 decisions，path 为 .writing-anything/decisions.yaml，decision 为决策 id，message 含决策的问题。决定之后、非阻塞的或未关联该单元的决策不阻塞它。decisions.yaml 存在但无法加载（解析错误、不通过 Schema 校验）时，每个未完成的单元都有一条 code 为 decision.invalid-queue、decision 为 null 的阻塞项，直到决策队列被修复。wa-cli advance 因这些阻塞项拒绝推进（见 units-and-lifecycle 主规格的 advance-stage），wa-cli next 与 wa-cli status 列出它们。
+    scenarios:
+      blocking-refuses-advance:
+        - GIVEN: 作品 my-post 的 brief.yaml 存在且含 audience 与 purpose，决策队列有关联 my-post 的阻塞决策 dec-1（open）
+        - WHEN: 运行 wa-cli advance my-post --dir D --json
+        - THEN: diagnostics 中有一条错误码为 decision.blocking、path 为 .writing-anything/decisions.yaml 的诊断，其 next 包含 wa-cli decisions 命令；work.yaml 不变，退出码为 1
+      decided-unblocks:
+        - GIVEN: 同上，之后运行 wa-cli decide dec-1 --option a --confirmation 作者同意 --dir D
+        - WHEN: 运行 wa-cli advance my-post --dir D --json
+        - THEN: my-post 的 stage 为 draft，退出码为 0
+      non-blocking-ignored:
+        - GIVEN: 作品 my-post 的 brief.yaml 存在且含 audience 与 purpose，决策队列只有关联 my-post 的非阻塞决策
+        - WHEN: 运行 wa-cli advance my-post --dir D --json
+        - THEN: 退出码为 0
+      invalid-queue:
+        - GIVEN: 作品 my-post 的 brief.yaml 存在且含 audience 与 purpose，decisions.yaml 有 YAML 语法错误
+        - WHEN: 运行 wa-cli advance my-post --dir D --json
+        - THEN: diagnostics 中有一条错误码为 decision.invalid-queue 的诊断，退出码为 1
+  decisions-validation:
+    strength: MUST
+    statement: wa-cli validate 整体校验时，decisions.yaml 存在则必须通过决策队列的 JSON Schema 校验并计入 checked，且满足：决策 id 唯一（否则 artifact.duplicate-id，field 为 decisions[i].id）；选项 id 为 a、b、c… 且不重复（否则 artifact.schema-violation）；recommendation 与 choice 是该决策的选项（否则 decision.unknown-option，field 为 decisions[i].recommendation 或 decisions[i].choice）；status 为 decided 的决策含 confirmation 与 decided_at（否则 artifact.schema-violation）；units 中的每个单元引用都能解析（否则 decision.unknown-unit，field 为 decisions[i].units[j]，next 包含 wa-cli validate --dir <dir> --json）。wa-cli validate .writing-anything/decisions.yaml 执行同样的检查。decisions.yaml 是符号链接（或不是普通文件）时，所有入口（整体校验、validate <path>、decisions、decision add、decide）都按不存在处理并报告 artifact.not-found（next 包含 wa-cli validate --dir <dir> --json），计算阻塞项时按无法加载处理（decision.invalid-queue）。
+    scenarios:
+      unknown-unit:
+        - GIVEN: 决策队列中 dec-1 的 units 为 [my-post/nope]，作品 my-post 没有单元 nope
+        - WHEN: 运行 wa-cli validate --dir D --json
+        - THEN: diagnostics 中有一条错误码为 decision.unknown-unit、path 为 .writing-anything/decisions.yaml、field 为 decisions[0].units[0] 的诊断，退出码为 1
+      decided-without-confirmation:
+        - GIVEN: 决策队列中 dec-1 的 status 为 decided，没有 confirmation
+        - WHEN: 运行 wa-cli validate --dir D --json
+        - THEN: diagnostics 中有一条错误码为 artifact.schema-violation 的诊断，退出码为 1
+      symlinked-queue:
+        - GIVEN: .writing-anything/decisions.yaml 是指向项目目录之外的符号链接
+        - WHEN: 运行 wa-cli decisions --dir D --json
+        - THEN: diagnostics 中有一条错误码为 artifact.not-found、path 为 .writing-anything/decisions.yaml 的诊断，其 next 包含 wa-cli validate 命令，退出码为 1

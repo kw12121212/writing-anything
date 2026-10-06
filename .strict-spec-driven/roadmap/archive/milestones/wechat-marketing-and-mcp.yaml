@@ -1,0 +1,43 @@
+schema: strict-spec-driven/roadmap-milestone/v2
+schema_version: 2
+artifact_type: roadmap_milestone
+schema_file: ../schemas/roadmap-milestone.yaml
+milestone:
+  wechat-marketing-and-mcp:
+    title: 营销/公众号（Marketing & WeChat）
+order: 300
+goal: Agent 能用 wa-cli 完成一篇公众号营销文章，包括标题候选（Headline Candidates）、摘要、开头钩子（Hook）、行动号召（CTA）、广告法极限词（Superlative Claims）检查、内联样式（Inline Style）HTML 导出和 AI 生成内容标识（AI-generated Content Label）；作者可以在本地阅读页中边读边提意见，意见即时进入作者反馈（Feedback）。
+scope:
+  in:
+    - wechat-marketing 文体：标题候选、摘要、开头钩子、CTA 作为结构化产物
+    - 公众号内联样式 HTML 导出与配图占位
+    - 按出处生成 AI 生成内容标识
+    - 营销写作法：AIDA、PAS 与 4U 标题法
+    - 本地即时阅读与反馈页（wa-cli preview --serve）
+    - 广告法极限词等合规规则，可由规范包扩展
+  out:
+    - 直接调用公众号 API 发布
+    - 图片生成
+done_criteria:
+  - 公众号文章端到端测试通过，导出的 HTML 只含内联样式
+  - 命中极限词时 lint 以非零退出，并标明规则来源
+  - 段落出处包含 agent 时，导出结果带 AI 参与说明；不包含时不生成
+  - 在阅读页选中文字提交的意见，立即出现在 wa-cli feedback list 与 feedback watch 的输出中
+  - 选用 AIDA 或 PAS 写作法时，大纲缺少对应段落会被 validate 报告；标题候选按 4U 标题法的评分项审稿
+  - wa-cli preview 不加 --serve 时生成可离线阅读的静态 HTML
+intake_questions:
+  - id: compliance-source
+    question: 广告法词表的来源与维护方式？
+    context: 内置词表需要持续维护，不同行业还有额外限制。
+    impact: 影响合规规则的数据格式与责任边界。
+    recommendation: 内置基础极限词表并标注来源；行业词表通过规范包扩展；所有输出标注为辅助检查。
+planned_changes: {}
+dependencies:
+  - tech-blog-workflow
+risks:
+  - 合规词表只是辅助检查，不构成法律意见，需在输出中说明
+  - 公众号编辑器对 HTML 的过滤规则可能变化
+  - 本地阅读页是项目中唯一的网络监听，必须只监听回环地址并校验随机令牌，测试需要覆盖拒绝无令牌请求
+status: complete
+notes: []
+details: 本里程碑只包含营销文体与阅读反馈相关工作；MCP 已拆分到 mcp-integration 里程碑。阅读反馈页从规范包里程碑提前到这里，是为了让作者尽早获得即时反馈的体验。里程碑 id 创建后保持稳定，因此仍为 wechat-marketing-and-mcp。

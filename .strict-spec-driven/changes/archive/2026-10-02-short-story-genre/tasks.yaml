@@ -1,0 +1,53 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: short-story-genre
+sections:
+  Implementation:
+    genre-data:
+      text: 在 internal/catalog/builtin/genres/ 新增 short-story.yaml（单元类型 story/scene、阶段 brief→outline→draft→review、length 规则 1000–20000 字、rubric conflict/pacing/motivation、context_budget 16000，不声明论断类规则与 default_method），并更新 internal/catalog 的内置文体测试。
+      status: complete
+    brief-schema-fields:
+      text: 扩展 internal/schema 的 brief.schema.json（premise {text, sources, decision}、theme、pov {person, character}）与 genre.schema.json（brief_required 枚举增加 premise、theme、pov），补充 internal/schema/testdata 的合法与非法夹具。
+      status: complete
+    brief-fiction-fields:
+      text: 在 internal/brief 实现前提、主题与视角：brief set 的 --premise、--premise-sources、--premise-decision、--theme、--pov-person、--pov-character（空值删除），brief show 输出 premise/theme/pov，并把无 sources 且无决策的前提列为 brief.unsourced-premise、只关联未决定决策的前提列为 brief.unconfirmed-premise；brief_required 对新字段的 missing-field 提问使用内置中文问题文案。
+      status: complete
+    premise-gate-wiring:
+      text: 把 brief.unsourced-premise 与 brief.unconfirmed-premise 接入 internal/work 的写作简报阻塞项与 advance/next 的下一步命令（brief show、help brief set、decisions），保持与核心观点阻塞项相同的顺序与 path 规则。
+      status: complete
+    outline-contract-fields:
+      text: 扩展 internal/schema 的 outline.schema.json（节新增可选 characters、beats、reveal）并在 internal/outline 实现：outline set 的 --characters、--beats、--reveal（空值删除），outline show 输出契约字段，validate 校验 beats 引用的 id 是同一作品根单元大纲的节 id（否则 outline.unknown-beat，field 为 sections[i].beats[j]），根单元大纲缺失或非法时该引用检查按与 covers 一致的降级方式处理。
+      status: complete
+    cli-and-glossary:
+      text: 在 internal/cli 接线 brief set/show 与 outline set 的新参数、help 文本与 --json 输出字段；更新 docs/GLOSSARY.md 的场景契约词条，注明短篇轻量版为出场人物、承担的节拍与揭示边界（长篇再扩展因果链、状态变化与伏笔），检查相关技能说明（wa-brief、wa-outline）是否需要同步字段提示。
+      status: complete
+    short-story-e2e:
+      text: 新增短篇小说端到端测试：init --genre short-story、new、source add、brief set（前提与关键转折关联素材、视角与目标字数）、advance、根单元大纲节拍（covers 关键转折）、unit add 场景、场景大纲契约（characters/beats/reveal）、advance、draft write、review record、accept、advance 与 export markdown；覆盖前提或关键转折未关联素材/确认时 advance 被阻塞的分支。
+      status: complete
+  Testing:
+    unit-tests:
+      text: 为 internal/catalog（short-story 内置文体解析与校验）、internal/schema（brief/genre/outline 新字段的合法与非法夹具）、internal/brief（前提/主题/视角的 set、show、提问与阻塞码）、internal/outline（契约字段与 unknown-beat 校验）补充单元测试，测试只验证规格描述的可观察行为。
+      status: complete
+      command: go test ./internal/...
+    project-regression:
+      text: 运行完整项目回归（含 80% 覆盖率阈值，范围 internal/** 不含 internal/tools/**），作为审稿与归档前的项目级回归证据。
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    ready-check:
+      text: 运行 strict-spec-cli ready short-story-genre，确认规划产物齐备、测试关卡设置且无未解决的阻塞问题。
+      status: complete
+      command: strict-spec-cli ready short-story-genre
+    verify-check:
+      text: 实现完成后运行 strict-spec-cli verify short-story-genre，确认产物结构、任务完成状态与无未决问题；对照 proposal 的 unchanged_behavior 复核 tech-blog、wechat-marketing、minimal 文体行为未变。
+      status: complete
+      command: strict-spec-cli verify short-story-genre
+    archive-readiness:
+      text: 归档前检查 delta 规格与主规格的合并结果：brief-artifact/brief-set/brief-show/brief-gate、outline-artifact/outline-set/outline-show 与 genres-and-packs 的新增/修改要求能正确合并进主规格，新增错误码与术语在 docs/GLOSSARY.md 中一致。
+      status: complete
+      command: strict-spec-cli verify short-story-genre
+testing_gates:
+  validation_task: project-regression
+  unit_test_task: unit-tests

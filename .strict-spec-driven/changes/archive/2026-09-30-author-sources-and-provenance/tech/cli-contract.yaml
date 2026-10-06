@@ -1,0 +1,21 @@
+schema: strict-spec-driven/delta-tech/v1
+schema_version: 1
+artifact_type: delta_tech
+schema_file: templates/strict-spec-driven/schemas/delta-tech.yaml
+target_standard: cli-contract
+operations:
+  ADDED: {}
+  MODIFIED:
+    next-rechecks-problem:
+      strength: SHOULD
+      statement: 诊断 next 中给出的复查命令必须能重新检出该问题：涉及多个产物的问题（引用、合并、内置产物与工作区产物的冲突）给出整体校验 wa-cli validate --dir <dir> --json，不得给出只校验单个文件、会报告 valid 为 true 的命令；命令按自身改写 next（如指向 wa-cli help <command>）时，只改写由本次参数引起的问题，已有产物中存在的问题保留默认的复查命令。
+      rationale: Agent 按 next 复查；复查命令检不出问题时，Agent 会误以为问题已经解决；把已有产物的问题也改成查看用法，Agent 会反复调整参数而问题始终存在。
+      enforcement:
+        method: test
+        detail: internal/cli 的测试对跨产物错误码断言 next 为整体校验，并运行该命令断言仍报告同一诊断；TestClaimAdd 断言追加论断时已有论断的 claim.unknown-source 保留整体校验。
+      examples:
+        good:
+          - rule.type-conflict 的 next 为 wa-cli validate --dir . --json
+        bad:
+          - rule.type-conflict 的 next 为 wa-cli validate .writing-anything/packs/house.yaml --dir . --json
+  REMOVED: {}

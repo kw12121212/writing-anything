@@ -1,0 +1,49 @@
+schema: strict-spec-driven/question-list/v1
+schema_version: 1
+artifact_type: question_list
+schema_file: templates/strict-spec-driven/schemas/question-list.yaml
+change: scene-close-out
+open: []
+resolved:
+  - id: requirement-problem
+    question: What is concretely going wrong today, and for whom?
+    context: 'Why this is asked: the change is planned against a need, and the need lives only with the requester. A "problem" here means what someone does or suffers today — not a feature that is missing. If the answer names a button, a field, a page, or an endpoint, it is a solution, and the underlying problem is still unstated. What a sufficient answer contains: who is affected, what they do today instead, and how often. Worked example: "every Monday one person spends forty minutes copying order rows into a spreadsheet to send the weekly report". What it changes: this becomes the proposal''s why, and it decides whether the change is worth making.'
+    answer: 长篇的连续性不依赖模型记忆（novel 里程碑 goal）：任何单个会话装不下全书，场景写完后状态变化、新增设定、知情变化与伏笔回收若不显式同步进磁盘上的故事圣经（Story Bible）台账，后续场景的 state at、knowledge at 与 context 就基于过期记忆组装，偏差逐场景放大；且抽取由 Agent 完成，漏抽与错抽不会被自动发现（novel 里程碑 risks 第 2 条），受影响的是作者与接入 Agent 的长篇连续性
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-interpretation
+    question: Which reading of the request is intended, where more than one is possible?
+    context: 'Why this is asked: a short request usually admits several readings, and building the wrong one is indistinguishable from building nothing. What a sufficient answer contains: the reading that is meant, stated plainly enough to rule the others out — or a statement that only one reading exists and what it is. Worked example: "export means the version sent to the manager, not the one I read myself". What it changes: this fixes the scope boundary before any code is written, and settles disputes about what was asked for.'
+    answer: 按计划变更 details 的字面与里程碑完成标准执行：Agent 通过 wa-cli scene close-out 一次性提交抽取结果（状态变化、新增设定、知情变化、伏笔埋设与回收、产生的事件）；wa-cli 对照场景契约检查契约要求的内容是否都已提交；依据人名与别名词典扫描并提示补录或豁免；收口未完成或提议尚未经作者处理时场景不能验收（done criteria：契约要求的状态变化或伏笔未在收口中提交时 wa-cli accept 被拒绝）
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-outcome
+    question: What observable difference proves the problem is solved?
+    context: 'Why this is asked: without a success condition, nobody can tell afterwards whether the change worked. "Observable" means someone outside the system can check it without reading the code. What a sufficient answer contains: what a person will see, or no longer have to do, once this is done. Worked example: "the report is in the manager''s inbox on Monday morning without anyone assembling it". What it changes: this becomes the delta spec''s scenarios and the acceptance evidence at review time.'
+    answer: novel 里程碑 done_criteria 的可观察断言：契约要求的状态变化或伏笔未在收口中提交时 wa-cli accept 被拒绝（所有关卡强度）；收口记录的提议全部经作者确认处理后 accept 通过；正文修改后收口过期（closeout.stale）；收口提交后 state at 与 knowledge at 反映新条目；既有文体（minimal、tech-blog、wechat-marketing）与短篇轻量契约场景的验收行为不变
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-trigger
+    question: Why now — what forced this?
+    context: 'Why this is asked: work that nothing forced is the work most often thrown away later. This question catches a request that sounds reasonable but has no real driver behind it. What a sufficient answer contains: the concrete event, deadline, incident, or cost that made this surface now, or an honest statement that nothing did. Worked example: "the report was missed last month and it was raised with the team". What it changes: a change with no trigger is a candidate for deferral, and the answer is weighed at review before archive.'
+    answer: roadmap-recommend 脚本推荐：计划变更 scene-close-out 依赖的 state-change-proposals、knowledge-state 与 foreshadowing-ledger 均已归档（状态与知情台账、伏笔台账、确认记录与重放模式就位），它是 novel 里程碑当前唯一可推荐的计划变更（54 个计划变更中 1 个合格，13 个因依赖未完成被跳过，其中 layered-summaries-and-budget 直接依赖本变更）
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-non-goals
+    question: What must explicitly not change?
+    context: 'Why this is asked: the requester knows which nearby behavior other people depend on, and the agent does not. A "non-goal" is something the change must leave alone even though it sits close to the work. What a sufficient answer contains: the behavior, setting, or output that must survive untouched, and who relies on it. Worked example: "do not change the saved filters — several people rely on their own". What it changes: these become the proposal''s unchanged_behavior items, which review checks the finished result against.'
+    answer: 不能改变的行为（proposal 的 unchanged_behavior）：场景大纲未声明契约要求字段（state_changes、plants、recovers、events）且无 closeout.yaml 时，accept、advance、next、validate、context 的输出、退出码与错误码不变；state、knowledge、threads、canon 命令组语义不变；scene contract 参数与既有检查不变；收口阻塞项不进入 next 的 blockers；分层摘要与卷末检查点（layered-summaries-and-budget）、连续性审查（novel-continuity）、向量检索均不在本变更
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: suspected-name-scan-scope
+    question: 写后收口的疑似专有名词扫描，候选范围是否需要超出场景大纲声明（characters、pov、location）做正文级启发式（例如引号包裹文本、重复出现的高频词）？
+    context: 计划变更 details 要求「依据人名与别名词典扫描正文，列出设定集里没有的疑似专有名词」，但没有定义正文上产生候选的算法；中文正文没有大写与分词边界，任何启发式都同时引入误报与漏报，且 wa-cli 不调用大语言模型（LLM）无法做语义判定。本变更采用的基线：候选只取场景大纲各节声明的 characters 取值、pov 与 location 文本，与设定集（Canon）条目 name 与别名完全相等匹配，未命中者以 warning 提示补录或豁免——确定、零误报，覆盖「出场人物未建卡」这一最高频漏抽形态；契约未声明的新专有名词不会被提示。影响范围：proposal scope（本变更 out 条目已声明正文级启发式不在内）、spec delta（closeout 主规格 closeout-submit 的扫描语句与场景）、implementation files（internal/closeout 的扫描函数是否需要正文分词或模式提取）、tests（误报与漏报分支的测试夹具）、dependencies（若引入启发式词表需要规范包或文体配置承载阈值）。推荐：先按基线交付，收集作者在卷末抽查（属 layered-summaries-and-budget 计划变更）中的漏报反馈，再决定是否以文体配置的确定规则（如书名号与直角引号包裹的短文本）扩展候选；建议在 authors 反馈前不引入概率性启发式
+    answer: 先按基线交付：候选只取场景大纲各节声明的 characters、pov 与 location，与设定集条目 name 与别名完全相等匹配，未命中者以 warning 提示补录或豁免；正文级启发式（引号包裹文本、重复词统计等）不在本变更。理由：确定、零误报、不调用模型，覆盖「出场人物未建卡」最高频漏抽形态；契约未声明的新专名不会提示，漏报由卷末作者抽查（属 layered-summaries-and-budget 计划变更）兜底，待作者反馈漏报情况后再决定是否以文体配置的确定规则扩展候选。此答案为代理假设，作者可在 review 或 ship 阶段推翻后扩展扫描范围
+    status: resolved
+    kind: requirement
+    answered_by: assumption

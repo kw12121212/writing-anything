@@ -1,0 +1,19 @@
+schema: strict-spec-driven/lesson/v1
+schema_version: 1
+artifact_type: lesson
+schema_file: templates/strict-spec-driven/schemas/lesson.yaml
+lesson:
+  id: lesson-792658
+  title: 查看命令依赖只有写入命令保证的不变量，合法的手写产物会让它崩溃
+category: coding
+status: active
+created_at: '2026-10-01T17:09:55.697Z'
+updated_at: '2026-10-01T17:09:55.697Z'
+context: metrics record 保证每个会话给某指标打分时覆盖全部段落，metrics show 与 calibrate 据此假定会话数足够时每个段落都有分数。
+observation: Schema 与领域校验都不检查覆盖；一份 validate 判为合法、只给第 1 段打分的 metrics.yaml 让 show 与 calibrate 解引用空指针 panic。测试只用 wa-cli 写出的产物，发现不了。
+takeaway: 汇总与查看函数只依赖 Schema 与领域校验保证的性质；写入路径额外保证的不变量，要么加进领域校验，要么在读取路径上把不满足的情况按缺失处理，并用一份合法但手写的产物测试查看命令。
+applies_when: 为一种产物编写查看、汇总或统计命令，而产物的某些性质（覆盖、计数一致、引用存在）只由写入命令保证、Schema 与 validate 不检查时
+occurrences:
+  - origin: ai-scored-metrics
+    date: '2026-10-01'
+    evidence: internal/metrics/metrics.go Summarize 对没有分数的片段按 pending 处理；TestSummarizeHandWrittenFile 与 TestMetricsWritesNothingOnFailure；delta tech workspace-artifacts/read-path-invariants

@@ -1,0 +1,5 @@
+schema_version: 1
+packs:
+  - id: brand
+    source: {git: https://example.com/brand.git}
+    sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa

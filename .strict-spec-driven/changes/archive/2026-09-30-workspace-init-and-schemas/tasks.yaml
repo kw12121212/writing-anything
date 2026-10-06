@@ -1,0 +1,77 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: workspace-init-and-schemas
+sections:
+  Implementation:
+    add-dependencies:
+      text: 用 go get 引入 go.yaml.in/yaml/v3 与 github.com/santhosh-tekuri/jsonschema/v6 的最新稳定版，更新 go.mod 与 go.sum；确认 go build ./... 仍产出单文件 wa-cli 二进制。
+      status: complete
+    schema-package:
+      text: 新建 internal/schema：schemas/config.schema.json（draft 2020-12，字段见 design config-shape，禁止未知字段），用 go:embed 打包；实现按相对路径登记的产物类型表，以及统一的 Validate 入口：YAML 解析为节点树并转换为 JSON 兼容值，返回带点分字段路径（数组写作 [i]）与行号的问题列表，区分 parse-error 与 schema-violation。
+      status: complete
+    workspace-package:
+      text: 新建 internal/workspace：Init 只创建缺失的 .writing-anything/、config.yaml、sources/、works/ 并返回新建路径，写入前先用 internal/schema 校验配置，不合法时不写任何文件；配置已存在时不重写，并报告与参数不一致的字段；Load 读取并校验配置；Check 检查必需目录；Summary 统计 sources/ 与 works/ 的直接条目数；SetConfig 在 YAML 节点树上修改单个键（保留其他节点与注释），按 design config-set-semantics 校验后用临时文件加重命名写入；文件系统错误作为 write-failed 问题返回。
+      status: complete
+    cli-framework:
+      text: 扩展 internal/cli 命令框架：注册表支持两词命令名（命令组 + 子命令），分发时匹配最长命令名；help 增加可选位置参数 subcommand，并按完整命令名查找；argSpec 增加 required（用法中写作 <name>，help --json 输出 required），缺少必需参数时报 usage.missing-argument；只给出命令组名或子命令不存在时报 usage.unknown-command 并列出可用子命令；help version extra 这类单词命令加多余参数的情况仍报 usage.unexpected-argument。
+      status: complete
+    cli-init-command:
+      text: 在 internal/cli 注册表加入 init：参数 --dir、--language、--genre、--gate-level，输出键 workspace；按 design error-codes 把问题转换为诊断（artifact.schema-violation、workspace.config-kept、workspace.write-failed），changedPaths 列出新建路径（相对项目目录，以 / 分隔）；非 --json 模式打印人读摘要。
+      status: complete
+    cli-validate-command:
+      text: 在注册表加入 validate：可选位置参数 path 与参数 --dir，输出键 checked（已校验的产物路径数组）；未指定 path 时校验整个工作区（config.yaml 与 sources/、works/），指定时只校验该产物；覆盖 workspace.not-found、workspace.missing-directory、artifact.not-found、artifact.unknown-kind、artifact.parse-error、artifact.schema-violation，每条诊断带 path、field（适用时）与可执行的 next。
+      status: complete
+    cli-status-command:
+      text: 在注册表加入 status：参数 --dir，输出键 workspace、config、sources、works（见 design status-summary）；未找到工作区时报 workspace.not-found（next 含 wa-cli init --dir <dir>）并以退出码 1 退出；工作区校验有 error 时仍输出摘要，valid 为 false，退出码为 1。
+      status: complete
+    cli-config-set-command:
+      text: 在注册表加入 config set：必需位置参数 key 与 value，参数 --dir，输出键 config；覆盖 config.unknown-key、artifact.schema-violation（不写文件）、artifact.parse-error、workspace.not-found，取值未变时 changedPaths 为空；config.yaml 顶层字段的 schema-violation 诊断在 validate、status、init 中的 next 包含 wa-cli config set <field> <value> --dir <dir>。
+      status: complete
+    glossary:
+      text: 在 docs/GLOSSARY.md 加入「产物（Artifact）」：工作区中由 wa-cli 管理、受 JSON Schema 约束的结构化文件与正文文件；检查新增的 CLI 输出、诊断与 help 文本在首次出现专有名词时遵循术语表写法。
+      status: complete
+  Testing:
+    schema-tests:
+      text: internal/schema 单元测试：testdata/ 下放合法配置与各类损坏配置（YAML 语法错误、未知字段、gate_level 非法、packs 重复、类型错误、锚点与合并键），断言问题类型、字段路径与行号；遍历类型表，断言每个已登记类型的 Schema 都能编译，且各有至少一个合法和一个不合法的夹具。
+      status: complete
+      command: go test ./internal/schema/...
+    workspace-tests:
+      text: internal/workspace 单元测试：在 t.TempDir() 中覆盖首次 init、重复 init 不覆盖作者修改过的 config.yaml、只补齐被删除的 works/、参数与已有配置不一致、配置不合法时不写任何文件、Summary 计数与缺目录检查；SetConfig 保留注释与其他字段、packs 逗号拆分与清空、删除 default_genre、非法值不改文件、取值未变不写文件、修复已损坏的字段。
+      status: complete
+      command: go test ./internal/workspace/...
+    cli-tests:
+      text: internal/cli 测试：按 workspace 与 cli 规格场景逐条断言 init / validate / status / config set 的标准输出、--json 信封、错误码字面量、path/field/next 与退出码；覆盖两词命令分发、help config set、config set --help、只给出命令组名、usage.missing-argument，以及 help version extra 仍报 usage.unexpected-argument；断言 path 与 changedPaths 相对项目目录、以 / 分隔，且不含临时目录前缀（workspace-artifacts/workspace-relative-paths）；TestRegistryConsistency 覆盖新命令的 outputKeys、flags 与 args.required；version/help 原有断言不变。
+      status: complete
+      command: go test ./internal/cli/...
+    binary-tests:
+      text: cmd/wa-cli 的 TestBinary 增加用例：构建出的二进制位于 t.TempDir()（仓库之外），在另一个临时目录中运行 init 与 validate --json，断言 valid 为 true、退出码为 0，覆盖 workspace 规格 self-contained-schemas。
+      status: complete
+      command: go test ./cmd/wa-cli/...
+    validation:
+      text: 静态检查与构建：go vet 与 go build 通过。
+      status: complete
+      command: go vet ./... && go build ./...
+    regression:
+      text: 运行完整回归命令，覆盖率不低于 80%（internal/**，不含 internal/tools/**）。
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    verify-scope:
+      text: 核对实现只覆盖 proposal 的 in scope：未实现文体与规范包加载、config 的其他子命令、向上查找工作区、单元阶段输出；仓库根目录没有 .writing-anything/；TestNoDevToolDependency 仍通过；新增错误码没有与已有错误码重名。
+      status: complete
+    verify-deltas:
+      text: 核对 delta spec（workspace、cli）与实际行为一致，delta tech（workspace-artifacts）规则的 test 类检查都有对应测试；按实际实现调整 delta。
+      status: complete
+    ready-check:
+      text: 运行 ready 检查变更可交接。
+      status: complete
+      command: strict-spec-cli ready workspace-init-and-schemas
+    verify-change:
+      text: 运行 verify 检查任务、delta spec 与 delta tech 的一致性，确认归档时能新建 workspace 主规格与 workspace-artifacts 技术标准并更新两个索引。
+      status: complete
+      command: strict-spec-cli verify workspace-init-and-schemas
+testing_gates:
+  validation_task: validation
+  unit_test_task: regression

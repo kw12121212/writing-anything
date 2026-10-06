@@ -1,0 +1,31 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: continuity-review
+approach:
+  - 新包 internal/continuity 以只读方式汇集确定性检查：称谓解析复用 canon 的 name/aliases 完全匹配、状态终态复用 internal/state 的先序重放、伏笔超期复用 internal/threads 的 overdue、悬空引用与因果问题复用各包校验函数并按场景过滤；豁免经决策队列的既有幂等模式（问题文本固定格式），accept 经 review.GateInput.Continuity 接线（与 closeout、volume 同一模式）
+decisions:
+  deterministic-scope:
+    decision: 检查集限定为结构上可判定的冲突：未建卡出场人物、保留词终态人物出场（死亡、已死亡、已亡故、失踪、已退场，精确匹配最新已确认状态的完整描述）、同场景多名解析同卡、按场景过滤的悬空引用与伏笔超期；知情与数值事实只查结构性失效引用，语义判定明确排除
+    rationale: 计划变更 details 列出的检查里，只有这些不依赖对正文的理解；保留词精确匹配意味着作者不用规范词时规则静默（交给语义审查），不会误报；done criteria 的「状态快照、知情表、伏笔台账或因果链冲突」由 dead-acting、dangling-reference、thread-anomaly 与既有因果检查分别承载
+  scene-scope-filter:
+    decision: 悬空引用与因果问题按「与场景相关」过滤后归入 findings：state、knowledge 取 scene 绑定该场景的条目，threads 取 planted_in 或 recovered_in 指向该场景的条目与该场景大纲 plants、recovers 引用，closeout 取该场景的收口记录问题，因果问题取 path 为该场景 outline.yaml 的既有诊断；给 work 时输出全部场景的 findings
+    rationale: continuity 的输出单位是场景（阻塞挂在场景验收上）；全书扫描等于逐场景过滤的并集，同一实现服务两种调用；复用各包校验避免第二套规则漂移（与 lint 的 shared-term-matcher 同一理由）
+  waiver-via-decisions:
+    decision: accept 因 continuity 阻塞时按（场景， 错误码）幂等地向决策队列生成阻塞决策：问题文本固定为「是否豁免场景 <场景> 的连续性检查 <错误码>？」，选项 允许/保持不变，推荐保持不变；作者允许后该错误码在该场景不再阻塞；决策已 open 或作者已选择保持不变时不重复追加；finding 消失后不再生成（既有决策留在队列中由作者自行处理）
+    rationale: 「修改正文或由作者决策豁免」是计划变更 details 的原文；决策队列是仓库既定的作者确认通道（canon 钦定、伏笔放弃同源，refusal-side-decision-gating 的 MUST 模式），幂等防止 Agent 重试灌满队列；豁免粒度取（场景， 错误码）而非单条 finding，避免同一错误码的多条发现生成多个决策
+  no-new-artifact:
+    decision: continuity 不写入检查结果产物：每次运行为只读扫描，--json 输出 findings 与 changedPaths（仅为幂等生成的决策队列路径）；被豁免的 finding 照常列出并标注 waived
+    rationale: 检查结果可从台账与大纲随时重算，落盘会制造需要同步与过期管理的第二事实来源；豁免的唯一记录是决策队列，天然可追溯
+alternatives:
+  - option: 检查结果写入单元级 continuity.yaml 产物
+    reason: 可重算的结果落盘引入 stale 管理与 validate 负担；豁免已有决策队列作为唯一记录，产物没有承载新信息
+  - option: 豁免经 lint-ignore 式正文内标记
+    reason: 正文内标记受 author-only-gate-markers 约束须区分作者与 Agent 写入，且豁免对象是（场景， 错误码）而非段落；决策队列的确认记录模式更直接且已验证
+  - option: 把全部检查并入 wa-cli validate
+    reason: validate 是结构合法性检查，continuity 是语义边界的结构投影；混入会让 validate 的 checked 与诊断随文体膨胀，且验收阻塞需要按场景汇总而非按产物
+risks:
+  - 保留词终态匹配只覆盖规范写法，作者写「殒命」「离世」不会触发 dead-acting：规则文档与 help 中列明保留词，语义写法由 review-task-packets 的语义审查兜底
+  - 同名多卡（canon 允许 name 重复）使称谓解析多义：解析到多个条目时该称谓不参与 unknown-character 与 dead-acting 判定（与 recall 的多义不解析一致），不产生误报
+  - 决策生成在 accept 拒绝路径上写决策队列（changedPaths 含队列路径）：与 canon 钦定同模式，测试断言幂等与 changedPaths 如实列出

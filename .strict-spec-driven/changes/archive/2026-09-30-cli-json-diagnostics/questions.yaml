@@ -1,0 +1,49 @@
+schema: strict-spec-driven/question-list/v1
+schema_version: 1
+artifact_type: question_list
+schema_file: templates/strict-spec-driven/schemas/question-list.yaml
+change: cli-json-diagnostics
+open: []
+resolved:
+  - id: version-json-envelope
+    question: 'version --json 改用统一信封后，是否允许改变 project-scaffold 定义的 {"version": "<version>"} 输出形状？'
+    context: 影响范围：spec delta（cli 规格 version-command 的 version-json 场景）、internal/cli 与 cmd/wa-cli 测试。选项：A 输出信封并把 version 并列放在顶层；B 保持最小对象，不纳入信封。推荐 A：满足所有命令共用信封的契约，version 字段的位置不变，原来的解析方式依然可用。
+    answer: 采用 A。project-scaffold 的已解决问题 version-json-shape 已约定：cli-json-diagnostics 引入统一信封时同步修改 cli 规格与测试。
+    status: resolved
+    kind: technical
+    answered_by: roadmap
+  - id: requirement-problem
+    question: What is concretely going wrong today, and for whom?
+    context: 'Why this is asked: the change is planned against a need, and the need lives only with the requester. A "problem" here means what someone does or suffers today — not a feature that is missing. If the answer names a button, a field, a page, or an endpoint, it is a solution, and the underlying problem is still unstated. What a sufficient answer contains: who is affected, what they do today instead, and how often. Worked example: "every Monday one person spends forty minutes copying order rows into a spreadsheet to send the weekly report". What it changes: this becomes the proposal''s why, and it decides whether the change is worth making.'
+    answer: 据里程碑 kernel-foundation 与规划变更 cli-json-diagnostics：wa-cli 目前只有手写分发的 version 命令，没有命令注册表、help 或统一的 --json 输出与诊断契约。受影响的是接入 wa-cli 的 Agent（无法稳定解析输出、无法查询参数与错误码），以及实现后续所有内核命令的开发者（每个命令都得自己发明输出形状）。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-outcome
+    question: What observable difference proves the problem is solved?
+    context: 'Why this is asked: without a success condition, nobody can tell afterwards whether the change worked. "Observable" means someone outside the system can check it without reading the code. What a sufficient answer contains: what a person will see, or no longer have to do, once this is done. Worked example: "the report is in the manager''s inbox on Monday morning without anyone assembling it". What it changes: this becomes the delta spec''s scenarios and the acceptance evidence at review time.'
+    answer: 据规划变更 details 与里程碑 done_criteria：wa-cli help --json 列出每条命令的参数、输出键和退出码；每条命令加 --json 时输出含 valid、diagnostics、changedPaths 的信封；诊断带稳定错误码、产物路径、字段路径和下一步命令；退出码 0 成功、1 校验失败、2 用法错误。写在 delta spec 的场景中。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-trigger
+    question: Why now — what forced this?
+    context: 'Why this is asked: work that nothing forced is the work most often thrown away later. This question catches a request that sounds reasonable but has no real driver behind it. What a sufficient answer contains: the concrete event, deadline, incident, or cost that made this surface now, or an honest statement that nothing did. Worked example: "the report was missed last month and it was raised with the team". What it changes: a change with no trigger is a candidate for deferral, and the answer is weighed at review before archive.'
+    answer: 据路线图：cli-json-diagnostics 只依赖已归档的 project-scaffold，而 workspace-init-and-schemas 等后续内核规划变更依赖它；roadmap-recommend 推荐它为下一项。project-scaffold 的 version-json-shape 问题也明确把统一信封留给本变更。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-non-goals
+    question: What must explicitly not change?
+    context: 'Why this is asked: the requester knows which nearby behavior other people depend on, and the agent does not. A "non-goal" is something the change must leave alone even though it sits close to the work. What a sufficient answer contains: the behavior, setting, or output that must survive untouched, and who relies on it. Worked example: "do not change the saved filters — several people rely on their own". What it changes: these become the proposal''s unchanged_behavior items, which review checks the finished result against.'
+    answer: 据规划变更 details 与里程碑 scope.out：不实现 init/validate/status 等业务命令，不实现 MCP 服务或 Skill（只提供注册表作为依据），wa-cli 不调用 LLM；version 文本输出、文本模式下用法错误写 stderr 并以退出码 2 退出、cmd/wa-cli 薄入口与覆盖率关卡保持不变。已写入 proposal 的 out 与 unchanged。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-interpretation
+    question: Which reading of the request is intended, where more than one is possible?
+    context: 'Why this is asked: a short request usually admits several readings, and building the wrong one is indistinguishable from building nothing. What a sufficient answer contains: the reading that is meant, stated plainly enough to rule the others out — or a statement that only one reading exists and what it is. Worked example: "export means the version sent to the manager, not the one I read myself". What it changes: this fixes the scope boundary before any code is written, and settles disputes about what was asked for.'
+    answer: 据规划变更 details：只有一种读法——建立命令框架（子命令注册表、参数解析、help 与 help --json）以及所有命令共用的 --json 输出信封与诊断契约，并让现有 version 命令遵循这套契约；不包含新的业务命令。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap

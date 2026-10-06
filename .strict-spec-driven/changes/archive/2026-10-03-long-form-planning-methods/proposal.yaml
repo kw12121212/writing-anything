@@ -1,0 +1,25 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: long-form-planning-methods
+  status: proposed
+summary:
+  what:
+    - 内置长篇规划写作法模板并落地规划工作流：新增内置规划类写作法 snowflake（雪花写作法十步：一句话概括、一段话概括、人物概要、一页纲要、人物详述、四页纲要、人物宝典、场景列表、场景详述、开始写作，其中人物概要、人物详述、人物宝典声明 product 为 characters，场景列表为 scenes，场景详述为 scene-contracts），新增内置结构类写作法 golden-three（黄金三章：钩子、主角亮相、核心冲突与金手指）与 volume-structure（卷结构：目标、高潮、断章），节拍都声明 position 与 tension。新增规划（Plan）产物 plan.yaml 与 wa-cli plan show/step/confirm 命令组：按写作法 steps 顺序分步产出，每步记录文本、素材（--source，须已登记）与产物链接（--link）；plan confirm 必须给出 --confirmed-by-author 与 --confirmation 才能确认当前步，上一步未经确认时不能写或确认下一步；characters 步骤的链接须是设定集中的人物条目，scenes 步骤的链接须是单元树中的场景单元，scene-contracts 步骤的链接须是场景单元的大纲节且声明了场景契约字段，product 步骤确认时须至少有一个链接。novel 文体的 default_method 设为 snowflake。
+    - 内置长篇规划写作法模板并落地规划工作流：新增内置规划类写作法 snowflake（雪花写作法十步：一句话概括、一段话概括、人物概要、一页纲要、人物详述、四页纲要、人物宝典、场景列表、场景详述、开始写作，其中人物概要、人物详述、人物宝典声明 product 为 characters，场景列表为 scenes，场景详述为 scene-contracts），新增内置结构类写作法 golden-three（黄金三章：钩子、主角亮相、核心冲突与金手指）与 volume-structure（卷结构：目标、高潮、断章），节拍都声明 position 与 tension。新增规划（Plan）产物 plan.yaml 与 wa-cli plan show/step/confirm 命令组：按写作法 steps 顺序分步产出，每步记录文本、素材（--source，须已登记）与产物链接（--link）；plan confirm 必须给出 --confirmed-by-author 与 --confirmation 才能确认当前步，上一步未经确认时不能写或确认下一步；已确认步骤可经 plan step --redo --confirmed-by-author --confirmation 重置为新的未确认草稿并删除其后步骤的记录（产物不动）；characters 步骤的链接须是设定集中的人物条目，scenes 步骤的链接须是单元树中的场景单元，scene-contracts 步骤的链接须是场景单元的大纲节且声明了场景契约字段，product 步骤确认时须至少有一个链接。novel 文体的 default_method 设为 snowflake。
+  why:
+    - '长篇小说在任何单个会话都装不下全书，动笔前需要分步规划并经作者确认（novel 里程碑 done 判据：雪花写作法的某一步未经作者确认时不能进入下一步；场景列表与场景详述分别生成单元树中的场景和场景契约）。novel 文体注释明确默认写作法由本计划变更声明；规划类写作法的数据模型（kind: planning 与 steps）已存在，但尚无内置规划写作法，也没有分步确认的工作流。'
+scope:
+  in:
+    - internal/catalog/builtin/methods/ 新增 snowflake、golden-three、volume-structure 三个内置写作法数据；method.schema.json 的 steps 项增加可选 product 枚举（characters、scenes、scene-contracts）及 Schema 测试夹具；internal/catalog/builtin/genres/novel.yaml 的 default_method 设为 snowflake；新增 internal/plan 包（plan.yaml 读写、JSON Schema、顺序关卡、素材与链接校验）；internal/cli 新增 plan show/step/confirm 命令并注册 help；wa-cli validate 整体校验与 validate <path> 检查 plan.yaml；docs/GLOSSARY.md 增补新术语；按需更新内嵌 Skill 与 MCP 薄封装的命令面。
+    - internal/catalog/builtin/methods/ 新增 snowflake、golden-three、volume-structure 三个内置写作法数据；method.schema.json 的 steps 项增加可选 product 枚举（characters、scenes、scene-contracts）及 Schema 测试夹具；internal/catalog/builtin/genres/novel.yaml 的 default_method 设为 snowflake；新增 internal/plan 包（plan.yaml 读写、JSON Schema、顺序关卡、--redo 重置、素材与链接校验）；internal/cli 新增 plan show/step/confirm 命令并注册 help；wa-cli validate 整体校验与 validate <path> 检查 plan.yaml；docs/GLOSSARY.md 增补新术语；按需更新内嵌 Skill 与 MCP 薄封装的命令面。
+  out:
+    - 不改动既有内置写作法的数据与选用行为（文章类、结构类不受影响）；规划完成度不接入 advance 关卡（保持生命周期与规划正交，另见开放问题）；不支持已确认步骤的修订或重置（另见开放问题）；不引入向量检索或任何模型调用；不改 tech-blog、wechat-marketing、short-story 文体的默认写作法；分层摘要与卷末检查点属 layered-summaries-and-budget，知情表与状态快照属其他计划变更。
+    - 不改动既有内置写作法的数据与选用行为（文章类、结构类不受影响）；规划完成度不接入 advance 关卡（作者已确认：规划与生命周期正交）；--redo 只重置规划记录，不回滚任何产物（人物卡、场景单元、场景契约经既有命令管理）；不引入向量检索或任何模型调用；不改 tech-blog、wechat-marketing、short-story 文体的默认写作法；分层摘要与卷末检查点属 layered-summaries-and-budget，知情表与状态快照属其他计划变更。
+unchanged_behavior:
+  - method list / method show 的既有字段与排序、写作简报 method 选用流程（brief set --method）、规划类写作法步骤不由大纲承担 role 的既有行为、canon add / set、unit add / move、scene contract 的命令语义、决策队列与验收关卡行为、MCP 与 Skill 只做薄封装的约定。
+roadmap:
+  milestone: novel
+  planned_change: long-form-planning-methods

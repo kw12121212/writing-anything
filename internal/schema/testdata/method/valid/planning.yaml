@@ -1,0 +1,8 @@
+schema_version: 1
+id: outline-first
+title: 先大纲后动笔
+kind: planning
+steps:
+  - {id: premise, title: 前提}
+  - {id: cast, title: 人物表, product: characters}
+  - {id: scenes, title: 场景表, product: scenes}

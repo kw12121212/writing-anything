@@ -1,0 +1,37 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: layered-summaries-and-budget
+approach:
+  - 摘要机制在 internal/series 上扩展汇总单元（子层齐全检查与子树正文串联指纹，summary.yaml 字段不变）；场景上下文在 internal/ctxpack 新增三个内容项（states 按 internal/state 的重放、priorEndings 与分层摘要按 summary.yaml 读取）并重排 scene 裁剪优先级；卷末检查点为新包 internal/volume（checkpoint.yaml 生成、确定性抽样、确认记录、strict 阻塞计算），经 internal/cli 以 volume checkpoint / volume confirm 两个命令暴露，accept 经 review.GateInput 新增 Volume 字段接线（与收口阻塞同一模式）
+decisions:
+  aggregate-fingerprint:
+    decision: 汇总单元 summary.yaml 复用现有 Schema（text、draft_sha256、recorded_at）：draft_sha256 记录其子树全部场景当前 draft.md 的 SHA-256 按单元树先序逐个拼接后再取 SHA-256；stale 由 summary show 重新计算推导（任一子场景正文变化即过期），不另存子摘要清单
+    rationale: 字段不变使既有 series-validation、context-series 与 summary show 的消费方零改动；串联指纹是确定性的、只依赖磁盘内容，与 state at 重放的可复现原则一致；把子摘要清单存进产物会在子层变化时产生第二个需要同步的事实来源
+  layered-readiness:
+    decision: 章摘要要求子树全部场景 stage 为 done 且各有摘要（缺一报告 summary.children-missing，逐项列出）；部与根摘要要求直接子层（章，含直接子场景的混合层级按各单元类型分别对待）各自有摘要；wa-cli summary set 只做就绪检查，不阻止子层摘要之后被作者修改（那由 stale 机制呈现）
+    rationale: 逐层汇总（场景 → 章 → 部 → 全书）是里程碑完成标准的原文；就绪检查把「漏一层」在写入时拦下，stale 把「写后漂移」在读取时呈现，两者互补且都只依赖现有产物
+  scene-priority-reorder:
+    decision: scene 单元的裁剪优先级按计划变更 details 的清单整体重排：场景契约（本单元大纲）最高，其后为状态快照、视角人物已知、读者已知人物未知、揭示边界、未回收伏笔、前序场景结尾、章摘要、部摘要、全书摘要、作者反馈、决策、规范要点、素材原文、相邻节；非 scene 单元保持既有顺序不动
+    rationale: 契约是本场景写作的第一约束，状态与知情错误会直接写出矛盾正文，因此置于最高；分层摘要越近越相关、越远越概括；规范要点与素材对场景写作是支撑性的，置于后半。knowledge-state 变更的设计已预告本次自由重排
+  prior-endings:
+    decision: priorEndings 取先序最近两个场景（同作品内按单元树先序、类型为 scene、有 draft.md）去 HTML 注释后的正文末尾至多 400 个字符（Unicode 码点），按先序倒序排列（最近在前），每项含 unit 与 excerpt；两个场景都没有时为空数组不报告
+    rationale: 计划变更 details 要求「前一两个场景的原文结尾」：原文结尾携带摘要必失的语气与节奏；数量与长度取小值，保证在 16000 预算内始终可容纳；去注释与 neighbors 的 excerpt 同规则
+  deterministic-sampling:
+    decision: 卷末检查点的收口核对样本从本部各场景 closeout.yaml 的 state 与 knowledge 提交中抽取至多 3 条：以 part 单元引用与子树全部场景正文串联指纹（同 aggregate-fingerprint）为种子做确定性洗牌后取前若干条，同一输入同一抽取结果；抽取不足 3 条时取全部
+    rationale: 「随机抽取」若用真随机会让同一检查点两次生成不一致，违反本仓库输出可复现的原则；种子取检查点内容本身的来源（部引用+正文指纹），正文变化即重新抽样，语义正是「核对当前正文」；至多 3 条来自作者抽查的成本权衡
+  strict-only-volume-gate:
+    decision: accept 的卷末检查点阻塞只在 strict 关卡强度生效：待验收场景按单元树先序之前的部（不含本场景所属部）存在 checkpoint.yaml 但 confirmation 缺失时报告 volume.unconfirmed（next 含 wa-cli volume confirm）；fast 与 standard 只提示（warning）；accept 不自动生成检查点，生成由 volume checkpoint 显式完成
+    rationale: 计划变更 details 明确「strict 关卡下检查点未经作者确认，下一部的场景不能验收，其他关卡强度只提示」；只查更早的部，本部检查点属本部收尾、不阻塞本部内场景；显式生成保持 accept 只读检查、不产生副作用的既有边界
+alternatives:
+  - option: 分层摘要独立产物（summaries.yaml 汇总文件）
+    reason: 与既有 summary.yaml 机制形成两套摘要产物，context 与系列摘要消费方要合并两个来源；复用单元目录 summary.yaml 让层级只是取值规则，无新增产物类型
+  - option: 卷末检查点在 advance 到 done 时自动生成
+    reason: advance 是推进命令，让它写额外产物违背其只改 stage 的既有语义；显式 volume checkpoint 让抽样核对成为作者可见的动作
+  - option: priorEndings 取前序场景摘要而非原文结尾
+    reason: details 明确要求原文结尾，且 priorScenes 已提供摘要（父单元内前序场景），两者互补：摘要给情节、结尾给语气
+risks:
+  - 重排后的 scene 优先级改变既有夹具的裁剪结果：需要在 ctxpack 测试中按新优先级重写断言，并保留非 scene 单元的既有断言防止重排越界
+  - 汇总指纹依赖全部子场景正文，场景很多时每次 summary show 都全量读取：先序遍历一次读取即可，正文总量与部内场景数成正比，长篇单部规模（数十场景）可接受
+  - 确定性抽样算法将来调整会改变同一工作区的抽取结果：把洗牌实现固定在 internal/volume 的单一函数并以注释声明不得变更输出分布，测试断言固定夹具的具体抽取结果

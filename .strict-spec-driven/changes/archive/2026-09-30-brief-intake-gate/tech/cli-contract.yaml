@@ -1,0 +1,23 @@
+schema: strict-spec-driven/delta-tech/v1
+schema_version: 1
+artifact_type: delta_tech
+schema_file: templates/strict-spec-driven/schemas/delta-tech.yaml
+target_standard: cli-contract
+operations:
+  ADDED: {}
+  MODIFIED:
+    next-rechecks-problem:
+      strength: SHOULD
+      statement: 诊断 next 中给出的复查命令必须能重新检出该问题：涉及多个产物的问题（引用、合并、内置产物与工作区产物的冲突）给出整体校验 wa-cli validate --dir <dir> --json，不得给出只校验单个文件、会报告 valid 为 true 的命令；命令按自身改写 next（如指向 wa-cli help <command>）时，只改写由本次参数引起的问题，已有产物中存在的问题保留默认的复查命令。判断问题是否由本次参数引起时，按诊断字段是否为参数名（或其下标、子字段）的白名单判断，不以「字段不以产物内路径开头」推断：已有产物的根级问题（如 schema_version、未定义的字段）也属于已有产物。修改已有产物的命令在写前复查（修改后重新解析与校验）中发现、而修改前的产物本身合法的问题，同样由本次参数引起：诊断不填 path，字段换成对应的参数名，next 给出 wa-cli help <command> --json；能在修改前检查的参数取值（如只含空白的文本、重复的 id）应在修改前报告。
+      rationale: Agent 按 next 复查；复查命令检不出问题时，Agent 会误以为问题已经解决；把已有产物的问题也改成查看用法，Agent 会反复调整参数而问题始终存在；以前缀排除会漏掉根级字段（fresh-context 审查在 decision add 与 claim add 中都复现）。写前复查的问题若带上产物路径，next 给出的单文件复查会报通过，因为文件并未写入（brief set 的审查复现）。
+      enforcement:
+        method: test
+        detail: internal/cli 的测试对跨产物错误码断言 next 为整体校验并能重新检出；TestClaimAdd、TestFeedbackAdd 与 TestDecisionAdd 断言已有产物的问题（含根级字段）保留默认的复查命令。TestBriefSetRejects 断言空白文本、重复 id 等参数问题不填 path、next 为 wa-cli help brief set --json；internal/brief 的 TestSetRejects 断言写前复查问题的字段为参数名。
+      examples:
+        good:
+          - paramField(d.Field, "question", "options", "id", "recommendation") 为真时才改写为 wa-cli help decision add --json
+          - brief.Set 在写前复查失败时清空 path，把 key_messages[0].text 映射为 message-text
+        bad:
+          - '!strings.HasPrefix(d.Field, "decisions") 时改写 next，schema_version 的问题也被改成查看用法'
+          - 写前复查失败时返回 path 为 brief.yaml 的诊断，next 为 wa-cli validate brief.yaml，复查报告 valid 为 true
+  REMOVED: {}

@@ -1,0 +1,8 @@
+schema_version: 1
+id: guide
+title: 入门指南
+works: [part-1, part-2]
+packs: [house]
+sources: [s1]
+facts:
+  - {id: audience, text: 读者是后端工程师, sources: [s1]}

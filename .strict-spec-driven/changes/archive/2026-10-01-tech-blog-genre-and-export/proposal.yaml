@@ -1,0 +1,35 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: tech-blog-genre-and-export
+  status: proposed
+summary:
+  what:
+    - 新增内置 tech-blog（技术博客）文体：单元类型 article（子单元 section），阶段为写作简报、大纲、草稿、审稿与验收；简报必填项为 audience、purpose 与 key_messages；默认写作法为金字塔原理与 SCQA（结论先行），评分标准含技术准确（blocking）、可复现、受众匹配与文档类型明确（Diátaxis 分类），作者可以在写作简报中改选写作法。
+    - 新增三种规则类型（Rule Type），tech-blog 文体启用：code-block-language（围栏代码块必须标注语言）、link-format（Markdown 链接与裸 URL 的格式：链接文字、地址、空白、协议与主机名，不访问网络）与 reference-sources（版本号与函数调用形式的 API 说法必须被关联 reference 类型素材的论断覆盖）。
+    - 新增 wa-cli export <work> --format markdown：按单元树先序只导出验收记录有效的单元，去掉作者批注与单处豁免注释，可选 --front-matter 附带文件头元数据（Front Matter），--output 指定项目目录内的输出路径（默认 .writing-anything/exports/<work>.md）。
+    - 用测试夹具中的作者素材完成端到端测试：tech-blog 文体从写作简报、大纲、草稿、论断、文本检查、审稿、strict 验收、推进到 Markdown 导出，导出结果与夹具中的期望文件逐字节一致。
+  why:
+    - 里程碑 tech-blog-workflow 的范围包括 tech-blog 文体（结构、代码块语言、链接、版本出处）与 Markdown 导出；完成标准要求用测试夹具中的作者素材跑通一篇技术博客从写作简报到 Markdown 导出的端到端测试。
+    - 帮 Agent 规范地协助人写作：技术文章的版本号与 API 说法必须有资料出处，只有经作者验收的内容才能导出发布。
+scope:
+  in:
+    - internal/catalog/builtin/genres/tech-blog.yaml；catalog.RuleTypes 新增三种规则类型
+    - internal/lint：text 记录围栏代码块的开头行；code-block-language、link-format、reference-sources 的检查与参数；internal/cli 的 lint 在 reference-sources 生效时读取论断
+    - internal/export（新包）：Markdown 导出、批注与单处豁免注释的去除、输出路径校验、front matter；internal/cli 的 export 命令
+    - 端到端测试与 testdata/e2e 夹具（作者素材、正文、审稿输入与期望的导出文件）
+    - lint 主规格新增技术写作规则；genres-and-packs 主规格修改 known-rule-types、新增 tech-blog-genre；新增 export 主规格；docs/GLOSSARY.md 新增文件头元数据（Front Matter）
+    - internal/mdscan（新包）：围栏代码块与行内代码的识别，供导出与作者反馈共用；internal/feedback 的批注识别改用它；修改 feedback 主规格的 comment-feedback
+  out:
+    - HTML 与公众号导出：属于 wechat-marketing-and-mcp 里程碑
+    - 链接可达性检查（访问网络）：文本检查不发起网络请求
+    - 按语义判断版本号或 API 说法是否与资料一致：wa-cli 不调用 LLM，只检查是否关联了 reference 素材的论断
+unchanged_behavior:
+  - 输出信封字段与退出码约定不变；已发布错误码的含义不变
+  - minimal 文体与 default 规范包不变；不声明新规则类型的文体与规范包不受影响
+  - 仓库根目录不创建 .writing-anything/；产品二进制不依赖 internal/tools/** 与 strict-spec-driven；wa-cli 不联网、不调用 LLM
+roadmap:
+  milestone: tech-blog-workflow
+  planned_change: tech-blog-genre-and-export

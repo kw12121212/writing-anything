@@ -1,0 +1,23 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: corpus-authoring
+  status: proposed
+summary:
+  what:
+    - 按 wa-cli 完整生命周期真实创作《停在四点十七分》小说语料并录制可重放命令脚本：作者素材（Source）先行、写作简报（Brief）声明雪花写作法（snowflake）并经规划（Plan）十步展开、单元树与九个场景契约（Scene Contract）、逐场景草稿（Draft）与写后收口（Close-out）、审稿（Review）与带确认记录的验收（Acceptance）、分层摘要（Summary）与卷末检查点（Volume Checkpoint）、伏笔台账（Foreshadowing Ledger）与状态快照（State Snapshot）与知情表（Knowledge State）按设计绑定、recall 全文检索（Full-text Search）、影响传播（Ripple Analysis）与复查标记、会话交接（Handoff Note）、组稿（Assembly）与整书导出（Export）；全部命令按 script-format.md 记录为分阶段脚本 commands.yaml，正文与文本输入以 inputs/ 文件引用检入 internal/cli/testdata/e2e/novel/
+  why:
+    - corpus-design 已交付设计文档、测试矩阵与脚本格式；重放测试（replay-harness）与黄金断言（golden-assertions）需要一份真实创作、检入仓库、可按序重放的命令序列与语料，作为长篇端到端（E2E）回归的输入
+scope:
+  in:
+    - internal/cli/testdata/e2e/novel/commands.yaml（分阶段、带注释、正文输入以文件引用）；inputs/ 下全部文本输入：三份作者素材、九个场景草稿（每场约 1400–2000 字）、写后收口提交、审稿记录、作者确认原话、作者直编片段；新增语料结构校验 Go 测试（脚本字段齐备、input_ref 全部可解析、场景草稿规模符合设计、四类真实负向步骤在脚本中在位）
+    - internal/cli/testdata/e2e/novel/commands.yaml（八阶段、带注释、正文输入以文件引用，含一次作者直编 write_file 步骤）；inputs/ 下全部文本输入：三份作者素材、九个场景草稿（每场约 1400–2000 字）、作者直编与合并终稿、九份写后收口提交、审稿记录与任务包结论、作者确认原话、三份部末交接记录；新增语料结构校验 Go 测试（八阶段齐备、脚本字段语义、input_ref 全部可解析、九场景草稿规模、五类六码真实负向步骤在位、--base 哈希承诺复算一致）
+  out:
+    - 不实现重放测试（replay-harness）；不落盘黄金文件与注入式负向断言（golden-assertions）；不做矩阵对账与语料 README（matrix-check、docs-runbook）；不改产品代码与任何主规格；语料一次性定稿，不引入内容生成机制
+unchanged_behavior:
+  - wa-cli 产品行为完全不变；corpus-design 的 DESIGN.md、matrix.yaml、script-format.md 不变（若实现中发现设计勘误，以最小修正并同步测试）；internal/cli 既有测试与 testdata 既有文件不变
+roadmap:
+  milestone: novel-e2e
+  planned_change: corpus-authoring

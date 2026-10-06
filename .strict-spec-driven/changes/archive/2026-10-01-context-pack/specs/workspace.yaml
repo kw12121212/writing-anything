@@ -1,0 +1,77 @@
+schema: strict-spec-driven/delta-spec/v1
+schema_version: 1
+artifact_type: delta_spec
+schema_file: templates/strict-spec-driven/schemas/delta-spec.yaml
+target_spec: workspace
+operations:
+  ADDED: {}
+  MODIFIED:
+    status-summary:
+      strength: MUST
+      statement: wa-cli status 必须汇总 --dir 下的工作区：--json 输出包含 workspace（相对项目目录的工作区路径）、config（language、defaultGenre、packs、gateLevel 与 contextBudget（未设置时为 null）；配置无法解析时为 null）、sources 与 works（sources/ 与 works/ 下的直接条目数，不含以 . 开头的隐藏条目），以及 units：按作品 id 排序、单元树先序列出每个可加载作品的每个单元，每项含 unit（单元引用）、work、type、parent（父单元的引用，根单元为 null）、stage、blockers 与 commands，blockers 与 commands 的含义与 wa-cli next 相同（stage 为 done 的单元两者为空数组）。工作区校验（与 validate-workspace 相同）全部通过时退出码为 0；有 error 级诊断时仍输出上述字段，但 valid 为 false，退出码为 1。不加 --json 时，以人读文本输出同样的信息，单元以缩进树列出。
+      scenarios:
+        status-fresh:
+          - GIVEN: 刚用 wa-cli init --dir D --genre minimal 创建的工作区
+          - WHEN: 运行 wa-cli status --dir D --json
+          - THEN: workspace 为 .writing-anything，config.defaultGenre 为 minimal，config.gateLevel 为 standard，sources 与 works 均为 0，units 为空数组，valid 为 true，退出码为 0
+        status-counts:
+          - GIVEN: 已初始化的工作区，已用 wa-cli new 创建两个作品，sources/ 下有一个文件
+          - WHEN: 运行 wa-cli status --dir D --json
+          - THEN: works 为 2，sources 为 1
+        status-invalid-config:
+          - GIVEN: 已初始化的工作区，config.yaml 中 gate_level 为 bogus
+          - WHEN: 运行 wa-cli status --dir D --json
+          - THEN: 输出仍包含 workspace、sources 与 works；diagnostics 中有一条错误码为 artifact.schema-violation 的诊断；valid 为 false，退出码为 1
+        status-unknown-genre:
+          - GIVEN: 已初始化的工作区，config.yaml 中 default_genre 为 no-such-genre
+          - WHEN: 运行 wa-cli status --dir D --json
+          - THEN: config.defaultGenre 仍为 no-such-genre；diagnostics 中有一条错误码为 config.unknown-genre 的诊断；valid 为 false，退出码为 1
+        status-units:
+          - GIVEN: 已用 wa-cli new minimal my-post --dir D 创建作品，并用 wa-cli unit add my-post section intro --dir D 追加子单元
+          - WHEN: 运行 wa-cli status --dir D --json
+          - THEN: units 依次为 my-post（type 为 article，parent 为 null，stage 为 brief）与 my-post/intro（type 为 section，parent 为 my-post，stage 为 brief），两项的 blockers 各有一条 lifecycle.missing-artifact 阻塞项，valid 为 true，退出码为 0
+    config-set:
+      strength: MUST
+      statement: wa-cli config set <key> <value> 必须把工作区 config.yaml 中的 key 设为 value，并保留其他字段与 YAML 注释。key 只能是 language、default_genre、packs、gate_level、context_budget；packs 的 value 按逗号分隔，空字符串表示空数组；default_genre 与 context_budget 的 value 为空字符串时删除该字段；context_budget 的 value 为十进制整数时写为整数，不是正整数时按 Schema 报告 artifact.schema-violation（field 为 context_budget）。写入成功时退出码为 0，changedPaths 为 .writing-anything/config.yaml，--json 输出的 config 字段为修改后的配置；新值与原值相同时不写文件，changedPaths 为空数组。新值不符合 Schema 时必须报告 artifact.schema-violation 并保持文件不变，退出码为 1；key 不在上述范围内时必须报告错误码 config.unknown-key，退出码为 1；key 当前的值带有 YAML 锚点时必须报告错误码 config.anchored-value 并保持文件不变，退出码为 1；修改后的文档无法重新解析时不得写入；未找到工作区时按 workspace-not-found 处理。
+      scenarios:
+        set-gate-level:
+          - GIVEN: 刚初始化的工作区 D，作者在 config.yaml 中加了一行注释
+          - WHEN: 运行 wa-cli config set gate_level strict --dir D --json
+          - THEN: config.yaml 的 gate_level 为 strict，注释与其他字段不变；changedPaths 为 [.writing-anything/config.yaml]，config.gateLevel 为 strict，退出码为 0
+        set-packs:
+          - GIVEN: 刚初始化的工作区 D
+          - WHEN: 运行 wa-cli config set packs "house-style, glossary-zh" --dir D --json
+          - THEN: config.yaml 的 packs 为 [house-style, glossary-zh]，退出码为 0
+        clear-default-genre:
+          - GIVEN: 用 wa-cli init --dir D --genre tech-blog 创建的工作区
+          - WHEN: 运行 wa-cli config set default_genre "" --dir D --json
+          - THEN: config.yaml 不再含 default_genre，config.defaultGenre 为 null，退出码为 0
+        set-invalid-value:
+          - GIVEN: 刚初始化的工作区 D
+          - WHEN: 运行 wa-cli config set gate_level bogus --dir D --json
+          - THEN: valid 为 false，diagnostics 中有一条错误码为 artifact.schema-violation、field 为 gate_level 的诊断，config.yaml 与运行前逐字节相同，退出码为 1
+        set-unknown-key:
+          - GIVEN: 刚初始化的工作区 D
+          - WHEN: 运行 wa-cli config set schema_version 2 --dir D --json
+          - THEN: valid 为 false，diagnostics 中有一条错误码为 config.unknown-key 的诊断，config.yaml 不变，退出码为 1
+        set-same-value:
+          - GIVEN: 刚初始化的工作区 D，gate_level 为 standard
+          - WHEN: 运行 wa-cli config set gate_level standard --dir D --json
+          - THEN: changedPaths 为空数组，config.yaml 不变，退出码为 0
+        repair-broken-field:
+          - GIVEN: 工作区 D 的 config.yaml 中 gate_level 为 bogus
+          - WHEN: 运行 wa-cli config set gate_level fast --dir D --json
+          - THEN: config.yaml 的 gate_level 变为 fast，valid 为 true，退出码为 0；此后 wa-cli validate --dir D 通过
+        set-anchored-value:
+          - GIVEN: '工作区 D 的 config.yaml 为 default_genre: &genre tech-blog 且 packs: [*genre]'
+          - WHEN: 运行 wa-cli config set default_genre "" --dir D --json
+          - THEN: valid 为 false，diagnostics 中有一条错误码为 config.anchored-value、field 为 default_genre 的诊断，config.yaml 与运行前逐字节相同，退出码为 1
+        set-context-budget:
+          - GIVEN: 刚初始化的工作区 D
+          - WHEN: 运行 wa-cli config set context_budget 5000 --dir D --json
+          - THEN: config.yaml 的 context_budget 为整数 5000，config.contextBudget 为 5000，退出码为 0
+        set-bad-context-budget:
+          - GIVEN: 刚初始化的工作区 D
+          - WHEN: 运行 wa-cli config set context_budget 0 --dir D --json
+          - THEN: diagnostics 中有一条错误码为 artifact.schema-violation、field 为 context_budget 的诊断，config.yaml 不变，退出码为 1
+  REMOVED: {}

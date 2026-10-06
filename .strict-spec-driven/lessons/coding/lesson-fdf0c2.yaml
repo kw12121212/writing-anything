@@ -1,0 +1,22 @@
+schema: strict-spec-driven/lesson/v1
+schema_version: 1
+artifact_type: lesson
+schema_file: templates/strict-spec-driven/schemas/lesson.yaml
+lesson:
+  id: lesson-fdf0c2
+  title: 从每个开头标记向后查找结束标记，在结束标记缺失时是平方级的
+category: coding
+status: active
+created_at: '2026-09-30T16:33:42.420Z'
+updated_at: '2026-10-01T02:56:25.152Z'
+context: rule-engine-and-lint 的正文屏蔽区域对每个反引号、](、<!-- 都向后查找对应的结束标记，单处豁免对每条注释重新扫描所在段落，多词匹配对每个词条扫描整篇正文。
+observation: fresh-context 审查实测：1 MB 以内、全是未闭合 ]( 或豁免注释的正文让 lint 耗时 20 秒到超过 2 分钟；2000 个禁用词使耗时随词条数线性增长。功能测试都用小正文，没有发现。
+takeaway: 解析不可信正文时，结束标记的位置要一次预先算好（如每行从右向左算出下一个 ) 与反引号的下标、全文最后一个 --> 的位置），每个开头标记常数时间判断；多词匹配按首字符建索引一遍扫描；为输入设字节上限，并写限时的规模测试。
+applies_when: 为正文、产物或其他作者可编辑的文本编写解析、屏蔽或多词匹配逻辑，尤其是需要为开头标记寻找对应结束标记时
+occurrences:
+  - origin: rule-engine-and-lint
+    date: '2026-09-30'
+    evidence: internal/lint/text.go 的 nextIndex 与 closeLine/closeCol、lint.go 的 matcher；lint_test.go 的 TestInputLimits。
+  - origin: tech-blog-genre-and-export
+    date: '2026-10-01'
+    evidence: 导出去注释起初对每处匹配用 LastIndex 与 Count 重新扫描本行前文，link-format 的 inSpans 对每个链接线性查找全部区间：1 MB 单行 4 万处注释导出 9.5 秒、2 MB 正文 lint 4 秒。改为一次预先算出位置并二分查找，补了 TestStripComments 与 TestTechBlogScale 的限时规模测试。

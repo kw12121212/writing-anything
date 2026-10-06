@@ -1,0 +1,30 @@
+schema: strict-spec-driven/delta-tech/v1
+schema_version: 1
+artifact_type: delta_tech
+schema_file: templates/strict-spec-driven/schemas/delta-tech.yaml
+target_standard: workspace-artifacts
+operations:
+  ADDED: {}
+  MODIFIED:
+    structured-edits:
+      strength: MUST
+      statement: 修改已有的结构化产物时，必须在 YAML 节点树上只改目标节点，保留其他字段与注释；改变节点风格（如向流式序列 [] 追加元素后改为块式）时，节点上的注释必须迁移到仍会输出的位置（internal/workspace.BlockSequence）；目标节点或到达它途经的任一节点带有 YAML 锚点、是别名或所在映射含合并键时不修改；写出前必须对编码结果重新解析，并执行 Schema 校验与该产物类型的领域校验（如作品的文体检查），无法解析或任一校验失败时不写；取值未变时不写文件，changedPaths 为空。
+      rationale: 作者会直接编辑结构化产物并写注释，整体重写或改变节点风格都会丢失这些内容；经由锚点、别名或合并键共享的节点被修改时会同时改动其他位置；只做 Schema 校验会写出结构合法但领域上不可用的产物；取值未变不写，changedPaths 才如实反映变更。
+      enforcement:
+        method: test
+        detail: internal/workspace 的 TestSetConfigPreservesComments、TestSetConfigRejects、TestSetConfigSameValue、TestSetConfigAnchors 与 TestBlockSequenceKeepsLineComment，internal/work 的 TestAdvance、TestAddUnit、TestAddUnitKeepsFlowComment 与 TestAnchoredEdits，internal/draft 的 TestAddClaimKeepsFlowComment，internal/feedback 的 TestAddPreservesCommentsAndSkipsIDs 覆盖注释保留（含流式序列的行尾注释）、写前复查、取值未变与锚点、别名、合并键。
+    validated-path-segments:
+      strength: MUST
+      statement: 由命令参数（单元引用、作品 slug、单元 id、素材 id、validate 的 path）拼接或解析工作区路径前，每个由参数给出的 id 路径段都必须先按 common.schema.json 的 id 格式校验，不匹配时报告对应的 not-found 或 artifact.schema-violation，诊断不填 path，也不访问该路径；工作区目录之下的路径在读取与写入时都必须逐级确认途经的是真实目录、不跟随符号链接，只对最后一级文件做 Lstat 不够；同一产物在所有入口（整体校验、validate <path>、列表与修改命令）上对符号链接的处理必须一致。
+      rationale: Agent 会对不可信的输入与工作区自动运行命令；未经校验的路径段（如 ../x）或途经的符号链接会让读写逃出项目目录，而诊断与 changedPaths 仍报告工作区内的路径；只在部分入口防护时，另一个入口会读取项目目录之外的文件并报告通过。
+      enforcement:
+        method: test
+        detail: internal/work 的 TestResolve（../x 用例）、TestCreate（非法 slug）与 TestSymlinkedWorkDir，internal/draft 的 TestSymlinkedUnitDirNotRead 与 TestWriteRejects，internal/source 的 TestSymlinkedMetadata，internal/feedback 的 TestSymlinks，internal/workspace 的 TestValidateArtifactSymlinks，internal/cli 的 TestFeedbackSymlinkedUnitDir 断言不合法的路径段与途经的符号链接不会被读写。
+    input-limits:
+      strength: MUST
+      statement: 解析产物时必须限制展开别名后的节点数（schema.MaxNodes），超限报告 artifact.parse-error，不得先展开再检查；对工作区文件做推导、匹配或比较的算法（如段落出处的最长公共子序列对齐、反馈锚点的重新定位）必须限制输入规模，并使内存与耗时与之相称（draft.MaxParagraphs，超限报告 draft.too-large）：不得让不可信的文件决定平方级内存，也不得在每处匹配重新扫描前文。
+      rationale: Agent 会对不可信的工作区自动运行命令，层层引用的别名、极长的正文或大量重复的原文片段都能让很小的操作耗尽内存或长时间占满 CPU；feedback watch 会反复执行这些计算。
+      enforcement:
+        method: test
+        detail: internal/schema 的 TestAliasBomb 与 internal/cli 的 TestValidateAliasExpansionLimit 断言返回 artifact.parse-error；internal/draft 的 TestTooManyParagraphs 断言 draft.too-large；internal/feedback 的 TestLocateManyMatches 断言 9000 处匹配的重新定位在 2 秒内完成。
+  REMOVED: {}

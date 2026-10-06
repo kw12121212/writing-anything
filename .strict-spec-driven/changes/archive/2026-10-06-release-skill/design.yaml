@@ -1,0 +1,55 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: release-skill
+approach:
+  - 项目技能是仓库内的 Markdown 指令文件：不进二进制、不被 wa-cli 感知，放 .agents/skills/release/SKILL.md，frontmatter 与内置技能同一格式（internal/skills.Parse 可解析）。正文按阶段写正式发布流程：前置检查（dev 与 origin/dev 同步、工作树干净、gh 已认证）→ 完整回归（引用 config.yaml 声明的完整回归命令）→ 确定版本号（无标签时缺省 v0.1.0，之后按语义化版本（Semantic Versioning）从最新 v* 标签推导建议值，发布者确认后才打标签）→ 合并 dev 到 main（--no-ff）→ 打 v* 标签并在本地构建发布产物（go run ./internal/tools/release）→ 用 gh release create 创建 GitHub Release（附 SHA256SUMS）→ 推送 main、dev 与标签，核对 GitHub Release 与安装脚本渠道。技能不依赖 strict-spec-driven，不依赖任何 CI/CD。仓库级技能的格式校验测试放 internal/skills，扫描 .agents/skills/ 下全部项目技能
+decisions:
+  repo-skill-location:
+    decision: 项目技能放 .agents/skills/<name>/SKILL.md，格式与内置技能一致
+    rationale: 复用既有约定：skills install --agent codex 的目标目录就是 .agents/skills（Codex 在仓库中扫描的位置），internal/skills.Parse 已实现同一格式约束，无需新机制
+  no-cicd-local-release:
+    decision: 删除 .github/workflows/release.yml；发布产物由技能在本地构建，用 gh release create 直接创建 GitHub Release
+    rationale: 本项目不使用 CI/CD；internal/tools/release 已支持本地构建全平台发布产物与 SHA256SUMS，gh CLI 是本地命令而非 CI/CD；install.sh 的下载渠道保持不变
+  version-from-tag:
+    decision: 版本号不落任何文件：通过 main 上的 v* git 标签表达，构建时经 -ldflags 注入 internal/version；技能从最新标签按语义化版本推导建议值，发布者确认后才打标签
+    rationale: 仓库现状即如此（原 release.yml 以标签名注入版本，无版本文件），避免版本号双源漂移；首个正式版本定为 v0.1.0（发布者已确认）
+  no-ff-merge:
+    decision: dev 合并到 main 使用 --no-ff 合并提交
+    rationale: main 只接收来自 dev 的合并；合并提交让 main 历史上的每次发布点清晰可见，fast-forward 会把发布点与普通提交混在一起
+  test-ownership:
+    decision: 仓库级项目技能的格式校验测试放 internal/skills
+    rationale: 该包拥有 SKILL.md 格式的全部知识（Parse、nameRE、长度约束），复用即可；为校验一个 Markdown 文件新建包违反 YAGNI
+  technical-only-no-scene:
+    decision: 本次变更为纯技术变更（技能指引、仓库元数据与配套测试），不触及 wa-cli 的任何用户可观察行为：不建立场景（scene），specs/ 保持为空，不新增 delta spec
+    rationale: 场景优先路由要求纯技术变更不发明行为者流程；仓库级技能的约束由 internal/skills 的结构校验测试与 delta tech 规则承载
+  no-delta-spec:
+    decision: specs/ 保持为空：本次变更不修改任何主规格（main spec）需求
+    rationale: 发布技能是仓库开发流程指引；三项缺陷修复均使实现对齐既有规格原文或测试意图（skills-install 的相对路径要求、export-output 的「只能是 exports」、install.sh 不属主规格），需求文本与场景不变。仓库级技能的约束由 delta tech（go-project-structure 的 project-skill-location）与 internal/skills 校验测试承载
+  path-spelling-normalization:
+    decision: Install 把 rootAbs 与 base 的第一个已存在祖先用 filepath.EvalSymlinks 归一到真实路径后，重算 base 与 missing 再做 inside 判定与路径显示
+    rationale: macOS 的 TMPDIR 经 /var → /private/var 符号链接，t.TempDir 与 os.Getwd 对同一目录给出两种拼写，locator.show 的字符串 Rel 前缀比较把同一目录判为外部（产物路径变绝对、Created 遗漏）；归一到 OS 报告的真实路径使判定与显示拼写一致。EvalSymlinks 失败（路径不存在）时保持原拼写，行为不变；InWorkspace 已有 os.SameFile 身份比较兜底，不在本次范围
+  install-sh-brace-variables:
+    decision: install.sh 的变量展开一律加 ${} 花括号
+    rationale: 本机 /bin/sh（bash 3.2.57，随 macOS 升级更新）把 $var 后紧跟的全角字符首字节并入变量名，配合 set -u 报 unbound variable，安装脚本在 macOS 上必坏；花括号使变量名边界与多字节字符无关，在不误解析变量的 shell 上行为不变
+  exports-segment-strict:
+    decision: internal/export 的 isExports 判定要求段名与 exports 字面严格相等，再叠加文件身份检查
+    rationale: export-output 规格写明途经工作区目录之下「只能是 exports」；大小写不敏感文件系统上 Lstat(EXPORTS) 命中同名目录，仅靠 SameFile 身份检查会把大小写变体误判为 exports。段名严格相等是规格字面要求，身份检查继续拦住符号链接与同名他物
+  pack-test-spelling-normalization:
+    decision: TestPackInstallFakeGit 的 fakeGit 助手把 TMPDIR 归一为 EvalSymlinks 后的真实路径拼写
+    rationale: 被测代码的临时目录经 MkdirTemp 取 TMPDIR 原文拼写（macOS 上 /var/...），而 fake git 脚本的 pwd 经 getcwd 返回真实路径拼写（/private/var/...）；两侧拼写一致断言才可靠。纯测试修复，不触及产品代码
+alternatives:
+  - option: 把发布流程做成 wa-cli 子命令（如 wa-cli release）
+    reason: 发布属于仓库开发流程而非写作生命周期；wa-cli 是产品运行时，不应携带 git 与 gh 操作，技能文件零代码即可指导 Agent 执行
+  - option: 保留 release.yml 不删除
+    reason: 用户已确认本项目不使用任何 CI/CD；保留工作流文件与约定冲突，且推送 v* 标签仍会误触 GitHub Actions
+  - option: 版本号写入文件（如 VERSION）再提交
+    reason: 仓库的版本机制是构建时经 -ldflags 注入标签名，没有版本文件；引入文件会形成版本号双源，漂移只能靠人工对齐
+risks:
+  - gh CLI 未安装或未认证时，创建 GitHub Release 会失败；技能把 gh auth status 放进前置检查，失败时给出安装与登录指引
+  - 技能描述的流程随仓库演进漂移（路径改名、回归命令变化、安装渠道变更）；由 internal/skills 的结构校验测试钉住技能引用的仓库路径存在性，漂移在回归中失败
+  - 首次发布没有既有标签可推导版本号；技能以 v0.1.0 为缺省并要求发布者确认，不静默选值
+  - 归一化改变「项目目录之外」诊断 message 中的绝对路径拼写（/var → /private/var）；规格只要求写绝对路径，TestInstall 同步改为按 EvalSymlinks 后的拼写断言
+  - install.sh 花括号改动面覆盖全部变量展开（机械替换），审查时按 diff 逐行核对不改变语义
+  - export 段名严格校验后，大写不敏感文件系统上大小写变体 exports 路径从「接受」变为「拒绝」；这正是测试登记的意图，真实用户以小写 exports 使用导出

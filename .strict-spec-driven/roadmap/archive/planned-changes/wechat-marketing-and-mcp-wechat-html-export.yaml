@@ -1,0 +1,12 @@
+schema: strict-spec-driven/planned-change/v1
+schema_version: 1
+artifact_type: planned_change
+schema_file: ../../templates/strict-spec-driven/schemas/planned-change.yaml
+planned_change:
+  id: wechat-html-export
+  milestone: wechat-marketing-and-mcp
+status: complete
+summary: 公众号内联样式（Inline Style）HTML 导出
+details: wa-cli export --format wechat-html 把已验收正文转成只含内联样式的 HTML，不含 script、外链样式表或 class 依赖；样式主题来自规范包；图片以带说明的占位块导出，并附一份配图清单。测试校验导出结果不含被禁止的标签和属性。
+depends_on:
+  - wechat-marketing-genre

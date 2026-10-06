@@ -1,0 +1,34 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: emotion-pacing-curve
+approach:
+  - 在 metrics 领域新增只读聚合命令 wa-cli curve：按单元树先序（与 metrics compute 相同）为每个已声明的 AI 评分指标输出一条曲线，单元点值复用 metrics show 的片段取值语义（agreed 中位数、decided 作者选择）再取单元内中位数；目标按「场景契约 targets → tension 节拍线性映射 → 无目标」三层解析；偏离与节奏检查发现项只在 curve 输出。数据面改动集中在 outline 节 targets 字段、文体 pacing_checks 声明与 short-story 内置指标，均为纯数据，符合内核与虚构概念解耦的既有架构。
+decisions:
+  curve-per-metric:
+    decision: curve 对作品中每个已声明的 AI 评分指标输出一条曲线，不在内核硬编码「情绪」「张力」两个名字；short-story 文体声明 emotion 与 tension 指标后自然形成情绪曲线（Emotion Curve）与张力曲线（Tension Curve）
+    rationale: 规则、评分标准、AI 评分指标均由文体与规范包声明的既有架构下，内核出现虚构专用维度会阻断其他文体（如网文）复用曲线能力；按指标输出让曲线命令对 tech-blog 等非虚构文体同样可用
+  curve-point-aggregation:
+    decision: 曲线数据点按单元树先序排列，每单元一个点，值为该单元各片段取值的中位数；没有任何可取值片段（含 pending、disputed 或 metrics.yaml 过期）时为 null
+    rationale: 路线图写明「按单元顺序汇总」，里程碑完成标准以场景为发现项粒度；复用 metrics show 的片段取值语义避免出现第二套分数解释，null 点显式暴露「未打完分」而不是假装为 0
+  target-resolution:
+    decision: 目标三层解析：单元大纲节 targets 声明的锚定分值优先；未声明且指标 id 为 tension 时，由该场景大纲节 beats 引用的根单元大纲节 role 对应的结构类写作法节拍的目标张力按 min + tension ÷ 10 × (max − min) 线性映射到该指标 scale（多节拍取映射均值），四舍五入（远离零）；其他情况无目标、不对比
+    rationale: 路线图要求「未声明时，采用所选结构类写作法给出的目标走势」；节拍 tension 是 0 到 10 的固定刻度而指标 scale 各异（如 1 到 5），线性映射是唯一不需要额外配置的桥接；仅 tension 指标享有此默认，因为节拍数据只有 tension 一个目标字段
+  deviation-rule:
+    decision: 偏离判定为 |单元点值 − 目标| 大于该指标的 tolerance（复用校准容忍度）；发现项含 unit、metric、value、target、difference 与 message（说明偏高或偏低，只衡量偏离、不评判好坏），只在 curve 输出，accept、advance 与 lint 都不读取
+    rationale: 与文风漂移（Style Drift）发现项同为非阻塞信息；复用每指标已有的 tolerance 配置，不新增配置面，也不引入新的判定语义
+  pacing-check-data:
+    decision: 节奏检查（Pacing Check）为文体纯数据：每项含 id、metric（已声明的 AI 评分指标）、min_score（片段取值达到该分值视为节拍点）与 max_gap_chars（按单元先序拼接正文后，相邻两个节拍点片段之间允许的最大非空白字符数）；判定基于已记录分数与确定性字符数，发现项同样只在 curve 输出。short-story 文体声明 emotional-beat-gap（emotion 达到 3 分的片段之间最多 2000 个非空白字符），使该能力在里程碑文体上开箱可用并可端到端验证（规范包与 config.yaml 不能声明，作者已确认）
+    rationale: 路线图示例为「网文中两个爽点之间的最大字数间隔」且明确检查基于已记录的分数和确定性指标进行；纯数据声明与「规范包只能是数据」的约束一致，爽点等文体概念由分值阈值表达而非代码特判。内置文体都不声明节奏检查时，合并与校验路径无法被任何测试触达，short-story 的 emotional-beat-gap 以真实的创作约束（情绪节拍不宜间隔过远）补齐这条路径
+  text-chart:
+    decision: 文本图表为每个指标一段、按单元先序排列的字符条形（方块字符与刻度标注，标注单元点值与目标），--json 输出结构化的 curves（points、targets、发现项）
+    rationale: 满足路线图「曲线以 --json 和文本图表两种形式输出」的最低要求，不引入外部绘图依赖，终端可读
+alternatives:
+  - option: 在 short-story 文体内核硬编码情绪与张力两条曲线
+    reason: 内核出现虚构专用概念，网文等后续文体无法复用曲线能力，与规则、评分标准由文体数据声明的分层架构不一致
+  - option: curve 按段落而非按单元输出数据点
+    reason: 段落级点值让文本图表在多场景作品下过长，且里程碑完成标准以场景（单元）为发现项粒度，按单元汇总即可支撑判定
+risks:
+  - 节拍张力到指标 scale 的线性映射在刻度差异大时（如 1 到 25）会放大取整误差；短篇常用 1 到 5 刻度影响有限，映射公式写入规格便于作者理解发现项中的目标值
+  - 情绪与张力指标的锚定说明与示例文本是产品文案，初稿由本变更拟定，作者审稿时可调整；锚定文本影响打分会话的质量但不影响 wa-cli 的确定性行为

@@ -1,0 +1,38 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: foreshadowing-ledger
+  status: proposed
+summary:
+  what:
+    - 新增作品根单元目录下的伏笔台账（Foreshadowing Ledger）threads.yaml：每个伏笔条目（Thread Entry）记录符合 id 格式的 id（文件内唯一，缺省生成 thread-<n>）、非空的 text（伏笔内容）、planted_in（埋设场景，scene 类型单元引用）、planned_recover（计划回收位置，scene 或章类型单元引用，按单元树先序不得早于 planted_in）与 status（open 未回收 / paid 已回收 / dropped 放弃）；status 为 paid 时附 recovered_in（回收发生的 scene 单元引用），为 dropped 时附 decision（授权放弃的决策 id）。
+    - 新增 wa-cli threads <work> [--all]：默认列出 status 为 open 的条目（--all 列出全部），按 planted_in 的单元树先序排序，每项标 overdue——条目为 open 且（计划回收单元的 stage 为 done，或存在 stage 为 done 的 scene 单元既不在计划回收单元子树内、又按先序位于其后）；不加 --json 时以人读文本输出，overdue 条目标注已超过计划回收位置并附下一步命令。
+    - 新增 wa-cli threads add <work> --text <内容> --plant-in <场景> --recover-at <章或场景> [--id <id>] 与 wa-cli threads set <work> <id> [--text <内容>] [--recover-at <位置>] [--status open|paid|dropped] [--recovered-in <场景>] [--decision <决策 id>]：--status paid 必须同时给出 --recovered-in，--status open 清除 recovered_in 与 decision；放弃（dropped）必须作者确认——未给出指向为该条目生成、已由作者决定且选择允许的决策的 --decision 时拒绝（threads.author-confirmation）并幂等生成阻塞决策（Decision Queue），作者决定后携带 --decision 重试才写入，与设定集（Canon）作者钦定条目的阻塞模式一致。
+    - wa-cli context 对 scene 单元在上下文包（Context Pack）新增未回收伏笔（Open Foreshadowing）内容项：台账中 open 且与本场景契约相关的条目（planted_in 为本场景、planned_recover 为本场景，或本场景大纲节 recovers 引用），每项含 id、text、planted_in、planned_recover 与 overdue；计入上下文预算（Context Budget），part 为 thread，优先级排在揭示边界之后，超预算时按 context-trim 裁剪；--json 输出 threads 字段，Markdown 输出新增「未回收伏笔（Open Foreshadowing）」小节；threads.yaml 不存在时 threads 为空数组且不报告。
+    - 场景契约（Scene Contract）与台账交叉校验：作品有伏笔台账（Foreshadowing Ledger）threads.yaml 时，大纲节 recovers 引用的伏笔 id 必须已登记且 planted_in 按先序不晚于本场景（否则 threads.unknown-thread / threads.recover-not-planted），plants 引用的伏笔 id 必须 planted_in 恰为本场景（否则 threads.unknown-thread）；wa-cli scene contract 给出 --plant 或 --recover 时按写入后状态即时检查并拒绝写入（同因果链预检），wa-cli validate 整体校验报告全部此类问题；作品没有 threads.yaml 时不做伏笔检查，既有作品行为不变。
+  why:
+    - 路线图 novel 里程碑（order 600，长篇结构与记忆）的计划变更 foreshadowing-ledger：它是完成标准「伏笔回收引用不存在的埋设时校验失败；wa-cli threads 标出超过计划回收位置的未回收伏笔」与里程碑 details「记忆存放在磁盘上的故事圣经（Story Bible）台账中」的伏笔侧承载者；依赖的 scene-contract-and-causality 已归档，契约中的 plants/recovers 字段已就位，只缺台账与校验。
+    - 长篇小说的伏笔常跨越数十章：任何单个会话都记不住埋在哪、计划在哪收，跨会话即丢失。台账把伏笔状态放到磁盘上，Agent 每个会话经 wa-cli threads 与 wa-cli context 获得确定、可复现的伏笔记忆，不依赖模型记忆，也不调用大语言模型（LLM），与里程碑「长篇的连续性不依赖模型记忆」的原则一致。
+    - 放弃伏笔是作者的叙事决策：静默丢弃会辜负读者期待。dropped 走决策队列（Decision Queue）作者确认，与仓库约定「涉及作者意图的行为，规格必须写明人的确认点」一致。
+scope:
+  in:
+    - internal/schema：新增 threads.schema.json（schema_version 与 entries 的 id/text/planted_in/planned_recover/status/recovered_in/decision 约束）与命名注册，合法与不合法夹具
+    - 新包 internal/threads：threads.yaml 加载与领域校验（id 唯一、单元引用存在与类型、planned_recover 不早于 planted_in、状态字段约束）、Add/Set/List、overdue 判定（单元树先序与 stage）、dropped 的决策队列授权（复用 canon 的 gate 模式）、契约交叉检查（供 validate 与写入预检复用）
+    - internal/cli：threads / threads add / threads set 命令注册（args、flags、outputKeys、exitCodes、--json 与人读输出、诊断 next）；scene contract 对 --plant/--recover 的台账预检（仿 causalityPrecheck）；validate 整体校验纳入 threads.yaml 与契约交叉检查，validate <path> 支持台账产物
+    - internal/ctxpack：场景级上下文新增未回收伏笔内容项（part thread）、预算计入、按优先级裁剪与 Markdown 小节
+    - docs/GLOSSARY.md：伏笔条目（Thread Entry）词条；测试夹具：带 threads.yaml 的长篇夹具与无台账夹具
+  out:
+    - 写后收口（Close-out）：契约要求的伏笔未在收口提交时 wa-cli accept 被拒绝——属 scene-close-out 计划变更；本变更中 paid 状态由 threads set 显式记录，不与验收联动
+    - 状态快照（State Snapshot）、知情表（Knowledge State）、分层摘要与卷末检查点：novel 里程碑其他计划变更
+    - 正文中伏笔的自动抽取与识别：抽取由接入的 Agent 完成，wa-cli 不调用大语言模型（LLM）
+    - 向量检索、跨作品共享台账与按人物过滤伏笔：不在本变更；MCP 服务与内置技能不单独编写（threads 经命令注册表自动暴露）
+unchanged_behavior:
+  - 作品没有 threads.yaml 时，validate、scene contract、context 等命令的输出、退出码与错误码不变（context 的 threads 字段为空数组）
+  - 既有 outline.yaml 的 plants/recovers 字段格式、scene contract 参数与因果链（Causality Chain）检查不变，只新增有台账时的交叉校验
+  - 设定集（Canon）、recall、草稿、审稿与验收行为不变；决策队列既有语义不变，threads 只是新的决策生成方
+  - MCP 服务与内置技能内容不变；非 scene 单元的 context 输出不变（threads 为空数组）
+roadmap:
+  milestone: novel
+  planned_change: foreshadowing-ledger

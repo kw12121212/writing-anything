@@ -1,0 +1,3 @@
+schema_version: 1
+samples:
+  - {metric: tension, source: 'pack:house', unit: post, paragraph: 1, paragraph_sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, ai_median: 3.5, author_score: 4, confirmation: 作者：4 分, recorded_at: '2026-10-02T08:00:00Z'}

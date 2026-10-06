@@ -1,0 +1,33 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: human-edit-protection-and-comments
+  status: proposed
+summary:
+  what:
+    - 人工编辑保护（Human Edit Protection）：单元已有 draft.md 且其 SHA-256 与最近一次 draft write 的写入记录不同（或没有写入记录）时，wa-cli draft write 拒绝覆盖并报告 draft.human-edited，提示先用 wa-cli diff 查看作者的改动；只有用 --base <sha256> 显式声明基于作者的当前版本时才写入，--base 过期时报告 draft.base-mismatch。
+    - 新增 wa-cli diff <unit>：按写入记录逐段列出作者自最近一次 draft write 以来的改动（新增、修改、删除的段落及当前文字），并给出可作为 --base 的当前正文哈希。
+    - '正文批注（Comment）<!-- @me: ... --> 或 <!-- @me(kind): ... --> 被解析为作者反馈：锚点取批注本身与所在段落，出现在 feedback list、feedback watch 与 wa-cli next 中；draft write 覆盖正文前把当前正文中的批注记入 feedback.yaml，feedback resolve 解决或不采纳批注反馈时把批注从正文移除，记录保留在反馈中。'
+  why:
+    - 里程碑 kernel-foundation 的完成标准要求作者直接修改 draft.md 后 draft write 拒绝覆盖并提示用 wa-cli diff 查看人工改动，并且正文批注被解析为作者反馈；目前 draft write 总是覆盖，Agent 整体重写会悄悄抹掉作者的改动，违反「作者的编辑优先于 Agent」的项目约定。
+    - 作者最自然的反馈方式是直接在正文里写批注；没有解析，Agent 只能靠作者在对话中复述，批注也会在 Agent 重写时丢失。
+scope:
+  in:
+    - internal/draft：写入前检查人工编辑与 --base；逐段改动（diff）推导；段落带原文文字；批注移除后按原出处重建写入记录
+    - internal/feedback：解析正文批注为反馈（稳定 id cm-<hash>、kind、锚点、跳过围栏代码块）、与已记入的反馈合并列出、记入 feedback.yaml（source 为 comment）、解决或不采纳时移除批注；feedback.schema.json 新增可选的 source（conversation、comment）
+    - wa-cli draft write 新增 --base；新增 wa-cli diff <unit>；draft write 覆盖前记入批注；feedback resolve 支持批注反馈并移除批注
+    - 修改 sources-and-provenance 主规格的 draft-write，新增 human-edit-protection 与 draft-diff；修改 feedback 主规格的 feedback-list、feedback-resolve，新增 comment-feedback（delta spec）
+  out:
+    - 反馈与修订记录的结构化关联、阅读页（Reading View）等其他反馈渠道
+    - 三方合并作者与 Agent 的改动；diff 显示被删除段落的原文（写入记录只保存哈希）
+    - wa-cli 调用 LLM
+unchanged_behavior:
+  - 输出信封字段与退出码约定不变；已发布错误码的含义不变
+  - 作者没有改过正文时，draft write 的行为与输出不变；写入内容与当前正文逐字节相同时仍直接成功
+  - 没有批注时，feedback list、feedback watch、next 与 feedback resolve 的行为不变；provenance、source、claim、decision 等命令不变
+  - 仓库根目录不创建 .writing-anything/；产品二进制不依赖 internal/tools/** 与 strict-spec-driven
+roadmap:
+  milestone: kernel-foundation
+  planned_change: human-edit-protection-and-comments

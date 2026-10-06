@@ -1,0 +1,69 @@
+# 长篇小说（Novel）：单元层级为 部（Part）→ 章（Chapter）→ 场景（Scene），只有场景走完整生命周期；
+# 部与章声明为汇总单元（Aggregated Unit，stage_from_children），阶段由子场景汇总得出（最短板规则：
+# 取最落后场景的阶段），wa-cli advance 对它们报告 lifecycle.derived-stage。场景推进与结构调整（插入、
+# 移动，id 稳定）支撑在任何单个会话都装不下全书时由 Agent 逐场景推进长篇。小说规则沿用 short-story 的
+# 四条（AI 腔词表、对话标点、视角与人称一致、篇幅），虚构内容不做论断出处检查；默认写作法为 snowflake
+# （雪花写作法十步规划，规划步骤不经大纲承担，分步确认见 wa-cli plan 命令组）；AI 评分指标由后续计划
+# 变更声明，这里不声明。
+schema_version: 1
+id: novel
+title: 长篇小说
+description: 以场景为单元、按部与章组织的长篇小说：场景走完整生命周期，部与章的进度由场景汇总得出；结构调整不改变单元 id 与既有引用。
+unit_types:
+  - id: novel
+    title: 小说
+    children: [part]
+    brief_required: [premise, pov, length, key_messages]
+  - id: part
+    title: 部
+    children: [chapter]
+    stage_from_children: true
+  - id: chapter
+    title: 章
+    children: [scene]
+    stage_from_children: true
+  - id: scene
+    title: 场景
+stages:
+  - id: brief
+    title: 写作简报
+    required_artifacts: [brief]
+  - id: outline
+    title: 大纲
+    required_artifacts: [outline]
+  - id: draft
+    title: 草稿
+    required_artifacts: [draft]
+  - id: review
+    title: 审稿与验收
+    required_artifacts: [review, acceptance]
+rules:
+  length:
+    type: length-range
+    severity: warning
+    params: {min: 1000, max: 20000}
+  fiction-cliches:
+    type: ai-cliche
+    severity: warning
+    params:
+      terms:
+        - 眼底闪过一丝
+        - 嘴角勾起一抹
+        - 不易察觉的笑
+        - 空气仿佛凝固
+        - 时间仿佛静止
+        - 心中五味杂陈
+        - 命运的车轮
+        - 岁月静好
+        - 说不清道不明
+        - 仿佛在诉说着什么
+        - 内心深处
+        - 无声地呐喊
+  dialogue:
+    type: dialogue-punctuation
+    severity: warning
+  pov:
+    type: pov-consistency
+    severity: warning
+default_method: snowflake
+context_budget: 16000

@@ -1,0 +1,7 @@
+state_changes:
+  - {id: st-2, contract: sc-2, entry: char-lin-wan, state: 得知真相后取消返程，visitor 变为 staying}
+knowledge:
+  - {id: kn-05, entry: char-shen-wangshu, character: char-lin-wan}
+  - {id: kn-06, entry: char-shen-wangshu, character: char-zhou-huifang}
+  - {id: kn-07, entry: char-shen-wangshu, character: reader}
+events: [ev-truth-told]

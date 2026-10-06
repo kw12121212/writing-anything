@@ -1,0 +1,168 @@
+schema: strict-spec-driven/main-spec/v1
+schema_version: 1
+artifact_type: main_spec
+schema_file: templates/strict-spec-driven/schemas/main-spec.yaml
+spec:
+  id: outline
+  title: 大纲（Outline）
+requirements:
+  outline-artifact:
+    strength: MUST
+    statement: 单元目录下的 outline.yaml 是大纲（Outline）：含 schema_version（1）与按顺序排列的 sections；每个大纲节（Outline Section）含 id 与非空的 title，以及可选的 covers（覆盖的核心观点（Key Message）id，不重复）、uses（使用的素材（Source）id，不重复）、reason（不覆盖任何核心观点的理由，非空文本）与 role（承担的写作法章节或节拍 id，见 methods 主规格的 method-outline-check）；节还可声明轻量场景契约（Scene Contract）字段：characters（出场人物，非空文本数组，不重复）、beats（承担的情节节拍（Story Beat）id，不重复）与 reveal（揭示边界（Reveal Boundary），非空文本，本场景不能提前透露的信息）；节还可声明长篇场景契约扩展字段：pov（视角人物，非空文本）、location（地点，非空文本）、state_changes（必须发生的状态变化，每项含符合 id 格式且节内不重复的 id 与非空文本）、plants（要埋设的伏笔（Foreshadowing）id，不重复）、recovers（要回收的伏笔 id，不重复）、causes（起因（Cause），引用前文已发生事件的 id，不重复）与 events（预期产生的事件（Event）id，不重复），plants、recovers、causes 与 events 的每个取值都必须符合 id 格式；这些字段不符合上述要求时报告 artifact.schema-violation（field 为对应点分路径，如 sections[i].state_changes[j].id）。wa-cli validate 整体校验时，必须对每个可加载作品的每个单元目录中存在的 outline.yaml 做 Schema 校验并计入 checked，且满足：节 id 在文件内唯一，否则报告 artifact.duplicate-id（field 为 sections[i].id）；covers 中的每个 id 都是同一单元目录下 brief.yaml 中的核心观点，否则报告 outline.unknown-message（field 为 sections[i].covers[j]；没有 brief.yaml 时任何 covers 都不存在，brief.yaml 不通过校验时不做此项检查）；uses 中的素材都已登记，否则报告 outline.unknown-source（field 为 sections[i].uses[j]）；beats 中的每个 id 都是同一作品根单元大纲（根单元目录下的 outline.yaml）的节 id，否则报告 outline.unknown-beat（field 为 sections[i].beats[j]；根单元没有大纲或根单元大纲不通过校验时不做此项检查）；场景单元大纲节的 causes 与 events 还必须通过因果链（Causality Chain）检查（见 scene-causality）。这些检查都通过时，validate 还必须把每个覆盖缺口（Coverage Gap，见 outline-show）报告为一条 error 级诊断：outline.uncovered-message（path 为 outline.yaml，不填 field，message 含核心观点的 id 与内容）与 outline.missing-reason（field 为 sections[i]），next 为 wa-cli outline show <unit> --dir <dir> --json 与 wa-cli help outline set --json；以及单元选用写作法时的写作法缺口（outline.missing-method-part、outline.method-order 与 outline.unknown-role，见 methods 主规格的 method-outline-check），next 另含 wa-cli method list --dir <dir> --json。wa-cli validate <path> 对该位置的 outline.yaml 执行同样的检查。outline.yaml 存在但途经符号链接或不是普通文件时，validate、outline set、outline remove、outline show 与 scene contract 都报告 artifact.not-found（path 为该 outline.yaml），不读取也不覆盖它。 长篇场景契约扩展字段还包括时间线（Timeline）的 time（故事时间（Story Time）：非空文本标记，相同文本视为同时）与 after（时间线：声明本场景晚于的前文场景引用，非空文本数组，不重复，元素可跨作品，格式 <work>/<scene>）；这两个字段与其他契约字段同样受 Schema 约束（artifact.schema-violation）。
+    scenarios: {}
+  outline-set:
+    strength: MUST
+    statement: wa-cli outline set <unit> <section> 必须按节 id 新增或修改单元目录下 outline.yaml 中的一节：section 不存在时新增一节，此时必须给出 --title，省略 --after 与 --before 时追加在末尾；section 已存在时只修改给出的字段，位置不变。--title 设置标题；--covers 与 --uses 为逗号分隔的 id，整体替换；--reason 设置不覆盖任何核心观点的理由；--role 设置承担的写作法章节或节拍 id；--characters 与 --beats 为逗号分隔的取值，整体替换；--reveal 设置揭示边界；--covers、--uses、--reason、--role、--characters、--beats 与 --reveal 取值为空字符串时删除该字段。--after <id> 或 --before <id> 把该节放到指定节之后或之前。outline.yaml 不存在时创建，含 schema_version 1 与 sections，子单元的单元目录不存在时先创建；已存在时只修改涉及的节，保留其他内容与 YAML 注释。修改后的取值与原有取值相同时不写文件，changedPaths 为空数组；否则 changedPaths 为新建的单元目录（如有）与 outline.yaml。成功时退出码为 0，--json 输出的 outline、coverage 与 gaps 同 outline-show；覆盖缺口不阻止写入；修改后大纲中仍存在的 covers、uses、beats 引用问题以 severity 为 warning 的诊断报告，valid 仍为 true。section 或 --role 不符合 id 格式时报告 artifact.schema-violation（field 为 section 或 role）；单元选用了文章类或结构类写作法且 --role 不是它的章节或节拍时报告 outline.unknown-role（field 为 role）；写作简报选用的写作法不可用时照常修改，并以 warning 报告 brief.unknown-method；新节缺少 --title、--title 为空字符串、--title、--reason 或 --reveal 的取值非空但只含空白、--after 或 --before 为空字符串、--covers、--uses 或 --beats 中有重复的 id、--characters 中有空白或重复的取值、同时给出 --after 与 --before、--after 或 --before 指向该节本身、节已存在而没有给出任何修改参数时报告 input.invalid-value；--after 或 --before 指向的节不存在时报告 outline.section-not-found；covers 中的核心观点不在写作简报中时报告 outline.unknown-message（field 为 covers[i]），给出 --covers 而写作简报不通过校验时报告写作简报的诊断；uses 中的素材未登记时报告 outline.unknown-source（field 为 uses[i]）；给出 --beats 而根单元大纲可加载且通过校验时，beats 中的 id 不是根单元大纲的节时报告 outline.unknown-beat（field 为 beats[i]）；已有的 outline.yaml 有解析、Schema 或节 id 重复问题时报告其诊断（其中 covers、uses 的引用问题不阻止修改，以便写作简报删除核心观点后用本命令修复大纲，但本次给出的 --covers、--uses 必须合法）；要修改之处经由 YAML 锚点、别名或合并键得到时报告 outline.anchored-value。由参数引起的诊断不填 path，field 为参数名或为空，next 含 wa-cli help outline set --json。这些情况都不修改任何文件，退出码为 1。
+    scenarios:
+      set-first-section:
+        - GIVEN: 作品 my-post 的 brief.yaml 有核心观点 km-1 与 km-2，没有 outline.yaml
+        - WHEN: 运行 wa-cli outline set my-post why --title 为什么需要连接池 --covers km-1 --dir D --json
+        - THEN: outline.yaml 含一节 why（covers 为 [km-1]）；changedPaths 为 [.writing-anything/works/my-post/outline.yaml]；gaps 只有一项 code 为 outline.uncovered-message、keyMessage 为 km-2；valid 为 true，退出码为 0
+      set-before:
+        - GIVEN: outline.yaml 依次有节 why 与 how
+        - WHEN: 运行 wa-cli outline set my-post intro --title 引子 --reason 引出问题 --before why --dir D --json
+        - THEN: sections 依次为 intro、why、how，退出码为 0
+      set-modify:
+        - GIVEN: outline.yaml 的节 how 有 title、covers [km-2] 与作者写的注释
+        - WHEN: 运行 wa-cli outline set my-post how --uses src-a --dir D --json
+        - THEN: how 的 title 与 covers 不变，uses 为 [src-a]，注释保留，退出码为 0
+      set-move:
+        - GIVEN: outline.yaml 依次有节 intro、why、how
+        - WHEN: 运行 wa-cli outline set my-post intro --after how --dir D --json
+        - THEN: sections 依次为 why、how、intro，退出码为 0
+      set-clear:
+        - GIVEN: outline.yaml 的节 how 有 covers [km-2] 与 reason
+        - WHEN: 运行 wa-cli outline set my-post how --reason= --dir D --json
+        - THEN: how 没有 reason，covers 不变，退出码为 0
+      set-unchanged:
+        - GIVEN: outline.yaml 的节 why 的 title 为「为什么需要连接池」
+        - WHEN: 运行 wa-cli outline set my-post why --title 为什么需要连接池 --dir D --json
+        - THEN: changedPaths 为空数组，outline.yaml 与运行前逐字节相同，退出码为 0
+      set-new-without-title:
+        - GIVEN: outline.yaml 没有节 end
+        - WHEN: 运行 wa-cli outline set my-post end --reason 总结 --dir D --json
+        - THEN: diagnostics 中有一条错误码为 input.invalid-value、没有 path 的诊断，message 指出缺少 --title，next 含 wa-cli help outline set --json；outline.yaml 不变，退出码为 1
+      set-unknown-message:
+        - GIVEN: brief.yaml 中没有 km-9
+        - WHEN: 运行 wa-cli outline set my-post why --covers km-9 --dir D --json
+        - THEN: diagnostics 中有一条错误码为 outline.unknown-message、field 为 covers[0] 的诊断，没有新建或修改文件，退出码为 1
+      set-missing-anchor:
+        - GIVEN: outline.yaml 没有节 nope
+        - WHEN: 运行 wa-cli outline set my-post why --after nope --dir D --json
+        - THEN: diagnostics 中有一条错误码为 outline.section-not-found 的诊断，outline.yaml 不变，退出码为 1
+      set-repair-dangling:
+        - GIVEN: 作品 my-post 的节 how 覆盖 km-2，之后作者用 wa-cli brief set my-post --remove-message km-2 删除了该核心观点
+        - WHEN: 运行 wa-cli outline set my-post how --covers= --reason 交代背景 --dir D --json
+        - THEN: how 没有 covers、reason 为「交代背景」，退出码为 0；此后 wa-cli validate --dir D 不再报告 outline.unknown-message
+      set-contract:
+        - GIVEN: short-story 作品 my-story 根单元 outline.yaml 有节 b1，场景 s1 没有 outline.yaml
+        - WHEN: 运行 wa-cli outline set my-story/s1 scene-1 --title 灯下对峙 --characters 守灯人,精灵 --beats b1 --reveal 精灵的真实身份 --dir D --json
+        - THEN: s1 的 outline.yaml 的节 scene-1 的 characters 为 [守灯人, 精灵]、beats 为 [b1]、reveal 为「精灵的真实身份」；changedPaths 含该 outline.yaml，退出码为 0
+      set-unknown-beat:
+        - GIVEN: short-story 作品 my-story 根单元 outline.yaml 有节 b1
+        - WHEN: 运行 wa-cli outline set my-story/s1 scene-1 --title 灯下对峙 --beats b9 --dir D --json
+        - THEN: diagnostics 中有一条错误码为 outline.unknown-beat、field 为 beats[0] 的诊断，没有新建或修改文件，退出码为 1
+  outline-remove:
+    strength: MUST
+    statement: wa-cli outline remove <unit> <section> 必须删除单元目录下 outline.yaml 中 id 为 section 的节，保留其他内容与 YAML 注释；成功时 changedPaths 为 outline.yaml，--json 输出的 outline、coverage 与 gaps 同 outline-show，删除后大纲中仍存在的 covers、uses 引用问题以 severity 为 warning 的诊断报告，退出码为 0。没有 outline.yaml 或其中没有该节时报告 outline.section-not-found（next 含 wa-cli outline show <unit> --dir <dir> --json）；该节或其中的值带有 YAML 锚点、别名或合并键时报告 outline.anchored-value；已有的 outline.yaml 有解析、Schema 或节 id 重复问题时报告其诊断（covers、uses 的引用问题不阻止删除）；这些情况都不修改任何文件，退出码为 1。
+    scenarios:
+      remove-section:
+        - GIVEN: outline.yaml 依次有节 intro、why、how
+        - WHEN: 运行 wa-cli outline remove my-post intro --dir D --json
+        - THEN: sections 依次为 why、how，changedPaths 为 [.writing-anything/works/my-post/outline.yaml]，退出码为 0
+      remove-missing:
+        - GIVEN: outline.yaml 没有节 nope
+        - WHEN: 运行 wa-cli outline remove my-post nope --dir D --json
+        - THEN: diagnostics 中有一条错误码为 outline.section-not-found 的诊断，其 next 含 wa-cli outline show my-post；outline.yaml 不变，退出码为 1
+  outline-show:
+    strength: MUST
+    statement: wa-cli outline show <unit> 必须只读地输出单元的大纲与覆盖情况：--json 输出 outline、coverage 与 gaps。outline 含 unit、path（outline.yaml 路径）与 sections（按大纲顺序，每项含 id、title、covers、uses、characters、beats、plants、recovers、causes 与 events（数组；未声明时为空数组；state_changes 每项含 id 与 text）以及 reason、role、reveal、pov 与 location（未设置时为 null））；单元目录下没有 outline.yaml 时 outline 为 null。coverage 按写作简报中的顺序为该单元 brief.yaml 的每个核心观点列一项，含 keyMessage（核心观点 id）、text 与 sections（covers 含该核心观点的节 id，按大纲顺序）；没有 brief.yaml 时为空数组。gaps 为覆盖缺口（Coverage Gap）数组，每项含 code、keyMessage、section 与 message：先按写作简报的顺序列出每个没有被任何一节覆盖的核心观点（code 为 outline.uncovered-message，section 为 null），再按大纲的顺序列出每个既没有 covers 也没有 reason 的节（code 为 outline.missing-reason，keyMessage 为 null），最后是单元选用写作法时的写作法缺口（见 methods 主规格的 method-outline-check）；写作简报选用的写作法不可用时不列写作法缺口，并以 warning 报告 brief.unknown-method；没有 outline.yaml 时每个核心观点都是 outline.uncovered-message。changedPaths 为空数组；brief.yaml 不通过校验，或 outline.yaml 有解析、Schema 或节 id 重复问题时报告其诊断，outline 为 null，valid 为 false，退出码为 1；outline.yaml 只有 covers、uses、beats 的引用问题时照常输出 outline、coverage 与 gaps，同时报告这些诊断，valid 为 false，退出码为 1；否则即使有覆盖缺口，valid 也为 true、退出码为 0。不加 --json 时以人读文本输出同样的信息。
+    scenarios:
+      show-coverage:
+        - GIVEN: 作品 my-post 的 brief.yaml 有 km-1 与 km-2，outline.yaml 有覆盖 km-1 的节 why 与没有 covers 和 reason 的节 how
+        - WHEN: 运行 wa-cli outline show my-post --dir D --json
+        - THEN: coverage 依次为 km-1（sections 为 [why]）与 km-2（sections 为空数组）；gaps 依次为 keyMessage 为 km-2 的 outline.uncovered-message 与 section 为 how 的 outline.missing-reason；changedPaths 为空数组，退出码为 0
+      show-empty:
+        - GIVEN: 作品 my-post 的 brief.yaml 有 km-1，没有 outline.yaml
+        - WHEN: 运行 wa-cli outline show my-post --dir D --json
+        - THEN: outline 为 null，gaps 只有 keyMessage 为 km-1 的 outline.uncovered-message，退出码为 0
+      show-dangling:
+        - GIVEN: 作品 my-post 的节 how 的 covers 为 [km-2]，写作简报中已没有 km-2
+        - WHEN: 运行 wa-cli outline show my-post --dir D --json
+        - THEN: outline 列出节 how；diagnostics 中有一条错误码为 outline.unknown-message、field 为 sections[1].covers[0] 的诊断，退出码为 1
+      show-contract:
+        - GIVEN: short-story 作品 my-story 的场景 s1 的 outline.yaml 的节 scene-1 声明了 characters、beats 与 reveal
+        - WHEN: 运行 wa-cli outline show my-story/s1 --dir D --json
+        - THEN: 该节的 characters 为 [守灯人, 精灵]、beats 为 [b1]、reveal 非 null；changedPaths 为空数组，退出码为 0
+      show-novel-contract:
+        - GIVEN: novel 作品 my-novel 的场景 s1 的节 sc1 声明了 pov、location、state_changes、plants、causes 与 events，没有声明 recovers
+        - WHEN: 运行 wa-cli outline show my-novel/s1 --dir D --json
+        - THEN: 该节输出 pov 与 location（非 null）、state_changes 每项含 id 与 text，causes 与 events 为声明的取值，未声明的 recovers 为空数组；changedPaths 为空数组，退出码为 0
+  outline-gate:
+    strength: MUST
+    statement: 单元当前阶段的 required_artifacts 含 outline，且单元目录下存在 outline.yaml 或 outline.md 时，大纲问题必须是该单元的阻塞项（Blocker），artifact 为 outline、decision 为 null：outline.yaml 或 brief.yaml 不通过校验（覆盖缺口除外）时只有一条 code 为 outline.invalid 的阻塞项，path 为不通过校验的产物（outline.yaml 或 brief.yaml）；否则 outline-show 的 gaps 中每一项都是一条阻塞项，code 与该缺口相同，path 为 outline.yaml（单元只有 outline.md 时为 outline.md，并视为没有任何节），message 与该缺口的 message 相同。两者都不存在时只有 lifecycle.missing-artifact。wa-cli advance 因这些阻塞项拒绝推进时，为每个阻塞项给出一条错误码为其 code、path 为其 path 的诊断，next 为：覆盖缺口给出 wa-cli outline show <unit> --dir <dir> --json 与 wa-cli help outline set --json；outline.invalid 给出 wa-cli validate <不通过校验的产物路径> --dir <dir> --json 与 wa-cli validate --dir <dir> --json。
+    scenarios:
+      gate-uncovered:
+        - GIVEN: 作品的文体在单元当前阶段要求 outline，brief.yaml 有 km-1 与 km-2，outline.yaml 只覆盖 km-1
+        - WHEN: 运行 wa-cli advance my-post --dir D --json
+        - THEN: valid 为 false，diagnostics 中有一条错误码为 outline.uncovered-message、path 为 outline.yaml 的诊断，message 含 km-2，next 含 wa-cli outline show my-post；work.yaml 不变，退出码为 1
+      gate-passes:
+        - GIVEN: 同上，outline.yaml 覆盖 km-1 与 km-2，每节都有 covers 或 reason
+        - WHEN: 运行 wa-cli advance my-post --dir D --json
+        - THEN: 单元推进到下一阶段，退出码为 0
+      gate-outline-md:
+        - GIVEN: 作品的文体在单元当前阶段要求 outline，brief.yaml 有 km-1，单元只有 outline.md
+        - WHEN: 运行 wa-cli advance my-post --dir D --json
+        - THEN: diagnostics 中有一条错误码为 outline.uncovered-message、path 为 outline.md 的诊断，退出码为 1
+      gate-other-stage:
+        - GIVEN: minimal 文体的作品 my-post（没有要求 outline 的阶段），outline.yaml 有覆盖缺口，brief.yaml 含 audience 与 purpose
+        - WHEN: 运行 wa-cli advance my-post --dir D --json
+        - THEN: work.yaml 的 stage 为 draft，退出码为 0
+      gate-invalid-brief:
+        - GIVEN: 作品的文体在单元当前阶段要求 outline，outline.yaml 合法，brief.yaml 不通过校验
+        - WHEN: 运行 wa-cli advance my-post --dir D --json
+        - THEN: diagnostics 中只有一条错误码为 outline.invalid 的大纲诊断，path 为 .writing-anything/works/my-post/brief.yaml，next 含 wa-cli validate .writing-anything/works/my-post/brief.yaml 命令，退出码为 1
+  scene-contract-targets:
+    strength: MUST
+    statement: 大纲节的轻量场景契约（Scene Contract）可以声明 targets：AI 评分指标（Metric）id 到目标锚定分值（scale 内的整数；非整数取值由 Schema 与参数解析报告）的映射。wa-cli outline set <unit> <section> --target <metric>=<score>[,<metric>=<score>…] 设置它（逗号分隔、整体替换，空字符串时删除），outline show 的 sections 每项含 targets（未声明时为空对象）。wa-cli validate 整体校验时（wa-cli validate <path> 对 outline.yaml 执行相同检查）必须校验：targets 的 metric 不在按作品文体合并的已声明指标（见 genres-and-packs 主规格的 scored-metrics）中时报告 outline.unknown-target-metric（field 为 sections[i].targets.<metric>）；分值不在该指标的 scale 内时报告 outline.target-out-of-range（field 同上）；两种情况以退出码 1 退出，next 为 wa-cli outline show <unit> --dir <dir> --json 与 wa-cli help outline set --json。outline set --target 给出不合法取值时报告相同错误码（field 为 targets.<metric>），不修改文件。生命周期关卡不检查 targets（调用方未解析生效配置时跳过），其问题由整体校验报告。
+    scenarios:
+      set-target:
+        - GIVEN: short-story 作品 my-story 的场景 s1 已有大纲节，文体声明了 tension 指标（scale 1 到 5）
+        - WHEN: 运行 wa-cli outline set my-story/s1 sec1 --target tension=4 --dir D --json
+        - THEN: 'outline.yaml 中该节的 targets 为 {tension: 4}，outline show 输出的 sections 含 targets，退出码为 0'
+      target-out-of-range:
+        - GIVEN: 同上
+        - WHEN: 运行 wa-cli outline set my-story/s1 sec1 --target tension=7 --dir D --json
+        - THEN: diagnostics 中有一条错误码为 outline.target-out-of-range、field 为 targets.tension 的诊断，outline.yaml 不变，退出码为 1
+      unknown-target-metric:
+        - GIVEN: 作品合并后没有声明任何 AI 评分指标
+        - WHEN: 运行 wa-cli outline set my-story/s1 sec1 --target emotion=3 --dir D --json
+        - THEN: diagnostics 中有一条错误码为 outline.unknown-target-metric、field 为 targets.emotion 的诊断，退出码为 1
+  scene-causality:
+    strength: MUST
+    statement: 场景单元（type 为 scene 的单元）大纲节的因果链（Causality Chain）检查：事件（Event）id 由场景单元大纲节的 events 声明，在作品内跨场景唯一；wa-cli validate 整体校验按单元树先序（Pre-order）遍历作品的所有场景单元大纲，同一事件 id 被第二个及之后的场景声明时，必须对每个后声明的节报告 scene.duplicate-event（path 为该 outline.yaml，field 为 sections[i].events[j]，message 含事件 id 与先声明它的场景引用）。每个场景单元大纲节的 causes 引用的事件 id：没有任何场景声明时报告 scene.unknown-event（field 为 sections[i].causes[j]）；声明它的场景按单元树先序不在该场景之前（同一场景或更靠后）时报告 scene.event-not-yet-happened（field 同上，message 含事件 id 与声明它的场景引用）。这些检查在 wa-cli validate 整体校验与 wa-cli validate <path>（path 为某 outline.yaml）时执行，发现问题以 error 报告、退出码为 1，next 为 wa-cli scene contract <unit> <section> --dir <dir> --json 与 wa-cli help scene contract --json；单元大纲不通过这些检查时，大纲关卡按 outline-gate 以 outline.invalid（path 为不通过校验的 outline.yaml）阻塞推进。非场景单元大纲节上的 causes 与 events 不参与因果链，也不产生上述诊断。
+    scenarios:
+      chain-ok:
+        - GIVEN: novel 作品 my-novel 的 chapter-one 有场景 s1（大纲节声明 events [ev-1]）与 s2（causes [ev-1]、events [ev-2]），chapter-two 有场景 s3（causes [ev-2]）
+        - WHEN: 运行 wa-cli validate --dir D --json
+        - THEN: valid 为 true，没有因果链诊断，退出码为 0
+      duplicate-event:
+        - GIVEN: novel 作品 my-novel 的场景 s1 与 s3 的大纲节都声明 events [ev-1]
+        - WHEN: 运行 wa-cli validate --dir D --json
+        - THEN: diagnostics 中有一条错误码为 scene.duplicate-event、path 为 s3 的 outline.yaml、field 为 sections[0].events[0] 的诊断，message 含 ev-1 与 s1 的引用，退出码为 1
+      unknown-event:
+        - GIVEN: novel 作品 my-novel 的场景 s2 的大纲节 causes 为 [ev-9]，没有任何场景声明 ev-9
+        - WHEN: 运行 wa-cli validate .writing-anything/works/my-novel/units/s2/outline.yaml --dir D --json
+        - THEN: diagnostics 中有一条错误码为 scene.unknown-event、field 为 sections[0].causes[0] 的诊断，退出码为 1
+      not-yet-happened:
+        - GIVEN: novel 作品 my-novel 的场景 s1 的大纲节 causes 为 [ev-2]，ev-2 由先序更靠后的场景 s2 声明
+        - WHEN: 运行 wa-cli validate --dir D --json
+        - THEN: diagnostics 中有一条错误码为 scene.event-not-yet-happened、path 为 s1 的 outline.yaml、field 为 sections[0].causes[0] 的诊断，message 含 ev-2 与 s2 的引用，退出码为 1
+      gate-outline-invalid:
+        - GIVEN: novel 作品 my-novel 的场景 s2 处于大纲阶段且 brief 与 outline 产物齐备，其大纲节的 causes 引用没有任何场景声明的 ev-9
+        - WHEN: 运行 wa-cli advance my-novel/s2 --dir D --json
+        - THEN: diagnostics 中有一条错误码为 outline.invalid、path 为 .writing-anything/works/my-novel/units/s2/outline.yaml 的诊断，next 含 wa-cli validate 命令；work.yaml 不变，退出码为 1
+  scene-contract-set:
+    strength: MUST
+    statement: wa-cli scene contract <unit> <section> 必须以命名参数写入场景单元大纲节的场景契约字段：--pov、--location 与 --reveal 设置非空文本；--characters、--beats、--plant、--recover、--cause 与 --event 为逗号分隔的取值，整体替换；--state-change <id>=<文本> 按节内 id 与既有条目合并（新增或更新，保留未涉及的条目），可重复给出；--title 设置节的标题。section 不存在时新增一节并追加在末尾，此时必须给出 --title；section 已存在时只修改给出的字段，位置不变。文本参数（--pov、--location、--reveal）取值为空字符串时删除该字段，列表参数（--characters、--beats、--plant、--recover、--cause、--event）取值为空字符串时清空该列表，id 列表中的空白取值被忽略，--characters 的空白取值报告 input.invalid-value（与 outline set 一致）；修改后的取值与原有取值相同时不写文件，changedPaths 为空数组；否则 outline.yaml 不存在时创建（含 schema_version 1 与 sections），单元目录不存在时先创建，只修改涉及的节并保留其他内容与 YAML 注释，changedPaths 为新建的单元目录（如有）与该 outline.yaml。给出 --beats 时的引用检查与 outline set 的 outline.unknown-beat 相同；给出 --cause 或 --event 时按写入后的状态即时执行 scene-causality 的因果链检查，本次写入引起、报告在被编辑节上的问题以 error 报告并拒绝写入，诊断不填 path，字段为参数名（如 causes[i]），其他节或其他场景的既有问题不阻止写入，由整体校验报告；单元的 type 不是 scene 时报告 scene.not-scene（message 含该单元的实际类型）；section 不符合 id 格式时报告 artifact.schema-violation（field 为 section）；新节缺少 --title、--title/--pov/--location/--reveal 的取值非空但只含空白、--state-change 的格式不是 <id>=<文本>、--state-change 的 id 不符合 id 格式、重复或文本为空或只含空白、--beats/--plant/--recover/--cause/--event 中有重复的取值、节已存在而没有给出任何修改参数时报告 input.invalid-value；--beats/--plant/--recover/--cause/--event 中不符合 id 格式的取值由写前复查的 Schema 校验报告 artifact.schema-violation（不填 path，字段为参数名，如 events[i]）；已有的 outline.yaml 有解析、Schema 或节 id 重复问题时报告其诊断（covers、uses 的引用问题不阻止修改）；要修改之处经由 YAML 锚点、别名或合并键得到时报告 outline.anchored-value。成功时 --json 输出与 outline show 相同的 outline、coverage 与 gaps，退出码为 0。由参数引起的诊断不填 path，next 含 wa-cli help scene contract --json；这些失败情况都不修改任何文件，退出码为 1。 --time 设置节的故事时间（非空文本）；--after 为逗号分隔的时间线引用，整体替换（空字符串时删除）；两者的写入与校验同其他文本/列表参数。
+    scenarios: {}

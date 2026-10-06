@@ -1,0 +1,19 @@
+schema: strict-spec-driven/lesson/v1
+schema_version: 1
+artifact_type: lesson
+schema_file: templates/strict-spec-driven/schemas/lesson.yaml
+lesson:
+  id: json-map-null-nil-map-676fe1
+  title: 把 JSON 解码进 map 后直接赋值，内容为 null 的文件会让 nil map 崩溃
+category: coding
+status: active
+created_at: '2026-10-01T15:35:49.224Z'
+updated_at: '2026-10-01T15:35:49.224Z'
+context: mcp-client-registration 的 json 客户端把作者给出的 mcpServers 配置文件解码进 map[string]json.RawMessage 后设置自己的条目。
+observation: fresh-context 审查用内容为 null 的配置文件复现了 panic：json.Unmarshal 对 null 不报错，map 保持 nil，随后的赋值崩溃；mcpServers 为 null 时同样得到 nil map 而不是错误。整条覆盖自己的条目还丢掉了作者加的 env。
+takeaway: 解码第三方 JSON 后，分别处理顶层为 null（从空对象开始）与内层取值为 null（按结构不符报告错误）；只改自己负责的字段并保留其余字段；为 null、空文件、内层 null 与带额外字段的条目各写测试。
+applies_when: wa-cli 读取并改写作者或其他工具拥有的 JSON 或 YAML 配置文件时
+occurrences:
+  - origin: mcp-client-registration
+    date: '2026-10-01'
+    evidence: internal/mcpinstall 的 jsonConfig 对 nil doc 从空对象开始、对 nil servers 或 entry 报告 mcp.invalid-config，只合并 command 与 args；internal/cli 的 TestMCPInstallJSON 覆盖 null、mcpServers 为 null 与保留 env。

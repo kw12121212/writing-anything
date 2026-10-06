@@ -1,0 +1,43 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: mcp-client-registration
+sections:
+  Implementation:
+    package:
+      text: internal/mcpinstall：Env（查找、执行、当前可执行文件）、claudeCode、codex、jsonConfig 三个相互隔离的注册函数与结果
+      status: complete
+    cli:
+      text: internal/cli：mcp install 命令（参数检查、按客户端汇总 installs、诊断与 next、changedPaths）；注册表与样例调用
+      status: complete
+    docs:
+      text: wa-init 技能说明用 wa-cli mcp install 注册 MCP 服务；docs/GLOSSARY.md 确认术语
+      status: complete
+  Testing:
+    lint:
+      text: gofmt 检查本变更的 Go 文件
+      status: complete
+      command: test -z "$(gofmt -l internal/mcpinstall internal/cli/mcpinstall.go internal/cli/mcpinstall_test.go internal/cli/registry.go internal/cli/cli_test.go)"
+    unit-tests:
+      text: 单元测试：internal/mcpinstall 的命令行、移除失败忽略、作用域、找不到 CLI、外部命令失败、json 合并与幂等、不合法的 json 与符号链接；CLI：参数检查、多个客户端、PATH 中的假 claude 与 codex
+      status: complete
+      command: go test ./internal/...
+    full-regression:
+      text: 运行完整回归命令，覆盖率不低于 80%
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    spec-alignment:
+      text: 对照 mcp delta spec 的每个场景确认实现与测试覆盖，并按实际实现修正
+      status: complete
+    strict-ready:
+      text: 运行 strict-spec-cli ready 与 strict-spec-cli verify，确认变更产物有效
+      status: complete
+      command: strict-spec-cli ready mcp-client-registration && strict-spec-cli verify mcp-client-registration
+    archive-readiness:
+      text: 确认 delta spec 能合并，归档后路线图中的 mcp-client-registration 标记为完成，里程碑 mcp-integration 完成
+      status: complete
+testing_gates:
+  validation_task: full-regression
+  unit_test_task: unit-tests

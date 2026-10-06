@@ -1,0 +1,52 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: scene-context-and-fiction-rules
+sections:
+  Implementation:
+    scene-context-pack:
+      text: internal/ctxpack：场景级上下文组装——对 scene 单元从场景自身 outline.yaml 的大纲节收集出场人物（characters）、情节节拍（beats）引用与揭示边界（reveal 各节取值）；出场人物按 name 在作品 canon.yaml 的 character 条目中精确匹配得到当前设定（id、name、text、protection），声明的人物没有同名 character 条目时逐个给出 warning 级 context.character-not-in-canon（next 含 wa-cli help canon add --json），作品没有 canon.yaml 时不报告；前序场景摘要按父单元 units 顺序取排在本场景之前、单元目录下有 summary.yaml 的兄弟场景，每项含 unit、text 与 stale，摘要过期的照常列出，前序场景没有摘要时给出 warning 级 context.summary-missing（next 含 wa-cli help summary set --json），summary.yaml 无法读取或不合法时以 warning 报告并跳过该摘要（同系列摘要的处理）；canon.yaml 存在但不通过校验时报告其诊断，context 为 null，退出码 1（同 context-command 对大纲等产物的处理）；三个新字段在非 scene 单元为空值。
+      status: complete
+    scene-context-budget-markdown:
+      text: internal/ctxpack 与 internal/cli：场景级内容接入预算裁剪与输出——人物设定、揭示边界与前序场景摘要按其 Markdown 文本字符数计入上下文预算（Context Budget）：人物设定与揭示边界插在本节大纲条目（section）之后、作者反馈之前，每份前序场景摘要插在每份前序作品摘要（summary）之后；被裁剪或截断的项进入 trimmed，新增 part 取值 character（id 为 canon 条目 id）、reveal（id 为 null）与 scene-summary（id 为场景单元引用）；--json 的 context 增加 characters、priorScenes 与 reveal 字段（非 scene 单元为空数组或 null）；不加 --json 的 Markdown 输出增加「出场人物（Characters）」「前序场景（Prior Scenes）」与「揭示边界（Reveal Boundary）」小节，与现有小节一样按裁剪结果省略被整项裁剪的内容。
+      status: complete
+    lint-dialogue-punctuation:
+      text: internal/lint：新增 dialogue-punctuation 规则类型（无参数，跳过屏蔽区域，参数校验复用 rule-params 的通用条款——出现任何参数即 rule.invalid-params）：同一行内成对的半角双引号（从奇数序的双引号到下一个双引号）包住的文字报告一项发现项，text 为该对话原文，suggestion 为改用全角引号「“”」的提示；对话引号内以句号「。」结尾、且闭引号后紧跟不超过 4 个汉字、以说、道、问、答、喊、叫、嚷、吼、笑、哭收尾的说话人分句时，报告一项发现项（text 为引号内的句号），suggestion 为把句号改为逗号「，」；引号内以「？」「！」结尾的照常保留、不报告；两种检查的位置、排序、豁免（lint-ignore 与规则级 waivers）与现有规则一致。
+      status: complete
+    lint-pov-consistency:
+      text: internal/lint：新增 pov-consistency 规则类型（无参数，跳过屏蔽区域）：从本单元或继承的祖先单元写作简报读取 pov 的人称（person，结构化枚举 first/second/third）——为 first 期望第一人称、为 third 期望第三人称，为 second、未设置或写作简报不可用时规则不执行，并给出一条 warning 级 lint.pov-unrecognized 诊断（path 为 draft.md，message 说明 pov 人称无法识别或写作简报不可用、规则未执行，不改变退出码）；internal/cli 的 lint 接线只在有生效的 pov-consistency 规则时读取写作简报（同 claimRules 的门控），简报问题不改变 lint 的结果；期望第三人称时，对话（同一行内成对的全角引号「“”」与成对的半角双引号包住的文字）之外的叙述文字中，每个出现的「我」字报告一项发现项（覆盖「我们」等，同一位置只报告一次），message 说明疑似视角滑移或对话漏加引号、属启发式检测，suggestion 为 null；期望第一人称时不报告发现项。
+      status: complete
+    short-story-fiction-rules:
+      text: internal/catalog：内置 short-story 文体新增三条规则（severity 均为 warning）——fiction-cliches（type 为 ai-cliche，terms 为小说 AI 腔词表：眼底闪过一丝、嘴角勾起一抹、不易察觉的笑、空气仿佛凝固、时间仿佛静止、心中五味杂陈、命运的车轮、岁月静好、说不清道不明、仿佛在诉说着什么、内心深处、无声地呐喊）、dialogue（type 为 dialogue-punctuation）与 pov（type 为 pov-consistency）；internal/catalog 与 internal/lint 的已知规则类型（Rule Type）注册表加入 dialogue-punctuation 与 pov-consistency，rule.unknown-type 诊断 message 的已知类型列表同步，内置文体文件头部的注释同步说明；文体文件通过与工作区规范包相同的校验。
+      status: complete
+    plain-text-export:
+      text: 'internal/export：新增 --format text 纯文本（Plain Text）导出——按 export-markdown 同样的规则选出验收记录有效的单元、去掉作者批注与单处豁免注释、BOM 去掉、CRLF 换 LF、单元之间空一行、文件以换行结尾；把正文转为纯文本：ATX 标题去掉 # 前缀保留标题文字、行内代码与强调（**、__、* 与 _）只保留文字、链接 [文字](地址) 只保留文字、图片 ![替代文字](地址) 输出「【图：替代文字】」、引用块去掉行首 > 与一个空格（没有空格时只去 >）、围栏代码块去掉围栏行、内容行原样保留、不跨越空行的已闭合 HTML 注释去掉、其余文字与空行原样保留，不留下因去掉标记而产生的连续空行；AI 参与说明（AI-generated Content Label）在放置位置含 footer 时按 markdown 的文末格式追加，含 metadata 时没有元数据可写、只按 footer 处理；--output 省略时为 .writing-anything/exports/<work>.txt，输出路径检查同 export-output（含 .txt 后缀的配图清单规则不适用——text 格式没有配图清单）；--front-matter 与 --format text 同时给出时报告 input.invalid-value（field 为 front-matter），不写文件，退出码 1；--json 的 export.format 为 text，images 为空数组、imageList 为 null，changedPaths 同 markdown。'
+      status: complete
+    glossary-terms:
+      text: docs/GLOSSARY.md：增补本变更引入的专有名词——对话标点（Dialogue Punctuation）、视角与人称一致（POV Consistency）、小说 AI 腔词表（Fiction AI-cliché Terms）与纯文本（Plain Text）导出格式，并核对揭示边界（Reveal Boundary）、设定集（Canon）、人物卡（Character Sheet）与摘要（Summary）既有词条与新增字段（context 的 characters、priorScenes、reveal；export 的 --format text）表述一致。
+      status: complete
+  Testing:
+    unit-tests:
+      text: 'internal/ctxpack、internal/lint、internal/catalog、internal/export 与 internal/cli 的单元与命令级测试，夹具含违例文本与合规文本：场景上下文——出场人物按 name 匹配 canon 条目、未登记人物逐个 context.character-not-in-canon、作品没有 canon.yaml 不警告、前序摘要按父单元顺序列出且 stale 标注、前序场景缺摘要 context.summary-missing、canon.yaml 不通过校验时 context 为 null 且退出码 1、预算裁剪新增 part（character、reveal、scene-summary）的优先级与 keptChars、非 scene 单元新字段为空值、Markdown 输出新增小节；dialogue-punctuation——半角引号对话发现项、对话后置说话人句号改逗号、？与！不报告、合规文本（全角引号、句号位置正确）零发现项；pov-consistency——第三人称期望下叙述中的「我」「我们」发现项、对话引号内的「我」不报告、第一人称期望零发现项、pov 无法识别或简报缺失时 lint.pov-unrecognized 且规则不执行；short-story 文体——config resolved 含 fiction-cliches、dialogue 与 pov 三条规则（severity 均为 warning）、unknown-type 诊断列出两种新类型、给新类型规则传参时 rule.invalid-params；纯文本导出——标题去 #、强调与行内代码去标记、链接留文字、图片输出【图：替代文字】、引用块去 >、围栏代码块去围栏行、front-matter 拒绝（input.invalid-value）、默认输出 .writing-anything/exports/<work>.txt、未验收单元跳过；所有 path 与 changedPaths 为相对路径，断言使用规格字面量错误码。'
+      status: complete
+      command: go test ./internal/ctxpack/... ./internal/lint/... ./internal/catalog/... ./internal/export/... ./internal/cli/...
+    e2e-short-story:
+      text: internal/cli 端到端测试（testdata 下新增短篇夹具，含违例文本与合规文本）：init --genre short-story --gate-level strict → new → source add 作者前提素材 → brief set（premise 关联素材、pov 为第三人称有限视角、length、作为关键转折的 key_messages 并关联素材）→ canon add 出场人物（character，带 name）→ advance → 根单元 outline set 情节节拍（节 covers 关键转折）→ advance → unit add 两个场景、场景 outline set（characters、beats 与 reveal）→ 场景一 draft write 合规文本 → lint 无 error 级与论断类发现项（另用违例文本夹具断言 dialogue-punctuation、pov 与 fiction-cliches 发现项后写回合规文本）→ advance → review record → accept（给出作者确认）→ advance → summary set 场景一摘要 → 场景二 draft write 时先运行 context 断言 characters（含 canon 设定）、priorScenes（含场景一摘要）与 reveal → 完成场景二生命周期 → export --format text 与 export（markdown）→ validate 全绿；断言导出纯文本的标记剥离结果与 changedPaths。
+      status: complete
+    regression:
+      text: 完整项目回归（review_evidence.project_regression）：go vet、go build、全部测试带覆盖率，并经 internal/tools/covercheck 强制 80% 行覆盖率（范围 internal/**，不含 internal/tools/**）；确保场景级上下文、新规则类型、short-story 文体规则数据与纯文本导出不破坏既有文体、素材、论断、设定集、决策与导出行为。
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    ready-verify:
+      text: 实现完成后运行 strict-spec-cli ready scene-context-and-fiction-rules 与 strict-spec-cli verify scene-context-and-fiction-rules：确认任务完成、delta 规格与实现一致、行为未越界（非 scene 单元输出不变、现有规则与导出格式不变）。
+      status: complete
+      command: strict-spec-cli ready scene-context-and-fiction-rules && strict-spec-cli verify scene-context-and-fiction-rules
+    archive-readiness:
+      text: 归档就绪检查：确认 proposal 的 roadmap 链接（milestone short-story、planned-change scene-context-and-fiction-rules）与变更目录名一致；delta spec 的错误码（context.character-not-in-canon、context.summary-missing、lint.pov-unrecognized）、part 取值（character、reveal、scene-summary）与格式取值（text）和实现一致；archive 合并时 context、lint、genres-and-packs、export 四个主规格能正确并入；确认 questions.yaml 无未解决的开放问题。
+      status: complete
+      command: strict-spec-cli verify scene-context-and-fiction-rules
+testing_gates:
+  validation_task: regression
+  unit_test_task: unit-tests

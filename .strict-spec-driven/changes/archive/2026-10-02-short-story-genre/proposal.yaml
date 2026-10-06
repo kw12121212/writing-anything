@@ -1,0 +1,35 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: short-story-genre
+  status: proposed
+summary:
+  what:
+    - 新增内置 short-story 文体（短篇小说）：单元类型 story（根，子单元类型 scene）与 scene（场景），阶段依次为写作简报（必需产物 brief）、大纲（outline）、草稿（draft）与审稿验收（review 与 acceptance）；评分标准覆盖冲突、节奏与人物动机；不声明论断类规则，论断出处检查对虚构内容关闭。
+    - 写作简报（Brief）扩展虚构字段：前提（premise，非空文本，可关联素材与决策）、主题（theme，非空文本）与视角（pov，含人称 person 与可选视角人物 character）；story 单元类型的简报必填项为 premise、pov、length 与 key_messages（关键转折复用核心观点机制）；前提与关键转折没有关联作者素材或确认记录时阻塞推进（新增 brief.unsourced-premise 与 brief.unconfirmed-premise）。
+    - 大纲（Outline）扩展情节节拍与轻量场景契约（Scene Contract）：故事根单元的大纲节即情节节拍（Story Beat）；场景单元的大纲节可声明契约字段 characters（出场人物）、beats（承担的节拍，引用根单元大纲节 id）与 reveal（揭示边界），契约数据格式与后续长篇扩展保持一致。
+  why:
+    - short-story 里程碑（order 500）的地基：首次验证单元树与生命周期能否承载虚构文体，验证设定集能否作为事实库的扩展（由后续变更完成）；本里程碑其余 4 个规划变更（人物卡与设定集、场景上下文与小说规则、结构类写作法、情绪与张力曲线）都直接或间接依赖本变更。
+    - 文章阶段的论断出处规则（亲历必须有来源）不适用于虚构内容：按文体在数据层关闭论断检查，改为要求前提与关键转折来自作者素材或确认记录，保持「作者为素材与最终决策来源」的定位。
+scope:
+  in:
+    - internal/catalog/builtin：short-story 文体数据（单元类型、阶段、规则、评分标准、上下文预算）与内置文体校验测试
+    - internal/schema：brief 与 outline 的 JSON Schema 扩展（premise/theme/pov、characters/beats/reveal），genre Schema 的 brief_required 取值扩展（premise、theme、pov），配套 testdata
+    - internal/brief：前提、主题、视角的加载、brief set 命名参数、brief show 输出、未关联素材/未确认前提的提问与阻塞项（brief.unsourced-premise、brief.unconfirmed-premise）
+    - internal/outline 与 internal/work：场景契约字段的 set/show、beats 引用根单元大纲节的校验（outline.unknown-beat）、validate 与 advance 关卡接线
+    - internal/cli：brief set/show 与 outline set 的新参数；端到端测试：一篇短篇小说从 new、source add、brief set（含前提与关键转折的素材关联）、advance、大纲节拍与场景契约、场景草稿到验收、Markdown 导出的全流程
+    - docs/GLOSSARY.md：补充场景契约词条的短篇轻量说明（出场人物、承担的节拍、揭示边界）
+  out:
+    - 人物卡与轻量设定集（作者钦定保护、canon 命令）：由 characters-and-light-canon 负责
+    - 场景级上下文包（出场人物当前设定、前序场景摘要）、对话标点/视角一致/小说 AI 腔规则与纯文本导出：由 scene-context-and-fiction-rules 负责
+    - 结构类写作法模板（三幕结构、救猫咪、七点、起承转合、英雄之旅）及其节拍校验：由 story-structure-templates 负责
+    - 情绪曲线与张力曲线及节奏检查：由 emotion-pacing-curve 负责；多层单元树、状态快照等长篇能力：由 novel 里程碑负责
+unchanged_behavior:
+  - tech-blog、wechat-marketing 与 minimal 文体、已有内置写作法与规则的行为不变；brief 与 outline 现有字段、错误码与输出信封不变，新字段全部可选
+  - 单元树与生命周期推进逻辑、决策队列、素材与出处机制本身不变；论断检查关闭通过文体不声明论断类规则实现，不新增机制
+  - Markdown 导出行为不变（按单元树先序拼接已验收单元）；MCP 服务与技能只做薄封装，不实现 CLI 之外的逻辑
+roadmap:
+  milestone: short-story
+  planned_change: short-story-genre

@@ -1,0 +1,16 @@
+schema: strict-spec-driven/delta-tech/v1
+schema_version: 1
+artifact_type: delta_tech
+schema_file: templates/strict-spec-driven/schemas/delta-tech.yaml
+target_standard: go-project-structure
+operations:
+  ADDED:
+    injectable-clock:
+      strength: MUST
+      statement: 领域包写入时间戳（decided_at、confirmed_at、recorded_at、written_at 等）必须以 time.Time 参数接收时钟，由 internal/cli 统一传包级 now()（cli/review.go 定义、测试可替换）；internal/ 非测试代码不得直取 time.Now() 或硬编码 time.Date 时刻，预检查函数（如 draft.Precheck）与实际写入必须传入同一时钟；唯一例外是 internal/canon 系列级同 id 覆盖的 ConfirmedAt（canon.go），新增例外须登记在本规则排除清单并由 TestInjectableClock 静态扫描强制。
+      rationale: 同一缺陷模式反复出现：decision/handoff/volume/review 先接入注入时钟，后加的 state/knowledge/plan/draft 又私取系统时钟、cli 新调用点直传 time.Now()，语料重放双跑一致性全部失守；fix-state-knowledge-clock 修复后以 TestInjectableClock（internal/cli）静态扫描强制，防止下一个时间戳再漏网。
+      enforcement:
+        method: lint
+        detail: 强制测试：internal/cli TestInjectableClock 扫描 internal/** 非测试 .go 文件的 time.Now() 与硬编码 time.Date(202* 行，白名单为 cli/review.go（now 定义处）与 canon/canon.go（登记排除）。
+  MODIFIED: {}
+  REMOVED: {}

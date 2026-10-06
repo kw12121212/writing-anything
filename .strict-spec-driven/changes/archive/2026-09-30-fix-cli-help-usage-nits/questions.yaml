@@ -1,0 +1,49 @@
+schema: strict-spec-driven/question-list/v1
+schema_version: 1
+artifact_type: question_list
+schema_file: templates/strict-spec-driven/schemas/question-list.yaml
+change: fix-cli-help-usage-nits
+open: []
+resolved:
+  - id: fix-scope
+    question: 本次修复包含哪些问题？
+    context: 影响范围：proposal scope 与实现文件 internal/cli/cli.go、help.go。来源是 cli-json-diagnostics 审查报告中未修的四个小问题。
+    answer: 作者要求「这几个小问题都修掉吧」，即 cli-json-diagnostics 归档总结中列出的四项：wa-cli --help、help version --help、用法错误写入失败的退出码、占位符中英混用。
+    status: resolved
+    kind: technical
+    answered_by: human
+  - id: requirement-problem
+    question: What is concretely going wrong today, and for whom?
+    context: 'Why this is asked: the change is planned against a need, and the need lives only with the requester. A "problem" here means what someone does or suffers today — not a feature that is missing. If the answer names a button, a field, a page, or an endpoint, it is a solution, and the underlying problem is still unstated. What a sufficient answer contains: who is affected, what they do today instead, and how often. Worked example: "every Monday one person spends forty minutes copying order rows into a spreadsheet to send the weekly report". What it changes: this becomes the proposal''s why, and it decides whether the change is worth making.'
+    answer: 据作者请求与复现：Agent 或用户运行 wa-cli --help 得到「缺少命令」与退出码 2；运行 wa-cli help version --help 得到 help 自己的用法；标准输出不可写时用法错误静默返回 2；用法说明里 <command> 与 <命令> 混用。
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-outcome
+    question: What observable difference proves the problem is solved?
+    context: 'Why this is asked: without a success condition, nobody can tell afterwards whether the change worked. "Observable" means someone outside the system can check it without reading the code. What a sufficient answer contains: what a person will see, or no longer have to do, once this is done. Worked example: "the report is in the manager''s inbox on Monday morning without anyone assembling it". What it changes: this becomes the delta spec''s scenarios and the acceptance evidence at review time.'
+    answer: wa-cli --help 输出命令总览并以 0 退出；wa-cli help version --help 输出 version 的用法；wa-cli nope --json > /dev/full 以退出码 1 退出并在标准错误报告写入失败；用法说明中的占位符统一。
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-trigger
+    question: Why now — what forced this?
+    context: 'Why this is asked: work that nothing forced is the work most often thrown away later. This question catches a request that sounds reasonable but has no real driver behind it. What a sufficient answer contains: the concrete event, deadline, incident, or cost that made this surface now, or an honest statement that nothing did. Worked example: "the report was missed last month and it was raised with the team". What it changes: a change with no trigger is a candidate for deferral, and the answer is weighed at review before archive.'
+    answer: 作者在 cli-json-diagnostics 归档后看到遗留问题清单，要求立即全部修掉。
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-non-goals
+    question: What must explicitly not change?
+    context: 'Why this is asked: the requester knows which nearby behavior other people depend on, and the agent does not. A "non-goal" is something the change must leave alone even though it sits close to the work. What a sufficient answer contains: the behavior, setting, or output that must survive untouched, and who relies on it. Worked example: "do not change the saved filters — several people rely on their own". What it changes: these become the proposal''s unchanged_behavior items, which review checks the finished result against.'
+    answer: 只修这四项；不新增命令、短参数或别名，不改 cli-contract 技术标准，其余 help 与用法错误行为不变。已写入 proposal 的 out 与 unchanged。
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-interpretation
+    question: Which reading of the request is intended, where more than one is possible?
+    context: 'Why this is asked: a short request usually admits several readings, and building the wrong one is indistinguishable from building nothing. What a sufficient answer contains: the reading that is meant, stated plainly enough to rule the others out — or a statement that only one reading exists and what it is. Worked example: "export means the version sent to the manager, not the one I read myself". What it changes: this fixes the scope boundary before any code is written, and settles disputes about what was asked for.'
+    answer: 四项都按上次总结中的描述理解。第 4 项「统一」的方向不是作者指定的：design english-placeholders 统一为英文标识符 <command>、<value>、<args>，与 help --json 的 args[].name 一致。
+    status: resolved
+    kind: requirement
+    answered_by: human

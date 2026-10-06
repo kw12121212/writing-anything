@@ -1,0 +1,6 @@
+schema_version: 1
+id: s
+type: reference
+file: ../escape.md
+sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+bytes: 3

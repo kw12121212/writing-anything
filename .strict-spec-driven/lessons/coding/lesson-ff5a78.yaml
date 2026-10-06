@@ -1,0 +1,22 @@
+schema: strict-spec-driven/lesson/v1
+schema_version: 1
+artifact_type: lesson
+schema_file: templates/strict-spec-driven/schemas/lesson.yaml
+lesson:
+  id: lesson-ff5a78
+  title: 提问内容改变后另建决策，会留下作者无法撤回、一直阻塞单元的旧决策
+category: coding
+status: active
+created_at: '2026-10-01T12:45:11.579Z'
+updated_at: '2026-10-01T17:09:55.523Z'
+context: wechat-marketing-genre 的 marketing ask 把标题候选登记为阻塞决策；候选改过后再次提问时，最初的实现另建了一个新决策。
+observation: 独立审查复现：旧决策仍是 open 且 blocking，作者决定新决策后 advance 仍被旧决策阻塞，而 wa-cli 没有撤回决策的命令，作者只能去决定一个已经过时的问题。
+takeaway: 代替其他产物登记阻塞决策时，同时设计「内容改变后再次提问」的路径：尚未决定的决策原地更新（decision.Replace），已决定的才另建；测试覆盖「提问后、决定前修改内容」的顺序。
+applies_when: 命令代替产物在决策队列中登记阻塞决策（blocking 为 true），且被提问的内容（选项、候选）之后还可能被修改
+occurrences:
+  - origin: wechat-marketing-genre
+    date: '2026-10-01'
+    evidence: internal/marketing/set.go Ask 的 open 分支；internal/cli/marketing_test.go TestMarketingReaskOpenDecision
+  - origin: ai-scored-metrics
+    date: '2026-10-01'
+    evidence: metrics record 的分歧决策最初在会话替换或正文改变后不更新、另建新决策；审查指出后改为 decision.Replace 原地更新、正文改变时保留未决定的记录（internal/metrics TestOpenDecisionUpdatedInPlace）

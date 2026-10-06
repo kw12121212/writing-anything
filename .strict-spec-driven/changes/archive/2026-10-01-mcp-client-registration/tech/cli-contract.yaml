@@ -1,0 +1,23 @@
+schema: strict-spec-driven/delta-tech/v1
+schema_version: 1
+artifact_type: delta_tech
+schema_file: templates/strict-spec-driven/schemas/delta-tech.yaml
+target_standard: cli-contract
+operations:
+  ADDED:
+    external-processes:
+      strength: MUST
+      statement: wa-cli 运行外部程序（如 MCP 客户端的官方 CLI）时必须经可注入的环境接口（查找与执行分离，测试可以替换），用 exec 直接传参数列表、不经 shell，不连接 wa-cli 自己的标准输入与输出，设时长上限（超时视为失败），并把合并后的标准输出与标准错误截断后写入诊断；命令层测试用写入 PATH 的假可执行文件断言实际的命令行与工作目录。外部程序只能是固定的客户端 CLI，不得执行来自产物或规范包的命令。
+      rationale: stdio 上的 MCP 会话与 --json 输出不能被子进程的输出污染；官方 CLI 首次运行的引导或自动更新会卡住；不少 CLI 把错误写在标准输出；只断言命令行就能独立更新各客户端的参数。
+      enforcement:
+        method: test
+        detail: internal/mcpinstall 的 TestSystemEnv 覆盖合并输出、截断与失败；internal/cli 的 TestMCPInstall* 用 PATH 中的假 claude 与 codex 断言命令行、工作目录与失败输出。
+    third-party-config-merge:
+      strength: MUST
+      statement: wa-cli 写入第三方的配置文件（如 MCP 客户端的 mcpServers 文件）时必须只改自己负责的字段，保留其余的键、条目与自己条目中的其他字段；文件不存在、为空或为 null 时从空对象开始，结构不符时报告错误而不覆盖；取值未变时不写；写入时先写同目录的临时文件再重命名并保留原有权限，拒绝写入符号链接；JSON 编码不转义 HTML 字符。配置文件路径不得落在工作区之内（按文件身份逐级比较，不只比较文字），项目之外的路径不列在 changedPaths 与诊断的 path 中。
+      rationale: 这些文件属于作者与其他工具，wa-cli 不知道其他字段的含义；本变更的审查发现整条覆盖会丢掉作者加的 env、JSON null 会让对 nil map 赋值崩溃、文字比较的路径检查可被指向工作区的符号链接绕过。
+      enforcement:
+        method: test
+        detail: internal/mcpinstall 的 TestJSONConfig 与 internal/cli 的 TestMCPInstallJSON、TestMCPInstallGuards 覆盖合并、null、权限、符号链接与工作区检查。
+  MODIFIED: {}
+  REMOVED: {}

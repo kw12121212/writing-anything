@@ -1,0 +1,45 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: global-timeline
+sections:
+  Implementation:
+    timeline-schema:
+      text: internal/schema：outline.schema.json 的节新增可选 time（非空文本）与 after（非空文本数组，元素为单元引用，不重复）；补合法与不合法夹具
+      status: complete
+    timeline-package:
+      text: 新包 internal/timeline：Collect(root, works)（各场景大纲节的 time/after 声明，跨作品收集；after 支持 <work>/<scene> 引用解析）；Order（Kahn 拓扑排序 + 单元树先序/works 顺序稳定选择，输出全序与 position；环报告 timeline.cycle（列出成环场景）、未知引用 timeline.unknown-scene、与先序矛盾的 after 声明 timeline.order-conflict）；SameTimePresence（同一 canon 人物在相同 time 的两个场景出场且无 after 链分隔——BFS 可达性判定——报告 timeline.same-time-presence）；Timeline(root, ref)（unit/work/series 三种范围的只读输出）
+      status: complete
+    timeline-continuity:
+      text: internal/continuity：接入时间线检查（只对声明了 time 或 after 的场景启用）——unknown-scene、order-conflict、same-time-presence 进入 Run 的 findings（error 级）与既有豁免通道；无声明作品零新增检查
+      status: complete
+    timeline-cli:
+      text: internal/cli：timeline 命令注册（args：unit|work|series；只读；--json 输出 timeline 数组（unit、time、after、position）与诊断；人读输出按序每行一个场景）；scene contract 命令新增 --time 与 --after 参数（整体替换，空字符串删除）；outline.set 的 Section 视图含 time/after
+      status: complete
+    timeline-glossary:
+      text: docs/GLOSSARY.md 增补时间线（Timeline）与故事时间（Story Time）词条：场景大纲声明的 time（自由文本时间标记，相同文本视为同时）与 after（声明晚于的前文场景引用），wa-cli timeline 输出推导全序，顺序矛盾与同 time 双出场经 continuity 检查
+      status: complete
+  Testing:
+    test-timeline-package:
+      text: internal/timeline 单元测试：无声明的全序（先序补位、零诊断）；after 的偏序（链式、跨作品引用、与先序一致的乱序）；环检测（timeline.cycle）；未知引用（timeline.unknown-scene）；order-conflict（after 与其他声明形成矛盾）；same-time-presence（相同 time 同人物双出场命中、有 after 链分隔不命中、不同 time 不命中、未声明不参与）；series 范围的 works 顺序默认序
+      status: complete
+    test-timeline-cli:
+      text: 已覆盖：timeline 命令的三种范围与 --json（sampleArgs + 信封）、scene contract --time/--after 写入、continuity 时间线发现阻塞 accept 且豁免后通过（既有豁免通道复用）、无声明作品全部既有断言不回归（全量 go test 通过）
+      status: complete
+    run-regression:
+      text: 完整回归测试并确认覆盖率不低于阈值：go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    verify-change:
+      text: 已运行 ready 与 verify；实现含包测试（无声明的默认序、after 链、环、未知引用、矛盾、同 time 双出场四分支、跨作品合并、HasDeclaration）与 CLI 测试（timeline 三种范围、scene contract --time/--after、continuity 时间线发现阻塞与修正后通过、无声明作品全量回归），覆盖率 87.13% ≥ 80%
+      status: complete
+      command: strict-spec-cli ready global-timeline && strict-spec-cli verify global-timeline
+    verify-archive-readiness:
+      text: 已核对归档合并路径：timeline 新主规格将写入 .strict-spec-driven/specs/timeline.yaml 并进入 specs/INDEX.yaml；outline 的 outline-artifact 与 scene-contract-set 为 MODIFIED（time/after 字段与参数）；continuity 的 continuity-command 为 MODIFIED（时间线检查段）；strict-spec-cli verify 诊断清零
+      status: complete
+      command: strict-spec-cli verify global-timeline
+testing_gates:
+  validation_task: run-regression
+  unit_test_task: test-timeline-package

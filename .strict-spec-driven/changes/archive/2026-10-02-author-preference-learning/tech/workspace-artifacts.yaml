@@ -1,0 +1,16 @@
+schema: strict-spec-driven/delta-tech/v1
+schema_version: 1
+artifact_type: delta_tech
+schema_file: templates/strict-spec-driven/schemas/delta-tech.yaml
+target_standard: workspace-artifacts
+operations:
+  ADDED:
+    yaml-text-utf8:
+      strength: MUST
+      statement: 把正文或作者给出的文字写进 YAML 产物（如写入记录的段落原文、修改记录）之前，必须检查它是合法的 UTF-8；不合法时按规格规定的方式处理（跳过该字段或报告专门的错误码），不得让 YAML 编码器报错，也不得写出 !!binary 等非数据标签。
+      rationale: 正文按字节写入、不保证是 UTF-8；直接写进 YAML 会让原本能成功的命令失败，或产生被可执行内容检查拒绝的产物，作者修好编码之前所有写入都被挡住。
+      enforcement:
+        method: test
+        detail: internal/cli 的 TestDraftWriteEditsPrecheckAndMarkup 用含 \xff 的正文运行 draft write，断言成功且正文逐字节写入。
+  MODIFIED: {}
+  REMOVED: {}

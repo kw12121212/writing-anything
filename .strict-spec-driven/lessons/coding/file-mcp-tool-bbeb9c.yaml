@@ -1,0 +1,19 @@
+schema: strict-spec-driven/lesson/v1
+schema_version: 1
+artifact_type: lesson
+schema_file: templates/strict-spec-driven/schemas/lesson.yaml
+lesson:
+  id: file-mcp-tool-bbeb9c
+  title: 接受本地路径或 file:// 来源的新命令会自动成为 MCP tool，越过项目目录读取文件
+category: coding
+status: active
+created_at: '2026-10-01T16:41:54.203Z'
+updated_at: '2026-10-01T16:41:54.203Z'
+context: MCP tool 由命令注册表自动生成，除排除列表与隐藏参数外每条命令、每个位置参数都会暴露给 MCP 客户端。pack install 的位置参数 source 可以是项目外的本地路径或 file:// 仓库。
+observation: 设计时只考虑了「只读取来源、只写工作区」，没对照 cli-contract/mcp-thin-wrapper；审查实测通过 pack_install 能让诊断回显项目外 YAML 的字段名与取值，符合 Schema 的文件还会被复制进工作区。--file 早已被隐藏，但位置参数没有同样的机制。
+takeaway: 新增命令时，逐个检查位置参数与命名参数能否指向项目目录之外（本地路径、file:// 地址、--target 类输出路径）；能的话在设计中决定把命令加入 mcpExcluded 或隐藏该参数，并在 mcp 主规格的 mcp-tools 中同步排除列表，测试用字面量断言该 tool 不存在。
+applies_when: 新增或修改 wa-cli 命令，其位置参数或命名参数接受文件路径、目录或 URL（尤其 file://），而该命令会自动生成 MCP tool 时
+occurrences:
+  - origin: pack-install-distribution
+    date: '2026-10-01'
+    evidence: internal/cli/mcp.go 的 mcpExcluded 加入 pack install；changes/pack-install-distribution/specs/mcp.yaml 修改 mcp-tools；TestMCPToolPerCommand 断言没有 pack_install

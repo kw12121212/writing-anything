@@ -1,0 +1,19 @@
+schema: strict-spec-driven/lesson/v1
+schema_version: 1
+artifact_type: lesson
+schema_file: templates/strict-spec-driven/schemas/lesson.yaml
+lesson:
+  id: lesson-74afa7
+  title: 可以被参数配置成什么也不检查的规则，会让检查静默通过
+category: coding
+status: active
+created_at: '2026-10-01T11:44:49.378Z'
+updated_at: '2026-10-01T11:44:49.378Z'
+context: 'ad-compliance 规则用 builtin 开关内置极限词表、terms 追加词；builtin: false 且 terms 为空时规则照常被接受。'
+observation: 独立审查发现：这样配置的合规规则每次都通过，没有任何诊断，规范包作者写错或清空词表时无从察觉。
+takeaway: 新增规则类型时检查参数组合：凡是能让规则不检查任何内容的组合（关掉默认数据又没有追加数据），在 validate 中按 rule.invalid-params 报告，而不是静默接受。
+applies_when: 新增或修改规则类型（Rule Type）的参数，尤其是带开关的内置词表或默认数据、可由规范包或项目配置关闭的检查
+occurrences:
+  - origin: ad-compliance-rules
+    date: '2026-10-01'
+    evidence: internal/lint/lint.go validate 中 ad-compliance 的 builtin/terms 检查；lint delta spec rule-params 场景 empty-ad-terms

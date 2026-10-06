@@ -1,0 +1,22 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: scene-contract-and-causality
+  status: proposed
+summary:
+  what:
+    - 在短篇轻量场景契约（Scene Contract）之上扩展长篇的场景契约与因果链（Causality Chain）：大纲节（Outline Section）新增视角（pov）、地点（location）、必须发生的状态变化（state_changes）、要埋设与回收的伏笔（plants/recovers）、起因（causes，引用前文已发生事件的 id）与预期产生的事件（events）字段；新增 wa-cli scene contract 命令以命名参数写入；wa-cli validate 校验因果链——事件 id 作品内唯一，起因引用不存在或尚未发生（按单元树先序判定）的事件时报错。
+  why:
+    - 长篇小说在任何单个会话都装不下全书，必须在动笔前用契约约定每个场景的内容与因果；契约是后续上下文包（Context Pack）组装、写后收口（Close-out）与各项审查的共同依据（novel 里程碑目标），本变更为其建立数据与校验地基。
+scope:
+  in:
+    - internal/schema/schemas/outline.schema.json 与 internal/schema（大纲节新字段）；internal/outline（Section 结构、加载、Schema 与因果链校验、show 输出）；internal/cli（新增 scene.go 的 scene contract 命令与 help 注册；MCP tool 由命令注册表自动派生）；docs/GLOSSARY.md（新术语）。
+  out:
+    - 写后收口（scene-close-out）、状态快照与状态变更提议（state-change-proposals）、知情表（knowledge-state）、伏笔台账（foreshadowing-ledger）、按契约组装上下文与连续性审查（novel-continuity 里程碑）；向量检索；outline set/remove 的既有参数（新字段仅经 scene contract 写入）；视角必须属于出场人物之类的新增交叉检查；novel 文体声明（默认写作法与评分指标另由后续变更处理）。
+unchanged_behavior:
+  - 大纲节既有字段（covers、uses、reason、role、characters、beats、reveal、targets）的语义与 outline set/remove/show 的既有行为；outline 关卡仍以 outline.invalid 汇总校验失败；单元树命令（unit add/move 等）与生命周期结构不变；短篇场景契约用法不变。
+roadmap:
+  milestone: novel
+  planned_change: scene-contract-and-causality

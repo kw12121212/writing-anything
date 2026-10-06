@@ -1,0 +1,17 @@
+schema: strict-spec-driven/delta-spec/v1
+schema_version: 1
+artifact_type: delta_spec
+schema_file: templates/strict-spec-driven/schemas/delta-spec.yaml
+target_spec: genres-and-packs
+operations:
+  ADDED:
+    drift-threshold:
+      strength: MUST
+      statement: 规范包可以用 drift_threshold（大于 0、不超过 10 的数，表示标准差的倍数）设置文风漂移（Style Drift）的阈值；按 packs 的顺序合并，后面的规范包覆盖前面的；文体与 config.yaml 不能声明。wa-cli config resolved 的 resolved.driftThreshold 含 value 与 source（pack:<id>）；都没有声明时 value 为 2、source 为 default。
+      scenarios:
+        threshold-default:
+          - GIVEN: 文体与规范包都没有 drift_threshold
+          - WHEN: 运行 wa-cli config resolved --dir D --json
+          - THEN: 'resolved.driftThreshold 为 {value: 2, source: default}；规范包 mine 声明 1.5 且启用时为 {value: 1.5, source: pack:mine}'
+  MODIFIED: {}
+  REMOVED: {}

@@ -1,0 +1,23 @@
+# 卷结构（Volume Structure）：网文按卷组织的结构模板——每卷声明目标、高潮与断章。选用在部（卷）单元，
+# 大纲节以 role 承担各节拍，节拍位置按该卷正文的字数比例核对；断章把张力顶到卷末，驱动读者进入下一卷。
+schema_version: 1
+id: volume-structure
+title: 卷结构
+description: 网文的卷级模板：每卷先立目标，中段冲突升级推向高潮，卷末以断章收束并钩住下一卷。
+kind: structure
+beats:
+  - id: goal
+    title: 目标
+    description: 本卷开局交代主角在卷内的目标与阻力，卷的主线问题成立。
+    position: {min: 0, max: 0.3}
+    tension: 3
+  - id: climax
+    title: 高潮
+    description: 卷内冲突的顶点：主角以代价换来卷线问题的解决，局势重构。
+    position: {min: 0.7, max: 0.95}
+    tension: 10
+  - id: cliffhanger
+    title: 断章
+    description: 卷末把新的危机或悬念推到台前，留下让读者必须翻开下一卷的钩子。
+    position: {min: 0.9, max: 1}
+    tension: 7

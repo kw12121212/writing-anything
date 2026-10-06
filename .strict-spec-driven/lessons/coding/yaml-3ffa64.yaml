@@ -1,0 +1,19 @@
+schema: strict-spec-driven/lesson/v1
+schema_version: 1
+artifact_type: lesson
+schema_file: templates/strict-spec-driven/schemas/lesson.yaml
+lesson:
+  id: yaml-3ffa64
+  title: 在 YAML 节点树上按解析时的下标导航，任何改变兄弟序列的操作都会使其后单元的下标左移
+category: coding
+status: active
+created_at: '2026-10-03T06:12:40.972Z'
+updated_at: '2026-10-03T06:12:40.972Z'
+context: unit move 需要同时导航到被移动单元的序列与新父单元的序列：两者的 index 都是解析 work.yaml 时算好的。实现先从原序列摘除了子树，再按 index 走树取目标序列——摘除使同级后面的单元左移一位，index 随即指错节点：递归文体下把单元静默挂到了错误的父单元并写出 work.yaml，index 越界时则把合法移动误报成 work.anchored-value。新视角审查用递归夹具文体经验性复现（multi-level-units）。
+observation: 按 index 导航得到的节点引用只在「文档尚未被修改」时有效；一旦删除或移动了同一序列中的元素，所有未重新解析的 index 都过期。错误形态隐蔽：不越界时静默写错位置，越界时表现为别的错误码。
+takeaway: 需要触碰同一单元树中多个节点时，先按解析时的 index 把所有目标节点（及其序列节点）取到本地变量，再执行删除/移动；插入位置在摘除后按锚点 id 重新扫描序列计算，不复用过期的下标。所有修改都经 save() 重新解析校验，但不合法的中间状态仍可能通过校验（挂错父单元仍是合法 work.yaml），必须靠夹具断言树形结构本身。
+applies_when: 在 internal/work 等按 u.index 导航 YAML 节点树的命令中新增删除、移动或重排操作时；以及任何『先修改序列再用旧下标取节点』的编辑路径。
+occurrences:
+  - origin: multi-level-units
+    date: '2026-10-03'
+    evidence: 审查发现项 1（agent 复现：unit move saga2/sec-a saga2/sec-c-1 把 sec-a 写到 sec-d-1 之下）；修复后 TestMoveUnderLaterSibling 以递归文体夹具回归覆盖。

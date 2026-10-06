@@ -1,0 +1,13 @@
+schema: strict-spec-driven/planned-change/v1
+schema_version: 1
+artifact_type: planned_change
+schema_file: ../../templates/strict-spec-driven/schemas/planned-change.yaml
+planned_change:
+  id: pack-learn-style-profile
+  milestone: packs-and-series
+status: complete
+summary: 从作者样文生成文风画像（Style Profile）提议
+details: wa-cli pack learn 以 past-article 类型的素材为输入：wa-cli 计算确定性统计（句长、段长、常用词、标点习惯），Agent 补充定性分析后，通过命名参数写入文风画像提议。作者逐项确认后，提议才写入作者自己的规范包；未确认的提议不影响任何规则。
+depends_on:
+  - pack-install-distribution
+  - author-sources-and-provenance

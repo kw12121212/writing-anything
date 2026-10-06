@@ -1,0 +1,46 @@
+# 雪花写作法（Snowflake Method）十步：从一句话概括逐步扩展到场景详述，最后开始写作。每一步产出规划产物并经
+# 作者确认（wa-cli plan confirm）后才能进入下一步；人物概要、人物详述与人物宝典的产物（product 为 characters）
+# 是设定集（Canon）的人物卡（wa-cli canon add 写入），场景列表（product 为 scenes）的产物是单元树中的场景单元
+# （wa-cli unit add 登记），场景详述（product 为 scene-contracts）的产物是场景契约（Scene Contract，wa-cli scene
+# contract 写入），都经 wa-cli plan step --link 关联并在确认时校验。novel 文体的默认写作法。
+schema_version: 1
+id: snowflake
+title: 雪花写作法
+description: 从一句话前提逐步扩展到场景列表与场景详述的规划方法：十步各自产出规划产物，每步经作者确认后进入下一步；人物步骤沉淀为设定集人物卡，场景步骤生成单元树中的场景与场景契约。
+kind: planning
+steps:
+  - id: one-sentence
+    title: 一句话概括
+    description: 用一句话说清这本小说的前提：主角、冲突与风险，先经作者确认再扩展。
+  - id: one-paragraph
+    title: 一段话概括
+    description: 把一句话扩展为一段话：开端、三次灾难式转折与结局的骨架。
+  - id: character-sketch
+    title: 人物概要
+    description: 每个主要人物一段概要：姓名、动机、目标、冲突与顿悟；产出设定集的人物卡。
+    product: characters
+  - id: one-page-synopsis
+    title: 一页纲要
+    description: 把一段话概括扩展为一页故事纲要，交代完整因果与转折。
+  - id: character-details
+    title: 人物详述
+    description: 把人物概要扩展为整页详述：出身、经历、说话方式与人物弧线；继续沉淀人物卡。
+    product: characters
+  - id: four-page-synopsis
+    title: 四页纲要
+    description: 把一页纲要扩展为四页细纲，按幕展开冲突升级与转折点。
+  - id: character-bible
+    title: 人物宝典
+    description: 为每个出场人物补全设定：外貌、习惯、关系与在故事中的功能，形成人物宝典。
+    product: characters
+  - id: scene-list
+    title: 场景列表
+    description: 从细纲列出全部场景并登记到单元树（wa-cli unit add 在部与章下登记场景），作为逐场景推进的清单。
+    product: scenes
+  - id: scene-details
+    title: 场景详述
+    description: 为场景列表中的场景写场景契约（wa-cli scene contract 约定视角、人物、节拍、状态变化、伏笔与起因）。
+    product: scene-contracts
+  - id: start-writing
+    title: 开始写作
+    description: 规划完成，按场景契约逐场景推进生命周期（Brief → Outline → Draft → Review）。

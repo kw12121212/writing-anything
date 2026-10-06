@@ -1,0 +1,42 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: rule-engine-and-lint
+approach:
+  - 每种规则类型声明自己的参数（名称、类型、是否必需、默认值），执行前逐项校验，未知参数或类型不符时报告 rule.invalid-params（field 为 rules.<id>.params.<name>），该规则不执行，其他规则照常执行。
+  - 新增领域包 internal/lint：prepare 去掉 BOM、规范换行后切成行，一遍算出可见文字（屏蔽区域替换为空格）、散文段落与行到段落的映射；每种规则类型一个检查函数，多词匹配共用 Aho-Corasick 自动机（每行扫描一遍）；Run 按规则 id 执行全部生效规则、应用单处豁免并排序。internal/cli 负责参数、合并结果（resolve.ForGenre）、段落出处（draft.Provenance）与输出。
+decisions:
+  exit-code:
+    decision: 有未被豁免、severity 为 error 的发现项时，lint 给出一条 error 级诊断 lint.findings（path 为 draft.md，message 含条数），valid 为 false、退出码为 1；只有 warning 级发现项时 valid 为 true、退出码为 0。next 为 wa-cli help draft write --json 与 wa-cli lint <unit> --dir <dir> --json。
+    rationale: 完成标准要求命中禁用词或 AI 腔词表时以非零退出并给出可执行修复命令；发现项放在专属的 findings 中，诊断只做汇总，避免每条发现项在 diagnostics 中重复。
+  default-severities:
+    decision: 内置 default 规范包中 ai-cliche 为 error、banned-terms 为 error、term-consistency 为 warning、cjk-typography 保持 warning。
+    rationale: AI 腔与禁用词是完成标准点名要阻塞的问题，且可用规则级 waivers 或单处豁免关闭；中文排版误报较多，只提示。
+  cjk-scope:
+    decision: 'cjk-typography 只检查两类问题：汉字与 ASCII 字母或数字直接相邻（缺少空格，参数 spacing，默认 true），以及汉字之后紧跟半角的 , . : ; ! ?（应为全角，参数 punctuation，默认 true）。'
+    rationale: 这两类是中文技术写作最常见、判断最确定的问题；更细的规则（引号、括号）误报高，留给后续。
+  waiver-scope:
+    decision: '单处豁免 <!-- lint-ignore <rule-id>: 理由 --> 作用于注释所在的散文段落，注释单独成段时作用于下一个散文段落；只豁免有位置的发现项；缺少理由时豁免无效并给出 warning 诊断 lint.invalid-waiver，指向不存在的规则时给出 warning 诊断 lint.unknown-waiver-rule。全文级发现项（字数、必需章节、破折号密度）用规则级 waivers 关闭。'
+    rationale: 按段落豁免足以覆盖误报，同时避免一条注释关闭整篇的检查；理由必填满足里程碑风险中的要求。
+  counting:
+    decision: 字数与段落长度按非空白 Unicode 字符计，不计屏蔽区域与 Markdown 标题标记；ai-cliche 的 max_dashes_per_1000 按每千字的破折号（连续的 — 记为一个）数量计。
+    rationale: 与术语表「字数：中文按字符计」一致，确定且与语言无关。
+  word-boundary:
+    decision: 词表匹配：只含 ASCII 字母、数字与连字符的词要求两侧不是 ASCII 字母或数字，其他词按子串匹配；匹配区分大小写。
+    rationale: 避免 Go 命中 Google；中文没有词边界，子串匹配是常规做法。
+  agent-waiver:
+    decision: 单处豁免只在注释所在段落的出处不是 agent 时生效：Agent 用 draft write 写入、作者未改动的段落中的豁免给出 lint.agent-waiver（warning）且不生效；作者改写该段后出处为 agent-draft-human-edited，豁免生效。没有写入记录或出处无法推导时按作者写入处理。
+    rationale: 审查指出 Agent 可以自己写入 lint-ignore 注释绕过 error 关卡；项目约定作者的编辑优先于 Agent、验收需要作者确认，复用已有的段落出处推导即可区分，不需要新的确认机制。
+  input-limits:
+    decision: 正文超过 2 MiB 时报告 lint.too-large；屏蔽区域、段落与豁免在 prepare 中一遍算出（每行预先算好下一个右括号与反引号的位置，最后一个 --> 的位置决定 <!-- 是否闭合），多词匹配按首字符建索引一遍扫描，扫描次数不随规则或词条数增长。
+    rationale: 审查实测 1 MB 以内的正文可让豁免与链接屏蔽的平方级扫描耗时 20 秒以上（workspace-artifacts/input-limits）。
+  inactive-terms:
+    decision: 合并后有禁用词或术语表的 avoid 写法、却没有生效的对应规则时给出 lint.inactive-terms（warning）。
+    rationale: packs 不含 default 时，规范包的禁用词会静默不生效，Agent 与作者无从得知。
+alternatives:
+  - option: 把每个发现项都作为诊断输出
+    reason: 诊断数组会被大量发现项淹没，且 warning 与 error 混在一起时 Agent 难以分辨需要处理的范围。
+risks:
+  - 中文排版与词表匹配仍可能误报；可以关闭规则、降低 severity 或单处豁免。
+  - 修改内置 default 规范包的 severity 会使已有工作区中命中 AI 腔词表的正文开始无法通过 lint。

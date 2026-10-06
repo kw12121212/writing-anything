@@ -1,0 +1,25 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: corpus-authoring
+approach:
+  - 在仓库外临时工作区（t.TempDir 等价目录）以真实 wa-cli 命令完整执行一遍创作流程，命令序列即真实发生的序列：init（novel、strict）→ source add 三份素材 → brief set（premise/pov/length/key_messages，前提与关键转折链接素材出处）→ method 声明 snowflake → plan step/plan confirm 十步（人物卡与关系与物品经 canon add、作者钦定规则 rule-clock-freeze、unit add 部/章/场景树、scene contract 九份契约）→ 逐场景 advance 推进：outline set 场景节（time/after）→ draft write（inputs 引用）→ lint → scene close-out（提议并确认 canon/状态/知情/伏笔）→ review record → accept（作者确认记录）→ summary set 章/部级 → 每部 volume checkpoint/confirm → recall 三查 → impact 预览/mark/clear → handoff write → assemble → export markdown。作者参与以数据形式固定：决策确认原话、验收确认、卷末确认、直编片段（作者直接改正文后 diff/再收口）都作为 inputs 检入，重放时按序提交。真实负向步骤随流程录制：part-1 未确认时 part-2 首场景 accept 被 volume.unconfirmed 拒绝、open 复查标记时 assemble 被拒、TH-C 超期 error 经决策队列豁免后验收。commands.yaml 按阶段（init/sources/brief/plan/outline/draft/closeout/review/accept/summary/volume/recall/impact/handoff/assemble/export）汇编，每步 command/input_ref/expect_exit/expect_code/stdout_contains 如实记录
+  - 在仓库外临时工作区以真实 wa-cli 命令完整执行一遍创作流程，命令序列即真实发生的序列：init（novel、strict）→ source add 三份素材 → brief set（premise/pov/length/key_messages，前提与关键转折链接素材出处）→ method 声明 snowflake → plan step/plan confirm 十步（人物卡与关系与物品经 canon add、作者钦定规则 rule-clock-freeze、unit add 部/章/场景树、根大纲故事节拍、threads add 三条伏笔、scene contract 九份契约）→ 逐场景推进：brief set → advance → outline set 补 reason → advance → draft write（inputs 引用）→ lint → scene close-out（提议并确认 canon/状态/知情/伏笔）→ advance → review record → accept（作者确认记录）→ advance → summary set 场景/章/部级 → 每部 volume checkpoint/confirm → recall 三查 → impact 预览/mark/clear → handoff write → assemble → export markdown。作者参与以数据形式固定：决策确认原话、验收确认、卷末确认、直编片段（作者直接改正文后 diff/再收口）都作为 inputs 检入，重放时按序提交。真实负向步骤随流程录制（五类六码）：draft.human-edited（人工编辑保护）、volume.unconfirmed（part-2 未确认时 ch3-s1 验收被拒）、assemble.scenes-open 与 assemble.rechecks（open 复查标记期间组稿被拒）、assemble.continuity（悬空伏笔 th-c 超期阻塞组稿）、threads.author-confirmation（未经授权放弃伏笔被拒并生成阻塞决策，作者 decide 允许后带决策放弃）。commands.yaml 按 init/sources/brief/plan/part-1/part-2/part-3/assemble-export 八阶段汇编，每步 command 或 write_file（作者直编文件级参与点）、input_ref/expect_exit/expect_code/stdout_contains 如实记录，并以一次性全量重放（280 步）验证可重放性与 --base 哈希承诺
+decisions:
+  real-execution-recording:
+    decision: 命令脚本不是事后虚构，而是把真实执行过的序列按 script-format.md 逐条记录；inputs/ 文件先落盘再被命令引用
+    rationale: 里程碑的可重复性根基是「测试重放的是命令与文本而非重新生成内容」；真实执行过一遍是语料可信的前提，也是负向关卡步骤（volume.unconfirmed、assemble 阻塞）有真实证据的唯一途径
+  author-as-data:
+    decision: 作者（Author）的确认与参与以固定数据检入：决策队列确认原话、验收确认、卷末确认、状态/知情确认、作者直编片段，重放时按序提交
+    rationale: 里程碑笔记明确「作者参与以数据形式固定」；wa-cli 不调用模型，作者意图的表达就是这些检入的文本
+  corpus-structure-test:
+    decision: 本变更附带语料结构校验 Go 测试：加载 commands.yaml 断言八阶段齐备、每步 command/write_file 二选一与字段语义合法、全部 input_ref 指向存在的检入文件、九个场景草稿各 1400–2000 字（总约 1.35 万字）、五类六码真实负向步骤在位（draft.human-edited、volume.unconfirmed、assemble.scenes-open+assemble.rechecks、assemble.continuity、threads.author-confirmation）、--base 哈希承诺等于 ch1-s3-author.md 的 SHA-256、生命周期命令面覆盖
+    rationale: replay-harness 尚未存在，结构校验是把「语料完整且符合设计规模」固化为可执行断言的最早机会，延续 testdata-design-artifact-validation 技术标准（SHOULD）
+  no-delta-spec:
+    decision: corpus-authoring 是技术专用变更：只新增检入语料（命令脚本、文本输入）与结构校验测试，不改 wa-cli 的任何用户可观测行为
+    rationale: milestone scope 明确只新增测试与夹具、不改产品代码；语料与脚本不构成主规格需求
+alternatives: []
+risks:
+  - 真实执行中个别命令的参数语义与 matrix 示意有出入（如确认类命令的取值化参数）——以真实执行为准记录，matrix 勘误按 corpus-design 的不变项约束最小修正并在本变更报告中说明
+  - 九场景正文规模与知情/伏笔约束易在写作中漂移——以设计文档场景表为契约逐场对照，收口与知情表按 KN 编号逐条登记

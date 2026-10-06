@@ -1,0 +1,57 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: cli-json-diagnostics
+sections:
+  Implementation:
+    output-envelope:
+      text: 在 internal/cli 实现 result 信封（valid、diagnostics、changedPaths，数组永不为 null）与 diagnostic 结构（code、severity、message、path、field、next），以及 JSON 编码写出与 valid 判定
+      status: complete
+    command-registry:
+      text: 实现命令注册表：命令声明 name、summary、位置参数、flags（bool/string、说明）、outputKeys、exitCodes 与 run 函数；--json 与 --help 为框架自动附加的共有参数
+      status: complete
+    flag-parser:
+      text: 实现按注册表解析参数：--name 与 --name=value；未知参数、缺少取值、bool 参数带取值、多余位置参数产生 usage.* 诊断并返回退出码 2
+      status: complete
+    dispatch-usage-errors:
+      text: 改写 Run：按注册表分发；无命令、未知命令、参数错误在文本模式写用法到 stderr，出现 --json 时把 JSON 信封写到 stdout，退出码均为 2
+      status: complete
+    help-command:
+      text: 实现 wa-cli help [<命令>] [--json] 与 wa-cli <命令> --help：文本用法与 commands 数组（name、summary、usage、args、flags、outputKeys、exitCodes）；未知命令为用法错误
+      status: complete
+    version-envelope:
+      text: 把 version 注册进注册表；version --json 输出 {valid, diagnostics, changedPaths, version}，文本输出不变
+      status: complete
+    glossary:
+      text: 在 docs/GLOSSARY.md 工程一节加入本变更引入的术语：命令注册表（Command Registry）、输出信封（Output Envelope）、退出码（Exit Code）
+      status: complete
+  Testing:
+    cli-unit-test:
+      text: 为 internal/cli 编写测试：信封字段与空数组、诊断字段、各 usage.* 错误码在文本与 --json 模式下的输出与退出码、help 文本与 --json（全量与单命令、未知命令）、--help、version 文本与 --json 信封、写出失败返回 1；遍历注册表断言 help --json 的 flags、outputKeys、exitCodes 与命令实际行为一致
+      status: complete
+      command: go test ./internal/cli/...
+    binary-test:
+      text: 更新 cmd/wa-cli 二进制级测试：version --json 信封、help --json 可解析、--json 用法错误写 stdout，并保留不依赖 internal/tools/** 的检查
+      status: complete
+      command: go test ./cmd/wa-cli/...
+    full-regression:
+      text: 在干净仓库运行完整回归命令，确认覆盖率不低于 80%
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    ready-check:
+      text: 运行 strict-spec-cli ready cli-json-diagnostics 无阻塞诊断
+      status: complete
+      command: strict-spec-cli ready cli-json-diagnostics
+    verify-check:
+      text: 运行 strict-spec-cli verify cli-json-diagnostics，确认任务全部完成且 delta spec / delta tech 与实现一致
+      status: complete
+      command: strict-spec-cli verify cli-json-diagnostics
+    archive-readiness:
+      text: 确认归档会把 delta 合并进 cli 主规格、新建 cli-contract 技术标准，并把规划变更 cli-json-diagnostics 标记为完成
+      status: complete
+      command: strict-spec-cli roadmap-status
+testing_gates:
+  validation_task: full-regression
+  unit_test_task: cli-unit-test

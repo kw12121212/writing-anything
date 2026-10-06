@@ -1,0 +1,26 @@
+schema_version: 1
+id: essay
+title: 随笔
+description: 测试用文体
+unit_types:
+  - id: article
+    title: 文章
+    children: [section]
+    brief_required: [audience, purpose, key_messages]
+  - id: section
+    title: 节
+stages:
+  - id: brief
+    title: 写作简报
+    required_artifacts: [brief]
+  - id: draft
+    title: 草稿
+rules:
+  length:
+    type: length-range
+    severity: warning
+    params: {min: 500, max: 5000}
+rubric:
+  - id: clarity
+    title: 清晰
+    description: 核心观点一遍能读懂

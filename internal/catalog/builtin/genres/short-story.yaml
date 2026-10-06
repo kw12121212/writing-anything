@@ -1,0 +1,118 @@
+# 短篇小说（Short Story）：以场景（Scene）为单元推进 简报 → 大纲 → 草稿 → 审稿与验收。虚构内容不做论断出处检查：
+# 前提与关键转折（写作简报中的核心观点）必须关联作者素材或确认记录。故事根单元的大纲节是情节节拍（Story Beat），
+# 每个场景在自己的大纲里声明轻量场景契约（Scene Contract：出场人物、承担的节拍、揭示边界、按指标声明的目标锚定分值）。
+# 三条小说专用规则（小说 AI 腔词表、对话标点、视角与人称一致）都是启发式质量检查，severity 为 warning，不阻塞验收。
+# 默认写作法为三幕结构（three-act），作者可通过写作简报改选其他结构类写作法或用 none 退出。声明的两个 AI 评分指标
+# （情绪 emotion 与张力 tension）供 wa-cli curve 汇总情绪曲线（Emotion Curve）与张力曲线（Tension Curve），
+# 与场景契约目标或节拍目标张力对比；偏离发现项不阻塞验收。节奏检查（Pacing Check）emotional-beat-gap 约束
+# 两个达到 3 分情绪的片段之间最多相隔 2000 个非空白字符，同样不阻塞验收。
+schema_version: 1
+id: short-story
+title: 短篇小说
+description: 以场景为单元的短篇小说：作者提供前提、人物与关键转折，Agent 按场景草拟、审稿并导出；虚构内容不做论断出处检查。
+default_method: three-act
+unit_types:
+  - id: story
+    title: 故事
+    children: [scene]
+    brief_required: [premise, pov, length, key_messages]
+  - id: scene
+    title: 场景
+stages:
+  - id: brief
+    title: 写作简报
+    required_artifacts: [brief]
+  - id: outline
+    title: 大纲
+    required_artifacts: [outline]
+  - id: draft
+    title: 草稿
+    required_artifacts: [draft]
+  - id: review
+    title: 审稿与验收
+    required_artifacts: [review, acceptance]
+rules:
+  length:
+    type: length-range
+    severity: warning
+    params: {min: 1000, max: 20000}
+  fiction-cliches:
+    type: ai-cliche
+    severity: warning
+    params:
+      terms:
+        - 眼底闪过一丝
+        - 嘴角勾起一抹
+        - 不易察觉的笑
+        - 空气仿佛凝固
+        - 时间仿佛静止
+        - 心中五味杂陈
+        - 命运的车轮
+        - 岁月静好
+        - 说不清道不明
+        - 仿佛在诉说着什么
+        - 内心深处
+        - 无声地呐喊
+  dialogue:
+    type: dialogue-punctuation
+    severity: warning
+  pov:
+    type: pov-consistency
+    severity: warning
+rubric:
+  - id: conflict
+    title: 冲突清晰
+    description: 每个场景有明确的冲突或张力来源，读者知道人物在争什么。
+  - id: pacing
+    title: 节奏得当
+    description: 情节节拍推进的快慢与内容匹配，没有拖沓或仓促收尾。
+  - id: motivation
+    title: 人物动机可信
+    description: 人物的行动有可见的动机，关键选择不依赖巧合。
+scored_metrics:
+  - id: emotion
+    title: 情绪
+    description: 片段的情绪强度：从平静陈述到情绪接管叙事。
+    scale: {min: 1, max: 5}
+    anchors:
+      - score: 1
+        description: 平静陈述，没有可察觉的情绪起伏。
+        example: 她把茶杯放回桌上，看了看时间。
+      - score: 2
+        description: 情绪轻微起伏，人物有所触动但克制。
+        example: 他顿了顿，没有接话。
+      - score: 3
+        description: 情绪明确，直接作用于人物的语言与动作。
+        example: 她攥紧了信纸，指节发白。
+      - score: 4
+        description: 情绪强烈，人物难以自持，言行失衡。
+        example: 你到底还瞒了我多少？他的声音劈了叉。
+      - score: 5
+        description: 情绪顶点：爆发、崩溃或狂喜，叙事被情绪接管。
+        example: 她终于哭出声来，整个人滑坐在地上。
+  - id: tension
+    title: 张力
+    description: 片段的紧张度：读者悬着心的程度。
+    scale: {min: 1, max: 5}
+    anchors:
+      - score: 1
+        description: 松弛：日常推进，没有悬而未决的东西。
+        example: 第二天早上，他们照常去上班。
+      - score: 2
+        description: 轻微悬念：出现不安的细节或伏笔。
+        example: 楼道的灯又坏了，她听见楼下有动静。
+      - score: 3
+        description: 明显紧张：冲突摆上台面，结果未定。
+        example: 他把辞职信推到桌子对面，等着她开口。
+      - score: 4
+        description: 高度紧张：危机临近，每个选择都可能出错。
+        example: 脚步声停在门外，钥匙插进了锁孔。
+      - score: 5
+        description: 极限紧张：摊牌或生死关头，读者无法停下。
+        example: 刀尖抵住他的喉咙：最后一次，钥匙在哪里。
+pacing_checks:
+  - id: emotional-beat-gap
+    metric: emotion
+    min_score: 3
+    max_gap_chars: 2000
+context_budget: 16000

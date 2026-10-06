@@ -1,0 +1,5 @@
+schema_version: 1
+part: my-novel/part-one
+scene: my-novel/scene-2
+sampled:
+  - {scene: my-novel/scene-1, kind: event, id: ev-1, text: 文本}

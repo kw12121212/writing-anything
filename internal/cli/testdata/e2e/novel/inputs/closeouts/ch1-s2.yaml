@@ -1,0 +1,4 @@
+state_changes: []
+knowledge:
+  - {id: kn-02, entry: item-letter, character: char-han-jiang}
+events: [ev-town-rule-learned]

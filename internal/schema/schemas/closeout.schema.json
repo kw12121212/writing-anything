@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "写后收口",
+  "description": "场景单元目录中的写后收口（Close-out）记录：收口时正文的 SHA-256 指纹、本次同步进各记忆台账的条目 id、确认产生的事件与豁免的疑似专有名词（Suspected Proper Noun）名单。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "draft_sha256"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "draft_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$", "description": "收口时正文 draft.md 原始字节的 SHA-256；正文修改后收口过期（closeout.stale）"},
+    "events": {"type": "array", "items": {"$ref": "common.schema.json#/$defs/id"}, "description": "确认产生的事件（Event）id；每个必须在该场景大纲声明的 events 中（领域校验报告 closeout.unknown-event）"},
+    "canon": {"type": "array", "items": {"$ref": "common.schema.json#/$defs/id"}, "description": "本次新增的设定集（Canon）条目 id"},
+    "state": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["id"], "properties": {
+      "id": {"$ref": "common.schema.json#/$defs/id", "description": "本次提交的状态变化提议 id；条目存在且绑定该场景由领域校验检查（closeout.unknown-entry）"},
+      "contract": {"$ref": "common.schema.json#/$defs/id", "description": "对应的契约节内 state_changes 的 id；计划外提交省略"}
+    }}},
+    "knowledge": {"type": "array", "items": {"$ref": "common.schema.json#/$defs/id"}, "description": "本次提交的知情提议 id；条目存在且绑定该场景由领域校验检查（closeout.unknown-entry）"},
+    "plants": {"type": "array", "items": {"$ref": "common.schema.json#/$defs/id"}, "description": "本次埋设的伏笔 id；planted_in 为该场景由领域校验检查（closeout.unknown-entry）"},
+    "recovers": {"type": "array", "items": {"$ref": "common.schema.json#/$defs/id"}, "description": "本次回收的伏笔 id；status 为 paid 且 recovered_in 为该场景由领域校验检查（closeout.unknown-entry）"},
+    "waived": {"type": "array", "items": {"type": "string", "pattern": "\\S"}, "uniqueItems": true, "description": "豁免的疑似专有名词文本：这些取值不再触发 closeout.suspected-name 提示"}
+  }
+}

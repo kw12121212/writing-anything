@@ -1,0 +1,42 @@
+schema: strict-spec-driven/question-list/v1
+schema_version: 1
+artifact_type: question_list
+schema_file: templates/strict-spec-driven/schemas/question-list.yaml
+change: mcp-client-registration
+open: []
+resolved:
+  - id: requirement-problem
+    question: What is concretely going wrong today, and for whom?
+    context: 'Why this is asked: the change is planned against a need, and the need lives only with the requester. What it changes: this becomes the proposal''s why.'
+    answer: 据里程碑 mcp-integration 与规划变更 mcp-client-registration：作者要手工编辑各 MCP 客户端的配置才能接入 wa-cli mcp，格式各不相同且容易写错路径。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-outcome
+    question: What observable difference proves the problem is solved?
+    context: 'Why this is asked: without a success condition, nobody can tell afterwards whether the change worked. What it changes: this becomes the delta spec''s scenarios.'
+    answer: 据里程碑 done_criteria：wa-cli mcp install 重复执行结果幂等，并保留客户端配置中已有的其他条目；规划变更：claude-code 与 codex 优先调用官方 CLI，找不到时跳过并给出诊断，json 写入 --config 指定的文件，支持项目级与用户级。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-trigger
+    question: Why now — what forced this?
+    context: 'Why this is asked: work that nothing forced is the work most often thrown away later.'
+    answer: 据路线图：依赖的 mcp-server 已归档；roadmap-recommend 推荐本变更为里程碑的最后一项。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-non-goals
+    question: What must explicitly not change?
+    context: 'Why this is asked: the requester knows which nearby behavior other people depend on. What it changes: these become the proposal''s unchanged_behavior items.'
+    answer: 据里程碑 scope：不做远程传输，不在 MCP 中实现 CLI 之外的业务逻辑；wa-cli mcp 本身不变。已写入 proposal 的 out 与 unchanged。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-interpretation
+    question: Which reading of the request is intended, where more than one is possible?
+    context: 'Why this is asked: a short request usually admits several readings. What it changes: this fixes the scope boundary before any code is written.'
+    answer: 据规划变更 details：--client claude-code|codex|json，官方 CLI 优先，json 写入 --config，项目级与用户级两种范围，幂等并保留已有条目，各客户端逻辑隔离。codex 只有用户级、注册的命令用绝对路径等取舍写在 design 的决策中。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap

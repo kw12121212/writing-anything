@@ -1,0 +1,49 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: characters-and-light-canon
+sections:
+  Implementation:
+    schema-canon:
+      text: internal/schema：登记 canon 产物类型（路径模式 .writing-anything/works/*/canon.yaml，仅作品根目录），新增 canon.schema.json（schema_version 1、entries[]：id/type/name/text/sources/protection/decision/members，type 枚举 character、location、world-rule、relationship，protection 枚举 normal、author-pinned，relationship 的 members 为 2 个以上不重复 id），并在 internal/schema 的测试与 testdata/ 下补合法与不合法夹具，断言示例路径只匹配一种产物类型（workspace-artifacts/embedded-schemas）。
+      status: complete
+    canon-package:
+      text: 新包 internal/canon：canon.yaml 的加载与领域校验（条目 id 唯一、sources 已登记、relationship 的 members 为同文件 character 条目且不少于 2 个不重复、decision 引用存在的检查留给 validate/命令侧）、Add/Set/Remove/List：不存在的 canon.yaml 创建（schema_version 1 与 entries），已存在时只改目标条目并保留其他内容与 YAML 注释（structured-edits：锚点、别名、合并键拒绝 canon.anchored-value，取值未变不写、写前重新解析并复查）；新错误码常量 canon.unknown-source、canon.unknown-character、canon.not-found、canon.anchored-value、canon.unknown-decision 定义在产生它的包中（cli-contract/error-code-registry）。
+      status: complete
+    canon-protection:
+      text: internal/canon 与 internal/decision 联动实现作者钦定（Author-pinned）写保护：protection 为 author-pinned 的条目，canon set/remove（含把 protection 改为 normal）未给出有效 --decision 时报告 canon.author-pinned 且不修改 canon.yaml，同时按 decision-add 形态向决策队列幂等追加阻塞决策（question 固定格式「是否允许<修改|删除>作者钦定的设定条目 <entry>（<name>）？」，options a 允许/b 保持不变，recommendation b，blocking true，units 为作品根单元；同一作品、条目与操作已有 open 决策时不重复追加；决策队列无法加载时不追加并报告其诊断）；--decision 授权判定（决策存在、由本命令族生成、status 为 decided 且 choice 为 a）通过后执行并在条目 decision 字段记录该 id；追加决策经 internal/workspace 原子写入并出现在 changedPaths。
+      status: complete
+    cli-canon:
+      text: internal/cli：在命令注册表登记 canon add <work>（--type、--name、--text、--sources、--members、--pin、--id）、canon set <work> <entry>（--type、--name、--text、--sources、--pin、--decision）、canon remove <work> <entry>（--decision）与只读的 canon list <work>，全部支持 --json 与共享 --dir；参数解析、help 输出、outputKeys（canon、removed、entries）与 exitCodes 只从注册表派生，并为每条命令登记 sampleArgs（canon add/set/remove 为 mutatingSamples）；诊断 next 给出可直接运行的复查命令，path 为相对 --dir 的路径。
+      status: complete
+    validate-canon:
+      text: wa-cli validate 接入 canon.yaml：整体校验时对每个可加载作品目录中存在的 canon.yaml 做 Schema 校验并计入 checked，且检查条目 id 唯一（artifact.duplicate-id）、sources 已登记（canon.unknown-source）、members 为同文件 character 条目且不少于 2 个不重复（canon.unknown-character）、decision 引用的决策存在（canon.unknown-decision）；wa-cli validate <path> 按位置识别作品目录下的 canon.yaml 并执行同样的检查；canon.yaml 途经符号链接或不是普通文件时按不存在处理报告 artifact.not-found；子单元目录中的 canon.yaml 不识别为该产物类型。
+      status: complete
+    glossary-canon:
+      text: docs/GLOSSARY.md：在术语表中增补本变更引入的专有名词——设定条目（Canon Entry）与保护级别（Protection Level），并核对人物卡（Character Sheet）、设定集（Canon）、作者钦定（Author-pinned）既有词条与新产物字段（canon.yaml 的 type、protection、members）表述一致。
+      status: complete
+  Testing:
+    unit-tests:
+      text: internal/canon、internal/schema、internal/cli 的单元与命令级测试：canon add 的条目与默认 id（canon-<n>）、character/location 必填 name、relationship members 校验（canon.unknown-character）、sources 未登记（canon.unknown-source）、id 重复（artifact.duplicate-id）；canon set/remove 的注释保留、取值未变不写、canon.not-found、锚点拒绝（canon.anchored-value）、修改后悬空引用降为 warning；钦定保护：拒绝（canon.author-pinned）+ 自动阻塞决策逐字段断言（question 固定格式、options、recommendation b、blocking、units）、重复拒绝幂等（不重复追加）、decide 后携带 --decision 成功且记录 decision、choice 不为 a 或未决定的决策仍拒绝、决策队列无法加载时不追加；canon list 只读与空作品；validate 对 canon.yaml 的整体与单文件检查、符号链接负例、子单元目录 canon.yaml 不识别；所有 path 与 changedPaths 为相对路径（runWS 断言），断言使用规格字面量错误码。
+      status: complete
+      command: go test ./internal/canon/... ./internal/schema/... ./internal/cli/...
+    e2e-canon:
+      text: internal/cli 端到端测试：new short-story 作品 → source add 作者设定素材 → canon add 人物（人物卡，带 name 与 sources）→ canon add 第二个人物与 relationship（members 引用两人）→ canon add --pin 世界规则 → canon set 修改钦定条目被拒绝并生成阻塞决策（advance 因此被 decision.blocking 拒绝）→ decide 允许 → 携带 --decision 重试成功且条目记录决策 → canon remove 普通条目 → canon list 与 wa-cli validate 全绿；断言决策队列、changedPaths 与错误码字面量。
+      status: complete
+    regression:
+      text: 完整项目回归（review_evidence.project_regression）：go vet、go build、全部测试带覆盖率，并经 internal/tools/covercheck 强制 80% 行覆盖率（范围 internal/**，不含 internal/tools/**）；确保 canon 变更不破坏既有文体、素材、论断、决策与导出行为。
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    ready-verify:
+      text: 实现完成后运行 strict-spec-cli ready characters-and-light-canon 与 strict-spec-cli verify characters-and-light-canon：确认任务完成、开放问题、delta 规格与实现一致、行为未越界。
+      status: complete
+      command: strict-spec-cli ready characters-and-light-canon && strict-spec-cli verify characters-and-light-canon
+    archive-readiness:
+      text: 归档就绪检查：确认 proposal 的 roadmap 链接（milestone short-story、planned-change characters-and-light-canon）与变更目录名一致，delta spec 的错误码、字段与场景和实现一致，questions.yaml 的开放问题已解决；archive 合并时 sources-and-provenance 主规格能正确并入 canon 各要求。
+      status: complete
+      command: strict-spec-cli verify characters-and-light-canon
+testing_gates:
+  validation_task: regression
+  unit_test_task: unit-tests

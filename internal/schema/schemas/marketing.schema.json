@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "营销要素",
+  "description": "单元的营销要素（Marketing Elements）：标题候选（Headline Candidates）、文章摘要（Digest）、开头钩子（Hook）、行动号召（CTA）与作者选定标题的决策。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "headlines": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "text"],
+        "properties": {
+          "id": {"$ref": "common.schema.json#/$defs/id"},
+          "text": {"type": "string", "pattern": "\\S"}
+        }
+      }
+    },
+    "digest": {"type": "string", "pattern": "\\S"},
+    "opening": {"type": "string", "pattern": "\\S", "description": "开头钩子（Hook）；字段名不用 hook，因为 hook 是可执行内容检查保留的字段名"},
+    "cta": {"type": "string", "pattern": "\\S"},
+    "headline_decision": {"$ref": "common.schema.json#/$defs/id", "description": "作者选定标题的决策 id，由 wa-cli marketing ask 写入"}
+  }
+}

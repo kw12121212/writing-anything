@@ -1,0 +1,21 @@
+schema: strict-spec-driven/delta-tech/v1
+schema_version: 1
+artifact_type: delta_tech
+schema_file: templates/strict-spec-driven/schemas/delta-tech.yaml
+target_standard: go-project-structure
+operations:
+  ADDED:
+    output-sync-in-tests:
+      strength: SHOULD
+      statement: 流式或轮询命令的测试用输出作为同步点（轮询输出直到出现哨兵事件或期望的内容），不以固定的 sleep 假定后台扫描已经完成；测试中写入待观测的文件时先写临时文件再重命名。
+      rationale: 固定等待在慢速或满载的 CI 上会让基线扫描晚于测试动作，事件被算进基线后测试只能等到超时失败；非原子写入会让扫描读到写了一半的文件，产生另一种诊断。
+      enforcement:
+        method: review
+        detail: internal/cli 的 TestFeedbackWatch 以 --all 输出的哨兵反馈作为启动扫描完成的同步点，并用 atomicWrite 写入不合法的 feedback.yaml。
+      examples:
+        good:
+          - waitFor(t, out, "哨兵") 后再追加反馈
+        bad:
+          - time.Sleep(200 * time.Millisecond) 后假定 watch 已完成启动扫描
+  MODIFIED: {}
+  REMOVED: {}

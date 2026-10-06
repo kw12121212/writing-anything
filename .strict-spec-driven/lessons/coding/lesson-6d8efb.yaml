@@ -1,0 +1,19 @@
+schema: strict-spec-driven/lesson/v1
+schema_version: 1
+artifact_type: lesson
+schema_file: templates/strict-spec-driven/schemas/lesson.yaml
+lesson:
+  id: lesson-6d8efb
+  title: 布尔参数表达不了反向取值，需要反向语义时必须单设参数或改用取值参数
+category: coding
+status: active
+created_at: '2026-10-02T16:06:42.780Z'
+updated_at: '2026-10-02T16:06:42.780Z'
+context: wa-cli 的命令参数由命令注册表声明并由 internal/cli 的统一解析器解析：bool 参数不接受取值（--flag=false 按用法错误拒绝），string 参数才能带取值；参数面在设计阶段拟定时往往只想到正向语义。
+observation: characters-and-light-canon 实现时最初打算用 --pin=false 表达「取消钦定」，注册表解析器按 usage 规则拒绝 bool 参数带取值；设计文档没有核对解析器语义，实现时才发现需要改命令面并同步规格。
+takeaway: 命令需要某参数的两种互斥语义（升/降、开/关）时，要么用取值参数（如 --protection <level>），要么为反向语义单设 bool 参数并在命令层显式处理互斥（报告 input.invalid-value）；拟命令面时先对照 parseArgs 的解析规则，不要假定 --flag=value 通用。
+applies_when: 为 wa-cli 新增或修改命令参数，且参数需要表达反向取值或两态互斥语义时。
+occurrences:
+  - origin: characters-and-light-canon
+    date: '2026-10-02'
+    evidence: internal/cli/parse.go 的 flagBool 分支拒绝带取值的 bool 参数；internal/cli/canon.go 的 --pin/--unpin 互斥检查；delta 规格 canon-edit 的 --unpin 与 input.invalid-value 条款。

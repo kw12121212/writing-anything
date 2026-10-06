@@ -1,0 +1,18 @@
+schema_version: 1
+id: character-1
+work: my-novel
+dimension: character
+scope: my-novel/chapter-one
+excerpt:
+  text: 章内正文切片。
+  truncated: false
+slices:
+  - {kind: state, text: canon-1：受伤（state-1）}
+checklist:
+  - {id: behavior-state, question: 言行与最新状态一致吗}
+  - {id: naming, question: 称谓与设定集一致吗}
+status: done
+results:
+  - {item: behavior-state, verdict: pass}
+  - {item: naming, verdict: fail, note: 称谓混用}
+recorded_at: "2026-10-04T08:00:00Z"

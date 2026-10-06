@@ -1,0 +1,225 @@
+package cli
+
+import (
+	"crypto/sha256"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
+	"go.yaml.in/yaml/v3"
+)
+
+// snapshotTree 返回目录下全部普通文件的相对路径 → 内容 SHA-256 映射。
+func snapshotTree(t *testing.T, dir string) map[string]string {
+	t.Helper()
+	out := map[string]string{}
+	err := filepath.Walk(dir, func(p string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() {
+			return nil
+		}
+		rel, err := filepath.Rel(dir, p)
+		if err != nil {
+			return err
+		}
+		data, err := os.ReadFile(p)
+		if err != nil {
+			return err
+		}
+		out[filepath.ToSlash(rel)] = fmt.Sprintf("%x", sha256.Sum256(data))
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return out
+}
+
+// replayNovelCorpus 在 dir 中按序重放小说语料全部步骤并做逐步断言（退出码、诊断码、
+// stdout 片段、变异命令 changedPaths、死键自检）。调用方负责冻结 now 时间源。
+// 黄金比对（TestNovelCorpusGolden）与负向注入（TestNovelCorpusNegativeInjections）复用本助手。
+func replayNovelCorpus(t *testing.T, dir string) {
+	var script corpusScript
+	raw, err := os.ReadFile(filepath.Join("testdata", "e2e", "novel", "commands.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := yaml.Unmarshal(raw, &script); err != nil {
+		t.Fatalf("commands.yaml 解析失败: %v", err)
+	}
+	if len(script.Stages) == 0 {
+		t.Fatal("commands.yaml 没有阶段")
+	}
+
+	// 变异类命令：执行成功时必须报告 changedPaths（按重放实测校准；show/list/at 等只读子命令不在内）。
+	mutating := map[[2]string]bool{
+		{"init", ""}: true, {"new", ""}: true,
+		{"source", "add"}: true, {"brief", "set"}: true,
+		{"plan", "step"}: true, {"plan", "confirm"}: true,
+		{"canon", "add"}: true, {"canon", "set"}: true, {"canon", "remove"}: true,
+		{"unit", "add"}: true, {"unit", "move"}: true,
+		{"scene", "contract"}: true, {"scene", "close-out"}: true,
+		{"outline", "set"}: true, {"outline", "remove"}: true,
+		{"draft", "write"}:   true,
+		{"review", "record"}: true, {"review", "submit"}: true, // review plan 生成任务包，但维度无产出时合法地不写文件
+
+		{"accept", ""}: true, {"advance", ""}: true,
+		{"summary", "set"}:       true,
+		{"volume", "checkpoint"}: true, {"volume", "confirm"}: true,
+		{"decide", ""}:     true,
+		{"threads", "add"}: true, {"threads", "set"}: true,
+		{"state", "propose"}: true, {"state", "confirm"}: true, {"state", "set"}: true,
+		{"knowledge", "propose"}: true, {"knowledge", "confirm"}: true, {"knowledge", "set"}: true,
+		{"impact", "mark"}: true, {"impact", "clear"}: true,
+		{"handoff", "write"}: true,
+		{"assemble", ""}:     true, {"export", ""}: true,
+	}
+	// 键控：先按 (verb, subverb) 查，未命中再回退 (verb, "")——顶层动词（第二个 token 是位置
+	// 参数或旗标，如 init/new/accept/advance/decide/assemble/export）只有 verb 形态的键。
+	isMutating := func(c []string) bool {
+		if len(c) == 0 {
+			return false
+		}
+		if len(c) > 1 && mutating[[2]string{c[0], c[1]}] {
+			return true
+		}
+		return mutating[[2]string{c[0], ""}]
+	}
+
+	keyHits := map[[2]string]int{}
+	total := 0
+	for _, st := range script.Stages {
+		for _, step := range st.Steps {
+			total++
+			label := strings.Join(step.Command, " ")
+			if wf := step.WriteFile; wf != nil {
+				if step.InputRef == nil {
+					t.Fatalf("[%s] write_file 步骤缺少 input_ref", st.Stage)
+				}
+				data, err := os.ReadFile(filepath.Join("testdata", "e2e", "novel", *step.InputRef))
+				if err != nil {
+					t.Fatalf("[%s] 读取 %s: %v", st.Stage, *step.InputRef, err)
+				}
+				dst := filepath.Join(dir, filepath.FromSlash(*wf))
+				if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(dst, data, 0o644); err != nil {
+					t.Fatal(err)
+				}
+				continue
+			}
+			input := ""
+			if step.InputRef != nil {
+				data, err := os.ReadFile(filepath.Join("testdata", "e2e", "novel", *step.InputRef))
+				if err != nil {
+					t.Fatalf("[%s] 读取 %s: %v", st.Stage, *step.InputRef, err)
+				}
+				input = string(data)
+			}
+			code, res := runWSIn(t, dir, input, step.Command...)
+			if code != step.ExpectExit {
+				t.Fatalf("[%s] %s: exit = %d, 期望 %d; diagnostics = %+v", st.Stage, label, code, step.ExpectExit, res.Diagnostics)
+			}
+			if step.ExpectCode != nil && *step.ExpectCode != "" {
+				for _, want := range strings.Split(*step.ExpectCode, ",") {
+					want = strings.TrimSpace(want)
+					found := false
+					for _, d := range res.Diagnostics {
+						if d.Code == want {
+							found = true
+							break
+						}
+					}
+					if !found {
+						t.Fatalf("[%s] %s: 期望诊断码 %s 不在 %+v", st.Stage, label, want, res.Diagnostics)
+					}
+				}
+			}
+			if step.StdoutContains != nil && !strings.Contains(res.stdout, *step.StdoutContains) {
+				t.Fatalf("[%s] %s: stdout 缺少 %q", st.Stage, label, *step.StdoutContains)
+			}
+			if code == 0 && isMutating(step.Command) {
+				key := [2]string{step.Command[0], ""}
+				if len(step.Command) > 1 && mutating[[2]string{step.Command[0], step.Command[1]}] {
+					key = [2]string{step.Command[0], step.Command[1]}
+				}
+				keyHits[key]++
+				if len(res.ChangedPaths) == 0 {
+					t.Fatalf("[%s] %s: 变异命令成功执行但 changedPaths 为空", st.Stage, label)
+				}
+			}
+		}
+	}
+	if total < 200 {
+		t.Fatalf("重放步数 = %d，语料应不少于 200 步（与 TestNovelCorpusScript 的下限互指）", total)
+	}
+
+	// 死键自检：清单中登记的键若被语料的命令形态覆盖（verb 相同且 subverb 相同或为回退形态），
+	// 必须至少命中一次——否则登记不可达，断言静默失效而测试仍然全绿。
+	for key := range mutating {
+		verbSeen, shapeSeen := false, false
+		for _, st := range script.Stages {
+			for _, step := range st.Steps {
+				c := step.Command
+				if len(c) == 0 || c[0] != key[0] {
+					continue
+				}
+				verbSeen = true
+				if key[1] == "" || (len(c) > 1 && c[1] == key[1]) {
+					shapeSeen = true
+				}
+			}
+		}
+		if verbSeen && shapeSeen && keyHits[key] == 0 {
+			t.Errorf("变异清单键 %v 被语料命令形态覆盖但从未命中（键控或语料漂移）", key)
+		}
+	}
+}
+
+// 小说语料重放：冻结时间源，连续重放两次，两棵工作区目录树逐文件 SHA-256 比对完全一致
+// （含导出的 book.md 与 novel-export.md），作为可重复性的显式验证。
+func TestNovelCorpusReplay(t *testing.T) {
+	frozen := time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)
+	now = func() time.Time { return frozen }
+	defer func() { now = time.Now }()
+
+	dir1 := t.TempDir()
+	replayNovelCorpus(t, dir1)
+	dir2 := t.TempDir()
+	replayNovelCorpus(t, dir2)
+
+	tree1 := snapshotTree(t, dir1)
+	tree2 := snapshotTree(t, dir2)
+	if len(tree1) != len(tree2) {
+		t.Fatalf("两次重放文件数不一致: %d vs %d", len(tree1), len(tree2))
+	}
+	for rel, sum1 := range tree1 {
+		sum2, ok := tree2[rel]
+		if !ok {
+			t.Fatalf("第二次重放缺少文件 %s", rel)
+		}
+		if sum1 != sum2 {
+			a, _ := os.ReadFile(filepath.Join(dir1, filepath.FromSlash(rel)))
+			b, _ := os.ReadFile(filepath.Join(dir2, filepath.FromSlash(rel)))
+			head := func(b []byte) string {
+				if len(b) > 400 {
+					return string(b[:400]) + "…（截断）"
+				}
+				return string(b)
+			}
+			t.Fatalf("两次重放产物不一致: %s\n--- 第一次 ---\n%s\n--- 第二次 ---\n%s", rel, head(a), head(b))
+		}
+	}
+	if _, err := os.Stat(filepath.Join(dir1, "book.md")); err != nil {
+		t.Fatalf("组稿产物缺失: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir1, "novel-export.md")); err != nil {
+		t.Fatalf("整书导出产物缺失: %v", err)
+	}
+}

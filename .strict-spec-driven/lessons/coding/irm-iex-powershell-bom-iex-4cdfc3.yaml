@@ -1,0 +1,19 @@
+schema: strict-spec-driven/lesson/v1
+schema_version: 1
+artifact_type: lesson
+schema_file: templates/strict-spec-driven/schemas/lesson.yaml
+lesson:
+  id: irm-iex-powershell-bom-iex-4cdfc3
+  title: 通过 irm | iex 分发的 PowerShell 脚本不能带 BOM，测试必须走 iex 路径
+category: coding
+status: active
+created_at: '2026-09-30T14:23:43.763Z'
+updated_at: '2026-09-30T14:23:43.763Z'
+context: binary-release-and-install 为 install.ps1 加了 UTF-8 BOM，以便 Windows PowerShell 5.1 以 -File 运行时正确读取中文；测试只用 pwsh -File 运行脚本。
+observation: "审查实测：irm 按 charset=utf-8 解码响应后不会去掉 BOM，字符串首字符为 U+FEFF，iex 把第一行解析成命令 '\uFEFF#' 并报错；作者会话中 $ErrorActionPreference 为 Stop 时安装直接中止。脚本顶层设置的 $ErrorActionPreference、变量与函数也会留在作者会话里。-File 的测试全部通过，没有发现这两个问题。"
+takeaway: 文档推荐 irm <url> | iex 的 PowerShell 脚本不带 BOM，全部逻辑放在 & { } 脚本块中，失败用 throw 而不是 exit；测试要同时覆盖 -File 与「按 UTF-8 解码后交给 Invoke-Expression」两种运行方式，断言成功时 stderr 为空，并在成功运行后检查调用者会话没有残留设置、变量与函数。
+applies_when: 编写或修改以 irm | iex（或 curl | sh 这类边下载边执行）方式分发的安装脚本，或为含非 ASCII 文字的 PowerShell 脚本选择文件编码时
+occurrences:
+  - origin: binary-release-and-install
+    date: '2026-09-30'
+    evidence: install.ps1 去掉 BOM 并包进 & { }；internal/tools/release/install_test.go 的 TestInstallPs1 对每个用例分别以 -File 与 iex 运行，并在成功安装后断言会话状态为 Continue|False|False。

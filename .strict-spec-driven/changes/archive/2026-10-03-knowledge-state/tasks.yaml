@@ -1,0 +1,57 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: knowledge-state
+sections:
+  Implementation:
+    knowledge-schema:
+      text: internal/schema 新增 knowledge.schema.json（schema_version=1；events 数组：id 符合 id 格式必填、scene 与 entry 非空必填、character 非空必填（reader 或条目 id 的领域语义由领域校验承担）、status 枚举 proposed|confirmed|rejected 必填、confirmation 与 decided_at 为取值化可空字段同 state.schema.json、decided_at 为 RFC 3339），在 schema.go 注册命名 knowledge 并纳入 embed 清单；补合法与不合法夹具及 schema 包测试
+      status: complete
+    knowledge-package:
+      text: 新包 internal/knowledge：knowledge.yaml 的加载与领域校验（id 唯一报 artifact.duplicate-id；scene 单元不存在或类型不为 scene 报 knowledge.unknown-unit；entry 不在作品 canon.yaml 设定条目中报 knowledge.unknown-entry；character 不为 reader 且不在 canon.yaml 的 character 条目中报 knowledge.unknown-character；proposed 不得带 confirmation/decided_at、confirmed 与 rejected 必带；途经符号链接按 artifact.not-found）；Propose（scene/entry/character/id，id 缺省 know-<n> 递增不重复）、List（默认 proposed 过滤、--all、按 scene 单元树先序排序、先序相同按文件顺序）、Confirm/Reject（记录 confirmation 与 decided_at；confirm 仅作用于 proposed，reject 可拒绝 proposed 或撤销 confirmed，rejected 终态）、Set（修改 scene/entry/character：proposed 无需确认、confirmed 需 --confirmed-by-author 与 --confirmation 重新确认并更新记录、rejected 拒绝）；KnownAt(unit, character) 取 confirmed 且 character 匹配、scene 按先序严格早于目标场景的条目，同场景按文件顺序、每条目取最早适用事件（知情单调），输出 entry/name/event/scene 并按 entry 升序，供 validate、CLI 与 ctxpack 复用
+      status: complete
+    knowledge-cli:
+      text: internal/cli 注册六个命令：knowledge propose（args：work；flags：--scene/--entry/--character/--id）、knowledge list（args：work；flags：--all）、knowledge confirm（args：work、id；flags：--confirmed-by-author/--confirmation）、knowledge reject（同 confirm）、knowledge set（args：work、id；flags：--scene/--entry/--character/--confirmed-by-author/--confirmation）、knowledge at（args：unit；flags：--character）：outputKeys、exitCodes、sampleArgs、--json 信封（propose/confirm/reject/set 输出 event，list 输出 events，at 输出 knowledge）与人读输出；诊断与 next（knowledge list --all 复查、canon list 补登记、help 用法、at 的 unit 类型与 character 取值提示）
+      status: complete
+    knowledge-validate:
+      text: wa-cli validate 整体校验按 CheckWorks 模式纳入每个可加载作品 knowledge.yaml 的 Schema 与领域校验（计入 checked，entry 与 character 检查以该作品 canon.yaml 为准），validate <path> 支持对 knowledge.yaml 直接校验；无 knowledge.yaml 的作品零新增诊断，既有 checked 与诊断不变
+      status: complete
+    knowledge-context:
+      text: internal/ctxpack 与 internal/cli/context.go：scene 单元上下文新增 knowledge 与 readerOnly 内容项——pov 取场景自身 outline.yaml 中第一个声明 pov 的大纲节，解析为 canon.yaml 中 name 相同的第一个 character 条目，未解析到时 warning knowledge.pov-not-in-canon（next 含 canon list 与 help scene contract）且两字段为空数组；knowledge 按该视角人物重放（复用 internal/knowledge 的 KnownAt），每项含 entry、name、text、event 与 scene；readerOnly 为 character 为 reader 的适用条目减去 knowledge 已含 entry；无 knowledge.yaml 时空数组不报告，台账不合法时报告其诊断、context 为 null、退出码 1（同 threads.yaml 处理）；两项计入预算，裁剪 part 为 knowledge 与 reader-only、优先级插在 canon 人物设定项与揭示边界之间；Markdown 输出新增「视角人物已知（POV Knowledge）」「读者已知、人物未知（Reader Only）」小节
+      status: complete
+    knowledge-glossary:
+      text: docs/GLOSSARY.md 增补知情表（Knowledge State）与知情事件（Knowledge Event）词条：作品根单元目录 knowledge.yaml 中按场景登记的知情事件总账，作者确认后生效，已确认条目按单元树先序重放得出各获知者（人物或读者）的已知列表；写法与既有状态台账（State Ledger）词条一致
+      status: complete
+  Testing:
+    test-knowledge-package:
+      text: internal/knowledge 单元测试：Schema 各失败分支（status 非法、decided_at 非 RFC 3339、空白 scene/entry/character；confirmation 与 decided_at 为取值化可空字段，proposed 且为 null 合法、不因键存在性报错）；领域校验错误码（artifact.duplicate-id、knowledge.unknown-unit 单元不存在或类型不符、knowledge.unknown-entry 含无 canon.yaml 时、knowledge.unknown-character 含引用非 character 类型条目时、knowledge.incomplete-confirmation 的三种形态——已决定而 confirmation 为 null、缺 confirmation、缺 decided_at）；Propose 的 id 缺省生成与重复拒绝（参数问题不填 path）、--character 为 reader 与 character 条目两分支；Confirm/Reject/Set 的状态迁移（confirm 非 proposed 报 knowledge.already-decided、reject 撤销 confirmed、set 修改 confirmed 缺 --confirmed-by-author/--confirmation 拒绝且文件未变、rejected 终态三命令均拒绝）；List 的 proposed 过滤、--all 与先序排序
+      status: complete
+    test-knowledge-cli:
+      text: internal/cli 测试：knowledge propose（--json 信封与 event 字段、knowledge.unknown-character/knowledge.unknown-entry/knowledge.unknown-unit 不写文件、--id 缺省与重复）；knowledge list（默认 proposed、--all、无台账空数组退出码 0、人读输出）；knowledge confirm（记录 confirmation 与 RFC 3339 的 decided_at、重复确认报 knowledge.already-decided）；knowledge reject（撤销 confirmed 后条目 rejected）；knowledge set（confirmed 缺 --confirmed-by-author/--confirmation 拒绝、带全参数写入并更新确认记录、--character 校验）；knowledge at（--character 为条目 id 与 reader、unit 不存在或非 scene 报 knowledge.unknown-unit、--character 非法报 knowledge.unknown-character、无适用条目空数组）；退出码与 next 断言
+      status: complete
+    test-knowledge-replay:
+      text: 重放语义测试（里程碑完成标准）：多章夹具中断言 knowledge at 只含按先序严格早于目标场景的 confirmed 条目（目标场景自身与 proposed/rejected 条目排除）；同一获知者同一设定条目多条 confirmed 取按先序最早一条（earliest wins，event 与 scene 指向最早条目）；同一夹具连续两次运行输出完全一致（确定性）；经 knowledge set 修改早期 confirmed 条目（改 scene 或 character）并重新确认后，已知列表随之变化；经 knowledge reject 撤销早期条目后，已知列表不再含该条目；reader 与人物互不串扰（--character reader 只含 reader 条目，人物条目不进读者列表）
+      status: complete
+    test-knowledge-context:
+      text: internal/ctxpack 与 internal/cli/context 测试：scene 单元的 knowledge 与 readerOnly 字段（pov 解析命中、knowledge 含 text/event/scene、readerOnly 为读者已知减视角已知）；pov 未声明或未解析到 character 条目时 warning knowledge.pov-not-in-canon 且两字段为空数组、退出码 0；无 knowledge.yaml 时空数组不报告；knowledge.yaml 不通过校验时 context 为 null、退出码 1；预算裁剪（part 为 knowledge 与 reader-only、trimmed 的 id 为设定条目 id、keptChars、被整项裁剪项不出现在字段中、优先级位于 canon 人物设定项与揭示边界之间）；Markdown 输出「视角人物已知（POV Knowledge）」「读者已知、人物未知（Reader Only）」小节；非 scene 单元两字段为空数组且无场景级诊断
+      status: complete
+    test-knowledge-e2e:
+      text: internal/cli e2e 与 validate 测试：带 knowledge.yaml 的多章长篇夹具整体校验（knowledge.yaml 计入 checked、领域问题按错误码与 field 报告、合法台账零诊断退出码 0）；无台账作品的 validate 输出与既有断言一致（无新增诊断）；validate <path> 对单个 knowledge.yaml 的检查（entry 与 character 以该作品 canon.yaml 为准）
+      status: complete
+    run-regression:
+      text: 完整回归测试并确认覆盖率不低于阈值：go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    verify-change:
+      text: 运行 strict-spec-cli ready knowledge-state 与 strict-spec-cli verify knowledge-state：确认变更就绪、规格与任务一致、诊断清零
+      status: complete
+      command: strict-spec-cli ready knowledge-state && strict-spec-cli verify knowledge-state
+    verify-archive-readiness:
+      text: 核对归档合并路径：knowledge 新主规格将写入 .strict-spec-driven/specs/knowledge.yaml 并进入 specs/INDEX.yaml；context 的 scene-context 与 context-trim 为 MODIFIED，合并语句与既有 scenarios 兼容、不破坏 context-command 引用；运行 strict-spec-cli verify knowledge-state 确认无跨文件冲突
+      status: complete
+      command: strict-spec-cli verify knowledge-state
+testing_gates:
+  validation_task: run-regression
+  unit_test_task: test-knowledge-package

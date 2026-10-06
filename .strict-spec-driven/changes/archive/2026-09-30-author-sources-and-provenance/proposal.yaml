@@ -1,0 +1,39 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: author-sources-and-provenance
+  status: proposed
+summary:
+  what:
+    - 新增作者素材库（Source Library）：wa-cli source add 从文件或标准输入登记素材（Source），类型为 author-note、interview、transcript、reference、past-article 之一，原文逐字节存档到 .writing-anything/sources/<id>/ 并记录 SHA-256，分配稳定 id；wa-cli source list 列出已登记的素材；wa-cli validate 检查存档原文未被改动。
+    - 新增 wa-cli draft write <unit>：从文件或标准输入把正文写入单元目录下的 draft.md，同时在 provenance.yaml 中记录整篇与每个段落的内容哈希及其出处（Provenance）；新写入的段落标为 agent，与作者已有段落相同的段落保留原出处。
+    - 新增 wa-cli provenance <unit>：把当前 draft.md 与最近一次写入记录逐段对比，推导每个段落的出处 human、agent 或 agent-draft-human-edited，并按段落数与字符数汇总单元级各类出处的占比；没有写入记录的正文全部视为 human。
+    - 新增论断（Claim）产物 claims.yaml 与 wa-cli claim add <unit>：登记需要出处支撑的论断（经历、观点、案例、数据、事实），并把论断关联到已登记的素材 id；引用不存在的素材时拒绝写入，validate 同样检查。
+  why:
+    - 里程碑 kernel-foundation 的完成标准要求能用 CLI 登记作者素材，并由 Agent 通过 wa-cli draft write 写入正文；项目约定亲历内容、观点与数据必须链接到作者提供的素材，凡不经 draft write 产生的正文变化都视为人工编辑。目前工作区只有 sources/ 空目录，没有登记素材、写入正文或记录出处的命令，Agent 只能直接改文件，作者无法分辨哪些段落出自 Agent。
+    - author-feedback 与 human-edit-protection-and-comments 都依赖本变更：反馈锚点需要段落、人工编辑保护需要最近一次 draft write 的哈希，后续的 claim-source-check 需要论断到素材的关联，AI 生成内容标识与作者偏好学习需要段落级出处。
+scope:
+  in:
+    - internal/schema：新增 source（.writing-anything/sources/*/source.yaml）、provenance（单元目录下的 provenance.yaml）与 claims（单元目录下的 claims.yaml）三种产物类型及其 JSON Schema，embed 打包；产物类型允许登记多个路径模式，以同时匹配根单元目录与子单元目录
+    - 新的领域包 internal/source：登记素材（类型检查、默认 id 为 src- 加内容 SHA-256 的前 12 位十六进制、id 已存在时报告 source.exists、空内容报告 source.empty）、原文逐字节存档、加载与列出素材、校验存档完整性（source.id-mismatch、source.modified）
+    - 新的领域包 internal/draft：Markdown 段落切分（空行分隔、围栏代码块整体算一段）、段落哈希、写入正文与写入记录、按最长公共子序列对齐推导段落出处与单元级汇总、论断登记与校验（claim.unknown-source、artifact.duplicate-id）
+    - wa-cli source add、source list、draft write、provenance、claim add 五条命令：在命令注册表中声明参数、输出键与退出码，共享 --dir 与 --json；--file 相对 --dir 解析，省略时读标准输入，读取失败报告 input.read-failed
+    - internal/cli.Run 增加标准输入参数，cmd/wa-cli 传入 os.Stdin；修改 go-project-structure 技术标准的 injectable-io 规则（delta tech）
+    - wa-cli validate 整体校验时检查 sources/ 下每个素材目录与每个单元目录中的 provenance.yaml、claims.yaml，validate <path> 识别这三种产物；修改 workspace 主规格的 validate-workspace（delta spec）
+    - 新增 sources-and-provenance 主规格（delta spec），修改 workspace-artifacts 技术标准的 embedded-schemas 规则（delta tech）；把新术语加入 docs/GLOSSARY.md
+  out:
+    - 人工编辑保护：draft write 在作者改过正文后拒绝覆盖、wa-cli diff、draft write --base（由 human-edit-protection-and-comments 负责）；本变更的 draft write 总是写入，但保留作者段落的出处
+    - 正文批注解析、作者反馈与锚点重新定位（由 author-feedback 与 human-edit-protection-and-comments 负责）
+    - 论断出处的启发式检查与未登记论断的检测（由 tech-blog-workflow 的 claim-source-check 负责）；论断的修改、删除与列表命令
+    - 素材的修改、删除、全文检索与去重；AI 生成内容标识的导出；句子级出处
+    - wa-cli 调用 LLM
+unchanged_behavior:
+  - 输出信封（Output Envelope）字段 valid、diagnostics、changedPaths 与退出码约定 0/1/2 不变；已发布错误码的含义不变
+  - wa-cli init、config set、config resolved、new、unit add、advance、next 的参数、输出与诊断不变；status 的字段与含义不变（sources 仍为 sources/ 下的直接条目数）
+  - 必需产物仍按文件是否存在判断；draft write 写出的 draft.md 满足 draft 必需产物，不改变 advance 的判断规则
+  - 内置 minimal 文体与 default 规范包的内容不变；仓库根目录不创建 .writing-anything/；产品二进制不依赖 internal/tools/** 与 strict-spec-driven
+roadmap:
+  milestone: kernel-foundation
+  planned_change: author-sources-and-provenance

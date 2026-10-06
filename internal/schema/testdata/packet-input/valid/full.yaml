@@ -1,0 +1,3 @@
+verdicts:
+  - {item: behavior-state, verdict: pass}
+  - {item: naming, verdict: fail, note: 混用}

@@ -1,0 +1,25 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: fix-cli-help-usage-nits
+approach:
+  - 只在命令分发层修改：commandSet.run 在首个参数恰为 --help 时把其余参数交给 help 命令；help 命令带位置参数时，--help 不再截获调用，而是由 runHelp 按位置参数输出目标命令的用法。usageError 与 writeHelp、runVersion 一样检查写入错误，失败时调用 writeFailed 返回 1。占位符在 help.go 的总览与 string 参数用法中改为英文标识符。
+decisions:
+  root-help-flag:
+    decision: 只有首个参数恰为 --help 时才视为 wa-cli help，其后的参数原样交给 help（如 wa-cli --help version --json 等同 wa-cli help version --json）；首个参数是其他 - 开头的参数时仍为 usage.missing-command。
+    rationale: 把 --help 当作全局帮助是约定俗成的写法；只特判这一个参数，不引入一般的全局参数解析。
+  help-positional-wins:
+    decision: help <command> --help 输出 <command> 的用法；help --help（无位置参数）仍输出 help 自己的用法。
+    rationale: help 的位置参数就是要查看的命令，用户写出它时的意图是查看该命令；无位置参数时 --help 的含义与其他命令一致。
+  write-failure-exit:
+    decision: 用法错误的输出写入失败时，向标准错误报告「写入输出失败：…」并以退出码 1 退出；标准错误本身不可写时同样返回 1。
+    rationale: exit-codes 规定执行失败为 1；与 writeFailed 保持一致，调用方才能区分「用法写错了」和「输出没写出去」。
+  english-placeholders:
+    decision: 用法说明中的占位符统一使用英文标识符：<command>、<value>、<args>，与 help --json 中 args[].name 一致；说明文字仍为中文。
+    rationale: 位置参数名是 help --json 暴露的标识符，按术语约定标识符保持英文；用中文占位符则 <命令> 与 args[].name=command 对不上。
+alternatives:
+  - option: 占位符统一为中文（<命令>、<值>）
+    reason: 会让用法中的占位符与 help --json 的 args[].name 不一致，且 MCP 生成参数名时需要另一套映射。
+risks:
+  - 外部脚本若匹配旧的「用法：wa-cli <命令>」文本会失效；目前只有仓库内测试依赖，同步修改。

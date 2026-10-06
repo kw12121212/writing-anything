@@ -1,0 +1,44 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: pack-install-distribution
+approach:
+  - 新增领域包 internal/packinstall：解析来源参数（git 地址、本地 .yaml 文件、含 pack.yaml 的目录，或保留的 <owner>/<name>）、通过可注入的 Env 调用系统 git 拉取到临时目录、读取并校验规范包、读写锁定文件 .writing-anything/packs.lock.yaml、校验锁定一致性；只返回 workspace.Problem，由 internal/cli 转换为诊断。
+  - 规范包内容的校验复用 internal/catalog 的规范包加载与检查（Schema 校验入口自带可执行内容检查，再做重复项与已知规则类型检查），在临时位置完成全部检查后才写入工作区（precheck-before-side-effects）：先原子写入 packs/<id>.yaml，再原子写入锁定文件。
+  - internal/cli 新增 pack install、pack list、pack remove 三条命令登记到命令注册表并登记样例调用；MCP tool 由注册表自动生成。整体 validate（internal/cli 的 checkWorkspace）追加 packinstall.Check 的锁定一致性检查；锁定文件在 internal/schema 登记产物类型 pack-lock 与 JSON Schema，wa-cli validate .writing-anything/packs.lock.yaml 单独校验 Schema 与条目 id 重复。
+decisions:
+  system-git:
+    decision: git 来源调用系统 git 可执行文件：git clone --quiet --no-checkout -- <url> <临时目录>，再 git -C <临时目录> checkout --quiet --detach <ref 或 HEAD>，git -C <临时目录> rev-parse HEAD 取提交；统一加 -c core.hooksPath=<空目录> 关闭钩子，环境变量 GIT_TERMINAL_PROMPT=0，不递归子模块，时长上限 2 分钟；找不到 git 时报告 pack.git-unavailable，git 失败时报告 pack.git-failed（message 含截断后的合并输出）。
+    rationale: go-project-structure/stdlib-first 要求优先标准库，引入 go-git 会显著增加二进制体积与依赖面；系统 git 已能处理认证（SSH 密钥、凭据助手），与作者已有的 git 配置一致。固定子命令与参数列表、-- 分隔 URL、拒绝以 - 开头的 ref，避免参数注入；关闭钩子与交互提示，保证拉取不执行仓库内容、不卡住 MCP 会话。
+  pack-source-layout:
+    decision: 规范包来源为单个 .yaml 文件（本地路径），或根目录含 pack.yaml 的目录或 git 仓库；安装后的文件名由规范包的 id 决定（packs/<id>.yaml），文件内容逐字节复制。git 仓库中的 pack.yaml 必须是普通文件（不是符号链接），大小不超过 1 MiB。
+    rationale: 与现有工作区规范包的单文件形态一致，安装后无需新的加载路径，config resolved 与 validate 不需要区分已安装与手写的规范包；逐字节复制使锁定的 SHA-256 等于来源文件的哈希，便于核对。符号链接与大小限制防止从克隆的仓库读到仓库之外的文件或超大输入。
+  lock-file:
+    decision: 锁定文件为 .writing-anything/packs.lock.yaml（不在 packs/ 目录中，避免被当成规范包），schema_version 为 1，packs 按 id 排序，每项含 id、source（git 与可选的 ref，或 path）、commit（只有 git 来源有，40 位十六进制）与 sha256（已安装文件内容的 SHA-256）。本地路径在项目目录之内或可以表示为相对路径时写相对项目目录的路径，否则写绝对路径。
+    rationale: 锁定文件只记录已安装规范包，作者手写的规范包不需要条目，不影响现有工作区；提交加内容哈希同时满足「锁定到具体版本」与「能校验通过」：提交说明来源版本，哈希检测安装后被改动。
+  install-conflicts:
+    decision: 规范包 id 与内置规范包相同时报告 pack.id-conflict；packs/<id>.yaml 已存在但没有锁定条目（作者手写）时报告 pack.exists，不覆盖；已有锁定条目时视为更新，替换文件与条目；来源、提交与哈希都未变时不写文件，状态为 unchanged。
+    rationale: 作者的文件优先于工具，绝不覆盖没有出处记录的手写规范包；重复安装幂等，便于 Agent 重试。
+  no-auto-enable:
+    decision: pack install 只安装与锁定，不修改 config.yaml 的 packs；启用仍通过 wa-cli config set packs，pack remove 在规范包仍被 packs 引用时报告 pack.in-use，next 为去掉该 id 后的 config set packs 命令。
+    rationale: 启用会改变合并顺序与生效规则，应由作者显式决定；分开安装与启用也保持每条命令只变更自己负责的产物。
+  registry-reserved:
+    decision: 来源参数既不是 git 地址、也不是已存在的路径，且形如 <owner>/<name>（两段 id 格式，以 / 分隔）时报告 pack.registry-unsupported，说明中心化仓库尚未支持并给出 git 地址或本地路径的用法；规范包 id 仍沿用现有 id 格式，不接受 /。
+    rationale: 里程碑 intake 问题 pack-registry 的建议：先只支持 git 地址与本地路径，为 <owner>/<name> 预留命名空间。现在明确拒绝这种写法，以后引入仓库时不会与已有行为冲突。
+  lock-verification:
+    decision: 整体 wa-cli validate 校验锁定文件：每个锁定条目的 packs/<id>.yaml 不存在时报告 pack.lock-missing-file，内容 SHA-256 与锁定不一致时报告 pack.lock-mismatch，next 含按锁定来源重新安装的命令；pack list 以 status（builtin、local、installed、modified、missing）展示同样的结果，modified 与 missing 给出 warning 级诊断，不使 list 失败。
+    rationale: done_criteria 要求已安装规范包能校验通过；validate 是作者与 Agent 统一的校验入口，list 作为查看命令不应因为可修复的状态失败。
+  wait-delay:
+    decision: 运行外部程序时除 exec.CommandContext 的时长上限外再设 cmd.WaitDelay（5 秒）：超时杀掉主进程后，即使它派生的子进程（如 git 的 ssh、git-remote-https）仍持有输出管道，Run 也在上限加 WaitDelay 内返回；internal/mcpinstall 采用同样的写法。
+    rationale: 输出写到 bytes.Buffer 时 Wait 要等所有持有管道的进程退出，只杀主进程会让超时失效，MCP 会话因此卡住；external-processes 规则要求超时视为失败，两处共用同一条规则，应一并修正。
+alternatives:
+  - option: 引入 go-git 等纯 Go 的 git 实现
+    reason: 增加较大的第三方依赖与二进制体积，且需要自行处理 SSH 与凭据助手认证，违背 stdlib-first
+  - option: 把锁定信息写进每个已安装规范包文件本身
+    reason: 规范包 Schema 不允许额外字段，写入会改变文件内容使哈希失去意义，也会与来源文件不同
+  - option: 安装时自动加入 config.yaml 的 packs
+    reason: 改变规则合并顺序属于作者决策，自动启用会让一次安装悄悄改变生效规则
+risks:
+  - 依赖系统安装 git；未安装 git 时只能使用本地路径来源
+  - 作者手工修改已安装的规范包后 validate 会失败，需要重新安装或移除后改为手写规范包

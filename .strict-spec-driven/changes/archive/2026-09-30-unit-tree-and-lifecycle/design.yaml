@@ -1,0 +1,61 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: unit-tree-and-lifecycle
+approach:
+  - 数据模型：作品即根单元。.writing-anything/works/<work>/work.yaml 含 schema_version（1）、id（等于目录名）、genre（文体 id）、type（根单元类型，必须是文体 unit_types 的第一项）、stage（当前阶段 id 或 done）与 units（子单元数组，每项含 id、type、stage 与递归的 units）。单元 id 在作品内唯一，且不等于作品 id；单元引用写作 <work>（根单元）或 <work>/<unit-id>（任意深度的子单元，无需写出路径），移动单元时引用保持稳定。
+  - 单元目录与必需产物：根单元的产物放在 .writing-anything/works/<work>/，子单元放在 .writing-anything/works/<work>/units/<unit-id>/（按 id 平铺，不随层级嵌套）。阶段 S 的必需产物 a 在单元目录下存在 a.yaml 或 a.md 即视为满足；本变更只判断文件是否存在，不校验其内容。
+  - 生命周期状态机：新建单元的阶段为文体 stages 的第一项；advance 计算当前阶段的阻塞项，没有阻塞项时进入下一阶段，走完最后一个阶段后进入保留的终点 done。阻塞项由 internal/work 的一个函数统一计算，本变更只有缺失的必需产物（lifecycle.missing-artifact），后续 decision-queue、brief-intake-gate 在同一函数中追加阻塞来源；advance、next 与 status 都只通过这个函数得到阻塞项，保证三者一致。
+  - CLI：在注册表中新增 new、advance、next 与 unit add（新命令组 unit 的第一个子命令），共享 --dir 与 --json。new 与 unit add 创建或追加节点、advance 只改目标单元的 stage 节点，均在 YAML 节点树上修改、写前重新解析并用 Schema 与 internal/work 的校验检查，取值未变不写，经 internal/workspace 的统一写入函数原子写入，changedPaths 只列出 work.yaml（new 另列新建的作品目录）。next 与 status 为只读命令。领域包只返回结构化问题，由 internal/cli 转换为诊断并填写可直接运行的 next。
+  - 校验集成：validate 整体校验时遍历 works/ 下每个不以 . 开头的子目录，要求存在 work.yaml（缺失为 artifact.not-found）并执行作品校验，路径计入 checked；validate <path> 通过产物类型表识别 work.yaml。status 复用同一校验，并在 units 中按作品 id 排序、单元树先序列出每个单元；作品无法加载时该作品不出现在 units 中，对应诊断使 valid 为 false。
+  - 子单元创建、父子独立推进与无生成命令时的下一步已由作者在 questions.yaml 的 unit-creation、lifecycle-scope、next-without-producer 中确认，均采用推荐方案 A。
+  - 测试夹具：internal/work 的校验与推进函数接收已加载的 *catalog.Genre，命令层通过 catalog.LoadGenre 按作品的 genre 取内置文体；多层单元树的测试文体（book → part → chapter → scene）放在 internal/work/testdata/ 下，由测试解码后直接传入，不进入内置目录，也不成为可在工作区中引用的文体。单层形状用内置 minimal 文体在 internal/cli 的命令级测试中覆盖。
+decisions:
+  work-is-root-unit:
+    decision: 作品本身就是单元树的根单元：work.yaml 顶层字段同时描述作品与根单元，根单元类型固定为文体 unit_types 的第一项，根单元 id 等于作品 id。
+    rationale: 单层文章（article → 节）中作品与文章是同一个对象，把两者拆开会让每篇文章多出一个没有意义的层级；多层长篇只需让文体的第一个单元类型表示整部作品（book → part → chapter → scene）。以第一项为根类型不需要在文体 Schema 中新增字段，已归档的 minimal 文体无需修改。
+  nested-tree-flat-ids:
+    decision: work.yaml 中单元树以 units 递归嵌套表示，单元 id 在作品内全局唯一，单元引用与单元目录都只用 id，不含层级路径。
+    rationale: 嵌套结构与作者阅读单元树的方式一致，可以直接看出层级；id 全局唯一使 <work>/<unit-id> 与 units/<unit-id>/ 在单元被移动后保持不变，novel-multi-level-units 要求插入、移动场景时 id 稳定，无需迁移目录或改写引用。
+  reserved-done-stage:
+    decision: 生命周期终点用保留的阶段 id done 表示：走完最后一个阶段后 stage 为 done；internal/catalog 拒绝声明 id 为 done 的阶段（genre.reserved-stage-id），对 done 单元运行 advance 报告 lifecycle.already-done。
+    rationale: 用 stage 一个字段表达全部状态，Agent 读 work.yaml 或 status 时不需要组合两个字段判断是否完成；只有内置文体会声明阶段，保留 id 的检查不影响任何已有数据。
+  presence-only-artifacts:
+    decision: 必需产物只按单元目录下 <artifact>.yaml 或 <artifact>.md 是否存在判断；缺失时诊断的 path 为单元目录，message 列出两个可接受的文件名。
+    rationale: brief、outline、draft 等产物的内容 Schema 与生成命令由后续变更定义，现在校验内容会提前锁定格式；文件名约定让后续的 draft write（draft.md）与 brief set（brief.yaml）直接满足阶段检查，无需改动内核。
+  single-blocker-source:
+    decision: 阻塞项由 internal/work 的单一函数计算，advance 的拒绝、next 的 steps 与 status 的 units 都由它得出；本变更只实现缺失必需产物一种阻塞来源。
+    rationale: 三条命令对同一单元给出不同的阻塞结论会让 Agent 无所适从；决策队列与简报关卡上线时只需在这一处追加来源，符合里程碑中「内核提供通用状态机、转换校验与关卡钩子」的约定，又不为尚不存在的来源预先设计插件机制。
+  work-package:
+    decision: 新增领域包 internal/work 承载作品加载、校验、单元引用解析、阻塞项计算、推进与追加子单元；它依赖 internal/schema、internal/workspace 与 internal/catalog，不 import internal/cli。
+    rationale: 作品与生命周期是内核的独立概念，放进 internal/workspace 会让它承担文体知识，放进 internal/catalog 会混淆「文体声明」与「作品实例」；独立的包也让后续 decision-queue 与 draft write 直接复用单元解析。
+  independent-units:
+    decision: 每个单元（含根单元与各级子单元）都按文体的同一阶段序列独立推进；推进父单元不检查子单元，推进子单元不影响父单元（作者于 questions.yaml lifecycle-scope 确认）。
+    rationale: 文体目前只声明一套阶段序列，没有按单元类型区分；父子之间的汇总与约束属于 novel-multi-level-units 的范围，现在引入会在没有真实文体的情况下锁定规则。
+  no-new-dependencies:
+    decision: 不引入新的第三方依赖，继续使用 go.yaml.in/yaml/v3 与 santhosh-tekuri/jsonschema/v6。
+    rationale: 节点树编辑、Schema 校验与原子写入都已有实现可复用，符合 go-project-structure/stdlib-first。
+  sample-invocation-for-mutations:
+    decision: 修改 cli-contract/sample-invocation（delta tech）：new、unit add、advance 登记在临时工作区中变更产物的样例调用，并列入 mutatingSamples；TestRegistryConsistency 对它们断言 changedPaths 非空，对其他命令仍断言为空。work 产物类型登记、原子写入、节点树修改与相对路径遵循 workspace-artifacts 现有规则，不需要修改。
+    rationale: 原规则要求每条命令登记一次成功且不变更产物的调用，而创建作品、追加单元与推进阶段不存在这样的调用；只能修改规则，否则这三条命令无法满足注册表一致性测试。区分两类样例仍保留原规则对只读命令的约束。
+  work-edit-safety:
+    decision: advance 与 unit add 只在 work.yaml 的节点树上直接定位目标节点；目标单元、其 stage 或其 units 序列经由 YAML 锚点、别名或合并键得到时，报告 work.anchored-value 并不修改文件。
+    rationale: 遵循 workspace-artifacts/structured-edits「不修改带有 YAML 锚点的值」：修改被别名共享的节点会同时改动其他单元；work.yaml 只应由 wa-cli 写出，正常情况下不会出现锚点，拒绝修改是偏安全的做法。
+  unit-add-checks-parent-type:
+    decision: unit add 在修改文档前先按父单元类型的 children 检查新单元的类型，不允许（包括文体未声明的类型）时报告 work.child-type-not-allowed，field 为父单元的 units，message 列出允许的子单元类型。
+    rationale: 规格要求 type 不在父单元类型的 children 中时报告 work.child-type-not-allowed；若只依赖写前的整体作品校验，未声明的类型会先命中 work.unknown-unit-type，message 列出的全部类型也包括不允许的类型，Agent 会据此选错类型（fresh-context 审查发现）。
+  no-symlinked-works:
+    decision: 作品目录必须是真实目录：解析单元引用与遍历 works/ 时用 Lstat，符号链接的作品目录视为作品不存在，不读取也不写入。
+    rationale: Agent 会对不可信的工作区自动运行命令；跟随符号链接会让 advance 与 unit add 改写项目目录之外的 work.yaml，而 changedPaths 仍报告工作区内的路径（fresh-context 审查实测）。
+alternatives:
+  - option: 作品与根单元分开存放：work.yaml 只记录元数据，单元树放在 root 字段下，根单元另有独立 id。
+    reason: 单层文章会多出一个没有意义的层级，单元引用也要写成 my-post/my-post 之类的冗余形式。
+  - option: 每个单元一个 unit.yaml，按层级嵌套目录存放。
+    reason: 移动单元需要搬迁目录并改写引用，与 id 稳定的要求冲突；读取整棵树也要遍历大量文件，status 与校验更慢。
+  - option: '用 done: true 布尔字段表示完成，stage 停留在最后一个阶段。'
+    reason: 完成状态要组合两个字段判断，两者不一致（done 为 true 而 stage 不是最后一个阶段）时还需要额外的校验规则。
+risks:
+  - 作品即根单元、根类型为 unit_types 第一项是本变更确立的约定，后续文体必须遵守；若 novel 文体需要多个并列的顶层单元类型，需要重新设计根类型的声明方式。
+  - 必需产物只按文件存在判断，作者或 Agent 手工放一个空的 brief.yaml 也能通过推进；由后续为各产物定义 Schema 的变更收紧。
+  - 在生成命令上线之前，被缺失产物阻塞的单元在 next 中 commands 为空数组，Agent 只能依据 action 得知所缺产物（作者于 questions.yaml next-without-producer 确认）。

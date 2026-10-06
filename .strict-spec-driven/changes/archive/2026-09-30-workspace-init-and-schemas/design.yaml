@@ -1,0 +1,57 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: workspace-init-and-schemas
+approach:
+  - 新增 internal/schema 包：schemas/ 目录下放 JSON Schema（draft 2020-12）文件，用 //go:embed 打包；包内维护产物类型表，按产物相对于项目目录的路径（本变更只有 .writing-anything/config.yaml）确定类型与 Schema。统一入口 Validate(path, data) 先把 YAML 解析为节点树，再转换为 JSON 兼容的值交给校验器，并把校验器报告的实例位置映射回字段路径与 YAML 行号。
+  - 新增 internal/workspace 包：Init(dir, opts) 逐项检查 .writing-anything/、config.yaml、sources/、works/，只创建缺失项并返回新建路径列表；写入前用 internal/schema 校验将要写出的配置。Load(dir) 读取并校验配置，Summary 统计 sources/ 与 works/ 的直接条目数。该包返回结构化问题，不依赖 internal/cli。
+  - internal/cli 在注册表中新增 init、validate、status 三条命令，参数与输出键全部在注册表中声明；命令把 workspace 与 schema 返回的问题转换为诊断，并通过共享输出信封写出。三条命令都接受 --dir，路径解析相对于进程当前目录，便于测试直接传入 t.TempDir()。
+  - wa-cli config set 在 internal/workspace 中以 YAML 节点树修改 config.yaml：只替换或删除目标键的节点，其余节点与注释原样保留；写入前把修改后的文档交给 internal/schema 校验，被设置字段出现违规时放弃写入。写入采用同目录临时文件加重命名，避免留下半写的文件。
+  - yaml.v3 的解析器错误（与扫描器错误不同）报告从 0 开始的行号，且在第一行时省略行号；internal/schema 按已知的解析器问题文本换算成从 1 开始的行号，扫描器错误的行号原样使用，无法确定位置的错误（如引用了不存在的锚点）不给行号。Schema 错误的说明由 internal/schema 按约束类型生成中文，不直接透传校验器的英文说明。
+  - 写入文件时，已有文件的权限保持不变；新建文件的权限为 0644。
+decisions:
+  workspace-dir-flag:
+    decision: init、validate、status 通过 --dir <path> 指定项目目录（包含 .writing-anything/ 的目录），默认当前目录；本变更不向上查找父目录。
+    rationale: 显式目录让命令行为确定、易测，并满足 injectable-io（测试不需要切换进程工作目录）；向上查找会引入“到底选中哪个工作区”的歧义，等出现真实需求后再加。
+  config-shape:
+    decision: config.yaml 字段为 schema_version（固定为 1）、language（BCP 47 语言标签，默认 zh-CN）、default_genre（可选，kebab-case 文体 id）、packs（kebab-case 规范包 id 数组，默认空、不可重复）、gate_level（strict / standard / fast，默认 standard）；Schema 禁止未知字段。
+    rationale: schema_version 为后续格式迁移预留判断依据；文体与规范包尚未实现，只校验 id 格式可以避免本变更依赖 genre-and-pack-loading；禁止未知字段能让拼错的键立即报错，而不是被静默忽略。
+  kind-by-path:
+    decision: 产物类型由其相对于项目目录的路径决定，而不是由文件内的类型字段决定；validate <path> 指向未登记的路径时报 artifact.unknown-kind。
+    rationale: 工作区布局本身就是契约，按路径识别不需要在每个文件里重复声明类型，也避免文件声明的类型与所在位置不一致；后续变更只需在类型表中登记新的路径模式。
+  error-codes:
+    decision: 新增错误码：workspace.not-found、workspace.missing-directory、workspace.read-failed、workspace.write-failed、workspace.config-kept（warning）、artifact.not-found、artifact.unknown-kind、artifact.parse-error、artifact.schema-violation、config.unknown-key、config.anchored-value、usage.missing-argument。诊断的 path 为相对项目目录、以 / 分隔的路径（项目目录外的文件写作 ../ 开头的相对路径，无法表示为相对路径时不填 path）；field 为点分字段路径，数组下标写作 [i]（如 packs[0]）。每条诊断的 next 至少含一条可以直接粘贴运行的命令，参数按 shell 规则加引号，不含占位符：gate_level 违规时为每个允许的取值各给一条 config set 命令（init 时为 init 命令）；其他配置项违规时给 wa-cli help config set --json，并在 message 中提示用 config set 修改；workspace.config-kept 的 next 是应用该参数的 config set 命令；工作区结构问题与目录写入失败的 next 是 wa-cli init --dir <dir> --json；其余问题的 next 是 wa-cli validate <path> --dir <dir> --json。
+    rationale: 按领域区分工作区结构、单个产物、配置命令与用法问题，Agent 可以按错误码分支；读取失败与写入失败分开，权限问题不会被误报成写入失败；相对路径与点分字段路径在不同机器上保持一致；next 中的占位符会被 shell 当作重定向，所以只给可以直接运行的命令，并把需要作者给出取值的情况写进 message。
+  init-validates-before-write:
+    decision: init 先用 Schema 校验根据参数生成的配置；不合法（如 --gate-level bogus）时报 artifact.schema-violation、退出码 1，且不创建任何文件或目录。config.yaml 已存在时不重写；若传入的参数与已有值不同，给出 workspace.config-kept warning，说明已保留原文件。
+    rationale: 复用同一份 Schema 校验参数，避免在命令中手写取值检查；先校验再写，可以避免留下半成品工作区。warning 让 Agent 知道参数没有生效，而不是误以为配置已更新。
+  third-party-deps:
+    decision: 引入两个第三方依赖：YAML 解析使用 go.yaml.in/yaml/v3（YAML 组织维护的 yaml.v3 后继版本），JSON Schema 校验使用 github.com/santhosh-tekuri/jsonschema/v6；实现时核对并锁定最新的稳定版本。
+    rationale: Go 标准库没有 YAML 解析器，也没有 JSON Schema 校验器；自己实现完整的 YAML 解析器成本和风险都过高。yaml.v3 的节点树带行号，便于诊断定位；jsonschema/v6 是纯 Go 实现，支持 draft 2020-12，错误里带实例位置，依赖很少，能保持单文件二进制精简。这满足 stdlib-first 要求在设计中说明引入理由的规定。
+  status-summary:
+    decision: status 的 --json 输出命令专属字段 workspace（相对项目目录的工作区路径）、config（language、defaultGenre、packs、gateLevel；无法解析时为 null）、sources 与 works（直接条目数）；工作区校验有 error 时仍输出摘要，但 valid 为 false、退出码为 1。
+    rationale: Agent 在一次调用中就能拿到工作区全貌与是否可用；工作区损坏时照常给出摘要与诊断，方便 Agent 判断接下来该修复还是继续。单元阶段与下一步命令由 unit-tree-and-lifecycle 在此基础上扩展。
+  command-groups:
+    decision: 注册表中的命令名可以是由空格分隔的两个词（命令组 + 子命令，如 config set）；分发时优先匹配最长的命令名。help 声明两个可选位置参数 command 与 subcommand，并按拼接后的完整命令名查找。只给出命令组名（wa-cli config）或命令组下不存在的子命令时，报 usage.unknown-command，message 列出该组可用的子命令。
+    rationale: 路线图已经规划了 config resolved，之后还有 feedback add / list / watch、draft write 等命令组，在框架层统一支持两词命令名，比每个命令组自己分发子命令更符合 registry-declared。拒绝不完整的命令组时复用 usage.unknown-command，不引入新的错误码。
+  required-args:
+    decision: argSpec 增加 required 字段：必需参数在用法中写作 <name>，可选参数写作 [<name>]，help --json 的 args 每项输出 required；缺少必需参数时报新错误码 usage.missing-argument，退出码为 2。必需参数只能排在可选参数之前。
+    rationale: config set 的 key 与 value 缺一不可，后续的 advance <unit>、draft write <unit>、source add 也需要必需参数；由注册表声明并统一解析，help 与实际行为就不会漂移。
+  config-set-semantics:
+    decision: config set 可设置的键为 language、default_genre、packs、gate_level；packs 的取值按逗号拆分并去掉首尾空白，空字符串表示空数组；default_genre 为空字符串时删除该字段。其他键（包括 schema_version）报 config.unknown-key（退出码 1）。被设置字段的新值不符合 Schema 时报 artifact.schema-violation 并且不写文件；其余字段已有的问题不阻止写入，但按 validate 的规则报告（valid 为 false，退出码 1）。取值与原值相同时不写文件，changedPaths 为空。--json 输出与 status 相同形状的 config 字段。config.yaml 无法解析时报 artifact.parse-error 并且不写文件。
+    rationale: 只允许设置 Schema 中可由作者决定的字段，schema_version 留给未来的迁移命令处理；只拦截被设置字段的违规，作者才能逐项修复一个已经损坏的配置，不会因为别的字段有错而无法修改；与原值相同时不写文件，changedPaths 才能如实反映变更。
+  anchored-values:
+    decision: config set 不修改当前值带有 YAML 锚点的配置项，报告 config.anchored-value；值本身是别名时可以直接替换。修改后的文档在写出前重新解析，无法解析时一律不写。
+    rationale: 替换或删除带锚点的值会让引用它的别名悬空，文件随之无法解析；让别名跟随新值又会悄悄改动其他字段。拒绝修改并说明原因最安全，写前重新解析则兜住其他未预见的情况。
+  alias-expansion-limit:
+    decision: internal/schema 在解析时用带记忆的遍历计算展开别名后的节点数，超过 100000 个即报告 artifact.parse-error，不再继续转换与校验。
+    rationale: Agent 会对克隆来的工作区自动运行 validate 与 status，约 1KB 的恶意 YAML 就能通过层层别名展开耗尽内存；带记忆的计数本身与展开规模无关，可以在展开之前拦截。
+alternatives:
+  - option: 只用标准库，手写一个 YAML 子集解析器和字段检查
+    reason: YAML 子集的边界难以向作者与 Agent 说清，后续文体、规范包与单元产物的结构会越来越复杂，手写检查会与 JSON Schema 产生漂移，也违背产物由 JSON Schema 约束的项目约定。
+  - option: 在每个产物文件中写 kind 字段，按字段选择 Schema
+    reason: 文件内容可能与其所在位置不一致，产生两个真相来源；而且损坏或缺失 kind 字段的文件无法选出 Schema，诊断质量反而更差。
+risks:
+  - 引入第一批第三方依赖会增加二进制体积和供应链面，需要用 go.sum 锁定版本；后续升级时要重新跑完整回归。
+  - 校验器报告的实例位置到 YAML 行号的映射，依赖 YAML 节点树与转换后的值一一对应；YAML 锚点与合并键可能让行号指向定义处而不是使用处，需要测试覆盖。

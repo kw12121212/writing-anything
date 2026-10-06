@@ -1,0 +1,37 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: wechat-marketing-genre
+approach:
+  - 文体与写作法是内置数据（internal/catalog/builtin）：wechat-marketing.yaml 声明单元类型、阶段（草稿阶段的必需产物为 draft 与 marketing）、规则、评分标准与默认写作法 aida；aida.yaml 与 pas.yaml 是文章类写作法，复用已有的写作法缺口检查与方法评分项机制，不新增检查代码。
+  - marketing ask 在写入前完成全部检查（营销要素合法、至少两个候选、决策队列可加载、没有仍在等待且未过期的标题决策、--recommend 是候选 id），并预先算出新决策的 id（decision.NextID，与 decision add 相同的规则），先准备好新的 marketing.yaml，再追加决策、最后写 marketing.yaml（cli-contract/precheck-before-side-effects）。
+  - 营销要素放在单元目录下的 marketing.yaml（schema_version、headlines（每项 id 与 text）、digest、opening、cta、headline_decision；开头钩子的字段名用 opening，因为 hook 是可执行内容检查保留的字段名），新建 internal/marketing 包，结构仿照 internal/brief：Load 校验 Schema 与标题 id 唯一；Set 在 YAML 节点树上按字段修改并做写前复查；Questions 给出仍缺的要素；Check 计算关卡。标题的选定结果不写入 marketing.yaml，而是从 headline_decision 指向的决策推导：决策的选项文字与当前候选（按顺序）一致时，已决定的选项即选定的标题，否则为过期（stale）；决策队列无法加载时为 unknown。
+decisions:
+  headline-via-decision-queue:
+    decision: 标题选择复用决策队列：marketing ask 登记一个 blocking 为 true、关联该单元、选项为各候选文字的决策，作者用 wa-cli decide 选定
+    rationale: 规划变更要求「选择记为决策」；复用决策队列得到确认记录、阻塞推进与 wa-cli decisions 的一次性提问，不需要新的确认机制；未决定时已有的 decision.blocking 阻塞推进
+  derived-headline:
+    decision: 选定的标题由决策推导，不另存；候选在提问后被修改（选项文字与候选不再一致）时为 marketing.headline-stale，需要重新 marketing ask
+    rationale: 只保留一个事实来源，避免 marketing.yaml 与决策队列不一致；作者改了候选后旧的选择不再可信，必须重新确认
+  digest-field:
+    decision: 文章摘要的字段名为 digest，术语为「文章摘要（Digest）」
+    rationale: 术语表中「摘要（Summary）」已指已验收单元的简要内容（供上下文使用），公众号的分享卡片简介是另一个概念，用不同的词避免混淆
+  marketing-at-draft:
+    decision: marketing 是草稿阶段的必需产物：进入审稿之前必须写齐营销要素并由作者选定标题
+    rationale: 审稿要按 4U 评分项给标题打分，标题必须在审稿前确定；放在草稿阶段让 Agent 与正文一起准备，而不是在写作简报阶段过早决定
+  fixed-required-elements:
+    decision: 关卡要求的要素固定为：至少两个标题候选、文章摘要、开头钩子与行动号召，不提供按文体声明的必填项
+    rationale: 目前只有 wechat-marketing 一个文体用到营销要素，可配置的必填项属于没有需求的抽象（YAGNI）
+  reask-replaces-open:
+    decision: 候选改过而标题决策尚未决定时，marketing ask 原地替换该决策的选项、推荐与理由（新增 decision.Replace），不另建决策；已决定的决策过期后才另建新的决策
+    rationale: 另建决策会让旧的、选项已过时的决策继续以 decision.blocking 阻塞单元，而作者没有命令可以撤回它，只能去决定一个过时的问题；原地替换保留同一个待决事项，作者看到的总是当前的候选
+alternatives:
+  - option: 把标题候选、摘要、钩子与 CTA 放进写作简报 brief.yaml
+    reason: 写作简报在大纲之前确定，而标题与钩子要在成稿时才能写好；混在一起会让写作简报关卡过早要求这些要素
+  - option: 新增 marketing choose 命令直接记录作者选定的标题
+    reason: 会绕过决策队列，作者无法在 wa-cli decisions 中统一看到待决事项，也要另写一套确认记录
+risks:
+  - 候选在提问后被修改会使决策过期，需要重新提问；关卡与 marketing show 都明确报告过期并给出命令
+  - 端到端测试依赖多个已有命令，任何命令的输出变化都会使其失败；测试只断言关键字段
+  - 追加决策之后写 marketing.yaml 失败时，决策已留在队列中而 marketing.yaml 没有记下它；输出如实列出决策队列并在 message 中说明要先处理该决策

@@ -1,0 +1,25 @@
+schema: strict-spec-driven/lesson/v1
+schema_version: 1
+artifact_type: lesson
+schema_file: templates/strict-spec-driven/schemas/lesson.yaml
+lesson:
+  id: lesson-1da63c
+  title: 引用其他产物的产物，编辑命令不能因已有的悬空引用拒绝修改
+category: coding
+status: active
+created_at: '2026-09-30T15:29:18.719Z'
+updated_at: '2026-10-01T02:29:59.364Z'
+context: outline-coverage 的 outline set、outline remove 与 outline show 先完整加载 outline.yaml，加载时把 covers 引用写作简报中不存在的核心观点（outline.unknown-message）当作文件不合法。
+observation: fresh-context 审查复现：作者用 brief set --remove-message 删除一个核心观点后，引用它的大纲节既不能改 covers、也不能删除，outline show 也拒绝输出，只能手工编辑 outline.yaml 或把观点加回简报，违反结构化产物只通过 wa-cli 变更的约定；测试都从一致的状态出发，没有覆盖上游产物先变化的顺序。
+takeaway: 把跨产物引用检查与本产物自身的合法性检查（解析、Schema、id 唯一）分开：编辑与查看命令只因后者拒绝，引用问题照常报告但不阻止修复；本次参数给出的引用仍须合法。测试要覆盖「先改上游产物，再用 wa-cli 修复下游产物」的顺序。
+applies_when: 新增或修改一种会引用另一个可独立编辑产物中 id 的产物（如大纲引用写作简报的核心观点、写作简报引用素材与决策），并为它编写修改或查看命令时
+occurrences:
+  - origin: outline-coverage
+    date: '2026-09-30'
+    evidence: internal/outline 拆分 checkIDs 与 checkRefs 并新增 LoadLenient；internal/cli/outline_test.go 的 TestOutlineDanglingMessage 覆盖 brief remove-message 后的 show、set、remove 与 validate。
+  - origin: claim-source-check
+    date: '2026-09-30'
+    evidence: claim set 与 claim list 起初复用完整的 checkClaims，其他论断引用已删除素材时拒绝修改与列出；internal/draft 的 danglingAsWarnings 与 ListClaims 把悬空引用降为 warning，internal/cli/sources_test.go 的 TestClaimEditDanglingSource 覆盖删除素材后的 set、list、remove 与 validate。
+  - origin: writing-method-templates
+    date: '2026-10-01'
+    evidence: brief.yaml 的 method 起初作为写作简报自身的合法性检查：移除规范包后 brief show、brief set --audience、outline show 与 context 全部拒绝。改为 checkMethodRef 只在 validate 中检查、大纲命令以 warning 报告（Messages.MethodProblem）；internal/cli/method_test.go 的 TestMethodDanglingAndNext 覆盖先移除规范包再用 wa-cli 修复的顺序。

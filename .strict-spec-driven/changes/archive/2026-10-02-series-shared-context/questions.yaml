@@ -1,0 +1,42 @@
+schema: strict-spec-driven/question-list/v1
+schema_version: 1
+artifact_type: question_list
+schema_file: templates/strict-spec-driven/schemas/question-list.yaml
+change: series-shared-context
+open: []
+resolved:
+  - id: requirement-problem
+    question: What is concretely going wrong today, and for whom?
+    context: 'Why this is asked: the change is planned against a need, and the need lives only with the requester. What it changes: this becomes the proposal''s why.'
+    answer: 据里程碑 packs-and-series 与规划变更 series-shared-context：多篇文章组成系列（专栏）时，规范包、素材、事实要在每篇中重复配置，后一篇写作时也看不到前一篇已验收的内容摘要。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-outcome
+    question: What observable difference proves the problem is solved?
+    context: 'Why this is asked: without a success condition, nobody can tell afterwards whether the change worked. What it changes: this becomes the delta spec''s scenarios.'
+    answer: 据里程碑 done_criteria：单元在摘要生成后又被修改时，摘要被标为过期，context 输出中注明；系列中第二篇文章的 context 输出包含第一篇的已验收摘要。据规划变更 details：wa-cli series 创建系列并加入作品，系列级的规范包、素材和事实被成员作品继承；摘要由 Agent 撰写，wa-cli 校验非空与长度并记录内容哈希。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-trigger
+    question: Why now — what forced this?
+    context: 'Why this is asked: work that nothing forced is the work most often thrown away later.'
+    answer: 据路线图：依赖的 context-pack 已归档，roadmap-recommend 推荐本变更；novel 里程碑的分层摘要与 novel-series 的跨作品设定集依赖它。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-non-goals
+    question: What must explicitly not change?
+    context: 'Why this is asked: the requester knows which nearby behavior other people depend on. What it changes: these become the proposal''s unchanged_behavior items.'
+    answer: 据项目约束：wa-cli 不调用模型，摘要由 Agent 撰写；不属于系列的作品行为不变。跨作品设定集与时间线属于 novel-series 里程碑。已写入 proposal 的 out 与 unchanged。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-interpretation
+    question: Which reading of the request is intended, where more than one is possible?
+    context: 'Why this is asked: a short request usually admits several readings. What it changes: this fixes the scope boundary before any code is written.'
+    answer: 据规划变更 details：系列级的规范包、素材和事实被成员作品继承，作品级可以覆盖；单元验收后由 Agent 撰写摘要，wa-cli 校验非空、长度在文体规定的范围内并记录内容哈希；成员作品的 context 输出包含前序作品的已验收摘要并注明过期状态。目前没有作品级的规范包声明，「作品级覆盖」按合并顺序（系列层在工作区规范包之后、项目配置之前）实现，写在 design 的决策中。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap

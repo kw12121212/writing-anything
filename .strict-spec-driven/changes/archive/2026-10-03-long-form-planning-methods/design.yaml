@@ -1,0 +1,22 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: long-form-planning-methods
+approach:
+  - '复用既有写作法数据模型与产物命令，规划工作流落在三处。① 数据：internal/catalog/builtin/methods 新增 snowflake（kind: planning，十步，结构步骤声明 product）、golden-three 与 volume-structure（kind: structure，节拍含 position 与 tension）；method.schema.json 的 steps 项增加可选 product 枚举，校验扩展既有 checkMethod 流程。② 产物与命令：新增 internal/plan 包管理单元目录下的 plan.yaml（记录 method 与各步骤的文本、素材、链接与确认记录），wa-cli plan show（只读）、plan step（写当前步：--text、--source、--link）、plan confirm（--confirmed-by-author --confirmation 确认当前步）按方法 steps 顺序把关；产物实体由既有命令产出（人物卡经 canon add、场景单元经 unit add、场景契约经 scene contract），plan step 以 --link 记录引用，confirm 按步骤 product 校验链接。③ 文体与校验：novel 文体 default_method 设为 snowflake；wa-cli validate 整体校验与 validate <path> 对 plan.yaml 做 Schema、顺序、素材登记与链接检查。人物步骤产物为普通保护级别的设定条目，作者可用既有 canon set 修改。'
+decisions:
+  plan-links-materialization:
+    decision: 人物概要/人物详述/人物宝典的人物卡（Character Sheet）、场景列表的场景单元与场景详述的场景契约（Scene Contract），都由 Agent 先用既有命令（wa-cli canon add、wa-cli unit add、wa-cli scene contract）产出，再在 wa-cli plan step 的 --link 中记录引用；plan confirm 按写作法 steps 中声明的 product（characters、scenes、scene-contracts）校验链接可解析且类型正确，product 步骤确认时要求至少一个链接；product 声明放在方法模板数据中，CLI 不硬编码雪花步骤 id。
+    rationale: wa-cli 不调用大语言模型，规划内容本就由 Agent 产出；canon add、unit add 与 scene contract 是这三类产物的唯一变更入口，复用它们避免在 plan 命令中重复参数面与校验语义；链接在 confirm 时校验，使「场景列表生成单元树中的场景、场景详述生成场景契约」成为可验证的确认关卡；product 数据化让规范包（Pack）也能自带规划写作法。
+  plan-confirmation-gate:
+    decision: 每步经 wa-cli plan confirm <unit> <step> --confirmed-by-author --confirmation <作者原话摘要> 确认后才能进入下一步：plan step 拒绝写第一个未确认步骤之后的步骤，plan confirm 只确认第一个未确认步骤（都报告 plan.step-order，已确认步骤不可再改写）；确认记录（confirmed_by_author、confirmation、confirmed_at）写入 plan.yaml，与 accept 的确认记录（Confirmation Record）参数形态一致；「每步核心内容关联作者素材或确认记录」由两侧满足——步骤的 --source 须是已登记素材（plan.unknown-source），确认记录由 confirm 强制写出；关卡不依赖 gate_level，因为里程碑 done 判据对规划步骤是无条件要求。
+    rationale: 作者确认是长篇规划的强制关卡而非可选强度；顺序不变式（已确认步骤构成方法 steps 的前缀）由命令把关、由 validate 复查；沿用 accept 已发布的确认参数形态，Agent 与作者的既有习惯不变。
+  plan-step-redo:
+    decision: 已确认步骤可经 wa-cli plan step <unit> <step> --redo --confirmed-by-author --confirmation <作者原话摘要>（连同新的 --text，可选 --source/--link）修订：重置该步骤为新的未确认草稿，并删除其后全部步骤的记录；各步产物（人物卡、场景单元、场景契约）不动，后续步骤须重新逐级起草与确认。--redo 必须与 --confirmed-by-author、--confirmation 同时给出（否则 plan.incomplete-confirmation）；对未确认的步骤给出 --redo 报告 plan.not-confirmed（直接改写即可，无需 --redo）。
+    rationale: 作者确认采纳迭代语义：雪花写作法后面的步骤常常推翻前面的结论，冻结步骤文本会逼作者绕道；--redo 以作者确认把修订显式化并保留可追溯的确认记录，重置后续步骤保证顺序不变式（已确认步骤构成前缀）始终成立，产物不动则避免 CLI 反向撤销既有命令的写入。
+alternatives:
+  - option: plan step / plan confirm 直接携带结构化参数（如 --character <名称>=<文本>、--scene <章>:<场景>=<标题>）并由 plan 命令写入设定集、登记单元或生成契约。
+    reason: 少一步链接，但要在 plan 命令里复制 canon add、unit add 与 scene contract 三个既有命令的参数面与保护、校验语义，与「结构化产物只通过 wa-cli 变更」的既有入口重复，故不采用。
+risks:
+  - 修订（--redo）会删除被重置步骤之后全部步骤的记录（含确认记录）：误用会丢失后续步骤的作者确认历史（产物不动）；以 --confirmed-by-author --confirmation 的强制作者确认缓解，误删的步骤重新起草即可恢复。

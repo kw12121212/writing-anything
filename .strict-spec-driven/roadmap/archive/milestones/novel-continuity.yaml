@@ -1,0 +1,41 @@
+schema: strict-spec-driven/roadmap-milestone/v2
+schema_version: 2
+artifact_type: roadmap_milestone
+schema_file: ../schemas/roadmap-milestone.yaml
+milestone:
+  novel-continuity:
+    title: 长篇连续性与组稿（Novel Continuity & Assembly）
+order: 650
+goal: 在没有任何会话能读完全书的前提下：确定性检查覆盖全书，语义审查拆成可并行的审查任务包（Review Task Packet），修改早期内容后自动找出需要复查的后续场景（影响传播 Ripple Analysis），会话之间通过交接记录（Handoff Note）无损接续，最终组稿（Assembly）导出。
+scope:
+  in:
+    - 确定性连续性审查（Continuity Review）：状态、知情、伏笔、因果、人名别名、数值事实
+    - 审查任务包的生成、结果回写与汇总
+    - 影响传播：修改后标记需复查的场景，并支持修改前预览
+    - 会话交接记录
+    - 组稿与整书导出
+  out:
+    - 依赖时间的检查（novel-series 的时间线）
+    - 跨作品连续性审查（novel-series）
+    - wa-cli 自行调度或启动 Agent
+done_criteria:
+  - 与状态快照、知情表、伏笔台账或因果链冲突的场景被 wa-cli continuity 标为阻塞，不能验收
+  - wa-cli review plan 生成的每个任务包都不超过上下文预算；每个清单项都有结论后，结果才能提交并汇总
+  - 修改早期场景引用的设定条目后，所有引用该条目的后续场景被标为需复查并阻塞组稿
+  - 新会话运行 wa-cli next 时能看到最近的交接记录
+  - 存在未验收单元、连续性阻塞或需复查标记时，wa-cli assemble 拒绝组稿并列出阻塞项
+intake_questions:
+  - id: review-dispatch
+    question: 审查任务包由谁调度执行？
+    context: wa-cli 不调用模型，也不启动 Agent。
+    impact: 决定任务包格式与结果回写方式。
+    recommendation: wa-cli 只负责生成任务包和校验回写结果；由接入的 Agent 调度执行（例如使用全新的子 Agent 会话并行），Skill 中说明调度方式。
+planned_changes: {}
+dependencies:
+  - novel
+risks:
+  - 语义审查的质量取决于执行任务包的 Agent；wa-cli 只保证任务范围、检查清单与结果结构
+  - 影响传播只能沿已记录的引用追踪，未记录的隐含关联需要依赖语义审查发现
+status: complete
+notes: []
+details: 分治审查的原则是：不让任何一个会话需要读完全书。全书范围的确定性检查由 wa-cli 完成；语义审查按维度拆成小任务，每个任务只含一段正文、相关台账切片和检查清单；纵向审查（例如人物弧光）读状态历史与摘要，而不是全文。

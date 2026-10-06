@@ -1,0 +1,31 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: docs-runbook
+sections:
+  Implementation:
+    write-readme:
+      text: 撰写 internal/cli/testdata/e2e/novel/README.md：目录结构、运行方式、UPDATE_GOLDEN 用法与 <dir> 归一、修订语料完整步骤、矩阵维护约定（evidence 双向对账）
+      status: complete
+  Testing:
+    readme-accuracy:
+      text: README 引用的测试名、命令、文件与流程逐一与仓库实际核对（六个测试名、UPDATE_GOLDEN 变量、九个黄金文件、目录清单）
+      status: complete
+      command: go test ./internal/cli/ -run "TestNovelCorpus" -v
+    full-regression:
+      text: 完整项目回归（含覆盖率阈值 80%）
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    ready-check:
+      text: strict-spec-cli ready docs-runbook
+      status: complete
+      command: strict-spec-cli ready docs-runbook
+    verify-check:
+      text: strict-spec-cli verify docs-runbook
+      status: complete
+      command: strict-spec-cli verify docs-runbook
+testing_gates:
+  validation_task: full-regression
+  unit_test_task: readme-accuracy

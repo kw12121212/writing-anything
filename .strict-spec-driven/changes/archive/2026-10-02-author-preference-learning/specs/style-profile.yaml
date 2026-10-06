@@ -1,0 +1,17 @@
+schema: strict-spec-driven/delta-spec/v1
+schema_version: 1
+artifact_type: delta_spec
+schema_file: templates/strict-spec-driven/schemas/delta-spec.yaml
+target_spec: style-profile
+operations:
+  ADDED:
+    preference-items:
+      strength: MUST
+      statement: 规范包提议的条目可以带 key（偏好的稳定标识）与 evidence（证据数组，每项含 unit 与 text）；由 wa-cli pack prefer 创建的提议 sources 为空数组、没有 stats 与 baseline 条目，--json 输出中 stats 为 null；之后 wa-cli pack learn 可以给同一提议加入素材，此时生成 stats 与 baseline 条目。pack learn 的 --style 与 --avoid 条目没有 key。
+      scenarios:
+        learn-after-prefer:
+          - GIVEN: 提议 prefs 由 pack prefer 创建，没有 stats
+          - WHEN: 运行 wa-cli pack learn prefs --source a1 --dir D --json
+          - THEN: proposal.stats 不为 null，items 新增 baseline 条目，原有的偏好条目不变
+  MODIFIED: {}
+  REMOVED: {}

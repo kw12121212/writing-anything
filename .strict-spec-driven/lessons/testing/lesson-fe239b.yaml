@@ -1,0 +1,19 @@
+schema: strict-spec-driven/lesson/v1
+schema_version: 1
+artifact_type: lesson
+schema_file: templates/strict-spec-driven/schemas/lesson.yaml
+lesson:
+  id: lesson-fe239b
+  title: 清单键控与命令形态不一致时断言静默失效
+category: testing
+status: active
+created_at: '2026-10-04T16:21:38.391Z'
+updated_at: '2026-10-04T16:21:38.391Z'
+context: replay-harness 的重放测试用 (verb, subverb) 二元组清单判定变异命令并断言 changedPaths 非空
+observation: 顶层动词（init/new/accept/advance/decide/assemble/export）的第二个 token 是位置参数或旗标，(verb, subverb) 键永不匹配；清单里登记了这些动词的 (verb,"") 形态，但判定函数只在 len==1 时才查它——7 个动词 52 个成功步骤的断言从未执行而测试全绿。评审发现后，第一次补自检又把自检插在重放执行之前，空命中照样全绿。
+takeaway: 以清单判定命令/条目类别时：键型必须与被判定对象的真实形态一致，无子命令的动词要有回退查询；并加命中率自检（被语料形态覆盖的键必须至少命中一次），自检必须放在执行之后。写完全绿的测试要警惕『登记即生效』的错觉。
+applies_when: 编写按命令、错误码或清单条目分类断言的重放/对账类测试时
+occurrences:
+  - origin: replay-harness
+    date: '2026-10-04'
+    evidence: internal/cli/novel_corpus_replay_test.go isMutating 回退查询与 keyHits 死键自检；修复前自检报出 7 个键从未命中

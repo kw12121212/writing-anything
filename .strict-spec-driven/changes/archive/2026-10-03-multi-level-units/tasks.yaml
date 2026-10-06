@@ -1,0 +1,50 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: multi-level-units
+sections:
+  Implementation:
+    novel-genre-data:
+      text: 'internal/catalog 与 internal/schema：新增内置 novel 文体 internal/catalog/builtin/genres/novel.yaml——单元类型 novel（根，children 为 [part]，brief_required 为 [premise, pov, length, key_messages]）、part（children 为 [chapter]，stage_from_children: true）、chapter（children 为 [scene]，stage_from_children: true）与 scene；阶段依次为 brief（brief）、outline（outline）、draft（draft）与 review（review 与 acceptance）；规则 fiction-cliches（ai-cliche，warning，小说 AI 腔词表同 short-story）、dialogue（dialogue-punctuation，warning）、pov（pov-consistency，warning）与 length（length-range，warning，1000 到 20000 字）；context_budget 为 16000；不声明 default_method、scored_metrics 与 pacing_checks；文件头注释说明多层结构与汇总声明。genre.schema.json 为单元类型增加可选布尔 stage_from_children，在不带 children 的单元类型上声明时报告 artifact.schema-violation（field 为 unit_types[i].stage_from_children）；catalog.UnitType 增加 StageFromChildren 字段并接入解析；内置文体通过与工作区规范包相同的校验。'
+      status: complete
+    derived-stage:
+      text: internal/work：汇总单元的阶段推导——按文体阶段序列，单元类型声明 stage_from_children 的单元（汇总单元，Aggregated Unit）的阶段取其子单元树中所有非汇总子孙单元（走生命周期的单元）里最落后者的阶段；没有非汇总子孙单元时为文体的第一个阶段；全部为 done 时为 done。提供 progress（非汇总子孙单元中 stage 为 done 的数量与总数）与汇总阻塞项（未完成非汇总子孙单元的阻塞项按既有阻塞项顺序去重后的并集）。wa-cli advance 对汇总单元不修改文件，报告错误码 lifecycle.derived-stage（常量定义于 internal/work，path 为该 work.yaml，next 含 wa-cli status --dir <dir> --json），退出码 1；work.yaml 中汇总单元仍存合法 stage（unit add 写第一个阶段作存储值），既有作品校验不变。wa-cli config resolved 的 unitTypes 每项输出 stageFromChildren（internal/resolve 接线）。
+      status: complete
+    hierarchical-status-next:
+      text: internal/cli：status 与 next 按层级输出汇总单元——status 的 units 与 next 的 steps 中，汇总单元的 stage 为推导阶段，新增 progress 字段（对象 {done, total}；非汇总单元为 null），blockers 为汇总阻塞项并集，commands 为空数组；next 中推导阶段为 done 的汇总单元跳过（同 next-skips-done），未跳过的汇总单元 action 提示未完成的非汇总子孙单元数量（如「部下还有 3 个未完成的场景」），feedback 仍为该单元自身的未处理反馈；不带 --json 的 status 人读输出与 next 输出对汇总单元按同一取值渲染。非汇总单元的 units/steps 字段、排序与阻塞项计算不变。
+      status: complete
+    unit-insert:
+      text: internal/work 与 internal/cli：unit add 锚点插入——wa-cli unit add <parent> <type> <id> 新增可选 flags --before <sibling-id> 与 --after <sibling-id>（互斥）：给出时在父单元子单元序列中锚点之前/之后插入新单元，省略时仍在末尾追加；新单元的 id、type、stage（文体的第一个阶段）与既有校验（work.child-type-not-allowed、artifact.schema-violation、artifact.duplicate-id、work.anchored-value）不变，成功输出不变（unit、type、parent、stage）。锚点 id 在作品中不存在时报告 unit.not-found（既有错误码）；锚点存在但不是 parent 的直接子单元时报告新错误码 unit.not-sibling（message 含锚点 id 与父单元引用）；两个 flag 同时给出时报告 input.invalid-value（field 为 before）。这些情况都不修改文件；在 YAML 节点序列中插入节点并保留其他内容与注释（同现有追加路径）。
+      status: complete
+    unit-move:
+      text: internal/work 与 internal/cli：新增 wa-cli unit move <unit> <parent> [--before <sibling-id>] [--after <sibling-id>]——把单元连同其子树移动为 parent 的子单元（含同父内重排序；--before/--after 指定插入位置，语义与错误同 unit add 的锚点插入），只修改 work.yaml 中该子树的位置，保留其他内容与 YAML 注释；单元 id、单元引用（<work>/<unit-id>）、单元目录（.writing-anything/works/<work>/units/<unit-id>/）与一切按单元 id 的引用不变。校验：unit 或 parent 不存在时报告 unit.not-found / work.not-found（既有）；被移动单元是根单元时报告新错误码 unit.move-root；parent 是被移动单元自身或其子孙时报告新错误码 unit.move-under-self；单元类型不在 parent 类型的 children 中时报告 work.child-type-not-allowed（既有）；锚点不存在 / 不是 parent 直接子单元时报告 unit.not-found / unit.not-sibling；--before 与 --after 同时给出时报告 input.invalid-value；目标位置或被移动子树途经 YAML 锚点、别名或合并键时报告 work.anchored-value（既有）；work.yaml 不通过作品校验时报告其诊断。这些情况都不修改文件，退出码 1。成功时 changedPaths 为该 work.yaml，--json 输出 unit 字段含 unit、type、parent（新父单元引用）与 stage（生效阶段：汇总单元为推导阶段，其他为存储阶段），退出码 0。在命令注册表登记（registry-declared），sampleArgs 登记一次变更产物的调用并列入 mutatingSamples，MCP tool unit_move 随注册表自动生成。
+      status: complete
+    glossary-terms:
+      text: docs/GLOSSARY.md：增补本变更引入的专有名词——部（Part）、章（Chapter）、汇总单元（Aggregated Unit）与推导阶段（Derived Stage），并核对长篇小说（Novel）、多层单元树（Multi-level Unit Tree）、插入（Insert）与移动（Move）相关表述与 CLI 帮助、诊断输出一致；说明「汇总单元在 work.yaml 中的存储阶段仅为占位，生效阶段以推导为准」。
+      status: complete
+  Testing:
+    unit-tests:
+      text: 'internal/work、internal/catalog、internal/schema、internal/resolve 与 internal/cli 的单元与命令级测试：novel 文体——内置校验通过、config resolved 的 unitTypes 含 novel/part/chapter/scene 且 part 与 chapter 的 stageFromChildren 为 true、novel 为 false；genre schema——stage_from_children 出现在不带 children 的单元类型上时 artifact.schema-violation（field 为 unit_types[i].stage_from_children）；推导阶段——最落后场景决定部与章的阶段、空章为第一个阶段且 progress 为 {done: 0, total: 0}、全 done 时为 done、advance 汇总单元报告 lifecycle.derived-stage 且 work.yaml 逐字节不变（退出码 1）；status/next——汇总单元输出推导阶段、progress 与去重并集的阻塞项、commands 为空数组、非汇总单元 progress 为 null、next 跳过推导阶段为 done 的汇总单元、action 含未完成场景数；插入——--before/--after 位置正确、注释保留、锚点不存在 unit.not-found、锚点在别处 unit.not-sibling、两 flag 同给 input.invalid-value、不给 flag 仍末尾追加；移动——同父重排序与跨父移动成功且子树随行、id 与单元引用不变、单元目录不迁移、unit.move-root、unit.move-under-self（移到自身子孙下）、work.child-type-not-allowed、work.anchored-value、错误路径 work.yaml 不变；注册表——unit move 的 outputKeys 与样例调用一致（sampleArgs + mutatingSamples，changedPaths 非空）；所有 path 与 changedPaths 为相对路径，断言使用规格字面量错误码。'
+      status: complete
+      command: go test ./internal/work/... ./internal/catalog/... ./internal/schema/... ./internal/resolve/... ./internal/cli/...
+    e2e-novel:
+      text: 'internal/cli 端到端测试（testdata 下新增长篇夹具：一部、两章、三场景）：init --genre novel --dir D → new novel my-novel → unit add 部与两章、每章下 unit add 场景 → unit add --before 在章首插入场景 → unit move 把场景从章一移到章二（--after 指定位置）→ 断言单元 id、单元引用与单元目录不变、work.yaml 注释保留 → 场景一走完整生命周期（brief 由根单元继承校验路径按现有行为推进、outline、draft、review record、accept、advance 到 done）→ status 断言章一 stage 为 draft、progress 为 {done: 1, total: 2}，部为 draft，next 跳过 done 场景且章一条目的 commands 为空数组 → advance 章一报告 lifecycle.derived-stage → 余下场景推进到 done 后部与章的推导阶段为 done、next 不再列出 → validate 全绿。'
+      status: complete
+      command: go test ./internal/cli/ -run TestNovelE2E
+    regression:
+      text: 完整项目回归（review_evidence.project_regression）：go vet、go build、全部测试带覆盖率，并经 internal/tools/covercheck 强制 80% 行覆盖率（范围 internal/**，不含 internal/tools/**）；确保 novel 文体、汇总推导、插入与移动不破坏既有文体、单元推进、阻塞项计算、MCP 与导出行为。
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    ready-verify:
+      text: 实现完成后运行 strict-spec-cli ready multi-level-units 与 strict-spec-cli verify multi-level-units：确认任务完成、delta 规格与实现一致、行为未越界（非汇总单元输出不变、既有文体的 unit add 不带锚点仍在末尾追加、work.yaml Schema 未变）。
+      status: complete
+      command: strict-spec-cli ready multi-level-units && strict-spec-cli verify multi-level-units
+    archive-readiness:
+      text: 归档就绪检查：确认 proposal 的 roadmap 链接（milestone novel、planned-change multi-level-units）与变更目录名一致；delta spec 的新错误码（lifecycle.derived-stage、unit.not-sibling、unit.move-root、unit.move-under-self）、新字段（stageFromChildren、progress）与新命令（unit move，MCP tool unit_move）与实现一致；archive 合并时 units-and-lifecycle、workspace 与 genres-and-packs 三个主规格能正确并入；确认 questions.yaml 的开放问题已解决或已有作者答复后再归档。
+      status: complete
+      command: strict-spec-cli verify multi-level-units
+testing_gates:
+  validation_task: regression
+  unit_test_task: unit-tests

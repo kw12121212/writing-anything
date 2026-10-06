@@ -1,0 +1,15 @@
+schema: strict-spec-driven/planned-change/v1
+schema_version: 1
+artifact_type: planned_change
+schema_file: ../../templates/strict-spec-driven/schemas/planned-change.yaml
+planned_change:
+  id: manuscript-assembly-export
+  milestone: novel-continuity
+status: complete
+summary: 组稿（Assembly）与整书导出
+details: wa-cli assemble 按单元树顺序把已验收场景组成书稿；任一单元未验收、仍有连续性阻塞或需复查标记时拒绝，并列出阻塞项。导出支持 Markdown 与纯文本整书，附带目录和章标题，并按出处附上 AI 参与说明。
+depends_on:
+  - layered-summaries-and-budget
+  - continuity-review
+  - ai-content-disclosure
+  - ripple-analysis

@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "素材",
+  "description": "素材库（Source Library）中一个素材（Source）的元数据；原文逐字节存档在同目录的 file 中。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "id", "type", "file", "sha256", "bytes"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "id": {"$ref": "common.schema.json#/$defs/id"},
+    "type": {"enum": ["author-note", "interview", "transcript", "reference", "past-article"]},
+    "title": {"$ref": "common.schema.json#/$defs/text"},
+    "original_name": {"$ref": "common.schema.json#/$defs/text"},
+    "file": {"type": "string", "pattern": "^original(\\.[A-Za-z0-9]+)?$"},
+    "sha256": {"$ref": "common.schema.json#/$defs/sha256"},
+    "bytes": {"type": "integer", "minimum": 1}
+  }
+}

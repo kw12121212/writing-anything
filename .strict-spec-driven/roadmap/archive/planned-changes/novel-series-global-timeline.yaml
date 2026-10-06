@@ -1,0 +1,12 @@
+schema: strict-spec-driven/planned-change/v1
+schema_version: 1
+artifact_type: planned_change
+schema_file: ../../templates/strict-spec-driven/schemas/planned-change.yaml
+planned_change:
+  id: global-timeline
+  milestone: novel-series
+status: complete
+summary: 时间线（Timeline）与事件顺序检查
+details: 为事件溯源中的事件补充故事时间（绝对时间或相对顺序），时间线事件与状态快照、因果链共用同一套事件 id。wa-cli 检查作品内与跨作品的事件顺序矛盾，以及人物在时间线上的位置与状态矛盾（例如同一时间出现在两地），并把这些检查接入 wa-cli continuity。wa-cli timeline 输出作品或系列的时间线。
+depends_on:
+  - cross-work-canon

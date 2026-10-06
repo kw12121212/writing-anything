@@ -1,0 +1,8 @@
+schema_version: 1
+id: src-0123456789ab
+type: author-note
+title: 迁移笔记
+original_name: idea.md
+file: original.md
+sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+bytes: 12

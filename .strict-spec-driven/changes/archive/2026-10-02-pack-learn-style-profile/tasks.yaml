@@ -1,0 +1,55 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: pack-learn-style-profile
+sections:
+  Implementation:
+    schema:
+      text: Schema：common.schema.json 的 styleStats；pack.schema.json 的 style_profile；proposal.schema.json 与产物类型 pack-proposal（.writing-anything/proposals/*.yaml）、测试夹具
+      status: complete
+    catalog-resolve:
+      text: internal/catalog 读取 style_profile；internal/resolve 输出 resolved.styleProfile（最后一个声明的规范包，带 source；没有时为 null）
+      status: complete
+    source-read:
+      text: internal/source：读取并校验素材原文的入口（返回内容），供文风统计使用
+      status: complete
+    package:
+      text: internal/learn：文风统计（句子与段落切分、分布、标点频率、常用词）、提议读写与条目合并、确认写入作者规范包（节点树编辑与写前校验）、拒绝、提议校验
+      status: complete
+    cli:
+      text: internal/cli：pack learn、pack confirm、pack reject 命令（参数检查、诊断与 next、changedPaths、人读输出），注册表与 sampleArgs；validate 整体与单个产物校验接入提议
+      status: complete
+    docs:
+      text: docs/GLOSSARY.md 加入规范包提议、文风统计等术语；wa-init 技能说明如何从过往文章生成文风画像提议并请作者逐项确认
+      status: complete
+    review-fixes:
+      text: 审查修复：提议只替换取值改变的节点（保留注释、无变化不写、无关条目的锚点不阻止操作）；confirm 先检查目标再判断是否有可写条目；规范包已有相同条目时不改写文件；baseline 按 kind 查找并校验 id 与 kind 一致；next 按错误码选择；目录列举改用 workspace.YAMLFiles（含 catalog 与 packinstall）；Schema 收紧 sources 与 rejected 条目；补充测试与 delta tech
+      status: complete
+  Testing:
+    lint:
+      text: gofmt 检查本变更的 Go 文件
+      status: complete
+      command: test -z "$(gofmt -l internal/learn internal/source internal/catalog internal/resolve internal/schema internal/cli/learn.go internal/cli/learn_test.go internal/cli/workspace.go internal/cli/registry.go internal/cli/cli_test.go)"
+    unit-tests:
+      text: 单元测试：统计的确定性与各项定义（句末引号、标点、子串去重、分位数）；learn 的首次创建、追加素材、重算与 baseline 回到 proposed、拒绝后不重复、错误码；confirm 写入规范包（新建与保留注释、幂等、内置与已安装目标、锚点）；reject；validate；resolved.styleProfile；CLI 输出与 MCP 样例调用
+      status: complete
+      command: go test ./internal/...
+    full-regression:
+      text: 运行完整回归命令，覆盖率不低于 80%
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    spec-alignment:
+      text: 对照 style-profile 与 genres-and-packs delta spec 的每个场景确认实现与测试覆盖，并按实际实现修正
+      status: complete
+    strict-ready:
+      text: 运行 strict-spec-cli ready 与 strict-spec-cli verify，确认变更产物有效
+      status: complete
+      command: strict-spec-cli ready pack-learn-style-profile && strict-spec-cli verify pack-learn-style-profile
+    archive-readiness:
+      text: 确认 delta spec 能合并（style-profile 为新建主规格），归档后路线图中的 pack-learn-style-profile 标记为完成
+      status: complete
+testing_gates:
+  validation_task: full-regression
+  unit_test_task: unit-tests

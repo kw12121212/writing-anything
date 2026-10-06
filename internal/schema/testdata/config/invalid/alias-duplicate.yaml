@@ -1,0 +1,5 @@
+schema_version: 1
+language: zh-CN
+default_genre: &genre tech-blog
+packs: [*genre, *genre]
+gate_level: standard

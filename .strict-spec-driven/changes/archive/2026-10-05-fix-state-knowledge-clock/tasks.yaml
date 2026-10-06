@@ -1,0 +1,31 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: fix-state-knowledge-clock
+sections:
+  Implementation:
+    inject-now-param:
+      text: 三类时钟旁路全部接入可注入时钟：state/knowledge 的 Confirm/Reject/Set、plan 的 Confirm、draft 的 Write/Precheck（修改记录 recorded_at）增加 now time.Time 参数（包内 timestamp() 私取删除）；internal/cli 全部时间戳调用统一传 now()（含 handoff/volume/decision/reviewpacket/impact 原先直传 time.Now() 的调用点）；reviewpacket 的 character 维度任务包生成改为按设定条目 id 排序，消除 map 迭代序导致的多包内容不确定；既有直接调用方测试机械更新签名
+      status: complete
+  Testing:
+    reproduce-clock-bypass:
+      text: 新增时钟注入回归测试 TestStateKnowledgeConfirmClockInjection：冻结 internal/cli 的 now，最小工作区内执行 state propose+confirm 与 knowledge propose+confirm，断言 decided_at 等于冻结时刻且两次执行一致（修复前失败）；TestNovelCorpusReplay 双跑目录树逐字节比对作为端到端证据（修复前 state.yaml/plan.yaml/edits.yaml/任务包不一致，修复后全绿）
+      status: complete
+      command: go test ./internal/cli/ -run TestStateKnowledgeConfirmClockInjection
+    full-regression:
+      text: 完整项目回归（含覆盖率阈值 80%）：时钟回归测试与重放相关测试全部通过
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    ready-check:
+      text: strict-spec-cli ready fix-state-knowledge-clock
+      status: complete
+      command: strict-spec-cli ready fix-state-knowledge-clock
+    verify-check:
+      text: strict-spec-cli verify fix-state-knowledge-clock
+      status: complete
+      command: strict-spec-cli verify fix-state-knowledge-clock
+testing_gates:
+  validation_task: full-regression
+  unit_test_task: reproduce-clock-bypass

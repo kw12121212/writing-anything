@@ -1,0 +1,54 @@
+schema: strict-spec-driven/question-list/v1
+schema_version: 1
+artifact_type: question_list
+schema_file: templates/strict-spec-driven/schemas/question-list.yaml
+change: scene-contract-and-causality
+open: []
+resolved:
+  - id: requirement-problem
+    question: What is concretely going wrong today, and for whom?
+    context: 'Why this is asked: the change is planned against a need, and the need lives only with the requester. A "problem" here means what someone does or suffers today — not a feature that is missing. If the answer names a button, a field, a page, or an endpoint, it is a solution, and the underlying problem is still unstated. What a sufficient answer contains: who is affected, what they do today instead, and how often. Worked example: "every Monday one person spends forty minutes copying order rows into a spreadsheet to send the weekly report". What it changes: this becomes the proposal''s why, and it decides whether the change is worth making.'
+    answer: roadmap 证据（novel 里程碑 goal 与本 planned change details）：长篇在任何单个会话都装不下全书，Agent 只能逐场景推进，但今天场景在草拟前只有短篇的轻量契约（出场人物、节拍、揭示边界、目标分值），无法声明视角、地点、必须发生的状态变化、要埋设或回收的伏笔与因果；Agent 在每个会话里只能口头重新约定场景内容，也没有任何机制校验某场景的起因是否引用前文真实发生的事件。受影响的是接入 wa-cli 的 Agent 与作者：每写一个场景都要重新对齐约定，且因果错误（起因引用后文事件）无人拦截。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-outcome
+    question: What observable difference proves the problem is solved?
+    context: 'Why this is asked: without a success condition, nobody can tell afterwards whether the change worked. "Observable" means someone outside the system can check it without reading the code. What a sufficient answer contains: what a person will see, or no longer have to do, once this is done. Worked example: "the report is in the manager''s inbox on Monday morning without anyone assembling it". What it changes: this becomes the delta spec''s scenarios and the acceptance evidence at review time.'
+    answer: roadmap 证据（milestone done_criteria「场景起因引用不存在或尚未发生的事件时 validate 失败」与 planned change details）：完成后，Agent 在草拟前用 wa-cli scene contract <unit> <section> 以命名参数写入完整场景契约；wa-cli validate（整体与单路径）对起因引用不存在事件报 scene.unknown-event、引用尚未发生（按单元树先序不由更早场景声明）的事件报 scene.event-not-yet-happened、事件 id 被多场景重复声明报 scene.duplicate-event，均退出码 1；wa-cli outline show 输出全部契约字段。这些都不需要读代码即可从 CLI 输出验证。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-trigger
+    question: Why now — what forced this?
+    context: 'Why this is asked: work that nothing forced is the work most often thrown away later. This question catches a request that sounds reasonable but has no real driver behind it. What a sufficient answer contains: the concrete event, deadline, incident, or cost that made this surface now, or an honest statement that nothing did. Worked example: "the report was missed last month and it was raised with the team". What it changes: a change with no trigger is a candidate for deferral, and the answer is weighed at review before archive.'
+    answer: roadmap 证据（依赖序）：本 planned change 唯一的依赖 multi-level-units 已完成归档，它是当前唯一 eligible 的 planned change（roadmap-recommend 结果：54 个中 1 个 eligible）；同时 state-change-proposals、foreshadowing-ledger、scene-close-out、long-form-planning-methods 都 depends_on scene-contract-and-causality——契约是 novel 里程碑后续全部记忆与收口机制的地基，不先落地会阻塞整条依赖链。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-non-goals
+    question: What must explicitly not change?
+    context: 'Why this is asked: the requester knows which nearby behavior other people depend on, and the agent does not. A "non-goal" is something the change must leave alone even though it sits close to the work. What a sufficient answer contains: the behavior, setting, or output that must survive untouched, and who relies on it. Worked example: "do not change the saved filters — several people rely on their own". What it changes: these become the proposal''s unchanged_behavior items, which review checks the finished result against.'
+    answer: roadmap 证据（planned change details 与 milestone scope.out）：outline set/remove 的既有参数与行为、大纲节既有字段（covers、uses、reason、role、characters、beats、reveal、targets）的语义、outline 关卡仍以 outline.invalid 汇总校验失败、单元树命令与生命周期结构、短篇场景契约用法都必须保持不变；写后收口、状态快照、知情表、伏笔台账、按契约组装上下文与连续性审查明确不在本变更内（属后续 planned change 或 novel-continuity 里程碑）；outline set 不新增长篇契约字段的参数。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-interpretation
+    question: Which reading of the request is intended, where more than one is possible?
+    context: 'Why this is asked: a short request usually admits several readings, and building the wrong one is indistinguishable from building nothing. What a sufficient answer contains: the reading that is meant, stated plainly enough to rule the others out — or a statement that only one reading exists and what it is. Worked example: "export means the version sent to the manager, not the one I read myself". What it changes: this fixes the scope boundary before any code is written, and settles disputes about what was asked for.'
+    answer: roadmap 证据（planned change details 原文）：唯一读法是——契约声明在细纲（场景单元的大纲）中，「在短篇的轻量场景契约上扩展」，由 wa-cli scene contract 以命名参数写入，本变更只交付契约字段、写入命令与因果链校验；「契约是 context 组装、写后收口和各项审查的共同依据」是对后续变更的角色定位，不在本变更实现。歧义点（字段落点、「已发生」判定基准）已作为开放问题 contract-home 与 event-happened-basis 留给作者裁决。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: contract-home
+    question: 长篇场景契约的字段放在大纲节上，还是独立的场景级产物？
+    context: 短篇的轻量契约已声明在大纲节（characters/beats/reveal/targets）上；视角（pov）、起因（causes）、预期事件（events）在语义上是场景级属性，而一个单元的大纲可以有多个节。影响范围：outline.schema.json 的字段位置、outline 关卡与文体阶段声明是否需要改动，以及后续里程碑（写后收口、知情表、伏笔台账）读取契约的方式与实现文件数。推荐：扩展大纲节字段——planned change 的表述是「在短篇的轻量场景契约上扩展」，novel 的 outline 阶段已要求 outline 产物，长篇场景细纲约定为单节。备选：新建场景级契约产物（如 scene-contract.yaml），语义上每场景单契约更自然，但需要新产物类型、文体与关卡改动，改动面更大。
+    answer: 采用推荐项：扩展大纲节字段。roadmap 原文「在短篇的轻量场景契约上扩展」「细纲中每个场景在草拟前声明」，且 short-story 文体注释明确「每个场景在自己的大纲里声明轻量场景契约」——契约的家就是场景的大纲节；不新建产物类型、不改文体阶段与关卡。长篇场景细纲约定单节，多节时各节独立校验。作者事后如不同意，可用 /strict-spec-modify 调整。
+    status: resolved
+    answered_by: roadmap
+  - id: event-happened-basis
+    question: 场景契约中「前文已发生」的事件按什么基准判定？
+    context: planned change 要求「起因引用不存在或尚未发生的事件时 validate 失败」，但产生事件的写后收口（Close-out）与状态快照（State Snapshot）都是依赖本变更的后续 planned change，本变更只能依据细纲声明判定。影响范围：spec delta 中因果链判定规则、scene.event-not-yet-happened 的触发条件与测试夹具；不影响实现的文件范围。推荐：按单元树先序（Pre-order）中严格更早的场景声明的事件判定「已发生」，不依赖草拟或验收进度——纯规划态、确定、可复现，不依赖后续里程碑。备选：要求产生事件的场景已推进到 draft 之后才视为已发生（更严格，但阻碍先成细纲再逐场景写作的长篇工作流，且本里程碑内无法验证正文是否真的写到该事件）。
+    answer: 采用推荐项：按单元树先序（Pre-order）中严格更早的场景声明的 events 判定「已发生」，不依赖草拟或验收进度。理由：契约在草拟前声明、细纲常先于正文成稿，先序判定是纯规划态的确定性检查，不依赖后续里程碑（写后收口、状态快照）的机制；本里程碑内也没有机制验证正文是否写到该事件。作者事后如不同意，可用 /strict-spec-modify 调整。
+    status: resolved
+    answered_by: assumption

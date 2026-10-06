@@ -1,0 +1,25 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: fix-cli-help-usage-nits
+  status: proposed
+summary:
+  what:
+    - 修复 wa-cli 帮助与用法错误的四个缺陷：wa-cli --help 报「缺少命令」并以退出码 2 退出；wa-cli help <command> --help 忽略位置参数，显示 help 自己的用法；输出用法错误时忽略写入失败，仍以退出码 2 退出；用法说明中的占位符中英混用（<command>、<命令>、<值>）。
+  why:
+    - cli 规格 exit-codes 要求执行失败返回 1，写入失败却返回 2，与规格不符；--help 与 help <command> --help 是用户和 Agent 最常尝试的查询写法，现在一个报错、一个答非所问；占位符混用让用法说明前后不一致，而位置参数名是会出现在 help --json 中的标识符，应与之一致。
+scope:
+  in:
+    - internal/cli/cli.go：wa-cli --help [...] 等同 wa-cli help [...]；help <command> --help 与 help <command> 相同；usageError 写入失败时报告到标准错误并返回退出码 1
+    - internal/cli/help.go：用法说明的占位符统一使用英文标识符（<command>、<value>），总览为「用法：wa-cli <command> [<args>]」
+    - cli 主规格 help-command、exit-codes 的 delta spec（MODIFIED），internal/cli 与 cmd/wa-cli 的回归测试
+    - cli 主规格 usage-error 的 MODIFIED：注明写出用法错误失败时按 exit-codes 返回 1，消除两条 MUST 的字面冲突；docs/GLOSSARY.md 退出码条目的说明与规格对齐为「1 校验失败或执行失败」
+  out:
+    - 新增命令、短参数 -h、参数别名，以及 help 输出的其他排版调整
+    - cli-contract 技术标准的规则变更
+unchanged_behavior:
+  - wa-cli help、help <command>、help --json、<command> --help 的现有输出内容（除占位符外）与退出码不变
+  - 不加 --json 时用法错误仍写到标准错误并以退出码 2 退出；加 --json 时仍写 JSON 信封到标准输出；输出写入成功时的所有行为不变
+  - wa-cli --json（无命令）仍为 usage.missing-command；version 的文本与 --json 输出不变

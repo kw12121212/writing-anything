@@ -1,0 +1,54 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: unit-tree-and-lifecycle
+sections:
+  Implementation:
+    work-schema:
+      text: '在 internal/schema 新增 work.schema.json（schema_version、id、genre、type、stage、递归的 units，每项含 id、type、stage、units；所有对象 additionalProperties: false）并登记 work 产物类型，路径模式为 .writing-anything/works/*/work.yaml'
+      status: complete
+    reserved-done-stage:
+      text: internal/catalog 的文体检查拒绝 id 为 done 的阶段，报告 genre.reserved-stage-id（field 指向该阶段 id）
+      status: complete
+    work-package:
+      text: 新增 internal/work：加载与校验作品（work.id-mismatch、work.unknown-genre、work.unknown-unit-type、work.child-type-not-allowed、work.root-type-mismatch、work.unknown-stage、artifact.duplicate-id）、解析单元引用 <work> 与 <work>/<unit-id>（work.not-found、unit.not-found）、定位单元目录、按单一函数计算阻塞项（lifecycle.missing-artifact）；只返回结构化问题
+      status: complete
+    work-mutations:
+      text: 在 internal/work 实现创建作品、推进阶段（下一阶段或 done，done 单元报告 lifecycle.already-done）与追加子单元（unit.child-type-not-allowed、artifact.duplicate-id）：在 YAML 节点树上只改目标节点、保留注释，写前重新解析并校验，经 internal/workspace 导出的统一写入函数原子写入
+      status: complete
+    cli-commands:
+      text: 在 internal/cli 注册表新增 new、advance、next 与 unit add（新命令组 unit）：共享 --dir 与 --json，登记 args、outputKeys（work、unit、steps）、exitCodes 与 sampleArgs；诊断的 next 为可直接运行的命令；不加 --json 时输出人读文本
+      status: complete
+    validate-status-integration:
+      text: 扩展 wa-cli validate：整体校验时遍历 works/ 下不以 . 开头的子目录，缺少 work.yaml 报告 artifact.not-found，校验每个作品并计入 checked；validate <path> 识别 work.yaml。扩展 wa-cli status：--json 新增 units（按作品 id 排序、单元树先序，每项含 unit、work、type、parent、stage、blockers、commands），人读文本以缩进树输出
+      status: complete
+    fixtures:
+      text: 在 internal/work 与 internal/cli 的 testdata/ 下编写夹具：minimal 文体的单层作品（article → section），以及测试文体 book → part → chapter → scene 的多层作品；覆盖合法与各类非法 work.yaml
+      status: complete
+    glossary:
+      text: 在 docs/GLOSSARY.md 加入本变更引入的术语：根单元（Root Unit）、单元引用（Unit Reference）、必需产物（Required Artifact）、阻塞项（Blocker）等尚未收录的词
+      status: complete
+  Testing:
+    unit-tests:
+      text: 为 schema、catalog、work 与 cli 编写单元测试：作品创建与校验的各错误码、单元引用解析、单层与多层单元树的推进与阻塞、推进到 done 与重复推进、unit add 的类型与 id 检查、work.yaml 注释保留与取值未变不写、next 与 status 的 --json 输出、validate 对 works/ 的校验；断言使用规格中的字面量
+      status: complete
+      command: go test ./internal/...
+    full-regression:
+      text: 运行完整回归命令，覆盖率不低于 80%
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    spec-alignment:
+      text: 对照 units-and-lifecycle 与 workspace delta spec 的每个场景确认实现与测试覆盖，并按实际实现修正 delta spec
+      status: complete
+    strict-ready:
+      text: 运行 strict-spec-cli ready 与 strict-spec-cli verify，确认变更产物有效
+      status: complete
+      command: strict-spec-cli ready unit-tree-and-lifecycle && strict-spec-cli verify unit-tree-and-lifecycle
+    archive-readiness:
+      text: 确认 delta spec 能合并进 workspace 主规格与新建的 units-and-lifecycle 主规格，归档后路线图中的 unit-tree-and-lifecycle 标记为完成
+      status: complete
+testing_gates:
+  validation_task: full-regression
+  unit_test_task: unit-tests

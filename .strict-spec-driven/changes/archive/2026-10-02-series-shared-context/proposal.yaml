@@ -1,0 +1,30 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: series-shared-context
+  status: proposed
+summary:
+  what:
+    - 新增系列（Series）.writing-anything/series/<id>.yaml：有序的成员作品、系列级的规范包、素材与事实；wa-cli series set、series add、series fact 与 series show 管理系列
+    - 成员作品继承系列级规范包：按 文体 → config.yaml 的 packs → 系列的 packs → 项目配置 合并，lint、审稿、导出、AI 评分与上下文包都按作品使用这一合并结果
+    - 新增已验收单元的摘要（Summary）：wa-cli summary set 校验单元已验收、摘要非空且长度在文体规定的范围内，记录正文的内容哈希；正文之后被修改时摘要标为过期；wa-cli summary show 查看
+    - 成员作品的 wa-cli context 输出 series：系列的事实与前序作品的已验收摘要（注明是否过期），系列素材并入引用素材
+  why:
+    - 里程碑 packs-and-series 要求多篇文章组成系列时共享规范包、事实库与已验收单元的摘要；系列中第二篇文章的 context 输出包含第一篇的已验收摘要，摘要过期时在 context 中注明
+    - 系列是后续系列小说共享设定集（Canon）的基础，摘要机制在本里程碑首次引入，长篇的分层摘要在其上扩展
+scope:
+  in:
+    - series.schema.json 与 summary.schema.json、产物类型登记与 validate 校验（成员作品存在且只属于一个系列、规范包与素材存在）
+    - 文体的 summary_length（摘要字数范围，未声明时为 20 到 500 字）；internal/resolve 的按作品合并 ForWork
+    - context 的 series 字段与裁剪优先级中的事实与摘要；命令注册表、help、样例调用与 MCP tool；docs/GLOSSARY.md；wa-review 或 wa-publish 技能说明验收后写摘要
+  out:
+    - 作品级的规范包声明；跨作品共享设定集（Canon）与时间线（novel-series 里程碑）
+    - 由 wa-cli 生成摘要（摘要由 Agent 撰写）；长篇的分层摘要
+unchanged_behavior:
+  - 不属于任何系列的作品，config resolved、lint、context 等的结果不变（context.series 为 null）
+  - 摘要不阻塞 advance 与 accept；wa-cli 不调用大语言模型
+roadmap:
+  milestone: packs-and-series
+  planned_change: series-shared-context

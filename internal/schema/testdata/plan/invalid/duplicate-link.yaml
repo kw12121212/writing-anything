@@ -1,0 +1,8 @@
+schema_version: 1
+method: outline-first
+steps:
+  - id: cast
+    title: 人物表
+    text: 主角守灯人。
+    links: [c-1, c-1]
+    confirmed_by_author: false

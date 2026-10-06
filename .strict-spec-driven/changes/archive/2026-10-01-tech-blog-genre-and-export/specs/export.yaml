@@ -1,0 +1,56 @@
+schema: strict-spec-driven/delta-spec/v1
+schema_version: 1
+artifact_type: delta_spec
+schema_file: templates/strict-spec-driven/schemas/delta-spec.yaml
+target_spec: export
+spec:
+  title: 导出（Export）
+  path: .strict-spec-driven/specs/export.yaml
+operations:
+  ADDED:
+    export-markdown:
+      strength: MUST
+      statement: 'wa-cli export <work> [--format markdown] 必须把作品中验收记录有效的单元导出为一个 Markdown 文件：按单元树先序（根单元在前）拼接各单元的 draft.md，单元之间空一行，文件以换行结尾；去掉作者批注（<!-- 之后为 @me: 或 @me(kind): 且有非空文字的注释，可以跨行但不能跨空行、不能包含另一个 <!--，与作者反馈的批注一致）与单处豁免注释（与文本检查一致：内容为 lint-ignore <规则 id>: 理由，注释到其后第一个 -->，行首的注释可以跨空行，不在行首的不能）；没有对应 --> 或不满足这些条件的写法不是注释，原样保留；去掉后只剩空白的行整行去掉，不因此留下连续空行，注释一直延伸到行尾时去掉它之前留下的行尾空白，其余空白（如 Markdown 行尾两个空格的硬换行）原样保留；围栏代码块与行内代码（识别与文本检查、作者反馈一致：围栏的结束行为同一字符且长度不短于开头，行内代码为 n 个反引号到之后恰好 n 个反引号）及其他 HTML 注释原样保留；各单元正文开头的 BOM 去掉，CRLF 换成 LF。正文超过 2 MiB 的单元不导出（同 export.unaccepted）。验收记录有效指单元目录下有 acceptance.yaml、通过校验、draft_sha256 与当前正文一致且 gate_level 不比工作区当前的关卡强度宽松（见 units-and-lifecycle 主规格的 advance-stage）。没有正文或验收无效的单元不导出，各给出一条 warning 级 export.unaccepted（path 为单元目录，next 包含 wa-cli review show <unit> --dir <dir> --json）；没有任何可导出的单元时报告 export.nothing-accepted（next 包含 wa-cli next --dir <dir> --json），不写文件，退出码为 1。给出 --front-matter 时在开头附带 YAML 文件头元数据（Front Matter），依次含 title（第一个导出单元正文中围栏代码块之外的第一个一级标题，结尾的 # 只在与文字之间有空白时视为关闭序列；没有时为作品 id）、description（根单元写作简报的 purpose，没有时省略）、genre、units 与 accepted_at（导出单元中最晚的验收时间）。成功时 --json 输出的 export 含 work、format、path、units（导出的单元引用，按顺序）、skipped（每项含 unit 与 reason）与 chars，changedPaths 为新建的目录与导出文件，退出码为 0。--format 不是 markdown 时报告 input.invalid-value（field 为 format）；<work> 是子单元引用时报告 work.not-found（field 为 work）；这些情况不写文件，退出码为 1。'
+      scenarios:
+        export-accepted:
+          - GIVEN: 作品 my-post 已验收，子单元 intro 没有验收
+          - WHEN: 运行 wa-cli export my-post --output dist/post.md --dir D --json
+          - THEN: dist/post.md 只含 my-post 的正文；diagnostics 中有一条 severity 为 warning、错误码为 export.unaccepted、path 为 .writing-anything/works/my-post/units/intro 的诊断；changedPaths 为 [dist, dist/post.md]，退出码为 0
+        nothing-accepted:
+          - GIVEN: 作品 my-post 没有验收
+          - WHEN: 运行 wa-cli export my-post --dir D --json
+          - THEN: diagnostics 中有一条错误码为 export.nothing-accepted 的诊断，没有写出文件，退出码为 1
+        strip-process-comments:
+          - GIVEN: '已验收单元的正文含独占一行的 <!-- lint-ignore ai-cliche: 引用原话 --> 与行尾的 <!-- @me: 太长 -->'
+          - WHEN: 运行 wa-cli export my-post --dir D --json
+          - THEN: 导出文件中没有这两处注释，独占一行的注释所在行被去掉
+        unclosed-annotation:
+          - GIVEN: '已验收单元的正文为「段落 A。<!-- @me: 这里太长」、空行、「段落 B。」'
+          - WHEN: 运行 wa-cli export my-post --dir D --json
+          - THEN: 导出文件含段落 A 与段落 B 的全部文字（漏写 --> 的不是批注）
+    export-output:
+      strength: MUST
+      statement: wa-cli export 的 --output 必须是相对项目目录（--dir）的文件路径，省略时为 .writing-anything/exports/<work>.md；绝对路径、含反斜杠、规整后离开项目目录、以 / 结尾，或落在工作区 .writing-anything/ 之中但不在 .writing-anything/exports/ 之下（导出不能覆盖工作区产物；按不区分大小写比较，写入前再按文件身份确认途经的工作区目录之下只能是 exports）时报告 export.invalid-output（field 为 output，next 包含 wa-cli help export --json）；输出文件所在的每一级目录都必须是真实目录（不存在时逐级创建），已存在的输出文件必须是普通文件，途经或指向符号链接时报告 export.invalid-output，path 为出问题的路径。导出文件原子写入，已存在时覆盖。
+      scenarios:
+        output-outside:
+          - GIVEN: 作品 my-post 已验收
+          - WHEN: 运行 wa-cli export my-post --output ../x.md --dir D --json
+          - THEN: diagnostics 中有一条错误码为 export.invalid-output 的诊断，项目目录之外没有新文件，退出码为 1
+        output-workspace-artifact:
+          - GIVEN: 作品 my-post 已验收
+          - WHEN: 运行 wa-cli export my-post --output .writing-anything/config.yaml --dir D --json
+          - THEN: diagnostics 中有一条错误码为 export.invalid-output 的诊断，config.yaml 不变，退出码为 1
+        output-symlink:
+          - GIVEN: 项目目录下的 link 是指向项目目录之外的符号链接
+          - WHEN: 运行 wa-cli export my-post --output link/post.md --dir D --json
+          - THEN: diagnostics 中有一条错误码为 export.invalid-output、path 为 link 的诊断，链接目标中没有新文件，退出码为 1
+    tech-blog-e2e:
+      strength: MUST
+      statement: 用 internal/cli/testdata/e2e 中的作者素材（author-note、interview 与 reference 各一份）、正文与审稿输入，必须能只通过 wa-cli 命令在 tech-blog 文体、strict 关卡强度下完成一篇技术博客：init、new、source add、brief set、advance、按写作法角色 outline set、advance、draft write、claim add、lint（没有 error 级发现项）、advance、review record、review resolve、accept（缺少作者确认时被拒绝，给出确认后通过）、advance 到 done，最后 export --front-matter 得到与 testdata/e2e/export.md 逐字节相同的文件，之后 validate 通过。
+      scenarios:
+        blog-to-markdown:
+          - GIVEN: internal/cli/testdata/e2e 中的作者素材、正文、审稿输入与期望的导出文件
+          - WHEN: 按需求中的顺序运行 wa-cli 命令（验收时间固定为 2026-10-01T09:30:00Z）
+          - THEN: 每个命令的退出码都为 0（缺少确认的 accept 为 1）；导出的 .writing-anything/exports/pool.md 与 testdata/e2e/export.md 逐字节相同
+  MODIFIED: {}
+  REMOVED: {}

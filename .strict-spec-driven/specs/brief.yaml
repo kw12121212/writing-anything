@@ -1,0 +1,184 @@
+schema: strict-spec-driven/main-spec/v1
+schema_version: 1
+artifact_type: main_spec
+schema_file: templates/strict-spec-driven/schemas/main-spec.yaml
+spec:
+  id: brief
+  title: 写作简报（Brief）
+requirements:
+  brief-artifact:
+    strength: MUST
+    statement: 单元目录（见 units-and-lifecycle 主规格的 advance-stage）下的 brief.yaml 是写作简报（Brief）：含 schema_version（1），以及可选的 audience（受众，非空文本）、purpose（写作目的（Purpose），非空文本）、premise（前提（Premise），含非空文本 text、可选 sources（素材 id 数组，不重复）与 decision（决策 id））、theme（主题（Theme），非空文本）、pov（视角（POV），含 person（取值为 first、second 或 third）与可选的 character（非空文本，视角人物））、key_messages（核心观点（Key Message）数组，每项含 id 与非空的 text，可选 sources（素材 id 数组，不重复）与 decision（决策 id））、length（含正整数 min 与 max）、avoid（禁区（Off-limits），非空文本数组）、sources（关联素材 id 数组，不重复）与 method（写作法模板（Method Template）id 或 none，见 methods 主规格的 method-selection）。wa-cli validate 整体校验时，必须对每个可加载作品的每个单元目录中存在的 brief.yaml 做 Schema 校验并计入 checked，且满足：核心观点 id 在文件内唯一，否则报告 artifact.duplicate-id（field 为 key_messages[i].id）；sources、key_messages[i].sources 与 premise.sources 中的素材都已登记，否则报告 brief.unknown-source（field 为对应的点分路径，如 key_messages[0].sources[1] 或 premise.sources[0]）；key_messages[i].decision 与 premise.decision 是决策队列中存在的决策，否则报告 brief.unknown-decision，且该决策的 units 含本单元的单元引用，否则报告 brief.unrelated-decision（两者的 field 为 key_messages[i].decision 或 premise.decision；决策队列无法加载时不做这两项检查，由决策队列自己的诊断报告）；length.min 不大于 length.max，否则报告 brief.invalid-length（field 为 length）；method 为空或 none 以外的取值时必须是可用的写作法，否则报告 brief.unknown-method（field 为 method）。method 是对写作法的引用，不属于写作简报自身的合法性：brief show 与 brief set 不因它拒绝执行，并以 warning 报告 brief.unknown-method；读取写作简报的其他命令同样不因它拒绝执行。wa-cli validate <path> 对该位置的 brief.yaml 执行同样的检查。brief.yaml 存在但途经符号链接或不是普通文件时，validate、brief set、brief show 都报告 artifact.not-found（path 为该 brief.yaml，message 说明按不存在处理），不读取也不覆盖它，提问关卡把它当作 brief.invalid。validate 不检查必填项是否填写，必填项见 brief-gate。
+    scenarios:
+      validate-brief:
+        - GIVEN: 作品 my-post 的 brief.yaml 含 audience、purpose 与一个 sources 为已登记素材 src-a 的核心观点 km-1
+        - WHEN: 运行 wa-cli validate --dir D --json
+        - THEN: valid 为 true，checked 含 .writing-anything/works/my-post/brief.yaml，退出码为 0
+      duplicate-message:
+        - GIVEN: brief.yaml 中有两个 id 为 km-1 的核心观点
+        - WHEN: 运行 wa-cli validate .writing-anything/works/my-post/brief.yaml --dir D --json
+        - THEN: diagnostics 中有一条错误码为 artifact.duplicate-id、field 为 key_messages[1].id 的诊断，退出码为 1
+      unknown-source:
+        - GIVEN: brief.yaml 的 sources 为 [src-nope]，src-nope 未登记
+        - WHEN: 运行 wa-cli validate --dir D --json
+        - THEN: diagnostics 中有一条错误码为 brief.unknown-source、field 为 sources[0] 的诊断，退出码为 1
+      unknown-decision:
+        - GIVEN: brief.yaml 的核心观点 km-1 的 decision 为 dec-9，决策队列中没有 dec-9
+        - WHEN: 运行 wa-cli validate --dir D --json
+        - THEN: diagnostics 中有一条错误码为 brief.unknown-decision、field 为 key_messages[0].decision 的诊断，退出码为 1
+      invalid-length:
+        - GIVEN: 'brief.yaml 的 length 为 {min: 3000, max: 1500}'
+        - WHEN: 运行 wa-cli validate --dir D --json
+        - THEN: diagnostics 中有一条错误码为 brief.invalid-length、field 为 length 的诊断，退出码为 1
+      schema-violation:
+        - GIVEN: brief.yaml 含未声明的字段 tone
+        - WHEN: 运行 wa-cli validate --dir D --json
+        - THEN: diagnostics 中有一条错误码为 artifact.schema-violation、path 为 .writing-anything/works/my-post/brief.yaml 的诊断，退出码为 1
+      unrelated-decision:
+        - GIVEN: brief.yaml 的核心观点 km-1 的 decision 为 dec-1，dec-1 的 units 不含 my-post
+        - WHEN: 运行 wa-cli validate --dir D --json
+        - THEN: diagnostics 中有一条错误码为 brief.unrelated-decision、field 为 key_messages[0].decision 的诊断，退出码为 1
+      symlinked-brief:
+        - GIVEN: 作品 my-post 的 brief.yaml 是指向项目目录之外文件的符号链接
+        - WHEN: 分别运行 wa-cli validate、wa-cli brief show my-post、wa-cli brief set my-post --audience x（都加 --dir D --json）
+        - THEN: 三者都有一条错误码为 artifact.not-found、path 为 .writing-anything/works/my-post/brief.yaml 的诊断，退出码为 1；符号链接与外部文件都不变
+      premise-unknown-source:
+        - GIVEN: short-story 作品 my-story 的 brief.yaml 的 premise 含非空 text，sources 为 [src-nope]，src-nope 未登记
+        - WHEN: 运行 wa-cli validate --dir D --json
+        - THEN: diagnostics 中有一条错误码为 brief.unknown-source、field 为 premise.sources[0] 的诊断，退出码为 1
+  brief-required-fields:
+    strength: MUST
+    statement: 文体（Genre）可以在 unit_types[i].brief_required 中声明该单元类型的简报必填项（Required Brief Field），取值为 audience、purpose、premise、theme、pov、key_messages、length、avoid、sources，不得重复（否则报告 artifact.schema-violation）；省略时该单元类型没有必填项。wa-cli config resolved 的 unitTypes 每项含 briefRequired（数组；省略时为空数组）。内置 minimal 文体的 article 声明 brief_required 为 [audience, purpose]，section 不声明；内置 short-story 文体的 story 声明 brief_required 为 [premise, pov, length, key_messages]，scene 不声明。
+    scenarios:
+      resolved-brief-required:
+        - GIVEN: default_genre 为 minimal 的工作区 D
+        - WHEN: 运行 wa-cli config resolved --dir D --json
+        - THEN: resolved.unitTypes 中 article 的 briefRequired 为 [audience, purpose]，section 的 briefRequired 为空数组，退出码为 0
+      resolved-short-story-required:
+        - GIVEN: default_genre 为 short-story 的工作区 D
+        - WHEN: 运行 wa-cli config resolved --dir D --json
+        - THEN: resolved.unitTypes 中 story 的 briefRequired 为 [premise, pov, length, key_messages]，scene 的 briefRequired 为空数组，退出码为 0
+  brief-set:
+    strength: MUST
+    statement: wa-cli brief set <unit> 必须按给出的命名参数修改单元目录下的 brief.yaml：--audience 与 --purpose 设置对应字段；--length <min>-<max> 设置 length（min 与 max 为正整数，min 不大于 max）；--avoid（可重复）以给出的取值整体替换 avoid；--sources（逗号分隔的素材 id）整体替换 sources；--method 设置 method（写作法 id 或 none）；--premise 设置前提文本，--premise-sources（逗号分隔的素材 id）整体替换前提关联的素材，--premise-decision 设置前提关联的决策；--theme 设置主题；--pov-person（取值为 first、second 或 third）与 --pov-character 设置视角的人称与视角人物；这些参数取值为空字符串时删除该字段（--avoid 只给出一个空值时同样删除，--premise-sources 只给出一个空值时删除 premise 的 sources，--pov-person 与 --pov-character 取值为空字符串时删除对应子字段，两者都删除后 pov 整体删除）。--message <id> 选中一个核心观点：该 id 不存在时追加一个核心观点，此时必须同时给出 --message-text；已存在时只修改给出的 --message-text、--message-sources（逗号分隔，整体替换，空字符串时删除）与 --message-decision（空字符串时删除）。--remove-message <id>（可重复）删除核心观点，先于 --message 执行。brief.yaml 不存在时创建，含 schema_version 1，子单元的单元目录不存在时先创建；已存在时只修改涉及的字段，保留其他内容与 YAML 注释，新增的字段按 schema_version、audience、purpose、premise、theme、pov、key_messages、length、avoid、sources、method 的顺序放置。修改后的取值与原有取值相同时不写文件，changedPaths 为空数组；否则 changedPaths 为新建的单元目录（如有）与 brief.yaml，--json 输出的 brief 与 questions 同 brief-show，退出码为 0。没有给出任何修改参数、只给出已存在的 --message 而没有给出要修改的内容、--audience、--purpose 或 --message-text 的取值非空但只含空白、--avoid 给出多个取值且其中有空白取值、--sources、--message-sources 或 --premise-sources 中有重复的 id、--pov-person 不在取值范围内、--pov-character 在写作简报没有视角人称（pov 未设置或没有 person）且未同时给出 --pov-person 时给出、--premise-sources 或 --premise-decision 在写作简报没有前提时给出、删除前提（--premise 取值为空字符串）时同时给出 --premise-sources 或 --premise-decision、--message-text、--message-sources 或 --message-decision 没有与 --message 一起给出、新核心观点缺少 --message-text、--length 格式不对或 min 大于 max 时报告 input.invalid-value；--message 的 id 不符合 id 格式时报告 artifact.schema-violation（field 为 message）；--method 给出的写作法不可用时报告 brief.unknown-method（field 为 method）；引用的素材未登记时报告 brief.unknown-source，决策不存在时报告 brief.unknown-decision，决策的 units 不含该单元时报告 brief.unrelated-decision（--premise-sources 与 --premise-decision 同样适用，field 为 premise-sources[i] 与 premise-decision），给出 --message-decision 而决策队列无法加载时报告 decision.invalid-queue（path 为 .writing-anything/decisions.yaml）；--remove-message 给出的核心观点不存在时报告 brief.message-not-found；已有的 brief.yaml 不通过校验时报告其诊断；要修改之处经由 YAML 锚点、别名或合并键得到时报告 brief.anchored-value。由参数引起的诊断不填 path，field 为参数名（如 message、sources[0]、message-sources[1]、message-decision、remove-message[0]）或为空，next 含 wa-cli help brief set --json。这些情况都不修改任何文件，退出码为 1。brief set 不受单元当前阶段限制，也不检查必填项是否填齐。
+    scenarios:
+      set-creates:
+        - GIVEN: 作品 my-post 没有 brief.yaml，素材 src-a 已登记
+        - WHEN: 运行 wa-cli brief set my-post --audience 后端工程师 --purpose 讲清楚为什么要做连接池 --message km-1 --message-text 连接池能显著降低延迟 --message-sources src-a --dir D --json
+        - THEN: brief.yaml 含 schema_version 1、audience、purpose 与核心观点 km-1（sources 为 [src-a]）；brief.keyMessages[0].id 为 km-1，questions 为空数组；changedPaths 为 [.writing-anything/works/my-post/brief.yaml]，退出码为 0
+      set-clears:
+        - GIVEN: 作品 my-post 的 brief.yaml 有 purpose 与 avoid
+        - WHEN: 运行 wa-cli brief set my-post --purpose= --avoid= --dir D --json
+        - THEN: brief.yaml 中没有 purpose 与 avoid，brief.purpose 为 null，brief.avoid 为空数组，退出码为 0
+      set-remove-message:
+        - GIVEN: 作品 my-post 的 brief.yaml 有核心观点 km-1 与 km-2
+        - WHEN: 运行 wa-cli brief set my-post --remove-message km-1 --dir D --json
+        - THEN: brief.yaml 只剩 km-2，退出码为 0
+      set-child-unit:
+        - GIVEN: 作品 my-post 有子单元 intro，units/intro/ 目录不存在
+        - WHEN: 运行 wa-cli brief set my-post/intro --purpose 引出问题 --dir D --json
+        - THEN: changedPaths 为 [.writing-anything/works/my-post/units/intro, .writing-anything/works/my-post/units/intro/brief.yaml]，退出码为 0
+      set-no-flags:
+        - GIVEN: 作品 my-post
+        - WHEN: 运行 wa-cli brief set my-post --dir D --json
+        - THEN: diagnostics 中有一条错误码为 input.invalid-value 的诊断，没有新建或修改文件，退出码为 1
+      set-new-message-without-text:
+        - GIVEN: 作品 my-post 的 brief.yaml 没有核心观点 km-1
+        - WHEN: 运行 wa-cli brief set my-post --message km-1 --message-sources src-a --dir D --json
+        - THEN: diagnostics 中有一条错误码为 input.invalid-value 的诊断，message 指出缺少 --message-text；brief.yaml 不变，退出码为 1
+      set-unknown-source:
+        - GIVEN: src-nope 未登记
+        - WHEN: 运行 wa-cli brief set my-post --sources src-nope --dir D --json
+        - THEN: diagnostics 中有一条错误码为 brief.unknown-source 的诊断，没有新建或修改文件，退出码为 1
+      set-bad-length:
+        - GIVEN: 作品 my-post
+        - WHEN: 运行 wa-cli brief set my-post --length 3000-1500 --dir D --json
+        - THEN: diagnostics 中有一条错误码为 input.invalid-value 的诊断，没有新建或修改文件，退出码为 1
+      set-remove-missing:
+        - GIVEN: 作品 my-post 的 brief.yaml 没有核心观点 km-9
+        - WHEN: 运行 wa-cli brief set my-post --remove-message km-9 --dir D --json
+        - THEN: diagnostics 中有一条错误码为 brief.message-not-found 的诊断，brief.yaml 不变，退出码为 1
+      set-unchanged:
+        - GIVEN: 作品 my-post 的 brief.yaml 的 audience 为「后端工程师」
+        - WHEN: 运行 wa-cli brief set my-post --audience 后端工程师 --dir D --json
+        - THEN: changedPaths 为空数组，brief.yaml 与运行前逐字节相同，退出码为 0
+      set-blank-text:
+        - GIVEN: 作品 my-post 的 brief.yaml 有核心观点 km-1
+        - WHEN: 运行 wa-cli brief set my-post --message km-1 --message-text " " --dir D --json
+        - THEN: diagnostics 中有一条错误码为 input.invalid-value、没有 path 的诊断，next 含 wa-cli help brief set --json；brief.yaml 不变，退出码为 1
+      set-unrelated-decision:
+        - GIVEN: 决策 dec-1 存在但没有关联 my-post
+        - WHEN: 运行 wa-cli brief set my-post --message km-1 --message-decision dec-1 --dir D --json
+        - THEN: diagnostics 中有一条错误码为 brief.unrelated-decision、field 为 message-decision 的诊断，brief.yaml 不变，退出码为 1
+      set-merges:
+        - GIVEN: 作品 my-post 的 brief.yaml 已有 audience、核心观点 km-1 与作者写的注释，决策 dec-1 关联 my-post
+        - WHEN: 运行 wa-cli brief set my-post --message km-1 --message-decision dec-1 --length 1500-3000 --dir D --json
+        - THEN: 'km-1 的 text 与 sources 不变、decision 为 dec-1，length 为 {min: 1500, max: 3000}，audience 与注释保留，退出码为 0'
+      set-premise:
+        - GIVEN: short-story 作品 my-story 没有 brief.yaml，素材 src-idea 已登记
+        - WHEN: 运行 wa-cli brief set my-story --premise 一位守灯人发现灯里住着说谎的精灵 --premise-sources src-idea --pov-person third --pov-character 守灯人 --length 2000-8000 --dir D --json
+        - THEN: 'brief.yaml 的 premise 含该 text 且 sources 为 [src-idea]，pov 为 {person: third, character: 守灯人}，length 为 {min: 2000, max: 8000}；changedPaths 含 brief.yaml，退出码为 0'
+      set-premise-unknown-source:
+        - GIVEN: 素材 src-nope 未登记
+        - WHEN: 运行 wa-cli brief set my-story --premise 守灯人的前提 --premise-sources src-nope --dir D --json
+        - THEN: diagnostics 中有一条错误码为 brief.unknown-source 的诊断，没有新建或修改文件，退出码为 1
+      set-pov-bad-person:
+        - GIVEN: short-story 作品 my-story
+        - WHEN: 运行 wa-cli brief set my-story --pov-person omniscient --dir D --json
+        - THEN: diagnostics 中有一条错误码为 input.invalid-value、field 为 pov-person 的诊断，brief.yaml 不变，退出码为 1
+  brief-show:
+    strength: MUST
+    statement: wa-cli brief show <unit> 必须只读地输出单元的写作简报：--json 输出 brief 与 questions。brief 含 unit（单元引用）、path（brief.yaml 路径）、audience 与 purpose（未设置时为 null）、premise（含 text、sources（数组）与 decision（未设置时为 null）；未设置时为 null）、theme（未设置时为 null）与 pov（含 person 与 character（未设置时为 null）；未设置时为 null）、keyMessages（每项含 id、text、sources（数组）与 decision（未设置时为 null））、length（含 min 与 max，未设置时为 null）、avoid 与 sources（未设置时为空数组）、method（未设置时为 null）；单元目录下没有 brief.yaml 时 brief 为 null。questions 为仍需向作者提问的问题数组，按以下顺序、每项含 code、field、message 与 question：单元类型声明的每个未填写的必填项（code 为 brief.missing-field，field 为字段名；key_messages、avoid、sources 为空数组，audience、purpose 与 theme 只含空白字符（包括全角空格）时视为未填写，premise 未设置或其 text 只含空白字符、pov 未设置或其 person 缺失时同样视为未填写），然后是既没有 sources 也没有 decision 的前提（code 为 brief.unsourced-premise）与没有 sources、decision 尚未决定的前提（code 为 brief.unconfirmed-premise），field 为 premise，然后是每个既没有 sources 也没有 decision 的核心观点（code 为 brief.unsourced-message）与每个没有 sources、decision 尚未决定的核心观点（code 为 brief.unconfirmed-message），field 为 key_messages[i]。question 为 wa-cli 按字段内置的中文提问文字，message 说明缺少什么并含 question。questions 与单元当前阶段无关。changedPaths 为空数组；brief.yaml 不通过 brief-artifact 的校验时报告其诊断，valid 为 false，退出码为 1；否则退出码为 0。不加 --json 时以人读文本输出同样的信息。
+    scenarios:
+      show-empty:
+        - GIVEN: 刚用 wa-cli new minimal my-post --dir D 创建的作品，没有 brief.yaml
+        - WHEN: 运行 wa-cli brief show my-post --dir D --json
+        - THEN: brief 为 null，questions 依次为 field 为 audience 与 purpose 的两项，code 都为 brief.missing-field，question 非空；changedPaths 为空数组，退出码为 0
+      show-unsourced:
+        - GIVEN: 作品 my-post 的 brief.yaml 含 audience、purpose 与没有 sources 和 decision 的核心观点 km-1
+        - WHEN: 运行 wa-cli brief show my-post --dir D --json
+        - THEN: questions 只有一项，code 为 brief.unsourced-message，field 为 key_messages[0]，message 含 km-1，退出码为 0
+      show-unconfirmed:
+        - GIVEN: 作品 my-post 的 brief.yaml 含 audience、purpose 与只关联决策 dec-1 的核心观点 km-1，dec-1 关联 my-post 且为 open
+        - WHEN: 运行 wa-cli brief show my-post --dir D --json，再运行 wa-cli decide dec-1 --answer 是 --confirmation 我确认这个观点 --dir D 后再次运行 brief show
+        - THEN: 第一次 questions 只有一项，code 为 brief.unconfirmed-message、field 为 key_messages[0]；决定后 questions 为空数组
+      show-premise-unsourced:
+        - GIVEN: short-story 作品 my-story 的 brief.yaml 填齐必填项，premise 含非空 text 但没有 sources 与 decision
+        - WHEN: 运行 wa-cli brief show my-story --dir D --json
+        - THEN: questions 只有一项，code 为 brief.unsourced-premise，field 为 premise，question 非空，退出码为 0
+  brief-gate:
+    strength: MUST
+    statement: 单元当前阶段的 required_artifacts 含 brief，且单元目录下存在 brief.yaml 或 brief.md 时，写作简报的问题必须是该单元的阻塞项（Blocker），artifact 为 brief、decision 为 null：brief.yaml 不通过 brief-artifact 的校验时只有一条 code 为 brief.invalid 的阻塞项，path 为 brief.yaml；否则 brief-show 的 questions 中每一项都是一条阻塞项，code 与该问题相同，path 为 brief.yaml（单元只有 brief.md 时为 brief.md，并视为没有填写任何字段），message 与该问题的 message 相同。单元目录下两者都不存在时只有 lifecycle.missing-artifact，不报告写作简报阻塞项。wa-cli advance 因写作简报阻塞项拒绝推进时，为每个阻塞项给出一条错误码为其 code、path 为其 path 的诊断，next 为：brief.missing-field、brief.unsourced-message 与 brief.unsourced-premise 给出 wa-cli brief show <unit> --dir <dir> --json 与 wa-cli help brief set --json；brief.unconfirmed-message 与 brief.unconfirmed-premise 给出 wa-cli decisions --dir <dir> --json；brief.invalid 给出 wa-cli validate <brief.yaml 路径> --dir <dir> --json。
+    scenarios:
+      gate-missing-field:
+        - GIVEN: 作品 my-post（minimal）的 brief.yaml 只有 audience
+        - WHEN: 运行 wa-cli advance my-post --dir D --json
+        - THEN: valid 为 false，diagnostics 中有一条错误码为 brief.missing-field、path 为 .writing-anything/works/my-post/brief.yaml 的诊断，message 含 purpose 与向作者提问的问题，next 含 wa-cli brief show my-post 与 wa-cli help brief set --json；work.yaml 与运行前逐字节相同，退出码为 1
+      gate-unsourced:
+        - GIVEN: 作品 my-post 的 brief.yaml 含 audience、purpose 与没有出处的核心观点 km-1
+        - WHEN: 运行 wa-cli advance my-post --dir D --json
+        - THEN: diagnostics 中有一条错误码为 brief.unsourced-message 的诊断，message 含 km-1，work.yaml 不变，退出码为 1
+      gate-passes:
+        - GIVEN: 作品 my-post 的 brief.yaml 含 audience、purpose 与 sources 为已登记素材 src-a 的核心观点 km-1
+        - WHEN: 运行 wa-cli advance my-post --dir D --json
+        - THEN: work.yaml 的 stage 为 draft，退出码为 0
+      gate-invalid:
+        - GIVEN: '作品 my-post 的 brief.yaml 内容为 k: v'
+        - WHEN: 运行 wa-cli advance my-post --dir D --json
+        - THEN: diagnostics 中有一条错误码为 brief.invalid 的诊断，next 含 wa-cli validate .writing-anything/works/my-post/brief.yaml 命令，work.yaml 不变，退出码为 1
+      gate-brief-md:
+        - GIVEN: 作品 my-post 只有 brief.md，没有 brief.yaml
+        - WHEN: 运行 wa-cli advance my-post --dir D --json
+        - THEN: diagnostics 中有 audience 与 purpose 两条错误码为 brief.missing-field、path 为 .writing-anything/works/my-post/brief.md 的诊断，退出码为 1
+      gate-section:
+        - GIVEN: 作品 my-post 有子单元 intro（section），units/intro/brief.yaml 只含 schema_version
+        - WHEN: 运行 wa-cli advance my-post/intro --dir D --json
+        - THEN: intro 的 stage 为 draft，退出码为 0
+      gate-later-stage:
+        - GIVEN: 作品 my-post 的 stage 为 draft，brief.yaml 只有 audience，draft.md 存在
+        - WHEN: 运行 wa-cli advance my-post --dir D --json
+        - THEN: work.yaml 的 stage 为 review，退出码为 0
+      gate-premise-unsourced:
+        - GIVEN: short-story 作品 my-story 的 brief.yaml 填齐必填项，premise 含非空 text 但没有 sources 与 decision
+        - WHEN: 运行 wa-cli advance my-story --dir D --json
+        - THEN: diagnostics 中有一条错误码为 brief.unsourced-premise、path 为 .writing-anything/works/my-story/brief.yaml 的诊断，next 含 wa-cli brief show my-story 与 wa-cli help brief set --json；work.yaml 不变，退出码为 1

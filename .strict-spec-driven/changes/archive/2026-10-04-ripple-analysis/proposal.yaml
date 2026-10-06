@@ -1,0 +1,38 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: ripple-analysis
+  status: proposed
+summary:
+  what:
+    - 新增 wa-cli impact <unit|entry>：只读预览影响范围——给出目标（场景、设定条目、事件或伏笔）被修改时受影响的后续场景（按单元树先序更晚且引用了目标或其传递闭包的场景），每项含 scene、via（引用路径：cause-event、character、state、knowledge、thread 之一）与 reason；--json 输出 affected 数组，人读输出按先序列出
+    - 新增 wa-cli impact mark <unit|entry>：把影响范围落盘为复查标记——写入 .writing-anything/rechecks/<work>.yaml（schema_version、scenes 数组：每项含 scene、target、via、reason、marked_at 与 status（open / cleared）），追加式合并（同（场景， 目标）的 open 标记不重复，已 cleared 的同目标重新标记时追加新条目）；同时为每个受影响场景生成 causality 维度的审查任务包（复用 review plan 的生成与预算规则，报告 changedPaths）；没有受影响场景时只报告、不写文件
+    - 新增 wa-cli impact clear <scene> <target>：解除复查标记——该场景对该目标的 open 标记改为 cleared；--confirmed-by-author 与 --confirmation <作者原话摘要> 必须同时给出（作者确认无影响），或该场景的 review.yaml 基于当前正文且在其 review record 之后没有新的 open 审稿发现项时允许省略（重新审查通过）；写入 cleared_at 与确认记录
+    - 复查标记的可见性：wa-cli validate 纳入 rechecks/<work>.yaml 的 Schema 与领域校验（场景存在、target 可解析、确认记录完整 impact.incomplete-confirmation）；wa-cli next 对有 open 复查标记的场景在该单元的 action 中提示（不进入 blockers，与收口、连续性一致，由 impact list 与组稿侧消费）
+  why:
+    - 路线图 novel-continuity 里程碑计划变更 ripple-analysis：完成标准「修改早期场景引用的设定条目后，所有引用该条目的后续场景被标为需复查并阻塞组稿」的承载者（组稿命令属 manuscript-assembly-export，消费本变更的复查标记）；依赖的 review-task-packets 已归档，当前是唯一可推荐的计划变更
+    - 长篇改一处、全书皆动：修改已验收场景或设定条目后，靠人记住哪些后续场景要复查不可靠；引用图（场景契约、事件、知情表、伏笔台账与 recall 索引中的引用）已经全部在磁盘上，影响传播可以确定性计算——标记、生成复查任务包、复查通过后解除
+    - 影响传播只能沿已记录的引用追踪（里程碑风险第 2 条）：via 路径与 reason 如实呈现引用依据，未记录的隐含关联交给审查任务包的语义审查
+scope:
+  in:
+    - 新包 internal/impact：引用图构建（场景大纲的 causes/events/characters/pov/state_changes、伏笔台账 planted_in 与 recovered_in、recall 倒排索引的场景命中）、先序更晚过滤、传递闭包（一层：目标 → 引用场景 → 引用场景声明的事件所及的更晚场景）、affected 输出、rechecks/<work>.yaml 的追加式写入与领域校验、clear 的确认记录、审查任务包生成（复用 internal/reviewpacket 的 causality 维度）
+    - internal/schema：新增 rechecks.schema.json（路径模式 .writing-anything/rechecks/*.yaml），补夹具
+    - internal/cli：impact（预览）、impact mark、impact clear 三个命令注册（args、flags、outputKeys、exitCodes、sampleArgs 与 mutatingSamples、--json 与人读输出、诊断与 next）；validate 整体校验纳入 rechecks；next 对 open 复查标记的场景在 action 提示
+    - docs/GLOSSARY.md：影响传播（Ripple Analysis）与复查标记（Recheck Mark）词条
+    - 测试夹具：多章长篇夹具（事件链、设定引用、伏笔），覆盖预览、标记、幂等追加、解除与 next 提示
+  out:
+    - 组稿（assemble）与整书导出——属 manuscript-assembly-export 计划变更（其验收关卡消费本变更的复查标记）
+    - 会话交接记录——属 session-handoff 计划变更
+    - 影响范围的语义推断：只沿已记录的引用（契约、事件、知情、伏笔、recall 索引）传播，隐含关联由审查任务包的语义审查发现
+    - 修改的自动检测（正文或设定条目何时被改）：由调用方（Agent 或作者）在修改后显式运行 impact mark；acceptance.stale 已覆盖正文修改的验收侧检测
+    - MCP 服务与内置技能不单独编写（impact 经命令注册表自动暴露）
+unchanged_behavior:
+  - 没有 rechecks 文件或标记全部 cleared 时，validate、next、accept、advance 的输出、退出码与错误码不变（next 的 blockers 不新增条目，复查提示只进 action）
+  - reviewpacket、continuity、closeout、volume 命令组语义不变；impact mark 复用 reviewpacket 的 causality 维度生成，不改变既有包的保留规则
+  - recall 索引的语义与刷新规则不变；impact 只读消费倒排索引的场景命中
+  - MCP 服务与内置技能内容不变
+roadmap:
+  milestone: novel-continuity
+  planned_change: ripple-analysis

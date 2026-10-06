@@ -1,0 +1,32 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: wechat-html-export
+  status: proposed
+summary:
+  what:
+    - wa-cli export 新增 --format wechat-html：把作品中已验收的正文转成只含内联样式（Inline Style）的 HTML，供粘贴进公众号编辑器；只使用 section、h1–h4、p、strong、em、code、pre、blockquote、ul、ol、li、hr、br 与 sup 标签，属性只有 style，不含 script、外链样式表、class 或 id；正文中的原始 HTML 一律转义，HTML 注释去掉。
+    - 配图（Illustration）导出为带编号与说明的占位块，并在导出文件旁写出一份配图清单 <名称>.images.md（编号、替代文字、地址与标题）；链接转为文字加脚注编号，文末列出参考链接（公众号正文不支持外部链接）。
+    - 样式主题（HTML Theme）来自规范包：规范包的 html_theme 按元素给出 CSS 声明，覆盖内置的默认主题；取值只能是简单的 CSS 声明，不能含 url(、expression、javascript、@import、引号或尖括号。wa-cli config resolved 输出 htmlTheme，每个元素带 value 与 source。
+  why:
+    - 里程碑 wechat-marketing-and-mcp 的完成标准要求：公众号文章端到端测试通过，导出的 HTML 只含内联样式；规划变更要求样式主题来自规范包，图片以带说明的占位块导出并附配图清单，测试校验导出结果不含被禁止的标签和属性。
+    - 公众号编辑器会过滤 class、外链样式与脚本，只保留内联样式；作者目前只能拿到 Markdown，需要再手工排版。
+scope:
+  in:
+    - internal/export：已验收单元的选择抽成共用函数；wechat-html 渲染（Markdown 子集到内联样式 HTML）、配图占位与清单、参考链接
+    - internal/catalog 与 internal/schema：规范包的 html_theme 字段、元素名与取值校验、内置默认主题；internal/resolve：合并 htmlTheme 并记录来源
+    - internal/cli：export 的 --format wechat-html、默认输出路径 <work>.html、输出字段 images 与 imageList；config resolved 输出 htmlTheme
+    - 修改 export 主规格的 export-markdown 与 export-output，新增 wechat-html-export；修改 genres-and-packs 的 config-resolved，新增 pack-html-theme
+    - 测试：禁止的标签与属性、转义、配图占位与清单、参考链接、主题覆盖与来源、非法主题取值；wechat-marketing 端到端测试加上 wechat-html 导出；wa-publish 技能说明 wechat-html 导出
+  out:
+    - 直接调用公众号 API 发布、上传或生成图片
+    - 表格、嵌套列表、脚注语法等 Markdown 扩展的完整渲染：不支持的写法按普通段落文字输出
+    - AI 生成内容标识：由 ai-content-disclosure 负责
+unchanged_behavior:
+  - Markdown 格式（省略 --format 或为 markdown）的导出内容、默认路径与错误码不变；导出仍只包含验收记录有效的单元
+  - 没有声明 html_theme 的规范包与已有配置的合并结果不变（config resolved 只多出 htmlTheme）
+roadmap:
+  milestone: wechat-marketing-and-mcp
+  planned_change: wechat-html-export

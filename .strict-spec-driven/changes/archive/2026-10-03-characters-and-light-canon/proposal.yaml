@@ -1,0 +1,39 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: characters-and-light-canon
+  status: proposed
+summary:
+  what:
+    - 新增作品级设定集（Canon）产物 canon.yaml（作品根单元目录下）：设定条目（Canon Entry）类型为人物（character，即人物卡 Character Sheet）、地点（location）、世界规则（world-rule）与人物关系（relationship），每条含 id、type、非空 text、可选 name 与 sources（出处），以及保护级别（Protection Level）protection（normal 或 author-pinned）；relationship 条目以 members 引用同文件的人物条目。
+    - 新增 wa-cli canon add/set/remove/list 命令负责设定集增删改查：canon 产物在 internal/schema 登记 JSON Schema（路径模式仅作品根目录），出处引用已登记素材，members 引用同文件 character 条目，修改走结构化编辑（保留注释、拒绝锚点、取值未变不写）。
+    - 作者钦定（Author-pinned）条目受最高级别保护：canon set/remove 修改或删除钦定条目（含取消钦定）时，未携带指向已决定且选择为允许的决策的 --decision 即被拒绝（新错误码 canon.author-pinned），并自动在决策队列生成阻塞决策（同一操作幂等）；作者 wa-cli decide 之后携带 --decision 重试才写入，条目记录该决策 id。
+    - docs/GLOSSARY.md 增补设定条目（Canon Entry）与保护级别（Protection Level）词条。
+  why:
+    - 路线图 short-story 里程碑（order 500）当前激活：依赖的 short-story-genre 已归档，本规划变更是里程碑完成标准「Agent 试图修改作者钦定的设定条目时，命令被拒绝并生成阻塞决策」的承载者，也是同里程碑 scene-context-and-fiction-rules（场景级上下文包：出场人物的当前设定）的直接依赖。
+    - 今天 Agent 协助虚构写作时没有可追溯的设定载体：人物、地点、世界规则与人物关系只能散落在正文或素材里，Agent 无法只读地取得「当前设定」，也无法把作者钦定的设定与 Agent 建议的设定区分开，存在覆写作者确定设定的风险。
+    - 里程碑 intake 问题 canon-model 已给出推荐答案：设定集作为事实库（Fact Store）的扩展，沿用同一套 id、出处与保护级别——本变更是该答案的落地，首次验证事实库能否承载虚构文体。
+scope:
+  in:
+    - internal/schema：canon 产物类型登记（路径模式 .writing-anything/works/*/canon.yaml，仅作品根目录）与 canon.schema.json、合法与不合法夹具
+    - 新包 internal/canon：canon.yaml 的加载与校验（条目 id 唯一、sources 已登记、members 为同文件 character 条目、protection 枚举），Add/Set/Remove/List 及结构化编辑约束（保留注释、拒绝锚点、取值未变不写）
+    - internal/decision 联动：钦定条目的写保护、自动阻塞决策的幂等生成、--decision 授权校验与条目上的决策记录
+    - internal/cli：canon add/set/remove/list 命令注册（注册表、help、outputKeys、sampleArgs/mutatingSamples）与新错误码常量（canon.unknown-source、canon.unknown-character、canon.not-found、canon.author-pinned、canon.anchored-value、canon.unknown-decision）
+    - wa-cli validate：整体校验与 validate <path> 对 canon.yaml 的 Schema 与引用检查
+    - docs/GLOSSARY.md：设定条目（Canon Entry）、保护级别（Protection Level）词条
+  out:
+    - 场景级上下文包（出场人物当前设定、前序场景摘要、揭示边界）与对话标点、视角一致、小说 AI 腔规则：由 scene-context-and-fiction-rules 负责
+    - 场景契约 characters 字段与人物条目的关联校验：本变更不改 outline 与场景契约行为，由 scene-context-and-fiction-rules 负责消费侧联动
+    - 连续性审查、状态快照、知情表、跨作品（系列级）共享设定：由 novel 与后续里程碑负责
+    - canon 与导出、lint、上下文包的联动：本变更只做存储与保护，不接入消费方
+    - canon 条目进入阶段必需产物或推进关卡：设定集不设关卡（见设计决策）
+unchanged_behavior:
+  - 素材（source）、论断（claim）、决策（decide/decisions）现有命令的行为、输出与错误码不变；canon 不改变任何已有产物的结构
+  - brief、outline 与场景契约行为不变；short-story 等内置文体数据不变；论断出处检查的按文体关闭机制不变
+  - validate 对现有产物的检查与 checked 输出不变（canon.yaml 存在时新增其检查项）
+  - MCP 服务与技能只做薄封装：MCP 经命令注册表自动暴露 canon 命令，不为其单独编写逻辑；本变更不修改内置技能内容
+roadmap:
+  milestone: short-story
+  planned_change: characters-and-light-canon

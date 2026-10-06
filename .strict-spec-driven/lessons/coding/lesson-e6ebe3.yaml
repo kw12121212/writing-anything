@@ -1,0 +1,19 @@
+schema: strict-spec-driven/lesson/v1
+schema_version: 1
+artifact_type: lesson
+schema_file: templates/strict-spec-driven/schemas/lesson.yaml
+lesson:
+  id: lesson-e6ebe3
+  title: 统计判定中的浮点相等
+category: coding
+status: active
+created_at: '2026-10-02T01:21:20.872Z'
+updated_at: '2026-10-02T01:21:20.872Z'
+context: style-metrics-and-drift 用已验收单元的均值与标准差判定文风漂移，规格写明「标准差为 0 时不判定」。
+observation: 三个完全相同的 0.1 求出的总体标准差是 1.39e-17，stdev == 0 的守卫被绕过，输出「超过 2 个标准差（标准差 0）」这种自相矛盾的发现项；比例类指标的标准差常小于 0.01，按两位小数输出时显示为 0。
+takeaway: 对浮点运算结果做「为 0」或「相等」判断前，先判断样本是否全部相同，或按输出精度舍入后再比较；输出精度要足以显示判定所用的量。
+applies_when: 代码根据均值、方差、比例等浮点统计量做阈值或为零判断，或把这些量以固定小数位输出给人看时。
+occurrences:
+  - origin: style-metrics-and-drift
+    date: '2026-10-02'
+    evidence: internal/stylemetric/stylemetric_test.go TestIdenticalBaselineNotJudged；fresh-context 审查发现项

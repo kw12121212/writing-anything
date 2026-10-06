@@ -1,0 +1,77 @@
+schema: strict-spec-driven/delta-spec/v1
+schema_version: 1
+artifact_type: delta_spec
+schema_file: templates/strict-spec-driven/schemas/delta-spec.yaml
+target_spec: units-and-lifecycle
+operations:
+  ADDED: {}
+  MODIFIED:
+    advance-stage:
+      strength: MUST
+      statement: wa-cli advance <unit> 必须按作品文体声明的阶段序列推进单元。当前阶段的每个必需产物（Required Artifact）a 都要求单元目录下存在 a.yaml 或 a.md；根单元的单元目录为 .writing-anything/works/<work>/，其他单元为 .writing-anything/works/<work>/units/<unit-id>/。全部存在时把该单元的 stage 改为下一阶段，当前为最后一个阶段时改为保留的终点 done；只修改该单元的 stage，保留 work.yaml 的其他内容与 YAML 注释；changedPaths 为该 work.yaml，--json 输出的 unit 字段含 unit、type、previousStage 与 stage，退出码为 0。有必需产物缺失时必须拒绝推进、不修改文件，为每个缺失的产物给出一条错误码为 lifecycle.missing-artifact 的诊断（path 为单元目录，message 列出 a.yaml 与 a.md，next 包含 wa-cli next <unit> --dir <dir> --json），退出码为 1。单元有决策阻塞项（见 decisions 主规格的 decision-blocking）时同样拒绝推进、不修改文件，为每个阻塞项给出一条错误码为该阻塞项 code（decision.blocking 或 decision.invalid-queue）的诊断，path 为 .writing-anything/decisions.yaml，next 包含 wa-cli decisions --dir <dir> --json，退出码为 1。单元的 stage 已是 done 时报告 lifecycle.already-done，退出码为 1。work.yaml 不通过作品校验时报告其诊断且不修改文件；目标单元或其 stage 经由 YAML 锚点、别名或合并键得到时报告 work.anchored-value，不修改文件，退出码为 1。文体不得声明 id 为 done 的阶段。
+      scenarios:
+        advance-to-next:
+          - GIVEN: 已用 wa-cli new minimal my-post --dir D 创建作品，D/.writing-anything/works/my-post/brief.yaml 存在
+          - WHEN: 运行 wa-cli advance my-post --dir D --json
+          - THEN: work.yaml 的 stage 为 draft；unit.previousStage 为 brief，unit.stage 为 draft；changedPaths 为 [.writing-anything/works/my-post/work.yaml]，退出码为 0
+        markdown-artifact:
+          - GIVEN: 作品 my-post 的 stage 为 draft，D/.writing-anything/works/my-post/draft.md 存在
+          - WHEN: 运行 wa-cli advance my-post --dir D --json
+          - THEN: work.yaml 的 stage 为 review，退出码为 0
+        missing-artifact:
+          - GIVEN: 刚用 wa-cli new minimal my-post --dir D 创建的作品，没有 brief.yaml 与 brief.md
+          - WHEN: 运行 wa-cli advance my-post --dir D --json
+          - THEN: valid 为 false，diagnostics 中有一条错误码为 lifecycle.missing-artifact、path 为 .writing-anything/works/my-post 的诊断，message 含 brief.yaml 与 brief.md，next 包含 wa-cli next my-post 命令；work.yaml 与运行前逐字节相同，退出码为 1
+        advance-to-done:
+          - GIVEN: 作品 my-post 的 stage 为 review（minimal 的最后一个阶段），review.yaml 存在
+          - WHEN: 运行 wa-cli advance my-post --dir D --json
+          - THEN: work.yaml 的 stage 为 done，unit.stage 为 done，退出码为 0
+        already-done:
+          - GIVEN: 作品 my-post 的 stage 为 done
+          - WHEN: 运行 wa-cli advance my-post --dir D --json
+          - THEN: diagnostics 中有一条错误码为 lifecycle.already-done 的诊断，work.yaml 不变，退出码为 1
+        child-unit-directory:
+          - GIVEN: 作品 my-post 有子单元 intro，D/.writing-anything/works/my-post/brief.yaml 存在，但 D/.writing-anything/works/my-post/units/intro/ 下没有 brief 产物
+          - WHEN: 运行 wa-cli advance my-post/intro --dir D --json
+          - THEN: diagnostics 中有一条错误码为 lifecycle.missing-artifact、path 为 .writing-anything/works/my-post/units/intro 的诊断，退出码为 1
+        preserves-comments:
+          - GIVEN: 作品 my-post 的 work.yaml 中有作者写的注释，brief.yaml 存在
+          - WHEN: 运行 wa-cli advance my-post --dir D --json
+          - THEN: 注释与除 stage 以外的字段不变，退出码为 0
+        invalid-work:
+          - GIVEN: 作品 my-post 的 work.yaml 中 stage 为 bogus
+          - WHEN: 运行 wa-cli advance my-post --dir D --json
+          - THEN: diagnostics 中有一条错误码为 work.unknown-stage 的诊断，work.yaml 不变，退出码为 1
+        blocked-by-decision:
+          - GIVEN: 作品 my-post 的 brief.yaml 存在，决策队列有关联 my-post 的 open 阻塞决策 dec-1
+          - WHEN: 运行 wa-cli advance my-post --dir D --json
+          - THEN: diagnostics 中有一条错误码为 decision.blocking 的诊断，其 next 包含 wa-cli decisions 命令；work.yaml 与运行前逐字节相同，退出码为 1
+    next-steps:
+      strength: MUST
+      statement: wa-cli next [<unit>] 必须只读地输出下一步：--json 输出 steps 数组，未给出 unit 时包含工作区中所有可加载作品里 stage 不为 done 的单元（按作品 id 排序、单元树先序），给出 unit 时只含该单元。每项含 unit（单元引用）、stage、blockers、action、commands 与 feedback。blockers 为阻塞项（Blocker）数组，每项含 code、artifact、path、decision 与 message：缺失的必需产物（code 为 lifecycle.missing-artifact，decision 为 null），以及决策阻塞项（code 为 decision.blocking 或 decision.invalid-queue，artifact 为 decisions，见 decisions 主规格的 decision-blocking）；action 为人读说明；commands 为可以直接运行、不含占位符的 wa-cli 命令：没有阻塞项时为 [wa-cli advance <unit> --dir <dir> --json]，被缺失产物阻塞时列出为该产物登记的生成命令（尚未登记时不列出，action 列出所缺产物与期望的文件路径），被决策阻塞时列出 wa-cli decisions --dir <dir> --json，action 提示先请作者决定。feedback 为该单元未处理完（status 为 open 或 accepted）的作者反馈数组，每项的字段与 wa-cli feedback list 相同（见 feedback 主规格的 feedback-list），有未处理的反馈时 action 提示先处理这些反馈；反馈不是阻塞项，不影响 blockers 与 commands。给出的单元已是 done 时，该项 blockers 与 commands 为空数组。changedPaths 为空数组；有作品不通过作品校验时报告其诊断、valid 为 false、退出码为 1，其他作品照常列出；否则退出码为 0。不加 --json 时以人读文本输出同样的信息。
+      scenarios:
+        next-blocked:
+          - GIVEN: 刚用 wa-cli new minimal my-post --dir D 创建的作品
+          - WHEN: 运行 wa-cli next --dir D --json
+          - THEN: steps 只含一项：unit 为 my-post，stage 为 brief，blockers 中有一条 code 为 lifecycle.missing-artifact、artifact 为 brief 的阻塞项，commands 为空数组，action 提到 brief.yaml；valid 为 true，changedPaths 为空数组，退出码为 0
+        next-unblocked:
+          - GIVEN: 同上，D/.writing-anything/works/my-post/brief.yaml 已存在
+          - WHEN: 运行 wa-cli next my-post --dir D --json
+          - THEN: steps 只含 my-post 一项，blockers 为空数组，commands 只含一条 wa-cli advance my-post 命令，退出码为 0
+        next-skips-done:
+          - GIVEN: 作品 my-post 的 stage 为 done，子单元 intro 的 stage 为 draft
+          - WHEN: 运行 wa-cli next --dir D --json
+          - THEN: steps 只含 unit 为 my-post/intro 的一项，退出码为 0
+        next-read-only:
+          - GIVEN: 含作品的合法工作区
+          - WHEN: 运行 wa-cli next --dir D --json
+          - THEN: changedPaths 为空数组，工作区内所有文件的内容与修改时间不变
+        next-lists-feedback:
+          - GIVEN: 作品 my-post 有 open 的 fb-1、accepted 的 fb-2 与 resolved 的 fb-3
+          - WHEN: 运行 wa-cli next my-post --dir D --json
+          - THEN: steps 只含 my-post 一项，其 feedback 依次为 fb-1 与 fb-2，action 提到作者反馈；blockers 与 commands 与没有反馈时相同，退出码为 0
+        next-blocked-by-decision:
+          - GIVEN: 作品 my-post 的 brief.yaml 存在，决策队列有关联 my-post 的 open 阻塞决策 dec-1
+          - WHEN: 运行 wa-cli next my-post --dir D --json
+          - THEN: steps 只含 my-post 一项，blockers 为一条 code 为 decision.blocking、artifact 为 decisions、decision 为 dec-1 的阻塞项，commands 只含一条 wa-cli decisions 命令，退出码为 0
+  REMOVED: {}

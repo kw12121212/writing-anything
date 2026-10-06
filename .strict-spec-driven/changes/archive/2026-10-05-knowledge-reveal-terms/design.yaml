@@ -1,0 +1,23 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: knowledge-reveal-terms
+approach:
+  - 两层实现：数据层——知情事件 Event 增加 Terms []string（yaml/json 键 terms，事件序插入 character 之后），ProposeInput.Terms 与 SetInput.Terms *[]string 接受写入与整体替换（空值删除），领域校验每项非空且不重复（artifact.schema-violation），knowledge.schema.json 增加 terms 属性（非空唯一字符串数组），已确认条目改 terms 与其他字段同样回到 proposed 须重确认；cli 层在 knowledge propose 与 set 注册 --terms 旗标（逗号分隔收集）。检查层——internal/continuity Run 在伏笔检查后增加揭示词检查：加载 confirmed 事件按 entry 分组，terms 取并集（复用 lint 的多词匹配一次扫描，符合按词表计数复用多词匹配器的技术标准）；场景全序复用 timeline.Order（与时间线检查同源）；对每个带契约有正文的场景命中词时按「早于获知点」判定 reader 与出场人物违例并产出 continuity.knowledge-early 发现；无任何非空 terms 时整段跳过保证零影响。语料接入：脚本在既有确认后补 4 组 knowledge set --terms + 重新确认步骤（kn-05/07 为「为了救人」，kn-08/09 为「出生的时刻」），重放验证后 UPDATE_GOLDEN（预期仅 knowledge.yaml 变化），负向断言升级为 prose 注入（ch1-s3 注入含「为了救人」的句子 → continuity.knowledge-early error → 恢复原文全绿），矩阵 T-NEG-02 升级为 error 级并更新 evidence，DESIGN/README 的产品缺口记录改为已补齐，GLOSSARY 增「揭示词（Reveal Terms）」
+decisions:
+  terms-on-knowledge-event:
+    decision: 揭示词挂在知情事件上而非 canon 条目或场景契约：单一事实源随获知语义走，条目级取并集
+    rationale: 揭示词描述「知道这个条目意味着能在正文看到什么」，与获知事件同生命周期；挂 canon 需要新字段与 Schema 涟漪，挂场景契约会把同一秘密的词分散到多场
+  mechanical-not-semantic:
+    decision: 检查只做作者声明词的机械匹配，不做语义判定（不调用模型）
+    rationale: 与「wa-cli 不调用 LLM」的定位一致：作者声明边界（数据），工具执行边界（机械）；漏词是作者数据问题而非工具误报
+  zero-impact-guard:
+    decision: 没有任何非空 terms 的作品，continuity/accept/validate 输出与错误码逐字节不变
+    rationale: 向后兼容的硬承诺，规格 scenario no-terms-unchanged 与单测双重锚定
+alternatives:
+  - option: 把揭示词挂到 canon 条目或场景契约
+    reason: canon 条目需要新字段与 Schema 涟漪，且秘密的揭示语义已经在知情事件上；场景契约会把同一秘密的词分散到多场，维护面更大
+risks:
+  - 揭示词过宽会误报（通用词命中前文）——词由作者声明并可在豁免通道处理；语料选定的两个词已按前文核对无命中
+  - knowledge set 修改已确认条目会回到 proposed——语料补词步骤如实录制 set 与重新确认两步，反而覆盖了重确认路径

@@ -1,0 +1,37 @@
+schema: strict-spec-driven/delta-tech/v1
+schema_version: 1
+artifact_type: delta_tech
+schema_file: templates/strict-spec-driven/schemas/delta-tech.yaml
+target_standard: workspace-artifacts
+operations:
+  ADDED:
+    data-only-artifacts:
+      strength: MUST
+      statement: 文体、规范包与 config.yaml 的校验必须经过 internal/schema 的统一校验入口（Kind.Validate 或 Kind.ValidateNode），它在 Schema 校验之前做可执行内容检查（YAML 核心标签白名单与脚本类字段名黑名单），发现可执行内容时只报告 artifact.executable-content；任何包都不得对产物内容做模板求值、表达式计算、动态加载，或把其中的字符串当作命令执行。
+      rationale: 规范包由第三方或作者提供，项目约定规范包只能是数据；把检查放在所有命令都必须经过的统一校验入口，validate、config resolved 与后续命令就不会漏检，后续的规则引擎、导出与 MCP 服务消费的也都是纯数据。
+      enforcement:
+        method: test
+        detail: internal/schema 的 TestExecutable 用含自定义标签、脚本字段（含大小写变体）的夹具断言 artifact.executable-content 的字段与行号，internal/resolve 与 internal/cli 的测试覆盖规范包与 config.yaml 经 config resolved、validate 报告同一错误码；代码审查确认没有对产物字符串调用 os/exec、text/template 或 plugin。
+    builtin-catalog:
+      strength: MUST
+      statement: 内置文体与规范包放在 internal/catalog/builtin/genres/ 与 internal/catalog/builtin/packs/ 下，以 <id>.yaml 命名并用 go:embed 打包；测试必须逐个校验全部内置产物能通过与工作区规范包相同的 Schema、可执行内容与规则类型检查。只作为内置数据存在的产物类型（如 genre）也在 internal/schema 登记，其路径模式不匹配任何工作区路径。
+      rationale: 内置数据与工作区数据走同一套校验，才能保证内置内容不会成为校验的例外；集中存放便于后续文体（tech-blog 等）按同一方式加入。
+      enforcement:
+        method: test
+        detail: internal/catalog 的测试遍历 embed 目录中的每个文件并断言无问题。
+    resolved-sources:
+      strength: MUST
+      statement: 合并结果中的每项设置都必须记录来源层（genre:<id>、pack:<id>、project），由 internal/resolve 统一产生；消费合并结果的命令（如后续的 lint）必须使用 internal/resolve 的结果，不得自行读取文体或规范包重新合并。
+      rationale: 规则来源必须在 config resolved 与后续发现项中保持一致；只有一个合并实现才能避免多处合并逻辑分叉。
+      enforcement:
+        method: review
+        detail: 审查时确认新增命令只通过 internal/resolve 读取合并后的规则与术语。
+    builtin-problem-origin:
+      strength: MUST
+      statement: 内置文体或规范包产生的问题不填 path（它们没有工作区路径），由领域包在 workspace.Problem.Origin 中写明出处（「内置文体 <id>」或「内置规范包 <id>」）；internal/cli 把诊断的 message 组装为以出处开头、位置放在末尾的形式，next 给出整体校验 wa-cli validate --dir <dir> --json。领域包不得把出处拼进 Message。
+      rationale: 诊断的 path 必须是相对项目目录的路径，内置产物无法提供；出处作为结构化字段才能由 cli 统一放在最前面，后续内置的 tech-blog 等文体沿用同一方式。
+      enforcement:
+        method: test
+        detail: internal/cli 的 TestBuiltinLayerDiagnostic 断言内置层问题 path 为空、message 以「内置规范包 default：」开头、next 为整体校验并能重新检出。
+  MODIFIED: {}
+  REMOVED: {}

@@ -1,0 +1,59 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: release-skill
+sections:
+  Implementation:
+    impl-install-normalize:
+      text: internal/skills.Install 路径拼写归一化：rootAbs 与 base 的第一个已存在祖先 EvalSymlinks 归一后重算 base 与 missing；TestInstall 的「外部目标」message 断言改为 EvalSymlinks 后的拼写
+      status: complete
+    impl-install-sh:
+      text: install.sh：变量展开加 ${} 花括号（全部 $name 形式），消除 bash 3.2 把 $var 后全角字符首字节并入变量名的解析缺陷
+      status: complete
+    impl-export-exports:
+      text: internal/export 的 parents()：isExports 判定加段名与 exports 字面严格相等，保留 SameFile 身份检查
+      status: complete
+    impl-pack-test:
+      text: internal/cli 的 fakeGit 助手：把 TMPDIR 归一为 EvalSymlinks 后的真实路径拼写，使被测代码临时目录参数与脚本 pwd 记录的拼写一致（修 TestPackInstallFakeGit）
+      status: complete
+    impl-skill:
+      text: '编写 .agents/skills/release/SKILL.md：frontmatter（name: release，description 说明用途与触发时机），正文按阶段写正式发布流程：前置检查（dev 与 origin/dev 同步、工作树干净、gh auth status）、完整回归（引用 config.yaml 声明的完整回归命令）、确定版本号（无标签时缺省 v0.1.0，之后按语义化版本（Semantic Versioning）从最新 v* 标签推导建议值并经发布者确认）、合并 dev 到 main（--no-ff）、打 v* 标签并本地构建发布产物（go run ./internal/tools/release）、gh release create 创建 GitHub Release、推送 main/dev/标签并核对下载渠道；含「必须停下来问发布者」一节'
+      status: complete
+    impl-remove-ci:
+      text: 删除 .github/workflows/release.yml；删除后 .github/ 为空时一并移除该目录
+      status: complete
+    impl-agents:
+      text: AGENTS.md 的「分支」一节补充：正式发布通过项目技能 .agents/skills/release 执行；本项目不使用 CI/CD
+      status: complete
+    impl-glossary:
+      text: docs/GLOSSARY.md 增加本次引入的术语条目（标签（Tag）等），格式与现有条目一致
+      status: complete
+    impl-test:
+      text: internal/skills 新增仓库级项目技能校验测试（TestProjectSkills）：遍历仓库 .agents/skills/*/SKILL.md，用 skills.Parse 校验格式；断言 release 技能存在；断言技能正文引用的关键仓库路径（install.sh、docs/INSTALL.md、internal/tools/release、docs/GLOSSARY.md、AGENTS.md）存在；既有 TestInstall 的「相对项目目录 + 绝对内层目标」用例作为拼写归一化的回归用例，修复后应为绿
+      status: complete
+  Testing:
+    test-skill:
+      text: 运行 internal/skills 全部测试，覆盖新的仓库级技能校验
+      status: complete
+      command: go test ./internal/skills -count=1
+    test-fixes:
+      text: 三个修复涉及的包全部测试通过
+      status: complete
+      command: go test ./internal/export ./internal/cli ./internal/tools/release -count=1
+    test-regression:
+      text: 完整回归：config.yaml 声明的完整项目级回归命令（含覆盖率阈值 80%）
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    verify-strict:
+      text: strict verify 通过
+      status: complete
+      command: strict-spec-cli verify release-skill
+    verify-no-cicd:
+      text: 确认仓库无 CI/CD 残留：.github/ 目录不存在
+      status: complete
+      command: 'test ! -e .github && echo ''ok: no .github directory'''
+testing_gates:
+  validation_task: test-regression
+  unit_test_task: test-skill

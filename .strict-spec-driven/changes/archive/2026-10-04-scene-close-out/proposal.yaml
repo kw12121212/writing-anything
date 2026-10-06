@@ -1,0 +1,43 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: scene-close-out
+  status: proposed
+summary:
+  what:
+    - 新增场景单元目录下的收口产物 closeout.yaml（写后收口 Close-out 的记录）：含 schema_version（1）、draft_sha256（收口时正文 draft.md 原始字节的 SHA-256）、events（确认产生的事件（Event）id 数组）、canon（本次新增的设定集条目 id 数组）、state（本次提交的状态变化提议 id 数组）、knowledge（本次提交的知情提议 id 数组）、plants（本次埋设的伏笔 id 数组）、recovers（本次回收的伏笔 id 数组）与 waived（豁免的疑似专有名词文本数组）；wa-cli validate 整体校验纳入每个场景单元目录下存在的 closeout.yaml 的 Schema 与领域校验并计入 checked（draft_sha256 形态、各 id 引用的台账条目存在且绑定该场景、events 的每个 id 在该场景大纲声明），wa-cli validate <path> 对单个 closeout.yaml 执行同样检查
+    - 新增 wa-cli scene close-out <unit> [--file <路径>]：从 --file（相对 --dir 或绝对路径）或标准输入读取收口输入（YAML 载荷，节为 canon（新增设定条目）、state_changes（状态变化提议，可带 contract 关联契约节内 id）、knowledge（知情提议）、plants（计划外埋设的伏笔）、recovers（回收既有伏笔的 id）、events（确认产生的事件 id）与 waived（豁免的疑似专有名词）），一次提交把记忆与正文同步：按 canon add、state propose、knowledge propose、threads add / threads set 的既有语义与领域校验编排写入，最后整体写出 closeout.yaml；全部预检（输入 Schema、单元类型为 scene、正文存在、各台账既有诊断、按写入后状态的契约对照）通过前不写任何文件
+    - 收口对照场景契约（合并该场景大纲全部节的契约字段，按写入后状态检查）：契约每个 state_changes[i] 必须被载荷中 contract 等于 i 的状态变化提交覆盖（否则 closeout.missing-state-change 拒绝写入）；契约每个 recovers 伏笔 id 在写入后必须 status 为 paid 且 recovered_in 为该场景（closeout.missing-recovery）；契约每个 events 事件 id 必须在载荷 events 中且载荷 events 不得含契约外的事件（closeout.missing-event / closeout.unknown-event）；契约 plants 伏笔 id 在写入后 planted_in 为该场景（既有 threads 交叉检查在大纲阶段已保证，此处复查）
+    - 收口时扫描疑似专有名词（Suspected Proper Noun）：以该场景大纲各节声明的 characters 取值、pov 与 location 文本为候选，与写入后设定集（Canon）条目的 name 与别名（Alias）完全相等匹配（同 recall 的解析规则），未命中的取值以 warning 级 closeout.suspected-name 提示补录（wa-cli canon add）或豁免，不阻塞写入；wa-cli scene close-out <unit> --waive <名字>（可重复）把名字并入 closeout.yaml 的 waived（仅改该文件），此后不再提示
+    - closeout.yaml 已存在时再次提交报告 closeout.already-closed，--replace 整体替换重收口（不清理已写入台账条目，重放语义容忍重复：状态后者生效、知情最早生效）
+    - 验收联动（里程碑完成标准的承载）：场景大纲任一节声明了非空的 state_changes、plants、recovers 或 events（即契约要求收口的场景）时，wa-cli accept 在所有关卡强度（Gate Level）下新增收口阻塞项——无 closeout.yaml 报 closeout.missing、产物不合法报 closeout.invalid（保留其诊断）、draft_sha256 与当前正文不同报 closeout.stale、记录的 state 与 knowledge 提议仍有 proposed 报 closeout.pending-proposals、按当前契约与台账复查契约对照失败复用 closeout.missing-state-change / closeout.missing-recovery / closeout.missing-plant / closeout.missing-event；收口未完成或提议尚未经作者处理时场景不能验收
+  why:
+    - 路线图 novel 里程碑（order 600，长篇结构与记忆）的计划变更 scene-close-out：它是完成标准「契约要求的状态变化或伏笔未在收口中提交时，wa-cli accept 被拒绝」与计划变更 details 全部要求的承载者；依赖的 state-change-proposals、knowledge-state 与 foreshadowing-ledger 均已归档（状态与知情台账、伏笔台账、确认记录与重放模式已就位），当前是唯一可推荐的计划变更（54 个计划变更中 1 个合格，其余被归档状态或未完成依赖跳过）
+    - 长篇的连续性不依赖模型记忆（里程碑 details）：任何单个会话装不下全书，场景写完后若不把状态变化、新增设定、知情变化与伏笔回收同步进磁盘上的故事圣经（Story Bible）台账，后续场景的 state at、knowledge at 与 context 就基于过期记忆组装，偏差逐场景放大。收口是记忆与正文的同步点，也是「先契约后写作」闭环的收尾核对
+    - 抽取由 Agent 完成，漏抽与错抽不会被自动发现（里程碑风险第 2 条）：收口以三道闸缓解——契约对照（契约要求的变化必须提交才放行）、设定集外疑似专有名词提示（补录或豁免）、作者确认（提议未经处理不能验收）；符合仓库约定「涉及作者意图、事实来源和验收的行为，规格必须写明人的确认点」
+scope:
+  in:
+    - internal/schema：新增 closeout.schema.json（schema_version、draft_sha256、events、canon、state、knowledge、plants、recovers、waived 的约束）与命名注册，补合法与不合法夹具及 schema 包测试
+    - 新包 internal/closeout：closeout.yaml 加载与领域校验（id 引用的台账条目存在且绑定该场景、events 在场景大纲声明、符号链接处理）、按写入后状态的契约对照、疑似专有名词扫描（场景大纲 characters、pov、location 对照 canon name 与别名）、收口输入解析与提交编排（复用 canon、state、knowledge、threads 的追加与修改语义及既有诊断）、waived 维护、验收阻塞项计算，供 validate、CLI 与 review 复用
+    - internal/cli：scene close-out 子命令注册（args：unit；flags：--file、--replace、--waive；输入从 --file 或标准输入读取，模式同 review record）：outputKeys、exitCodes、--json 信封（closeout 字段含 unit、path、draftSha256、各台账写入 id、events、waived 与扫描命中的疑似名单）与人读输出、诊断与 next；scene 命令组帮助纳入 close-out；validate 整体校验与 validate <path> 纳入 closeout.yaml
+    - docs/GLOSSARY.md：疑似专有名词（Suspected Proper Noun）词条；既有写后收口（Close-out）词条按收口产物补一句
+    - 测试夹具：带场景契约与记忆台账的多章长篇夹具（契约要求的与计划外的抽取内容）、收口后提议已确认与未确认的分支夹具、无契约场景与既有文体夹具
+    - internal/review 与 internal/cli：accept 的阻塞项纳入收口检查（closeout.missing、closeout.invalid、closeout.stale、closeout.pending-proposals 与契约对照错误码 closeout.missing-state-change、closeout.missing-recovery、closeout.missing-plant、closeout.missing-event，所有关卡强度生效，next 含 wa-cli scene close-out 与 wa-cli help scene close-out --json）；review show 的 gate.blockers 按 accept-gate 自动跟随
+  out:
+    - 分层摘要（场景 → 章 → 部 → 全书）、卷末作者检查点与上下文整体重组——属 layered-summaries-and-budget 计划变更（依赖本变更）
+    - 连续性审查、审查任务包、影响传播、会话交接与组稿——属 novel-continuity 里程碑
+    - 正文级启发式专有名词扫描（如引号包裹文本、重复词统计）：候选来源限于场景大纲声明的 characters、pov 与 location，确定且零误报；是否引入正文级启发式见 questions.yaml 开放问题 suspected-name-scan-scope
+    - 台账提议的批量确认命令（作者仍逐条 wa-cli state confirm / wa-cli knowledge confirm）；收口不清理、不撤销已写入的台账条目（--replace 重收口只整体替换 closeout.yaml）
+    - 事件台账：事件仍只由场景大纲声明（outline 的 events 字段与 scene-causality 检查），收口只确认产生，不另建存储
+    - MCP 服务与内置技能不单独编写（scene close-out 经命令注册表自动暴露）
+unchanged_behavior:
+  - 场景大纲未声明任何非空的 state_changes、plants、recovers 或 events 且没有 closeout.yaml 时，accept、advance、next、validate、context 的输出、退出码与错误码不变：既有文体 minimal、tech-blog、wechat-marketing 以及只有轻量契约（characters、beats、reveal）的 short-story 场景不受影响
+  - wa-cli state、knowledge、threads、canon 命令组的写入、确认、校验与重放语义不变；close-out 只经同一领域校验编排既有写入，不给台账新增字段
+  - scene contract 的参数、既有检查（含 threads-contract-checks 的写前复查与 scene-causality）不变；收口不修改大纲
+  - 收口阻塞项不进入 wa-cli next 的 blockers（与 accept 的其他阻塞项一致，由 review show 的 gate.blockers 呈现）；advance 的验收检查（acceptance.invalid、acceptance.stale、acceptance.weaker-gate）不变
+  - MCP 服务与内置技能内容不变
+roadmap:
+  milestone: novel
+  planned_change: scene-close-out

@@ -1,0 +1,7 @@
+state_changes:
+  - {id: st-3, contract: sc-3, entry: item-clocktower, state: 镇民同意修复大钟当日搭架开工，stopped 变为 repair-approved}
+knowledge:
+  - {id: kn-08, entry: item-letter, character: char-lin-wan}
+  - {id: kn-09, entry: item-letter, character: reader}
+recovers: [th-a, th-b]
+events: [ev-clock-approved]

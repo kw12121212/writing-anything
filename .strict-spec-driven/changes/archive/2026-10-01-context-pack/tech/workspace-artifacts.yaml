@@ -1,0 +1,16 @@
+schema: strict-spec-driven/delta-tech/v1
+schema_version: 1
+artifact_type: delta_tech
+schema_file: templates/strict-spec-driven/schemas/delta-tech.yaml
+target_standard: workspace-artifacts
+operations:
+  ADDED: {}
+  MODIFIED:
+    resolved-sources:
+      strength: MUST
+      statement: 合并结果中的每项设置都必须记录来源层（genre:<id>、pack:<id>、project；没有任何配置层给出取值、使用内核默认值时为 default，如 contextBudget），由 internal/resolve 统一产生；消费合并结果的命令（如 context、后续的 lint）必须使用 internal/resolve 的结果（按作品文体合并时用 resolve.ForGenre），不得自行读取文体或规范包重新合并。
+      rationale: 规则来源必须在 config resolved 与后续发现项中保持一致；只有一个合并实现才能避免多处合并逻辑分叉。
+      enforcement:
+        method: review
+        detail: 审查时确认新增命令只通过 internal/resolve 读取合并后的规则与术语。
+  REMOVED: {}

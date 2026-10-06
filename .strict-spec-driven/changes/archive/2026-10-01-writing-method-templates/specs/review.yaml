@@ -1,0 +1,53 @@
+schema: strict-spec-driven/delta-spec/v1
+schema_version: 1
+artifact_type: delta_spec
+schema_file: templates/strict-spec-driven/schemas/delta-spec.yaml
+target_spec: review
+operations:
+  ADDED: {}
+  MODIFIED:
+    review-record:
+      strength: MUST
+      statement: wa-cli review record <unit> 必须从 --file（相对 --dir 或为绝对路径）或标准输入读取审稿（Review）输入并整体替换单元目录下的 review.yaml。输入为 YAML：rubric 为评分结论数组，每项含 item（评分项 id）、verdict（pass 或 fail）、evidence（非空）与 paragraphs（至少一个段落编号）；findings 为发现项（Finding）数组，每项含 paragraph 与 message，可选 id、rubric、quote 与 suggestion。段落编号从 1 开始，与 wa-cli provenance 的段落一致。单元的评分标准（Rubric）为合并后的评分标准（见 wa-cli config resolved），加上单元选用的写作法附带的评分项（见 methods 主规格的 method-rubric）；其中每个评分项都必须恰有一个结论：缺少时报告 review.missing-verdict（field 为 rubric，message 含评分项 id 与标题），item 或 rubric 不是单元的评分项时报告 review.unknown-rubric-item，同一评分项有多个结论时报告 review.duplicate-verdict；段落编号大于正文段落数时报告 review.unknown-paragraph；quote 不出现在所引段落的原文中时报告 review.quote-not-found；发现项 id 重复时报告 artifact.duplicate-id；输入不符合审稿输入的 Schema 时报告 artifact.schema-violation 或 artifact.parse-error。这些诊断的 path 为空、field 为输入中的位置（如 findings[0].quote），next 包含 wa-cli help review record --json、wa-cli provenance <unit> --dir <dir> --json 、wa-cli config resolved --dir <dir> --json 与 wa-cli brief show <unit> --dir <dir> --json；单元没有正文时报告 draft.not-found；都不修改文件，退出码为 1。成功时写出的 review.yaml 含 schema_version 1、draft_sha256（当前 draft.md 原始字节的 SHA-256）、rubric 与 findings，省略的发现项 id 取 rf-<n>（n 从 1 递增，跳过输入中已用的 id），每个发现项的 status 为 open；changedPaths 为 [review.yaml]，--json 输出的 review 字段含 unit、path、stale、draftSha256、rubric（每项另含评分项的 title 与 blocking）与 findings，退出码为 0。
+      scenarios:
+        record-review:
+          - GIVEN: 作品 my-post（minimal，评分标准为 clarity）处于审稿阶段，正文有两个段落，第二段含「可能」
+          - WHEN: 运行 wa-cli review record my-post --dir D --json，标准输入为 clarity 的 fail 结论（paragraphs [2]）、一个 id 为 rf-1 的发现项与一个不带 id、quote 为「可能」的发现项
+          - THEN: review.yaml 的 draft_sha256 为当前正文的 SHA-256，findings 依次为 rf-1 与 rf-2，status 都为 open；review.rubric[0].title 为 清晰；changedPaths 为 [.writing-anything/works/my-post/review.yaml]，退出码为 0
+        missing-verdict:
+          - GIVEN: 同上
+          - WHEN: 标准输入的 rubric 为空数组
+          - THEN: diagnostics 中有一条错误码为 review.missing-verdict、field 为 rubric 的诊断，其 next 包含 wa-cli help review record --json；没有写出 review.yaml，退出码为 1
+        unknown-paragraph:
+          - GIVEN: 同上，正文只有两个段落
+          - WHEN: 标准输入的结论引用第 3 段
+          - THEN: diagnostics 中有一条错误码为 review.unknown-paragraph、field 为 rubric[0].paragraphs[0] 的诊断，退出码为 1
+        quote-not-found:
+          - GIVEN: 同上，第一段不含「例子」
+          - WHEN: 标准输入的发现项引用第 1 段、quote 为「例子」
+          - THEN: diagnostics 中有一条错误码为 review.quote-not-found、field 为 findings[0].quote 的诊断，退出码为 1
+    accept-gate:
+      strength: MUST
+      statement: 'wa-cli accept <unit> 必须按工作区配置的关卡强度（Gate Level）检查验收的阻塞项，有阻塞项时为每项给出一条 error 级诊断、不写任何文件、退出码为 1。所有关卡强度下的阻塞项：本单元文本检查未被豁免的 error 级发现项（accept.lint-errors，path 为 draft.md，next 包含 wa-cli lint <unit> --dir <dir> --json）、使文本检查无法完成的 error 级问题（保留其错误码）、关联该单元的 open 阻塞决策（decision.blocking，next 包含 wa-cli decisions --dir <dir> --json），以及决策队列无法加载（decision.invalid-queue，message 说明决策队列无法加载）。standard 与 strict 另有：没有 review.yaml（accept.review-missing）、review.yaml 不通过校验（保留其诊断）、审稿的 draft_sha256 与当前正文不同（accept.review-stale）、单元的评分项（见 review-record）没有结论（review.missing-verdict），每个 status 为 open 的审稿发现项（accept.open-finding，next 包含 wa-cli help review resolve --json）与每条未处理的作者反馈（accept.open-feedback，next 包含 wa-cli feedback list <unit> --dir <dir> --json）。strict 另有：单元的评分项（来自文体、规范包或选用的写作法）声明 blocking: true 且审稿结论为 fail（accept.blocking-rubric），以及没有给出 --confirmed-by-author 与 --confirmation（accept.unconfirmed，next 包含 wa-cli help accept --json）。审稿结论为 fail 在 fast、standard 下以及未声明 blocking 的评分项上都不阻塞。每条阻塞项诊断的 next 都包含能复查它的 wa-cli review show <unit> --dir <dir> --json。'
+      scenarios:
+        strict-unconfirmed:
+          - GIVEN: 作品 my-post 处于审稿阶段，审稿基于当前正文且没有未处理的修订任务，gate_level 为 strict
+          - WHEN: 运行 wa-cli accept my-post --dir D --json
+          - THEN: diagnostics 中有一条错误码为 accept.unconfirmed、severity 为 error 的诊断，其 next 包含 wa-cli help accept --json；没有写出 acceptance.yaml，退出码为 1
+        standard-open-revisions:
+          - GIVEN: gate_level 为 standard，审稿有一个 open 的发现项，另有一条 open 的作者反馈
+          - WHEN: 运行 wa-cli accept my-post --dir D --json
+          - THEN: diagnostics 中有错误码为 accept.open-finding 与 accept.open-feedback 的诊断，其 next 包含 wa-cli review show my-post 命令；退出码为 1
+        hard-rules-fast:
+          - GIVEN: gate_level 为 fast，正文命中 error 级的 AI 腔词表，关联该单元有一个 open 的阻塞决策，没有审稿
+          - WHEN: 运行 wa-cli accept my-post --dir D --json
+          - THEN: diagnostics 中有错误码为 accept.lint-errors 与 decision.blocking 的诊断，没有 accept.review-missing，退出码为 1
+        every-blocker-rechecks:
+          - GIVEN: gate_level 为 strict，关联该单元有 open 的阻塞决策，review.yaml 不通过校验
+          - WHEN: 运行 wa-cli accept my-post --dir D --json
+          - THEN: 每条 error 级诊断的 next 都包含 wa-cli review show my-post 命令，退出码为 1
+        blocking-rubric:
+          - GIVEN: 'gate_level 为 strict，评分项 facts 声明 blocking: true，审稿对它的结论为 fail'
+          - WHEN: 运行 wa-cli accept my-post --confirmed-by-author --confirmation 作者：好 --dir D --json
+          - THEN: diagnostics 中有一条错误码为 accept.blocking-rubric 的诊断，退出码为 1
+  REMOVED: {}

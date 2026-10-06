@@ -1,0 +1,20 @@
+schema_version: 1
+audience: 后端工程师
+purpose: 讲清楚为什么要做连接池
+premise:
+  text: 一位守灯人发现灯里住着说谎的精灵
+  sources: [src-a]
+theme: 谎言也可以是善意的
+pov:
+  person: third
+  character: 守灯人
+key_messages:
+  - id: km-1
+    text: 连接池能显著降低延迟
+    sources: [src-a]
+  - id: km-2
+    text: 连接数不是越多越好
+    decision: dec-1
+length: {min: 1500, max: 3000}
+avoid: [不点名批评同事]
+sources: [src-a, src-b]

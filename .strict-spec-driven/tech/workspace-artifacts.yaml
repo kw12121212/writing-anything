@@ -1,0 +1,325 @@
+schema: strict-spec-driven/main-tech/v1
+schema_version: 1
+artifact_type: main_tech
+schema_file: templates/strict-spec-driven/schemas/main-tech.yaml
+standard:
+  id: workspace-artifacts
+  title: 工作区产物与 JSON Schema
+  category: architecture
+rules:
+  embedded-schemas:
+    strength: MUST
+    statement: 工作区中的每种结构化产物（Artifact）都必须在 internal/schema 中登记产物类型，并以 JSON Schema（draft 2020-12）文件声明结构，用 go:embed 打包进二进制；同一产物类型可以登记多个路径模式（如同时出现在根单元目录与子单元目录中的 provenance.yaml），每个工作区路径至多匹配一种产物类型；命令读写产物时必须经过 internal/schema 的统一校验入口，不得在命令中手写字段检查代替 Schema。
+    rationale: Schema 是 Agent、作者与 wa-cli 共享的结构契约；嵌入二进制保证单文件分发时照样能校验；只有一个校验入口，诊断格式和错误码才能保持一致；单元目录深度不同，同一产物需要多个路径模式，而登记为多个同名类型会让按名称查找与遍历出现重复。
+    enforcement:
+      method: test
+      detail: internal/schema 的测试遍历产物类型表：断言每个已登记类型的 Schema 都能编译，并且在 testdata/ 下各有至少一个合法和一个不合法的夹具，校验结果与预期相符；断言每个路径模式的示例路径只匹配一种产物类型。
+    examples:
+      good:
+        - 新增单元产物时，在 internal/schema/schemas/ 加一份 Schema 文件，并在类型表中登记它的全部路径模式
+      bad:
+        - 在 status 命令里用 if cfg.GateLevel != "strict" && ... 手写取值检查
+  workspace-relative-paths:
+    strength: MUST
+    statement: 诊断的 path 与输出信封的 changedPaths 必须是相对项目目录（--dir）、以 / 分隔的路径，不得输出绝对路径或平台相关的分隔符。
+    rationale: 相对路径在不同机器、不同操作系统上保持一致，Agent 可以直接把它拼接到 --dir 后使用，测试断言也不依赖临时目录的位置。
+    enforcement:
+      method: test
+      detail: internal/cli 的 runWS 测试辅助函数在 t.TempDir() 中运行每条工作区命令，断言所有 path 与 changedPaths 都不是绝对路径、不含临时目录前缀与反斜杠。
+  field-path-format:
+    strength: MUST
+    statement: Schema 校验诊断的 field 必须使用点分字段路径，数组下标写作 [i]（如 packs[0]、units[2].title）；缺少必需字段或出现未定义字段时，field 为该字段的路径；其他指向产物根部的问题不填 field。
+    rationale: 统一的字段路径让 Agent 可以按同一规则定位任意产物中的出错位置；点分路径比 JSON Pointer 更接近作者阅读 YAML 的方式。
+    enforcement:
+      method: test
+      detail: internal/schema 的测试断言嵌套字段、数组元素、缺少与未定义字段违规时 field 的精确字面量。
+  atomic-writes:
+    strength: MUST
+    statement: 写入工作区文件必须经过 internal/workspace 的统一写入函数：先写同目录的临时文件再重命名，覆盖已有文件时保留其权限；不得直接用 os.WriteFile 覆盖产物。
+    rationale: 进程中断或磁盘写满时，直接覆盖会留下写了一半的产物，作者的内容随之损坏；统一入口也让权限处理保持一致。
+    enforcement:
+      method: review
+    examples:
+      good:
+        - writeFile(abs(root, ConfigPath), data)
+      bad:
+        - os.WriteFile(path, data, 0o644) 直接覆盖 config.yaml
+  structured-edits:
+    strength: MUST
+    statement: 修改已有的结构化产物时，必须在 YAML 节点树上只改目标节点，保留其他字段与注释；改变节点风格（如向流式序列 [] 追加元素后改为块式）时，节点上的注释必须迁移到仍会输出的位置（internal/workspace.BlockSequence）；目标节点或到达它途经的任一节点带有 YAML 锚点、是别名或所在映射含合并键时不修改；写出前必须对编码结果重新解析，并执行 Schema 校验与该产物类型的领域校验（如作品的文体检查），无法解析或任一校验失败时不写；取值未变时不写文件，changedPaths 为空。
+    rationale: 作者会直接编辑结构化产物并写注释，整体重写或改变节点风格都会丢失这些内容；经由锚点、别名或合并键共享的节点被修改时会同时改动其他位置；只做 Schema 校验会写出结构合法但领域上不可用的产物；取值未变不写，changedPaths 才如实反映变更。
+    enforcement:
+      method: test
+      detail: internal/workspace 的 TestSetConfigPreservesComments、TestSetConfigRejects、TestSetConfigSameValue、TestSetConfigAnchors 与 TestBlockSequenceKeepsLineComment，internal/work 的 TestAdvance、TestAddUnit、TestAddUnitKeepsFlowComment 与 TestAnchoredEdits，internal/draft 的 TestAddClaimKeepsFlowComment，internal/feedback 的 TestAddPreservesCommentsAndSkipsIDs 覆盖注释保留（含流式序列的行尾注释）、写前复查、取值未变与锚点、别名、合并键。
+  input-limits:
+    strength: MUST
+    statement: 解析产物时必须限制展开别名后的节点数（schema.MaxNodes），超限报告 artifact.parse-error，不得先展开再检查；对工作区文件做推导、匹配或比较的算法（如段落出处的最长公共子序列对齐、反馈锚点的重新定位）必须限制输入规模，并使内存与耗时与之相称（draft.MaxParagraphs，超限报告 draft.too-large）：不得让不可信的文件决定平方级内存，也不得在每处匹配重新扫描前文。对同一文档做逐项推导（每个批注、每条锚点的行号、段落与前后文）时共用一次切分与规范化的结果，对正文的扫描次数不得随条目数增长；条目数没有其他上限时另设上限（如 feedback.MaxComments，超限报告 feedback.too-many-comments）。
+    rationale: Agent 会对不可信的工作区自动运行命令，层层引用的别名、极长的正文或大量重复的原文片段、批注都能让很小的操作耗尽内存或长时间占满 CPU；feedback watch 会反复执行这些计算。
+    enforcement:
+      method: test
+      detail: internal/schema 的 TestAliasBomb 与 internal/cli 的 TestValidateAliasExpansionLimit 断言返回 artifact.parse-error；internal/draft 的 TestTooManyParagraphs 断言 draft.too-large；internal/feedback 的 TestLocateManyMatches 断言 9000 处匹配的重新定位在 2 秒内完成。internal/feedback 的 TestManyComments 与 TestManyRecordedComments 断言大量批注的列出在限定时间内完成，并在超过上限时报告 feedback.too-many-comments。
+  data-only-artifacts:
+    strength: MUST
+    statement: 文体、规范包与 config.yaml 的校验必须经过 internal/schema 的统一校验入口（Kind.Validate 或 Kind.ValidateNode），它在 Schema 校验之前做可执行内容检查（YAML 核心标签白名单与脚本类字段名黑名单），发现可执行内容时只报告 artifact.executable-content；任何包都不得对产物内容做模板求值、表达式计算、动态加载，或把其中的字符串当作命令执行。
+    rationale: 规范包由第三方或作者提供，项目约定规范包只能是数据；把检查放在所有命令都必须经过的统一校验入口，validate、config resolved 与后续命令就不会漏检，后续的规则引擎、导出与 MCP 服务消费的也都是纯数据。
+    enforcement:
+      method: test
+      detail: internal/schema 的 TestExecutable 用含自定义标签、脚本字段（含大小写变体）的夹具断言 artifact.executable-content 的字段与行号，internal/resolve 与 internal/cli 的测试覆盖规范包与 config.yaml 经 config resolved、validate 报告同一错误码；代码审查确认没有对产物字符串调用 os/exec、text/template 或 plugin。
+  builtin-catalog:
+    strength: MUST
+    statement: 内置文体与规范包放在 internal/catalog/builtin/genres/ 与 internal/catalog/builtin/packs/ 下，以 <id>.yaml 命名并用 go:embed 打包；测试必须逐个校验全部内置产物能通过与工作区规范包相同的 Schema、可执行内容与规则类型检查。只作为内置数据存在的产物类型（如 genre）也在 internal/schema 登记，其路径模式不匹配任何工作区路径。
+    rationale: 内置数据与工作区数据走同一套校验，才能保证内置内容不会成为校验的例外；集中存放便于后续文体（tech-blog 等）按同一方式加入。
+    enforcement:
+      method: test
+      detail: internal/catalog 的测试遍历 embed 目录中的每个文件并断言无问题。
+  resolved-sources:
+    strength: MUST
+    statement: 合并结果中的每项设置都必须记录来源层（genre:<id>、pack:<id>、project；没有任何配置层给出取值、使用内核默认值时为 default，如 contextBudget），由 internal/resolve 统一产生；消费合并结果的命令（如 context、后续的 lint）必须使用 internal/resolve 的结果（按作品文体合并时用 resolve.ForGenre），不得自行读取文体或规范包重新合并。
+    rationale: 规则来源必须在 config resolved 与后续发现项中保持一致；只有一个合并实现才能避免多处合并逻辑分叉。
+    enforcement:
+      method: review
+      detail: 审查时确认新增命令只通过 internal/resolve 读取合并后的规则与术语。
+  builtin-problem-origin:
+    strength: MUST
+    statement: 内置文体或规范包产生的问题不填 path（它们没有工作区路径），由领域包在 workspace.Problem.Origin 中写明出处（「内置文体 <id>」或「内置规范包 <id>」）；internal/cli 把诊断的 message 组装为以出处开头、位置放在末尾的形式，next 给出整体校验 wa-cli validate --dir <dir> --json。领域包不得把出处拼进 Message。
+    rationale: 诊断的 path 必须是相对项目目录的路径，内置产物无法提供；出处作为结构化字段才能由 cli 统一放在最前面，后续内置的 tech-blog 等文体沿用同一方式。
+    enforcement:
+      method: test
+      detail: internal/cli 的 TestBuiltinLayerDiagnostic 断言内置层问题 path 为空、message 以「内置规范包 default：」开头、next 为整体校验并能重新检出。
+  validated-path-segments:
+    strength: MUST
+    statement: 由命令参数（单元引用、作品 slug、单元 id、素材 id、validate 的 path）拼接或解析工作区路径前，每个由参数给出的 id 路径段都必须先按 common.schema.json 的 id 格式校验，不匹配时报告对应的 not-found 或 artifact.schema-violation，诊断不填 path，也不访问该路径；工作区目录之下的路径在读取与写入时都必须逐级确认途经的是真实目录、不跟随符号链接，只对最后一级文件做 Lstat 不够；同一产物在所有入口（整体校验、validate <path>、列表与修改命令）上对符号链接的处理必须一致。
+    rationale: Agent 会对不可信的输入与工作区自动运行命令；未经校验的路径段（如 ../x）或途经的符号链接会让读写逃出项目目录，而诊断与 changedPaths 仍报告工作区内的路径；只在部分入口防护时，另一个入口会读取项目目录之外的文件并报告通过。
+    enforcement:
+      method: test
+      detail: internal/work 的 TestResolve（../x 用例）、TestCreate（非法 slug）与 TestSymlinkedWorkDir，internal/draft 的 TestSymlinkedUnitDirNotRead 与 TestWriteRejects，internal/source 的 TestSymlinkedMetadata，internal/feedback 的 TestSymlinks，internal/workspace 的 TestValidateArtifactSymlinks，internal/cli 的 TestFeedbackSymlinkedUnitDir 断言不合法的路径段与途经的符号链接不会被读写。
+  single-blocker-source:
+    strength: MUST
+    statement: 单元的阻塞项（Blocker）只能由 internal/work 的 Work.Blockers 计算；advance 的拒绝、next 的 steps 与 status 的 units 都必须通过它得到阻塞项，不得在命令中另行判断；新增阻塞来源（如阻塞决策、写作简报关卡）时在 Work.Blockers 中追加。
+    rationale: 同一单元在 advance、next 与 status 中给出不同的阻塞结论会让 Agent 无所适从；只有一处计算，后续的决策队列与关卡上线时三条命令才会同时生效，与 resolved-sources 对合并结果的约束一致。
+    enforcement:
+      method: review
+      detail: 审查时确认新增或修改的命令只通过 Work.Blockers 读取阻塞项，新阻塞来源的测试同时覆盖 advance 与 next。
+    examples:
+      good:
+        - decision-queue 在 Work.Blockers 中追加未解决的阻塞决策，advance、next、status 无需修改即报告它
+      bad:
+        - 在 runAdvance 中单独检查决策队列，next 与 status 却看不到这个阻塞项
+  load-once-per-command:
+    strength: SHOULD
+    statement: 工作区级产物（如 decisions.yaml）参与每个单元的推导时，每条命令只加载并校验一次（如 Work 首次计算阻塞项时缓存决策队列），再用于逐单元计算；不得在逐单元循环中重复读取文件与做 Schema 校验；按单元引用检查存在性时同样按作品缓存。
+    rationale: 逐单元重复加载让开销变为单元数乘以产物大小（fresh-context 审查实测 300 个单元、150 条决策时 next 慢约 100 倍），也会让同一命令内的不同单元读到不同版本的数据。
+    enforcement:
+      method: review
+      detail: 审查时确认 Work.Blockers 通过 Work.queue 读取决策队列，internal/cli 的 unitExists 按作品缓存解析结果。
+    examples:
+      good:
+        - w.queue(root) 首次调用时 decision.Load，之后复用
+      bad:
+        - 在 Work.Blockers 中对每个单元调用 decision.Load
+  self-edit-rebaseline:
+    strength: MUST
+    statement: wa-cli 自己修改作者可编辑的正文（如移除已解决的批注）时，只有在修改前正文的 SHA-256 等于写入记录的 sha256 时，才按原出处重建写入记录（draft.Rebaseline）；正文已被作者改过时不得因此把它变成未编辑状态。
+    rationale: 不重建时，下一次 draft write 会把 wa-cli 自己的修改误判为人工编辑；无条件重建则会让作者的改动失去人工编辑保护，Agent 可以不带 --base 覆盖它。
+    enforcement:
+      method: test
+      detail: internal/draft 的 TestRebaseline 与 internal/feedback 的 TestResolveComment 覆盖正文未改与已改两种情况。
+  cross-artifact-references:
+    strength: SHOULD
+    statement: 引用另一个可独立编辑产物中 id 的产物（如 outline.yaml 的 covers 引用 brief.yaml 的核心观点、brief.yaml 引用素材与决策），校验时把跨产物引用问题与产物自身的合法性问题（解析、Schema、id 唯一）分开：validate 与关卡照常把引用问题报告为 error；修改与查看该产物的命令只因自身的合法性问题拒绝，已有的悬空引用照常报告（修改成功时为 warning）但不阻止修复，本次参数给出的引用仍须合法。
+    rationale: 上游产物（如写作简报）可以独立修改；若编辑命令因下游的悬空引用拒绝，Agent 只能手工编辑结构化产物，违反结构化产物只通过 wa-cli 变更的约定（outline-coverage 的审查复现）。
+    enforcement:
+      method: test
+      detail: internal/cli 的 TestOutlineDanglingMessage 在 brief set --remove-message 之后用 outline show、set、remove 修复大纲并断言 warning；internal/outline 的 TestDanglingReferences 断言 LoadLenient 与 Set、Remove 的行为。
+    examples:
+      good:
+        - outline.LoadLenient 返回 fatal 与 refs，outline set 只在 fatal 非空时拒绝
+      bad:
+        - outline set 用完整校验加载 outline.yaml，covers 指向已删除的核心观点时拒绝一切修改
+  author-only-gate-markers:
+    strength: MUST
+    statement: 允许在正文或产物中写入、从而解除关卡或降低检查强度的标记（如 lint-ignore 单处豁免），只有出自作者的才生效：按段落出处（Provenance）判断，出处为 agent 的段落中的标记不生效并给出 warning 诊断，作者改写该段后生效；写入记录存在但无法推导出处时一律不生效。没有写入记录时按作者写入处理。
+    rationale: Agent 通过 wa-cli draft write 写入正文；若 Agent 能自己写入豁免标记，error 级关卡形同虚设，违反作者的编辑优先于 Agent、验收需要作者确认的约定（rule-engine-and-lint 的审查复现）。
+    enforcement:
+      method: test
+      detail: internal/cli 的 TestLintAgentWaiver 用 draft write 写入豁免注释，断言 lint.agent-waiver 且不生效，作者改写后生效，写入记录损坏时不生效；internal/lint 的 TestWaiverScope 用 Origin 覆盖 agent 与 agent-draft-human-edited。
+    examples:
+      good:
+        - lint.Run 接收按行查询段落出处的 Origin，出处为 agent 时报告 lint.agent-waiver
+      bad:
+        - 只要正文中出现 lint-ignore 注释就豁免，不区分作者还是 Agent 写入
+  deliverable-outputs:
+    strength: MUST
+    statement: 把交付文件写到 --output 指定位置的命令（如 export、preview 与其他导出格式）必须经过 internal/export 的输出路径检查与原子写入（WriteOutput 或同一组内部函数）：路径相对项目目录、规整后不得离开项目目录、在工作区中时只能在 .writing-anything/exports/ 之下（不区分大小写，并按文件身份复查）、途经的目录必须是真实目录、已存在的输出文件必须是普通文件；违反时以该命令自己的错误码（如 export.invalid-output、preview.invalid-output）报告，field 为 output。一次写出多个交付文件（如导出文件与配图清单）时，先不带副作用地检查全部路径，再创建目录并写入，新建的目录与文件都列在 changedPaths 中。不得在命令中另写一套输出路径检查。
+    rationale: 交付文件的位置由用户参数决定，最容易被用来覆盖工作区产物或经符号链接写到项目之外；集中在一组函数里，新增的导出格式自动获得同样的防护；预检查不带副作用，失败时不留下多余的目录，成功时如实报告变更。
+    enforcement:
+      method: test
+      detail: internal/export 的 TestOutputPath 覆盖路径规则；internal/cli 的 export 与 preview 测试断言无效输出的错误码与不写文件，TestExportWechatPaths 断言新建的目录列在 changedPaths 中，清单路径不合法时两个文件都不写。
+    examples:
+      good:
+        - checkParents 检查导出文件与配图清单两个路径后再 write
+      bad:
+        - 检查清单路径时创建了目录、丢弃了新建目录的列表
+  generated-html:
+    strength: MUST
+    statement: wa-cli 生成的 HTML（如阅读页与公众号 HTML 导出）必须用 html/template 生成：先把内容解析成节点树，再由模板按节点种类输出固定的标签，正文等来自产物的文字一律经模板转义，不得用字符串拼接产生标记，也不得对已含生成标记的字符串再做正则或文字替换，不得在内容中插入作为标记用途的字符（真实输入可能含有它们）；规范包等第三方提供的、写进 style 等属性的取值必须用字符白名单校验（Schema 一次、渲染时再一次），不得把第三方数据用作正则替换模板；样式内联，不引用任何外部资源。完整的 HTML 文档（如静态阅读页）不含 script 元素并带限制性的 Content-Security-Policy；需要脚本时脚本内容固定，不内插数据，由 Content-Security-Policy 按其哈希放行；供粘贴的 HTML 片段（如公众号 HTML）不含 script，无法携带 Content-Security-Policy。渲染器必须有测试断言输出只含允许的标签与属性（包括使用对抗性的样式取值），并有在输入上限（2 MiB）的对抗性输入上完成的耗时测试。
+    rationale: 正文、作者反馈与规范包取值都是不可信的数据：模板转义防止注入；对已生成标记做替换会让第三方取值改写标签结构（本变更的审查复现了经样式取值注入 onclick）；白名单比黑名单可靠；不引用外部资源保证离线可读、不泄露阅读行为；片段由编辑器承载，CSP 只能用于完整文档。
+    enforcement:
+      method: test
+      detail: internal/export 的 TestRenderUnsafeTheme 用对抗性样式取值断言允许列表，TestRenderLargeInputs 在 2 MiB 对抗性输入上断言耗时；internal/cli 的 TestPreviewStatic、TestPreviewServe、TestExportWechatHTML 断言转义、允许列表与 CSP。
+    examples:
+      good:
+        - 节点树经 page.ExecuteTemplate 输出，style 为通过 catalog.SafeCSS 的 template.CSS
+      bad:
+        - 先插入 <strong style="主题取值"> 再对整串做 *斜体* 的正则替换
+  artifact-field-names:
+    strength: MUST
+    statement: 工作区产物的 JSON Schema 中声明的字段名（任意深度的 properties，不区分大小写）不得与可执行内容检查保留的字段名（schema.ExecutableKeys：script、command、exec、shell、hook、plugin、run、eval 及其复数等）相同；需要表达这类含义时换用其他字段名（如开头钩子用 opening 而不是 hook）。
+    rationale: 可执行内容检查在 Schema 校验之前按字段名拦截，产物若声明了保留的字段名，作者写入的合法内容会被报告为 artifact.executable-content，且无法绕过；在 Schema 层面避免冲突比放宽检查安全。
+    enforcement:
+      method: test
+      detail: internal/schema 的 TestFieldNamesAvoidExecutableKeys 遍历 schemas/*.schema.json 的全部 properties，断言没有字段名属于 ExecutableKeys。
+    examples:
+      good:
+        - marketing.schema.json 用 opening 表示开头钩子（Hook）
+      bad:
+        - marketing.schema.json 声明 hook 字段，合法的营销要素被报告为 artifact.executable-content
+  author-choice-decisions:
+    strength: SHOULD
+    statement: 产物中需要作者从多个候选中选定的内容（如标题候选、分歧片段的分值）通过决策队列确认：产物只记录决策 id，选定结果与状态（none、open、decided、stale、unknown）由决策推导，不把选择复制进产物；作者的选择按决策自己记录的选项解释（如选项文本中的分值），不按当前配置反推选项下标；代替产物向决策队列写入时，先完成全部检查并用 decision.NextID 预先算出 id，先写决策队列、再写引用它的产物，后者失败时在 changedPaths 中如实列出决策队列；一次命令新建多个决策时用 decision.AddAll 只写一次决策队列；候选在决定前改变时原地替换该决策的选项（decision.Replace），不另建会继续阻塞单元或留在队列中的新决策。
+    rationale: 决策队列是作者确认的唯一记录，复制选择会产生两个可能不一致的事实来源；配置（如 scale）在决定后改变时，按下标反推会把作者的选择悄悄换成别的值；预先算出 id、固定的写入顺序与一次写入满足 precheck-before-side-effects，原地替换避免作者没有办法撤回的过时决策。
+    enforcement:
+      method: review
+      detail: 审查代替产物写入决策队列的命令（如 marketing ask、metrics record）：产物中只有决策 id，状态与选择由决策推导，写入顺序与失败时的 changedPaths 正确，过期未决定的决策被替换而不是新增；internal/metrics 的 TestOpenDecisionUpdatedInPlace 与 TestDecidedValueFromOptionText 覆盖原地更新与按选项文本解释。
+    examples:
+      good:
+        - 'metrics.yaml 只记录 {metric: tension, paragraph: 2, decision: dec-1}，metrics show 按 dec-1 选中选项的文本「4：紧迫」得到 4 分'
+      bad:
+        - 按 choice 的字母减去当前 scale.min 反推分值，规范包把 scale 从 -2..2 改为 0..4 后作者选的 -2 变成 0
+  pack-text-in-deliverables:
+    strength: MUST
+    statement: 规范包等第三方提供、会原样写进交付文件（导出的 Markdown、front matter、HTML）的文字（如 ai_disclosure_template）必须由 Schema 限制为一行并设长度上限，只能含声明的占位符，占位符用纯文字替换；写进 YAML 时只能经 YAML 编码器（不得用字符串拼接），写进 HTML 时只能作为模板的文字节点。
+    rationale: 规范包是第三方数据：多行文字可以在 Markdown 文末插入标题、分隔线或伪造的 front matter，拼接进 YAML 会破坏结构；一行、有上限、占位符固定，并且只经编码器或模板输出，使这类文字只能是文字。
+    enforcement:
+      method: test
+      detail: internal/cli 的 TestAIDisclosureTemplateRules 断言多行、过长、空白与未知占位符的模板被 validate 与 config resolved 拒绝；front matter 由 yaml.Marshal 生成，公众号 HTML 中的说明是文字节点。
+    examples:
+      good:
+        - ai_disclosure_template 的 Schema：pattern ^(?:[^{}\r\n]|\{(?:ai_percent|ai_paragraphs|paragraphs)\})+$，maxLength 500
+      bad:
+        - doc += "\n---\n\n" + pack.Template，模板可以含换行与 ---
+  read-path-invariants:
+    strength: MUST
+    statement: 查看、汇总与统计产物的命令（如 metrics show、review show）不得假定只由写入命令保证、而 Schema 与领域校验都不检查的不变量（如每个会话覆盖全部段落）：wa-cli validate 判为合法的产物，任何命令都不得因它 panic 或给出错误结果；需要依赖这类不变量时，把它加入该产物的领域校验，或在读取路径上把不满足的情况按缺失处理。
+    rationale: 作者可以直接编辑结构化产物，合法但不是 wa-cli 写出的产物一定会出现；只在写入路径保证的不变量在读取路径上失效时，命令会崩溃，作者也无从修复。
+    enforcement:
+      method: test
+      detail: 每种新增产物至少有一条测试用合法但不是 wa-cli 写出的产物运行其查看命令（如 internal/metrics 的 TestSummarizeHandWrittenFile 与 internal/cli 的 TestMetricsWritesNothingOnFailure）。
+  directory-listing:
+    strength: MUST
+    statement: 列举工作区目录中的产物（如 packs/、proposals/）必须用 internal/workspace 的 YAMLFiles（os.ReadDir 后按名称过滤与排序），不得用 filepath.Glob 拼接项目目录：项目目录名中的 [ ] * ? 会被当成通配字符。
+    rationale: MCP 与 CLI 都会收到任意的 --dir；Glob 在目录名含通配字符时静默返回空结果，整体校验因此漏检不合法的产物且报告 valid 为 true。
+    enforcement:
+      method: test
+      detail: internal/cli 的 TestValidateDirWithGlobCharacters 在名为「Project [2026]」的项目目录中校验 packs/ 与 proposals/ 下不合法的文件。
+  yaml-text-utf8:
+    strength: MUST
+    statement: 把正文或作者给出的文字写进 YAML 产物（如写入记录的段落原文、修改记录）之前，必须检查它是合法的 UTF-8；不合法时按规格规定的方式处理（跳过该字段或报告专门的错误码），不得让 YAML 编码器报错，也不得写出 !!binary 等非数据标签。
+    rationale: 正文按字节写入、不保证是 UTF-8；直接写进 YAML 会让原本能成功的命令失败，或产生被可执行内容检查拒绝的产物，作者修好编码之前所有写入都被挡住。
+    enforcement:
+      method: test
+      detail: internal/cli 的 TestDraftWriteEditsPrecheckAndMarkup 用含 \xff 的正文运行 draft write，断言成功且正文逐字节写入。
+  subject-scoped-lookup:
+    strength: SHOULD
+    statement: 命令为当前作品扫描某类全部工作区级产物（如查找所属系列）时，无法加载、且无法判定与当前作品相关的实例应以 warning 报告并按不相关处理，不阻塞当前命令；整体校验仍按 error 报告。确需阻塞时写进规格。
+    rationale: 一个与当前作品无关的坏文件（如复制后忘了改 id 的系列文件）会让工作区中所有作品的 lint、context 与导出都失败，作者无从判断原因。
+    enforcement:
+      method: test
+      detail: internal/series 的 TestOfToleratesUnrelatedBrokenFiles 与 internal/cli 的 TestSeriesSourcesOrderAndRobustness：坏掉的系列文件不阻塞非成员作品的 lint，validate 仍报告 error。
+  per-work-merge-validated:
+    strength: SHOULD
+    statement: 命令按作品合并生效设置时引入的配置层（如所属系列的规范包），整体校验必须按命令实际使用的组合逐个合并一次并报告 error，使 lint、context 等报告的合并问题能被 wa-cli validate --dir 重新检出。
+    rationale: 只按 default_genre 合并的整体校验检不出只在系列成员作品上出现的冲突，诊断的 next 给出的复查命令会报告 valid 为 true（cli-contract/next-rechecks-problem）。
+    enforcement:
+      method: test
+      detail: internal/cli 的 TestSeriesSourcesOrderAndRobustness 让系列规范包与文体规则冲突，断言 validate 报告 rule.type-conflict。
+  structural-path-parsing:
+    strength: SHOULD
+    statement: 从产物路径推导同作品其他产物位置（如「单元目录所在作品根单元的目录」）时，必须以固定结构前缀（如 workspace.WorksPath）逐段解析：作品 id 是去掉 works 前缀后的第一段；不得在完整路径中用子串搜索 /units/ 等结构分隔符定位层级，测试需构造与结构段同名的 id（如作品 id 为 units）作为回归夹具。
+    rationale: short-story-genre 审查发现 RootDir 用 strings.Index(dir, "/units/") 定位根单元目录：作品 id 本身可以叫 units（合法 id），此时解析错位、outline.unknown-beat 校验静默跳过。结构段与可变 id 段同名是可构造输入，固定前缀逐段解析不受其影响。
+    enforcement:
+      method: test
+      detail: internal/outline 的 TestSceneContractBeats 已含作品 id 为 units 的夹具，断言 outline.unknown-beat 仍被报告；代码审查时检查同类推导是否走固定前缀。
+    examples:
+      good:
+        - rest := strings.TrimPrefix(dir, workspace.WorksPath+"/"); work := rest[:strings.Index(rest, "/")]
+      bad:
+        - if i := strings.Index(dir, "/units/"); i >= 0 { root = dir[:i] }
+  refusal-side-decision-gating:
+    strength: MUST
+    statement: 命令因保护级别（如作者钦定（Author-pinned））拒绝修改产物时，在拒绝路径上向决策队列生成阻塞决策的写入必须幂等：同一对象与同一操作已有 open 决策时不重复追加，作者已选择「保持不变」的已决定决策同样抑制追加，作者选择「允许」后的再次未授权尝试则追加新的决策；给出 --decision 时不追加新决策。追加时 changedPaths 必须如实列出决策队列路径，未追加时为空数组；决策队列无法加载时不追加并原样报告其诊断，目标产物逐字节不变。授权以自动生成决策的固定问题文本识别对象与操作，格式在规格中固定并在测试中逐字断言；授权通过后产物记录该决策 id；--decision 用在不受保护的条目上时按参数错误拒绝，不得把未校验的决策 id 写进产物。
+    rationale: 拒绝是 Agent 协助写作时的常规路径，不是异常：反复重试会灌满决策队列，而 changedPaths 是 Agent 判断副作用的唯一依据。问题文本是授权与幂等识别的契约，实现漂移会让授权失效或被误放行；把未校验的决策 id 写进产物会让一条「成功」命令造出 validate 判为不合法的工作区。novel 里程碑的状态变更提议、连续性豁免会复用同一模式，现在成文可以避免各命令各造一套。
+    enforcement:
+      method: test
+      detail: internal/canon 的 TestPinnedProtection（拒绝、幂等、keep-choice 后重试、阻塞推进）、TestPinnedAuthorize（retry-after-decide、无效 --decision）、TestPinnedQueueUnloadable（队列无法加载时不追加且两文件不变）、TestDecisionFlagOnlyForPinned（普通条目拒绝 --decision）逐分支断言问题文本字面量、changedPaths 与文件不变。
+    examples:
+      good:
+        - canon set 对钦定条目未授权时：报告 canon.author-pinned、changedPaths 为 [.writing-anything/decisions.yaml]、canon.yaml 逐字节不变；作者 decide 允许后携带 --decision 重试成功并把决策 id 记录在条目上。
+      bad:
+        - 每次拒绝都追加一条新的阻塞决策；或拒绝时 changedPaths 为空数组，Agent 因此不知道决策队列已被写入；或 --decision 指向任意已决定决策即放行。
+  markdown-structure-single-source:
+    strength: SHOULD
+    statement: Markdown 结构识别（围栏代码块的开头与结束行、行内代码区间、偏移是否落在区间中）只能放在 internal/mdscan，由文本检查（Lint）、导出（Markdown、纯文本、公众号 HTML）与作者反馈的批注识别共用（FenceLines、FenceMarkers、CodeSpans、InSpans）；新增识别规则或需要新的派生（如区分围栏标记行与内容行）时修改 mdscan 一处并由既有函数派生，不得在渲染器、导出格式或命令中重写同类的正则状态机。
+    rationale: 本变更的纯文本渲染器需要去掉围栏的标记行而保留内容行，初版在导出包内复制了 FenceLines 的状态机（新上下文评审发现）：两份状态机会随识别规则演进而分叉，文本检查与导出对「代码块」的认知随之不一致，正是 mdscan 包注释承诺要避免的。修复后 FenceLines 改为由 FenceMarkers 派生，仓库中只保留一份围栏状态机。
+    enforcement:
+      method: review
+      detail: 代码审查时确认新的 Markdown 结构识别只出现在 internal/mdscan；internal/export、internal/lint 与 internal/feedback 只调用 mdscan 的函数，不自带围栏或行内代码的正则状态机。
+  export-format-layering:
+    strength: SHOULD
+    statement: 新增导出交付格式（如纯文本、后续的书稿格式）时分三层复用：单元选择与验收有效性判断复用 internal/export 的 collect（含 StripComments 去批注），每种格式只实现自己的渲染函数（如 RenderPlainText、RenderWechat），输出路径检查、原子写入与 AI 参与说明的追加复用 export-output 与既有格式入口的同组内部函数；不得在新格式里复制单元选择、注释剥离或输出路径检查。
+    rationale: 纯文本导出（--format text）按该分层实现只新增了渲染函数与入口，Markdown 与公众号 HTML 两个既有格式同样由 collect 与统一输出路径检查支撑；若新格式自带单元选择或路径检查，验收过滤与输出防护会随格式数分叉。
+    enforcement:
+      method: review
+      detail: 代码审查新的导出格式时确认：collect、StripComments、cleanOutput/write 只有一份实现，新格式只贡献渲染函数与入口分支。
+  post-merge-ref-attribution:
+    strength: SHOULD
+    statement: 某一配置层声明的数据引用可能来自其他配置层的目标时（如文体专属的 pacing_checks 引用可由规范包按 id 覆盖的 AI 评分指标），引用校验必须在全部配置层合并完成后按合并结果（internal/resolve 的 resolved）进行，不得在单层内校验；问题归因到声明引用的那一层（内置文体不填 path、Origin 写明出处），校验逻辑写成领域包导出的纯函数（如 catalog.CheckPacingRefs），供 resolve 接线并可供领域包测试直接调用。
+    rationale: 单层校验会把引用其他层声明的合法引用误判为悬空（如节奏检查引用规范包覆盖的指标），合并后校验配合导出的纯函数让跨层引用既有正确的归因，又能不依赖工作区构造内置文体数据而直接测试。
+    enforcement:
+      method: review
+      detail: 适用于为文体或规范包新增可引用其他配置层 id 的数据字段；同层即可判定的检查（id 重复、取值范围）仍在各领域包的加载校验中做。
+    examples:
+      good:
+        - internal/resolve 在合并完全部层后调用 catalog.CheckPacingRefs(文体声明, 合并后的 scoredMetrics)，问题经 layerError 记在内置文体层；internal/catalog 的测试直接构造检查与指标列表断言 pacing.unknown-metric 与 pacing.invalid-params。
+      bad:
+        - 在 catalog.LoadGenre 的单层校验中检查 pacing_checks 的 metric 是否存在于该文体自己的 scored_metrics：引用规范包声明指标的合法检查被误报为 pacing.unknown-metric。
+  stale-node-index:
+    strength: MUST
+    statement: 在同一 YAML 节点树上需要触碰多个节点（如同时摘除一个子树并挂到另一个父单元之下）时，必须先按解析时的下标取到本次要修改的全部目标节点与序列节点，再执行第一次序列修改；序列被删除或移动元素后不得再用解析时的下标导航，插入位置按锚点 id 在序列内容中重新扫描。修改后的产物照常经重新解析与校验写出，但校验不能替代结构断言：树形位置写错（挂到错误父单元之下）仍是合法产物，测试必须用允许递归或混合层级的夹具文体断言单元树的父子结构与顺序本身。
+    rationale: 解析时记录的下标只在文档未被修改前有效：摘除同级元素会使其后元素左移，旧下标随即指错节点——不越界时静默写错位置并通过全部校验，越界时把合法操作误报成别的错误码（如 work.anchored-value）。内置文体的严格分层会让类型检查先挡住这类错误，只有递归或混合层级的夹具才能暴露，因此结构断言必须显式覆盖。
+    enforcement:
+      method: test
+      detail: internal/work 的 TestMoveUnderLaterSibling 用允许 sec 递归嵌套的夹具文体（testdata/genres/nested.yaml）断言移动后各级 units 的 id 顺序与父子关系；TestDerivedStageMixedLevels 与 TestMoveIntoBareParentAndAdvanceDone 覆盖混合层级与无 units 键的父单元。
+    examples:
+      good:
+        - unit move 先经 childSeq 取到目标序列并转换块式，再从原序列摘除子树，插入位置按锚点在摘除后的序列内容中重新扫描。
+      bad:
+        - 先从序列删除元素，再按解析时的 index 走树取目标父单元的序列节点。
+  value-based-optional-fields:
+    strength: SHOULD
+    statement: 产物中「A 为真时 B 必填，否则 B 为 null 或缺省」的字段（如确认记录（Confirmation Record）的 confirmation 与 confirmed_at）：JSON Schema 把 B 声明为 [原类型, null] 的可选键并只约束取值形态（pattern、枚举），不得用键存在性条件（条件 required 或 not/anyOf required）表达跨字段约束；「A 为真 ⇒ B 非空」的一致性由该产物的领域校验函数检查并给专属错误码（field 指向该条目），wa-cli validate 整体校验与单产物校验都执行该检查。
+    rationale: 'draft 2020-12 的条件 required 挡不住显式 null：已确认而 confirmation: null 的非法产物通过整体校验（plan-artifact 审查复现，valid=true）；键存在性条件又会拒绝规格明文合法的「未确认为 null」写法；且 $ref 内取值校验失败会把兄弟字段标为未评估，产生误导性诊断。取值化 Schema 与领域专属错误码两侧都可用测试逐字断言。'
+    enforcement:
+      method: test
+      detail: 每种带此类条件字段的新产物至少有一条测试覆盖三种形态——A 为真且 B 为 null、A 为真且 B 缺省、A 为假且 B 为 null——断言前两者得到领域错误码（如 plan.incomplete-confirmation，field 指向条目）、第三者通过校验；internal/plan 的 TestCheckConfirmations 与 internal/cli 的 TestPlanValidate 为参照实现。
+    examples:
+      good:
+        - 'plan.schema.json 把 confirmation 声明为 {"type": ["string","null"], "pattern": "\\S"}，plan 包 checkConfirmations 对已确认步骤缺非空确认记录报告 plan.incomplete-confirmation（field 为 steps[i]）'
+      bad:
+        - 'plan.schema.json 用 allOf 条件在 confirmed_by_author 为 true 时 required [confirmation, confirmed_at]、为 false 时 not anyOf required：「已确认 + confirmation: null」通过校验（应为 plan.incomplete-confirmation），「未确认 + confirmation: null」（规格合法）反被 artifact.schema-violation 拒绝'
+  ledger-skeleton-reuse:
+    strength: SHOULD
+    statement: 新增与 canon.yaml、threads.yaml、state.yaml、knowledge.yaml 同构的作品级台账产物，或修改其中任何一个包的台账骨架（ReadRegular+Lstat 的加载与符号链接处理、eventsNode 的锚点防护、recheck 的写前复查与 path/field 改写）时，先评估把该骨架提炼为 internal/workspace 的共享台账编辑助手：在同一变更中完成提炼，或记录不提炼的理由（如产物差异过大）；修复骨架缺陷时同步检查其余同构包是否同样受影响，不在第五个包中再次复制该骨架。
+    rationale: knowledge-state 变更复制 internal/state 的台账骨架实现 internal/knowledge，fresh-context 评审确认四个包（canon、threads、state、knowledge）的加载、锚点防护与写前复查逐字重复；每次复制都让符号链接处理这类缺陷要修多处。knowledge.For 与 recheck 的 canonEntries 注入已示范跨包复用设定集索引的做法，提炼骨架是自然的下一步，但涉及四个已归档包的重构，应作为独立变更评估而不是在本变更内顺手完成。
+    enforcement:
+      method: review

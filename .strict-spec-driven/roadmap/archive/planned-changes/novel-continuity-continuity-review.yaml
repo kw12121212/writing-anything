@@ -1,0 +1,16 @@
+schema: strict-spec-driven/planned-change/v1
+schema_version: 1
+artifact_type: planned_change
+schema_file: ../../templates/strict-spec-driven/schemas/planned-change.yaml
+planned_change:
+  id: continuity-review
+  milestone: novel-continuity
+status: complete
+summary: 确定性连续性审查（Continuity Review）
+details: wa-cli continuity <unit|work> 在全书范围执行确定性检查，不调用模型：引用了不存在或已失效的设定条目；违反作者钦定条目；与状态快照矛盾（例如已死亡的人物再次行动而没有说明）；违反知情表（人物提及尚未获知的信息）；伏笔台账异常；因果链断裂；人名与别名不一致；年龄等数值事实矛盾。发现冲突时单元被标为阻塞、不能验收，直到修改正文或由作者决策豁免。依赖时间的检查（例如人物同时出现在两地）由系列小说里程碑的时间线提供。
+depends_on:
+  - state-change-proposals
+  - knowledge-state
+  - foreshadowing-ledger
+  - recall-index
+  - scene-close-out

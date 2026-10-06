@@ -1,0 +1,16 @@
+schema: strict-spec-driven/delta-tech/v1
+schema_version: 1
+artifact_type: delta_tech
+schema_file: templates/strict-spec-driven/schemas/delta-tech.yaml
+target_standard: go-project-structure
+operations:
+  ADDED:
+    failure-tests-assert-code:
+      strength: SHOULD
+      statement: 断言命令或函数失败的测试应当断言具体的错误码（以及需要时的 path 与 field），不只断言「有问题」或退出码为 1；构造失败场景的夹具只应触发被测的那一个问题。
+      rationale: 只断言存在问题的测试会因为夹具中别的错误而通过（如复制的提议 id 与文件名不一致），被测分支实际上没有证据。
+      enforcement:
+        method: review
+        detail: 审查新增的失败场景测试：断言了规格中的错误码字面量，夹具没有附带其他会先报告的问题。
+  MODIFIED: {}
+  REMOVED: {}

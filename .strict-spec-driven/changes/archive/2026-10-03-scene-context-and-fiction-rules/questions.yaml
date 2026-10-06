@@ -1,0 +1,63 @@
+schema: strict-spec-driven/question-list/v1
+schema_version: 1
+artifact_type: question_list
+schema_file: templates/strict-spec-driven/schemas/question-list.yaml
+change: scene-context-and-fiction-rules
+open: []
+resolved:
+  - id: q-prior-scene-summaries
+    question: 前序场景的「已验收摘要」数据从哪里来？
+    context: 计划变更 scene-context-and-fiction-rules 只写「前序场景的已验收摘要」，未指明数据来源；该不确定性影响提案范围、context 主规格的 delta、实现文件与测试。
+    answer: 复用单元摘要 summary.yaml：wa-cli summary set 写入、写入以单元已验收为前提（summary.not-accepted），天然满足「已验收」语义，与系列前序作品摘要（series 主规格 context-series 的 summaries）行为一致；前序场景没有摘要时以 warning 级 context.summary-missing 提示。依据 sources-and-provenance 与 series 主规格的既有行为，无需新产物类型。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: q-canon-character-match
+    question: 场景大纲声明的出场人物如何关联设定集（Canon）条目？
+    context: outline 主规格已把场景契约的 characters 定型为自由文本人物名数组，canon 条目有 name 字段；关联方式影响 context 主规格 delta 与 internal/ctxpack 的实现。
+    answer: 按 name 精确匹配 canon.yaml 中 type 为 character 的条目；声明的人物没有同名条目时逐个给出 warning 级 context.character-not-in-canon（next 含 canon add 帮助），作品没有 canon.yaml 时不报告。不改任何现有产物结构。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: q-plain-text-format-value
+    question: 纯文本导出的 --format 取值与默认输出路径是什么？
+    context: 计划变更写「短篇导出支持 Markdown 与纯文本」，未指明格式取值；影响 export 主规格 delta、internal/export 实现与测试。
+    answer: 取值为 text（与 markdown、wechat-html 的小写短词命名一致），默认输出 .writing-anything/exports/<work>.txt；--front-matter 与 text 互斥（同 wechat-html），输出路径检查复用 export-output。三条小说规则的 severity 均为 warning（启发式检查不阻塞验收），也一并记入 design.yaml 的决策。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-problem
+    question: What is concretely going wrong today, and for whom?
+    context: 'Why this is asked: the change is planned against a need, and the need lives only with the requester. A "problem" here means what someone does or suffers today — not a feature that is missing. If the answer names a button, a field, a page, or an endpoint, it is a solution, and the underlying problem is still unstated. What a sufficient answer contains: who is affected, what they do today instead, and how often. Worked example: "every Monday one person spends forty minutes copying order rows into a spreadsheet to send the weekly report". What it changes: this becomes the proposal''s why, and it decides whether the change is worth making.'
+    answer: Agent 起草 short-story 场景时，wa-cli context 不包含出场人物的当前设定、前序场景的已验收摘要与揭示边界，人物与情节一致性只能靠 Agent 自行翻阅产物；小说文本没有对话标点与视角一致的自动检查，导出只有 Markdown 与公众号 HTML。受影响的是以场景为单元写短篇的作者与协助写作的 Agent。（证据：roadmap/planned-changes/short-story-scene-context-and-fiction-rules.yaml 的 summary 与 details，milestone short-story 的 details）
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-interpretation
+    question: Which reading of the request is intended, where more than one is possible?
+    context: 'Why this is asked: a short request usually admits several readings, and building the wrong one is indistinguishable from building nothing. What a sufficient answer contains: the reading that is meant, stated plainly enough to rule the others out — or a statement that only one reading exists and what it is. Worked example: "export means the version sent to the manager, not the one I read myself". What it changes: this fixes the scope boundary before any code is written, and settles disputes about what was asked for.'
+    answer: 按计划变更的字面范围理解：只对单元类型为 scene 的单元增强 context 输出（characters、priorScenes、reveal）；只新增 dialogue-punctuation 与 pov-consistency 两种规则类型并由内置 short-story 文体声明（含小说 AI 腔词表，经既有 ai-cliche 类型承载）；只新增 --format text 纯文本导出。不包含情绪/张力曲线（emotion-pacing-curve）、结构类写作法模板与 novel 里程碑的多层单元树、状态快照、连续性审查。（证据：planned change details 与 milestone scope.out）
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-outcome
+    question: What observable difference proves the problem is solved?
+    context: 'Why this is asked: without a success condition, nobody can tell afterwards whether the change worked. "Observable" means someone outside the system can check it without reading the code. What a sufficient answer contains: what a person will see, or no longer have to do, once this is done. Worked example: "the report is in the manager''s inbox on Monday morning without anyone assembling it". What it changes: this becomes the delta spec''s scenarios and the acceptance evidence at review time.'
+    answer: 可观察的完成证据：wa-cli context <scene> --json 输出 characters、priorScenes 与 reveal 且参与预算裁剪；dialogue-punctuation 与 pov-consistency 在违例夹具上报告发现项、在合规夹具上不报告（milestone done_criteria 同款要求）；short-story 文体的 resolved 规则含 fiction-cliches、dialogue 与 pov；wa-cli export <work> --format text 产出去掉 Markdown 标记的 .txt；端到端测试只靠 wa-cli 命令完成一篇短篇的完整生命周期且 validate 通过。（证据：planned change details 的验收描述与 milestone done_criteria）
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-non-goals
+    question: What must explicitly not change?
+    context: 'Why this is asked: the requester knows which nearby behavior other people depend on, and the agent does not. A "non-goal" is something the change must leave alone even though it sits close to the work. What a sufficient answer contains: the behavior, setting, or output that must survive untouched, and who relies on it. Worked example: "do not change the saved filters — several people rely on their own". What it changes: these become the proposal''s unchanged_behavior items, which review checks the finished result against.'
+    answer: 明确不变：非 scene 单元的 context 输出内容；现有规则类型的检查行为；export 的 markdown 与 wechat-html 格式；canon 命令族与作者钦定（Author-pinned）保护机制；summary 命令族行为。明确不做：揭示边界的正文自动检测（reveal 只作为上下文提示）；pov-consistency 的第一人称方向检测与更深层视角分析；情绪曲线与张力曲线。（证据：proposal.yaml 的 unchanged 与 out）
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-trigger
+    question: Why now — what forced this?
+    context: 'Why this is asked: work that nothing forced is the work most often thrown away later. This question catches a request that sounds reasonable but has no real driver behind it. What a sufficient answer contains: the concrete event, deadline, incident, or cost that made this surface now, or an honest statement that nothing did. Worked example: "the report was missed last month and it was raised with the team". What it changes: a change with no trigger is a candidate for deferral, and the answer is weighed at review before archive.'
+    answer: short-story 里程碑的既定顺序推进：前置依赖 characters-and-light-canon 与 context-pack 均已归档（roadmap-recommend 的依赖检查已放行），本计划变更是当前可推荐的最早未完成项，同时是 emotion-pacing-curve 的前置依赖，不做会阻塞里程碑后续工作。（证据：planned change depends_on 与 roadmap-status）
+    status: resolved
+    kind: requirement
+    answered_by: roadmap

@@ -1,0 +1,28 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: foreshadowing-ledger
+approach:
+  - 在作品根单元目录新增 threads.yaml 伏笔台账（Foreshadowing Ledger）（与 canon.yaml 设定集同级、同为故事圣经（Story Bible）的磁盘记忆），新包 internal/threads 持有加载、Schema 与领域校验、Add/Set/List 及契约交叉检查，internal/cli 以 threads（列出）/ threads add / threads set 三个命令暴露并复用 canon 的决策队列（Decision Queue）阻塞授权模式处理放弃确认；overdue 以单元树先序与 stage 为 done 判定；scene contract 给出 --plant/--recover 时仿 causalityPrecheck 做写入预检，validate 按 CheckWorks 模式纳入台账与交叉检查；internal/ctxpack 在 sceneItems 中新增 part 为 thread 的内容项并计入预算与裁剪。
+decisions:
+  ledger-artifact:
+    decision: threads.yaml 放在作品根单元目录，条目由 wa-cli threads add 显式登记（登记式台账），场景契约只表达意图并与台账交叉校验，不做自动派生
+    rationale: 台账需要记录计划回收位置与状态（open/paid/dropped），这些信息不在任何单个场景契约里；里程碑 details 明确记忆放在磁盘上的故事圣经台账中；canon.yaml 已在同一位置验证了台账产物的加载、锚点保护与决策授权模式，直接复用该结构最省新概念。
+  drop-authorization:
+    decision: 放弃（dropped）的作者确认走决策队列阻塞模式：未授权拒绝（threads.author-confirmation）并幂等生成阻塞决策，作者允许后携带 --decision 重试写入
+    rationale: 决策队列是仓库既有且唯一的人工确认机制，canon 作者钦定条目已用同一模式（gate/authorize/rejectDecision）；按固定问题文本识别条目与操作，使授权可独立验证、可复现。
+  overdue-rule:
+    decision: overdue 判定为：条目 open 且（计划回收单元 stage 为 done，或存在 stage 为 done 的 scene 单元既不在计划回收单元子树内、又按单元树先序位于其后）
+    rationale: 计划位置为章（chapter）时，章内先行场景 done 不代表错过——章内后续场景仍可回收，不因章内推进而误报；规则只依赖单元树结构与 stage，确定、可复现、不需要模型，且对场景目标与章目标语义一致。
+  ledger-optional:
+    decision: 作品没有 threads.yaml 时不做任何伏笔检查（契约交叉检查与 context 伏笔项都跳过，context 的 threads 字段为空数组）
+    rationale: scene-contract-and-causality 已归档的夹具与既有作品在无台账下使用 plants/recovers 字段，引入强制台账会破坏既有行为；台账是长篇工作流的可选产物，向后兼容优先。
+  context-scope:
+    decision: context 只输出与本场景契约相关的 open 伏笔：planted_in 为本场景、planned_recover 为本场景，或本场景大纲节 recovers 引用，其余经 wa-cli threads 查询
+    rationale: 全部 open 伏笔在长篇后期会很多，挤占上下文预算（Context Budget）；与本场景直接相关的条目才是动笔必需的记忆，其余由 Agent 按需用 threads 检索，与「按契约显式引用组装上下文」的里程碑原则一致。
+alternatives:
+  - option: 由场景契约的 plants/recovers 自动派生台账条目，不需要 threads add
+    reason: 计划回收位置与状态（尤其 dropped 与 paid 的回收场景）无法从契约得知；写后收口（Close-out）未落地时没有可靠的同步时机；派生式也让放弃确认无处安放。
+risks:
+  - 场景契约引用未登记伏笔时写入被拒，要求先 threads add 再写契约，多一次往返；以诊断的 next 直接给出补登记命令（wa-cli threads add …）缓解。

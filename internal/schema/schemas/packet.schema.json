@@ -1,0 +1,145 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "审查任务包",
+  "description": "wa-cli review plan 生成的语义审查任务包（Review Task Packet）：一段正文切片、相关台账切片与固定检查清单，由接入的 Agent 调度执行，结论经 wa-cli review submit 校验后写回。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "id",
+    "work",
+    "dimension",
+    "scope",
+    "excerpt",
+    "checklist",
+    "status"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "id": {
+      "$ref": "common.schema.json#/$defs/id",
+      "description": "任务包 id；必须与文件名（去扩展名）一致，由领域校验检查"
+    },
+    "work": {
+      "type": "string",
+      "pattern": "\\S"
+    },
+    "dimension": {
+      "enum": [
+        "character",
+        "thread",
+        "causality",
+        "pov-reveal",
+        "style",
+        "series-causality"
+      ]
+    },
+    "scope": {
+      "type": "string",
+      "pattern": "\\S",
+      "description": "审查范围：章或场景单元引用、伏笔 id 等"
+    },
+    "excerpt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "text",
+        "truncated"
+      ],
+      "properties": {
+        "text": {
+          "type": "string",
+          "pattern": "\\s*\\S[\\s\\S]*",
+          "description": "正文切片；style 维度为固定说明文字"
+        },
+        "truncated": {
+          "type": "boolean"
+        }
+      }
+    },
+    "slices": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "kind",
+          "text"
+        ],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "pattern": "\\S"
+          },
+          "text": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "checklist": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "question"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "common.schema.json#/$defs/id"
+          },
+          "question": {
+            "type": "string",
+            "pattern": "\\S"
+          }
+        }
+      }
+    },
+    "status": {
+      "enum": [
+        "open",
+        "done"
+      ]
+    },
+    "results": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "item",
+          "verdict"
+        ],
+        "properties": {
+          "item": {
+            "$ref": "common.schema.json#/$defs/id"
+          },
+          "verdict": {
+            "enum": [
+              "pass",
+              "fail",
+              "na"
+            ]
+          },
+          "note": {
+            "type": "string"
+          }
+        }
+      },
+      "description": "status 为 done 时每个清单项恰有一个结论，由领域校验检查（packet.missing-verdict / packet.unknown-item）"
+    },
+    "recorded_at": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$",
+      "description": "提交时间（UTC）；open 时为 null 或缺省"
+    }
+  }
+}

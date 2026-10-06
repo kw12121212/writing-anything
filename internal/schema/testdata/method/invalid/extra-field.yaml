@@ -1,0 +1,7 @@
+schema_version: 1
+id: bad
+title: 多余字段
+kind: planning
+steps:
+  - {id: a, title: 甲}
+color: red

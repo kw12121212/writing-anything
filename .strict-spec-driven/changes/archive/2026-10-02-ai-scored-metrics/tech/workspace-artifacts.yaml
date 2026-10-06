@@ -1,0 +1,28 @@
+schema: strict-spec-driven/delta-tech/v1
+schema_version: 1
+artifact_type: delta_tech
+schema_file: templates/strict-spec-driven/schemas/delta-tech.yaml
+target_standard: workspace-artifacts
+operations:
+  ADDED:
+    read-path-invariants:
+      strength: MUST
+      statement: 查看、汇总与统计产物的命令（如 metrics show、review show）不得假定只由写入命令保证、而 Schema 与领域校验都不检查的不变量（如每个会话覆盖全部段落）：wa-cli validate 判为合法的产物，任何命令都不得因它 panic 或给出错误结果；需要依赖这类不变量时，把它加入该产物的领域校验，或在读取路径上把不满足的情况按缺失处理。
+      rationale: 作者可以直接编辑结构化产物，合法但不是 wa-cli 写出的产物一定会出现；只在写入路径保证的不变量在读取路径上失效时，命令会崩溃，作者也无从修复。
+      enforcement:
+        method: test
+        detail: 每种新增产物至少有一条测试用合法但不是 wa-cli 写出的产物运行其查看命令（如 internal/metrics 的 TestSummarizeHandWrittenFile 与 internal/cli 的 TestMetricsWritesNothingOnFailure）。
+  MODIFIED:
+    author-choice-decisions:
+      strength: SHOULD
+      statement: 产物中需要作者从多个候选中选定的内容（如标题候选、分歧片段的分值）通过决策队列确认：产物只记录决策 id，选定结果与状态（none、open、decided、stale、unknown）由决策推导，不把选择复制进产物；作者的选择按决策自己记录的选项解释（如选项文本中的分值），不按当前配置反推选项下标；代替产物向决策队列写入时，先完成全部检查并用 decision.NextID 预先算出 id，先写决策队列、再写引用它的产物，后者失败时在 changedPaths 中如实列出决策队列；一次命令新建多个决策时用 decision.AddAll 只写一次决策队列；候选在决定前改变时原地替换该决策的选项（decision.Replace），不另建会继续阻塞单元或留在队列中的新决策。
+      rationale: 决策队列是作者确认的唯一记录，复制选择会产生两个可能不一致的事实来源；配置（如 scale）在决定后改变时，按下标反推会把作者的选择悄悄换成别的值；预先算出 id、固定的写入顺序与一次写入满足 precheck-before-side-effects，原地替换避免作者没有办法撤回的过时决策。
+      enforcement:
+        method: review
+        detail: 审查代替产物写入决策队列的命令（如 marketing ask、metrics record）：产物中只有决策 id，状态与选择由决策推导，写入顺序与失败时的 changedPaths 正确，过期未决定的决策被替换而不是新增；internal/metrics 的 TestOpenDecisionUpdatedInPlace 与 TestDecidedValueFromOptionText 覆盖原地更新与按选项文本解释。
+      examples:
+        good:
+          - 'metrics.yaml 只记录 {metric: tension, paragraph: 2, decision: dec-1}，metrics show 按 dec-1 选中选项的文本「4：紧迫」得到 4 分'
+        bad:
+          - 按 choice 的字母减去当前 scale.min 反推分值，规范包把 scale 从 -2..2 改为 0..4 后作者选的 -2 变成 0
+  REMOVED: {}

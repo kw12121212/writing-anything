@@ -1,0 +1,32 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: series-shared-context
+approach:
+  - 新增领域包 internal/series：读写 .writing-anything/series/<id>.yaml（节点树编辑、写前复查），查找作品所属的系列，校验成员作品、规范包与素材引用；读写单元目录的 summary.yaml 并判断过期。internal/resolve 新增 ForWork(root, genre, extra packs)：在 config.yaml 的 packs 之后、项目配置之前插入系列的 packs；lint、review、export、metrics 与 ctxpack 改为按作品合并（作品所属系列的 packs）。
+  - internal/ctxpack 为成员作品组装 series（id、title、facts、summaries）：summaries 为系列 works 中排在本作品之前、根单元有摘要的作品，含 work、text 与 stale；系列素材并入 sources（排在作品自己的素材之后）。裁剪优先级在决策之后、规则之前依次加入每条事实与每份摘要。internal/cli 新增 series set、series add、series fact、series show、summary set 与 summary show。
+decisions:
+  series-file:
+    decision: 系列是工作区级产物 .writing-anything/series/<id>.yaml：schema_version 1、id、title、works（成员作品 id，有序）、packs（规范包 id）、sources（素材 id）与 facts（每项含 id、text 与 sources）。一个作品至多属于一个系列。
+    rationale: 作品顺序决定「前序作品」的摘要；事实带素材出处，满足亲历、观点与数据必须链接作者素材的约定；一个作品只属于一个系列，合并顺序才唯一。
+  inheritance-order:
+    decision: 成员作品的合并顺序为 文体 → config.yaml 的 packs → 系列的 packs → 项目配置（config.yaml 的 rules、waivers、context_budget 等）；作品自己写作简报的素材在上下文中排在系列素材之前。没有作品级的规范包声明，「作品级覆盖」体现为更具体的层排在后面。
+    rationale: 系列比整个工作区更具体，应能覆盖工作区规范包；项目配置是作者对本工作区的直接设置，保持最后生效与现有行为一致；作品级规范包需要新的配置入口，留待以后。
+  summary-model:
+    decision: 摘要是单元目录的 summary.yaml：schema_version 1、text、draft_sha256（写入时 draft.md 的 SHA-256）与 recorded_at。summary set 要求单元有通过校验、未过期的 acceptance.yaml；字数（非空白字符）在作品文体的 summary_length 内（未声明时 20 到 500）；当前 draft.md 的 SHA-256 不等于 draft_sha256 时摘要过期。
+    rationale: 只有已验收的内容才适合作为系列上下文；记录哈希与验收记录一致，过期判断与 acceptance.stale 同一套规则，作者容易理解。
+  context-series:
+    decision: 'context.series 对不属于系列的作品为 null；成员作品为 {id, title, facts, summaries}，summaries 只含前序作品根单元的摘要，过期的照常列出并标 stale: true；前序作品没有摘要时给出 warning 级 context.summary-missing。'
+    rationale: done_criteria 要求第二篇的 context 含第一篇的已验收摘要并注明过期；缺少摘要时提醒 Agent 回去补写，而不是静默缺失。
+  lookup-and-load:
+    decision: series.ForWork 每条命令只查一次所属系列并合并（阅读页对同一作品的多个单元复用同一合并结果）；与当前作品无关、无法加载的系列文件降为 warning，作品按不属于它处理；前序作品的摘要读不出来时 context 以 warning 报告并跳过；整体校验对每个系列的每个成员作品按系列层合并一次，使 lint 与 context 报告的合并问题 validate 也能检出。
+    rationale: 满足 load-once-per-command；一个坏掉的系列文件不应让整个工作区不可用；context-command 只把本单元的产物问题当作失败；next-rechecks-problem 要求 validate 能复查命令报告的合并问题。
+alternatives:
+  - option: 把系列信息写进 config.yaml
+    reason: 一个工作区可以有多个系列，config.yaml 是工作区级的单一配置，放不下按系列区分的规范包、素材与事实
+  - option: 由 wa-cli 截取正文开头作为摘要
+    reason: 摘要需要理解内容，项目约定 wa-cli 不调用模型，摘要由 Agent 撰写、wa-cli 只校验
+risks:
+  - 系列 packs 改变成员作品的生效规则，已验收的单元在新规则下 lint 可能出现新的发现项
+  - 项目配置的 rules 与 waivers 对所有作品生效：引用只由系列规范包定义的规则会让非成员作品合并失败，作者应在系列的规范包中调整系列的规则

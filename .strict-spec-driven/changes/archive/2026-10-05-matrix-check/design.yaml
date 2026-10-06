@@ -1,0 +1,21 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: matrix-check
+approach:
+  - 'evidence 四类锚点与双向对账：矩阵条目的 evidence 为列表，每项含 kind 与定位字段——script（token：命令子串；可选 assert_type: stdout_contains/expect_code 与取值，定位 commands.yaml 中含该 token 且带该断言的步骤）、golden（file：golden/ 下文件名）、negative（code：负向注入测试断言的诊断码）、structure（test：TestNovelCorpusScript 或 TestNovelCorpusDesign）。TestNovelCorpusMatrix 加载矩阵与脚本，正向：每条矩阵 evidence 逐项解析，解析不到即输出缺失项并失败；反向：golden 目录全部文件、负向测试断言的全部诊断码、脚本全部带 stdout_contains 或 expect_code 的步骤，都必须被至少一条矩阵 evidence 引用，否则报「断言无矩阵条目」。矩阵负向条目与 DESIGN 预留段按已落地机制勘误：设定冲突=canon.author-pinned（含决策入队语义）、伏笔悬空=continuity.thread-anomaly、时间线倒置=timeline.cycle+timeline.order-conflict、知情违例=台账注入+knowledge at 暴露（记录产品无 prose 级检查的缺口）'
+  - 'evidence 四类锚点与双向对账：矩阵条目的 evidence 为列表，每项含 kind 与定位字段——script（token：命令子串；可选 assert_type: stdout_contains/expect_code 与取值，定位 commands.yaml 中含该 token 且带该断言的步骤）、golden（file：golden/ 下文件名）、negative（code：负向注入测试断言的诊断码）、structure（test：TestNovelCorpusScript、TestNovelCorpusDesign 或承载双跑一致性的 TestNovelCorpusReplay）。TestNovelCorpusMatrix 加载矩阵与脚本，正向：每条矩阵 evidence 逐项解析，解析不到即输出缺失项并失败；反向：golden 目录全部文件（并与黄金测试的采集清单一一对应）、负向测试断言的全部诊断码（从其源码机械推导）、脚本全部带 stdout_contains 或 expect_code 的步骤，都必须被至少一条矩阵 evidence 引用，否则报「断言无矩阵条目」；无断言过滤的宽 token 只作存在性锚点、不登记反向引用，防止顺带命中。矩阵负向条目与 DESIGN 预留段按已落地机制勘误：设定冲突=canon.author-pinned（含决策入队语义）、伏笔悬空=continuity.thread-anomaly、时间线倒置=timeline.cycle+timeline.order-conflict、知情违例=台账注入+knowledge at 暴露（记录产品无 prose 级检查的缺口）'
+decisions:
+  evidence-bidirectional:
+    decision: 对账双向化：矩阵→断言（每条可解析）与断言→矩阵（每个实质断言被引用）
+    rationale: 单向对账只能抓矩阵虚写，抓不到断言先行而矩阵漏登；双向才能同时满足完成标准的两个方向
+  negative-errata:
+    decision: 矩阵负向条目与 DESIGN 预留段按 golden-assertions 实测机制勘误，知情违例如实标注为台账层断言与产品缺口，不伪造 error 级
+    rationale: 矩阵是对账的事实源，事实源必须与产品真实检查一致
+  no-delta-spec:
+    decision: matrix-check 是技术专用变更：只新增对账测试并维护矩阵数据
+    rationale: 测试基建与夹具数据不构成主规格需求
+alternatives: []
+risks:
+  - evidence 的 script token 匹配过宽或过窄导致误报——token 取足够长的命令片段并在对账失败信息中给出双方证据定位

@@ -1,0 +1,13 @@
+schema: strict-spec-driven/planned-change/v1
+schema_version: 1
+artifact_type: planned_change
+schema_file: ../../templates/strict-spec-driven/schemas/planned-change.yaml
+planned_change:
+  id: author-feedback
+  milestone: kernel-foundation
+status: complete
+summary: 作者反馈（Feedback）模型：文本锚点、状态与即时通知
+details: 所有渠道的作者意见统一存为结构化反馈：锚点（Anchor，被评论的原文片段及其前后文，加上段落 id）、类型（必须改 / 建议 / 疑问 / 赞）、状态（待处理 / 已采纳 / 已解决 / 不采纳）、关联的修订记录。wa-cli feedback add --unit <unit> --quote <原文> --text <意见> 供 Agent 在对话中记录作者意见；feedback list / resolve 管理状态。正文修改后按锚点重新定位，定位不到时标为失去锚点（Orphaned），等待作者处理。wa-cli feedback watch 持续输出新增反馈（每行一条 JSON），供能在后台运行命令的 Agent 即时响应；wa-cli next 在每一步开始前列出未处理的反馈。
+depends_on:
+  - unit-tree-and-lifecycle
+  - author-sources-and-provenance

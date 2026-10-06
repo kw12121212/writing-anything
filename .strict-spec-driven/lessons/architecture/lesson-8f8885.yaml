@@ -1,0 +1,19 @@
+schema: strict-spec-driven/lesson/v1
+schema_version: 1
+artifact_type: lesson
+schema_file: templates/strict-spec-driven/schemas/lesson.yaml
+lesson:
+  id: lesson-8f8885
+  title: 为文体补默认配置时，默认值会沿每个单元级应用点生效，子单元会被父级规则卡死
+category: architecture
+status: active
+created_at: '2026-10-03T04:13:18.761Z'
+updated_at: '2026-10-03T04:13:18.761Z'
+context: 'story-structure-templates 为 short-story 声明 default_method: three-act 后，场景（子单元）继承默认写作法，其场景契约大纲被要求承担全部四个节拍而无法推进；作者确认改为「默认写作法只作用于根单元」，修复涉及六个应用点（大纲关卡 Picker、整体校验、单产物校验、outline set/remove/show、审稿与 lint）。'
+observation: 提案只把 default_method 当一条数据新增，没有预见它会同时改变所有单元（含子单元）的大纲关卡行为；根单元路径的单元测试全绿，端到端测试推进场景时才暴露。tech-blog 的 section 子单元存在同类问题，只是从未有测试走到那条路径。
+takeaway: 新增或激活任何「按作品声明、按单元消费」的默认值时，先枚举全部应用点并区分根单元与子单元的语义，再用子单元的端到端路径验证；只测根单元路径发现不了。
+applies_when: 为文体（Genre）或规范包声明会按单元生效的默认值（default_method、默认规则、默认关卡等），或修改单元继承语义时
+occurrences:
+  - origin: story-structure-templates
+    date: '2026-10-03'
+    evidence: internal/cli/e2e_test.go TestShortStoryEndToEnd 在场景 advance 处失败（4 条 outline.missing-method-part）；修复为 internal/cli/method.go unitDefaultMethod 与 internal/work/work.go picker 只对根单元取 default_method，internal/cli/method_test.go 新增 TestMethodDefaultRootOnly。

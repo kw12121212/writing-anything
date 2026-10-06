@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "规范包锁定文件",
+  "description": "锁定文件（Lock File）：wa-cli pack install 安装的每个规范包（Pack）的来源、git 提交与已安装文件的 SHA-256；由 pack install 与 pack remove 维护。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "packs"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "packs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "source", "sha256"],
+        "properties": {
+          "id": {"$ref": "common.schema.json#/$defs/id"},
+          "source": {
+            "type": "object",
+            "additionalProperties": false,
+            "description": "git 来源为 git 与可选的 ref；本地来源为 path（相对项目目录或绝对路径）",
+            "properties": {
+              "git": {"type": "string", "pattern": "\\S"},
+              "ref": {"type": "string", "pattern": "^[^-\\s]\\S*$"},
+              "path": {"type": "string", "pattern": "\\S"}
+            },
+            "oneOf": [{"required": ["git"]}, {"required": ["path"]}],
+            "dependentRequired": {"ref": ["git"]}
+          },
+          "commit": {"type": "string", "pattern": "^[0-9a-f]{40}$", "description": "git 来源解析到的提交号"},
+          "sha256": {"$ref": "common.schema.json#/$defs/sha256"}
+        },
+        "if": {"properties": {"source": {"required": ["git"]}}},
+        "then": {"required": ["commit"]},
+        "else": {"not": {"required": ["commit"]}}
+      }
+    }
+  }
+}

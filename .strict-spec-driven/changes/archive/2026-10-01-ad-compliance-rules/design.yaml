@@ -1,0 +1,27 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: ad-compliance-rules
+approach:
+  - 在 internal/lint 的 ruleTypes 中登记 ad-compliance（参数 terms：字符串数组；builtin：布尔，默认 true；basis：非空字符串，可选），检查函数复用已有的多词匹配器（matcher）与屏蔽区域，词的匹配规则与其他词表规则相同（区分大小写，纯 ASCII 词按词边界）。内置词表与依据写在 internal/lint 的 Go 代码中（随二进制提供），词表中任何一个词都不是另一个词的子串，避免同一处命中报告两次。
+  - 同一个词在内置词表与 terms 中都出现时只报告一次，按内置词表的依据；terms 中的词与内置词互为子串时（如 terms 含「第一」），同一处可能被两个词各报告一项，与 banned-terms 一致。message 为「极限词（Superlative Claims）：「词」属于绝对化用语，依据：《中华人民共和国广告法》第九条第（三）项（内置基础词表）；辅助检查，不构成法律意见」；terms 中的词依据为去掉首尾空白的 basis，没有 basis 时写明来自规则参数 terms。suggestion 为 null。builtin 为 false 而 terms 为空的规则什么也不检查，按 rule.invalid-params 报告，避免合规检查静默通过。
+decisions:
+  builtin-list-phrases:
+    decision: 内置词表只收短语（最佳、最好、最优、最强、最高级、最先进、最低价、最便宜、最受欢迎、国家级、世界级、全球级、顶级、顶尖、极致、极品、独一无二、史无前例、绝无仅有、万能、首选、唯一、遥遥领先、全球领先、销量第一、排名第一、全国第一、全网第一、行业第一、世界第一、第一品牌），不收单字「最」或单独的「第一」
+    rationale: 子串匹配下单字「最」与「第一」会命中「最近」「第一步」等大量正常写法，误报会让作者忽略整条规则；短语保留了planned change 举例的「最」「第一」「国家级」三类用语，又把误报控制在营销语境可接受的范围
+  pack-extends-by-own-rule:
+    decision: '规范包扩展行业词表的推荐方式是声明自己的 ad-compliance 规则 id（如 ad-medical，builtin: false，terms 与 basis），而不是覆盖已有规则的 terms'
+    rationale: 发现项的 source 是定义规则类型的配置层；独立的规则 id 让行业词表的发现项 source 为 pack:<id>，满足「发现项标明规则来源」，且不同规范包的词表互不覆盖（params 的顶层键按配置层整项替换）
+  disclaimer-in-message:
+    decision: 「辅助检查，不构成法律意见」写在每项发现项的 message 中，不新增诊断码或输出字段
+    rationale: message 是 --json 与人读输出都会展示的字段，发现项被单独转发（如 Skill 或审稿引用）时说明不会丢失；不改变输出信封
+  genre-enable-deferred:
+    decision: 本变更不修改任何内置文体或规范包；wechat-marketing 文体由 wechat-marketing-genre 变更声明并默认启用 ad-compliance
+    rationale: wechat-marketing 文体尚不存在，依赖关系上 wechat-marketing-genre 在本变更之后；tech-blog 与 default 不声明即为默认关闭
+alternatives:
+  - option: 把内置词表放进一个内置规范包（如 ad-compliance-cn）的 banned_terms
+    reason: banned-terms 合并后对所有 banned-terms 规则生效，无法按文体开关，且 message 无法统一标注法条与免责说明
+risks:
+  - 词表只是辅助检查，营销语境下仍可能有误报（如「唯一」「最好」用于非比较性陈述），作者可用单处豁免写明理由
+  - 广告法执法口径会变化，内置词表需要随版本维护

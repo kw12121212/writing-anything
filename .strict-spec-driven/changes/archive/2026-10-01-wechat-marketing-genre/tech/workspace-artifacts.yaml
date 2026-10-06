@@ -1,0 +1,33 @@
+schema: strict-spec-driven/delta-tech/v1
+schema_version: 1
+artifact_type: delta_tech
+schema_file: templates/strict-spec-driven/schemas/delta-tech.yaml
+target_standard: workspace-artifacts
+operations:
+  ADDED:
+    artifact-field-names:
+      strength: MUST
+      statement: 工作区产物的 JSON Schema 中声明的字段名（任意深度的 properties，不区分大小写）不得与可执行内容检查保留的字段名（schema.ExecutableKeys：script、command、exec、shell、hook、plugin、run、eval 及其复数等）相同；需要表达这类含义时换用其他字段名（如开头钩子用 opening 而不是 hook）。
+      rationale: 可执行内容检查在 Schema 校验之前按字段名拦截，产物若声明了保留的字段名，作者写入的合法内容会被报告为 artifact.executable-content，且无法绕过；在 Schema 层面避免冲突比放宽检查安全。
+      enforcement:
+        method: test
+        detail: internal/schema 的 TestFieldNamesAvoidExecutableKeys 遍历 schemas/*.schema.json 的全部 properties，断言没有字段名属于 ExecutableKeys。
+      examples:
+        good:
+          - marketing.schema.json 用 opening 表示开头钩子（Hook）
+        bad:
+          - marketing.schema.json 声明 hook 字段，合法的营销要素被报告为 artifact.executable-content
+    author-choice-decisions:
+      strength: SHOULD
+      statement: 产物中需要作者从多个候选中选定的内容（如标题候选）通过决策队列确认：产物只记录决策 id，选定结果与状态（none、open、decided、stale、unknown）由决策推导，不把选择复制进产物；代替产物向决策队列写入时，先完成全部检查并用 decision.NextID 预先算出 id，先写决策队列、再写引用它的产物，后者失败时在 changedPaths 中如实列出决策队列；候选在决定前改变时原地替换该决策的选项（decision.Replace），不另建会继续阻塞单元的新决策。
+      rationale: 决策队列是作者确认的唯一记录，复制选择会产生两个可能不一致的事实来源；预先算出 id 与固定的写入顺序满足 precheck-before-side-effects，原地替换避免作者没有办法撤回的过时阻塞决策。
+      enforcement:
+        method: review
+        detail: 审查代替产物写入决策队列的命令（如 marketing ask）：产物中只有决策 id，状态由选项比较推导，写入顺序与失败时的 changedPaths 正确，过期未决定的决策被替换而不是新增。
+      examples:
+        good:
+          - 'marketing.yaml 只有 headline_decision: dec-1，marketing show 按 dec-1 的选项与当前候选推导 headlineState'
+        bad:
+          - 'marketing.yaml 另存 headline: h2，作者在决策队列中改选后两处不一致'
+  MODIFIED: {}
+  REMOVED: {}

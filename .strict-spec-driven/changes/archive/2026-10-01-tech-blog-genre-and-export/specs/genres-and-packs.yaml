@@ -1,0 +1,25 @@
+schema: strict-spec-driven/delta-spec/v1
+schema_version: 1
+artifact_type: delta_spec
+schema_file: templates/strict-spec-driven/schemas/delta-spec.yaml
+target_spec: genres-and-packs
+operations:
+  ADDED:
+    tech-blog-genre:
+      strength: MUST
+      statement: 'wa-cli 必须随二进制提供内置的 tech-blog 文体（技术博客（Tech Blog））：单元类型 article（子单元类型 section，简报必填项为 audience、purpose 与 key_messages）与 section；阶段依次为 brief（必需产物 brief）、outline（outline）、draft（draft）与 review（review 与 acceptance）；默认写作法为 pyramid-scqa；规则 claims（claim-sources，error）、claim-candidates（warning）、code-language（code-block-language，error）、links（link-format，error）、references（reference-sources，warning）与 length（length-range，warning，800 到 8000 字）；评分标准为 accuracy（技术准确，blocking: true）、reproducible（可复现）、audience-fit（受众匹配）与 doc-type（文档类型明确：属于 Diátaxis 的教程、操作指南、参考或解释之一）；上下文预算为 16000。它与其他内置文体一样通过文体的校验。'
+      scenarios:
+        new-tech-blog:
+          - GIVEN: 刚用 wa-cli init --dir D 初始化的工作区
+          - WHEN: 运行 wa-cli new tech-blog post --dir D --json，再运行 wa-cli config resolved --dir D --json（config.yaml 的 default_genre 为 tech-blog）
+          - THEN: work.yaml 的 genre 为 tech-blog、type 为 article、stage 为 brief；resolved.rules 含 code-language、links 与 references，resolved.rubric 含 accuracy 且 blocking 为 true，退出码都为 0
+  MODIFIED:
+    known-rule-types:
+      strength: MUST
+      statement: 规则的 type 必须是已知规则类型（Rule Type）之一：cjk-typography、ai-cliche、banned-terms、term-consistency、length-range、paragraph-length、required-sections、claim-sources、claim-candidates、code-block-language、link-format、reference-sources。出现其他 type 时，wa-cli validate 与 wa-cli config resolved 必须报告错误码 rule.unknown-type（field 为该规则的 type，message 列出已知类型），以退出码 1 退出。
+      scenarios:
+        unknown-rule-type:
+          - GIVEN: house 规范包定义规则 r9，type 为 run-shell
+          - WHEN: 运行 wa-cli validate --dir D --json
+          - THEN: diagnostics 中有一条错误码为 rule.unknown-type、field 为 rules.r9.type 的诊断，message 列出已知的规则类型，退出码为 1
+  REMOVED: {}

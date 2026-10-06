@@ -1,0 +1,16 @@
+# Diátaxis 参考（Reference）：以查阅为目的，准确、完整地描述事物本身。
+schema_version: 1
+id: diataxis-reference
+title: Diátaxis 参考
+description: 面向查阅的文档：准确、完整、结构一致地描述接口、命令或配置，不夹带教学与观点。
+kind: article
+sections:
+  - id: overview
+    title: 概述
+    description: 描述对象是什么、适用范围。
+  - id: entries
+    title: 条目
+    description: 按一致的结构逐项描述。
+  - id: examples
+    title: 示例
+    description: 最小可用的示例。

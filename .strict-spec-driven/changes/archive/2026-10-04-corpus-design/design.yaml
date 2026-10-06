@@ -1,0 +1,25 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: corpus-design
+approach:
+  - 三份检入 internal/cli/testdata/e2e/novel/ 的设计产物分工：DESIGN.md 用中文承载小说设定（题材按里程碑已定方向：南方小镇修表匠收到一块停在特定时刻的旧怀表、牵出二十年前旧事；温情底色的封闭场景悬疑），包含人物卡（id、姓名、动机、秘密、终态）、人物关系、作者钦定世界规则（author_mandated，供 canon add 的钦定条目）、3 章 9 场景的场景表（每场：id、时间标记 time、after 相对顺序、地点、出场人物、承担节拍、揭示边界、状态变化）、时间线与跨章倒叙设计、两个秘密的知情点（谁在哪场得知、此前场景不得引用）、至少 2 条跨章伏笔链（第一章埋设、第二章强化、第三章回收）与 1 条悬空伏笔、至少 2 次状态快照变更、章内因果承接说明、雪花写作法（snowflake）十步与本设计的对应展开方式。matrix.yaml 为机器可读测试矩阵：每条含 id（稳定编号，如 T-UNITS-01）、feature（长篇特性，取里程碑 scope 清单的枚举值）、scene（所在场景 id 或 book 级）、command（wa-cli 命令）、expected（期望结果：发现项诊断码或全绿）、assertion（断言要点，供重放测试与对账引用）。script-format.md 定义命令脚本为分阶段 YAML：stage（生命周期阶段注释段）、command（wa-cli 参数序列）、input_ref（正文输入以语料目录内相对路径引用，不内联）、expect_exit、expect_code（诊断码）、可选 stdout_contains（recall 等只读命令的输出包含断言）。另附一个结构校验 Go 测试加载三份产物，断言编号唯一、必填字段齐备、特性面全覆盖与最低数量约束
+  - 三份检入 internal/cli/testdata/e2e/novel/ 的设计产物分工：DESIGN.md 用中文承载小说设定（题材按里程碑已定方向：南方小镇修表匠收到一块停在特定时刻的旧怀表、牵出二十年前旧事；温情底色的封闭场景悬疑），包含人物卡（id、姓名、动机、秘密、终态）、人物关系、作者钦定世界规则（author_mandated，供 canon add 的钦定条目）、3 部各 1 章 3 场景的场景表（每场：id、时间标记 time、after 相对顺序、地点、出场人物、承担节拍、揭示边界、状态变化）、时间线与跨章倒叙设计、两个秘密的知情点（谁在哪场得知、此前场景不得引用）、至少 2 条跨章伏笔链（第一章埋设、第二章强化、第三章回收）与 1 条悬空伏笔、至少 2 次状态快照变更、章内因果承接说明、雪花写作法（snowflake）十步与本设计的对应展开方式。matrix.yaml 为机器可读测试矩阵：每条含 id（稳定编号，如 T-UNITS-01）、feature（长篇特性，取里程碑 scope 清单的枚举值）、scene（单元 id：场景 id，或 book/部/章级）、command（wa-cli 命令）、expected（期望结果：发现项诊断码或全绿）、assertion（断言要点，供重放测试与对账引用）。script-format.md 定义命令脚本为分阶段 YAML：stage（生命周期阶段注释段）、command（wa-cli 参数序列）、input_ref（正文输入以语料目录内相对路径引用，不内联）、expect_exit、expect_code（诊断码）、可选 stdout_contains（recall 等只读命令的输出包含断言）。另附一个结构校验 Go 测试加载三份产物，断言编号唯一、必填字段齐备、特性面全覆盖与最低数量约束
+decisions:
+  matrix-yaml-format:
+    decision: 测试矩阵采用带稳定编号的 YAML（matrix.yaml），每条字段固定为 id/feature/scene/command/expected/assertion
+    rationale: replay-harness 的重放测试与 matrix-check 的对账校验需要机器可读且可逐条引用编号的矩阵；YAML 可被 Go 测试直接加载，编号即断言引用锚点，Markdown 表格无法承担该契约
+  snowflake-method:
+    decision: 长篇规划写作法选用雪花写作法（Snowflake Method），简报声明 snowflake，规划步骤经 plan step/plan confirm 展开
+    rationale: 内置写作法模板已含 snowflake；其从一句话到人物再到章节展开的步骤与悬疑中篇的人物驱动结构契合，且规划类写作法的 plan 命令链路已在 methods/plan 主规格中定义，网文结构更适合连载节奏而非封闭三章结构
+  design-structural-validation-test:
+    decision: 本变更附带一个结构校验 Go 测试（internal/cli 包），加载 matrix.yaml 与 DESIGN.md，断言矩阵编号唯一、每条字段齐备、特性面清单全覆盖、规划文件规定的最低数量约束（≥2 跨章伏笔链、≥1 悬空伏笔、≥2 秘密、≥2 状态快照变更、≥1 跨章倒叙、≥1 作者钦定世界规则、人物 ≤5、3 章 9 场景）满足
+    rationale: 让设计产物自身可验证：后续 corpus-authoring 与 replay-harness 依赖矩阵编号与结构，提前在校验层捕获缺字段或编号冲突，直接缓解里程碑风险清单中的『断言与矩阵脱节』
+  no-delta-spec:
+    decision: corpus-design 是技术专用变更：只新增 internal/cli/testdata/e2e/novel/ 下的设计文档、测试矩阵、脚本格式规范与结构校验测试，不改 wa-cli 的任何用户可观测行为
+    rationale: milestone scope 明确只新增测试与夹具、不改产品代码；测试语料设计产物不构成主规格需求，规格目录留空而非虚构 prose-only 规格
+alternatives: []
+risks:
+  - DESIGN.md 的场景表信息（time/after/知情点/状态变化）若与后续真实创作语料不一致会导致重放断言失真——以 matrix.yaml 逐条引用场景 id 并由 corpus-authoring 按设计文档创作来约束
+  - 脚本格式若与 replay-harness 的解析需求错配会返工——格式字段以 corpus-design 为单一来源定义，replay-harness 按此格式解析并回归

@@ -1,0 +1,19 @@
+schema: strict-spec-driven/lesson/v1
+schema_version: 1
+artifact_type: lesson
+schema_file: templates/strict-spec-driven/schemas/lesson.yaml
+lesson:
+  id: id-2ef97e
+  title: 组合多个单元的产物时，按引用所属的产物解析 id，不要用继承得到的那份
+category: coding
+status: active
+created_at: '2026-09-30T16:02:02.014Z'
+updated_at: '2026-09-30T16:02:02.014Z'
+context: context-pack 的上下文包同时使用继承得到的写作简报（本单元的，没有时取祖先的）与父单元大纲中的本节条目；本节条目覆盖的核心观点 id 属于父单元的写作简报。
+observation: fresh-context 审查复现：子单元有自己的 brief.yaml 时，查找本节覆盖的核心观点的 sources 用的是子单元的写作简报，素材丢失；子单元恰有同名核心观点时还会给出错误的素材。测试的子单元都没有自己的写作简报，两份产物恰好是同一份。
+takeaway: 一个 id 只在定义它的产物中有意义：解析引用时用引用方所指的那份产物（父单元大纲 → 父单元写作简报），不要用为别的用途继承或查找到的产物；测试要覆盖多个单元各自有同类产物、且 id 重名的情况。
+applies_when: 一条命令同时读取多个单元（本单元、父单元、祖先或兄弟单元）的同类产物，并用其中一份产物中的 id 去另一份中查找内容时
+occurrences:
+  - origin: context-pack
+    date: '2026-09-30'
+    evidence: internal/ctxpack 的 sectionOf 改为从父单元写作简报取被覆盖核心观点的 sources；TestSectionSourcesAndModified 与 CLI TestContextSectionSourcesAndReadOnly 覆盖子单元自有写作简报的情况。

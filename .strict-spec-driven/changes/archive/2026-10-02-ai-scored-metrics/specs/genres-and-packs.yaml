@@ -1,0 +1,25 @@
+schema: strict-spec-driven/delta-spec/v1
+schema_version: 1
+artifact_type: delta_spec
+schema_file: templates/strict-spec-driven/schemas/delta-spec.yaml
+target_spec: genres-and-packs
+operations:
+  ADDED:
+    scored-metrics:
+      strength: MUST
+      statement: 文体与规范包可以用 scored_metrics 声明 AI 评分指标（Metric）：每项含 id、title、可选的 description、scale（min 与 max 为整数，max − min 为 1 到 25）、anchors（锚定评分（Anchored Scale）：scale 内每个整数分值恰有一项，含 score、description 与 example 示例片段）以及可选的 sessions（需要的独立打分会话数，1 到 9，默认 3）、max_spread（分歧阈值，默认 1）、tolerance（校准时视为相符的最大差值，默认 1）、min_samples（判断降级所需的最少校准样本数，默认 5）与 min_agreement（0 到 1 的一致率阈值，默认 0.7）。config.yaml 不能声明 scored_metrics。同一文体或规范包中指标 id 重复时报告 artifact.duplicate-id；max 不大于 min 或 max − min 大于 25 时报告 metrics.invalid-scale（field 为 scored_metrics[i].scale）；anchors 缺少或重复某个分值、含 scale 之外的分值时报告 metrics.invalid-anchors（field 为 scored_metrics[i].anchors）；wa-cli validate 与 wa-cli config resolved 都以退出码 1 退出。合并时按 文体 → 规范包（按 packs 的顺序）的顺序，后面的配置层按 id 整项替换前面的同名指标并保留其位置；resolved.scoredMetrics 的每项含 id、title、description、scale、anchors、sessions、maxSpread、tolerance、minSamples、minAgreement（未声明的取默认值）与 source（genre:<id> 或 pack:<id>）；没有任何配置层声明时为空数组。
+      scenarios:
+        pack-declares-metric:
+          - GIVEN: 工作区规范包 house 声明 AI 评分指标 tension：scale 为 1 到 5，anchors 含 1 到 5 分各一项，sessions 为 2；config.yaml 的 packs 为 [house]
+          - WHEN: 运行 wa-cli config resolved --dir D --json
+          - THEN: resolved.scoredMetrics 只含 tension，source 为 pack:house，sessions 为 2，maxSpread 为 1，tolerance 为 1，minSamples 为 5，minAgreement 为 0.7，退出码为 0
+        missing-anchor:
+          - GIVEN: house 规范包的 tension 的 scale 为 1 到 5，anchors 缺少 4 分
+          - WHEN: 运行 wa-cli validate --dir D --json
+          - THEN: diagnostics 中有一条错误码为 metrics.invalid-anchors、path 为 .writing-anything/packs/house.yaml、field 为 scored_metrics[0].anchors 的诊断，message 指出缺少 4 分，退出码为 1
+        later-pack-replaces-metric:
+          - GIVEN: packs 为 [a, b]，a 与 b 都声明了指标 tension 但 title 不同
+          - WHEN: 运行 wa-cli config resolved --dir D --json
+          - THEN: resolved.scoredMetrics 只有一项 tension，内容与 b 相同，source 为 pack:b
+  MODIFIED: {}
+  REMOVED: {}

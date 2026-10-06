@@ -1,0 +1,29 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: style-metrics-and-drift
+approach:
+  - 新增领域包 internal/stylemetric：Measure(content, aiTerms) 计算单元的标量指标与段落指标（句子与段落切分复用 internal/learn 的规则，先用 feedback.StripComments 去掉作者批注）；Profile(styleProfile) 与 Accepted(units) 构成两类基准；Drift 按 |值 − 均值| > 阈值 × 标准差 判定（标准差为 0 时不判定）。只返回数据与问题。
+  - internal/cli 新增 metrics compute：解析单元，按作品合并生效设置（series.ForWork，取 styleProfile、driftThreshold 与 ai-cliche 规则的词表），对单元与其有正文的子孙单元计算指标；已验收单元基准取同一作品中 acceptance.yaml 与当前正文一致、且不在本次计算范围内的单元，少于 3 个时不使用该基准。命令只读，漂移发现项为 warning 级，不影响退出码。
+decisions:
+  metric-set:
+    decision: 标量指标：chars（非空白字符数）、sentenceMean、sentenceStdev、paragraphMean、dialogueRatio（“”「」『』内的字数占比）、vocabularyRichness（汉字二元组的类型数 / 词例数）、functionWords（的、了、是、在、和、就、都、也、而、着 每千字次数）、fourChar（标点或非汉字分隔出的恰为 4 个汉字的片段每千字个数）、aiCliche（合并后 ai-cliche 规则词表的每千字出现次数）、punctuation（标点集合每千字次数）；段落指标：每个段落的 sentences 与 sentenceMean。数值保留两位小数（比例四位）。
+    rationale: 都只依赖字符串计数，同样的正文总得到同样的结果；四字词以分隔片段近似，避免分词依赖；AI 腔词表沿用规范包的 ai-cliche 规则，与 lint 的口径一致。
+  baselines:
+    decision: 作者文风画像基准比较 sentenceMean（对 styleProfile.sentences 的 mean 与 stdev）、paragraphMean（对 paragraphs），以及每个至少 2 句的段落的 sentenceMean（对 sentences，发现项带段落与行号，表示局部节奏变化）；已验收单元基准对每个标量指标取这些单元的均值与总体标准差。阈值为 resolved.driftThreshold 的倍数。
+    rationale: 文风画像只有句长与段长的分布，只有这两项能用标准差判定；同作品已验收单元能为全部指标提供分布，3 个以上才有意义；段落级比较给出位置，满足「附带段落位置」。
+  non-blocking:
+    decision: 漂移发现项为 warning 级诊断之外的结构化结果（drift 数组），命令退出码只受错误影响；accept 与 lint 不读取漂移。
+    rationale: 里程碑 intake 问题 metric-blocking 的建议：指标默认不阻塞；指标只衡量偏离，不评判好坏，避免写作被指标绑架。
+  threshold-layers:
+    decision: drift_threshold 只由规范包声明（按 packs 顺序覆盖），文体与 config.yaml 不声明；都没有时为 2，来源 default。
+    rationale: 内置文体都不声明阈值，用户也不能自定义文体，文体层既不可达也无法测试；阈值属于作者或团队的规范，放在规范包里最自然。
+  counting-and-precision:
+    decision: AI 腔密度复用 lint.CountTerms（与 ai-cliche 规则相同的屏蔽、去重与一次扫描）；引号深度按段落重置；漂移判定按四位小数比较标准差，已验收单元取值完全相同时不判定，发现项中的 mean 与 stdev 保留四位小数。
+    rationale: 逐词 strings.Count 的扫描次数随词表增长，违反 input-limits，且与 lint 的口径不一致；浮点运算会让相同取值算出 1e-17 的标准差；比例类指标的标准差常小于 0.01，两位小数会显示为 0。
+alternatives:
+  - option: 把漂移检测做成 lint 规则类型
+    reason: lint 的发现项会参与验收关卡（error 级阻塞），且规则引擎只看单个单元，不便取同作品已验收单元的基准
+risks:
+  - 短单元的统计量不稳定，可能产生误报；漂移只作参考，由作者判断

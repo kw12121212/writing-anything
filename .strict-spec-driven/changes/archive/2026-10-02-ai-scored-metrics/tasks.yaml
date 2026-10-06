@@ -1,0 +1,55 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: ai-scored-metrics
+sections:
+  Implementation:
+    schema:
+      text: Schema：common.schema.json 的 scored_metrics 定义，genre 与 pack 引用；metrics.yaml（单元目录）、calibration.yaml（工作区）与 metrics-input（record 输入）的 Schema 与产物类型登记、测试夹具
+      status: complete
+    catalog-resolve:
+      text: internal/catalog 读取 scored_metrics 并检查 id 重复、scale 与锚定分值覆盖；internal/resolve 合并为 resolved.scoredMetrics（补齐默认值、带 source）
+      status: complete
+    decision-batch:
+      text: internal/decision：一次追加多个决策的入口（一次写入决策队列），供分歧决策使用
+      status: complete
+    package:
+      text: internal/metrics：任务生成、metrics.yaml 读写与校验、会话记录与替换、正文改变时丢弃旧会话、中位数与分歧、分歧决策、校准样本与一致率、仅供参考判断、单元与工作区产物校验
+      status: complete
+    cli:
+      text: internal/cli：metrics plan、metrics record、metrics show、metrics calibrate 命令（参数检查、诊断与 next、changedPaths、人读输出），注册表与 sampleArgs；validate 整体与单个产物校验接入 metrics.yaml 与 calibration.yaml
+      status: complete
+    docs:
+      text: docs/GLOSSARY.md 加入打分会话、片段、分歧、仅供参考等术语；wa-review 技能说明在声明了 AI 评分指标时如何用独立会话打分、记录与请作者校准
+      status: complete
+    review-fixes:
+      text: 审查修复：会话没有覆盖的片段按 pending 处理（不再 panic）；未决定的分歧决策原地更新、正文改变后保留未决定的记录；作者选择按决策选项文本解释分值；写入超过规模时报告 metrics.too-large；补充失败不写文件、锚点、无正文、过期校准与手写产物的测试；术语表补充 AI 评分指标；delta tech 修改 author-choice-decisions 并新增 read-path-invariants
+      status: complete
+  Testing:
+    lint:
+      text: gofmt 检查本变更的 Go 文件
+      status: complete
+      command: test -z "$(gofmt -l internal/metrics internal/decision internal/catalog internal/resolve internal/schema internal/cli/metrics.go internal/cli/metrics_test.go internal/cli/workspace.go internal/cli/registry.go internal/cli/cli_test.go)"
+    unit-tests:
+      text: 单元测试：指标声明的校验与合并；plan、record（输入错误、覆盖、替换、正文改变丢弃）、分歧决策（阈值、会话数、不重复、仅供参考不建）、show 的状态与值、calibrate（未完成打分、替换样本、一致率与降级）、validate；CLI 输出、诊断、退出码与 MCP 样例调用
+      status: complete
+      command: go test ./internal/...
+    full-regression:
+      text: 运行完整回归命令，覆盖率不低于 80%
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    spec-alignment:
+      text: 对照 metrics 与 genres-and-packs delta spec 的每个场景确认实现与测试覆盖，并按实际实现修正
+      status: complete
+    strict-ready:
+      text: 运行 strict-spec-cli ready 与 strict-spec-cli verify，确认变更产物有效
+      status: complete
+      command: strict-spec-cli ready ai-scored-metrics && strict-spec-cli verify ai-scored-metrics
+    archive-readiness:
+      text: 确认 delta spec 能合并（metrics 为新建主规格），归档后路线图中的 ai-scored-metrics 标记为完成
+      status: complete
+testing_gates:
+  validation_task: full-regression
+  unit_test_task: unit-tests

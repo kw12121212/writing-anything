@@ -1,0 +1,61 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: emotion-pacing-curve
+sections:
+  Implementation:
+    schema-targets:
+      text: internal/schema 的大纲 JSON Schema：大纲节（Outline Section）增加可选 targets（AI 评分指标（Metric）id 到整数分值的映射，键为 id 格式），unevaluatedProperties 语义保持，不声明时合法
+      status: complete
+    outline-targets:
+      text: internal/outline：节结构增加 Targets 字段（json tag targets，omitempty）；outline set <unit> <section> --target <metric>=<score>[,<metric>=<score>…]（整体替换，空字符串时删除）写入与删除；校验：metric 不在按作品文体合并的已声明指标（resolved.scoredMetrics）中时报告 outline.unknown-target-metric（field 为 sections[i].targets.<metric>），分值非整数或不在该指标 scale 内时报告 outline.target-out-of-range（field 同上）；sectionOrder 增加 targets；outline show 输出 targets
+      status: complete
+    catalog-pacing-checks:
+      text: internal/catalog：文体数据模型增加 pacing_checks（每项含 id、metric、min_score、max_gap_chars），校验：同一文体中 id 重复报告 artifact.duplicate-id；max_gap_chars 非正整数报告 pacing.invalid-params（field 为 pacing_checks[i].max_gap_chars）；规范包与 config.yaml 声明 pacing_checks 时按 Schema 拒绝（artifact.schema-violation）；metric 是否在合并后的已声明指标中由 resolve 层校验（pacing.unknown-metric）
+      status: complete
+    resolve-pacing:
+      text: internal/resolve：合并文体 pacing_checks 并在 resolved 中输出 pacingChecks（每项含 id、metric、minScore、maxGapChars 与 source（genre:<id>），没有声明时为空数组）；metric 不在合并后的已声明指标中时报告 pacing.unknown-metric（field 为 pacing_checks[i].metric），min_score 不在该指标 scale 内时报告 pacing.invalid-params（field 为 pacing_checks[i].min_score）；wa-cli validate 报告相同诊断
+      status: complete
+    short-story-metrics:
+      text: internal/catalog/builtin/genres/short-story.yaml：声明 scored_metrics：emotion（情绪，scale 1 到 5）与 tension（张力，scale 1 到 5），anchors 每个分值含 description 与 example 示例片段（文案初稿，作者审稿时可调）；通过文体与指标的全部既有校验
+      status: complete
+    curve-command:
+      text: internal/metrics 与 internal/cli：新增只读命令 wa-cli curve <work>：按单元树先序为 resolved.scoredMetrics 的每个指标输出一条曲线（单元点值复用 metrics show 的片段取值语义后取单元内中位数，无可取值片段时为 null）；目标三层解析（节 targets → 指标 id 为 tension 时节拍目标张力的线性映射 min + tension ÷ 10 × (max − min)、四舍五入远离零、多节拍取均值 → 无目标）；偏离判定 |值 − 目标| 大于该指标 tolerance；文体 pacing_checks 节奏检查（按单元先序拼接正文，相邻两个片段取值达到 min_score 的节拍点之间的非空白字符数超过 max_gap_chars 时输出发现项）；--json 输出 curves 与发现项，文本输出字符条形图与发现项列表；changedPaths 为空；合并后没有任何已声明指标时报告 metrics.none-declared（退出码 1）；帮助文本与诊断含下一步可执行命令
+      status: complete
+    glossary-pacing:
+      text: docs/GLOSSARY.md：新增节奏检查（Pacing Check）条目（文体声明的、基于已记录分数与确定性指标的节奏约束检查，如两个节拍点片段之间的最大字数间隔）；如实现引入偏离发现项（Deviation Finding）等其他新术语，一并加入同一小节
+      status: complete
+  Testing:
+    outline-targets-tests:
+      text: internal/cli outline 测试：outline set --target tension=4 写入 targets 并在 outline show 输出；--target tension=（空）删除；metric 未声明时 outline.unknown-target-metric、分值越界（如 7）时 outline.target-out-of-range，均不修改文件、退出码 1；validate 对手写的越界 targets 报告相同诊断；既有场景契约字段用例不回归
+      status: complete
+      command: go test ./internal/cli/ -run TestOutline
+    pacing-checks-tests:
+      text: internal/catalog 与 internal/resolve 测试：合法 pacing_checks 通过校验并出现在 resolved.pacingChecks（含 source 为 genre:<id>）；metric 未声明报告 pacing.unknown-metric、min_score 越界与 max_gap_chars 非正整数报告 pacing.invalid-params；规范包声明 pacing_checks 被 Schema 拒绝；short-story 文体的 emotion 与 tension 指标通过校验且出现在 resolved.scoredMetrics
+      status: complete
+      command: go test ./internal/catalog/... ./internal/resolve/...
+    curve-tests:
+      text: internal/cli curve 命令测试：契约声明目标时输出偏离发现项（含 unit、metric、value、target、difference）；未声明且指标为 tension 时 three-act 节拍目标张力映射为目标（如 setup 的 2 映射到 1 到 5 刻度为 2）；无目标或点值为 null 时不输出发现项；片段 pending、disputed 或 metrics.yaml 过期时点值为 null；节奏检查超过 max_gap_chars 输出发现项、未超过不输出；--json 结构与文本图表输出；changedPaths 为空、工作区文件不变；没有已声明指标时报告 metrics.none-declared 且退出码 1
+      status: complete
+      command: go test ./internal/cli/ -run TestCurve
+    e2e-curve:
+      text: short-story 端到端测试（internal/cli/e2e_test.go 扩展）：夹具中张力曲线偏离契约目标的场景被 curve 列为发现项；存在发现项时 accept 与 advance 的行为与没有发现项时相同（默认不阻塞验收）；既有短篇端到端用例不回归
+      status: complete
+      command: go test ./internal/cli/ -run TestShortStory
+    regression:
+      text: 完整回归：go vet、构建、全部测试与 80% 覆盖率检查（internal/**，不含 internal/tools/**）通过
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    ready-check:
+      text: 运行 strict-spec-cli ready emotion-pacing-curve，确认变更就绪、没有阻塞性诊断
+      status: complete
+      command: strict-spec-cli ready emotion-pacing-curve
+    verify-check:
+      text: 运行 strict-spec-cli verify emotion-pacing-curve，确认变更产物结构、规格引用与任务完整性通过校验
+      status: complete
+      command: strict-spec-cli verify emotion-pacing-curve
+testing_gates:
+  validation_task: regression
+  unit_test_task: curve-tests

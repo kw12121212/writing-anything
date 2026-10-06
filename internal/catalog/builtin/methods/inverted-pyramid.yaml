@@ -1,0 +1,20 @@
+# 倒金字塔：按重要性递减排列信息，最重要的事实放在导语。
+schema_version: 1
+id: inverted-pyramid
+title: 倒金字塔
+description: 按重要性递减排列信息：导语给出最重要的事实，主体补充重要细节，背景放在最后，读者在任何位置停下都不错过要点。
+kind: article
+sections:
+  - id: lead
+    title: 导语
+    description: 最重要的事实：谁、什么、何时、何地、为什么。
+  - id: body
+    title: 主体
+    description: 按重要性递减补充细节、引述与数据。
+  - id: background
+    title: 背景
+    description: 次要的背景与延伸信息。
+rubric:
+  - id: lead-complete
+    title: 导语完整
+    description: 只读导语就能获得全文最重要的事实。

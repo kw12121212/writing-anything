@@ -1,0 +1,49 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: style-metrics-and-drift
+sections:
+  Implementation:
+    schema-resolve:
+      text: genre 与 pack Schema 的 drift_threshold；internal/catalog 读取，internal/resolve 合并为 resolved.driftThreshold；测试夹具
+      status: complete
+    package:
+      text: internal/stylemetric：标量与段落指标、两类基准、漂移判定与发现项
+      status: complete
+    cli:
+      text: internal/cli：metrics compute 命令（子孙单元、已验收单元基准、人读输出），注册表与 sampleArgs
+      status: complete
+    docs:
+      text: docs/GLOSSARY.md 确认文风漂移等术语；wa-review 技能说明用 metrics compute 查看漂移并交给作者判断
+      status: complete
+    review-fixes:
+      text: 审查修复：标准差按精度判定、已验收取值相同时不判定、发现项四位小数；AI 腔复用 lint.CountTerms；引号深度按段落重置；drift_threshold 只由规范包声明；阈值类型防御；无正文的诊断措辞；补充已验收基准过滤、发现项取值、lint 与 accept 不受影响、精度与计数口径等测试；delta tech float-equality-in-stats 与 shared-term-matcher
+      status: complete
+  Testing:
+    lint:
+      text: gofmt 检查本变更的 Go 文件
+      status: complete
+      command: test -z "$(gofmt -l internal/stylemetric internal/catalog internal/resolve internal/schema internal/cli/compute.go internal/cli/compute_test.go internal/cli/registry.go internal/cli/cli_test.go)"
+    unit-tests:
+      text: 单元测试：各项指标的定义与确定性（批注、对话、四字词、虚词、AI 腔、丰富度）；两类基准、阈值与段落级漂移；不足 3 个已验收单元；标准差为 0；CLI 输出、诊断、退出码与 MCP 样例调用；accept 与 lint 不受影响
+      status: complete
+      command: go test ./internal/...
+    full-regression:
+      text: 运行完整回归命令，覆盖率不低于 80%
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    spec-alignment:
+      text: 对照 metrics 与 genres-and-packs delta spec 的每个场景确认实现与测试覆盖，并按实际实现修正
+      status: complete
+    strict-ready:
+      text: 运行 strict-spec-cli ready 与 strict-spec-cli verify，确认变更产物有效
+      status: complete
+      command: strict-spec-cli ready style-metrics-and-drift && strict-spec-cli verify style-metrics-and-drift
+    archive-readiness:
+      text: 确认 delta spec 能合并，归档后 style-metrics-and-drift 标记为完成、里程碑 packs-and-series 完成
+      status: complete
+testing_gates:
+  validation_task: full-regression
+  unit_test_task: unit-tests

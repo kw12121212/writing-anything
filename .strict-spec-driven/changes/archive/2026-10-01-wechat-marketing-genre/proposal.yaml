@@ -1,0 +1,34 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: wechat-marketing-genre
+  status: proposed
+summary:
+  what:
+    - 新增内置 wechat-marketing 文体（公众号营销文章）：单元类型 article 与 section；阶段为写作简报、大纲、草稿（必需产物 draft 与 marketing）与审稿验收；默认写作法 aida；规则含论断出处、广告法极限词（ad-compliance，error）、字数（1500 到 4000 字）与段落长度（150 字）；评分标准含营销评分项与 4U 标题法（有用、紧迫、独特、具体）的四个评分项。
+    - 新增内置营销写作法 AIDA（注意 → 兴趣 → 欲望 → 行动）与 PAS（问题 → 放大 → 解决），都是文章类写作法，大纲缺少对应章节时由已有的写作法缺口检查报告。
+    - 新增营销要素（Marketing Elements）产物 marketing.yaml：标题候选（Headline Candidates）、文章摘要（Digest）、开头钩子（Hook）与行动号召（CTA）；wa-cli marketing set 按命名参数写入，wa-cli marketing show 查看并列出仍缺的要素；wa-cli marketing ask 把标题候选登记为一个关联该单元的阻塞决策，作者用 wa-cli decide 选定，选择即为确认记录。必需产物含 marketing 的阶段，营销要素不全、标题未提问或候选在提问后改过时阻塞推进。
+  why:
+    - 里程碑 wechat-marketing-and-mcp 的目标：Agent 能用 wa-cli 完成一篇公众号营销文章，包括标题候选、摘要、开头钩子、行动号召与广告法极限词检查；完成标准要求选用 AIDA 或 PAS 时大纲缺少对应段落会被 validate 报告、标题候选按 4U 标题法的评分项审稿，命中极限词时 lint 以非零退出。
+    - 标题、摘要、钩子与行动号召决定营销文章的打开与转化，但标题必须由作者选定；把它们做成结构化产物并把标题选择记为决策，Agent 才能规范地协助而不是替作者决定。ad-compliance-rules 变更已把在 wechat-marketing 文体中默认启用 ad-compliance 交给本变更。
+scope:
+  in:
+    - internal/catalog/builtin：wechat-marketing 文体与 aida、pas 写作法
+    - internal/schema：marketing 产物的 JSON Schema 与登记（单元目录下的 marketing.yaml）
+    - internal/marketing：加载、校验、按字段修改、提问与关卡；internal/decision 导出下一个决策 id 的计算
+    - internal/work：Work.Blockers 加入营销要素阻塞项；internal/cli：marketing set、marketing show、marketing ask，next 与 advance 的下一步命令与说明，validate 校验 marketing.yaml
+    - 新增 marketing 主规格；修改 genres-and-packs（新增 wechat-marketing-genre）、methods（method-data 的内置写作法）与 units-and-lifecycle（advance-stage、next-steps）
+    - 端到端测试：一篇公众号文章从写作简报到验收、导出的全流程；wa-draft 技能说明营销要素与标题决策；docs/GLOSSARY.md 新增营销要素与文章摘要
+  out:
+    - 公众号 HTML 导出与配图：由 wechat-html-export 负责
+    - AI 生成内容标识：由 ai-content-disclosure 负责
+    - 自动生成或改写标题：wa-cli 不调用大语言模型，标题候选由 Agent 写入、作者选定
+unchanged_behavior:
+  - tech-blog 与 minimal 文体、已有内置写作法与规则的行为不变；没有 marketing 必需产物的阶段不检查营销要素
+  - wa-cli decide、decisions 与决策阻塞的行为不变；标题决策就是普通的阻塞决策
+  - 输出信封字段与退出码约定不变；已发布错误码的含义不变
+roadmap:
+  milestone: wechat-marketing-and-mcp
+  planned_change: wechat-marketing-genre

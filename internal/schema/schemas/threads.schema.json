@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "伏笔台账",
+  "description": "作品根单元目录中的伏笔台账（Foreshadowing Ledger）：伏笔条目（Thread Entry）记录伏笔内容、埋设场景、计划回收位置与状态。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "entries"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "text", "planted_in", "planned_recover", "status"],
+        "properties": {
+          "id": {"$ref": "common.schema.json#/$defs/id"},
+          "text": {"type": "string", "pattern": "\\S"},
+          "planted_in": {"type": "string", "pattern": "\\S"},
+          "planned_recover": {"type": "string", "pattern": "\\S"},
+          "status": {"enum": ["open", "paid", "dropped"]},
+          "recovered_in": {"type": "string", "pattern": "\\S"},
+          "decision": {"$ref": "common.schema.json#/$defs/id"}
+        },
+        "allOf": [
+          {
+            "if": {"properties": {"status": {"const": "paid"}}, "required": ["status"]},
+            "then": {"required": ["recovered_in"], "not": {"required": ["decision"]}}
+          },
+          {
+            "if": {"properties": {"status": {"const": "dropped"}}, "required": ["status"]},
+            "then": {"required": ["decision"], "not": {"required": ["recovered_in"]}}
+          },
+          {
+            "if": {"properties": {"status": {"const": "open"}}, "required": ["status"]},
+            "then": {"not": {"anyOf": [{"required": ["recovered_in"]}, {"required": ["decision"]}]}}
+          }
+        ]
+      }
+    }
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "审稿输入",
+  "description": "wa-cli review record 的输入：按评分标准（Rubric）逐项的结论与发现项（Finding）。发现项的 id 可以省略，由 wa-cli 编号。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["rubric"],
+  "properties": {
+    "rubric": {"$ref": "review.schema.json#/$defs/verdicts"},
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["paragraph", "message"],
+        "properties": {
+          "id": {"$ref": "common.schema.json#/$defs/id"},
+          "rubric": {"$ref": "common.schema.json#/$defs/id"},
+          "paragraph": {"$ref": "review.schema.json#/$defs/paragraph"},
+          "quote": {"type": "string", "pattern": "\\S"},
+          "message": {"type": "string", "pattern": "\\S"},
+          "suggestion": {"type": "string", "pattern": "\\S"}
+        }
+      }
+    }
+  }
+}

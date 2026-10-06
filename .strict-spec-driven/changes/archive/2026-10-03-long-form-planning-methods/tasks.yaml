@@ -1,0 +1,60 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: long-form-planning-methods
+sections:
+  Implementation:
+    impl-builtin-methods:
+      text: 'internal/catalog/builtin/methods/ 新增三个内置写作法数据：snowflake（kind: planning，十步：one-sentence 一句话概括、one-paragraph 一段话概括、character-sketch 人物概要、one-page-synopsis 一页纲要、character-details 人物详述、four-page-synopsis 四页纲要、character-bible 人物宝典、scene-list 场景列表、scene-details 场景详述、start-writing 开始写作；character-sketch、character-details、character-bible 声明 product: characters，scene-list 声明 product: scenes，scene-details 声明 product: scene-contracts，均含中文标题与描述）；golden-three（kind: structure，三节拍 hook 钩子、protagonist 主角亮相、core-conflict 核心冲突与金手指，含 position 与 tension）；volume-structure（kind: structure，三节拍 goal 目标、climax 高潮、cliffhanger 断章，含 position 与 tension）。'
+      status: complete
+    impl-method-schema:
+      text: internal/schema/schemas/method.schema.json：steps 项增加可选 product 字段（枚举 characters、scenes、scene-contracts，取值非法由 Schema 报告 artifact.schema-violation，field 为 methods[i].steps[j].product；product 只出现在 steps 项内，与既有「三种列表只能出现与 kind 对应的一种」的结构约束一致）；补齐 internal/schema/testdata/method 夹具（合法 product 与非法取值各一）。
+      status: complete
+    impl-novel-default-method:
+      text: internal/catalog/builtin/genres/novel.yaml：default_method 设为 snowflake，并同步文件头注释（默认写作法不再属于后续变更）；确认 config resolved 与 genre 校验路径无回归。
+      status: complete
+    impl-plan-package:
+      text: 新增 internal/plan 包：plan.json Schema（schema_version、method、steps[]，每步含 id、title、text、sources[]、links[]、confirmed_by_author、confirmation、confirmed_at）；plan.yaml 读写与 YAML 注释保留；顺序不变式（已确认步骤为方法 steps 前缀、当前步为第一个未确认步）；--source 须已登记（plan.unknown-source）；按步骤 product 校验 --link（characters→设定集 character 条目、scenes→作品内 scene 单元、scene-contracts→场景单元大纲节且声明契约字段，plan.unknown-link）；product 步骤确认时至少一个链接（plan.missing-links）；确认记录写入（plan.incomplete-confirmation）；--redo 重置（plan.not-confirmed：对未确认步骤给出 --redo）。
+      status: complete
+    impl-plan-cli:
+      text: internal/cli 新增命令组并注册 help：wa-cli plan show <unit>（只读输出 method、steps 状态 pending/drafted/confirmed 与 currentStep）；wa-cli plan step <unit> <step> --text ... --source ... --link ...（只允许写当前步或其未确认草稿，越序或改写已确认步骤报告 plan.step-order；已确认步骤给出 --redo --confirmed-by-author --confirmation 时重置该步并删除其后步骤记录；步骤不在方法中报告 plan.unknown-step；单元选用的写作法不是规划类报告 plan.not-planning）；wa-cli plan confirm <unit> <step> --confirmed-by-author --confirmation ...（只确认当前步；product 关卡同上）；全部命令支持 --json，诊断含错误码、产物路径与 next 可执行命令，遵循既有人读输出约定。
+      status: complete
+    impl-validate:
+      text: wa-cli validate 整体校验与 wa-cli validate <path> 接入 plan.yaml：Schema、顺序不变式、sources 已登记、链接按 product 可解析、已确认步骤必有确认记录；plan.yaml 途经符号链接或非普通文件时按 artifact.not-found 处理（与 canon.yaml 一致）。
+      status: complete
+    impl-glossary:
+      text: docs/GLOSSARY.md：增补本变更引入且缺失的术语（黄金三章（Golden Three Chapters）、卷结构（Volume Structure）、规划（Plan）、规划产物链接（Plan Link）等，以实现时实际引入为准），首次出现遵循「中文（English）」写法；核对既有 雪花写作法（Snowflake Method）词条与十步描述一致。
+      status: complete
+    impl-skills-mcp:
+      text: 检查内嵌 Skill（internal/skills/skills/）与 MCP 薄封装的命令面：为长篇规划工作流补充或更新 Skill 指引（按 method show snowflake → plan step → 作者确认 → plan confirm 的顺序推进，结构步骤先经 canon add / unit add / scene contract 落地再 --link）；MCP 工具面按既有薄封装约定暴露新命令，不实现 CLI 之外的业务逻辑。
+      status: complete
+  Testing:
+    plan-unit-tests:
+      text: internal/plan 单元测试：plan.yaml Schema 与注释保留；顺序不变式（越序写、确认非当前步、改写已确认步骤均报告 plan.step-order）；--source 未登记（plan.unknown-source）；按 product 的链接校验三类解析失败与类型不符（plan.unknown-link）；product 步骤无链接确认（plan.missing-links）；确认记录强制（plan.incomplete-confirmation）；--redo 重置该步与后续步骤、对未确认步骤报告 plan.not-confirmed；已确认步骤构成前缀的 validate 复查。
+      status: complete
+    catalog-schema-tests:
+      text: internal/catalog 与 internal/schema 测试：snowflake、golden-three、volume-structure 的加载与校验（十步及 product 声明、节拍 position/tension）；method list/show 输出新写作法（list-builtin 顺序回归与 show-planning-product）；steps 项 product 非法取值由 Schema 报告 artifact.schema-violation（夹具与 pack 端到端，field 为 methods[i].steps[j].product）；novel 文体 default_method 为 snowflake（TestNovelGenre 与 plan show 的 novel-default-method 场景）。
+      status: complete
+    plan-command-tests:
+      text: internal/cli 测试：plan show/step/confirm 的 --json 输出、诊断（错误码、next 命令）与退出码；里程碑 done 判据场景——snowflake 某一步未经作者确认时不能进入下一步；人物步骤先 canon add 再 --link、场景列表先 unit add 再 --link、场景详述先 scene contract 再 --link 的确认关卡；--redo 重置与 plan.not-confirmed；非规划写作法单元（plan.not-planning）与未知步骤（plan.unknown-step）；wa-cli validate 整体与单路径集成。
+      status: complete
+    novel-snowflake-e2e:
+      text: e2e 测试：novel 作品从 wa-cli new 到开始写作的雪花十步推进（含作者确认记录、人物三步写入设定集人物卡、场景列表生成单元树场景、场景详述生成场景契约），以及章/部单元经 brief set --method 选用 golden-three 与 volume-structure 后的 outline 写法缺口检查回归。
+      status: complete
+    project-regression:
+      text: 完整项目回归（含 80% 覆盖率门槛，范围 internal/** 不含 internal/tools/**）。
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    verify-ready:
+      text: strict-spec-cli ready long-form-planning-methods 通过（确定性阻塞项清零）。
+      status: complete
+      command: strict-spec-cli ready long-form-planning-methods
+    verify-change:
+      text: strict-spec-cli verify long-form-planning-methods 通过（变更工件与规格增量完整一致）。
+      status: complete
+      command: strict-spec-cli verify long-form-planning-methods
+testing_gates:
+  validation_task: project-regression
+  unit_test_task: plan-unit-tests

@@ -1,0 +1,19 @@
+# Diátaxis 操作指南（How-to Guide）：以完成任务为目的，给有经验的读者解决具体问题的步骤。
+schema_version: 1
+id: diataxis-how-to
+title: Diátaxis 操作指南
+description: 面向任务的文档：给已经了解基础的读者解决一个具体问题的步骤，不讲原理。
+kind: article
+sections:
+  - id: problem
+    title: 要解决的问题
+    description: 指南适用的具体场景。
+  - id: prerequisites
+    title: 前提
+    description: 开始前需要满足的条件。
+  - id: steps
+    title: 步骤
+    description: 完成任务的操作步骤。
+  - id: verification
+    title: 验证
+    description: 如何确认问题已经解决。

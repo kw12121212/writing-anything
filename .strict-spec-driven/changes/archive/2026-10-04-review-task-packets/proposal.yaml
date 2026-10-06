@@ -1,0 +1,39 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: review-task-packets
+  status: proposed
+summary:
+  what:
+    - 新增 wa-cli review plan <work|unit> [--dimension <维度>]：按五个维度生成语义审查任务包（Review Task Packet），写入 .writing-anything/packets/<work>/<packet-id>.yaml——character（人物一致性：章 × 出场人物，正文为该章内声明该人物出场的场景正文切片，切片为该人物的状态历史与知情条目）、thread（伏笔回收质量：每个 open 或 paid 伏笔，正文为埋设场景与回收场景的结尾片段，切片为台账条目与计划回收位置）、causality（因果与动机：每个场景，正文为场景正文，切片为 causes、events 与起因场景结尾）、pov-reveal（视角与揭示边界：每个场景，正文为场景正文，切片为 reveal、视角人物已知与读者已知人物未知条目）、style（文风与情绪节奏：每章纵向任务，切片为分层摘要、情绪曲线偏离点与文风漂移发现项）；每包含 schema_version、id、work、dimension、scope（场景或章引用）、excerpt（正文片段）、slices（台账与数据切片）、checklist（固定检查清单，每项含 id 与 question）与 status（open / done）；每个包的 excerpt+slices+checklist 按 Markdown 字符数计入并截断到不超过作品上下文预算（Context Budget）
+    - '新增 wa-cli review submit <packet-id>：从 --file 或标准输入读取结论（YAML：verdicts 数组，每项含 item（清单项 id）、verdict（pass / fail / na）与可选 note），校验每个清单项都有且仅有一个结论（缺漏报告 packet.missing-verdict，未知或重复报告 packet.unknown-item），写入包的 results 与 status: done（含 recorded_at）；只有 status 为 open 的包可提交（packet.already-done）'
+    - 新增 wa-cli review report <work>：只读汇总任务包状态——每个维度的 open 与 done 包数、done 包中 fail 结论清单（每项含 packet、scope、item、note）、全部包 done 且无 fail 时报告通过；--json 输出 dimensions、failures 与 ready
+    - review plan 的幂等与范围：同一作品重复 plan 保留 status 为 done 的包（按 dimension 与 scope 匹配），重建 open 包（内容随台账与正文更新）；--dimension 限定只生成该维度；给 unit 时只生成其范围内的包（其子树场景与所在章）
+  why:
+    - 路线图 novel-continuity 里程碑计划变更 review-task-packets：完成标准「wa-cli review plan 生成的每个任务包都不超过上下文预算；每个清单项都有结论后，结果才能提交并汇总」的承载者；依赖的 continuity-review、layered-summaries-and-budget 与 emotion-pacing-curve 均已归档，当前是唯一可推荐的计划变更（ripple-analysis 依赖它）
+    - 语义审查（人物弧光、伏笔质量、动机可信）需要理解正文，wa-cli 不调用模型：把审查拆成不超过预算的小任务包（一段正文+台账切片+检查清单），由接入的 Agent 调度执行（可用全新子 Agent 会话并行，里程碑 details 的分治原则），wa-cli 负责生成、校验回写与汇总——任务范围、检查清单与结果结构由此确定
+    - 纵向审查（文风与节奏）不能读全文：以分层摘要、情绪曲线偏离点与文风漂移发现项为线索切片，正是里程碑 details「纵向审查读状态历史与摘要，而不是全文」的落地
+scope:
+  in:
+    - 新包 internal/reviewpacket：五个维度的包生成（正文切片复用 draft 与 ctxpack 的片段规则、台账切片复用 state/knowledge/threads/series 的只读接口、style 维度复用 stylemetric 与 metrics 曲线偏离）、预算截断、schema 与领域校验（清单项齐全、结论合法）、submit 校验与写回、report 汇总
+    - internal/schema：新增 packet.schema.json 与 packet-input.schema.json（结论输入），路径模式 .writing-anything/packets/*/*.yaml，补夹具
+    - internal/cli：review plan / review submit / review report 三个命令注册（args、flags、outputKeys、exitCodes、sampleArgs 与 mutatingSamples、--json 与人读输出、诊断与 next）；validate 整体校验纳入 packets（CheckWorks 模式）与 validate <path>
+    - docs/GLOSSARY.md：审查任务包（Review Task Packet）词条
+    - 测试夹具：多章长篇夹具（出场人物、伏笔、契约、摘要与曲线齐备），覆盖五维度的包生成、预算不超、submit 校验与 report 汇总
+  out:
+    - 影响传播（ripple-analysis）与复查标记——属 ripple-analysis 计划变更（依赖本变更）
+    - 任务包的调度与执行：wa-cli 不启动 Agent，执行方式由接入的 Agent 与 Skill 决定（里程碑 intake question review-dispatch 的推荐）
+    - 组稿与整书导出——属 manuscript-assembly-export 计划变更
+    - 会话交接记录——属 session-handoff 计划变更
+    - 连续性阻塞与验收联动：本变更不改变 accept 行为（任务包是作品级审查，场景级确定性检查已由 continuity-review 承载）
+    - MCP 服务与内置技能不单独编写（三个命令经命令注册表自动暴露）
+unchanged_behavior:
+  - 没有 packets 目录或包全部 done 且无 fail 时，validate、accept、advance、next 的输出、退出码与错误码不变；既有文体的行为不受影响
+  - state、knowledge、threads、canon、closeout、continuity 命令组语义不变；任务包只读消费正文、台账与曲线数据，校验逻辑复用各包导出函数
+  - review record / review show / review resolve / accept（单元级审稿与验收）语义不变；review plan 与 review submit 是作品级审查的独立命令组（同名组内的既有子命令不受影响）
+  - MCP 服务与内置技能内容不变
+roadmap:
+  milestone: novel-continuity
+  planned_change: review-task-packets

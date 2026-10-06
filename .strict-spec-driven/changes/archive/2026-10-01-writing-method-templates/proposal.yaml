@@ -1,0 +1,36 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: writing-method-templates
+  status: proposed
+summary:
+  what:
+    - 新增写作法模板（Method Template）：纯数据，分文章类（article，必需章节及其顺序）、结构类（structure，节拍及其在全文中的位置范围）与规划类（planning，规划步骤）；每个模板可以附带评分标准（Rubric）条目。内置七个文章类写作法：金字塔原理与 SCQA、总分总、倒金字塔，以及 Diátaxis 的教程、操作指南、参考与解释；规范包（Pack）可以用 methods 定义自有写作法（同 id 覆盖内置），文体（Genre）可以用 default_method 声明默认写作法。
+    - 新增 wa-cli method list 与 wa-cli method show；写作简报（Brief）新增 method 字段（wa-cli brief set --method，none 表示不用写作法，省略时用文体的默认写作法）；大纲节（Outline Section）新增 role 字段（wa-cli outline set --role）声明它承担的写作法章节或节拍。
+    - 大纲覆盖检查新增写作法缺口：没有任何节承担的章节或节拍（outline.missing-method-part）、文章类写作法中顺序颠倒的章节（outline.method-order）与不属于写作法的 role（outline.unknown-role），与已有覆盖缺口一样使 validate 与 advance 以非零退出；不用写作法时不检查。成稿后按字数比例核对结构类写作法的节拍位置，超出范围只给出 warning（outline.beat-position）。选用写作法附带的评分项加入审稿的评分标准。
+  why:
+    - 里程碑 tech-blog-workflow 的完成标准要求：写作简报选定的写作法所要求的章节在大纲中缺失时，validate 与 advance 以非零退出；不选写作法时不做该检查。范围包括写作法模板机制与内置文章类写作法（金字塔原理 / SCQA、总分总、倒金字塔、Diátaxis）。
+    - 帮 Agent 规范地协助人写作：作者选定写作方法后，Agent 产出的大纲必须按这一方法组织，wa-cli 能确定性地检查。
+scope:
+  in:
+    - internal/schema：method Schema 与 common.schema.json 的 methodBody；pack、genre、brief、outline Schema 的新字段
+    - internal/cli：method list、method show；brief set --method、outline set --role；lint 的节拍位置 warning；审稿评分标准加入写作法的评分项
+    - 新增 methods 主规格
+    - 修改 brief 主规格的 brief-artifact、brief-set、brief-show，outline 主规格的 outline-artifact、outline-set、outline-show，review 主规格的 review-record 与 accept-gate
+    - internal/catalog：Method 数据与内置写作法（builtin/methods）；规范包 methods、文体 default_method 的加载与检查（含保留 id none）；LoadMethods、MethodSet 的 Find、IDs 与 Pick
+    - internal/brief：method 字段与 brief.unknown-method（只在 validate 中作为 error 检查，查看与修改写作简报时为 warning）、Edit.Method、MethodOf 与 MethodWarnings
+    - internal/outline：role 字段、写作法缺口、Picker 与 Messages.MethodProblem、BeatPositions；internal/work 与 internal/cli 传入写作法目录与文体的默认写作法
+  out:
+    - 规划类写作法的分步作者确认流程（如雪花写作法）：本变更只提供规划类模板的数据与查看，分步产出与确认由小说类里程碑处理
+    - tech-blog 文体的默认写作法：由 tech-blog-genre-and-export 声明
+    - 内置结构类与规划类写作法（三幕结构、雪花写作法等）：由小说类里程碑提供
+unchanged_behavior:
+  - 输出信封字段与退出码约定不变；已发布错误码的含义不变
+  - 不选写作法（method 为 none，或没有写作简报 method 且文体没有默认写作法）时，大纲检查、validate 与 advance 的行为不变；内置 minimal 文体不声明默认写作法
+  - 已有的写作简报、大纲与规范包文件不需要修改即可继续通过校验
+  - 仓库根目录不创建 .writing-anything/；产品二进制不依赖 internal/tools/** 与 strict-spec-driven；wa-cli 不联网、不调用 LLM
+roadmap:
+  milestone: tech-blog-workflow
+  planned_change: writing-method-templates

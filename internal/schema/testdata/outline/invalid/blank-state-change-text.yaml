@@ -1,0 +1,7 @@
+schema_version: 1
+sections:
+  - id: scene-1
+    title: 灯下对峙
+    state_changes:
+      - id: sc-1
+        text: " "

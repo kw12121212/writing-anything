@@ -1,0 +1,52 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: binary-release-and-install
+sections:
+  Implementation:
+    version-resolve:
+      text: internal/version：新增 Commit 注入变量与 Resolve(*debug.BuildInfo)，按 ldflags 注入值 → 构建信息（Main.Version、vcs.revision、vcs.modified）→ dev/unknown 得出版本与提交；Info() 读取当前进程的构建信息
+      status: complete
+    version-command:
+      text: internal/cli：version 文本输出 'wa-cli <version> (commit <commit>)'，--json 新增 commit 字段，outputKeys 新增 commit
+      status: complete
+    release-tool:
+      text: internal/tools/release：交叉编译 linux/darwin/windows × amd64/arm64（CGO_ENABLED=0、-trimpath、-ldflags 注入 Version 与 Commit），产物 wa-cli-<os>-<arch>[.exe] 与 SHA256SUMS；参数 -version（必需）、-commit（默认 git rev-parse HEAD）、-out（默认 dist）、-targets（逗号分隔，默认全部）
+      status: complete
+    install-scripts:
+      text: 仓库根目录 install.sh 与 install.ps1：识别平台（不支持时以非零退出并说明）、下载产物与 SHA256SUMS、校验 SHA-256（不符时以非零退出且不安装）、安装到用户级目录；支持 WA_VERSION、WA_INSTALL_DIR、WA_BASE_URL
+      status: complete
+    release-workflow:
+      text: .github/workflows/release.yml：推送 v* 标签时运行完整回归与发布工具，并用 gh release create 上传 dist/ 下的产物；.gitignore 忽略 dist/
+      status: complete
+    docs:
+      text: docs/INSTALL.md 说明脚本安装（Linux/macOS 与 Windows）、go install 安装、环境变量与手动校验；docs/GLOSSARY.md 新增交叉编译、发布产物、安装脚本、校验文件
+      status: complete
+  Testing:
+    unit-tests:
+      text: 单元测试：version.Resolve 的注入优先、构建信息回退、(devel) 与缺失时的默认值、-dirty 后缀；version 命令文本与 JSON 输出含 commit；发布工具的目标解析、产物命名、SHA256SUMS 格式与注入的版本（构建本机目标后运行 version --json）；install.sh 在假 uname 下对 6 个目标安装对应产物、哈希不符与不支持平台时非零退出且不安装、端到端安装后 wa-cli version 可运行；install.ps1 在有 pwsh 时同样测试，否则跳过
+      status: complete
+      command: go test ./internal/version/... ./internal/cli/... ./internal/tools/release/... ./cmd/...
+    full-regression:
+      text: 运行完整回归命令，覆盖率不低于 80%
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+    script-lint:
+      text: 用 shellcheck 检查 install.sh
+      status: complete
+      command: shellcheck install.sh
+  Verification:
+    spec-alignment:
+      text: 对照 cli delta spec 的每个场景确认实现与测试覆盖，并按实际实现修正 delta spec
+      status: complete
+    strict-ready:
+      text: 运行 strict-spec-cli ready 与 strict-spec-cli verify，确认变更产物有效
+      status: complete
+      command: strict-spec-cli ready binary-release-and-install && strict-spec-cli verify binary-release-and-install
+    archive-readiness:
+      text: 确认 delta spec 能合并进 cli 主规格，归档后路线图中的 binary-release-and-install 标记为完成
+      status: complete
+testing_gates:
+  validation_task: full-regression
+  unit_test_task: unit-tests

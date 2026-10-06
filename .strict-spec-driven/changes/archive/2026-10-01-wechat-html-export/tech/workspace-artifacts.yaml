@@ -1,0 +1,33 @@
+schema: strict-spec-driven/delta-tech/v1
+schema_version: 1
+artifact_type: delta_tech
+schema_file: templates/strict-spec-driven/schemas/delta-tech.yaml
+target_standard: workspace-artifacts
+operations:
+  ADDED: {}
+  MODIFIED:
+    generated-html:
+      strength: MUST
+      statement: wa-cli 生成的 HTML（如阅读页与公众号 HTML 导出）必须用 html/template 生成：先把内容解析成节点树，再由模板按节点种类输出固定的标签，正文等来自产物的文字一律经模板转义，不得用字符串拼接产生标记，也不得对已含生成标记的字符串再做正则或文字替换，不得在内容中插入作为标记用途的字符（真实输入可能含有它们）；规范包等第三方提供的、写进 style 等属性的取值必须用字符白名单校验（Schema 一次、渲染时再一次），不得把第三方数据用作正则替换模板；样式内联，不引用任何外部资源。完整的 HTML 文档（如静态阅读页）不含 script 元素并带限制性的 Content-Security-Policy；需要脚本时脚本内容固定，不内插数据，由 Content-Security-Policy 按其哈希放行；供粘贴的 HTML 片段（如公众号 HTML）不含 script，无法携带 Content-Security-Policy。渲染器必须有测试断言输出只含允许的标签与属性（包括使用对抗性的样式取值），并有在输入上限（2 MiB）的对抗性输入上完成的耗时测试。
+      rationale: 正文、作者反馈与规范包取值都是不可信的数据：模板转义防止注入；对已生成标记做替换会让第三方取值改写标签结构（本变更的审查复现了经样式取值注入 onclick）；白名单比黑名单可靠；不引用外部资源保证离线可读、不泄露阅读行为；片段由编辑器承载，CSP 只能用于完整文档。
+      enforcement:
+        method: test
+        detail: internal/export 的 TestRenderUnsafeTheme 用对抗性样式取值断言允许列表，TestRenderLargeInputs 在 2 MiB 对抗性输入上断言耗时；internal/cli 的 TestPreviewStatic、TestPreviewServe、TestExportWechatHTML 断言转义、允许列表与 CSP。
+      examples:
+        good:
+          - 节点树经 page.ExecuteTemplate 输出，style 为通过 catalog.SafeCSS 的 template.CSS
+        bad:
+          - 先插入 <strong style="主题取值"> 再对整串做 *斜体* 的正则替换
+    deliverable-outputs:
+      strength: MUST
+      statement: 把交付文件写到 --output 指定位置的命令（如 export、preview 与其他导出格式）必须经过 internal/export 的输出路径检查与原子写入（WriteOutput 或同一组内部函数）：路径相对项目目录、规整后不得离开项目目录、在工作区中时只能在 .writing-anything/exports/ 之下（不区分大小写，并按文件身份复查）、途经的目录必须是真实目录、已存在的输出文件必须是普通文件；违反时以该命令自己的错误码（如 export.invalid-output、preview.invalid-output）报告，field 为 output。一次写出多个交付文件（如导出文件与配图清单）时，先不带副作用地检查全部路径，再创建目录并写入，新建的目录与文件都列在 changedPaths 中。不得在命令中另写一套输出路径检查。
+      rationale: 交付文件的位置由用户参数决定，最容易被用来覆盖工作区产物或经符号链接写到项目之外；集中在一组函数里，新增的导出格式自动获得同样的防护；预检查不带副作用，失败时不留下多余的目录，成功时如实报告变更。
+      enforcement:
+        method: test
+        detail: internal/export 的 TestOutputPath 覆盖路径规则；internal/cli 的 export 与 preview 测试断言无效输出的错误码与不写文件，TestExportWechatPaths 断言新建的目录列在 changedPaths 中，清单路径不合法时两个文件都不写。
+      examples:
+        good:
+          - checkParents 检查导出文件与配图清单两个路径后再 write
+        bad:
+          - 检查清单路径时创建了目录、丢弃了新建目录的列表
+  REMOVED: {}

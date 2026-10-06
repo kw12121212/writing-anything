@@ -1,0 +1,22 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: replay-harness
+approach:
+  - 重放器以 internal/cli 测试实现：TestNovelCorpusReplay 加载 testdata/e2e/novel/commands.yaml（yaml.v3 解析 stages/steps），冻结包内 now 时间源（fix-state-knowledge-clock 后全部时间戳可注入）后用既有 runWSIn 在 t.TempDir() 进程内执行：write_file 步骤把 input_ref 内容写入工作区相对路径；命令步骤把 input_ref 内容作为标准输入；每步断言退出码、expect_code（逗号分隔的码全部出现在诊断中）、stdout_contains；变异类命令（init/new/source add/brief set/plan step/plan confirm/canon add/unit add/threads add/threads set/outline set/scene contract/scene close-out/draft write/review record/review submit/accept/advance/summary set/volume checkpoint/volume confirm/decide/state propose/confirm/set/knowledge propose/confirm/set/impact mark/clear/handoff write/assemble/export，按重放实测校准）断言 changedPaths 非空，只读命令不要求。重放完成后换新临时目录再重放一次，对两棵目录树做全量文件集合与逐文件 SHA-256 比对
+decisions:
+  inprocess-runwsin:
+    decision: 重放器沿用 internal/cli 现有 runWSIn 进程内执行约定，不子进程调起 wa-cli
+    rationale: 与既有 e2e 测试同构、纳入 go test 默认执行且无额外构建依赖
+  frozen-now-determinism:
+    decision: 冻结包内 now 时间源并以两次重放的目录树逐文件 SHA-256 比对作为可重复性的显式验证
+    rationale: 全部时间戳已可注入（fix-state-knowledge-clock），冻结后两次重放产物必须完全一致，这是里程碑完成标准之一
+  reuse-corpus-structure-test:
+    decision: 重放测试只做行为重放断言，脚本结构合法性由既有 TestNovelCorpusScript 承担
+    rationale: 两层职责分离：结构校验拦截格式漂移，重放校验拦截行为漂移
+  no-delta-spec:
+    decision: replay-harness 是技术专用变更：只新增测试文件
+    rationale: 测试基建不构成主规格需求
+alternatives: []
+risks: []

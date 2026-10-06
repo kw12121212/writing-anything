@@ -1,0 +1,35 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: claim-source-check
+  status: proposed
+summary:
+  what:
+    - 新增两种规则类型（Rule Type）：claim-sources 检查已登记的论断（Claim）：kinds 中类型的论断必须关联至少一份作者素材（类型为 author-note、interview 或 transcript 的素材），否则报告发现项并指向正文中论断的位置；claim-candidates 用启发式规则检测疑似论断（Claim Candidate）：第一人称经历句式（我或我们之后出现经历标记词，如曾经、当时、去年、遇到）与具体数据（百分比、倍数、万、亿），候选区间没有被已登记论断的文字覆盖时报告。
+    - wa-cli lint 读取单元的 claims.yaml 与所引素材的类型，交给规则引擎；两种规则按文体启用，小说类文体可以关闭或替换。内置 minimal 文体声明 claim-sources（error）与 claim-candidates（warning）。
+    - 新增 wa-cli claim set（修改论断的 kind、text 或整体替换所关联的素材）、wa-cli claim list（列出单元的论断）与 wa-cli claim remove（删除论断），使缺少作者素材的论断可以通过 wa-cli 修复，而不必手工编辑 claims.yaml；claim-sources 发现项的 message 与 lint.findings 的 next 指向这些命令。
+  why:
+    - 帮 Agent 规范地协助人写作：Agent 不能编造作者的经历与数据，亲历、观点、案例与数据必须能追溯到作者提供的素材。
+    - 里程碑 tech-blog-workflow 的完成标准要求亲历内容无出处时对应命令以非零退出并给出可执行修复命令；目前 claims.yaml 只校验素材已登记，不要求亲历、观点与数据出自作者素材，正文中未登记的亲历与数据也无人发现。
+scope:
+  in:
+    - internal/lint：新增 claim-sources 与 claim-candidates 两种规则类型（参数校验、检查、句子切分与论断覆盖）；Run 的输入改为 Input（段落出处、论断及其素材类型）
+    - internal/draft：导出读取单元论断的函数；internal/cli 的 lint 命令读取论断与素材类型并传入规则引擎
+    - internal/catalog：已知规则类型新增 claim-sources 与 claim-candidates；内置 minimal 文体声明这两条规则
+    - 修改 genres-and-packs 主规格的 known-rule-types；在 lint 主规格中新增 claim-rule-types；docs/GLOSSARY.md 新增疑似论断
+    - internal/draft：新增 SetClaim 与 RemoveClaim（写前复查、保留注释、取值未变时不写文件）与错误码 claim.not-found；internal/cli：新增 claim set、claim list 与 claim remove 命令并登记到命令注册表
+    - 在 sources-and-provenance 主规格中新增 claim-edit 与 claim-list
+  out:
+    - 自动登记论断或自动关联素材；lint 只报告，登记由 Agent 与作者通过 wa-cli claim add 完成
+    - 判断素材内容是否真的支持论断（语义核对需要 LLM）；只检查论断是否关联了作者素材
+    - tech-blog 文体的规则配置：由 tech-blog-genre-and-export 处理
+unchanged_behavior:
+  - 输出信封字段与退出码约定不变；已发布错误码的含义不变；lint 只读
+  - 已有七种规则类型的行为不变；不声明这两种规则的文体与规范包不受影响
+  - 仓库根目录不创建 .writing-anything/；产品二进制不依赖 internal/tools/** 与 strict-spec-driven；wa-cli 不联网、不调用 LLM
+  - claim add 的参数、输出与诊断不变
+roadmap:
+  milestone: tech-blog-workflow
+  planned_change: claim-source-check

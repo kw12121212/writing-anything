@@ -1,0 +1,13 @@
+schema: strict-spec-driven/planned-change/v1
+schema_version: 1
+artifact_type: planned_change
+schema_file: ../../templates/strict-spec-driven/schemas/planned-change.yaml
+planned_change:
+  id: matrix-check
+  milestone: novel-e2e
+status: complete
+summary: 测试矩阵完备性对账：矩阵每条特性都必须映射到实际执行的断言，缺矩阵条目或缺断言都使测试失败
+details: 矩阵文件带稳定行标识，测试加载矩阵并逐条映射到断言用例；新增长篇特性时矩阵同步扩充的维护约定写入 README；对账失败给出缺失项清单。
+depends_on:
+  - corpus-design
+  - golden-assertions

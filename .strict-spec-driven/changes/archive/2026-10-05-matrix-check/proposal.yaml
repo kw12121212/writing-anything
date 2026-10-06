@@ -1,0 +1,22 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: matrix-check
+  status: proposed
+summary:
+  what:
+    - 为测试矩阵建立完备性对账：matrix.yaml 每条增加 evidence 字段（script-锚定 commands.yaml 步骤及其断言、golden-锚定黄金文件、negative-锚定负向注入的诊断码、structure-锚定结构校验测试），新增 TestNovelCorpusMatrix 对账测试做双向校验——每条矩阵条目的 evidence 都必须解析到真实存在的断言（缺失给出清单），且反向全部黄金文件、负向诊断码、脚本 stdout_contains/expect_code 断言都被至少一条矩阵条目引用；同时把矩阵负向条目与预留段按 golden-assertions 落地的真实机制勘误（canon.author-pinned、continuity.thread-anomaly、timeline.cycle/order-conflict、知情台账注入+knowledge at 暴露并记录产品缺口）
+  why:
+    - 里程碑风险清单的「断言与矩阵脱节」至今只有结构校验缓解（编号、字段、覆盖面），没有任何机制保证每条矩阵条目真的对应一个被执行的断言、也没有反向保证新增断言同步进矩阵；对账是完成标准「每条特性都有断言编号且对应断言实际执行」的强制手段
+scope:
+  in:
+    - matrix.yaml 全部条目增加 evidence 字段并按真实机制勘误负向条目与预留段；internal/cli/novel_corpus_matrix_test.go（TestNovelCorpusMatrix：加载矩阵与 commands.yaml/golden/ 与已知负向码清单，双向对账，缺失项清单化输出）；DESIGN.md 负向预留段同步勘误
+  out:
+    - 不写 README（docs-runbook）；不改产品代码与主规格；不改黄金文件与语料正文；不为对账扩展 script-format.md 格式（evidence 是矩阵自有字段）
+unchanged_behavior:
+  - wa-cli 产品行为不变；commands.yaml 与 inputs/ 不变；黄金文件不变；既有测试断言不变（matrix 对账是新增校验层）
+roadmap:
+  milestone: novel-e2e
+  planned_change: matrix-check

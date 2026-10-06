@@ -1,0 +1,27 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: session-handoff
+approach:
+  - 新包 internal/handoff：handoffs.yaml（工作区级产物 .writing-anything/handoffs.yaml）的加载与校验、Write 追加（id 为 handoff-<n> 从条目数递增）、Show 最近 N 条；CLI 以 handoff write / handoff show 两个子命令暴露；next 的单元条目加 handoff 字段（最近一条）
+decisions:
+  workspace-level-append:
+    decision: 交接记录是工作区级产物 .writing-anything/handoffs.yaml（与 decisions.yaml 同级）：每条含 id、written_at、done、todo、instructions 与 risks；只提供 write（追加）与 show（只读）两个命令，没有编辑或删除
+    rationale: planned change details 明确「交接记录只能追加」；工作区级（而非作品级）因为一个会话可能同时推进多部作品的场景；与决策队列同级的全局产物位置已被 validate 的目录遍历接受
+  cap-200:
+    decision: 条目数上限 200：超出时 handoff write 报告 handoff.too-many（message 提示作者归档清理旧记录），不写文件
+    rationale: 只能追加 + 无删除命令意味着需要硬上限防止无界增长；200 条对跨数月的长篇推进足够，清理方式是作者直接编辑文件（结构简单，风险可控）
+  next-latest-field:
+    decision: next 的每个单元条目新增 handoff 字段：有记录时为最近一条的 {id, todo}（todo 是接续工作的直接输入），无记录时为 null；不分单元过滤
+    rationale: 完成标准只要求「看到最近的交接记录」；结构化关联（哪条记录属于哪个场景）没有数据来源，过滤会假装精确；最近一条的 todo 已足以让新会话无损接续
+alternatives:
+  - option: 交接记录按作品存放（works/<work>/handoffs.yaml）
+    reason: 一个会话常跨作品（如系列），拆开存放会让 write 需要选择作品、next 需要合并多份；工作区级一条时间线更简单
+  - option: 提供 handoff clear 归档命令
+    reason: 「只能追加」是规格要求；提供清理命令等于提供删除，与审计价值冲突；上限拒绝 + 作者手工整理已足够
+  - option: next 单独列出交接小节而不进单元条目
+    reason: 完成标准的原文是 next 能看到最近记录；放进单元条目让 Agent 逐单元读取时天然携带，不需要额外调用
+risks:
+  - handoffs.yaml 被作者直接编辑（改历史）：validate 的 Schema 校验保证结构，历史内容的真实性不在机器保障范围（与决策队列一致）
+  - 200 条上限在极端长篇下可能不够：message 提示归档清理；上限调整留待实际使用反馈

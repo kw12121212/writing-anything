@@ -1,0 +1,8 @@
+schema_version: 1
+part: my-novel/part-one
+scene: my-novel/scene-2
+sampled:
+  - {scene: s, kind: state, id: a, text: t}
+  - {scene: s, kind: state, id: b, text: t}
+  - {scene: s, kind: state, id: c, text: t}
+  - {scene: s, kind: state, id: d, text: t}

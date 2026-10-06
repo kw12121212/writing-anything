@@ -1,0 +1,25 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: scene-contract-and-causality
+approach:
+  - 扩展大纲节（Outline Section）上的轻量场景契约字段，而非新建独立产物：在 outline.schema.json 与 internal/outline 的 Section 上新增 pov（非空文本）、location（非空文本）、state_changes（id+文本条目，节内 id 不重复）、plants、recovers、causes、events（id 列表，各自不重复且符合 id 格式）。internal/cli 新增 scene.go 提供 wa-cli scene contract <unit> <section>：节不存在时按 outline set 语义以 --title 新增，存在时只修改给出的字段，文本参数空字符串删除、列表参数空字符串清空，beats 引用检查与 outline.anchored-value 等既有错误码沿用，给出 --cause 或 --event 时即时执行因果链检查。因果链按单元树先序（Pre-order）判定：事件 id 由场景单元大纲节的 events 声明、作品内唯一（重复报告 scene.duplicate-event）；某场景 causes 引用的 id 必须由先序严格更早的场景声明，未声明报告 scene.unknown-event，由同场景或更靠后场景声明报告 scene.event-not-yet-happened；检查在 wa-cli validate 整体校验与单路径校验中执行，并经既有 outline 关卡以 outline.invalid 阻塞推进。outline show 的 sections 输出补齐新契约字段。
+decisions:
+  contract-on-section:
+    decision: 场景契约字段扩展在大纲节上（与短篇轻量契约同一机制），不新建独立产物。
+    rationale: planned change 明确「在短篇的轻量场景契约上扩展」，短篇契约已声明在大纲节上；细纲即 outline.yaml，novel 文体的 outline 阶段已要求 outline 产物，无需改文体阶段或新增产物类型，validate 与 outline 关卡的既有管线可复用。
+  happened-by-preorder:
+    decision: 「前文已发生」按单元树先序中严格更早的场景声明的事件判定，不依赖场景草拟或验收进度。
+    rationale: 契约在草拟前声明，细纲常先于正文成稿；按声明顺序判定是纯规划态的确定性检查，可复现，也不依赖后续里程碑（写后收口、状态快照）的机制。
+  state-change-entries:
+    decision: 必须发生的状态变化声明为 id+文本条目（--state-change <id>=<文本>，按 id 新增或更新）。
+    rationale: 后续写后收口需要按稳定键对照「契约要求的状态变化是否都已提交」，纯文本无法可靠匹配；id 格式与节内唯一性约束与其他 id 一致。
+  event-id-work-unique:
+    decision: 预期产生的事件 id 在作品内跨场景唯一，重复声明以 scene.duplicate-event 报告先序靠后的声明者。
+    rationale: 起因只写事件 id，id 必须无歧义，才能作为因果链与后续事件溯源（Event Sourcing）的稳定引用。
+alternatives:
+  - option: 场景级独立契约产物（如 scene-contract.yaml）：视角、起因、预期事件在语义上是场景级属性，且天然单契约每场景；但需要新产物类型、文体阶段与关卡改动，与「在短篇的轻量场景契约上扩展」的路线不符，长篇场景细纲约定为单节即可满足。
+    reason: 避免引入新产物类型与文体阶段改动，保持与既有轻量契约机制连续。
+risks:
+  - 大纲节上同时存在短篇轻量字段与长篇扩展字段，可能造成混淆——以术语表与字段文档区分；单元大纲存在多节时契约分散在各节——长篇场景细纲约定为单节，多节时各节独立校验，语义不合并。

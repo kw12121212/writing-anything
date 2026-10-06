@@ -1,0 +1,19 @@
+schema: strict-spec-driven/lesson/v1
+schema_version: 1
+artifact_type: lesson
+schema_file: templates/strict-spec-driven/schemas/lesson.yaml
+lesson:
+  id: null-schema-37e8c0
+  title: 规格写「未确认为 null」时，产物 Schema 不得用键存在性表达条件
+category: coding
+status: active
+created_at: '2026-10-03T10:45:48.011Z'
+updated_at: '2026-10-03T10:45:48.011Z'
+context: 为带确认记录（Confirmation Record）或多态字段的产物（如 plan.yaml 的 confirmation/confirmed_at）设计 JSON Schema 与领域校验。
+observation: '初始 Schema 把可选字段声明为 [string, null] 并用条件 required（true 时必填、false 时 not anyOf required 禁止键出现）表达「已确认必有、未确认必无」：结果「已确认 + confirmation: null」通过整体校验（规格要求报告 plan.incomplete-confirmation，文件实际非法却 valid=true），而「未确认 + confirmation: null」（规格明文合法，未确认为 null）反被 artifact.schema-violation 误拒；新鲜上下文审查才发现。'
+takeaway: 条件按取值设计：可选键声明为 [string, null] 且不带键存在性条件；跨字段一致性（A 为真 ⇒ B 非空）放进该产物领域包的校验函数并给专属错误码（field 指向该条目），Schema 只约束单个取值的形态（pattern/枚举）。
+applies_when: 为「字段 A 为真时字段 B 必填，否则 B 为 null 或缺省」语义的产物写 Schema 与领域校验时；以及审查同类产物为何对非法文件报 valid。
+occurrences:
+  - origin: long-form-planning-methods
+    date: '2026-10-03'
+    evidence: '审查复现：手写 confirmed_by_author: true + confirmation: null 通过 wa-cli validate；修复（plan.schema.json 去掉键存在条件 + plan 包 checkConfirmations 报 plan.incomplete-confirmation）后 internal/plan 的 TestCheckConfirmations 与 internal/cli 的 TestPlanValidate 双侧覆盖三种形态。'

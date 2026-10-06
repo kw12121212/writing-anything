@@ -1,0 +1,6 @@
+mode: set
+example.com/m/internal/a/a.go:1.1,2.2 1 1
+example.com/m/internal/tools/x/x.go:1.1,2.2 10 0
+example.com/m/cmd/wa-cli/main.go:1.1,2.2 10 0
+example.com/mx/internal/z/z.go:1.1,2.2 10 0
+other.com/n/internal/y/y.go:1.1,2.2 10 0

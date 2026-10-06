@@ -1,0 +1,5 @@
+verdicts:
+  - {item: behavior-state, verdict: pass, note: 陈守拙的沉默与手上的动作一致}
+  - {item: naming, verdict: pass, note: 称谓与设定集一致}
+  - {item: knowledge-boundary, verdict: pass, note: 韩江与陈守拙的知情边界未越线}
+  - {item: state-change, verdict: pass, note: 怀表修复的状态变化在场内成立}

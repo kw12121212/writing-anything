@@ -1,0 +1,17 @@
+schema: strict-spec-driven/delta-spec/v1
+schema_version: 1
+artifact_type: delta_spec
+schema_file: templates/strict-spec-driven/schemas/delta-spec.yaml
+target_spec: cli
+operations:
+  ADDED: {}
+  MODIFIED:
+    json-output-envelope:
+      strength: MUST
+      statement: 所有 wa-cli 命令都必须接受 --json；加 --json 时标准输出必须恰好是一个 JSON 对象，即输出信封（Output Envelope）（例外：流式命令如 feedback watch 与 preview --serve 每个事件输出一行信封；wa-cli mcp 的标准输出是 MCP 协议消息，--json 时只在退出前多写一行汇总信封，见 mcp 主规格），包含 valid（布尔值）、diagnostics（数组）与 changedPaths（数组）字段，命令专属字段与之并列放在顶层；没有诊断或没有变更的产物时对应字段为空数组而不是 null。
+      scenarios:
+        envelope-on-success:
+          - GIVEN: 已构建的 wa-cli 二进制
+          - WHEN: 运行 wa-cli version --json 或 wa-cli help --json
+          - THEN: 标准输出是单个 JSON 对象，含 valid、diagnostics、changedPaths 三个字段，diagnostics 与 changedPaths 为空数组
+  REMOVED: {}

@@ -1,0 +1,40 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: scene-close-out
+approach:
+  - 在场景单元目录新增收口产物 closeout.yaml（与 brief、outline、review 等单元产物同级），新包 internal/closeout 持有加载与领域校验、按写入后状态的契约对照、疑似专有名词扫描、收口输入解析与提交编排（复用 internal/canon、internal/state、internal/knowledge、internal/threads 的既有写入函数与诊断）以及验收阻塞项计算；internal/cli 以 scene close-out 子命令暴露（输入从 --file 或标准输入读取，模式同 review record 的整体替换式输入）；accept 在所有关卡强度下计算并应用收口阻塞项，validate 按 CheckWorks 模式纳入 closeout.yaml
+decisions:
+  submit-shape:
+    decision: 单命令批量提交：收口输入为一个 YAML 载荷（canon、state_changes、knowledge、plants、recovers、events、waived 节），两阶段执行——先全部预检（输入 Schema、单元类型与正文存在、各目标台账的既有诊断、按写入后状态的契约对照），通过后依次写入 canon.yaml、state.yaml、knowledge.yaml、threads.yaml 并整体写出 closeout.yaml；预检失败不写任何文件。不让 Agent 分别调用既有命令后再仅登记完成
+    rationale: 计划变更 details 明确「Agent 通过 wa-cli scene close-out 提交抽取结果」，一次调用消除多次命令间的中途失败态；预检先行把所有领域失败（引用失效、id 重复、锚点、符号链接、契约缺口）挡在写入之前，写入阶段只剩既有追加路径，单进程内无竞态；各台账诊断与追加语义直接复用刚归档的 state-change-proposals、knowledge-state、foreshadowing-ledger 实现
+  idempotency:
+    decision: closeout.yaml 已存在时再次提交报告 closeout.already-closed；--replace 整体替换 closeout.yaml 重收口，不清理也不撤销已写入的台账条目
+    rationale: 台账「只追加、rejected 为终态」是既有约定，收口引入删除或撤销会破坏事件溯源与确认记录；重放语义已容忍重复条目（state at 同条目后者生效、knowledge at 最早生效，均为已归档行为），重收口后作者对新提议逐条确认即可收敛；改契约后重收口是 --replace 的正当场景
+  contract-check-scope:
+    decision: 契约对照按写入后状态、合并场景大纲全部节的契约字段：契约每个 state_changes 的节内 id 由载荷 state_changes 的 contract 字段关联并必须覆盖（closeout.missing-state-change）；契约每个 recovers 伏笔在写入后必须已回收于该场景（closeout.missing-recovery）；载荷 events 必须恰等于契约 events 的全覆盖（closeout.missing-event 与 closeout.unknown-event）；契约 plants 的 planted_in 复查；知情变化与计划外埋设不做必须方向的对照
+    rationale: 里程碑完成标准只要求「契约要求的」状态变化与伏笔必须提交；契约外抽取（知情、计划外伏笔）是 Agent 尽力而为的增量，交由作者逐条确认把关，做必须方向会把尽力抽取变成硬阻塞；events 必须恰覆盖是因为事件是因果链的引用目标（后文 causes），漏报会静默断链，超集则是未声明事件
+  acceptance-enforcement:
+    decision: 收口阻塞项在所有关卡强度（fast、standard、strict）下生效，错误码为 closeout.missing（契约要求收口而无产物）、closeout.invalid（保留产物诊断）、closeout.stale（draft_sha256 与当前正文不同）、closeout.pending-proposals（记录的 state 与 knowledge 提议仍有 proposed）与契约对照错误码；触发条件为场景大纲任一节声明了非空的 state_changes、plants、recovers 或 events，不按文体 id 硬编码
+    rationale: 与决策阻塞同理：漏收口会让后续所有场景基于过期记忆组装，是完整性硬约束，不应随关卡放宽；数据驱动的触发条件（契约字段存在性）使轻量契约场景与既有文体验证零变化，novel 与声明了长篇契约扩展的任何文体的行为一致
+  suspected-names:
+    decision: 疑似专有名词扫描以场景大纲各节声明的 characters 取值、pov 与 location 文本为候选，与写入后 canon 条目的 name、别名完全相等匹配（同 recall 的解析规则），未命中者以 warning 级 closeout.suspected-name 逐条提示（message 含取值与所在字段，next 含 canon add 与 --waive 用法），不阻塞写入；--waive 子操作把名字并入 closeout.yaml 的 waived，已豁免取值不再提示
+    rationale: 「依据人名与别名词典扫描」在中文正文上没有确定的反向候选来源，任何正文级启发式都引入误报与漏报；契约声明的名字是作者与 Agent 显式给出的确定性候选，与设定集词典对照零误报，覆盖「出场人物未建卡」这一最高频漏抽形态；正文级启发式是否引入作为开放问题记录，待作者反馈漏报情况
+  waive-without-confirmation:
+    decision: 豁免不需要作者确认记录：waived 只是消除 warning 的名单，记录在 closeout.yaml 中随 review show 与验收呈现（strict 关卡下 accept 本身要求作者确认）
+    rationale: 豁免不改变任何记忆与状态（不像 state confirm 改变生效状态），引入确认记录会与提议确认双轨并行、放大作者负担；作者在处理提议与验收时可见全部豁免名单，把关点已存在
+alternatives:
+  - option: 检查加登记式收口：Agent 分别调用 state propose、knowledge propose、threads add 等既有命令，close-out 只做契约对照与完成登记
+    reason: 计划变更 details 明确「通过 wa-cli scene close-out 提交抽取结果」；多次调用间失败会留下部分提交的不一致态且对 Agent 不可见；批量预检一次给出全部缺口清单，重试成本低
+  - option: 收口产物按作品级集中存放（如作品根目录的 closeouts.yaml）
+    reason: 收口与场景一一对应，放进场景单元目录与既有单元产物（brief、outline、review）的生命周期一致，validate 按单元目录发现、验收阻塞按场景定位都无需额外索引
+  - option: 台账提议并入决策队列（Decision Queue）阻塞确认
+    reason: state-change-proposals 与 knowledge-state 已两次否决同一方案：逐条提议生成阻塞决策会淹没队列并阻塞全部单元推进；「提议未处理时场景不能验收」由收口阻塞项 closeout.pending-proposals 表达，语义更直接
+  - option: canon 新增条目也走 proposed 状态确认
+    reason: 设定集条目没有状态语义（canon-protection 已提供作者钦定保护与决策授权），引入 proposed 要改 canon Schema、canon add 与全部消费方；收口载荷的 canon 节以 canon add 语义直接写入，作者经 canon list 与 canon set 把关
+risks:
+  - 契约在收口后被修改（例如新增一条状态变化）会使既有收口失效：accept 复查契约对照（closeout.missing-state-change 等）兜底，作者改契约后须 --replace 重收口；诊断 next 指向 scene close-out
+  - 批量提交在预检通过后的写入阶段遇到文件系统异常可能留下部分写入：单进程 CLI 内窗口极小，重放语义容忍重复条目，重跑 --replace 收敛到一致状态
+  - 疑似专有名词扫描只覆盖契约声明的名字，契约未声明的新专有名词不会提示：正文级启发式作为开放问题（suspected-name-scan-scope）记录，卷末作者抽查（属 layered-summaries-and-budget 计划变更）兜底
+  - closeout.stale 只比对正文 SHA-256，作者微调正文（不改事实）也会要求重收口：与 acceptance.stale 同语义，重收口用 --replace 提交相同载荷即可，成本低且保证记忆与正文一致

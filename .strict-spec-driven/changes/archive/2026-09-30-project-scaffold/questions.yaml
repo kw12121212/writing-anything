@@ -1,0 +1,49 @@
+schema: strict-spec-driven/question-list/v1
+schema_version: 1
+artifact_type: question_list
+schema_file: templates/strict-spec-driven/schemas/question-list.yaml
+change: project-scaffold
+open: []
+resolved:
+  - id: version-json-shape
+    question: wa-cli version --json 应输出什么形状？
+    context: '影响范围：spec delta（cli 规格的 version 场景）与 internal/cli 测试。统一的 --json 输出信封（valid、diagnostics、changedPaths）由后续规划变更 cli-json-diagnostics 定义，本变更不应预先定义。选项：A 输出最小对象 {"version": "<version>"}；B 提前采用完整信封；C 暂不支持 --json。推荐 A：既遵守所有命令支持 --json 的约定，又把信封定义留给 cli-json-diagnostics。'
+    answer: '采用 A：输出 {"version": "<version>"}；cli-json-diagnostics 引入统一信封时同步修改 cli 规格与测试。'
+    status: resolved
+    kind: requirement
+    answered_by: assumption
+  - id: requirement-problem
+    question: What is concretely going wrong today, and for whom?
+    context: 'Why this is asked: the change is planned against a need, and the need lives only with the requester. A "problem" here means what someone does or suffers today — not a feature that is missing. If the answer names a button, a field, a page, or an endpoint, it is a solution, and the underlying problem is still unstated. What a sufficient answer contains: who is affected, what they do today instead, and how often. Worked example: "every Monday one person spends forty minutes copying order rows into a spreadsheet to send the weekly report". What it changes: this becomes the proposal''s why, and it decides whether the change is worth making.'
+    answer: 据路线图 kernel-foundation 与规划变更 project-scaffold：仓库目前没有任何 Go 代码，config.yaml 中的完整回归命令（含 80% 覆盖率关卡）无法运行；受影响的是实现后续所有内核规划变更的开发者与 Agent，他们没有可构建、可测试、可度量覆盖率的工程骨架。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-outcome
+    question: What observable difference proves the problem is solved?
+    context: 'Why this is asked: without a success condition, nobody can tell afterwards whether the change worked. "Observable" means someone outside the system can check it without reading the code. What a sufficient answer contains: what a person will see, or no longer have to do, once this is done. Worked example: "the report is in the manager''s inbox on Monday morning without anyone assembling it". What it changes: this becomes the delta spec''s scenarios and the acceptance evidence at review time.'
+    answer: 据规划变更 details 与里程碑 done_criteria：在干净仓库运行 go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out 通过；go build 产出单文件 wa-cli 二进制，wa-cli version 可运行；覆盖率低于阈值时 covercheck 以非零退出。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-trigger
+    question: Why now — what forced this?
+    context: 'Why this is asked: work that nothing forced is the work most often thrown away later. This question catches a request that sounds reasonable but has no real driver behind it. What a sufficient answer contains: the concrete event, deadline, incident, or cost that made this surface now, or an honest statement that nothing did. Worked example: "the report was missed last month and it was raised with the team". What it changes: a change with no trigger is a candidate for deferral, and the answer is weighed at review before archive.'
+    answer: 据路线图：project-scaffold 是 kernel-foundation 里程碑的第一个规划变更，depends_on 为空，其余 53 个规划变更直接或间接依赖它，roadmap-recommend 将其列为唯一可推进项。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-non-goals
+    question: What must explicitly not change?
+    context: 'Why this is asked: the requester knows which nearby behavior other people depend on, and the agent does not. A "non-goal" is something the change must leave alone even though it sits close to the work. What a sufficient answer contains: the behavior, setting, or output that must survive untouched, and who relies on it. Worked example: "do not change the saved filters — several people rely on their own". What it changes: these become the proposal''s unchanged_behavior items, which review checks the finished result against.'
+    answer: 据规划变更 details（只实现最小 wa-cli version，不实现业务命令）与里程碑 scope.out：不实现命令框架/统一 --json 信封、init/validate/status 等业务命令、MCP、发布安装；wa-cli 不调用 LLM；strict-spec-driven 文件与术语表已有含义不变。已写入 proposal 的 out 与 unchanged。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-interpretation
+    question: Which reading of the request is intended, where more than one is possible?
+    context: 'Why this is asked: a short request usually admits several readings, and building the wrong one is indistinguishable from building nothing. What a sufficient answer contains: the reading that is meant, stated plainly enough to rule the others out — or a statement that only one reading exists and what it is. Worked example: "export means the version sent to the manager, not the one I read myself". What it changes: this fixes the scope boundary before any code is written, and settles disputes about what was asked for.'
+    answer: 据规划变更 details：只有一种读法——建立 Go 1.27 工程骨架与自研 covercheck 覆盖率工具（按语句加权近似行覆盖率，范围 internal/** 不含 internal/tools/**），附带最小 version 命令；不是命令框架或业务功能。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap

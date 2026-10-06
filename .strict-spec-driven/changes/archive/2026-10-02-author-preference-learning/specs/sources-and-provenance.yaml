@@ -1,0 +1,41 @@
+schema: strict-spec-driven/delta-spec/v1
+schema_version: 1
+artifact_type: delta_spec
+schema_file: templates/strict-spec-driven/schemas/delta-spec.yaml
+target_spec: sources-and-provenance
+operations:
+  ADDED: {}
+  MODIFIED:
+    draft-write:
+      strength: MUST
+      statement: wa-cli draft write <unit> 必须把读取到的内容逐字节写入单元目录（见 units-and-lifecycle 主规格的 advance-stage）下的 draft.md，子单元的单元目录不存在时先创建；同时写出同目录的写入记录（Draft Record）provenance.yaml，含 schema_version（1）、sha256（整篇正文原始字节的 SHA-256）与 paragraphs（按顺序排列的每个段落的 hash 与 origin；origin 为 agent 且为 UTF-8 文本的段落另含 text，即该段落的原文；正文仍逐字节写入，不是 UTF-8 的段落不记原文）。新正文中与写入前 draft.md 里出处为 human 或 agent-draft-human-edited 的某个段落哈希相同的段落保留该出处，其余段落的 origin 为 agent。成功时退出码为 0，覆盖写入记录之前，必须把作者对 Agent 段落的修改追加到同目录的修改记录 edits.yaml（见 preferences 主规格的 edit-record）；changedPaths 列出新建的单元目录与内容发生变化的 draft.md、provenance.yaml 与 edits.yaml（正文与写入记录都不变时为空数组），--json 输出的 draft 字段含 unit（单元引用）、path（draft.md 路径）、paragraphs（段落数）与 sha256。内容为空或只含空白时报告 draft.empty；新正文或现有 draft.md 超过 10000 个段落时报告 draft.too-large；现有 provenance.yaml 不通过 Schema 校验时报告其诊断；单元目录途经的 units/ 或单元目录本身不是真实目录（如符号链接）时报告 workspace.write-failed；单元引用无法解析时按 units-and-lifecycle 主规格的 unit-reference 处理；这些情况都不修改文件，退出码为 1。作者改过正文时的写入条件见 human-edit-protection；通过检查、写入正文之前，把当前 draft.md 中尚未记入的批注记入 feedback.yaml（见 feedback 主规格的 comment-feedback），此时 changedPaths 也列出 feedback.yaml。
+      scenarios:
+        write-root:
+          - GIVEN: 已用 wa-cli new minimal my-post --dir D 创建作品
+          - WHEN: 通过标准输入传入三段正文运行 wa-cli draft write my-post --dir D --json
+          - THEN: D/.writing-anything/works/my-post/draft.md 与输入逐字节相同，provenance.yaml 的 paragraphs 为 3 项且 origin 均为 agent 且 text 为各段原文；draft.paragraphs 为 3；changedPaths 为 [.writing-anything/works/my-post/draft.md, .writing-anything/works/my-post/provenance.yaml]，退出码为 0；此后 wa-cli next my-post 不再报告缺少 draft 产物（阶段为 draft 时）
+        write-child:
+          - GIVEN: 作品 my-post 有子单元 intro，D/.writing-anything/works/my-post/units/intro/ 不存在
+          - WHEN: 运行 wa-cli draft write my-post/intro --file intro.md --dir D --json
+          - THEN: changedPaths 为 [.writing-anything/works/my-post/units/intro, .writing-anything/works/my-post/units/intro/draft.md, .writing-anything/works/my-post/units/intro/provenance.yaml]，退出码为 0
+        rewrite-keeps-human:
+          - GIVEN: Agent 写入两段后，作者在 draft.md 末尾加了第三段
+          - WHEN: Agent 用 wa-cli diff my-post 取得 base 后，保留作者的第三段、改写第一段，运行 wa-cli draft write my-post --base <base> --dir D --json
+          - THEN: provenance.yaml 中第一段与第二段的 origin 为 agent，第三段为 human，退出码为 0
+        same-content:
+          - GIVEN: 刚用 wa-cli draft write my-post 写入正文，之后没有任何改动
+          - WHEN: 用相同内容再次运行 wa-cli draft write my-post --dir D --json
+          - THEN: changedPaths 为空数组，draft.md 与 provenance.yaml 的修改时间不变，退出码为 0
+        empty-draft:
+          - GIVEN: 已创建作品 my-post
+          - WHEN: 通过标准输入传入空内容运行 wa-cli draft write my-post --dir D --json
+          - THEN: diagnostics 中有一条错误码为 draft.empty 的诊断，单元目录下没有 draft.md，退出码为 1
+        too-large:
+          - GIVEN: 已创建作品 my-post
+          - WHEN: 通过标准输入传入 10001 个段落运行 wa-cli draft write my-post --dir D --json
+          - THEN: diagnostics 中有一条错误码为 draft.too-large 的诊断，单元目录下没有 draft.md，退出码为 1
+        edit-logged:
+          - GIVEN: Agent 写入两段后，作者把第一段「首先，我们需要赋能团队。」改为「先让团队上手。」
+          - WHEN: Agent 用 wa-cli diff 取得 base 后，保留作者改过的第一段、改写第二段，运行 wa-cli draft write my-post --base <base> --dir D --json
+          - THEN: edits.yaml 的 edits 含一项 before 为「首先，我们需要赋能团队。」、after 为「先让团队上手。」的修改对，changedPaths 含 edits.yaml；新的写入记录中第一段的 origin 为 agent-draft-human-edited、没有 text，第二段为 agent 且含 text
+  REMOVED: {}

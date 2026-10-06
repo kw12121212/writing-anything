@@ -1,0 +1,19 @@
+schema: strict-spec-driven/lesson/v1
+schema_version: 1
+artifact_type: lesson
+schema_file: templates/strict-spec-driven/schemas/lesson.yaml
+lesson:
+  id: lesson-839686
+  title: 编排命令的规格语句要先枚举输出信封与裁剪行为，再写实现
+category: coding
+status: active
+created_at: '2026-10-03T17:57:27.020Z'
+updated_at: '2026-10-03T17:57:27.020Z'
+context: layered-summaries-and-budget 在 context 包新增三个场景内容项并重排裁剪优先级，规格语句先行写全了优先级清单与截断规则
+observation: fresh-context 审查发现实现与规格的四处偏差都在细节边界：无 pov 时 states 是否组装（规格写了、实现漏了）、pov 解析成功的分支收集条目（实现在失败分支里追加空串）、priorEndings 的窗口按位置而非按有正文的场景、以及规格明确的前序结尾截断从未接上 truncate 闭包——每处都被规格场景或审查复现暴露
+takeaway: 规格语句写到可直接转测试的程度（无 pov、跳过无正文场景、截断等边界写进 scenario），实现时把每个场景当作断言清单逐条对照；组装新内容项时同时接好 drop 与 truncate 两个闭包，缺 truncate 的可截断项在预算测试里必然暴露为整项裁剪
+applies_when: 在 context 组装或任何带预算裁剪的管线里新增内容项，或重排既有优先级时
+occurrences:
+  - origin: layered-summaries-and-budget 变更的 fresh-context 独立审查
+    date: '2026-10-03'
+    evidence: internal/ctxpack/ctxpack.go 的 priorEndings/states 组装与 TestSceneStatesWithoutPOVAndDraftSkipping 回归

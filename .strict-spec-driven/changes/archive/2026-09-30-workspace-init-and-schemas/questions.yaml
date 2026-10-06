@@ -1,0 +1,48 @@
+schema: strict-spec-driven/question-list/v1
+schema_version: 1
+artifact_type: question_list
+schema_file: templates/strict-spec-driven/schemas/question-list.yaml
+change: workspace-init-and-schemas
+open: []
+resolved:
+  - id: requirement-outcome
+    question: What observable difference proves the problem is solved?
+    context: 'Why this is asked: without a success condition, nobody can tell afterwards whether the change worked. "Observable" means someone outside the system can check it without reading the code. What a sufficient answer contains: what a person will see, or no longer have to do, once this is done. Worked example: "the report is in the manager''s inbox on Monday morning without anyone assembling it". What it changes: this becomes the delta spec''s scenarios and the acceptance evidence at review time.'
+    answer: 据规划变更 details 与里程碑 done_criteria：wa-cli init 创建的工作区通过 wa-cli validate；重复运行 init 不覆盖已有文件；损坏的产物返回带错误码、产物路径、字段路径与修复命令的 --json 诊断；wa-cli status 汇总工作区状态。具体场景写在 workspace delta spec 中。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-trigger
+    question: Why now — what forced this?
+    context: 'Why this is asked: work that nothing forced is the work most often thrown away later. This question catches a request that sounds reasonable but has no real driver behind it. What a sufficient answer contains: the concrete event, deadline, incident, or cost that made this surface now, or an honest statement that nothing did. Worked example: "the report was missed last month and it was raised with the team". What it changes: a change with no trigger is a candidate for deferral, and the answer is weighed at review before archive.'
+    answer: 据路线图：本规划变更只依赖已归档的 cli-json-diagnostics，而 genre-and-pack-loading（进而 unit-tree-and-lifecycle 及其后的全部内核规划变更）依赖它；roadmap-recommend 推荐它为下一项。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-non-goals
+    question: What must explicitly not change?
+    context: 'Why this is asked: the requester knows which nearby behavior other people depend on, and the agent does not. A "non-goal" is something the change must leave alone even though it sits close to the work. What a sufficient answer contains: the behavior, setting, or output that must survive untouched, and who relies on it. Worked example: "do not change the saved filters — several people rely on their own". What it changes: these become the proposal''s unchanged_behavior items, which review checks the finished result against.'
+    answer: 据规划变更 details 与里程碑 scope：不实现文体与规范包的定义、加载与合并（genre-and-pack-loading），不实现作品、单元树与生命周期（unit-tree-and-lifecycle），不实现素材登记，wa-cli 不调用 LLM；仓库根目录不创建 .writing-anything/；version、help、输出信封与退出码约定保持不变。已写入 proposal 的 out 与 unchanged。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-interpretation
+    question: Which reading of the request is intended, where more than one is possible?
+    context: 'Why this is asked: a short request usually admits several readings, and building the wrong one is indistinguishable from building nothing. What a sufficient answer contains: the reading that is meant, stated plainly enough to rule the others out — or a statement that only one reading exists and what it is. Worked example: "export means the version sent to the manager, not the one I read myself". What it changes: this fixes the scope boundary before any code is written, and settles disputes about what was asked for.'
+    answer: 据规划变更 details：只有一种读法——init 创建并补齐工作区（config.yaml、sources/、works/，不覆盖已有文件）；产物 Schema 用 embed 打包，validate 校验单个产物或整个工作区；status 只汇总工作区层面的状态（配置、素材与作品数量、校验结果），单元阶段与下一步命令由 unit-tree-and-lifecycle 扩展。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-problem
+    question: What is concretely going wrong today, and for whom?
+    context: 'Why this is asked: the change is planned against a need, and the need lives only with the requester. A "problem" here means what someone does or suffers today — not a feature that is missing. If the answer names a button, a field, a page, or an endpoint, it is a solution, and the underlying problem is still unstated. What a sufficient answer contains: who is affected, what they do today instead, and how often. Worked example: "every Monday one person spends forty minutes copying order rows into a spreadsheet to send the weekly report". What it changes: this becomes the proposal''s why, and it decides whether the change is worth making.'
+    answer: 据里程碑 kernel-foundation 与规划变更 workspace-init-and-schemas：wa-cli 目前只有 help 与 version，没有工作区（Workspace），也没有产物的 JSON Schema 校验。受影响的是接入 wa-cli 的 Agent（没有地方存放素材、作品与配置，产物损坏时拿不到带错误码和修复命令的诊断），以及实现后续内核命令的开发者（文体与规范包加载、new、source add 都要读写 .writing-anything/，只能各自检查字段）。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: config-mutation-path
+    question: wa-cli init 之后，config.yaml（语言、默认文体、启用的规范包、关卡强度）应该怎样修改？
+    context: 项目约定「结构化产物只通过 wa-cli 变更」，但路线图没有规划任何修改 config.yaml 的命令；genre-and-pack-loading 只规划了只读的 wa-cli config resolved。本变更里 config.yaml 只能由 init 的参数写入，而且重复运行 init 不会覆盖已有配置。影响：proposal 范围（是否加入新命令）、workspace delta spec（是否新增 config set 的需求与场景）、实现文件（internal/cli 注册表是否要支持 config 子命令）、测试，以及 artifact.schema-violation 诊断中 next 推荐的修复命令。选项：A（推荐）在本变更中加入 wa-cli config set <key> <value> [--dir <path>]：复用同一份 Schema 先校验再写入，不合法时不改文件，并把 config 设计成以后能容纳 config resolved 的命令组；B 把 config.yaml 定为作者可以直接编辑的项目配置，作为约定的例外写进 AGENTS.md，validate 负责兜底校验；C 本变更不提供修改途径，另在路线图中新增计划变更，在此之前 next 只推荐 wa-cli validate 复查。
+    answer: 采用 A：本变更加入 wa-cli config set <key> <value> [--dir <path>]。可设置的键为 language、default_genre、packs、gate_level；先用同一份 Schema 校验再写入，被设置的字段不合法时不改文件；保留其他字段与注释。为此命令注册表支持由命令组与子命令组成的两词命令名（config set），并支持必需的位置参数。
+    status: resolved
+    answered_by: human

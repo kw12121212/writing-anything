@@ -1,0 +1,42 @@
+schema: strict-spec-driven/question-list/v1
+schema_version: 1
+artifact_type: question_list
+schema_file: templates/strict-spec-driven/schemas/question-list.yaml
+change: ad-compliance-rules
+open: []
+resolved:
+  - id: requirement-problem
+    question: What is concretely going wrong today, and for whom?
+    context: 'Why this is asked: the change is planned against a need, and the need lives only with the requester. What a sufficient answer contains: who is affected, what they do today instead, and how often. What it changes: this becomes the proposal''s why.'
+    answer: 据里程碑 wechat-marketing-and-mcp 与规划变更 ad-compliance-rules：公众号营销文章常出现广告法禁止的绝对化用语（极限词），目前 wa-cli lint 没有对应的检查，Agent 与作者只能靠人工发现。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-outcome
+    question: What observable difference proves the problem is solved?
+    context: 'Why this is asked: without a success condition, nobody can tell afterwards whether the change worked. What it changes: this becomes the delta spec''s scenarios and the acceptance evidence at review time.'
+    answer: 据里程碑 done_criteria：命中极限词时 lint 以非零退出，并标明规则来源；规划变更 details：内置词表标注来源、规范包扩展行业词表、单处豁免写明理由、输出注明辅助检查不构成法律意见、tech-blog 默认关闭。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-trigger
+    question: Why now — what forced this?
+    context: 'Why this is asked: work that nothing forced is the work most often thrown away later. What it changes: a change with no trigger is a candidate for deferral.'
+    answer: 据路线图：依赖的 rule-engine-and-lint 已归档，里程碑 tech-blog-workflow 已完成；roadmap-recommend 推荐本变更为下一项。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-non-goals
+    question: What must explicitly not change?
+    context: 'Why this is asked: the requester knows which nearby behavior other people depend on. What it changes: these become the proposal''s unchanged_behavior items.'
+    answer: 据里程碑 scope 与规划变更：tech-blog 文体默认不启用；不直接发布、不提供法律意见；已有规则类型与豁免机制不变。已写入 proposal 的 out 与 unchanged。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-interpretation
+    question: Which reading of the request is intended, where more than one is possible?
+    context: 'Why this is asked: a short request usually admits several readings. What it changes: this fixes the scope boundary before any code is written.'
+    answer: 据规划变更 details：ad-compliance 是新的规则类型，不是禁用词的别名；wechat-marketing 文体的默认启用由 wechat-marketing-genre 变更在声明文体时完成（文体尚不存在）。词表形态（短语而非单字）与扩展方式写在 design 的决策中。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap

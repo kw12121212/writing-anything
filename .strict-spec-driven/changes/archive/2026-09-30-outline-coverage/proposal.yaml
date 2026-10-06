@@ -1,0 +1,36 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: outline-coverage
+  status: proposed
+summary:
+  what:
+    - 新增大纲（Outline）产物 outline.yaml（单元目录下）：按顺序列出大纲节（Outline Section），每节含 id、title，以及 covers（覆盖的核心观点 id）、uses（使用的素材 id）或 reason（不覆盖任何核心观点的理由）；由 JSON Schema 约束。
+    - 新增 wa-cli outline set <unit> <section>（按 id 新增或修改一节，--after/--before 指定位置）、wa-cli outline remove <unit> <section> 与只读的 wa-cli outline show <unit>；修改保留注释，输出大纲、每个核心观点被哪些节覆盖（coverage）与覆盖缺口（gaps）。
+    - 覆盖追踪（Coverage Tracing）：核心观点（取自同一单元的 brief.yaml）没有被任何一节覆盖（outline.uncovered-message），或某节既没有 covers 也没有 reason（outline.missing-reason）时，wa-cli validate 以非零退出；单元当前阶段要求 outline 产物时这些缺口是阻塞项，wa-cli advance 以非零退出；诊断与 next 给出查看覆盖与补齐覆盖的命令。
+  why:
+    - 里程碑 tech-blog-workflow 的完成标准要求缺少核心观点覆盖时对应命令以非零退出并给出可执行修复命令；目前没有大纲产物，Agent 写出的大纲可能遗漏作者在写作简报中确认的核心观点，或塞入与观点无关的章节。
+    - 大纲是后续写作法模板（必需章节）与上下文包（按节组装）的基础，需要结构化、可确定性校验。
+scope:
+  in:
+    - internal/outline：大纲的加载、校验（Schema、节 id 唯一、covers 引用写作简报中的核心观点、uses 引用已登记素材）、按节修改（新增、修改、移动、删除，保留注释）与覆盖缺口计算；返回结构化问题
+    - internal/schema：新增 outline.schema.json 与产物类型 outline（works/*/outline.yaml、works/*/units/*/outline.yaml）
+    - internal/work：Blockers 在当前阶段要求 outline 时加入大纲阻塞项（outline.invalid 与覆盖缺口），位于写作简报阻塞项之后、决策阻塞项之前
+    - internal/cli：新增 outline set、outline remove、outline show；validate 整体与 validate <path> 校验 outline.yaml 并报告覆盖缺口；advance、next 为大纲阻塞项给出下一步命令
+    - 新增 outline 主规格；修改 units-and-lifecycle 的 advance-stage 与 next-steps、workspace 的 validate-workspace；docs/GLOSSARY.md 新增大纲节与覆盖缺口
+    - internal/workspace：新增 edit.go，提供修改结构化产物时共用的 YAML 节点操作（SetKey、HasAnchor、IndexByID 等）；internal/brief 改用它，行为不变
+  out:
+    - 写作法模板要求的必需章节与节拍：由 writing-method-templates 处理
+    - 按大纲节创建子单元或把大纲节与单元树关联；大纲节只是规划条目
+    - 修改内置 minimal 文体的阶段；需要 outline 阶段的文体（tech-blog）由 tech-blog-genre-and-export 提供
+    - wa-cli 调用 LLM 判断某节是否真的讲到了核心观点；只做声明层面的覆盖检查
+unchanged_behavior:
+  - 输出信封字段与退出码约定不变；已发布错误码的含义不变
+  - 没有 outline.yaml 的工作区的 validate 结果不变；不要求 outline 的阶段的 advance 与 next 不变；minimal 文体的阶段序列不变
+  - 写作简报的校验与提问关卡不变；brief.yaml 中核心观点的增删不受大纲限制
+  - 仓库根目录不创建 .writing-anything/；产品二进制不依赖 internal/tools/** 与 strict-spec-driven；wa-cli 不联网、不调用 LLM
+roadmap:
+  milestone: tech-blog-workflow
+  planned_change: outline-coverage

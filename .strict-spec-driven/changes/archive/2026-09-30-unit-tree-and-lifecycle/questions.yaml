@@ -1,0 +1,60 @@
+schema: strict-spec-driven/question-list/v1
+schema_version: 1
+artifact_type: question_list
+schema_file: templates/strict-spec-driven/schemas/question-list.yaml
+change: unit-tree-and-lifecycle
+open: []
+resolved:
+  - id: requirement-problem
+    question: What is concretely going wrong today, and for whom?
+    context: 'Why this is asked: the change is planned against a need, and the need lives only with the requester. A "problem" here means what someone does or suffers today — not a feature that is missing. If the answer names a button, a field, a page, or an endpoint, it is a solution, and the underlying problem is still unstated. What a sufficient answer contains: who is affected, what they do today instead, and how often. Worked example: "every Monday one person spends forty minutes copying order rows into a spreadsheet to send the weekly report". What it changes: this becomes the proposal''s why, and it decides whether the change is worth making.'
+    answer: 据里程碑 kernel-foundation 与规划变更 unit-tree-and-lifecycle：工作区目前只有配置、文体与规范包，works/ 下没有受 wa-cli 管理的作品与单元；genre-and-pack-loading 已加载文体声明的单元类型与阶段序列，但没有任何命令使用它们。受影响的是接入 wa-cli 的 Agent（无法创建作品、得知单元进行到哪一阶段、下一步该运行什么命令）、作者（看不到写作进度与卡在哪里），以及实现决策队列、正文写入与作者反馈的后续变更（没有可挂靠的单元与阶段）。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-outcome
+    question: What observable difference proves the problem is solved?
+    context: 'Why this is asked: without a success condition, nobody can tell afterwards whether the change worked. "Observable" means someone outside the system can check it without reading the code. What a sufficient answer contains: what a person will see, or no longer have to do, once this is done. Worked example: "the report is in the manager''s inbox on Monday morning without anyone assembling it". What it changes: this becomes the delta spec''s scenarios and the acceptance evidence at review time.'
+    answer: 据规划变更 details 与里程碑 done_criteria：能用 wa-cli new 创建一篇文章作品，wa-cli status / next 输出每个单元的当前阶段、阻塞项与下一步命令；wa-cli advance 按文体声明的阶段序列推进，缺少必需产物时拒绝并给出带错误码、产物路径与下一步命令的诊断；测试夹具同时覆盖单层与多层单元树。具体场景写在 units-and-lifecycle 与 workspace delta spec 中。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-trigger
+    question: Why now — what forced this?
+    context: 'Why this is asked: work that nothing forced is the work most often thrown away later. This question catches a request that sounds reasonable but has no real driver behind it. What a sufficient answer contains: the concrete event, deadline, incident, or cost that made this surface now, or an honest statement that nothing did. Worked example: "the report was missed last month and it was raised with the team". What it changes: a change with no trigger is a candidate for deferral, and the answer is weighed at review before archive.'
+    answer: 据路线图：本规划变更只依赖已归档的 genre-and-pack-loading，而 decision-queue、author-sources-and-provenance、author-feedback 都依赖它；roadmap-recommend 推荐它为下一项。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-non-goals
+    question: What must explicitly not change?
+    context: 'Why this is asked: the requester knows which nearby behavior other people depend on, and the agent does not. A "non-goal" is something the change must leave alone even though it sits close to the work. What a sufficient answer contains: the behavior, setting, or output that must survive untouched, and who relies on it. Worked example: "do not change the saved filters — several people rely on their own". What it changes: these become the proposal''s unchanged_behavior items, which review checks the finished result against.'
+    answer: 据规划变更 details 与里程碑 scope：不实现决策队列（decision-queue）、正文写入与出处（author-sources-and-provenance）、规则引擎与审稿（tech-blog-workflow），不内置 tech-blog、novel 等面向作者的文体，wa-cli 不调用 LLM；init、config set、config resolved 的行为，status 已有字段，输出信封与退出码约定保持不变。已写入 proposal 的 out 与 unchanged。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-interpretation
+    question: Which reading of the request is intended, where more than one is possible?
+    context: 'Why this is asked: a short request usually admits several readings, and building the wrong one is indistinguishable from building nothing. What a sufficient answer contains: the reading that is meant, stated plainly enough to rule the others out — or a statement that only one reading exists and what it is. Worked example: "export means the version sent to the manager, not the one I read myself". What it changes: this fixes the scope boundary before any code is written, and settles disputes about what was asked for.'
+    answer: 据规划变更 details 与里程碑 intake_questions：阶段序列由文体声明，内核提供通用状态机与转换校验；单元类型由文体声明，单元树支持单层与多层两种形状；advance 在缺少必需产物或存在阻塞项时拒绝推进。未决的三处读法（子单元如何创建、父子单元是否独立推进、无生成命令时的下一步）另列为 open 问题。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: unit-creation
+    question: 本变更是否提供 wa-cli unit add 命令来创建子单元？
+    context: 规划变更要求作品包含单元树并按单元推进，但只列出了 new、advance、status、next，没有说明子单元（如文章下的节）如何创建；按项目约定，结构化产物只能通过 wa-cli 变更，作者和 Agent 不应手工编辑 work.yaml。后续 outline-coverage 的 outline 命令会增删节，novel-multi-level-units 会插入、移动场景。影响：proposal 范围、units-and-lifecycle delta spec 是否包含 unit-add 要求、internal/cli 的命令注册表与 internal/work 的实现和测试。选项：A（推荐）提供 wa-cli unit add <parent> <type> <id>：在父单元末尾追加子单元，类型必须是父类型 children 允许的类型，id 在作品内唯一，新单元从第一个阶段开始；后续 outline 等命令复用同一实现。B 不提供，本变更的子单元只出现在测试夹具中，直到 outline 或长篇命令上线才能用 CLI 创建；按单元推进在命令行上只能对根单元观察。
+    answer: 采用 A：提供 wa-cli unit add <parent> <type> <id>，在父单元末尾追加子单元，类型必须是父类型 children 允许的类型，id 在作品内唯一，新单元从第一个阶段开始；后续 outline 等命令复用同一实现。
+    status: resolved
+    answered_by: human
+  - id: lifecycle-scope
+    question: 父单元与子单元是否各自独立地走同一套阶段序列？
+    context: 文体目前只声明一套阶段序列（minimal 为 brief → draft → review），没有按单元类型区分。技术博客中写作简报与大纲通常属于整篇文章，而草稿与审稿可能按节进行；长篇规划中场景走完整生命周期，章与部的状态由子单元汇总得出（novel-multi-level-units）。影响：units-and-lifecycle delta spec 中 advance 的语义与场景、work.yaml 的字段（是否每个单元都有 stage）、status / next 的输出，以及后续文体的数据模型。选项：A（推荐）本变更中每个单元（含根单元与各级子单元）都按同一阶段序列独立推进，父子互不检查；按单元类型区分阶段、父单元由子单元汇总留给后续变更。B 只有叶子单元推进，父单元的阶段由子单元汇总得出（需要本变更就定义汇总规则）。C 文体为每个单元类型声明适用的阶段子集（需要修改 genres-and-packs 主规格与 genre Schema）。
+    answer: 采用 A：每个单元（含根单元与各级子单元）都按同一阶段序列独立推进，父子互不检查；按单元类型区分阶段、父单元由子单元汇总留给后续变更。
+    status: resolved
+    answered_by: human
+  - id: next-without-producer
+    question: 单元被缺失的必需产物阻塞、而该产物还没有生成命令时，next 与 status 给出什么下一步？
+    context: 诊断约定要求 next 只含可以直接运行、不含占位符的 wa-cli 命令。本变更中 minimal 文体的 brief、draft、review 都还没有生成命令（draft write 由 author-sources-and-provenance 提供，brief set 由 brief-intake-gate 提供），而里程碑完成标准要求通过 status / next 看到下一步命令。影响：units-and-lifecycle delta spec 中 next 的输出形状与场景、advance 被拒绝时诊断的 next、后续变更如何为产物登记生成命令。选项：A（推荐）每个步骤含 action（人读说明，列出所缺产物与期望的文件路径）与 commands（可直接运行的命令）：没有阻塞项时 commands 为该单元的 advance 命令；被缺失产物阻塞时 commands 只列出已登记的生成命令，本变更中为空数组；advance 被拒绝时诊断的 next 为 wa-cli next <unit> --dir <dir> --json。后续变更在 internal/cli 的产物生成命令表中登记命令后自动出现。B 被阻塞时 commands 仍给出 advance 命令，表示产出文件后再运行。C 本变更就为 draft 等产物登记尚未实现的命令名。
+    answer: 采用 A：每个步骤含 action 与 commands；没有阻塞项时 commands 为该单元的 advance 命令；被缺失产物阻塞时 commands 只列出已登记的生成命令，本变更中为空数组，action 列出所缺产物与期望路径；advance 被拒绝时诊断的 next 为 wa-cli next <unit> --dir <dir> --json。
+    status: resolved
+    answered_by: human

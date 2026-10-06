@@ -1,0 +1,8 @@
+schema_version: 1
+entries:
+  - id: canon-1
+    type: person
+    name: 守灯人
+    text: 五十岁
+    sources: []
+    protection: normal

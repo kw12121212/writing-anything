@@ -1,0 +1,8 @@
+schema_version: 1
+id: bad
+title: 混合
+kind: article
+sections:
+  - {id: a, title: 甲}
+beats:
+  - {id: b, title: 乙, position: {min: 0, max: 1}}

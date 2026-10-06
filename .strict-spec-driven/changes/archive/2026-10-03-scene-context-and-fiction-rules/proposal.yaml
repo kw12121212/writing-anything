@@ -1,0 +1,22 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: scene-context-and-fiction-rules
+  status: proposed
+summary:
+  what:
+    - 场景级上下文与小说专用检查规则：wa-cli context 对场景（scene）单元额外输出生出场人物的当前设定（取自作品设定集 canon.yaml 中同名 character 条目）、前序场景的已验收摘要（复用单元摘要 summary.yaml）与揭示边界（场景大纲各节的 reveal）；规则引擎（Rule Engine）新增 dialogue-punctuation（对话标点）与 pov-consistency（视角与人称一致，启发式检测）两种规则类型，内置 short-story 文体声明小说 AI 腔词表规则；wa-cli export 新增 --format text 纯文本（Plain Text）导出。
+  why:
+    - short-story 里程碑要求 Agent 以场景为单元草拟短篇小说：场景写作需要出场人物的当前设定与前序场景摘要来保持人物与情节一致，揭示边界（Reveal Boundary）防止本场景提前透露后续信息；对话标点与视角一致是小说文本的基础质量检查；纯文本导出满足投稿与存档等 Markdown 之外的发布场景。
+scope:
+  in:
+    - 1) wa-cli context 对 scene 单元输出 characters、priorScenes 与 reveal 三个新字段：characters 为场景大纲声明的出场人物在 canon.yaml 中的当前设定条目，priorScenes 为父单元 units 顺序中排在本场景之前、有 summary.yaml 的兄弟场景的摘要，reveal 为本场景大纲各节的揭示边界。2) 声明的出场人物在 canon.yaml 中没有同名 character 条目、或前序场景缺少摘要时，以 warning 诊断提示并给出下一步命令。3) 新内容项计入上下文预算（Context Budget）并参与裁剪。4) 新增 dialogue-punctuation 规则类型：成对半角双引号对话提示改用全角引号；对话后紧跟说话人分句且引号内以句号结尾时提示改为逗号。5) 新增 pov-consistency 规则类型：按写作简报 pov 字段启发式识别第一/第三人称，第三人称叙述中对话引号之外出现「我」「我们」时报告疑似视角滑移；pov 无法识别时规则不执行并给出 warning 诊断。6) 内置 short-story 文体声明 fiction-cliches（ai-cliche，小说 AI 腔词表）、dialogue-punctuation 与 pov-consistency 规则，severity 均为 warning。7) 已知规则类型列表加入 dialogue-punctuation 与 pov-consistency。8) wa-cli export --format text：把验收单元正文去掉 Markdown 标记导出为 .txt 纯文本。9) 测试夹具包含违例文本与合规文本；端到端测试覆盖一篇短篇的完整流程（含 canon、场景摘要、场景级上下文与纯文本导出）。
+  out:
+    - 1) 情绪曲线与张力曲线（emotion-pacing-curve 计划变更，依赖本变更）。2) 结构类写作法模板与节拍位置校验。3) novel 里程碑的多层单元树、状态快照与连续性审查。4) 揭示边界的正文自动检测：reveal 只作为上下文提示输出，不扫描正文。5) pov-consistency 之外更深层的叙事视角分析（如视角人物切换、第二人称检测）。
+unchanged_behavior:
+  - 1) wa-cli context 对非 scene 单元的输出内容不变（新字段为空值）。2) 现有规则类型的检查行为不变。3) export 的 markdown 与 wechat-html 格式行为不变。4) canon 命令族与作者钦定（Author-pinned）保护机制不变。5) summary 命令族行为不变。
+roadmap:
+  milestone: short-story
+  planned_change: scene-context-and-fiction-rules

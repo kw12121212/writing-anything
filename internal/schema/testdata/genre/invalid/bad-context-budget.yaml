@@ -1,0 +1,8 @@
+schema_version: 1
+id: essay
+title: t
+unit_types:
+  - {id: a, title: t}
+stages:
+  - {id: s, title: t}
+context_budget: 0

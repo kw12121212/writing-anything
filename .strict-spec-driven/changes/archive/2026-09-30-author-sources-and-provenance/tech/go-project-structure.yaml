@@ -1,0 +1,31 @@
+schema: strict-spec-driven/delta-tech/v1
+schema_version: 1
+artifact_type: delta_tech
+schema_file: templates/strict-spec-driven/schemas/delta-tech.yaml
+target_standard: go-project-structure
+operations:
+  ADDED: {}
+  MODIFIED:
+    injectable-io:
+      strength: SHOULD
+      statement: 命令与开发工具的实现接收 args []string、stdin io.Reader 与 stdout、stderr io.Writer（开发工具不读标准输入时可省略 stdin）并返回 int 退出码；除 cmd/ 与 internal/tools/* 的 main 函数外，不调用 os.Exit，也不直接读写 os.Stdin、os.Stdout、os.Stderr。
+      rationale: 这样命令可以在进程内测试并计入覆盖率，无需为每个用例启动子进程；draft write 与 source add 从标准输入读取内容，标准输入同样需要注入。
+      enforcement:
+        method: review
+      examples:
+        good:
+          - func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int
+        bad:
+          - 在 internal/cli 中调用 os.Exit(2)、fmt.Println 或 io.ReadAll(os.Stdin)
+    thin-entry:
+      strength: MUST
+      statement: wa-cli 的入口位于 cmd/wa-cli/，只转交参数、输入输出流与退出码；全部实现位于 internal/ 下。
+      rationale: 覆盖率统计范围只含 internal/**，逻辑放在 cmd/ 会逃出回归关卡。
+      enforcement:
+        method: review
+      examples:
+        good:
+          - main 调用 cli.Run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr) 并 os.Exit 其返回值
+        bad:
+          - 在 cmd/wa-cli/main.go 中解析子命令并实现业务逻辑
+  REMOVED: {}

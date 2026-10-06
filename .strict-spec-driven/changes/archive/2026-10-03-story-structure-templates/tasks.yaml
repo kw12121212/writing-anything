@@ -1,0 +1,54 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: story-structure-templates
+sections:
+  Implementation:
+    schema-tension:
+      text: internal/schema/schemas/common.schema.json：methodBody 的 beats 节增加可选 tension 字段（整数，0 到 10），unevaluatedProperties 语义保持，文章类与规划类不受影响
+      status: complete
+    method-tension-field:
+      text: internal/catalog/method.go：MethodPart 增加 Tension 字段（json tag tension，omitempty），checkMethod 对结构类节拍给出的 tension 做 0 到 10 整数校验，越界或非整数报告 method.invalid-tension（field 为 beats[i].tension）；规范包模板可省略 tension
+      status: complete
+    builtin-templates:
+      text: internal/catalog/builtin/methods/ 新增五个结构类模板：three-act（setup 0–0.3、confrontation 0.2–0.6、climax 0.7–1、resolution 0.85–1）、save-the-cat（标准 15 节拍 opening-image 到 final-image）、seven-point（hook、plot-turn-1、pinch-1、midpoint、pinch-2、plot-turn-2、resolution）、qichengzhuanhe（qi、cheng、zhuan、he）、hero-journey（坎贝尔 12 阶段 ordinary-world 到 return-with-elixir）；每个节拍含 id、title、description、position 与 tension（0 到 10 整数，走势与各结构惯例一致）
+      status: complete
+    default-root-only:
+      text: 默认写作法只在根单元生效：internal/work/work.go 的大纲关卡 Picker（picker 按单元返回 Default，仅根单元取文体的 default_method）与 internal/cli 的应用点（method.go 的 unitMethod/danglingMethod、lint.go 的 beatPositions、outline.go 的 outline set/remove/show、workspace.go 的整体校验 defaults 与单产物校验 defaultMethodOf），子单元未选用写作法时不用写作法
+      status: complete
+    short-story-default:
+      text: internal/catalog/builtin/genres/short-story.yaml：default_method 设为 three-act（作者已确认）；同步更新文件头注释中『默认写作法在后续的结构类写作法变更中提供』的说明
+      status: complete
+    glossary-target-tension:
+      text: docs/GLOSSARY.md：在写作法小节加入目标张力（Target Tension）条目：结构类写作法节拍声明的 0 到 10 整数目标紧张度，供情绪曲线与张力曲线作为默认目标走势
+      status: complete
+  Testing:
+    catalog-tests:
+      text: internal/catalog 单元测试：五个新模板都通过 Schema 与 checkMethod 校验（kind 为 structure、beats 非空、position 与 tension 在范围内、tension 为整数）；three-act 的 setup 为 0–0.3、climax 为 0.7–1（与 methods 主规格 beat-positions 场景一致）；save-the-cat 恰好 15 个节拍；规范包模板 tension 为 12、-1 或 3.5 时报告 method.invalid-tension（field 为 beats[i].tension），省略 tension 时合法
+      status: complete
+      command: go test ./internal/catalog/...
+    cli-method-tests:
+      text: internal/cli method 命令与默认写作法测试：method list 输出 14 个内置写作法（按 id 排序：aida、diataxis-explanation、diataxis-how-to、diataxis-reference、diataxis-tutorial、general-specific-general、hero-journey、inverted-pyramid、pas、pyramid-scqa、qichengzhuanhe、save-the-cat、seven-point、three-act），新增五个的 kind 为 structure、source 为 builtin、beats 每项含 tension；method show three-act 输出 setup（0–0.3）等节拍及其 tension；TestMethodDefaultRootOnly 覆盖子单元不继承 default_method（outline show 无写作法缺口、单产物 validate 通过、自己的写作简报可选用）
+      status: complete
+      command: go test ./internal/cli/ -run TestMethod
+    genre-e2e-test:
+      text: short-story 端到端测试：初始化 short-story 工作区后，根单元大纲没有承担默认写作法节拍的节时 validate 报告 outline.missing-method-part（setup、confrontation、climax、resolution）且退出码为 1；写作简报 method 为 none 时不报写作法缺口；brief set --method qichengzhuanhe 可改选；更新既有 short-story 端到端用例（internal/cli/e2e_test.go）：根单元按情节节拍 outline set 时每节同时 --role 承担默认写作法 three-act 的节拍，其余虚构规则、场景契约断言不回归
+      status: complete
+      command: go test ./internal/cli/ -run TestShortStory
+    regression:
+      text: 完整回归：go vet、构建、全部测试与 80% 覆盖率检查（internal/**，不含 internal/tools/**）通过
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    ready-check:
+      text: 运行 strict-spec-cli ready story-structure-templates，确认变更就绪、没有阻塞性诊断
+      status: complete
+      command: strict-spec-cli ready story-structure-templates
+    verify-check:
+      text: 运行 strict-spec-cli verify story-structure-templates，确认变更产物结构、规格引用与任务完整性通过校验
+      status: complete
+      command: strict-spec-cli verify story-structure-templates
+testing_gates:
+  validation_task: regression
+  unit_test_task: catalog-tests

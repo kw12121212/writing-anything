@@ -1,0 +1,49 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: ai-content-disclosure
+sections:
+  Implementation:
+    config:
+      text: internal/schema、internal/workspace：config.yaml 的 ai_disclosure（footer、metadata、both），config set 可设置与删除
+      status: complete
+    pack-template:
+      text: internal/schema、internal/catalog、internal/resolve：规范包的 ai_disclosure_template（非空、只允许三个占位符）、内置模板、合并结果 aiDisclosure（placement 与 template，各带 source）
+      status: complete
+    export:
+      text: internal/export：按导出单元的出处汇总 AI 参与、export.unknown-provenance、说明文字、Markdown 的文末与 front matter、wechat-html 的文末段落
+      status: complete
+    cli:
+      text: internal/cli：export 输出 disclosure 与新诊断的 next；config resolved 的 aiDisclosure（JSON 与人读文本）；tech-blog 端到端的期望导出文件
+      status: complete
+    docs:
+      text: wa-publish 技能说明 AI 参与说明与 ai_disclosure；docs/GLOSSARY.md 确认 AI 生成内容标识的术语
+      status: complete
+  Testing:
+    lint:
+      text: gofmt 检查本变更的 Go 文件
+      status: complete
+      command: test -z "$(gofmt -l internal/export internal/catalog internal/resolve internal/schema internal/workspace internal/cli/export.go internal/cli/export_test.go internal/cli/workspace.go internal/cli/e2e_test.go)"
+    unit-tests:
+      text: 单元测试：出处汇总（agent、作者改过、只有作者、无法推导）、模板与占位符、三种放置、两种格式、config set ai_disclosure、config resolved 的来源；tech-blog 端到端测试的期望导出文件
+      status: complete
+      command: go test ./internal/...
+    full-regression:
+      text: 运行完整回归命令，覆盖率不低于 80%
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    spec-alignment:
+      text: 对照 export、workspace 与 genres-and-packs delta spec 的每个场景确认实现与测试覆盖，并按实际实现修正
+      status: complete
+    strict-ready:
+      text: 运行 strict-spec-cli ready 与 strict-spec-cli verify，确认变更产物有效
+      status: complete
+      command: strict-spec-cli ready ai-content-disclosure && strict-spec-cli verify ai-content-disclosure
+    archive-readiness:
+      text: 确认 delta spec 能合并，归档后路线图中的 ai-content-disclosure 标记为完成，里程碑 wechat-marketing-and-mcp 的规划变更全部完成
+      status: complete
+testing_gates:
+  validation_task: full-regression
+  unit_test_task: unit-tests

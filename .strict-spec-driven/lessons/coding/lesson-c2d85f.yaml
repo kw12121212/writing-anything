@@ -1,0 +1,19 @@
+schema: strict-spec-driven/lesson/v1
+schema_version: 1
+artifact_type: lesson
+schema_file: templates/strict-spec-driven/schemas/lesson.yaml
+lesson:
+  id: lesson-c2d85f
+  title: 复用整体校验做写前检查时，错误码取决于整体校验的检查顺序
+category: coding
+status: active
+created_at: '2026-09-30T12:04:18.240Z'
+updated_at: '2026-09-30T12:04:18.240Z'
+context: unit-tree-and-lifecycle 中 wa-cli unit add 修改 work.yaml 后，用与 validate 相同的整体作品校验做写前复查，并直接把复查问题当作命令的错误。
+observation: 规格要求类型不在父单元 children 中时报告 work.child-type-not-allowed，但文体未声明的类型在整体校验中先命中 work.unknown-unit-type，message 列出的全部类型还包括不允许的类型；全部测试通过，直到 fresh-context 审查按规格逐条探测才发现。
+takeaway: 写前复查只用来保证写出的文件可用；命令规格为某种输入指定了错误码时，在修改文档前单独检查这一前置条件，并为规格中每种输入（包括未声明、不存在的取值）各写一条断言错误码的测试。
+applies_when: 为修改结构化产物的 wa-cli 命令（如 unit add、advance、config set）实现参数检查，并打算复用 validate 的整体校验来报告参数错误时
+occurrences:
+  - origin: unit-tree-and-lifecycle
+    date: '2026-09-30'
+    evidence: internal/work/work.go addUnit 在修改文档前按父单元类型的 children 检查；internal/cli/units_test.go TestUnitAdd 的 chapter 用例

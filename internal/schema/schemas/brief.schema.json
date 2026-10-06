@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "写作简报",
+  "description": "单元的写作简报（Brief）：受众、写作目的、前提、主题、视角（POV）、核心观点（Key Message）、字数范围、禁区与关联素材。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "audience": {"type": "string", "pattern": "\\S"},
+    "purpose": {"type": "string", "pattern": "\\S"},
+    "premise": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["text"],
+      "properties": {
+        "text": {"type": "string", "pattern": "\\S"},
+        "sources": {"$ref": "common.schema.json#/$defs/ids"},
+        "decision": {"$ref": "common.schema.json#/$defs/id"}
+      }
+    },
+    "theme": {"type": "string", "pattern": "\\S"},
+    "pov": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["person"],
+      "properties": {
+        "person": {"enum": ["first", "second", "third"]},
+        "character": {"type": "string", "pattern": "\\S"}
+      }
+    },
+    "key_messages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "text"],
+        "properties": {
+          "id": {"$ref": "common.schema.json#/$defs/id"},
+          "text": {"type": "string", "pattern": "\\S"},
+          "sources": {"$ref": "common.schema.json#/$defs/ids"},
+          "decision": {"$ref": "common.schema.json#/$defs/id"}
+        }
+      }
+    },
+    "length": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["min", "max"],
+      "properties": {"min": {"type": "integer", "minimum": 1}, "max": {"type": "integer", "minimum": 1}}
+    },
+    "avoid": {"type": "array", "items": {"type": "string", "pattern": "\\S"}},
+    "sources": {"$ref": "common.schema.json#/$defs/ids"},
+    "method": {
+      "type": "string",
+      "pattern": "^(none|[a-z][a-z0-9]*(-[a-z0-9]+)*)$",
+      "description": "选用的写作法模板（Method Template）id；none 表示不用写作法；省略时用文体的默认写作法"
+    }
+  }
+}

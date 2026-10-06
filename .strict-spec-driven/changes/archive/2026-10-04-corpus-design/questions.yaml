@@ -1,0 +1,48 @@
+schema: strict-spec-driven/question-list/v1
+schema_version: 1
+artifact_type: question_list
+schema_file: templates/strict-spec-driven/schemas/question-list.yaml
+change: corpus-design
+open: []
+resolved:
+  - id: writing-method
+    question: 长篇规划写作法（Long-form Planning Method）选雪花写作法还是网文结构？
+    context: 规划文件要求矩阵同时覆盖长篇规划写作法与 recall 全文检索，写作法在雪花写作法（Snowflake Method）与网文结构之间任选其一；选择影响 corpus-authoring 的简报声明、plan step 展开方式与本变更矩阵的映射条目（影响提案范围与语料实现文件）
+    answer: 选雪花写作法（snowflake）：内置 methods 已含 snowflake 模板，其从一句话到人物再到章节的展开与悬疑中篇的人物驱动结构契合；网文结构更适合连载节奏而非封闭三章结构
+    status: resolved
+    answered_by: roadmap
+  - id: requirement-problem
+    question: What is concretely going wrong today, and for whom?
+    context: 'Why this is asked: the change is planned against a need, and the need lives only with the requester. A "problem" here means what someone does or suffers today — not a feature that is missing. If the answer names a button, a field, a page, or an endpoint, it is a solution, and the underlying problem is still unstated. What a sufficient answer contains: who is affected, what they do today instead, and how often. Worked example: "every Monday one person spends forty minutes copying order rows into a spreadsheet to send the weekly report". What it changes: this becomes the proposal''s why, and it decides whether the change is worth making.'
+    answer: novel 与 novel-continuity 里程碑已交付大量长篇特性面（多层单元、场景契约、状态快照、知情表、伏笔台账、写后收口、连续性审查等），但没有一部按真实工作流创作的小说语料做端到端回归：特性之间的衔接只有各命令单元测试覆盖，无法验证完整长篇写作生命周期（简报→大纲→草稿→审稿→修订→导出）在真实语料上是否成立
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-trigger
+    question: Why now — what forced this?
+    context: 'Why this is asked: work that nothing forced is the work most often thrown away later. This question catches a request that sounds reasonable but has no real driver behind it. What a sufficient answer contains: the concrete event, deadline, incident, or cost that made this surface now, or an honest statement that nothing did. Worked example: "the report was missed last month and it was raised with the team". What it changes: a change with no trigger is a candidate for deferral, and the answer is weighed at review before archive.'
+    answer: 路线图已规划 novel-e2e 里程碑（order 100）且其依赖的 novel 与 novel-continuity 里程碑均已交付归档；corpus-design 是该里程碑六个规划变更中唯一无依赖的起点，其余五个全部 dependency-incomplete
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-interpretation
+    question: Which reading of the request is intended, where more than one is possible?
+    context: 'Why this is asked: a short request usually admits several readings, and building the wrong one is indistinguishable from building nothing. What a sufficient answer contains: the reading that is meant, stated plainly enough to rule the others out — or a statement that only one reading exists and what it is. Worked example: "export means the version sent to the manager, not the one I read myself". What it changes: this fixes the scope boundary before any code is written, and settles disputes about what was asked for.'
+    answer: 设计一部 3 章、每章 3 场景（共 9 场）、正文约 1.5 万字的中文悬疑中篇（南方小镇修表匠与停在特定时刻的旧怀表，温情底色）的设定文档与带稳定编号的测试矩阵，并定义可重放命令脚本格式；只产出设计产物（DESIGN.md、matrix.yaml、script-format.md）与结构校验测试，正文创作由 corpus-authoring 承担
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-non-goals
+    question: What must explicitly not change?
+    context: 'Why this is asked: the requester knows which nearby behavior other people depend on, and the agent does not. A "non-goal" is something the change must leave alone even though it sits close to the work. What a sufficient answer contains: the behavior, setting, or output that must survive untouched, and who relies on it. Worked example: "do not change the saved filters — several people rely on their own". What it changes: these become the proposal''s unchanged_behavior items, which review checks the finished result against.'
+    answer: 不改 wa-cli 产品代码与任何主规格；不创作小说正文语料（corpus-authoring）；不实现重放测试、黄金文件与负向断言、矩阵对账校验、语料 README（replay-harness、golden-assertions、matrix-check、docs-runbook）；不引入内容生成机制；不做系列（跨作品）特性
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-outcome
+    question: What observable difference proves the problem is solved?
+    context: 'Why this is asked: without a success condition, nobody can tell afterwards whether the change worked. "Observable" means someone outside the system can check it without reading the code. What a sufficient answer contains: what a person will see, or no longer have to do, once this is done. Worked example: "the report is in the manager''s inbox on Monday morning without anyone assembling it". What it changes: this becomes the delta spec''s scenarios and the acceptance evidence at review time.'
+    answer: internal/cli/testdata/e2e/novel/ 下存在 DESIGN.md、matrix.yaml 与 script-format.md；新增结构校验测试通过（矩阵编号唯一、每条字段齐备、特性面全覆盖、≥2 跨章伏笔链、≥1 悬空伏笔、≥2 秘密知情点、≥2 状态快照变更、≥1 跨章倒叙、≥1 作者钦定世界规则、人物 ≤5、3 章 9 场景）；完整回归命令通过且新测试纳入 go test 默认执行
+    status: resolved
+    kind: requirement
+    answered_by: roadmap

@@ -1,0 +1,33 @@
+schema: strict-spec-driven/delta-tech/v1
+schema_version: 1
+artifact_type: delta_tech
+schema_file: templates/strict-spec-driven/schemas/delta-tech.yaml
+target_standard: cli-contract
+operations:
+  ADDED: {}
+  MODIFIED:
+    registry-declared:
+      strength: MUST
+      statement: 每条 wa-cli 命令必须在 internal/cli 的命令注册表（Command Registry）中声明 name、summary、位置参数、flags、outputKeys 与 exitCodes，参数解析与 help 输出都只从注册表派生；参数类型为 bool、string 或 list（可重复出现、按出现顺序收集的多个取值）；不得绕过注册表单独解析参数。
+      rationale: 注册表是 help --json、后续 MCP tools 生成与 Skill 命令校验的唯一依据，绕过它会使帮助与实际行为漂移。
+      enforcement:
+        method: test
+        detail: internal/cli 的 TestRegistryConsistency 遍历 help --json：断言每条命令 --json 输出的顶层字段恰好等于声明的 outputKeys，声明的每个 flag 都被解析器接受，且 exitCodes 非空；未声明的参数由解析器拒绝（usage.unknown-flag）。list 参数由 TestParseListFlag 覆盖重复出现与顺序。
+      examples:
+        good:
+          - 新增命令时在注册表加一项并声明其 flags 与 outputKeys
+        bad:
+          - 在某个命令的 run 函数里手写 for 循环解析 os.Args
+    next-rechecks-problem:
+      strength: SHOULD
+      statement: 诊断 next 中给出的复查命令必须能重新检出该问题：涉及多个产物的问题（引用、合并、内置产物与工作区产物的冲突）给出整体校验 wa-cli validate --dir <dir> --json，不得给出只校验单个文件、会报告 valid 为 true 的命令；命令按自身改写 next（如指向 wa-cli help <command>）时，只改写由本次参数引起的问题，已有产物中存在的问题保留默认的复查命令。判断问题是否由本次参数引起时，按诊断字段是否为参数名（或其下标、子字段）的白名单判断，不以「字段不以产物内路径开头」推断：已有产物的根级问题（如 schema_version、未定义的字段）也属于已有产物。
+      rationale: Agent 按 next 复查；复查命令检不出问题时，Agent 会误以为问题已经解决；把已有产物的问题也改成查看用法，Agent 会反复调整参数而问题始终存在；以前缀排除会漏掉根级字段（fresh-context 审查在 decision add 与 claim add 中都复现）。
+      enforcement:
+        method: test
+        detail: internal/cli 的测试对跨产物错误码断言 next 为整体校验并能重新检出；TestClaimAdd、TestFeedbackAdd 与 TestDecisionAdd 断言已有产物的问题（含根级字段）保留默认的复查命令。
+      examples:
+        good:
+          - paramField(d.Field, "question", "options", "id", "recommendation") 为真时才改写为 wa-cli help decision add --json
+        bad:
+          - '!strings.HasPrefix(d.Field, "decisions") 时改写 next，schema_version 的问题也被改成查看用法'
+  REMOVED: {}

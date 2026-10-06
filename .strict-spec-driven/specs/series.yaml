@@ -1,0 +1,100 @@
+schema: strict-spec-driven/main-spec/v1
+schema_version: 1
+artifact_type: main_spec
+schema_file: templates/strict-spec-driven/schemas/main-spec.yaml
+spec:
+  id: series
+  title: 系列与摘要（Series and Summary）
+requirements:
+  series-set:
+    strength: MUST
+    statement: wa-cli series set <series> 必须创建或修改系列（Series）.writing-anything/series/<series>.yaml（series 为 id 格式）：创建时含 schema_version 1、id、title（--title，省略时为 series）、works、packs、sources 与 facts（都为空数组）；--title 修改标题，--packs 与 --sources（逗号分隔的 id，空字符串表示清空）整体替换系列的规范包与素材；只修改给出的字段，保留其他内容与 YAML 注释。规范包不是内置或工作区规范包时报告 config.unknown-pack，素材未登记时报告 series.unknown-source，参数不是 id 格式、--packs 或 --sources 中有重复的 id、--title 为空白或不是 UTF-8 文本时报告 input.invalid-value（不填 path，next 含 wa-cli help series set --json）；这些情况不写文件，退出码为 1。--json 输出的 series 含 id、path、title、works、packs、sources 与 facts；changedPaths 为写入的系列文件（取值未变时为空数组），退出码为 0。
+    scenarios:
+      create-series:
+        - GIVEN: 已初始化的工作区 D
+        - WHEN: 运行 wa-cli series set guide --title 入门指南 --packs house --dir D --json
+        - THEN: .writing-anything/series/guide.yaml 被创建，title 为入门指南，packs 为 [house]，works、sources 与 facts 为空数组，退出码为 0
+  series-add:
+    strength: MUST
+    statement: wa-cli series add <series> <work> 必须把作品追加到系列 works 的末尾；作品已在该系列中时不写文件、changedPaths 为空数组。系列不存在时报告 series.not-found，作品不存在时报告 work.not-found，作品已属于另一个系列时报告 series.already-member（message 给出该系列）；这些情况不写文件，退出码为 1。
+    scenarios:
+      add-work:
+        - GIVEN: 系列 guide 与作品 part-1、part-2
+        - WHEN: 依次运行 wa-cli series add guide part-1 与 wa-cli series add guide part-2
+        - THEN: works 为 [part-1, part-2]；再把 part-1 加入另一个系列时报告 series.already-member
+  series-fact:
+    strength: MUST
+    statement: wa-cli series fact <series> <fact> 必须以 --text（非空）与可选的 --sources（逗号分隔的素材 id）新增或替换系列 facts 中 id 为 fact 的事实（Fact）：已有同 id 的事实时只修改 text 与 sources 字段，保留其他事实、该事实中的其他内容与注释；取值未变时不写文件；text 去掉首尾空白后写入；素材未登记时报告 series.unknown-source，--text 为空白或不是 UTF-8 文本、--sources 中有重复的 id 时报告 input.invalid-value，不写文件，退出码为 1。
+    scenarios:
+      add-fact:
+        - GIVEN: 系列 guide，已登记素材 s1
+        - WHEN: 运行 wa-cli series fact guide audience --text 读者是刚入门的后端工程师 --sources s1 --dir D --json
+        - THEN: 'facts 含 {id: audience, text: 读者是刚入门的后端工程师, sources: [s1]}，退出码为 0'
+  series-show:
+    strength: MUST
+    statement: wa-cli series show <series> 必须只读地输出系列的内容（同 series set 的 series 字段），并为每个成员作品给出 summaries：work、text（根单元摘要，没有时为 null）与 stale；changedPaths 为空数组。系列不存在时报告 series.not-found，退出码为 1。
+    scenarios:
+      show-series:
+        - GIVEN: 系列 guide 的 works 为 [part-1, part-2]，part-1 有摘要
+        - WHEN: 运行 wa-cli series show guide --dir D --json
+        - THEN: summaries 依次为 part-1（text 为摘要、stale 为 false）与 part-2（text 为 null），退出码为 0
+  series-inheritance:
+    strength: MUST
+    statement: 属于系列的作品，其生效配置必须按 文体 → config.yaml 的 packs（为空时为内置 default）→ 系列的 packs → 项目配置 的顺序合并：系列 packs 中的规范包作为配置层（source 为 pack:<id>）排在 config.yaml 的规范包之后、项目配置之前，config.yaml 中已列出的规范包不重复应用。wa-cli lint、review record、export、metrics 与 context 都对成员作品使用这一合并结果；不属于系列的作品与 wa-cli config resolved 的结果不变。.writing-anything/series/ 下无法加载的系列文件不阻塞这些命令：以 warning 报告，作品按不属于该系列处理（整体校验仍按 error 报告）。项目配置的 rules 与 waivers 对所有作品生效，引用只由系列规范包定义的规则会让不属于该系列的作品合并失败；只想调整系列的规则时应修改系列的规范包。
+    scenarios:
+      series-pack-applies:
+        - GIVEN: config.yaml 的 packs 为 [default]，系列 guide 的 packs 为 [house]，house 把规则 length 的 params.max 设为 20；作品 part-1 属于 guide，正文 30 字
+        - WHEN: 运行 wa-cli lint part-1 --dir D --json
+        - THEN: findings 含规则 length 的发现项，source 为 pack:house；不属于系列的作品没有该发现项
+  summary-set:
+    strength: MUST
+    statement: wa-cli summary set <unit> 必须以 --text（或 --file，相对 --dir 或为绝对路径）给出的文字写入单元目录的摘要（Summary）summary.yaml：schema_version 1、text、draft_sha256 与 recorded_at（UTC，YYYY-MM-DDTHH:MM:SSZ），整体替换已有的摘要。单元为非汇总单元（不走 stage_from_children 推导的单元）时：必须已验收——没有 acceptance.yaml、它不通过校验或其 draft_sha256 与当前正文不同时报告 summary.not-accepted（next 含 wa-cli review show <unit> --dir <dir> --json）；draft_sha256 为当前 draft.md 的 SHA-256，summary show 的 stale 为指纹不同或没有 draft.md。单元为汇总单元（Summarized Unit：作品文体声明 stage_from_children 的类型，以及作品根单元）时：draft_sha256 为其子树全部场景（type 为 scene 的单元）当前 draft.md 的 SHA-256 按单元树先序逐个拼接后再取 SHA-256；写入前必须子层齐全——该单元子树全部场景的 stage 为 done 且各有 summary.yaml（场景层就绪），且非场景子层的直接子单元（如章之于部）各有 summary.yaml（存在即视为子层就绪，其内部是否齐备由该层自己的写入检查保证），缺失时报告 summary.children-missing（field 为空，message 列出缺失的单元引用，至多 5 项后加「等 N 项」），next 含 wa-cli summary set --json；场景子树为空时（没有场景的汇总单元）不做子层检查。摘要为空白或不是 UTF-8 文本、同时给出 --text 与 --file 时报告 input.invalid-value；省略两者时从标准输入读取；摘要的非空白字符数不在作品文体的 summary_length（min 与 max，未声明时为 20 到 500）内时报告 summary.length（message 给出范围与实际字数）；这些情况不写文件，退出码为 1。--json 输出的 summary 含 unit、path、text、chars、draftSha256 与 stale（为 false），changedPaths 为 [summary.yaml]（内容未变时为空数组），退出码为 0。摘要由 Agent 撰写，wa-cli 只校验。
+    scenarios:
+      chapter-missing-scene-summary:
+        - GIVEN: novel 作品 my-novel 的 chapter-one 下 scene-1 已验收并有摘要，scene-2 已验收但没有摘要
+        - WHEN: 运行 wa-cli summary set my-novel/chapter-one --text 第一章：守灯人接下委托（80 字） --dir D --json
+        - THEN: 报告 summary.children-missing（message 含 my-novel/scene-2），没有写出章摘要，退出码为 1
+      chapter-summary-ok:
+        - GIVEN: chapter-one 下全部场景已验收且有摘要
+        - WHEN: 运行 wa-cli summary set my-novel/chapter-one --text 第一章摘要（60 字） --dir D --json
+        - THEN: 章 summary.yaml 的 draft_sha256 为两个场景正文 SHA-256 按先序拼接后的 SHA-256，changedPaths 含该 summary.yaml，退出码为 0
+      part-missing-chapter-summary:
+        - GIVEN: part-one 的 chapter-one 有摘要而 chapter-two 没有
+        - WHEN: 运行 wa-cli summary set my-novel/part-one --text 第一部摘要 --dir D --json
+        - THEN: 报告 summary.children-missing（message 含 my-novel/chapter-two），退出码为 1
+      scene-summary-unchanged:
+        - GIVEN: 场景 my-novel/scene-1 已验收，文体没有声明 summary_length
+        - WHEN: 运行 wa-cli summary set my-novel/scene-1 --text 太短 --dir D --json
+        - THEN: 报告 summary.length（message 含 20 到 500），不创建 summary.yaml，退出码为 1（非汇总单元行为不变）
+  summary-show:
+    strength: MUST
+    statement: wa-cli summary show <unit> 必须只读地输出单元的摘要：summary 含 unit、path、text、chars、draftSha256 与 stale；单元没有摘要时 summary 为 null；changedPaths 为空数组。非汇总单元的 stale 为当前 draft.md 的 SHA-256 不等于 draft_sha256，或没有 draft.md。汇总单元（summary-set 所定义）的 stale 为：其子树任一场景没有 draft.md 或其当前 SHA-256 拼接指纹不等于 draft_sha256，或任一子层摘要缺失（场景或直接子单元的 summary.yaml 不存在）时为 true。summary.yaml 不通过校验时报告其诊断，退出码为 1；无法推导（所在作品无法加载）时按非汇总单元的正文指纹推导。
+    scenarios:
+      chapter-stale-on-scene-edit:
+        - GIVEN: chapter-one 有摘要，之后作者直接修改了其子场景 scene-2 的正文
+        - WHEN: 运行 wa-cli summary show my-novel/chapter-one --dir D --json
+        - THEN: summary.stale 为 true（子场景正文指纹变化），退出码为 0
+      scene-stale-unchanged:
+        - GIVEN: 场景 scene-1 写入摘要后，作者修改了 draft.md
+        - WHEN: 运行 wa-cli summary show my-novel/scene-1 --dir D --json
+        - THEN: summary.stale 为 true，退出码为 0（非汇总单元行为不变）
+  series-validation:
+    strength: MUST
+    statement: wa-cli validate 整体校验时，必须对 .writing-anything/series/ 下每个不以 . 开头的 .yaml 文件做 Schema 校验并计入 checked：id 必须等于文件名（否则 series.id-mismatch），works 中的作品必须存在（否则 work.not-found，field 为 works[i]）且每个作品至多出现在一个系列中（否则 series.already-member），packs 必须存在（否则 config.unknown-pack，field 为 packs[i]），sources 与 facts 的 sources 必须已登记（否则 series.unknown-source），facts 的 id 不重复（否则 artifact.duplicate-id）；并对每个系列的每个成员作品按 series-inheritance 的顺序合并一次，报告合并中的 error（如系列规范包与文体规则的类型冲突，path 为出问题的配置层）；并对每个可加载作品的每个单元目录中存在的 summary.yaml 做 Schema 校验并计入 checked。wa-cli validate <path> 按位置识别系列文件与 summary.yaml 并做各自的 Schema 与文件内检查。
+    scenarios:
+      series-missing-work:
+        - GIVEN: series/guide.yaml 的 works 含不存在的作品 ghost
+        - WHEN: 运行 wa-cli validate --dir D --json
+        - THEN: diagnostics 中有一条错误码为 work.not-found、field 为 works[0] 的诊断，退出码为 1
+  context-series:
+    strength: MUST
+    statement: wa-cli context 的 context.series 对不属于任何系列的作品为 null；对成员作品为 {id, title, facts, summaries}：facts 为系列的事实（id、text、sources）；summaries 为系列 works 中排在本作品之前、根单元有 summary.yaml 的作品的摘要，按 works 的顺序，每项含 work、text 与 stale（过期的照常列出）；前序作品没有摘要时给出 warning 级 context.summary-missing（next 含 wa-cli help summary set --json）；前序作品的 summary.yaml 无法读取或不合法时以 warning 报告其诊断并跳过该摘要，context 照常组装。系列 sources 中的素材并入 context.sources，排在作品自己引用的素材之后（已出现的不重复）。不加 --json 的 Markdown 输出在「系列（Series）」一节写明系列 id 与标题，列出事实与摘要（摘要正文以引用块输出），过期的摘要注明「（已过期：正文在摘要之后被修改）」。事实与摘要按 context-trim 的优先级计入预算。
+    scenarios:
+      second-part-context:
+        - GIVEN: 系列 guide 的 works 为 [part-1, part-2]，part-1 已验收并写入摘要
+        - WHEN: 运行 wa-cli context part-2 --dir D --json
+        - THEN: 'context.series.summaries 只含 {work: part-1, text: 该摘要, stale: false}；part-1 正文之后被修改时 stale 为 true，Markdown 输出注明已过期'
+      not-member:
+        - GIVEN: 作品 solo 不属于任何系列
+        - WHEN: 运行 wa-cli context solo --dir D --json
+        - THEN: context.series 为 null，其他字段与之前相同

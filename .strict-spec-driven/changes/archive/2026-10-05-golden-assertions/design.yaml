@@ -1,0 +1,24 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: golden-assertions
+approach:
+  - 复用重放：把 novel_corpus_replay_test.go 的重放闭包抽为同包共享助手 replayNovelCorpus(t, dir)（含全部逐步断言），黄金测试与负向测试都先冻结时钟重放出完整工作区。黄金比对采集九类对象——三个文件字节（knowledge.yaml、threads.yaml、book.md）与六个命令输出（state at ch3-s3、continuity、context ch3-s2、review report、export markdown 的 novel-export.md、export text 的 novel-export.txt，均为 --json 或定稿字节）——与 golden/ 目录同名文件逐字节比对；UPDATE_GOLDEN=1 环境变量时改为写出。冻结时钟下无易变字段，逐字节比对即规范化策略。负向断言在重放副本上逐类注入：canon set 钦定条目（无需回滚，命令被拒零写入）；scene close-out --replace 注入越界知情（knowledge at 断言泄漏后用原始收口载荷 --replace 恢复并断言基线）；threads set th-a 回退 open（continuity 断言 thread-anomaly 后用 --status paid --recovered-in 恢复）；scene contract 互指 after（timeline 断言 cycle 与 order-conflict 后用 --after 空值删除恢复）。每类注入后先断言 error 级发现项，恢复后断言 continuity 全绿
+decisions:
+  byte-exact-golden:
+    decision: 冻结时间源下全部产物确定性，黄金文件逐字节比对，不做字段级规范化
+    rationale: 双跑一致性已在 replay-harness 验证；逐字节基线最严，任何漂移（含字段顺序）都会被捕获；如未来出现合理易变字段，再在采集点做定向规范化并在 README 登记
+  injections-use-product-commands:
+    decision: 四类注入全部经 wa-cli 命令完成（canon set、scene close-out --replace、threads set、scene contract --after），不直接改产物文件；被拒的钦定修改按产品语义生成阻塞决策（唯一写入为决策队列），设定集不变
+    rationale: 注入走产品路径才能同时验证命令的关卡语义；恢复同样经命令，恢复后断言全绿证明注入无残留
+  knowledge-gap-recorded:
+    decision: 知情违例的注入采用台账层注入 + knowledge at 断言暴露（空→非空），不声称 error 级发现；产品当前没有 prose 级知情边界确定性检查，该缺口在 matrix 负向条目与本变更报告中显式记录，留给后续产品变更
+    rationale: 负向断言必须诚实对应真实存在的检查；伪造 error 级断言比记录缺口更有害
+  no-delta-spec:
+    decision: golden-assertions 是技术专用变更：只新增测试与黄金夹具
+    rationale: 测试基建不构成主规格需求
+alternatives: []
+risks:
+  - 黄金文件对语料任何改动都零容差——这正是目的；修订语料时按 README 流程 UPDATE_GOLDEN=1 再生成
+  - review report 输出若包含 open 包计数等非确定序——以实际采集校准，必要时改用稳定性更高的汇总口径

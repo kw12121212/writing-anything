@@ -1,0 +1,49 @@
+schema: strict-spec-driven/delta-spec/v1
+schema_version: 1
+artifact_type: delta_spec
+schema_file: templates/strict-spec-driven/schemas/delta-spec.yaml
+target_spec: metrics
+operations:
+  ADDED:
+    metrics-compute:
+      strength: MUST
+      statement: wa-cli metrics compute <unit> 必须只读地为单元及其每个有 draft.md 的子孙单元（按单元树先序）计算确定性的文风与节奏指标（见 deterministic-metrics），并与两类基准对比输出文风漂移（Style Drift）发现项（见 drift-detection），不修改任何产物，changedPaths 为空数组，wa-cli 不调用模型。--json 输出的 units 为数组，每项含 unit、metrics（标量指标）、paragraphs（每段的 paragraph、line、sentences 与 sentenceMean）与 drift（漂移发现项）；baselines 含 profile（作者文风画像的来源 source，没有时为 null）、accepted（使用的已验收单元引用数组，不足 3 个时为空数组）与 threshold（value 与 source）。单元及其子孙都没有正文时报告 draft.not-found，退出码为 1；漂移发现项不影响退出码（为 0）。
+      scenarios:
+        compute-work:
+          - GIVEN: 作品 post 的根单元与子单元 intro 都有正文
+          - WHEN: 运行 wa-cli metrics compute post --dir D --json
+          - THEN: units 依次为 post 与 post/intro，各含 metrics 与 paragraphs；changedPaths 为空数组，退出码为 0
+    deterministic-metrics:
+      strength: MUST
+      statement: '指标必须只由正文确定（先去掉作者批注 <!-- @me: … -->，按 style-profile 主规格 style-stats 的规则切分段落与句子）：chars（非空白字符数）、sentenceMean 与 sentenceStdev（句长的均值与总体标准差）、paragraphMean（段长均值）、dialogueRatio（“”「」『』内的非空白字符占比，四位小数；引号按段落计，不闭合的引号不延续到下一段）、vocabularyRichness（汉字二元组的类型数除以词例数，四位小数，没有二元组时为 0）、functionWords（虚词 的、了、是、在、和、就、都、也、而、着 的每千字次数）、fourChar（被标点、空白或非汉字字符分隔、恰为 4 个汉字的片段的每千字个数）、aiCliche（按作品合并的、生效的 ai-cliche 规则 terms 每千字出现次数，计数口径与 lint 的 ai-cliche 规则相同：同样的屏蔽区域、去重后的词表与一次扫描；没有该规则时为 0）与 punctuation（style-stats 标点集合的每千字次数）；除比例外保留两位小数。段落指标为每段的 sentences（句数）与 sentenceMean。同样的正文与配置总是得到同样的指标。'
+      scenarios:
+        four-char:
+          - GIVEN: 正文为「一石二鸟，事半功倍。今天」
+          - WHEN: 计算指标
+          - THEN: fourChar 计入「一石二鸟」与「事半功倍」两个片段，不计「今天」
+        dialogue:
+          - GIVEN: 正文为「他说：“走吧。”」
+          - WHEN: 运行 wa-cli metrics compute post --dir D --json
+          - THEN: metrics.dialogueRatio 为 0.375（“”内 3 个字，共 8 个非空白字符）
+    drift-detection:
+      strength: MUST
+      statement: 漂移判定必须为：值与基准均值之差的绝对值大于 阈值 × 基准标准差；基准标准差按四位小数为 0、或已验收单元的取值完全相同时不判定。阈值为按作品合并的 driftThreshold（见 genres-and-packs 主规格的 drift-threshold）。基准一为作者文风画像 resolved.styleProfile：单元的 sentenceMean 对 sentences 的 mean 与 stdev、paragraphMean 对 paragraphs，以及每个至少 2 句的段落的 sentenceMean 对 sentences（段落级，表示局部节奏变化）；没有文风画像时不使用。基准二为同一作品中 acceptance.yaml 通过校验且与当前正文一致、且不在本次计算范围内的单元，不少于 3 个时对每个标量指标取它们的均值与总体标准差；不足 3 个时不使用。每项漂移发现项含 metric、baseline（profile 或 accepted）、value、mean 与 stdev（保留四位小数）、threshold、paragraph 与 line（单元级为 null）与 message（说明偏高或偏低，只衡量偏离、不评判好坏）。漂移发现项不阻塞验收：wa-cli accept、advance 与 lint 都不读取它们。
+      scenarios:
+        profile-drift:
+          - GIVEN: 规范包 mine 的 style_profile 中 sentences 的 mean 为 10、stdev 为 2，packs 为 [mine]；单元正文的平均句长为 20
+          - WHEN: 运行 wa-cli metrics compute post --dir D --json
+          - THEN: 'drift 含 {metric: sentenceMean, baseline: profile, value: 20, mean: 10, stdev: 2, threshold: 2} 的单元级发现项，退出码为 0'
+        paragraph-drift:
+          - GIVEN: 同上，第 3 段由 3 个 1 字的短句组成
+          - WHEN: 运行 wa-cli metrics compute post --dir D --json
+          - THEN: drift 含 metric 为 sentenceMean、paragraph 为 3、line 为该段首行行号的段落级发现项
+        not-blocking:
+          - GIVEN: 单元有漂移发现项且已满足其他验收条件
+          - WHEN: 运行 wa-cli accept 与 wa-cli lint
+          - THEN: 结果与没有漂移时相同
+        accepted-baseline:
+          - GIVEN: 作品 post 有 3 个已验收的子单元，对话占比都很低（只有一个含一句很短的引语），另一个子单元 new 的正文大半在引号内
+          - WHEN: 运行 wa-cli metrics compute post/new --dir D --json
+          - THEN: baselines.accepted 含这 3 个单元，drift 含 metric 为 dialogueRatio、baseline 为 accepted 的发现项；已验收单元的某项指标完全相同（标准差为 0）时不判定该项
+  MODIFIED: {}
+  REMOVED: {}

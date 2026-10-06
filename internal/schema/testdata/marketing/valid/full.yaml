@@ -1,0 +1,8 @@
+schema_version: 1
+headlines:
+  - {id: h1, text: 三步搞定连接池}
+  - {id: h2, text: 连接池为什么总是不够用}
+digest: 一篇讲清连接池配置的短文。
+opening: 上周的故障，又是连接池。
+cta: 关注我们，下周讲限流。
+headline_decision: dec-1

@@ -1,0 +1,6 @@
+schema_version: 1
+sections:
+  - id: scene-1
+    title: 灯下对峙
+    characters: [守灯人, 守灯人]
+    beats: [b1]

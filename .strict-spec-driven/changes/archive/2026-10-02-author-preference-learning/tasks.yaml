@@ -1,0 +1,52 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: author-preference-learning
+sections:
+  Implementation:
+    schema:
+      text: Schema：provenance.schema.json 的 agent 段落 text；edits.schema.json 与产物类型 edits（单元目录）；proposal.schema.json 的 key、evidence 与可选的 stats；测试夹具
+      status: complete
+    draft-record:
+      text: internal/draft：写入记录为 agent 段落写出 text（含 Rebaseline）；Write 覆盖写入记录前按 diff 的对齐把修改对追加到 edits.yaml（去重、上限 200）；Pairs 返回当前尚未记入的修改对；edits.yaml 的读取与校验
+      status: complete
+    prefer:
+      text: internal/learn：Prefer 的确定性归纳（删除词、长度比、反馈主题词、长段落反馈）、按 key 合并与拒绝记忆、没有 stats 的提议；pack learn 对没有素材的提议不生成统计
+      status: complete
+    cli:
+      text: internal/cli：pack prefer 命令（参数检查、observed 输出、诊断与 next、人读输出），注册表与 sampleArgs；proposal 视图的 stats 可为 null 与条目的 key、evidence；validate 整体与单个产物校验接入 edits.yaml
+      status: complete
+    docs:
+      text: docs/GLOSSARY.md 加入修改记录、修改对等术语；wa-revise 技能说明修订后运行 pack prefer 并请作者逐项确认偏好
+      status: complete
+    review-fixes:
+      text: 审查修复：修改记录检查移入 draft.Precheck（记入批注前完成）；只差批注的段落不算修改对；非 UTF-8 段落不记原文与修改对；写入失败时 changedPaths 列出已写的文件；证据围绕匹配词截取且不超过 80 字符、只取真正删除该词的修改对；合并按 key 与 kind；没有偏好时不建空提议；draft.edits-anchored 的 next；补充规则与边界测试；delta tech yaml-text-utf8
+      status: complete
+  Testing:
+    lint:
+      text: gofmt 检查本变更的 Go 文件
+      status: complete
+      command: test -z "$(gofmt -l internal/draft internal/learn internal/schema internal/cli/learn.go internal/cli/learn_test.go internal/cli/workspace.go internal/cli/registry.go internal/cli/cli_test.go)"
+    unit-tests:
+      text: 单元测试：写入记录的 text、修改记录的追加去重与上限、Rebaseline；归纳规则的阈值与边界（3 对、从未加入、子串去重、0.8 与 1.25、反馈条数、长段落）、key 合并与拒绝记忆、确认写入规范包；手写产物的读取；CLI 输出、诊断、退出码与 MCP 样例调用
+      status: complete
+      command: go test ./internal/...
+    full-regression:
+      text: 运行完整回归命令，覆盖率不低于 80%
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    spec-alignment:
+      text: 对照 preferences、sources-and-provenance 与 style-profile delta spec 的每个场景确认实现与测试覆盖，并按实际实现修正
+      status: complete
+    strict-ready:
+      text: 运行 strict-spec-cli ready 与 strict-spec-cli verify，确认变更产物有效
+      status: complete
+      command: strict-spec-cli ready author-preference-learning && strict-spec-cli verify author-preference-learning
+    archive-readiness:
+      text: 确认 delta spec 能合并（preferences 为新建主规格，draft-write 为 MODIFIED），归档后路线图中的 author-preference-learning 标记为完成
+      status: complete
+testing_gates:
+  validation_task: full-regression
+  unit_test_task: unit-tests

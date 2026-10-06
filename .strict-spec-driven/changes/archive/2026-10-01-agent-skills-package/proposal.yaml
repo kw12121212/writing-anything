@@ -1,0 +1,30 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: agent-skills-package
+  status: proposed
+summary:
+  what:
+    - 新增八个内置技能（Skill）：wa-init、wa-brief、wa-outline、wa-draft、wa-review、wa-revise、wa-publish 与 wa-auto。每个技能是 Agent Skills 格式的 SKILL.md（YAML 文件头只含 name 与 description），只说明何时调用哪些 wa-cli 命令、何时必须停下来询问作者，不实现业务逻辑；技能文件用 embed 打包进二进制。
+    - 测试校验每个技能的元数据格式，以及每个技能引用的 wa-cli 命令都存在于 wa-cli help --json 中；docs/INSTALL.md 说明如何安装技能。
+    - 新增 wa-cli skills list（列出技能及其引用的 wa-cli 命令）与 wa-cli skills install --agent claude-code|codex（写入项目目录下的 .claude/skills 或 Codex 扫描的 .agents/skills），--target 安装到任意目录；先完成全部检查再写入，已有的技能文件内容相同时不改动、被改过时不写入任何文件（--force 才覆盖），不跟随符号链接写入。
+  why:
+    - 里程碑 tech-blog-workflow 的完成标准要求：wa-cli skills install 把内置 Skill 安装到 Claude Code 与 Codex 的技能目录；测试校验每个 Skill 引用的 wa-cli 命令都存在于 wa-cli help --json 中。
+    - Agent 通过技能接入 writing-anything：技能把规范的写作流程与必须询问作者的节点告诉 Agent，wa-cli 仍是唯一的真相来源。
+scope:
+  in:
+    - internal/skills（新包）：内置技能文件（skills/<name>/SKILL.md）、元数据解析、引用命令的提取与安装
+    - internal/cli：skills list 与 skills install 命令（登记、样例调用、诊断的下一步）
+    - docs/INSTALL.md 新增「安装技能」一节；新增 skills 主规格
+  out:
+    - MCP 服务：属于 wechat-marketing-and-mcp 里程碑
+    - 用户级目录的自动探测：用户级技能目录用 --target 给出绝对路径
+unchanged_behavior:
+  - 输出信封字段与退出码约定不变；已发布错误码的含义不变；其他命令不变
+  - 技能不实现业务逻辑：写作流程的规则都由 wa-cli 执行，技能只引用命令
+  - 仓库根目录不创建 .writing-anything/；产品二进制不依赖 internal/tools/** 与 strict-spec-driven；wa-cli 不联网、不调用 LLM
+roadmap:
+  milestone: tech-blog-workflow
+  planned_change: agent-skills-package

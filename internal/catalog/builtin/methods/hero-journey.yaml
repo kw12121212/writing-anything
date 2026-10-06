@@ -1,0 +1,67 @@
+# 英雄之旅（Hero's Journey）：坎贝尔总结的主角冒险模型，12 个阶段进出两个世界。
+schema_version: 1
+id: hero-journey
+title: 英雄之旅
+description: 坎贝尔（Joseph Campbell）总结的单体神话模型：从平凡世界出发，跨过门槛经受磨难，携灵药归返的 12 个阶段。
+kind: structure
+beats:
+  - id: ordinary-world
+    title: 平凡世界
+    description: 主角的日常与尚未弥合的缺失。
+    position: {min: 0, max: 0.1}
+    tension: 2
+  - id: call-to-adventure
+    title: 冒险召唤
+    description: 一个事件或消息打破日常，提出挑战。
+    position: {min: 0.05, max: 0.15}
+    tension: 4
+  - id: refusal-of-call
+    title: 拒绝召唤
+    description: 主角犹豫或拒绝，暴露恐惧与代价。
+    position: {min: 0.1, max: 0.2}
+    tension: 3
+  - id: meeting-the-mentor
+    title: 遇见导师
+    description: 获得指引、装备或信心，克服抗拒。
+    position: {min: 0.15, max: 0.25}
+    tension: 4
+  - id: crossing-the-threshold
+    title: 跨越门槛
+    description: 正式离开平凡世界，进入特殊世界。
+    position: {min: 0.2, max: 0.3}
+    tension: 5
+  - id: tests-allies-enemies
+    title: 试炼、盟友与敌人
+    description: 熟悉新世界的规则，结识盟友、遭遇敌人、接受小试炼。
+    position: {min: 0.3, max: 0.5}
+    tension: 6
+  - id: approach
+    title: 深入洞穴
+    description: 向最危险的中心逼近，做最后的准备。
+    position: {min: 0.45, max: 0.55}
+    tension: 6
+  - id: ordeal
+    title: 磨难
+    description: 直面最大恐惧，经历象征性的死亡与重生。
+    position: {min: 0.5, max: 0.65}
+    tension: 9
+  - id: reward
+    title: 奖赏
+    description: 夺得宝剑：存活、领悟或赢得所求。
+    position: {min: 0.6, max: 0.7}
+    tension: 8
+  - id: road-back
+    title: 归途
+    description: 踏上返程，再次被追击或被拉回。
+    position: {min: 0.7, max: 0.8}
+    tension: 7
+  - id: resurrection
+    title: 复活
+    description: 终极考验，主角以新的自我通过考验。
+    position: {min: 0.8, max: 0.9}
+    tension: 10
+  - id: return-with-elixir
+    title: 携灵药归返
+    description: 带着改变自己与世界的收获回到平凡世界。
+    position: {min: 0.9, max: 1}
+    tension: 3

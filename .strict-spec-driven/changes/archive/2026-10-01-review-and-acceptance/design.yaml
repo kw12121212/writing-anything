@@ -1,0 +1,43 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: review-and-acceptance
+approach:
+  - 新增 internal/review 包，只依赖 draft、resolve、feedback、decision、lint 的结果与 workspace：review.yaml 与 acceptance.yaml 的加载与校验、review record 的输入校验与写入、review resolve 的结构化编辑（workspace.SetKey 与 IndexByID，保留注释）、修订任务与验收关卡的计算。internal/cli 负责读取正文、运行文本检查、加载反馈与决策，把结果交给 review 包。
+  - 'review record 从 --file 或标准输入读取审稿输入（review-input Schema：rubric 与 findings），以合并后的评分标准与当前正文的段落（draft.Split，与 provenance 的段落编号一致）校验，写出带 schema_version、draft_sha256 与每个发现项 status: open 的 review.yaml；每次记录都是新一轮预审，整体替换已有的 review.yaml。'
+  - 验收关卡（Gate）是一个纯函数：输入关卡强度、文本检查结果、审稿（或其缺失与过期）、未处理的作者反馈、该单元的阻塞决策、评分标准与确认参数，输出阻塞项与 warning。review show 与 accept 共用它，review show 只读地展示就绪情况，accept 在没有阻塞项时写出 acceptance.yaml。
+  - lint 命令的读取正文、合并规则、读取论断与运行规则引擎抽成 cli 包内的 runUnitLint，lint、review show 与 accept 共用；review show 与 accept 只取发现项的计数与 error 级发现项，不改变 lint 命令的输出。
+  - review 与 acceptance 产物用 os.Lstat 判断是否存在：途经符号链接或不是普通文件时，loadDoc 报告 artifact.not-found，advance（acceptance.invalid）、next、validate、review show、review resolve 与 accept 都报告同一问题，不当作不存在。
+decisions:
+  review-artifact:
+    decision: review.yaml：schema_version 1；draft_sha256（审稿依据的正文 SHA-256）；rubric 为评分结论数组，每项含 item（评分项 id）、verdict（pass 或 fail）、evidence（非空）与 paragraphs（至少一个段落编号，从 1 开始）；findings 为发现项数组，每项含 id、paragraph、message，可选 rubric（评分项 id）、quote（须出现在该段落原文中）与 suggestion，以及 status（open、resolved、waived）与可选 note（waived 时必填）。
+    rationale: 里程碑 intake 问题 review-writer 的推荐：Agent 按评分标准逐项打分并附证据与正文位置，wa-cli 校验每个评分项都有结论与正文位置引用；段落编号与 wa-cli provenance 一致，Agent 可以直接引用；draft_sha256 让作者改过正文后能识别过期的审稿。
+  gate-levels:
+    decision: '三种关卡强度下的验收阻塞项：fast 只有文本检查的 error 级发现项（及文本检查无法执行的错误）与该单元的阻塞决策；standard 另有审稿缺失、审稿不通过校验、审稿过期（draft_sha256 与当前正文不同）、每个 open 的审稿发现项与每条未处理（open 或 accepted）的作者反馈；strict 另有 blocking: true 的评分项结论为 fail，以及缺少作者确认。standard 与 fast 下没有作者确认也可以验收，accept 以 warning 报告未记录作者确认，acceptance.yaml 的 confirmed_by_author 为 false。'
+    rationale: 规划变更：预审发现项默认不阻塞，只进入修订建议，由作者判断；阻塞验收的只有确定性硬规则与规范包在严格模式下显式声明为阻塞的项目；完成标准要求修订任务未解决前 standard 与 strict 不能验收、strict 下缺少确认记录时拒绝。评分结论为 fail 本身是预审意见，只在 strict 下且评分项声明 blocking 时阻塞。
+  acceptance-stage:
+    decision: 验收是阶段的必需产物：accept 只在单元当前阶段的 required_artifacts 含 acceptance 时可用（否则 accept.wrong-stage），不改变单元的阶段；之后由 advance 推进。acceptance.yaml 的 draft_sha256 与当前正文不同时，advance 与 next 报告 acceptance.stale 阻塞项，acceptance.yaml 不通过校验时报告 acceptance.invalid。
+    rationale: 生命周期仍由 advance 统一推进，关卡数据由文体声明；验收后作者或 Agent 又改了正文，原来的验收不再代表当前正文，必须重新审稿与验收。
+  revision-tasks:
+    decision: 修订任务不单独存储：review show 把 review.yaml 中 status 为 open 的发现项与该单元未处理的作者反馈列为修订任务（source 为 review 或 feedback），分别用 wa-cli review resolve 与 wa-cli feedback resolve 处理。
+    rationale: 发现项与反馈已有各自的状态与处理命令，另存一份任务会产生两个真相来源；里程碑 details 要求修订通过作者反馈与审稿发现项生成修订任务，不单独设计复杂的修订轮次。
+  confirmation-flags:
+    decision: accept 的 --confirmed-by-author 与 --confirmation <作者原话摘要> 必须同时给出（否则 accept.incomplete-confirmation）；acceptance.yaml 记录 gate_level、draft_sha256、confirmed_by_author、confirmation（未确认时省略）与 accepted_at（UTC 时间）。
+    rationale: 规划变更要求 wa-cli accept 需要 --confirmed-by-author 和作者确认原话摘要；确认记录是作者确认的时间与原话摘要（术语表）。wa-cli 无法核实确认是否真的来自作者，记录原话摘要使作者事后可以核对。
+  weaker-gate:
+    decision: acceptance.yaml 记录验收时的关卡强度；工作区当前的关卡强度比它更严（fast < standard < strict）时，advance 与 next 报告 acceptance.weaker-gate，需要按当前关卡强度重新验收。
+    rationale: 作者把工作区切到 strict 后，依据较宽松关卡（如未经作者确认的 fast 验收）的验收不应继续有效；否则「没有作者确认记录时 strict 关卡下被拒绝」可以先在 fast 下验收、再切换关卡绕开。
+  agent-waivers:
+    decision: review resolve 的 waived 只要求写明处理说明，不要求作者确认原话；waived 的发现项与说明在 review show 中照常列出，strict 下由 accept 的作者确认原话兜底。
+    rationale: 里程碑完成标准写明修订任务「全部解决或豁免」后即可验收；预审发现项默认不阻塞、由作者最终判断。review.yaml 是结构化产物，没有段落出处可以区分作者与 Agent 的写入（author-only-gate-markers 针对正文中的标记）；需要作者参与的关卡强度是 strict，其验收必须附作者确认原话。
+alternatives:
+  - option: accept 直接把单元推进到 done
+    reason: 绕开了 advance 的统一关卡与文体声明的阶段数据；子单元与后续文体可能在验收后还有阶段。
+  - option: 审稿发现项自动写入决策队列
+    reason: 预审发现项数量多且默认不阻塞，全部进入决策队列会淹没作者；需要作者判断的由 Agent 显式登记。
+risks:
+  - 审稿内容由 Agent 写入，wa-cli 只能校验结构与引用，不能保证审稿质量；Agent 可以重新记录一轮没有发现项的审稿来清空修订任务，由作者在 review show 与验收确认时兜底。
+  - accept 的 --confirmed-by-author 由 Agent 传入，wa-cli 无法核实确认来自作者；strict 下必须附原话摘要，作者可以事后在 acceptance.yaml 中核对。
+  - 段落编号随正文改动而变化；审稿过期后按 draft_sha256 识别，standard 与 strict 要求重新审稿。
+  - standard 下 Agent 可以自行把发现项标为 waived 并在未经作者确认的情况下验收；作者应在 review show 中核对 waived 的发现项与说明，需要作者把关时把工作区设为 strict。

@@ -1,0 +1,13 @@
+schema: strict-spec-driven/planned-change/v1
+schema_version: 1
+artifact_type: planned_change
+schema_file: ../../templates/strict-spec-driven/schemas/planned-change.yaml
+planned_change:
+  id: style-metrics-and-drift
+  milestone: packs-and-series
+status: complete
+summary: 文风与节奏的确定性指标（Metric）与文风漂移（Style Drift）检测
+details: wa-cli metrics compute <unit|work> 不调用模型，计算确定性指标：句长与段长分布、对话与非对话的比例、标点习惯、用词丰富度、常用虚词与口头禅的频率、四字词密度、AI 腔密度，以及每个单元的字数和局部句长变化（短句密集通常意味着节奏加快）。指标与两类基准对比：作者的文风画像，以及同一作品已验收单元的统计。偏离超过规范包设定的阈值（默认 2 个标准差）时输出漂移发现项，附带指标数值与段落位置。指标只衡量偏离，不评判好坏；漂移发现项默认不阻塞验收。
+depends_on:
+  - pack-learn-style-profile
+  - rule-engine-and-lint

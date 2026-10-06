@@ -1,0 +1,89 @@
+schema: strict-spec-driven/delta-spec/v1
+schema_version: 1
+artifact_type: delta_spec
+schema_file: templates/strict-spec-driven/schemas/delta-spec.yaml
+target_spec: units-and-lifecycle
+operations:
+  ADDED:
+    derived-stage:
+      strength: MUST
+      statement: 文体（Genre）可以把单元类型声明为汇总单元（Aggregated Unit）：单元类型上的布尔字段 stage_from_children 为 true（声明与校验见 genres-and-packs 主规格的 aggregated-unit-types）。汇总单元的阶段（Stage）不由推进得出，而是由子单元汇总的推导阶段（Derived Stage）：取其子单元树中所有非汇总子孙单元（走生命周期的单元）里最落后者的阶段——按该文体阶段序列排序最靠前的阶段；没有非汇总子孙单元时为文体的第一个阶段；全部为 done 时为 done。work.yaml 中汇总单元仍必须存有合法 stage（JSON Schema 不变，wa-cli unit add 写入文体的第一个阶段作为存储值），wa-cli 的行为以推导阶段为准：wa-cli advance <汇总单元> 不修改文件，报告错误码 lifecycle.derived-stage（path 为该 work.yaml，next 包含 wa-cli status --dir <dir> --json），退出码 1。wa-cli next 对汇总单元：steps 中该单元的 stage 为推导阶段，blockers 为其未完成非汇总子孙单元的阻塞项按 next-steps 规定顺序去重后的并集（同一 code、artifact、path 与 decision 的阻塞项只保留一条），commands 为空数组，action 提示未完成的非汇总子孙单元数量，feedback 仍为该单元自身的未处理反馈；推导阶段为 done 的汇总单元不出现在不带 unit 参数的 next 输出中（同 next-skips-done）。给出 unit 参数且该单元为汇总单元时同样输出上述条目。非汇总单元在 next 中的行为不变。
+      scenarios:
+        derive-weakest:
+          - GIVEN: novel 作品 my-novel 有 part-one（chapter-one 下 scene-1 的 stage 为 done、scene-2 为 draft，chapter-two 下 scene-3 为 brief）
+          - WHEN: 运行 wa-cli status --dir D --json
+          - THEN: units 中 chapter-one 的 stage 为 draft、part-one 的 stage 为 brief（scene-3 最落后），退出码为 0
+        derive-empty:
+          - GIVEN: novel 作品 my-novel 的 chapter-two 下没有任何场景
+          - WHEN: 运行 wa-cli status --dir D --json
+          - THEN: chapter-two 的 stage 为 brief（novel 的第一个阶段），blockers 与 commands 为空数组，退出码为 0
+        advance-derived-rejected:
+          - GIVEN: novel 作品 my-novel 有 chapter-one（其下有场景）
+          - WHEN: 运行 wa-cli advance my-novel/chapter-one --dir D --json
+          - THEN: valid 为 false，diagnostics 中有一条错误码为 lifecycle.derived-stage、path 为 .writing-anything/works/my-novel/work.yaml 的诊断，其 next 包含 wa-cli status 命令；work.yaml 与运行前逐字节相同，退出码为 1
+        derive-all-done:
+          - GIVEN: novel 作品 my-novel 的 part-one 下所有场景的 stage 都为 done
+          - WHEN: 运行 wa-cli next --dir D --json
+          - THEN: steps 不含 part-one 及其下汇总单元，只含尚未完成的非汇总单元（如根单元），退出码为 0
+        next-derived-blockers:
+          - GIVEN: novel 作品 my-novel 的 chapter-one 下 scene-1 缺 brief 产物、scene-2 缺 brief 产物
+          - WHEN: 运行 wa-cli next my-novel/chapter-one --dir D --json
+          - THEN: steps 只含 chapter-one 一项，stage 为 brief，blockers 为 scene-1 与 scene-2 的 lifecycle.missing-artifact 阻塞项去重后的并集（两条，path 各为场景的单元目录），commands 为空数组，action 提示未完成的场景数量，退出码为 0
+    unit-insert:
+      strength: MUST
+      statement: wa-cli unit add <parent> <type> <id> 必须支持可选的 --before <sibling-id> 与 --after <sibling-id>（互斥）：给出时在该父单元子单元序列中锚点兄弟单元之前/之后插入新单元，而不是末尾追加；两个参数都省略时仍在末尾追加（行为同 unit-add）。新单元的 id、type、stage（文体的第一个阶段）与 units 为空数组，既有校验（work.child-type-not-allowed、artifact.schema-violation、artifact.duplicate-id、work.anchored-value）与成功输出（unit、type、parent、stage）不变，只修改 work.yaml 中插入位置处的节点，保留其他内容与 YAML 注释。锚点 id 在作品中不存在时报告错误码 unit.not-found（既有）；锚点单元存在但不是 parent 的直接子单元时报告错误码 unit.not-sibling（message 含锚点 id 与父单元引用）；--before 与 --after 同时给出时报告 input.invalid-value（field 为 before）。这些情况都不修改文件，退出码为 1。
+      scenarios:
+        insert-before:
+          - GIVEN: novel 作品 my-novel 的 chapter-one 已有子单元 scene-1 与 scene-2
+          - WHEN: 运行 wa-cli unit add my-novel/chapter-one scene scene-0 --before scene-1 --dir D --json
+          - THEN: work.yaml 中 chapter-one 的 units 依次为 scene-0、scene-1、scene-2；unit.unit 为 my-novel/chapter-one/scene-0，unit.stage 为 brief；changedPaths 为 [.writing-anything/works/my-novel/work.yaml]，退出码为 0
+        insert-after:
+          - GIVEN: novel 作品 my-novel 的 chapter-one 已有子单元 scene-1 与 scene-2
+          - WHEN: 运行 wa-cli unit add my-novel/chapter-one scene scene-3 --after scene-2 --dir D --json
+          - THEN: chapter-one 的 units 依次为 scene-1、scene-2、scene-3，退出码为 0
+        insert-anchor-elsewhere:
+          - GIVEN: novel 作品 my-novel 的 chapter-one 有 scene-1，chapter-two 有 scene-9
+          - WHEN: 运行 wa-cli unit add my-novel/chapter-one scene scene-0 --before scene-9 --dir D --json
+          - THEN: diagnostics 中有一条错误码为 unit.not-sibling 的诊断，message 含 scene-9 与 my-novel/chapter-one；work.yaml 与运行前逐字节相同，退出码为 1
+        insert-anchor-missing:
+          - GIVEN: novel 作品 my-novel 的 chapter-one 没有子单元
+          - WHEN: 运行 wa-cli unit add my-novel/chapter-one scene scene-0 --before nope --dir D --json
+          - THEN: diagnostics 中有一条错误码为 unit.not-found 的诊断，work.yaml 不变，退出码为 1
+        insert-both-flags:
+          - GIVEN: novel 作品 my-novel 的 chapter-one 已有 scene-1
+          - WHEN: 运行 wa-cli unit add my-novel/chapter-one scene scene-0 --before scene-1 --after scene-1 --dir D --json
+          - THEN: diagnostics 中有一条错误码为 input.invalid-value、field 为 before 的诊断，work.yaml 不变，退出码为 1
+    unit-move:
+      strength: MUST
+      statement: wa-cli unit move <unit> <parent> [--before <sibling-id>] [--after <sibling-id>] 必须把单元连同其整个子树移动为 parent 的子单元：--before/--after 指定插入位置（锚点语义与错误同 unit-insert：锚点不存在报告 unit.not-found，锚点不是 parent 的直接子单元或锚点为被移动单元自身时报告 unit.not-sibling，同时给出报告 input.invalid-value），两个都省略时移动到 parent 子单元序列末尾；parent 与被移动单元的父单元相同时为同父内重排序。移动只修改 work.yaml 中该子树的位置，保留其他内容与 YAML 注释；单元 id、单元引用（Unit Reference，<work>/<unit-id>）、单元目录（.writing-anything/works/<work>/units/<unit-id>/）与一切按单元 id 的引用保持不变，不移动任何磁盘目录。成功时 changedPaths 为该 work.yaml，--json 输出的 unit 字段含 unit、type、parent（新父单元的引用）与 stage（生效阶段：汇总单元为推导阶段，其他单元为存储阶段），退出码为 0。以下情况都不修改文件、退出码为 1：unit 引用的作品不存在时报告 work.not-found（既有），unit 或 parent 引用的单元不存在时报告 unit.not-found（既有，两者的 next 都包含 wa-cli status 命令）；parent 引用另一作品中的单元时报告 input.invalid-value（field 为 parent，next 为 wa-cli help unit move --json；跨作品移动不支持）；被移动单元是根单元时报告错误码 unit.move-root；parent 是被移动单元自身或其子孙单元时报告错误码 unit.move-under-self（防止成环）；单元类型不在 parent 类型的 children 中（含文体未声明的类型）时报告 work.child-type-not-allowed（既有，message 列出允许的类型）；被移动子树的任一节点或目标位置途经的节点带 YAML 锚点、别名或合并键时报告 work.anchored-value（既有）；work.yaml 不通过作品校验时报告其诊断。
+      scenarios:
+        move-between-chapters:
+          - GIVEN: novel 作品 my-novel 的 chapter-one 有 scene-1，chapter-two 有 scene-9
+          - WHEN: 运行 wa-cli unit move my-novel/scene-1 my-novel/chapter-two --before scene-9 --dir D --json
+          - THEN: chapter-two 的 units 依次为 scene-1、scene-9，chapter-one 的 units 为空；unit.parent 为 my-novel/chapter-two，unit.stage 为 scene-1 的存储阶段；单元目录 units/scene-1/ 未被移动或重命名；changedPaths 为 [.writing-anything/works/my-novel/work.yaml]，退出码为 0
+        move-reorder-same-parent:
+          - GIVEN: novel 作品 my-novel 的 chapter-one 的 units 依次为 scene-1、scene-2
+          - WHEN: 运行 wa-cli unit move my-novel/scene-2 my-novel/chapter-one --before scene-1 --dir D --json
+          - THEN: chapter-one 的 units 依次为 scene-2、scene-1，退出码为 0
+        move-under-self:
+          - GIVEN: novel 作品 my-novel 有 part-one 及其子孙 chapter-one
+          - WHEN: 运行 wa-cli unit move my-novel/part-one my-novel/chapter-one --dir D --json
+          - THEN: diagnostics 中有一条错误码为 unit.move-under-self 的诊断；work.yaml 与运行前逐字节相同，退出码为 1
+        move-root:
+          - GIVEN: novel 作品 my-novel 已创建
+          - WHEN: 运行 wa-cli unit move my-novel my-novel/part-one --dir D --json
+          - THEN: diagnostics 中有一条错误码为 unit.move-root 的诊断，work.yaml 不变，退出码为 1
+        move-keeps-comments:
+          - GIVEN: 作品 my-novel 的 work.yaml 中作者写了注释
+          - WHEN: 运行合法的 wa-cli unit move 命令
+          - THEN: 注释与未涉及字段不变，退出码为 0
+        move-disallowed-type:
+          - GIVEN: novel 作品 my-novel 有 part-one 及其子单元 chapter-one（novel 根类型只允许 part 子单元）
+          - WHEN: 运行 wa-cli unit move my-novel/chapter-one my-novel --dir D --json
+          - THEN: diagnostics 中有一条错误码为 work.child-type-not-allowed 的诊断，message 列出 part；work.yaml 与运行前逐字节相同，退出码为 1
+        cross-work-parent:
+          - GIVEN: 工作区中有 novel 作品 my-novel 与另一作品 other-work
+          - WHEN: 运行 wa-cli unit move my-novel/scene-1 other-work/chapter-one --dir D --json
+          - THEN: diagnostics 中有一条错误码为 input.invalid-value、field 为 parent 的诊断，next 含 wa-cli help unit move --json；work.yaml 不变，退出码为 1
+  MODIFIED: {}
+  REMOVED: {}

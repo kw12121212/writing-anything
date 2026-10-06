@@ -1,0 +1,8 @@
+# 作者的注释
+schema_version: 1
+language: en-US
+default_genre: tech-blog
+packs:
+  - house-style
+  - glossary-zh
+gate_level: strict

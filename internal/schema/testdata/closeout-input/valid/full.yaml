@@ -1,0 +1,11 @@
+canon:
+  - {type: character, name: 精灵, text: 灯之精灵}
+state_changes:
+  - {entry: canon-1, state: 灯芯易主给精灵, contract: sc-1}
+knowledge:
+  - {entry: canon-5, character: reader}
+plants:
+  - {text: 灯塔的旧账, recover_at: my-novel/c2}
+recovers: [f-1]
+events: [ev-2]
+waived: [灯室]

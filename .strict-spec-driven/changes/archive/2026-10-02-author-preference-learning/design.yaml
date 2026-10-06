@@ -1,0 +1,34 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: author-preference-learning
+approach:
+  - internal/draft：Paragraph 已含原文，encodeRecord 为 origin 为 agent 的段落写出 text；Write 在覆盖写入记录之前，用与 diff 相同的对齐（最长公共子序列加区间内按顺序配对）找出记录中 origin 为 agent 且有 text、与当前段落配对且文字不同的段落，把 (before, after) 追加到单元目录的 edits.yaml（已存在相同的一对时不重复），超过 200 条时丢弃最早的；暴露 Pairs 供归纳读取当前尚未覆盖的修改。
+  - internal/learn 新增 Prefer：遍历全部可加载作品的单元，读取 edits.yaml 与当前修改对、feedback.ListAll 的反馈（不含 praise 与 rejected），按确定性规则生成条目，合并进提议：同一 key 的 proposed 条目更新文字与证据，confirmed 与 rejected 的不再改动，被拒绝的 key 给出 warning。internal/cli 新增 pack prefer。
+decisions:
+  edit-log:
+    decision: 修改记录放在单元目录的 edits.yaml：schema_version 1 与 edits 数组，每项含 before（Agent 原文）、after（作者修改后的文字）与 recorded_at；由 draft write 在覆盖写入记录前追加，changedPaths 随之列出它。写入记录本身只为 agent 段落增加 text，hash 与 origin 的含义不变。
+    rationale: 作者的修改只在两次 draft write 之间可见，下一次写入会覆盖写入记录；在覆盖前把修改对存下来，才能跨多次写入「积累」偏好。只给 agent 段落存原文，作者自己写的段落不需要比较，记录体积可控。
+  removed-terms:
+    decision: 反复被删除的词：对每个修改对，按文风统计的常用词规则（汉字 2 到 4 字子串与长度不小于 3 的拉丁字母词）分别计数，before 中次数多于 after 的词记为该对删除了它，after 中多于 before 的记为加入；在不少于 3 个修改对中被删除、且没有在任何修改对中被加入的词，去掉被删除对数相同的更长子串包含的子串，按对数降序、再按字典序取前 10 个，生成 key 为 removed:<词> 的 banned-term 条目，证据为至多 3 个含该词的修改前原文片段。
+    rationale: 只依赖字符串计数，结果可复现；「从未被加入」排除了作者只是调整位置的词；对数阈值避免一次性删改被当作偏好。
+  length-preference:
+    decision: 长度变化：修改对不少于 3 个时，修改后总字数与修改前总字数之比不大于 0.8 生成 key 为 length:shorter 的文风条目，不小于 1.25 生成 length:longer，文字写明平均变化的百分比，证据为变化最大的 3 对的字数。
+    rationale: 比值对段落多少不敏感；阈值留出 20% 的正常改动幅度。
+  feedback-preferences:
+    decision: 反馈：kind 为 must-fix、suggestion 或 question 且 status 不为 rejected 的反馈参与归纳。在不少于 3 条反馈的文字中出现的常用词（同样的子串规则与去重），按条数取前 5 个，生成 key 为 feedback:<词> 的文风条目；锚点已定位的反馈不少于 3 条、且其中不少于三分之二位于长度超过所在正文平均段长 1.5 倍的段落时，生成 key 为 feedback:long-paragraphs 的文风条目。证据为至多 3 条反馈的单元、id 与文字。
+    rationale: 同一个词反复出现在作者意见里，是「多次标注太啰嗦」这类同类意见最直接的确定性信号；长段落规则对应「阅读卡点集中出现在长段落」。
+  preference-items:
+    decision: 偏好条目与文风画像条目共用规范包提议：新增可选的 key（同一偏好的稳定标识）与 evidence（每项含 unit 与 text 片段）；由 pack prefer 创建的提议 sources 为空数组、没有 stats 与 baseline 条目；pack learn 之后可以给同一提议加入素材与统计。确认与拒绝沿用 pack confirm 与 pack reject。
+    rationale: 作者只需要一个确认入口；key 让数字变化的条目（如百分比）在重复归纳时被识别为同一偏好，从而记住拒绝。
+  markup-and-encoding:
+    decision: 比较修改前后时用 internal/feedback 的 StripComments（经 draft.StripMarkup 钩子注入，避免 draft 反向依赖 feedback）去掉作者批注，只差批注的段落不算修改对；不是 UTF-8 的段落不写原文、不记修改对，正文照常逐字节写入；修改记录的读取、校验与锚点检查放进 draft.Precheck，在记入批注之前完成。
+    rationale: 批注是 wa-cli 的标记，不是作者对文字的修改，计入会产生「写得更长」之类的错误偏好并永久挡住删除词；YAML 文本只能是 UTF-8，直接写入会让 draft write 失败，违背逐字节写入；precheck-before-side-effects 要求任何写入前完成全部检查。
+alternatives:
+  - option: 只在 pack prefer 运行时比较当前写入记录与正文
+    reason: 下一次 draft write 会覆盖写入记录，作者的修改随之丢失，偏好无法跨多次写入积累
+  - option: 保存每一版正文
+    reason: 存储随写入次数增长，且超出本变更的范围；只存 Agent 段落与其修改对就足以归纳
+risks:
+  - 修改对的词频差对改写整段的情况噪声较大；阈值与「从未加入」条件只能降低误报，偏好仍需作者逐项确认

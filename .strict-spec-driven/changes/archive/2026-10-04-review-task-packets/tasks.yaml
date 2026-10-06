@@ -1,0 +1,42 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: review-task-packets
+sections:
+  Implementation:
+    packet-schema:
+      text: internal/schema 新增 packet.schema.json（schema_version=1；id 符合 id 格式且与文件名一致；work 非空；dimension 枚举 character|thread|causality|pov-reveal|style；scope 非空；excerpt 为对象 {text 非空, truncated 布尔}；slices 为对象数组，每项含 kind 非空与 text 非空；checklist 为对象数组，每项含 id 与非空 question，id 不重复；status 枚举 open|done；results 为数组（status 为 done 时每项含 item、verdict 枚举 pass|fail|na 与可选 note），缺省视为空；recorded_at 为取值化可空字段）与 packet-input.schema.json（verdicts 数组：item、verdict 枚举、可选 note），注册路径模式 .writing-anything/packets/*/*.yaml；补合法与不合法夹具
+      status: complete
+    packet-package:
+      text: 新包 internal/reviewpacket：Plan(root, w, unit|nil, dimension) 生成五个维度的任务包——character（按章 × 章内场景大纲声明出场的人物；excerpt 为该章内声明该人物的场景正文按序拼接；slices 为该人物的状态历史 state.List 全部绑定条目与知情条目）、thread（每个伏笔条目；excerpt 为埋设场景与回收场景的正文结尾片段；slices 为台账条目文本与计划回收位置）、causality（每个场景；excerpt 为场景正文；slices 为 causes、events 与各起因声明场景的正文结尾）、pov-reveal（每个场景；excerpt 为场景正文；slices 为 reveal、视角人物已知与读者已知人物未知条目，复用 ctxpack 的解析与重放）、style（每章；excerpt 为空文本占位；slices 为章分层摘要、metrics 曲线偏离点与 stylemetric 文风漂移发现项）；固定检查清单（每维度 3-4 项，按 design 的 fixed-checklists）；预算截断（slices 与 checklist 优先，excerpt 取剩余预算，超出截断并置 truncated）；幂等保留 done（按 dimension+scope 匹配）；整体写出 packets/<work>/ 下的一包一文件并删除本次范围外的既有 open 包；Submit(root, w, id, verdicts)（清单齐全校验 packet.missing-verdict / packet.unknown-item、包存在 packet.not-found、状态校验 packet.already-done，写回 results 与 status done 与 recorded_at）；Report(root, w)（dimensions 每维度 open/done 计数、failures 清单、ready）；CheckWorks 与 CheckArtifact 供 validate
+      status: complete
+    packet-cli:
+      text: internal/cli：注册 review plan（args：unit 或 work；flags：--dir、--dimension）、review submit（args：packet；flags：--dir、--file）、review report（args：work；flags：--dir）三个命令（注册表声明、sampleArgs 与 mutatingSamples、--json 信封与人读输出、诊断与 next）；validate 整体校验纳入 packets 目录（CheckWorks）与 validate <path> 分发（CheckArtifact）
+      status: complete
+    packet-glossary:
+      text: docs/GLOSSARY.md 增补审查任务包（Review Task Packet）词条：wa-cli review plan 按维度生成的不超过上下文预算的语义审查任务（一段正文+台账切片+检查清单），由接入的 Agent 调度执行，结果经 wa-cli review submit 校验回写并汇总为作品级报告
+      status: complete
+  Testing:
+    test-packet-package:
+      text: internal/reviewpacket 单元测试：五维度包生成（范围与切片内容、未出场人物不建包、无曲线数据时 style 包线索为空）、预算截断（大正文截断且 truncated 为 true、slices 与 checklist 完整）、幂等（done 保留、open 重建、范围外 open 清理）、Submit 校验（missing-verdict、unknown-item、not-found、already-done、成功写回）、Report 汇总（ready 判定、failures 清单）、CheckWorks 与 CheckArtifact 的领域问题
+      status: complete
+    test-packet-cli:
+      text: internal/cli 测试：review plan 的 --json 信封（packets 数组与预算断言）、--dimension 过滤、给 unit 的范围收窄；review submit 从 --file 与 stdin 两入口、校验拒绝；review report 的人读与 --json 输出；validate 计入 packets；sampleArgs 与 TestRegistryConsistency 通过
+      status: complete
+    run-regression:
+      text: 完整回归测试并确认覆盖率不低于阈值：go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    verify-change:
+      text: 已运行 ready 与 verify；fresh-context 独立审查的 8 个 MUST FIX（重 plan 的 id 覆盖 done 包、范围收窄误删范围外 done、report 对坏包 panic 且漏报领域问题、packets null、submit 整体重写丢注释、无正文场景与预算下界失败、逐包写入的部分失败、维度切片与规格偏差——character 知情条件、causality 起因场景结尾、pov-reveal 知情重放、style 线索措辞）与 SHOULD 项（submit 的 id-文件名一致校验、not-found next 指向作品、术语表去重、无包说明）已全部修复并补 5 条回归测试；修复后完整回归通过（覆盖率 87.94% ≥ 80%）
+      status: complete
+      command: strict-spec-cli ready review-task-packets && strict-spec-cli verify review-task-packets
+    verify-archive-readiness:
+      text: 已核对归档合并路径：reviewpacket 新主规格将写入 .strict-spec-driven/specs/reviewpacket.yaml 并进入 specs/INDEX.yaml（packet-plan 语句与实现同步：id 避让、统一预检、无正文占位、style 线索为已记录评分；packet-submit 引用为 <work>/<packet-id>）；strict-spec-cli verify 诊断清零
+      status: complete
+      command: strict-spec-cli verify review-task-packets
+testing_gates:
+  validation_task: run-regression
+  unit_test_task: test-packet-package

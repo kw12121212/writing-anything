@@ -1,0 +1,25 @@
+schema: strict-spec-driven/lesson/v1
+schema_version: 1
+artifact_type: lesson
+schema_file: templates/strict-spec-driven/schemas/lesson.yaml
+lesson:
+  id: lesson-a9dd44
+  title: 按字符串前缀限制写入位置，在不区分大小写的文件系统上会被绕过
+category: coding
+status: active
+created_at: '2026-10-01T03:04:25.105Z'
+updated_at: '2026-10-06T02:34:50.452Z'
+context: tech-blog-genre-and-export 的 export 用 strings.HasPrefix 拒绝写入 .writing-anything/ 中 exports 之外的路径。
+observation: fresh-context 审查在 NTFS（等同 Windows 与 macOS 的默认文件系统）上复现：--output .Writing-Anything/config.yaml 通过字符串检查，Lstat 却找到真实的工作区目录，覆盖了 config.yaml。
+takeaway: 限制写入范围时，除规整后的字符串比较（不区分大小写）外，写入前逐级 Lstat 已存在的目录并用 os.SameFile 与受保护的目录比较；测试直接调用按身份检查的函数，证明它不依赖字符串比较。
+applies_when: 命令接受作者或 Agent 给出的输出路径、并且要禁止写入某些目录（如工作区产物）时
+occurrences:
+  - origin: tech-blog-genre-and-export
+    date: '2026-10-01'
+    evidence: internal/export 的 cleanOutput（EqualFold）与 ensureParents（os.SameFile）；export_test.go 的 TestOutputPath。
+  - origin: mcp-client-registration
+    date: '2026-10-01'
+    evidence: mcp install 的 --config 起初只按文字（EqualFold 首段）拒绝工作区：项目中指向 .writing-anything 的符号链接 ws 让 --config ws/evil.json 写进了工作区。改为 insideWorkspace 逐级 os.Stat 并用 os.SameFile 与工作区比较；internal/cli 的 TestMCPInstallGuards 覆盖。
+  - origin: release-skill
+    date: '2026-10-06'
+    evidence: 'release-skill 的 export 修复暴露同一陷阱的反向：大小写不敏感文件系统上 Lstat(EXPORTS) 命中真实 exports 目录，os.SameFile 身份检查反而绕过了规格「只能是 exports」的字面名要求（export_test.go 的 .writing-anything/EXPORTS/c.md: false 既有断言在 macOS 失败）；修复在 parents() 的 isExports 中把段名与 exports 字面严格相等置于身份检查之前（internal/export/export.go:337-341）——身份检查与字面名要求必须并用，二者各自防一种绕过'

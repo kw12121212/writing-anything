@@ -1,0 +1,45 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: multi-level-units
+approach:
+  - internal/catalog 新增内置 novel 文体数据（internal/catalog/builtin/genres/novel.yaml：四层单元类型、part 与 chapter 声明 stage_from_children、阶段序列、四条小说规则与上下文预算 16000），UnitType 结构增加 StageFromChildren 布尔字段；internal/schema 的 genre.schema.json 为单元类型增加可选 stage_from_children（仅允许出现在声明 children 的单元类型上，叶子类型声明报告 artifact.schema-violation），经统一校验入口生效。internal/resolve 与 internal/cli 的 config resolved 在 unitTypes 每项输出 stageFromChildren。internal/work 实现汇总推导：按文体阶段序列取非汇总子孙单元中最落后者为推导阶段（无子孙为第一个阶段、全 done 为 done）、统计 progress（done/total）并把未完成非汇总子孙单元的阻塞项按既有顺序去重合并；advance 对汇总单元拒绝（新错误码常量 lifecycle.derived-stage）。internal/work 的 AddUnit 支持锚点插入（--before/--after：unit.not-found、unit.not-sibling、input.invalid-value），新增 MoveUnit（work.child-type-not-allowed、unit.move-under-self、unit.move-root、锚点与 work.anchored-value 复用既有校验），两者都在 YAML 节点树上只改目标位置并保留注释。internal/cli 在注册表登记 unit move（name、args、flags、outputKeys、exitCodes、sampleArgs 并列入 mutatingSamples），status 的 unitView 与 next 的 stepView 对汇总单元填入推导阶段、progress、汇总阻塞项、空 commands 与相应 action，next 跳过推导阶段为 done 的汇总单元。
+decisions:
+  derived-stage-weakest-link:
+    decision: 汇总单元的推导阶段取其子单元树中所有非汇总子孙单元里最落后者的阶段（按文体阶段序列最靠前）；没有非汇总子孙单元时为文体的第一个阶段；全部 done 时为 done。
+    rationale: 「这一部推进到哪」的直觉是最短板：只要还有一个场景在 brief，部就仍处起步；按完成计数（如过半即 done）会让阶段语义随场景数漂移，且与「场景走完整生命周期」的阶段模型不对齐；直接对全体非汇总子孙取最落后者也让部、章两层递归定义退化为一次定义，无需逐层推导规则。
+  stage-from-children-declaration:
+    decision: 汇总由单元类型上的布尔字段 stage_from_children 声明（数据驱动），仅允许带 children 的单元类型声明；内核不内置任何按文体或按层级的汇总知识。
+    rationale: 文体与规范包是纯数据的架构约束；按层级深度或按文体 id 硬编码汇总会让第三方文体无法声明多层结构；叶子类型声明汇总会得到恒为第一阶段的空推导，属配置错误，由 genre Schema 直接拒绝。
+  stored-stage-placeholder:
+    decision: work.yaml 中汇总单元仍必须存有合法 stage（JSON Schema 不变），wa-cli unit add 写入文体的第一个阶段作为存储值；wa-cli 的行为（advance 拒绝、status/next 输出）以推导阶段为准。
+    rationale: 保持 work.yaml Schema 与既有作品校验（work.unknown-stage 等）不变，避免为一个文体重写全量产物结构；作者直接查看文件时存储值只作占位，阶段语义以推导为准并在 CLI 输出与术语表中说明。
+  insert-flags-not-new-command:
+    decision: 插入通过 wa-cli unit add 的可选 --before <sibling> / --after <sibling> 实现，移动单独新增 wa-cli unit move <unit> <parent> [--before/--after]。
+    rationale: 插入与追加同属「新建单元」，类型、重复 id、锚点值等校验完全复用 unit add 的既有路径；移动是既有单元连同子树的重挂，需要防环（不能移到自身子孙下）与根单元保护，命令形状与错误面不同，单独成命令。
+  id-stable-no-dir-move:
+    decision: unit move 只改 work.yaml 中的树位置：单元 id、单元引用（<work>/<unit-id>）、单元目录（.writing-anything/works/<work>/units/<unit-id>/）与一切按单元 id 的引用（摘要、设定集、伏笔等）都不变。
+    rationale: 单元引用与单元目录本就按 id 寻址、与树位置无关，这正是「id 稳定」的含义：结构调整不使既有台账引用失效，也不需要移动任何磁盘目录或重写引用。
+  novel-fiction-rules-reuse:
+    decision: novel 文体声明与 short-story 相同的四条小说规则（fiction-cliches、dialogue、pov 均 warning；length 为 warning、1000 到 20000 字）、相同的根单元简报必填项（premise、pov、length、key_messages）与上下文预算 16000。
+    rationale: 规则类型、小说 AI 腔词表与简报必填项都已存在，纯数据复用零实现成本；novel 是小说文体，首个可用版本缺少基本质量检查会留下空洞；参数可被规范包与项目配置按 id 覆盖或豁免。
+  no-default-method-no-metrics:
+    decision: novel 文体不声明 default_method，也不声明 scored_metrics 与 pacing_checks。
+    rationale: 长篇规划写作法（雪花写作法、黄金三章与卷结构）属 long-form-planning-methods 计划变更，场景契约目标分值属 scene-contract-and-causality 计划变更；现在声明会在其落地前制造大纲门槛（missing-method-part）或空转数据。
+  aggregated-blockers-union:
+    decision: status 与 next 中汇总单元的 blockers 为其未完成非汇总子孙单元阻塞项按既有阻塞项顺序去重后的并集，commands 恒为空数组，progress 只在汇总单元上输出（非汇总单元为 null）。
+    rationale: 「这一部被什么挡住」需要看到全部不同类别的阻塞；命令必须可直接执行且不含占位符，而汇总单元自身无可执行动作，逐场景的动作已列在各自条目上，重复列只会放大输出；progress 对非汇总单元无意义（自身阶段已说明）。
+alternatives:
+  - option: 汇总阶段实时写回 work.yaml：子单元推进时同步改写祖先的存储阶段。
+    reason: 作者可直接编辑 work.yaml，存储值会与子单元脱节，需要全量一致性校验与修复命令；推导无状态、可复现，work.yaml 仍是结构真相。
+  - option: status 与 next 只列场景、不列部与章。
+    reason: 违背计划变更「status 与 next 按层级输出进度和阻塞项」；长篇中作者需要一眼看到哪一部、哪一章落后。
+  - option: 新增独立的 unit insert 命令。
+    reason: 与 unit add 的校验路径完全重叠，两条命令造成注册表、帮助与 MCP tool 冗余；--before/--after 是对既有命令的最小扩展。
+  - option: novel 文体最小声明（仅层级与阶段，不声明规则与简报必填项）。
+    reason: lint 与简报门槛为零会使首个可用版本缺少基本质量约束；四条规则是纯数据，成本为零且可按 id 覆盖或豁免。
+risks:
+  - 大部长篇下汇总阻塞项并集可能很长：阻塞项按序去重后仍随不同场景的缺失产物线性增长；next 对汇总单元 commands 为空、action 只给计数，逐场景阻塞项仍落在各自条目，属既有行为；若实践证明过噪，由后续计划变更按「第一个阻塞场景」截断（本变更不做）。
+  - work.yaml 中汇总单元的占位存储阶段可能误导直接读文件的 Agent：以 status/next 为阶段真相、在 CLI 输出与术语表中说明「汇总单元的阶段以推导为准」缓解。
+  - unit move 移动子树途经 YAML 锚点时无法保留语义：复用 work.anchored-value 在写前拒绝且不修改文件，与既有编辑保护一致；作者可先手工整理锚点再移动。

@@ -1,0 +1,12 @@
+schema: strict-spec-driven/planned-change/v1
+schema_version: 1
+artifact_type: planned_change
+schema_file: ../../templates/strict-spec-driven/schemas/planned-change.yaml
+planned_change:
+  id: corpus-authoring
+  milestone: novel-e2e
+status: complete
+summary: 按 wa-cli 完整生命周期真实创作小说语料并录制命令脚本：作者素材、简报与长篇写作法、大纲与场景契约、逐场景草稿与写后收口、审稿验收、卷末检查点、组稿导出
+details: 创作顺序：作者素材先行（题材与设定笔记作为 Source，简报前提与关键转折链接出处）；简报声明长篇规划写作法（Long-form Planning Method，如雪花写作法或网文结构），大纲与人物设定按该写作法步骤展开；每场景走场景契约（出场人物、承担节拍、揭示边界）→ 草稿 → 写后收口（设定集、知情表、伏笔台账提议与确认）→ 审稿 → 带确认记录的验收；穿插作者参与点：至少一处作者直接编辑正文（人工编辑保护生效）、至少一个决策队列确认、每章末卷末检查点与分层摘要；创作过程中至少一次 recall 全文检索（Full-text Search）调用并记录预期命中；最终组稿整书导出。全部命令记录为分阶段注释的脚本检入语料目录，正文输入以文件引用而非内联，保证脚本可读。
+depends_on:
+  - corpus-design

@@ -1,0 +1,45 @@
+schema_version: 1
+id: house
+title: 团队规范
+description: 测试用规范包
+style:
+  - 结论先行
+glossary:
+  - term: 规范包
+    english: Pack
+    avoid: [插件包]
+banned_terms:
+  - term: 赋能
+    reason: 空泛
+    replacement: 帮助
+rules:
+  length:
+    severity: error
+    params: {max: 3000}
+  typography:
+    type: cjk-typography
+waivers:
+  - rule: typography
+    reason: 本团队不检查排版
+rubric:
+  - id: clarity
+    title: 清晰
+scored_metrics:
+  - id: tension
+    title: 紧张度
+    scale: {min: 1, max: 3}
+    anchors:
+      - {score: 1, description: 平静, example: 午后阳光正好。}
+      - {score: 2, description: 有隐忧, example: 他总觉得门外有人。}
+      - {score: 3, description: 危机迫近, example: 门把手开始转动。}
+    sessions: 2
+    max_spread: 1
+    min_agreement: 0.8
+
+style_profile:
+  sources: [a1]
+  chars: 15
+  sentences: {count: 3, mean: 5, median: 5, stdev: 1.63, p10: 3, p90: 7}
+  paragraphs: {count: 1, mean: 15, median: 15, stdev: 0, p10: 15, p90: 15}
+  punctuation: {"。": 66.67}
+  terms: []

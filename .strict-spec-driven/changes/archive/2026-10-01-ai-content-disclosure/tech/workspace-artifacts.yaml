@@ -1,0 +1,21 @@
+schema: strict-spec-driven/delta-tech/v1
+schema_version: 1
+artifact_type: delta_tech
+schema_file: templates/strict-spec-driven/schemas/delta-tech.yaml
+target_standard: workspace-artifacts
+operations:
+  ADDED:
+    pack-text-in-deliverables:
+      strength: MUST
+      statement: 规范包等第三方提供、会原样写进交付文件（导出的 Markdown、front matter、HTML）的文字（如 ai_disclosure_template）必须由 Schema 限制为一行并设长度上限，只能含声明的占位符，占位符用纯文字替换；写进 YAML 时只能经 YAML 编码器（不得用字符串拼接），写进 HTML 时只能作为模板的文字节点。
+      rationale: 规范包是第三方数据：多行文字可以在 Markdown 文末插入标题、分隔线或伪造的 front matter，拼接进 YAML 会破坏结构；一行、有上限、占位符固定，并且只经编码器或模板输出，使这类文字只能是文字。
+      enforcement:
+        method: test
+        detail: internal/cli 的 TestAIDisclosureTemplateRules 断言多行、过长、空白与未知占位符的模板被 validate 与 config resolved 拒绝；front matter 由 yaml.Marshal 生成，公众号 HTML 中的说明是文字节点。
+      examples:
+        good:
+          - ai_disclosure_template 的 Schema：pattern ^(?:[^{}\r\n]|\{(?:ai_percent|ai_paragraphs|paragraphs)\})+$，maxLength 500
+        bad:
+          - doc += "\n---\n\n" + pack.Template，模板可以含换行与 ---
+  MODIFIED: {}
+  REMOVED: {}

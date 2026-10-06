@@ -1,0 +1,45 @@
+schema: strict-spec-driven/delta-spec/v1
+schema_version: 1
+artifact_type: delta_spec
+schema_file: templates/strict-spec-driven/schemas/delta-spec.yaml
+target_spec: feedback
+operations:
+  ADDED: {}
+  MODIFIED:
+    comment-feedback:
+      strength: MUST
+      statement: 'draft.md 中的每个批注（Comment）<!-- @me: 文本 --> 或 <!-- @me(kind): 文本 -->（kind 为 must-fix、suggestion、question、praise 之一）都必须被解析为该单元的一条作者反馈。批注可以跨行，但不能跨越空行、不能包含另一个 <!--，开头与结尾都不能位于围栏代码块内，开头不能位于行内代码中（围栏代码块与行内代码的识别与文本检查一致：围栏的结束行为同一字符、长度不短于开头；行内代码为 n 个反引号到之后恰好 n 个反引号）；不满足这些条件的（如漏写 --> 的）不是批注，也不会被移除。id 为 cm- 加「kind、换行、去掉首尾空白的文本」的 SHA-256 前 8 个十六进制字符，同一正文中 kind 与文本都相同的批注依次加 -2、-3，编号时跳过 feedback.yaml 中已关闭（resolved 或 rejected）的记录的 id，使已关闭的记录不再占用正文中仍然存在的批注；kind 省略时为 suggestion；status 为 open；text 为去掉首尾空白的批注文本；source 为 comment；锚点的 quote 为整个批注，定位结果为批注开始的行与所在段落。尚未记入 feedback.yaml 的批注反馈由 feedback list、feedback watch 与 wa-cli next 按 feedback-list 的顺序与已记入的反馈一起列出；feedback.yaml 中已有同 id 记录时只列出该记录。wa-cli draft write 写入正文之前把当前正文中尚未记入的批注反馈记入 feedback.yaml，feedback resolve 处理批注反馈时先记入（见 feedback-resolve）；读取命令不写文件。一个单元的正文最多解析 1000 个批注：超过时 feedback list 与 wa-cli next 只列出前 1000 个并报告 feedback.too-many-comments，draft write 报告 feedback.too-many-comments 并不修改任何文件。'
+      scenarios:
+        parse-comment:
+          - GIVEN: '作品 my-post 的 draft.md 第 3 行为「第二段。<!-- @me(must-fix): 这里要给数据 -->」'
+          - WHEN: 运行 wa-cli feedback list my-post --dir D --json
+          - THEN: feedback 含一项 source 为 comment、kind 为 must-fix、text 为「这里要给数据」、status 为 open 的反馈，id 以 cm- 开头，anchor.state 为 located、line 为 3；feedback.yaml 没有被创建或修改
+        ignore-fenced:
+          - GIVEN: 'draft.md 中的 ``` 代码块内含「<!-- @me: 示例 -->」'
+          - WHEN: 运行 wa-cli feedback list my-post --dir D --json
+          - THEN: feedback 中没有 text 为「示例」的反馈
+        import-before-write:
+          - GIVEN: 作者在 draft.md 中写了批注，Agent 用 wa-cli diff 取得 base
+          - WHEN: Agent 以不含该批注的新正文运行 wa-cli draft write my-post --base <base> --dir D --json
+          - THEN: feedback.yaml 中有该批注的记录（source 为 comment、status 为 open），changedPaths 含 feedback.yaml，退出码为 0
+        next-lists-comment:
+          - GIVEN: draft.md 中有一个批注，feedback.yaml 不存在
+          - WHEN: 运行 wa-cli next my-post --dir D --json
+          - THEN: steps[0].feedback 含该批注反馈，退出码为 0
+        unclosed-comment:
+          - GIVEN: 'draft.md 为「A。<!-- @me: 忘了闭合\n\n作者的重要段落。\n\nB。<!-- @me: 真批注 -->」'
+          - WHEN: 运行 wa-cli feedback list my-post --dir D --json
+          - THEN: feedback 只含 text 为「真批注」的批注反馈；解决它之后，「作者的重要段落。」仍在正文中
+        duplicate-comments:
+          - GIVEN: draft.md 中有两个内容相同的批注，feedback list 列出 id 为 C 与 C-2 的两条批注反馈
+          - WHEN: 运行 wa-cli feedback resolve my-post C --dir D 后再运行 wa-cli feedback list my-post --dir D --json
+          - THEN: 第一个批注已从正文移除；feedback 含 id 为 C、status 为 resolved 的记录，以及 id 为 C-2、status 为 open 的批注反馈，后者仍可被 feedback resolve 处理
+        inline-code:
+          - GIVEN: 'draft.md 为「在正文里写 `<!-- @me: 文本 -->` 即可。」'
+          - WHEN: 运行 wa-cli feedback list my-post --dir D --json
+          - THEN: feedback 为空数组
+        fence-and-code-span:
+          - GIVEN: '正文中四个反引号的围栏内有 <!-- @me: 演示批注 -->，另有一行「用 ``a`b`` 表示。<!-- @me: 要改 -->」'
+          - WHEN: 运行 wa-cli feedback list my-post --dir D --json
+          - THEN: 只列出一条 text 为「要改」的批注反馈
+  REMOVED: {}

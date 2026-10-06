@@ -1,0 +1,4 @@
+state_changes: []
+knowledge:
+  - {id: kn-01, entry: char-shen-wangshu, character: char-chen-shouzhuo}
+events: [ev-watch-accepted]

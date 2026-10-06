@@ -1,0 +1,31 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: ad-compliance-rules
+  status: proposed
+summary:
+  what:
+    - 新增 ad-compliance 规则类型：检查正文中的极限词（Superlative Claims）。内置一份基础极限词表（如「最佳」「国家级」「销量第一」），每个词标注来源《中华人民共和国广告法》第九条第（三）项；参数 terms 追加词、builtin 为 false 时不用内置词表、basis 写明追加词表的依据。
+    - '规范包（Pack）可以声明自己的 ad-compliance 规则（如 ad-medical）扩展行业词表，发现项的 source 指明该规范包；作者用已有的单处豁免 <!-- lint-ignore <rule-id>: 理由 --> 豁免一处命中并写明理由。'
+    - 每项发现项的 message 写明命中的词、依据（内置词表的法条或 basis）以及「辅助检查，不构成法律意见」。
+  why:
+    - 里程碑 wechat-marketing-and-mcp 的完成标准要求：命中极限词时 lint 以非零退出，并标明规则来源；里程碑 intake 问题 compliance-source 的建议是内置基础极限词表并标注来源，行业词表通过规范包扩展，所有输出标注为辅助检查。
+    - 公众号营销文章常出现广告法禁止的绝对化用语；wa-cli 只能做确定性的辅助检查，帮 Agent 与作者在发布前发现它们，最终判断仍由作者负责。
+scope:
+  in:
+    - internal/lint：ad-compliance 规则类型、内置基础极限词表与来源、参数 terms、builtin、basis（新增字符串参数类型）
+    - internal/catalog：已知规则类型加入 ad-compliance
+    - lint 主规格新增 ad-compliance 规则类型；genres-and-packs 主规格的 known-rule-types 加入 ad-compliance
+    - 测试：内置词表命中、追加词表、builtin 为 false、规范包扩展行业词表的来源、单处豁免、参数校验、tech-blog 文体不启用
+  out:
+    - wechat-marketing 文体默认启用 ad-compliance：wechat-marketing 文体尚不存在，由同一里程碑的 wechat-marketing-genre 变更在声明文体时启用（severity 为 error）
+    - 内置行业词表（医疗、食品、化妆品等）：由规范包提供
+    - 法律意见或自动改写：只报告命中，suggestion 为 null
+unchanged_behavior:
+  - tech-blog 文体与内置 default 规范包不声明 ad-compliance，其文本检查结果不变
+  - 已有规则类型、单处豁免、输出信封字段与退出码约定不变；已发布错误码的含义不变
+roadmap:
+  milestone: wechat-marketing-and-mcp
+  planned_change: ad-compliance-rules

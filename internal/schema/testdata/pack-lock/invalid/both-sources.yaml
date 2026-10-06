@@ -1,0 +1,6 @@
+schema_version: 1
+packs:
+  - id: house
+    source: {path: ../house, git: https://example.com/h.git}
+    commit: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+    sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa

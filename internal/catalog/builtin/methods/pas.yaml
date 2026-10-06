@@ -1,0 +1,16 @@
+# PAS：先点出问题，再放大问题带来的困扰，最后给出解决方案。
+schema_version: 1
+id: pas
+title: PAS
+description: 问题（Problem）→ 放大（Agitate）→ 解决（Solution），适合以痛点切入、给出方案的营销文章。
+kind: article
+sections:
+  - id: problem
+    title: 问题
+    description: 点出目标读者正在面对的具体问题（痛点）。
+  - id: agitate
+    title: 放大
+    description: 说明问题不解决的代价，让读者感到需要改变；不夸大、不制造焦虑。
+  - id: solution
+    title: 解决
+    description: 给出解决方案与证据，并引出行动号召（CTA）。

@@ -1,0 +1,42 @@
+# 七点结构（Seven-Point Story Structure）：钩子到结局的七个支点，张力逐点抬升。
+schema_version: 1
+id: seven-point
+title: 七点结构
+description: 钩子、第一情节点、第一压力点、中点、第二压力点、第二情节点与结局：先定钩子与结局两个端点，再逐点抬升张力。
+kind: structure
+beats:
+  - id: hook
+    title: 钩子
+    description: 主角的初始状态，与结局形成最大反差。
+    position: {min: 0, max: 0.05}
+    tension: 2
+  - id: plot-turn-1
+    title: 第一情节点
+    description: 改变方向的事件，把主角推入故事。
+    position: {min: 0.1, max: 0.2}
+    tension: 4
+  - id: pinch-1
+    title: 第一压力点
+    description: 反派施加压力，向读者展示赌注有多大。
+    position: {min: 0.2, max: 0.35}
+    tension: 5
+  - id: midpoint
+    title: 中点
+    description: 主角从被动挨打转为主动出击的转折点。
+    position: {min: 0.45, max: 0.55}
+    tension: 7
+  - id: pinch-2
+    title: 第二压力点
+    description: 最大挫败：计划崩塌、盟友离开，希望收窄到一线。
+    position: {min: 0.6, max: 0.75}
+    tension: 8
+  - id: plot-turn-2
+    title: 第二情节点
+    description: 主角获得最后一块拼图，知道该怎么做。
+    position: {min: 0.75, max: 0.85}
+    tension: 9
+  - id: resolution
+    title: 结局
+    description: 与钩子对照的最终状态，张力在高潮后释放。
+    position: {min: 0.9, max: 1}
+    tension: 10

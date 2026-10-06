@@ -1,0 +1,19 @@
+schema: strict-spec-driven/lesson/v1
+schema_version: 1
+artifact_type: lesson
+schema_file: templates/strict-spec-driven/schemas/lesson.yaml
+lesson:
+  id: canon-list-canon-yaml-nil-nil-dac3b3
+  title: canon.List 对不存在的 canon.yaml 返回 (nil, nil)，与无法加载无法按返回值区分
+category: coding
+status: active
+created_at: '2026-10-03T11:38:51.899Z'
+updated_at: '2026-10-03T11:38:51.899Z'
+context: internal/canon 的 List 把「canon.yaml 不存在」与「canon.yaml 存在但不通过校验」都编码为 entries 为 nil：不存在时问题列表也为空，只有确实带问题时才是无法加载。消费设定集条目的领域包（如 internal/state 的 canonByID）必须用 len(ps) 是否为零来区分，否则会把「没有设定集」误当成「设定集坏了」而拒绝写入，或反过来在设定集坏了时静默成功（state-change-proposals 实现期实测：漏判时 state propose 返回三个 nil，静默不写文件）。
+observation: internal/state 首版 canonByID 只判 entries == nil 就当作无法加载：canon.yaml 被删除后 Propose 直接返回 (nil, nil, nil)，命令既不报 state.unknown-entry 也不写文件；测试夹具暴露后改为 entries == nil && len(ps) > 0 才判无法加载，否则按空条目集合处理（所有 entry 引用悬空）。
+takeaway: 调用 canon.List 时用「entries 为 nil 且问题非空」判定无法加载，只用其中之一都会误判另一个分支；没有 canon.yaml 是合法状态（条目集合为空），不是错误。
+applies_when: 任何按作品加载设定集条目做引用校验、上下文组装或快照计算的领域包与命令（novel 里程碑后续的 knowledge-state、scene close-out 也会消费 canon）。
+occurrences:
+  - origin: state-change-proposals 变更实现期调试发现
+    date: '2026-10-03'
+    evidence: internal/canon/canon.go 的 List：f 为 nil 时原样返回 (nil, ps)，不存在时 ps 为空；internal/state/state.go 的 canonByID 已按上述规则区分并有 TestProposeRejects 的无 canon.yaml 用例覆盖。

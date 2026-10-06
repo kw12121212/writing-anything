@@ -1,0 +1,21 @@
+schema_version: 1
+events:
+  - id: know-1
+    scene: my-novel/c1/s1
+    entry: canon-5
+    character: canon-1
+    status: proposed
+  - id: know-2
+    scene: my-novel/c1/s2
+    entry: canon-5
+    character: reader
+    status: confirmed
+    confirmation: 作者确认读者在灯室对峙时得知灯芯来历
+    decided_at: 2026-10-03T08:00:00Z
+  - id: know-3
+    scene: my-novel/c2/s1
+    entry: canon-5
+    character: canon-1
+    status: rejected
+    confirmation: 作者撤销该知情
+    decided_at: 2026-10-03T09:30:00Z
