@@ -13,7 +13,7 @@ description: 长篇（novel）的部末与成书收尾：生成并请作者确�
 4. 时间线（Timeline）：成书前运行 `wa-cli timeline <作品> --json`（系列用系列 id）检查场景全序、after 成环与声明矛盾，把矛盾交给作者处理。
 5. 组稿（Assembly）：运行 `wa-cli assemble <作品> --json`（需要别的位置或纯文本时加 `--output <路径>` 与 `--format text`）。被拒绝时按阻塞项处理：未完成的场景回到 wa-scene；连续性阻塞与 open 的复查标记转到 wa-continuity；strict 关卡下的待作者复核（Pending Author Review，见 `wa-cli review show <作品> --json` 的 pendingAuthorReviews）把阅读页地址交给作者，由作者在「待作者复核」区批量复核。书名是作品根单元大纲的首节：根大纲已有情节节拍时用 `wa-cli outline set <作品> <节 id> --title <书名> --reason <说明> --before <首节 id> --json` 放在首位；部、章标题用 `wa-cli outline set <单元> <节 id> --title <标题> --reason <说明> --json` 写在对应单元的大纲中。
 6. 导出（Export）：组稿成功后，需要发布用的成稿时按 wa-publish 运行 `wa-cli export <作品> --format markdown --json`，导出只含已验收的单元并附 AI 参与说明。
-7. 交接记录（Handoff Note）：会话结束前，把完成了什么、未完成的事项、作者的新指示与需要注意的风险写成 YAML（done 与 todo 必填，instructions 与 risks 可选，格式见 `wa-cli help handoff write --json`），运行 `wa-cli handoff write --file <文件> --json` 追加。新会话开始时，`wa-cli next --json` 每个步骤的 handoff 字段给出最近一条交接的 id 与 todo；运行 `wa-cli handoff show --json` 读取完整的最近一条（含作者指示与风险），需要更早的记录时加 `--last <条数>`。
+7. 交接记录（Handoff Note）：会话结束前，把完成了什么、未完成的事项、作者的新指示与需要注意的风险写成 YAML（done 与 todo 必填，instructions 与 risks 可选，格式见 `wa-cli help handoff write --json`），运行 `wa-cli handoff write --file <文件> --json` 追加。新会话开始时，`wa-cli next --json` 每个步骤的 handoff 字段给出最近一条交接的 id、todo 与作者指示（instructions），不加 --json 时 next 在文本输出顶部显示同样内容；运行 `wa-cli handoff show --json` 读取完整的最近一条（含完成事项与风险），需要更早的记录时加 `--last <条数>`。
 
 ## 必须停下来问作者
 

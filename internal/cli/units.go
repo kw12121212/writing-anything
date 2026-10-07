@@ -85,7 +85,7 @@ var nextCommand = &command{
 	summary: "列出单元（Unit）的当前阶段（Stage）、阻塞项（Blocker）与下一步命令；汇总单元（Aggregated Unit）的阶段与阻塞项由子单元汇总",
 	args:    []argSpec{{"unit", "只列出该单元；省略时列出所有未完成的单元。" + unitRefHelp, false}},
 	flags:   []flagSpec{dirFlag},
-	outputKeys: []outputKey{{"steps", "下一步数组，每项含 unit、stage、blockers、action、commands、feedback（未处理完的作者反馈）与 progress（汇总单元的进度，其他单元为 null）"},
+	outputKeys: []outputKey{{"steps", "下一步数组，每项含 unit、stage、blockers、action、commands、feedback（未处理完的作者反馈）、progress（汇总单元的进度，其他单元为 null）与 handoff（最近一条交接记录（Handoff Note）的 id、todo 与 instructions，没有时为 null）"},
 		{"pendingAuthorReviews", "给出单元时为其所在作品、省略时为全部作品的" + pendingAuthorReviewsHelp}},
 	exitCodes: standardExitCodes,
 	run:       runNext,
@@ -140,10 +140,13 @@ type blockerView struct {
 	Message  string  `json:"message"`
 }
 
-// handoffRef 是 next 条目附带的最近交接记录摘要。
+// handoffRef 是 next 条目附带的最近交接记录摘要：id、未完成事项与作者新指示（数组永不为 null）。
+// WrittenAt 只用于文本输出，不进入 JSON。
 type handoffRef struct {
-	ID   string   `json:"id"`
-	Todo []string `json:"todo"`
+	ID           string   `json:"id"`
+	Todo         []string `json:"todo"`
+	Instructions []string `json:"instructions"`
+	WrittenAt    string   `json:"-"`
 }
 
 type stepView struct {
@@ -155,7 +158,7 @@ type stepView struct {
 	Feedback []feedbackView `json:"feedback"`
 	// Progress 只对汇总单元（Aggregated Unit）非空：子单元树中走生命周期的单元的完成进度。
 	Progress *progressView `json:"progress"`
-	// Handoff 是工作区最近一条交接记录（Handoff Note）的 id 与待办，供新会话接续；没有记录时为 null。
+	// Handoff 是工作区最近一条交接记录（Handoff Note）的 id、待办与作者新指示，供新会话接续；没有记录时为 null。
 	Handoff *handoffRef `json:"handoff"`
 }
 
@@ -388,6 +391,10 @@ func runNext(inv *invocation) int {
 		if len(res.Steps) == 0 && len(res.PendingAuthorReviews) == 0 && !hasError(res.Diagnostics) {
 			b.WriteString("没有需要推进的单元（Unit）\n")
 		}
+		// 各步骤共享同一条最近交接记录，只在顶部输出一次（与 JSON 的 handoff 字段一致）。
+		if len(res.Steps) > 0 && res.Steps[0].Handoff != nil {
+			b.WriteString(handoffText(res.Steps[0].Handoff))
+		}
 		for _, s := range res.Steps {
 			stage := s.Stage
 			if s.Progress != nil {
@@ -587,7 +594,20 @@ func latestHandoff(dir string) *handoffRef {
 	if note == nil || len(ps) > 0 {
 		return nil
 	}
-	return &handoffRef{ID: note.ID, Todo: note.Todo}
+	return &handoffRef{ID: note.ID, Todo: note.Todo, Instructions: note.Instructions, WrittenAt: note.WrittenAt}
+}
+
+// handoffText 以人读文字输出 next 顶部的最近交接记录：id、写入时间、未完成事项与作者新指示。
+func handoffText(h *handoffRef) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "最近交接记录（Handoff Note）%s（%s）\n", h.ID, h.WrittenAt)
+	for _, t := range h.Todo {
+		fmt.Fprintf(&b, "  未完成：%s\n", t)
+	}
+	for _, i := range h.Instructions {
+		fmt.Fprintf(&b, "  作者新指示：%s\n", i)
+	}
+	return b.String()
 }
 
 // action 以人读文字说明单元的下一步。

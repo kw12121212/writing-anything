@@ -409,11 +409,14 @@ entries:
   scene: part-1
   command: wa-cli handoff write（每部末会话）+ handoff show --last N + next
   expected: 全绿（exit 0）
-  assertion: 部末写交接记录（完成了什么/未完成/作者新指示/风险），新会话经 next 接续；只能追加。
+  assertion: 部末写交接记录（完成了什么/未完成/作者新指示/风险），新会话经 next 接续（第一部交接写入后 next 的 handoff 字段即为 handoff-1 及其未完成事项）；只能追加。
   evidence:
   - kind: script
     token: handoff show
     stdout_contains: handoff
+  - kind: script
+    token: next stopped-at-417
+    stdout_contains: '"handoff":{"id":"handoff-1","todo":["第二部倒叙场景与铁盒交信、怀表修复"'
 - id: T-VOLUME-01
   feature: volume
   scene: part-1

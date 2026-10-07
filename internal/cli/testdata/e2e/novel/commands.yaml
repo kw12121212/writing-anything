@@ -1620,6 +1620,13 @@ stages:
     expect_exit: 0
     expect_code: null
     stdout_contains: null
+  - command:
+    - next
+    - stopped-at-417
+    input_ref: null
+    expect_exit: 0
+    expect_code: null
+    stdout_contains: '"handoff":{"id":"handoff-1","todo":["第二部倒叙场景与铁盒交信、怀表修复"'
 - stage: part-2
   note: 中部（第二章 旧事）：倒叙场景、铁盒交信与怀表修复（ST-1）；审查任务包生成与提交；recall 三查；影响传播预览、复查标记与组稿阻塞（assemble.scenes-open + assemble.rechecks）后作者确认解除；卷末检查点（暂不确认）；部末交接
   steps:
