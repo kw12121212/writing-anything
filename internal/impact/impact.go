@@ -34,6 +34,8 @@ const (
 	CodeIncompleteConfirmation = "impact.incomplete-confirmation"
 	CodeNotFound               = "impact.not-found"
 	CodeInvalid                = "impact.invalid"
+	// CodeAutoMarkFailed 是修改命令写入成功后自动影响传播失败的 warning：修改已保留，复查标记未写入。
+	CodeAutoMarkFailed = "impact.auto-mark-failed"
 )
 
 // Via 是引用路径。
@@ -234,6 +236,14 @@ func Compute(root string, w *work.Work, target string) ([]Affected, []workspace.
 		out = append(out, Affected{Scene: scene, Via: via, Reason: reason})
 	}
 	threadItems, _ := threads.List(root, w, true)
+	var names map[string]string // 只在目标为设定条目时按需构建
+	canonIDByName := func(name string) (string, bool) {
+		if names == nil {
+			names = canonNames(root, w)
+		}
+		id, ok := names[name]
+		return id, ok && id != ""
+	}
 	for _, s := range scenes {
 		if base >= 0 && pos[s.Ref] <= base {
 			continue
@@ -245,12 +255,12 @@ func Compute(root string, w *work.Work, target string) ([]Affected, []workspace.
 				causes = append(causes, sec.Causes...)
 				if kind == "canon" {
 					for _, name := range sec.Characters {
-						if entryID, ok := canonIDByName(root, w, name); ok && entryID == target {
+						if entryID, ok := canonIDByName(name); ok && entryID == target {
 							add(s.Ref, ViaCharacter, fmt.Sprintf("出场人物「%s」（%s）的设定被修改", name, target))
 						}
 					}
 					if sec.Pov != "" {
-						if entryID, ok := canonIDByName(root, w, sec.Pov); ok && entryID == target {
+						if entryID, ok := canonIDByName(sec.Pov); ok && entryID == target {
 							add(s.Ref, ViaCharacter, fmt.Sprintf("视角人物「%s」（%s）的设定被修改", sec.Pov, target))
 						}
 					}
@@ -398,30 +408,22 @@ func byRefUnit(w *work.Work, ref string) *work.Unit {
 	return nil
 }
 
-var canonNameCache map[string]map[string]string // root+work → name → id
-
-func canonIDByName(root string, w *work.Work, name string) (string, bool) {
-	key := root + "|" + w.ID
-	if canonNameCache == nil {
-		canonNameCache = map[string]map[string]string{}
-	}
-	if _, ok := canonNameCache[key]; !ok {
-		m := map[string]string{}
-		if entries, _ := canon.List(root, w); entries != nil {
-			for _, e := range entries {
-				for _, n := range e.Names() {
-					if _, dup := m[n]; !dup {
-						m[n] = e.ID
-					} else {
-						m[n] = "" // 同名多条目：多义不解析（与 recall 一致）
-					}
+// canonNames 返回作品设定集的称谓 → 条目 id 映射；同名多条目时映射为空串（多义不解析，与 recall 一致）。
+// 每次计算现读现建，不跨调用缓存：同一进程中 canon set 改名后的计算必须看到新称谓。
+func canonNames(root string, w *work.Work) map[string]string {
+	m := map[string]string{}
+	if entries, _ := canon.List(root, w); entries != nil {
+		for _, e := range entries {
+			for _, n := range e.Names() {
+				if _, dup := m[n]; !dup {
+					m[n] = e.ID
+				} else {
+					m[n] = ""
 				}
 			}
 		}
-		canonNameCache[key] = m
 	}
-	id, ok := canonNameCache[key][name]
-	return id, ok && id != ""
+	return m
 }
 
 // loadRechecks 读取作品的复查标记文件；不存在时返回 nil 与 nil。
@@ -455,24 +457,11 @@ func MarkTarget(root string, w *work.Work, target string, budget int, now time.T
 	if len(affected) == 0 {
 		return nil, nil, nil
 	}
-	rel := path(w.ID)
-	doc, f, ps := loadRechecks(root, w.ID)
+	_, f, ps := loadRechecks(root, w.ID)
 	if ps != nil {
 		return nil, nil, ps
 	}
-	if doc == nil {
-		f = &fileRecord{SchemaVersion: 1, Scenes: []FileMark{}}
-		doc = &yaml.Node{Kind: yaml.DocumentNode, HeadComment: "复查标记（Recheck Mark）；由 wa-cli impact mark 追加，经 wa-cli impact clear 解除。", Content: []*yaml.Node{{Kind: yaml.MappingNode, Content: []*yaml.Node{
-			workspace.Str("schema_version"), workspace.Int(1),
-			workspace.Str("scenes"), {Kind: yaml.SequenceNode, Tag: "!!seq"}}}}}
-	}
-	// 幂等：同（scene, target）的 open 标记不重复。
-	open := map[string]bool{}
-	for _, m := range f.Scenes {
-		if m.Status == "open" {
-			open[m.Scene+"\x00"+m.Target] = true
-		}
-	}
+	open, _ := openIndex(f)
 	var fresh []FileMark
 	for _, a := range affected {
 		if open[a.Scene+"\x00"+target] {
@@ -483,6 +472,46 @@ func MarkTarget(root string, w *work.Work, target string, budget int, now time.T
 	}
 	if len(fresh) == 0 {
 		return nil, nil, nil
+	}
+	packetScenes := []string{}
+	for _, a := range affected {
+		packetScenes = append(packetScenes, a.Scene)
+	}
+	changed, ps := appendMarks(root, w, fresh, packetScenes, budget, now)
+	if ps != nil {
+		return nil, nil, ps
+	}
+	return fresh, changed, nil
+}
+
+// openIndex 返回复查标记文件中 open 标记的（场景，目标）集合与有 open 标记的场景集合；f 为 nil 时均为空。
+func openIndex(f *fileRecord) (pairs, scenes map[string]bool) {
+	pairs, scenes = map[string]bool{}, map[string]bool{}
+	if f == nil {
+		return pairs, scenes
+	}
+	for _, m := range f.Scenes {
+		if m.Status == "open" {
+			pairs[m.Scene+"\x00"+m.Target] = true
+			scenes[m.Scene] = true
+		}
+	}
+	return pairs, scenes
+}
+
+// appendMarks 把新标记 fresh 追加写入作品的复查标记文件，并为 packetScenes 中的每个场景生成 causality 审查任务包。
+// 先生成全部任务包、再写复查标记（precheck-before-side-effects：包生成失败时 rechecks 逐字节不变）。返回变更路径；
+// 出错时返回出错前已写出的任务包路径与问题。
+func appendMarks(root string, w *work.Work, fresh []FileMark, packetScenes []string, budget int, now time.Time) ([]string, []workspace.Problem) {
+	rel := path(w.ID)
+	doc, _, ps := loadRechecks(root, w.ID)
+	if ps != nil {
+		return nil, ps
+	}
+	if doc == nil {
+		doc = &yaml.Node{Kind: yaml.DocumentNode, HeadComment: "复查标记（Recheck Mark）；由 wa-cli impact mark 追加，经 wa-cli impact clear 解除。", Content: []*yaml.Node{{Kind: yaml.MappingNode, Content: []*yaml.Node{
+			workspace.Str("schema_version"), workspace.Int(1),
+			workspace.Str("scenes"), {Kind: yaml.SequenceNode, Tag: "!!seq"}}}}}
 	}
 	// 节点树上追加标记，保留其他内容与注释。
 	m := doc.Content[0]
@@ -506,37 +535,148 @@ func MarkTarget(root string, w *work.Work, target string, budget int, now time.T
 	}
 	data, err := workspace.Encode(doc)
 	if err != nil {
-		return nil, nil, []workspace.Problem{errorAt(workspace.CodeWriteFailed, rel, "", "生成复查标记失败："+err.Error())}
+		return nil, []workspace.Problem{errorAt(workspace.CodeWriteFailed, rel, "", "生成复查标记失败："+err.Error())}
 	}
 	written, p := schema.Parse(data)
 	if p != nil {
-		return nil, nil, workspace.FromSchema(rel, []schema.Problem{*p})
+		return nil, workspace.FromSchema(rel, []schema.Problem{*p})
 	}
 	if sps := schema.Named("rechecks").ValidateNode(written); len(sps) > 0 {
-		return nil, nil, workspace.FromSchema(rel, sps)
+		return nil, workspace.FromSchema(rel, sps)
 	}
-	// 先生成审查任务包，全部成功后再写复查标记（precheck-before-side-effects：两个副作用一个事务，
-	// 包生成失败时 rechecks 逐字节不变）。
 	changed := []string{}
-	for _, a := range affected {
-		u := byRefUnit(w, a.Scene)
+	for _, scene := range packetScenes {
+		u := byRefUnit(w, scene)
 		if u == nil {
 			continue
 		}
 		_, pk, ps := reviewpacket.Plan(root, w, u, reviewpacket.DimCausality, budget, now)
-		if ps != nil {
-			return nil, nil, ps
-		}
 		changed = append(changed, pk...)
+		if ps != nil {
+			return changed, ps
+		}
 	}
 	if err := os.MkdirAll(filepath.Dir(filepath.Join(root, filepath.FromSlash(rel))), 0o755); err != nil {
-		return nil, nil, []workspace.Problem{errorAt(workspace.CodeWriteFailed, rel, "", "创建目录失败："+err.Error())}
+		return changed, []workspace.Problem{errorAt(workspace.CodeWriteFailed, rel, "", "创建目录失败："+err.Error())}
 	}
 	if err := workspace.WriteFile(root, rel, data); err != nil {
-		return nil, nil, []workspace.Problem{errorAt(workspace.CodeWriteFailed, rel, "", "写入复查标记失败："+err.Error())}
+		return changed, []workspace.Problem{errorAt(workspace.CodeWriteFailed, rel, "", "写入复查标记失败："+err.Error())}
 	}
-	changed = append(changed, rel)
-	return fresh, changed, nil
+	return append(changed, rel), nil
+}
+
+// Ripple 是一次语义修改后对一个目标的自动影响传播结果（数组永不为 null）。
+type Ripple struct {
+	Target string `json:"target"`
+	// Marked 是本次为已验收场景新落盘的复查标记。
+	Marked []MarkView `json:"marked"`
+	// Existing 是已有同目标 open 标记而跳过的已验收场景。
+	Existing []Affected `json:"existing"`
+	// Unaccepted 是只提示、不落盘的未验收场景。
+	Unaccepted []Affected `json:"unaccepted"`
+}
+
+// Empty 报告该目标没有任何受影响场景。
+func (r Ripple) Empty() bool {
+	return len(r.Marked) == 0 && len(r.Existing) == 0 && len(r.Unaccepted) == 0
+}
+
+// AutoMark 是修改命令（canon set、state set、knowledge set、threads set、scene contract）在语义字段变化后的
+// 自动影响传播：按 Compute 计算修改后引用图上的受影响场景，并入 pre（调用方在修改前对同一目标计算的结果），
+// from 非空时只保留先序不早于 from 的场景；stage 为 done（已验收）
+// 的场景自动追加 open 复查标记——同（场景，目标）已有 open 标记时归入 Existing——并只为此前没有任何 open
+// 标记的场景生成 causality 审查任务包；未验收场景只列入 Unaccepted，不写文件。目标不是本作品可解析的引用
+// （如只存在于系列设定集的条目）且 pre 为空时返回空结果。返回结果、变更路径与问题（出错时不写复查标记，变更路径
+// 只含出错前已写出的任务包）。
+func AutoMark(root string, w *work.Work, target, from string, pre []Affected, budget int, now time.Time) (Ripple, []string, []workspace.Problem) {
+	r := Ripple{Target: target, Marked: []MarkView{}, Existing: []Affected{}, Unaccepted: []Affected{}}
+	affected, ps := Compute(root, w, target)
+	for _, p := range ps {
+		if p.Code != CodeUnknownTarget {
+			return r, nil, ps
+		}
+	}
+	// 合并修改前的引用图结果：改名、改回收位置或改绑定后，只在修改前引用目标的场景同样受影响。
+	pos := map[string]int{}
+	for i, u := range w.Units() {
+		pos[u.Ref] = i
+	}
+	seen := map[string]bool{}
+	for _, a := range affected {
+		seen[a.Scene] = true
+	}
+	for _, a := range pre {
+		if _, ok := pos[a.Scene]; ok && !seen[a.Scene] {
+			seen[a.Scene] = true
+			affected = append(affected, a)
+		}
+	}
+	slices.SortStableFunc(affected, func(a, b Affected) int { return pos[a.Scene] - pos[b.Scene] })
+	if from != "" {
+		if base, ok := pos[from]; ok {
+			kept := affected[:0:0]
+			for _, a := range affected {
+				if pos[a.Scene] >= base {
+					kept = append(kept, a)
+				}
+			}
+			affected = kept
+		}
+	}
+	if len(affected) == 0 {
+		return r, nil, nil
+	}
+	_, f, ps := loadRechecks(root, w.ID)
+	if ps != nil {
+		return r, nil, ps
+	}
+	openPairs, openScenes := openIndex(f)
+	var fresh []FileMark
+	packetScenes := []string{}
+	for _, a := range affected {
+		u := byRefUnit(w, a.Scene)
+		switch {
+		case u == nil || u.Stage != catalogStageDone:
+			r.Unaccepted = append(r.Unaccepted, a)
+		case openPairs[a.Scene+"\x00"+target]:
+			r.Existing = append(r.Existing, a)
+		default:
+			fresh = append(fresh, FileMark{Scene: a.Scene, Target: target, Via: a.Via, Reason: a.Reason,
+				MarkedAt: nowUTC(now), Status: "open"})
+			if !openScenes[a.Scene] {
+				packetScenes = append(packetScenes, a.Scene)
+			}
+		}
+	}
+	if len(fresh) == 0 {
+		return r, nil, nil
+	}
+	changed, ps := appendMarks(root, w, fresh, packetScenes, budget, now)
+	if ps != nil {
+		return Ripple{Target: target, Marked: []MarkView{}, Existing: []Affected{}, Unaccepted: []Affected{}}, changed, ps
+	}
+	r.Marked = ViewAll(fresh)
+	return r, changed, nil
+}
+
+// SemanticKey 把语义字段规整为比较键：每个字符串去首尾空白并把连续空白折叠为单个空格，因此只改排版（空白）
+// 不改变键。集合型列表由调用方先用 SortedKey 规整。
+func SemanticKey(parts ...string) string {
+	out := make([]string, len(parts))
+	for i, p := range parts {
+		out[i] = strings.Join(strings.Fields(p), " ")
+	}
+	return strings.Join(out, "\x00")
+}
+
+// SortedKey 把集合型列表规整为与顺序无关的单个字符串（每项先折叠空白）。
+func SortedKey(items []string) string {
+	norm := make([]string, len(items))
+	for i, it := range items {
+		norm[i] = strings.Join(strings.Fields(it), " ")
+	}
+	slices.Sort(norm)
+	return strings.Join(norm, "\x01")
 }
 
 // Clear 解除场景 scene 对目标 target 的 open 复查标记：作者确认（--confirmed-by-author 与 --confirmation）

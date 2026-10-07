@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kw12121212/writing-anything/internal/impact"
 	"github.com/kw12121212/writing-anything/internal/knowledge"
 	"github.com/kw12121212/writing-anything/internal/outline"
 	"github.com/kw12121212/writing-anything/internal/work"
@@ -94,7 +95,7 @@ var knowledgeSetCommand = &command{
 		{"confirmed-by-author", flagBool, "作者重新确认本条已确认条目的修改"},
 		{"confirmation", flagString, "作者重新确认的原话摘要；修改已确认（confirmed）条目时必填"},
 	},
-	outputKeys: []outputKey{{"event", "修改后的条目：id、scene、entry、character、status、confirmation、channel（确认渠道（Confirmation Channel）：cli 或 preview，待确认为 null）与 decided_at；失败时为 null"}},
+	outputKeys: []outputKey{{"event", "修改后的条目：id、scene、entry、character、status、confirmation、channel（确认渠道（Confirmation Channel）：cli 或 preview，待确认为 null）与 decided_at；失败时为 null"}, impactOutputKey},
 	exitCodes:  standardExitCodes,
 	run:        runKnowledgeSet,
 }
@@ -272,9 +273,24 @@ func runKnowledgeReject(inv *invocation) int {
 	return runKnowledgeDecide(inv, "knowledge reject", "拒绝或撤销", knowledge.Reject)
 }
 
+type knowledgeSetResult struct {
+	Result
+	Event  *knowledgeEventView `json:"event"`
+	Impact []impact.Ripple     `json:"impact"`
+}
+
+// knowledgeSemantic 返回知情事件的语义比较键（知情绑定：scene、entry、character 与 terms）。
+func knowledgeSemantic(e *knowledge.Event) string {
+	if e == nil {
+		return ""
+	}
+	return impact.SemanticKey(e.Scene, e.Entry, e.Character, impact.SortedKey(e.Terms))
+}
+
 func runKnowledgeSet(inv *invocation) int {
 	dir := projectDir(inv)
-	res := &knowledgeEventResult{}
+	res := &knowledgeSetResult{Impact: []impact.Ripple{}}
+	var auto []Diagnostic
 	problems := workspace.Require(dir)
 	if problems == nil {
 		var w *work.Work
@@ -295,16 +311,40 @@ func runKnowledgeSet(inv *invocation) int {
 			}
 			in.ConfirmedByAuthor = inv.flag("confirmed-by-author")
 			in.Confirmation = inv.values["confirmation"]
+			var before *knowledge.Event
+			if events, _ := knowledge.List(dir, w, true); events != nil {
+				for i := range events {
+					if events[i].ID == inv.args[1] {
+						before = &events[i]
+					}
+				}
+			}
+			var pre []impact.Affected
+			if before != nil {
+				pre = preAffected(dir, w, before.Entry)
+			}
 			var e *knowledge.Event
 			var changed []string
 			if e, changed, problems = knowledge.Set(dir, w, inv.args[1], in, now()); e != nil {
 				res.Event, res.ChangedPaths = knowledgeViewOf(w.ID, *e), changed
+				// 影响目标为新旧绑定的设定条目，只计不早于新旧绑定场景的场景。
+				if len(changed) > 0 && knowledgeSemantic(before) != knowledgeSemantic(e) {
+					targets := []impactTarget{{target: e.Entry, from: e.Scene}}
+					if before != nil {
+						from := earlierScene(w, before.Scene, e.Scene)
+						targets = []impactTarget{{target: before.Entry, from: from, pre: pre}, {target: e.Entry, from: from}}
+					}
+					var more []string
+					res.Impact, more, auto = autoImpact(dir, w, targets)
+					res.ChangedPaths = append(res.ChangedPaths, more...)
+				}
 			}
 		}
 	}
 	res.Diagnostics = diagnostics(problems, dir)
 	knowledgeParamNext(res.Diagnostics, dir, inv.args[0], "knowledge set")
 	knowledgeNotFoundNext(res.Diagnostics, inv.args[0], dir)
+	res.Diagnostics = append(res.Diagnostics, auto...)
 	return finish(inv, res, func(w io.Writer) error {
 		if res.Event == nil {
 			return nil
@@ -313,8 +353,8 @@ func runKnowledgeSet(inv *invocation) int {
 		if len(res.ChangedPaths) == 0 {
 			verb = "取值未变，未修改"
 		}
-		_, err := fmt.Fprintf(w, "%s作品 %s 的知情事件（Knowledge Event）%s（%s 于 %s 获知 %s）%s\n",
-			verb, res.Event.Work, res.Event.ID, knowerText(res.Event.Character), res.Event.Scene, res.Event.Entry, knowledgeStatusText(res.Event.Status))
+		_, err := fmt.Fprintf(w, "%s作品 %s 的知情事件（Knowledge Event）%s（%s 于 %s 获知 %s）%s\n%s",
+			verb, res.Event.Work, res.Event.ID, knowerText(res.Event.Character), res.Event.Scene, res.Event.Entry, knowledgeStatusText(res.Event.Status), impactText(res.Impact))
 		return err
 	})
 }

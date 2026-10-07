@@ -293,3 +293,42 @@ func TestMarkPacketsPerSceneAndOverBudget(t *testing.T) {
 		t.Fatalf("packets = %d, changed = %v", len(entries), changed)
 	}
 }
+
+// AutoMark：未知目标返回空结果；from 过滤先序更早的场景；未验收场景只提示不写文件。
+func TestAutoMarkUnknownFromAndUnaccepted(t *testing.T) {
+	root, w := newNovel(t)
+	r, changed, ps := AutoMark(root, w, "nope", "", nil, 16000, time.Now())
+	if ps != nil || changed != nil || !r.Empty() || r.Marked == nil || r.Existing == nil || r.Unaccepted == nil {
+		t.Fatalf("unknown target = %+v %v %v", r, changed, ps)
+	}
+	// 全部场景未验收：canon-1 影响的场景只列入 Unaccepted，不写 rechecks。
+	r, changed, ps = AutoMark(root, w, "canon-1", "my-novel/scene-2", nil, 16000, time.Now())
+	if ps != nil || changed != nil || len(r.Marked) != 0 {
+		t.Fatalf("unaccepted = %+v %v %v", r, changed, ps)
+	}
+	if got := scenesOf(r.Unaccepted); containsStr(got, "my-novel/scene-1") || !containsStr(got, "my-novel/scene-2") {
+		t.Fatalf("from filter: %v", got)
+	}
+	if _, err := os.Stat(filepath.Join(root, ".writing-anything", "rechecks", "my-novel.yaml")); err == nil {
+		t.Fatal("rechecks written for unaccepted scenes")
+	}
+}
+
+func TestSemanticKey(t *testing.T) {
+	if SemanticKey(" a  b\n", "c") != SemanticKey("a b", "c") || SemanticKey("a", "b") == SemanticKey("ab", "") {
+		t.Fatal("SemanticKey whitespace normalization")
+	}
+	if SortedKey([]string{"x", " y"}) != SortedKey([]string{"y", "x"}) || SortedKey([]string{"x"}) == SortedKey([]string{"y"}) {
+		t.Fatal("SortedKey order independence")
+	}
+}
+
+// AutoMark 合并修改前的结果 pre：修改后图上不再引用目标的场景仍计入；未知目标但 pre 非空时按 pre 处理。
+func TestAutoMarkMergesPre(t *testing.T) {
+	root, w := newNovel(t)
+	pre := []Affected{{Scene: "my-novel/scene-3", Via: ViaCharacter, Reason: "改名前引用"}, {Scene: "nope", Via: ViaCharacter}}
+	r, _, ps := AutoMark(root, w, "gone", "", pre, 16000, time.Now())
+	if ps != nil || len(r.Unaccepted) != 1 || r.Unaccepted[0].Scene != "my-novel/scene-3" {
+		t.Fatalf("pre merge = %+v %v", r, ps)
+	}
+}

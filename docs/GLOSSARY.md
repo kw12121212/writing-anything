@@ -103,7 +103,7 @@
 | 分层摘要 | Layered Summary | 分层摘要 | 已验收场景的摘要逐层汇总为章、部与全书摘要：由 Agent 撰写，`wa-cli summary set` 校验子层齐全（缺失报 summary.children-missing）与过期状态（子场景正文变化的串联指纹） |
 | 卷末检查点 | Volume Checkpoint | 卷末检查点 | 每部最后一个场景经 `wa-cli accept` 验收成功后自动生成的作者核对产物（只写汇总、不代作者确认；`wa-cli volume checkpoint` 可重新生成）：汇总本部新增设定、已确认状态变化、伏笔变化与未处理决策，并确定性抽取收口条目；strict 关卡下更早的部缺少检查点（`volume.missing`）或未经 `wa-cli volume confirm` 确认（`volume.unconfirmed`）时，下一部的场景不能验收 |
 | 组稿 | Assembly | 组稿 | `wa-cli assemble` 按单元树先序把已验收场景组成整书（书名、目录、部/章标题、去注释正文与按出处的 AI 参与说明），导出 Markdown 或纯文本；存在未完成场景、连续性阻塞或 open 复查标记时拒绝组稿 |
-| 影响传播 | Ripple Analysis | 影响传播 | 按磁盘引用图（场景契约、事件、知情表、伏笔台账、recall 索引）确定性计算修改的受影响后续场景：`wa-cli impact` 预览，`wa-cli impact mark` 标记复查并生成审查任务包，复查通过或作者确认后解除 |
+| 影响传播 | Ripple Analysis | 影响传播 | 按磁盘引用图（场景契约、事件、知情表、伏笔台账、recall 索引）确定性计算修改的受影响后续场景：`wa-cli impact` 预览，`wa-cli impact mark` 标记复查并生成审查任务包；canon set、state set、knowledge set、threads set 与 scene contract 修改语义字段后自动为已验收场景标记复查、对未验收场景只提示；复查通过或作者确认后解除 |
 | 复查标记 | Recheck Mark | 复查标记 | 影响传播落盘的受影响场景标记（rechecks/<work>.yaml，只能追加）：open 时阻塞组稿，经 `wa-cli impact clear`（作者确认或重新审查通过）解除 |
 | 疑似专有名词 | Suspected Proper Noun | 疑似专有名词 | 写后收口扫描中以场景大纲声明（characters、pov、location）及正文中的人名上下文（命名引入、对话前导、称谓）为候选、未能解析到设定集条目 name 或别名的取值，以 warning 提示补录或豁免 |
 | 别名 | Alias | 别名 | 同一人物、地点、物品的其他称呼 |

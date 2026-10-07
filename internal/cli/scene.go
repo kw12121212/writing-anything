@@ -9,6 +9,7 @@ import (
 	"github.com/kw12121212/writing-anything/internal/brief"
 	"github.com/kw12121212/writing-anything/internal/catalog"
 	"github.com/kw12121212/writing-anything/internal/draft"
+	"github.com/kw12121212/writing-anything/internal/impact"
 	"github.com/kw12121212/writing-anything/internal/outline"
 	"github.com/kw12121212/writing-anything/internal/schema"
 	"github.com/kw12121212/writing-anything/internal/threads"
@@ -39,7 +40,7 @@ var sceneContractCommand = &command{
 		{"time", flagString, "故事时间（Story Time）标记（如 第三日夜）；相同文本视为同时；空字符串时删除"},
 		{"after", flagString, "时间线：声明本场景晚于的前文场景引用，用逗号分隔；整体替换，空字符串时删除"},
 	},
-	outputKeys: outlineKeys,
+	outputKeys: append(append([]outputKey{}, outlineKeys...), impactOutputKey),
 	exitCodes:  standardExitCodes,
 	run:        runSceneContract,
 }
@@ -212,9 +213,33 @@ func threadsPrecheck(dir string, w *work.Work, u *work.Unit, e outline.Edit, exi
 	return ps
 }
 
+type sceneContractResult struct {
+	outlineResult
+	Impact []impact.Ripple `json:"impact"`
+}
+
+// contractSemantic 返回大纲 o 中节 id 的语义比较键（场景契约的起因 causes 与必须发生的状态变化 state_changes）；
+// 大纲或节不存在时为空串。
+func contractSemantic(o *outline.Outline, id string) string {
+	if o == nil {
+		return ""
+	}
+	i := slices.IndexFunc(o.Sections, func(s outline.Section) bool { return s.ID == id })
+	if i < 0 {
+		return ""
+	}
+	sec := o.Sections[i]
+	var changes []string
+	for _, sc := range sec.StateChanges {
+		changes = append(changes, sc.ID+"="+sc.Text)
+	}
+	return impact.SemanticKey(impact.SortedKey(sec.Causes), impact.SortedKey(changes))
+}
+
 func runSceneContract(inv *invocation) int {
 	dir := projectDir(inv)
-	res := newOutlineResult()
+	res := &sceneContractResult{outlineResult: *newOutlineResult(), Impact: []impact.Ripple{}}
+	var auto []Diagnostic
 	problems := workspace.Require(dir)
 	edit := false      // 已进入大纲修改路径：参数问题由 sceneContractParamNext 改写 next
 	paramNext := false // 因本次参数被拒绝（含非场景单元）：同样改写 next
@@ -247,10 +272,16 @@ func runSceneContract(inv *invocation) int {
 							var o *outline.Outline
 							var changed []string
 							ensure := func() ([]string, []workspace.Problem) { return draft.EnsureUnitDir(dir, w, u) }
+							pre := preAffected(dir, w, u.Ref)
 							if o, changed, problems = outline.Set(dir, unitDir, e, ms, ensure); o != nil {
 								res.fill(u.Ref, o, ms)
 								res.ChangedPaths = changed
 								problems = remainingRefs(dir, unitDir, ms)
+								if len(changed) > 0 && contractSemantic(existing, e.ID) != contractSemantic(o, e.ID) {
+									var more []string
+									res.Impact, more, auto = autoImpact(dir, w, []impactTarget{{target: u.Ref, pre: pre}})
+									res.ChangedPaths = append(res.ChangedPaths, more...)
+								}
 							}
 						}
 					}
@@ -261,13 +292,14 @@ func runSceneContract(inv *invocation) int {
 	}
 	res.Diagnostics = diagnostics(problems, dir)
 	if edit || paramNext {
-		sceneContractParamNext(res, dir, inv.args[0])
+		sceneContractParamNext(&res.outlineResult, dir, inv.args[0])
 		for i, d := range res.Diagnostics {
 			if d.Code == outline.CodeAnchoredValue {
 				res.Diagnostics[i].Next = []string{"wa-cli help scene contract --json"}
 			}
 		}
 	}
+	res.Diagnostics = append(res.Diagnostics, auto...)
 	return finish(inv, res, func(out io.Writer) error {
 		if res.Outline == nil {
 			return nil
@@ -276,7 +308,7 @@ func runSceneContract(inv *invocation) int {
 		if len(res.ChangedPaths) == 0 {
 			verb = "取值未变，没有修改"
 		}
-		_, err := io.WriteString(out, fmt.Sprintf("场景契约（Scene Contract）%s：%s\n", verb, res.Outline.Path)+outlineText(res))
+		_, err := io.WriteString(out, fmt.Sprintf("场景契约（Scene Contract）%s：%s\n", verb, res.Outline.Path)+outlineText(&res.outlineResult)+impactText(res.Impact))
 		return err
 	})
 }

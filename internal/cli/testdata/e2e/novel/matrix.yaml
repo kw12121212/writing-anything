@@ -392,6 +392,18 @@ entries:
     token: impact mark stopped-at-417/item-pocketwatch
   - kind: script
     token: impact clear stopped-at-417/ch2-s3 item-pocketwatch
+- id: T-IMPACT-03
+  feature: impact
+  scene: ch3-s3
+  command: wa-cli threads set th-c --status dropped --decision dec-1 + impact list + impact clear（作者确认）
+  expected: 全绿（exit 0）
+  assertion: 放弃伏笔属于语义修改，自动影响传播为引用 th-c 的已验收场景 ch3-s3 落盘复查标记并生成 causality 任务包（无需手动 impact mark）；作者确认无影响后解除，组稿通过。
+  evidence:
+  - kind: script
+    token: impact list stopped-at-417
+    stdout_contains: ch3-s3
+  - kind: script
+    token: impact clear stopped-at-417/ch3-s3 th-c
 - id: T-HANDOFF-01
   feature: handoff
   scene: part-1

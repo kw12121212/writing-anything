@@ -362,16 +362,18 @@ func runNext(inv *invocation) int {
 			var w *work.Work
 			var u *work.Unit
 			if w, u, problems = work.Resolve(dir, inv.args[0]); u != nil {
-				res.Steps = append(res.Steps, step(dir, w, u))
+				res.Steps = append(res.Steps, step(dir, w, u, impact.OpenMarks(dir, w.ID)))
 				works = []*work.Work{w}
 			}
 		} else {
 			works, _, problems = work.LoadAll(dir)
 			for _, w := range works {
+				marks := impact.OpenMarks(dir, w.ID) // 每个作品只读一次复查标记文件
 				for _, u := range w.Units() {
-					// 汇总单元的阶段由子单元汇总：推导阶段为 done 时不再列出（同 next-skips-done）。
-					if w.EffectiveStage(u) != catalog.StageDone {
-						res.Steps = append(res.Steps, step(dir, w, u))
+					// 汇总单元的阶段由子单元汇总：推导阶段为 done 时不再列出（同 next-skips-done）；
+					// 唯一例外是已 done 而有 open 复查标记的场景，列出以给出复查与解除命令。
+					if w.EffectiveStage(u) != catalog.StageDone || len(openMarkTargets(marks, u)) > 0 {
+						res.Steps = append(res.Steps, step(dir, w, u, marks))
 					}
 				}
 			}
@@ -408,7 +410,8 @@ func runNext(inv *invocation) int {
 	})
 }
 
-func step(dir string, w *work.Work, u *work.Unit) stepView {
+// step 返回单元 u 的下一步条目；marks 为作品的 open 复查标记（impact.OpenMarks）。
+func step(dir string, w *work.Work, u *work.Unit, marks []impact.FileMark) stepView {
 	blockers, commands := progress(dir, w, u)
 	s := stepView{Unit: u.Ref, Stage: w.EffectiveStage(u), Blockers: blockers, Action: action(dir, w, u, blockers), Commands: commands,
 		Handoff:  latestHandoff(dir),
@@ -420,7 +423,31 @@ func step(dir string, w *work.Work, u *work.Unit) stepView {
 	if n := len(s.Feedback); n > 0 {
 		s.Action = fmt.Sprintf("先处理 %d 条未处理的作者反馈（Feedback）；%s", n, s.Action)
 	}
+	// 复查标记（Recheck Mark）不是推进关卡：不进入 blockers，只在 action 中提示并追加复查与解除命令。
+	if targets := openMarkTargets(marks, u); len(targets) > 0 {
+		s.Action += fmt.Sprintf("；注意：本场景有 %d 个 open 复查标记（Recheck Mark，目标 %s），组稿前必须清零：按 wa-cli review plan 生成的 causality 任务包复查并基于当前正文重新审稿后用 wa-cli impact clear 解除；作者核对后确认无影响时运行 wa-cli impact clear %s %s --confirmed-by-author --confirmation <作者原话摘要>",
+			len(targets), strings.Join(targets, "、"), u.Ref, targets[0])
+		s.Commands = append(s.Commands, shellCommand("wa-cli", "review", "plan", u.Ref, "--dimension", "causality", "--dir", dir, "--json"))
+		for _, t := range targets {
+			s.Commands = append(s.Commands, shellCommand("wa-cli", "impact", "clear", u.Ref, t, "--dir", dir, "--json"))
+		}
+		s.Commands = append(s.Commands, "wa-cli help impact clear --json")
+	}
 	return s
+}
+
+// openMarkTargets 返回 marks 中场景单元 u 的 open 复查标记目标（按标记顺序）；没有时为空。
+func openMarkTargets(marks []impact.FileMark, u *work.Unit) []string {
+	if u.Type != outline.SceneType {
+		return nil
+	}
+	var out []string
+	for _, m := range marks {
+		if m.Scene == u.Ref {
+			out = append(out, m.Target)
+		}
+	}
+	return out
 }
 
 // progress 返回单元的阻塞项与可以直接运行的下一步命令，next 与 status 共用；数组永不为 nil。
@@ -637,18 +664,6 @@ func action(dir string, w *work.Work, u *work.Unit, blockers []blockerView) stri
 			todo = append(todo, "修复无法加载的决策队列（Decision Queue）")
 		}
 		return "先" + strings.Join(todo, "，并") + "，再推进"
-	}
-	if marks := impact.OpenMarks(dir, w.ID); len(marks) > 0 {
-		var mine []string
-		for _, m := range marks {
-			if m.Scene == u.Ref {
-				mine = append(mine, m.Target)
-			}
-		}
-		if len(mine) > 0 {
-			return fmt.Sprintf("阶段 %s 的必需产物已齐备，可以推进到 %s；注意：本场景有 %d 个 open 复查标记（Recheck Mark，目标 %s），复查通过后 wa-cli impact clear 解除（组稿前必须清零）",
-				u.Stage, w.NextStage(u), len(mine), strings.Join(mine, "、"))
-		}
 	}
 	return fmt.Sprintf("阶段 %s 的必需产物已齐备，可以推进到 %s", u.Stage, w.NextStage(u))
 }
