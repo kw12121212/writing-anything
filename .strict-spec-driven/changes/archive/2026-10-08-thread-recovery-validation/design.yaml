@@ -1,0 +1,20 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: thread-recovery-validation
+approach:
+  - ContractProblems 区分三种台账状态：文件不存在（load 返回 nil 文件且无问题）时以空条目集合继续检查；台账不通过 Schema 校验或途经符号链接（load 返回问题）时仍跳过，由台账校验报告；台账有效时按条目检查。其余检查逻辑不变，因此无台账时 recovers 与 plants 的每个引用都报告 threads.unknown-thread。
+  - CheckWorks 对没有台账文件的作品也调用 ContractProblems，但不把不存在的 threads.yaml 计入 checked；scene contract 写前预检与 continuity 本来就直接调用 ContractProblems，自动获得一致行为，只更新描述旧行为的注释。
+decisions:
+  empty-ledger-semantics:
+    decision: 台账文件缺失等价于空台账，只在单一入口 ContractProblems 中实现
+    rationale: planned change details 明确要求无台账时把台账视为空集；validate、continuity 与 scene contract 都经过 ContractProblems，单一入口保证三条路径一致，避免分散判断遗漏
+  broken-ledger-still-skips:
+    decision: 台账存在但不通过 Schema 校验或途经符号链接时继续跳过交叉检查
+    rationale: 此时条目不可信，若按空集检查会对每个引用重复报告 unknown-thread，淹没真正的台账 Schema 诊断；作者修好台账后交叉检查自然恢复
+alternatives:
+  - option: 无台账时只检查 recovers、不检查 plants
+    reason: plants 同样要求引用恰在本场景登记的伏笔，只查 recovers 会让无台账作品的 plants 继续绕过台账，与 details「recovers 或 plants 引用不存在的伏笔报告 threads.unknown-thread」不符
+risks:
+  - 既有无台账作品若大纲已写 plants 或 recovers，validate 会开始报错；诊断的下一步指向 wa-cli threads add，作者补登即可恢复
