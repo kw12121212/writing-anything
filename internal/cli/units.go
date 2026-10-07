@@ -80,13 +80,14 @@ var advanceCommand = &command{
 }
 
 var nextCommand = &command{
-	name:       "next",
-	summary:    "列出单元（Unit）的当前阶段（Stage）、阻塞项（Blocker）与下一步命令；汇总单元（Aggregated Unit）的阶段与阻塞项由子单元汇总",
-	args:       []argSpec{{"unit", "只列出该单元；省略时列出所有未完成的单元。" + unitRefHelp, false}},
-	flags:      []flagSpec{dirFlag},
-	outputKeys: []outputKey{{"steps", "下一步数组，每项含 unit、stage、blockers、action、commands、feedback（未处理完的作者反馈）与 progress（汇总单元的进度，其他单元为 null）"}},
-	exitCodes:  standardExitCodes,
-	run:        runNext,
+	name:    "next",
+	summary: "列出单元（Unit）的当前阶段（Stage）、阻塞项（Blocker）与下一步命令；汇总单元（Aggregated Unit）的阶段与阻塞项由子单元汇总",
+	args:    []argSpec{{"unit", "只列出该单元；省略时列出所有未完成的单元。" + unitRefHelp, false}},
+	flags:   []flagSpec{dirFlag},
+	outputKeys: []outputKey{{"steps", "下一步数组，每项含 unit、stage、blockers、action、commands、feedback（未处理完的作者反馈）与 progress（汇总单元的进度，其他单元为 null）"},
+		{"pendingAuthorReviews", "给出单元时为其所在作品、省略时为全部作品的" + pendingAuthorReviewsHelp}},
+	exitCodes: standardExitCodes,
+	run:       runNext,
 }
 
 type workView struct {
@@ -166,6 +167,8 @@ type progressView struct {
 type nextResult struct {
 	Result
 	Steps []stepView `json:"steps"`
+	// PendingAuthorReviews 是待作者复核（Pending Author Review）的确认（strict 关卡下），组稿前须由作者在阅读页复核。
+	PendingAuthorReviews []pendingReviewView `json:"pendingAuthorReviews"`
 }
 
 // unitView 是 status 输出 units 中的一项。
@@ -350,17 +353,18 @@ func runAdvance(inv *invocation) int {
 
 func runNext(inv *invocation) int {
 	dir := projectDir(inv)
-	res := &nextResult{Steps: []stepView{}}
+	res := &nextResult{Steps: []stepView{}, PendingAuthorReviews: []pendingReviewView{}}
 	problems := workspace.Require(dir)
 	if problems == nil {
+		var works []*work.Work
 		if len(inv.args) == 1 {
 			var w *work.Work
 			var u *work.Unit
 			if w, u, problems = work.Resolve(dir, inv.args[0]); u != nil {
 				res.Steps = append(res.Steps, step(dir, w, u))
+				works = []*work.Work{w}
 			}
 		} else {
-			var works []*work.Work
 			works, _, problems = work.LoadAll(dir)
 			for _, w := range works {
 				for _, u := range w.Units() {
@@ -371,11 +375,14 @@ func runNext(inv *invocation) int {
 				}
 			}
 		}
+		var rps []workspace.Problem
+		res.PendingAuthorReviews, rps = pendingReviews(dir, works)
+		problems = append(problems, rps...)
 	}
 	res.Diagnostics = diagnostics(problems, dir)
 	return finish(inv, res, func(w io.Writer) error {
 		var b strings.Builder
-		if len(res.Steps) == 0 && !hasError(res.Diagnostics) {
+		if len(res.Steps) == 0 && len(res.PendingAuthorReviews) == 0 && !hasError(res.Diagnostics) {
 			b.WriteString("没有需要推进的单元（Unit）\n")
 		}
 		for _, s := range res.Steps {
@@ -394,6 +401,7 @@ func runNext(inv *invocation) int {
 				fmt.Fprintf(&b, "  反馈：%s\n", feedbackText(f))
 			}
 		}
+		b.WriteString(pendingReviewsText(res.PendingAuthorReviews))
 		_, err := io.WriteString(w, b.String())
 		return err
 	})

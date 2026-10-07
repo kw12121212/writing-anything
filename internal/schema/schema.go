@@ -73,6 +73,7 @@ var kinds = []*Kind{
 	newKind("packet", "packet.schema.json", ".writing-anything/packets/*/*.yaml"),
 	newKind("rechecks", "rechecks.schema.json", ".writing-anything/rechecks/*.yaml"),
 	newKind("handoffs", "handoffs.schema.json", ".writing-anything/handoffs.yaml"),
+	newKind("author-reviews", "author-reviews.schema.json", ".writing-anything/author-reviews.yaml"),
 	newKind("series-canon", "canon.schema.json", ".writing-anything/series/*/canon.yaml"),
 	newKind("handoff-input", "handoff-input.schema.json"),
 	newKind("packet-input", "packet-input.schema.json"),

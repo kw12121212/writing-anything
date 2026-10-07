@@ -429,6 +429,19 @@ entries:
   - kind: script
     token: assemble stopped-at-417
     expect_code: assemble.rechecks
+- id: T-ASSEMBLE-03
+  feature: assembly
+  scene: book
+  command: wa-cli assemble stopped-at-417（strict 下命令行渠道的验收与卷末确认未经作者在阅读页复核时）
+  expected: 发现项 assemble.unreviewed（error）
+  assertion: strict 关卡下经命令行渠道（cli）写入的九场验收与已确认的卷末检查点逐项列为待作者复核，组稿被拒；review show 列出待作者复核项（含 volume-checkpoint）；作者在本地阅读页批量复核（POST /author-review，复核记录渠道为 preview）后重放同一组稿命令通过。
+  evidence:
+  - kind: script
+    token: assemble stopped-at-417 --output book.md
+    expect_code: assemble.unreviewed
+  - kind: script
+    token: review show stopped-at-417
+    stdout_contains: volume-checkpoint
 - id: T-EXPORT-01
   feature: export
   scene: book

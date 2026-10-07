@@ -29,7 +29,9 @@ import (
 var previewCommand = &command{
 	name: "preview",
 	summary: "生成单元（Unit）及其子单元的阅读页（Reading View）：逐段展示正文与出处（Provenance）、文本检查（Lint）与审稿（Review）发现项；" +
-		"默认写出可离线打开的静态 HTML，加 --serve 时在 127.0.0.1 上启动需要随机令牌（Token）才能访问的本地阅读页，作者选中文字提交的意见即时保存为作者反馈（Feedback）",
+		"默认写出可离线打开的静态 HTML，加 --serve 时在 127.0.0.1 上启动需要随机令牌（Token）才能访问的本地阅读页，作者选中文字提交的意见即时保存为作者反馈（Feedback）；" +
+		"本地阅读页另列出该作品待作者确认的验收、决策、规划步骤、状态与知情提议和卷末检查点，作者在页面上确认即写入确认渠道（Confirmation Channel）为 preview 的确认记录；" +
+		"strict 关卡下还列出待作者复核（Pending Author Review）的命令行渠道确认，供作者组稿前批量复核。这是可审计的流程约束而非安全隔离：同机同账户的 Agent 能读到令牌",
 	args: []argSpec{{"unit", unitRefHelp, true}},
 	flags: []flagSpec{dirFlag,
 		{"output", flagString, "静态阅读页的输出文件，相对 --dir；省略时为 .writing-anything/exports/<work>.preview.html（子单元为 <work>.<unit-id>.preview.html）；不能与 --serve 同时使用"},
@@ -39,6 +41,8 @@ var previewCommand = &command{
 	outputKeys: []outputKey{
 		{"preview", "阅读页：unit、units（按单元树先序列出的单元引用）、path（静态阅读页的路径，--serve 时为 null）与 url（--serve 时的页面地址，含令牌；否则为 null）；失败时为 null"},
 		{"feedback", "--serve 时每保存一条反馈输出一行，含 " + feedbackViewHelp + "；其他行为 null"},
+		{"confirmation", "--serve 时作者在阅读页每记录一次确认输出一行，含 kind（acceptance、decision、plan、state、knowledge 或 volume）、unit、id、action（confirm 或 reject）与 channel（preview）；其他行为 null"},
+		{"authorReview", "--serve 时作者在阅读页每批量复核一次输出一行，含 reviewed（被复核的待作者复核项，每项含 key、kind、work、ref、path、confirmation 与 confirmedAt）与 channel（preview）；其他行为 null"},
 	},
 	exitCodes: standardExitCodes,
 	run:       runPreview,
@@ -53,8 +57,10 @@ type previewView struct {
 
 type previewResult struct {
 	Result
-	Preview  *previewView  `json:"preview"`
-	Feedback *feedbackView `json:"feedback"`
+	Preview      *previewView      `json:"preview"`
+	Feedback     *feedbackView     `json:"feedback"`
+	Confirmation *confirmedView    `json:"confirmation"`
+	AuthorReview *authorReviewView `json:"authorReview"`
 }
 
 // previewMaxBody 是 POST /feedback 请求体的字节数上限。
@@ -256,12 +262,19 @@ func (s *previewServer) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.page(rw)
-	case "/feedback":
+	case "/feedback", "/confirm", "/author-review":
 		if r.Method != http.MethodPost {
 			http.Error(rw, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		s.feedback(rw, r)
+		switch r.URL.Path {
+		case "/feedback":
+			s.feedback(rw, r)
+		case "/confirm":
+			s.confirm(rw, r)
+		default:
+			s.authorReview(rw, r)
+		}
 	default:
 		http.NotFound(rw, r)
 	}
@@ -276,6 +289,8 @@ func (s *previewServer) page(rw http.ResponseWriter) {
 	}
 	p := preview.Build(s.dir, w, preview.Subtree(u), unitLint(s.dir, w))
 	p.Serve = true
+	p.Confirms = confirmQueue(s.dir, w)
+	p.Strict, p.Reviews = reviewQueue(s.dir, w)
 	data, err := preview.Render(p)
 	if err != nil {
 		http.Error(rw, err.Error(), http.StatusInternalServerError)

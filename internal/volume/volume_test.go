@@ -223,7 +223,7 @@ func TestConfirm(t *testing.T) {
 	if v == nil {
 		t.Fatalf("problems = %+v", ps)
 	}
-	if !v.ConfirmedByAuthor || v.Confirmation == nil || *v.Confirmation != "作者：本部核对无误" || v.ConfirmedAt == nil {
+	if !v.ConfirmedByAuthor || v.Confirmation == nil || *v.Confirmation != "作者：本部核对无误" || v.ConfirmedAt == nil || v.Channel == nil || *v.Channel != "cli" {
 		t.Fatalf("view = %+v", v)
 	}
 	if len(changed) != 1 {

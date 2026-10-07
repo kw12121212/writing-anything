@@ -17,7 +17,7 @@ var volumeCheckpointCommand = &command{
 		{"part", "部单元（Unit）引用；必须是声明 stage_from_children 的汇总单元（如 part）", true},
 	},
 	flags:      []flagSpec{dirFlag},
-	outputKeys: []outputKey{{"checkpoint", "生成的检查点：part、path、scene、canon、states、threads、decisions、sampled、confirmedByAuthor、confirmation 与 confirmedAt；失败时为 null"}},
+	outputKeys: []outputKey{{"checkpoint", "生成的检查点：part、path、scene、canon、states、threads、decisions、sampled、confirmedByAuthor、confirmation、channel（确认渠道（Confirmation Channel），未确认为 null）与 confirmedAt；失败时为 null"}},
 	exitCodes:  standardExitCodes,
 	run:        runVolumeCheckpoint,
 }

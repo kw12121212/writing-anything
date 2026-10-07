@@ -53,6 +53,25 @@ const (
 // GateLevels 是关卡强度（Gate Level）的全部取值，与 config.schema.json 一致。
 var GateLevels = []string{"strict", "standard", "fast"}
 
+// 确认渠道（Confirmation Channel）：确认记录（Confirmation Record）经由哪条渠道写入。cli 为命令行参数
+// （--confirmed-by-author 与 --confirmation，Agent 也能代填），preview 为作者在本地阅读页（Reading View）上的操作。
+// 缺失 channel 字段的旧记录按 cli 解释。这是可审计的流程约束，不是安全隔离。
+const (
+	ChannelCLI     = "cli"
+	ChannelPreview = "preview"
+)
+
+// Channels 是确认渠道的全部取值，与各产物 Schema 中 channel 的枚举一致。
+var Channels = []string{ChannelCLI, ChannelPreview}
+
+// ChannelOr 返回记录的渠道：缺失（nil 或空）时为 cli。
+func ChannelOr(c *string) string {
+	if c == nil || *c == "" {
+		return ChannelCLI
+	}
+	return *c
+}
+
 // SettableKeys 是 config set 可以设置的配置项，按 config.yaml 中的顺序排列。
 var SettableKeys = []string{"language", "default_genre", "packs", "gate_level", "context_budget", "ai_disclosure"}
 

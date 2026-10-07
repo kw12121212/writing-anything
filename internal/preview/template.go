@@ -1,7 +1,7 @@
 package preview
 
-// pageScript 是 serve 模式内联的脚本：只读取选区并向本地服务提交意见，令牌取自页面地址。内容固定，
-// Content-Security-Policy 按其 SHA-256 放行（ScriptCSP）。
+// pageScript 是 serve 模式内联的脚本：读取选区并向本地服务提交意见，提交作者在待确认队列中的确认与对待复核确认的
+// 批量复核；令牌取自页面地址。内容固定，Content-Security-Policy 按其 SHA-256 放行（ScriptCSP）。
 const pageScript = `
 (function () {
   var token = new URLSearchParams(location.search).get('token');
@@ -36,6 +36,34 @@ const pageScript = `
         .catch(function (e) { $('status').textContent = '提交失败：' + e; });
     });
   });
+  function post(path, body, out, ok) {
+    fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-WA-Token': token }, body: JSON.stringify(body) })
+      .then(function (r) { return r.json(); })
+      .then(function (res) {
+        out.textContent = res.valid ? ok(res) : res.diagnostics.map(function (d) { return d.message; }).join('；');
+      })
+      .catch(function (e) { out.textContent = '提交失败：' + e; });
+  }
+  document.querySelectorAll('.confirm button').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var item = b.closest('.confirm');
+      var field = function (c) { var el = item.querySelector(c); return el ? el.value : ''; };
+      var body = { kind: item.dataset.kind, unit: item.dataset.unit, id: item.dataset.id, action: b.dataset.action,
+        option: field('.option'), answer: field('.answer'), confirmation: field('.summary') };
+      post('/confirm', body, item.querySelector('.result'), function () { b.disabled = true; return '已记录作者确认（渠道 preview）'; });
+    });
+  });
+  var review = $('review-submit');
+  if (review) {
+    review.addEventListener('click', function () {
+      var keys = [];
+      document.querySelectorAll('#author-review input[type=checkbox]:checked').forEach(function (c) { keys.push(c.value); });
+      post('/author-review', { keys: keys }, $('review-result'), function (res) {
+        review.disabled = true;
+        return '已复核 ' + res.authorReview.reviewed.length + ' 项（渠道 preview）';
+      });
+    });
+  }
 })();
 `
 
@@ -78,6 +106,12 @@ h2 small { font-weight: normal; color: #888; margin-left: .5em; }
 #panel textarea { width: 100%; box-sizing: border-box; height: 3.5em; }
 #panel #quote { color: #555; }
 #panel button { margin-right: .4em; }
+.queue { font-size: 14px; background: #fff; border: 1px solid #ddd; padding: .4em 1em; margin: 1em 0; }
+.queue h2 { margin-top: .4em; }
+.confirm, .queue label { display: block; border-top: 1px solid #eee; padding: .4em 0; }
+.confirm .detail { color: #555; white-space: pre-wrap; }
+.confirm input.summary, .confirm input.answer { width: 60%; }
+.result, #review-result { color: #1565c0; margin-left: .5em; }
 </style>
 </head>
 <body>
@@ -85,6 +119,33 @@ h2 small { font-weight: normal; color: #888; margin-left: .5em; }
 <div class="bar"><label for="color">按出处着色</label><span class="legend"><span class="o-human">作者</span><span class="o-agent">Agent</span><span class="o-agent-draft-human-edited">Agent 起草、作者修改</span></span></div>
 <main>
 <h1>阅读页：{{.Title}}</h1>
+{{- if .Serve}}
+<section class="queue" id="confirm-queue">
+<h2>待作者确认（Pending Author Confirmation）<small>确认由作者本人在此填写原话摘要后提交，确认渠道（Confirmation Channel）记为 preview</small></h2>
+{{- range .Confirms}}
+<div class="confirm" data-kind="{{.Kind}}" data-unit="{{.Unit}}" data-id="{{.ID}}">
+<div class="label">{{.Label}}</div>
+{{- if .Detail}}<div class="detail">{{.Detail}}</div>{{end}}
+{{- if .Options}}<div>选项 <select class="option">{{$rec := .Recommend}}{{range .Options}}<option value="{{.ID}}"{{if eq .ID $rec}} selected{{end}}>{{.ID}}. {{.Text}}</option>{{end}}</select>{{if .Recommend}}（推荐 {{.Recommend}}）{{end}}</div>{{end}}
+{{- if .NeedsAnswer}}<div><input class="answer" placeholder="作者的答复"></div>{{end}}
+<div><input class="summary" placeholder="作者原话摘要（必填）"> <button type="button" data-action="confirm">确认</button>{{if .CanReject}}<button type="button" data-action="reject">拒绝</button>{{end}}<span class="result" role="status"></span></div>
+</div>
+{{- else}}
+<p>没有待作者确认的事项</p>
+{{- end}}
+</section>
+{{- if .Strict}}
+<section class="queue" id="author-review">
+<h2>待作者复核（Pending Author Review）<small>strict 关卡（Gate）下经命令行渠道（cli）写入的确认，组稿前须由作者在此复核</small></h2>
+{{- range .Reviews}}
+<label><input type="checkbox" value="{{.Key}}" checked> {{.Label}}</label>
+{{- else}}
+<p>没有待作者复核的确认</p>
+{{- end}}
+{{- if .Reviews}}<div><button type="button" id="review-submit">复核所选</button><span id="review-result" role="status"></span></div>{{end}}
+</section>
+{{- end}}
+{{- end}}
 {{- range .Units}}
 <section class="unit" data-unit="{{.Ref}}">
 <h2>{{.Ref}}<small>阶段：{{.Stage}}</small></h2>

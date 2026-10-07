@@ -11,6 +11,7 @@ events:
     state: 伤愈
     status: confirmed
     confirmation: 作者确认伤愈发生在灯室对峙后
+    channel: cli
     decided_at: 2026-10-03T08:00:00Z
   - id: state-3
     scene: my-novel/c2/s1

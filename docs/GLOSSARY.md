@@ -166,12 +166,15 @@
 | 阻塞 | Blocking | 阻塞 | 未解决前禁止继续推进 |
 | 阻塞项 | Blocker | 阻塞项 | 阻止单元推进的具体原因，如缺失的必需产物、未决定的阻塞决策，由 `wa-cli next` 与 `wa-cli status` 列出 |
 | 确认记录 | Confirmation Record | 确认记录 | 作者确认的时间与原话摘要 |
+| 确认渠道 | Confirmation Channel | 渠道 | 确认记录经由哪条渠道写入：`cli` 为命令行参数（`--confirmed-by-author` 与 `--confirmation`，Agent 也能代填），`preview` 为作者在本地阅读页上的操作；缺失时按 `cli` 解释。这是可审计的流程约束，不是安全隔离 |
+| 待作者复核 | Pending Author Review | 待复核 | strict 关卡下经 `cli` 渠道写入、还没有由作者在阅读页复核的验收、钦定设定修改与卷末检查点确认；由 `wa-cli review show` 与 `wa-cli next` 列出，存在时 `wa-cli assemble` 拒绝组稿 |
+| 复核记录 | Author Review Record | 复核记录 | 作者在阅读页批量复核待作者复核项时写入 `.writing-anything/author-reviews.yaml` 的记录，渠道固定为 `preview`；按被复核那一次确认的时间对应，确认重写后需要重新复核 |
 | 批注 | Comment | 批注 | 作者写在正文里的修改意见，如 `<!-- @me: ... -->` |
 | 作者反馈 | Feedback | 反馈 | 作者对正文的结构化意见，来自对话、正文批注或阅读页 |
 | 锚点 | Anchor | 锚点 | 反馈指向的原文片段及其前后文，正文修改后用于重新定位 |
 | 失去锚点 | Orphaned Anchor | 失去锚点 | 正文修改后无法重新定位的反馈，需要作者处理 |
 | 阅读卡点 | Sticking Point | 阅读卡点 | 作者阅读时标记的"读不下去"的位置 |
-| 阅读页 | Reading View | 阅读页 | `wa-cli preview` 生成的逐段阅读页面：默认为可离线打开的静态 HTML；加 `--serve` 时为本地服务提供、可以选中文字提交反馈的页面 |
+| 阅读页 | Reading View | 阅读页 | `wa-cli preview` 生成的逐段阅读页面：默认为可离线打开的静态 HTML；加 `--serve` 时为本地服务提供、可以选中文字提交反馈、确认待作者确认的事项与复核待作者复核项的页面 |
 | 令牌 | Token | 令牌 | `wa-cli preview --serve` 每次运行生成的随机字符串，访问本地阅读页必须携带，防止本机其他网页或程序冒用 |
 | 人工编辑保护 | Human Edit Protection | 人工编辑保护 | 人改过的正文不被 Agent 覆盖 |
 | 上下文包 | Context Pack | 上下文包 | 只包含当前单元所需信息的输入集合 |

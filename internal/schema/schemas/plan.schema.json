@@ -22,6 +22,7 @@
           "links": {"type": "array", "items": {"type": "string", "pattern": "\\S"}, "uniqueItems": true},
           "confirmed_by_author": {"type": "boolean"},
           "confirmation": {"type": ["string", "null"], "pattern": "\\S", "description": "作者原话摘要；未确认为 null 或缺省。已确认的步骤缺非空 confirmation 由领域校验报告 plan.incomplete-confirmation"},
+          "channel": {"enum": ["cli", "preview", null], "description": "确认渠道（Confirmation Channel）：cli 或 preview；未确认为 null 或缺省，已确认而缺省时按 cli 解释"},
           "confirmed_at": {"type": ["string", "null"], "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$", "description": "确认时间（UTC）；未确认为 null 或缺省。已确认的步骤缺 confirmed_at 同样报告 plan.incomplete-confirmation"}
         }
       }

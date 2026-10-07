@@ -132,6 +132,17 @@ func Question(op string, e Entry) string {
 	return fmt.Sprintf("是否允许%s作者钦定的设定条目 %s？", op, e.ID)
 }
 
+// PinnedChange 报告决策 d 是否为修改或删除作者钦定（Author-pinned）条目生成的授权决策（按 Question 的固定问题
+// 文本识别），供待作者复核（Pending Author Review）计算钦定设定修改。
+func PinnedChange(d decision.Decision) bool {
+	for _, op := range []string{OpModify, OpRemove} {
+		if strings.HasPrefix(d.Question, "是否允许"+op+"作者钦定的设定条目 ") {
+			return true
+		}
+	}
+	return false
+}
+
 // loadCanon 读取并校验 rel 处的设定集（Schema）；文件不存在时返回 nil 与 nil；途经符号链接或不是普通文件时按
 // 不存在处理并报告 artifact.not-found（canon-validation）。领域检查由 checkEntries 负责。
 func loadCanon(root, rel string) (*yaml.Node, *canonFile, []workspace.Problem) {

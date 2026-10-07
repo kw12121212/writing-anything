@@ -13,7 +13,7 @@ import (
 	"github.com/kw12121212/writing-anything/internal/workspace"
 )
 
-const decisionViewHelp = "id、question、options、recommendation、rationale、blocking、units、status、choice、answer、confirmation 与 decidedAt"
+const decisionViewHelp = "id、question、options、recommendation、rationale、blocking、units、status、choice、answer、confirmation、channel（确认渠道（Confirmation Channel）：cli 或 preview，未决定为 null）与 decidedAt"
 
 var decisionAddCommand = &command{
 	name:    "decision add",
@@ -77,13 +77,14 @@ type decisionView struct {
 	Choice         *string      `json:"choice"`
 	Answer         *string      `json:"answer"`
 	Confirmation   *string      `json:"confirmation"`
+	Channel        *string      `json:"channel"` // 确认渠道（Confirmation Channel）；未决定为 null
 	DecidedAt      *string      `json:"decidedAt"`
 }
 
 func decisionOf(d decision.Decision) decisionView {
 	v := decisionView{ID: d.ID, Question: d.Question, Options: []optionView{}, Recommendation: d.Recommendation, Rationale: d.Rationale,
 		Blocking: d.Blocking, Units: append([]string{}, d.Units...), Status: d.Status, Choice: d.Choice, Answer: d.Answer,
-		Confirmation: d.Confirmation, DecidedAt: d.DecidedAt}
+		Confirmation: d.Confirmation, Channel: channelView(d.Status == decision.StatusDecided, d.Channel), DecidedAt: d.DecidedAt}
 	for _, o := range d.Options {
 		v.Options = append(v.Options, optionView(o))
 	}

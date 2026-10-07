@@ -10,6 +10,7 @@ decisions:
     status: decided
     choice: b
     confirmation: 作者说就用踩坑复盘
+    channel: preview
     decided_at: "2026-09-30T12:00:00Z"
   - id: dec-2
     question: 字数

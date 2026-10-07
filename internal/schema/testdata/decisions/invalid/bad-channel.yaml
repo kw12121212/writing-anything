@@ -1,0 +1,12 @@
+schema_version: 1
+decisions:
+  - id: dec-1
+    question: 标题用哪个
+    options: [{id: a, text: 迁移实录}, {id: b, text: 踩坑复盘}]
+    blocking: true
+    units: [my-post]
+    status: decided
+    choice: b
+    confirmation: 作者说就用踩坑复盘
+    channel: email
+    decided_at: "2026-09-30T12:00:00Z"

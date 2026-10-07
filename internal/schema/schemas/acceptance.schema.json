@@ -11,6 +11,7 @@
     "draft_sha256": {"$ref": "common.schema.json#/$defs/sha256"},
     "confirmed_by_author": {"type": "boolean"},
     "confirmation": {"type": "string", "pattern": "\\S"},
+    "channel": {"$ref": "common.schema.json#/$defs/channel"},
     "accepted_at": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"}
   },
   "if": {"properties": {"confirmed_by_author": {"const": true}}},

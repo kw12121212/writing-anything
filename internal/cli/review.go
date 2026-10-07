@@ -50,7 +50,8 @@ var reviewShowCommand = &command{
 		{"revisions", "修订任务数组：未处理的审稿发现项（source 为 review）与作者反馈（source 为 feedback），每项含 source、id、status、paragraph 与 message"},
 		{"decisions", "关联该单元、尚未决定的决策数组，每项含 id、question 与 blocking"},
 		{"gate", "验收关卡：level、ready（除作者确认外没有阻塞项）、confirmationRequired（strict 下为 true）与 blockers（每项含 code、path、ref 与 message）"},
-		{"acceptance", "已有的验收记录：gateLevel、draftSha256、confirmedByAuthor、confirmation、acceptedAt 与 stale；没有时为 null"},
+		{"acceptance", "已有的验收记录：gateLevel、draftSha256、confirmedByAuthor、confirmation、channel（确认渠道（Confirmation Channel），未经作者确认为 null）、acceptedAt 与 stale；没有时为 null"},
+		{"pendingAuthorReviews", "单元所在作品的" + pendingAuthorReviewsHelp},
 	},
 	exitCodes: standardExitCodes,
 	run:       runReviewShow,
@@ -76,7 +77,7 @@ var acceptCommand = &command{
 	flags: []flagSpec{dirFlag,
 		{"confirmed-by-author", flagBool, "作者已确认验收；必须同时给出 --confirmation"},
 		{"confirmation", flagString, "作者确认的原话摘要（确认记录（Confirmation Record））；必须同时给出 --confirmed-by-author"}},
-	outputKeys: []outputKey{{"acceptance", "写入的验收记录：unit、path、gateLevel、draftSha256、confirmedByAuthor、confirmation 与 acceptedAt；失败时为 null"}},
+	outputKeys: []outputKey{{"acceptance", "写入的验收记录：unit、path、gateLevel、draftSha256、confirmedByAuthor、confirmation、channel（确认渠道（Confirmation Channel），未经作者确认为 null）与 acceptedAt；失败时为 null"}},
 	exitCodes:  standardExitCodes,
 	run:        runAccept,
 }
@@ -261,6 +262,7 @@ type acceptanceView struct {
 	DraftSHA256       string  `json:"draftSha256"`
 	ConfirmedByAuthor bool    `json:"confirmedByAuthor"`
 	Confirmation      *string `json:"confirmation"`
+	Channel           *string `json:"channel"`
 	AcceptedAt        string  `json:"acceptedAt"`
 	Stale             *bool   `json:"stale,omitempty"`
 }
@@ -273,6 +275,8 @@ type reviewShowResult struct {
 	Decisions  []decisionItemView `json:"decisions"`
 	Gate       gateView           `json:"gate"`
 	Acceptance *acceptanceView    `json:"acceptance"`
+	// PendingAuthorReviews 是单元所在作品待作者复核（Pending Author Review）的确认（strict 关卡下）。
+	PendingAuthorReviews []pendingReviewView `json:"pendingAuthorReviews"`
 }
 
 // gateState 是一次命令中为验收关卡收集的全部输入与展示用的数据。
@@ -404,7 +408,8 @@ func gateNext(dir, ref string, b review.Blocker) []string {
 
 func runReviewShow(inv *invocation) int {
 	dir := projectDir(inv)
-	res := &reviewShowResult{Revisions: []revisionView{}, Decisions: []decisionItemView{}, Gate: gateView{Blockers: []gateBlockerView{}}}
+	res := &reviewShowResult{Revisions: []revisionView{}, Decisions: []decisionItemView{}, Gate: gateView{Blockers: []gateBlockerView{}},
+		PendingAuthorReviews: []pendingReviewView{}}
 	problems := workspace.Require(dir)
 	if problems == nil {
 		var w *work.Work
@@ -448,8 +453,11 @@ func runReviewShow(inv *invocation) int {
 			if a != nil {
 				stale := a.DraftSHA256 != g.in.DraftSHA
 				res.Acceptance = &acceptanceView{GateLevel: a.GateLevel, DraftSHA256: a.DraftSHA256, ConfirmedByAuthor: a.ConfirmedByAuthor,
-					Confirmation: a.Confirmation, AcceptedAt: a.AcceptedAt, Stale: &stale}
+					Confirmation: a.Confirmation, Channel: channelView(a.ConfirmedByAuthor, a.Channel), AcceptedAt: a.AcceptedAt, Stale: &stale}
 			}
+			var rps []workspace.Problem
+			res.PendingAuthorReviews, rps = pendingReviews(dir, []*work.Work{w})
+			problems = append(problems, rps...)
 		}
 	}
 	res.Diagnostics = diagnostics(problems, dir)
@@ -488,6 +496,7 @@ func runReviewShow(inv *invocation) int {
 		for _, bl := range res.Gate.Blockers {
 			fmt.Fprintf(&b, "  阻塞项：%s\n", bl.Message)
 		}
+		b.WriteString(pendingReviewsText(res.PendingAuthorReviews))
 		_, err := io.WriteString(w, b.String())
 		return err
 	})
@@ -604,12 +613,11 @@ func runAccept(inv *invocation) int {
 	})
 }
 
-// accept 检查并写入验收。problems 为关卡之外的问题，gate 为关卡的阻塞项（error）与 warning，由调用方给出各自的下一步。
+// accept 按命令行参数检查并写入验收（确认渠道为 cli）。problems 为关卡之外的问题，gate 为关卡的阻塞项（error）与
+// warning，由调用方给出各自的下一步。
 func accept(inv *invocation, dir string, w *work.Work, u *work.Unit, res *acceptResult) (problems, gate []workspace.Problem) {
-	unitDir := w.UnitDir(u)
 	if !acceptsHere(w, u) {
-		return []workspace.Problem{{Code: review.CodeWrongStage, Severity: workspace.SeverityError, Path: w.Path,
-			Message: fmt.Sprintf("单元 %s 的当前阶段 %s 不需要验收（Acceptance）；推进到必需产物含 acceptance 的阶段后再验收", u.Ref, u.Stage)}}, nil
+		return []workspace.Problem{wrongStage(w, u)}, nil
 	}
 	_, confirmed := inv.values["confirmed-by-author"]
 	confirmation, given := inv.values["confirmation"]
@@ -617,6 +625,19 @@ func accept(inv *invocation, dir string, w *work.Work, u *work.Unit, res *accept
 		return []workspace.Problem{{Code: review.CodeIncompleteConfirmation, Severity: workspace.SeverityError, Field: "confirmation",
 			Message: "--confirmed-by-author 与 --confirmation <作者原话摘要> 必须同时给出，且原话摘要不能为空"}}, nil
 	}
+	return acceptVia(dir, w, u, confirmed, confirmation, workspace.ChannelCLI, res)
+}
+
+// wrongStage 是单元当前阶段不需要验收时的问题。
+func wrongStage(w *work.Work, u *work.Unit) workspace.Problem {
+	return workspace.Problem{Code: review.CodeWrongStage, Severity: workspace.SeverityError, Path: w.Path,
+		Message: fmt.Sprintf("单元 %s 的当前阶段 %s 不需要验收（Acceptance）；推进到必需产物含 acceptance 的阶段后再验收", u.Ref, u.Stage)}
+}
+
+// acceptVia 按关卡检查并写入验收，确认记录的渠道为 channel（命令行为 cli，阅读页为 preview）；调用方已检查阶段与
+// 确认参数。返回值同 accept。
+func acceptVia(dir string, w *work.Work, u *work.Unit, confirmed bool, confirmation, channel string, res *acceptResult) (problems, gate []workspace.Problem) {
+	unitDir := w.UnitDir(u)
 	g := collectGate(dir, w, u)
 	g.in.Confirmed = confirmed
 	blockers, warnings := review.Gate(g.in)
@@ -641,12 +662,12 @@ func accept(inv *invocation, dir string, w *work.Work, u *work.Unit, res *accept
 	for _, b := range warnings {
 		gate = append(gate, workspace.Problem{Code: b.Code, Severity: workspace.SeverityWarning, Path: b.Path, Message: b.Message})
 	}
-	a, changed, ps := review.Accept(dir, unitDir, g.in.Level, g.in.DraftSHA, confirmed, confirmation, now())
+	a, changed, ps := review.AcceptVia(dir, unitDir, g.in.Level, g.in.DraftSHA, confirmed, confirmation, channel, now())
 	if a == nil {
 		return append(problems, ps...), gate
 	}
 	res.Acceptance = &acceptanceView{Unit: u.Ref, Path: review.AcceptancePath(unitDir), GateLevel: a.GateLevel, DraftSHA256: a.DraftSHA256,
-		ConfirmedByAuthor: a.ConfirmedByAuthor, Confirmation: a.Confirmation, AcceptedAt: a.AcceptedAt}
+		ConfirmedByAuthor: a.ConfirmedByAuthor, Confirmation: a.Confirmation, Channel: channelView(a.ConfirmedByAuthor, a.Channel), AcceptedAt: a.AcceptedAt}
 	res.ChangedPaths = changed
 	return problems, gate
 }

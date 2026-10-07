@@ -26,7 +26,7 @@ var knowledgeProposeCommand = &command{
 		{"character", flagString, "获知者；设定集 character 条目 id 或固定值 reader（读者）"},
 		{"id", flagString, "条目 id；省略时为 know-<n>"},
 	},
-	outputKeys: []outputKey{{"event", "新条目：id、scene、entry、character、status、confirmation 与 decided_at；失败时为 null"}},
+	outputKeys: []outputKey{{"event", "新条目：id、scene、entry、character、status、confirmation、channel（确认渠道（Confirmation Channel）：cli 或 preview，待确认为 null）与 decided_at；失败时为 null"}},
 	exitCodes:  standardExitCodes,
 	run:        runKnowledgePropose,
 }
@@ -39,7 +39,7 @@ var knowledgeListCommand = &command{
 		dirFlag,
 		{"all", flagBool, "列出全部条目，不只列待确认（proposed）的"},
 	},
-	outputKeys: []outputKey{{"events", "按绑定场景的单元树先序排列的条目数组，每项含 id、scene、entry、character、status、confirmation 与 decided_at"}},
+	outputKeys: []outputKey{{"events", "按绑定场景的单元树先序排列的条目数组，每项含 id、scene、entry、character、status、confirmation、channel（确认渠道（Confirmation Channel）：cli 或 preview，待确认为 null）与 decided_at"}},
 	exitCodes:  standardExitCodes,
 	run:        runKnowledgeList,
 }
@@ -56,7 +56,7 @@ var knowledgeConfirmCommand = &command{
 		{"confirmed-by-author", flagBool, "作者确认本条知情事件"},
 		{"confirmation", flagString, "作者确认原话摘要"},
 	},
-	outputKeys: []outputKey{{"event", "确认后的条目：id、scene、entry、character、status、confirmation 与 decided_at；失败时为 null"}},
+	outputKeys: []outputKey{{"event", "确认后的条目：id、scene、entry、character、status、confirmation、channel（确认渠道（Confirmation Channel）：cli 或 preview，待确认为 null）与 decided_at；失败时为 null"}},
 	exitCodes:  standardExitCodes,
 	run:        runKnowledgeConfirm,
 }
@@ -73,7 +73,7 @@ var knowledgeRejectCommand = &command{
 		{"confirmed-by-author", flagBool, "作者拒绝本条知情事件（或撤销已确认的条目）"},
 		{"confirmation", flagString, "作者拒绝或撤销的原话摘要"},
 	},
-	outputKeys: []outputKey{{"event", "拒绝或撤销后的条目：id、scene、entry、character、status、confirmation 与 decided_at；失败时为 null"}},
+	outputKeys: []outputKey{{"event", "拒绝或撤销后的条目：id、scene、entry、character、status、confirmation、channel（确认渠道（Confirmation Channel）：cli 或 preview，待确认为 null）与 decided_at；失败时为 null"}},
 	exitCodes:  standardExitCodes,
 	run:        runKnowledgeReject,
 }
@@ -94,7 +94,7 @@ var knowledgeSetCommand = &command{
 		{"confirmed-by-author", flagBool, "作者重新确认本条已确认条目的修改"},
 		{"confirmation", flagString, "作者重新确认的原话摘要；修改已确认（confirmed）条目时必填"},
 	},
-	outputKeys: []outputKey{{"event", "修改后的条目：id、scene、entry、character、status、confirmation 与 decided_at；失败时为 null"}},
+	outputKeys: []outputKey{{"event", "修改后的条目：id、scene、entry、character、status、confirmation、channel（确认渠道（Confirmation Channel）：cli 或 preview，待确认为 null）与 decided_at；失败时为 null"}},
 	exitCodes:  standardExitCodes,
 	run:        runKnowledgeSet,
 }
@@ -117,6 +117,12 @@ var knowledgeAtCommand = &command{
 type knowledgeEventView struct {
 	Work string `json:"work"`
 	knowledge.Event
+}
+
+// knowledgeViewOf 返回条目的输出形态：已决定的条目 channel 缺失时输出 cli，待确认的条目为 null。
+func knowledgeViewOf(work string, e knowledge.Event) *knowledgeEventView {
+	e.Channel = channelView(e.Status != knowledge.StatusProposed, e.Channel)
+	return &knowledgeEventView{Work: work, Event: e}
 }
 
 type knowledgeEventResult struct {
@@ -171,7 +177,7 @@ func runKnowledgePropose(inv *invocation) int {
 			var changed []string
 			in := knowledge.ProposeInput{Scene: inv.values["scene"], Entry: inv.values["entry"], Character: inv.values["character"], ID: inv.values["id"], Terms: parseTerms(inv.values["terms"])}
 			if e, changed, problems = knowledge.Propose(dir, w, in); e != nil {
-				res.Event, res.ChangedPaths = &knowledgeEventView{Work: w.ID, Event: *e}, changed
+				res.Event, res.ChangedPaths = knowledgeViewOf(w.ID, *e), changed
 			}
 		}
 	}
@@ -197,7 +203,7 @@ func runKnowledgeList(inv *invocation) int {
 			var events []knowledge.Event
 			if events, problems = knowledge.List(dir, w, inv.flag("all")); events != nil {
 				for _, e := range events {
-					res.Events = append(res.Events, knowledgeEventView{Work: w.ID, Event: e})
+					res.Events = append(res.Events, *knowledgeViewOf(w.ID, e))
 				}
 			}
 		}
@@ -240,7 +246,7 @@ func runKnowledgeDecide(inv *invocation, name, verb string, decide func(root str
 				var e *knowledge.Event
 				var changed []string
 				if e, changed, problems = decide(dir, w, inv.args[1], inv.values["confirmation"], now()); e != nil {
-					res.Event, res.ChangedPaths = &knowledgeEventView{Work: w.ID, Event: *e}, changed
+					res.Event, res.ChangedPaths = knowledgeViewOf(w.ID, *e), changed
 				}
 			}
 		}
@@ -292,7 +298,7 @@ func runKnowledgeSet(inv *invocation) int {
 			var e *knowledge.Event
 			var changed []string
 			if e, changed, problems = knowledge.Set(dir, w, inv.args[1], in, now()); e != nil {
-				res.Event, res.ChangedPaths = &knowledgeEventView{Work: w.ID, Event: *e}, changed
+				res.Event, res.ChangedPaths = knowledgeViewOf(w.ID, *e), changed
 			}
 		}
 	}

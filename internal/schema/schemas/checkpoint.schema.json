@@ -103,6 +103,14 @@
       "pattern": "\\S",
       "description": "作者确认原话摘要；confirmed_by_author 为 true 时非空（领域校验报告 volume.incomplete-confirmation）"
     },
+    "channel": {
+      "enum": [
+        "cli",
+        "preview",
+        null
+      ],
+      "description": "确认渠道（Confirmation Channel）：cli 或 preview；未确认为 null 或缺省，已确认而缺省时按 cli 解释"
+    },
     "confirmed_at": {
       "type": [
         "string",

@@ -13,7 +13,7 @@ import (
 
 var assembleCommand = &command{
 	name:    "assemble",
-	summary: "组稿（Assembly）：按单元树先序把已验收场景组成整书（书名、目录、部/章标题、去注释正文与 AI 参与说明），导出 Markdown 或纯文本；存在未完成场景、连续性阻塞或 open 复查标记时拒绝组稿并列出阻塞项",
+	summary: "组稿（Assembly）：按单元树先序把已验收场景组成整书（书名、目录、部/章标题、去注释正文与 AI 参与说明），导出 Markdown 或纯文本；存在未完成场景、连续性阻塞、open 复查标记，或 strict 关卡下有待作者复核（Pending Author Review）的命令行渠道确认时拒绝组稿并列出阻塞项",
 	args: []argSpec{
 		{"work", "作品 id", true},
 	},
@@ -74,6 +74,8 @@ func assembleNext(ds []Diagnostic, ref, dir string) {
 		case strings.HasPrefix(ds[i].Code, "assemble.continuity"):
 			ds[i].Next = []string{shellCommand("wa-cli", "decisions", "--dir", dir, "--json"),
 				"wa-cli help continuity --json", shellCommand("wa-cli", "review", "show", ref, "--dir", dir, "--json")}
+		case ds[i].Code == assembly.CodeUnreviewed:
+			ds[i].Next = []string{previewServeCommand(dir, ref), shellCommand("wa-cli", "review", "show", ref, "--dir", dir, "--json")}
 		case strings.HasPrefix(ds[i].Code, "assemble.rechecks"):
 			ds[i].Next = []string{shellCommand("wa-cli", "impact", "list", ref, "--dir", dir, "--json"),
 				"wa-cli help impact clear --json"}

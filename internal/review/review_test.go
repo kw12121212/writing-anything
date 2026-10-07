@@ -122,7 +122,8 @@ func TestRecordResolveAccept(t *testing.T) {
 	}
 	// Accept 写出通过 Schema 的验收记录；验收之后正文被改动时 AcceptanceBlockers 报告 acceptance.stale。
 	a, changed, ps := Accept(root, dir, "strict", sum, true, "作者：好", time.Date(2026, 10, 1, 9, 0, 0, 0, time.UTC))
-	if len(ps) > 0 || !slices.Equal(changed, []string{AcceptancePath(dir)}) || *a.Confirmation != "作者：好" || a.AcceptedAt != "2026-10-01T09:00:00Z" {
+	if len(ps) > 0 || !slices.Equal(changed, []string{AcceptancePath(dir)}) || *a.Confirmation != "作者：好" || a.AcceptedAt != "2026-10-01T09:00:00Z" ||
+		*a.Channel != "cli" || !strings.Contains(string(readAll(t, root, AcceptancePath(dir))), "channel: cli") {
 		t.Fatalf("accept: %+v %v", a, ps)
 	}
 	if got, ps := LoadAcceptance(root, dir); len(ps) > 0 || !got.ConfirmedByAuthor || len(AcceptanceBlockers(root, dir, "strict")) != 0 {
@@ -194,7 +195,8 @@ func TestReviewEdges(t *testing.T) {
 		t.Fatal("merge key accepted")
 	}
 	a, _, ps := Accept(root, dir, "fast", sum, false, "忽略", time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC))
-	if len(ps) > 0 || a.Confirmation != nil || strings.Contains(string(readAll(t, root, AcceptancePath(dir))), "confirmation:") {
+	if len(ps) > 0 || a.Confirmation != nil || a.Channel != nil || strings.Contains(string(readAll(t, root, AcceptancePath(dir))), "confirmation:") ||
+		strings.Contains(string(readAll(t, root, AcceptancePath(dir))), "channel:") {
 		t.Fatalf("unconfirmed accept: %+v %v", a, ps)
 	}
 	if bs := AcceptanceBlockers(root, dir, "fast"); len(bs) != 0 {

@@ -2789,7 +2789,7 @@ stages:
     stdout_contains: null
 - stage: assemble-export
   note: 终局：组稿被悬空伏笔阻塞（assemble.continuity）→ threads set dropped 被拒并生成阻塞决策（threads.author-confirmation）→ 作者 decide 允许 → 带决策放弃
-    th-c → 书名与部/章标题节 → 组稿与整书导出 → part-3 卷末确认与交接 → 时间线与全区校验
+    th-c → strict 下命令行渠道的验收与卷末确认未经复核、组稿被拒（assemble.unreviewed）→ 作者在阅读页批量复核 → 书名与部/章标题节 → 组稿与整书导出 → part-3 卷末确认与交接 → 时间线与全区校验
   steps:
   - command:
     - assemble
@@ -2847,6 +2847,29 @@ stages:
     expect_exit: 0
     expect_code: null
     stdout_contains: th-c
+  - command:
+    - assemble
+    - stopped-at-417
+    - --output
+    - book.md
+    input_ref: null
+    expect_exit: 1
+    expect_code: assemble.unreviewed
+    stdout_contains: null
+  - command:
+    - review
+    - show
+    - stopped-at-417
+    input_ref: null
+    expect_exit: 0
+    expect_code: null
+    stdout_contains: volume-checkpoint
+  - author_review: stopped-at-417
+    command: null
+    input_ref: null
+    expect_exit: 0
+    expect_code: null
+    stdout_contains: null
   - command:
     - assemble
     - stopped-at-417

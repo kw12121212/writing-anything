@@ -166,7 +166,7 @@
 
 ## 负向断言（golden-assertions 已落地）
 
-语料内生负向（命令脚本中真实发生并录制）：人工编辑保护（draft.human-edited）、卷末未确认阻塞（volume.unconfirmed）、复查标记组稿阻塞（assemble.scenes-open + assemble.rechecks）、悬空伏笔组稿阻塞（assemble.continuity，经 threads.author-confirmation → decide → dropped 收束）。
+语料内生负向（命令脚本中真实发生并录制）：人工编辑保护（draft.human-edited）、卷末未确认阻塞（volume.unconfirmed）、复查标记组稿阻塞（assemble.scenes-open + assemble.rechecks）、悬空伏笔组稿阻塞（assemble.continuity，经 threads.author-confirmation → decide → dropped 收束）、待作者复核组稿阻塞（assemble.unreviewed：strict 下经命令行渠道（cli）写入的验收与卷末确认，作者在本地阅读页批量复核后放行）。
 
 重放副本上的注入负向（TestNovelCorpusNegativeInjections）：
 

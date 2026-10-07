@@ -69,6 +69,7 @@ type fileRecord struct {
 	Sampled           []Sampled `json:"sampled"`
 	ConfirmedByAuthor bool      `json:"confirmed_by_author"`
 	Confirmation      *string   `json:"confirmation"`
+	Channel           *string   `json:"channel"`
 	ConfirmedAt       *string   `json:"confirmed_at"`
 }
 
@@ -84,6 +85,7 @@ type View struct {
 	Sampled           []Sampled `json:"sampled"`
 	ConfirmedByAuthor bool      `json:"confirmedByAuthor"`
 	Confirmation      *string   `json:"confirmation"`
+	Channel           *string   `json:"channel"` // 确认渠道（Confirmation Channel）；未确认为 null，已确认而缺失时为 cli
 	ConfirmedAt       *string   `json:"confirmedAt"`
 }
 
@@ -370,7 +372,16 @@ func orEmpty(vs []string) []string {
 func view(u *work.Unit, rel string, f *fileRecord) *View {
 	return &View{Part: f.Part, Path: rel, Scene: f.Scene, Canon: orEmpty(f.Canon), States: orEmpty(f.States),
 		Threads: orEmpty(f.Threads), Decisions: orEmpty(f.Decisions), Sampled: orEmptySampled(f.Sampled),
-		ConfirmedByAuthor: f.ConfirmedByAuthor, Confirmation: f.Confirmation, ConfirmedAt: f.ConfirmedAt}
+		ConfirmedByAuthor: f.ConfirmedByAuthor, Confirmation: f.Confirmation, Channel: channelOf(f), ConfirmedAt: f.ConfirmedAt}
+}
+
+// channelOf 返回已确认检查点的确认渠道（缺失为 cli）；未确认时为 nil。
+func channelOf(f *fileRecord) *string {
+	if !f.ConfirmedByAuthor {
+		return nil
+	}
+	c := workspace.ChannelOr(f.Channel)
+	return &c
 }
 
 func orEmptySampled(ss []Sampled) []Sampled {
@@ -380,8 +391,23 @@ func orEmptySampled(ss []Sampled) []Sampled {
 	return ss
 }
 
-// Confirm 写入部 u 检查点的作者确认记录；已有确认时报告 volume.already-confirmed。
+// Load 读取部 u 的检查点（Schema 校验）；不存在时返回 nil 与 nil。
+func Load(root string, w *work.Work, u *work.Unit) (*View, []workspace.Problem) {
+	dir := w.UnitDir(u)
+	doc, f, ps := load(root, dir)
+	if ps != nil || doc == nil {
+		return nil, ps
+	}
+	return view(u, Path(dir), f), nil
+}
+
+// Confirm 以命令行渠道（cli）确认检查点，见 ConfirmVia。
 func Confirm(root string, w *work.Work, u *work.Unit, confirmation string, now time.Time) (*View, []string, []workspace.Problem) {
+	return ConfirmVia(root, w, u, confirmation, workspace.ChannelCLI, now)
+}
+
+// ConfirmVia 写入部 u 检查点的作者确认记录与确认渠道 channel；已有确认时报告 volume.already-confirmed。
+func ConfirmVia(root string, w *work.Work, u *work.Unit, confirmation, channel string, now time.Time) (*View, []string, []workspace.Problem) {
 	if strings.TrimSpace(confirmation) == "" {
 		return nil, nil, []workspace.Problem{{Code: CodeIncompleteConfirmation, Severity: workspace.SeverityError, Field: "confirmation",
 			Message: "作者确认必须给出 --confirmed-by-author 与非空白的 --confirmation（作者原话摘要）"}}
@@ -403,7 +429,7 @@ func Confirm(root string, w *work.Work, u *work.Unit, confirmation string, now t
 	if f.ConfirmedByAuthor {
 		return nil, nil, []workspace.Problem{errorAt(CodeAlreadyConfirmed, rel, "", "部 "+u.Ref+" 的卷末检查点已经作者确认过")}
 	}
-	// 节点树上只改确认三字段，保留其他内容与注释；目标节点或所在映射带锚点、别名或合并键时拒绝修改
+	// 节点树上只改确认四字段（含确认渠道），保留其他内容与注释；目标节点或所在映射带锚点、别名或合并键时拒绝修改
 	// （workspace-artifacts/structured-edits）。
 	m := doc.Content[0]
 	if workspace.HasAnchor(m) {
@@ -419,7 +445,7 @@ func Confirm(root string, w *work.Work, u *work.Unit, confirmation string, now t
 	keys := []struct {
 		key string
 		val string
-	}{{"confirmation", confirmation}, {"confirmed_at", nowStr}}
+	}{{"confirmation", confirmation}, {"channel", channel}, {"confirmed_at", nowStr}}
 	for _, k := range keys {
 		found := false
 		for i := 0; i+1 < len(m.Content); i += 2 {

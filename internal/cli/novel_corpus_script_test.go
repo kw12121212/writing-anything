@@ -14,6 +14,7 @@ import (
 type corpusStep struct {
 	Command        []string `yaml:"command"`
 	WriteFile      *string  `yaml:"write_file"`
+	AuthorReview   *string  `yaml:"author_review"`
 	InputRef       *string  `yaml:"input_ref"`
 	ExpectExit     int      `yaml:"expect_exit"`
 	ExpectCode     *string  `yaml:"expect_code"`
@@ -61,9 +62,11 @@ func TestNovelCorpusScript(t *testing.T) {
 		"assemble.rechecks":           false,
 		"assemble.continuity":         false,
 		"threads.author-confirmation": false,
+		"assemble.unreviewed":         false,
 	}
 	steps := 0
 	writeSteps := 0
+	reviewSteps := 0
 	inputRefs := 0
 	seenCommands := map[string]int{}
 	for _, st := range script.Stages {
@@ -72,9 +75,17 @@ func TestNovelCorpusScript(t *testing.T) {
 		}
 		for _, s := range st.Steps {
 			steps++
-			hasCmd, hasWrite := s.Command != nil, s.WriteFile != nil
-			if hasCmd == hasWrite {
-				t.Errorf("步骤必须二选一：wa-cli 命令（command）或文件写入（write_file），阶段 %s 第 %d 步", st.Stage, steps)
+			kinds := 0
+			for _, has := range []bool{s.Command != nil, s.WriteFile != nil, s.AuthorReview != nil} {
+				if has {
+					kinds++
+				}
+			}
+			if kinds != 1 {
+				t.Errorf("步骤必须三选一：wa-cli 命令（command）、文件写入（write_file）或阅读页复核（author_review），阶段 %s 第 %d 步", st.Stage, steps)
+			}
+			if s.AuthorReview != nil {
+				reviewSteps++
 			}
 			if s.ExpectExit != 0 && (s.ExpectCode == nil || *s.ExpectCode == "") {
 				t.Errorf("失败步骤（exit=%d）必须声明 expect_code", s.ExpectExit)
@@ -117,6 +128,9 @@ func TestNovelCorpusScript(t *testing.T) {
 	}
 	if writeSteps != 1 {
 		t.Errorf("作者直编步骤数 = %d，期望恰好 1 处", writeSteps)
+	}
+	if reviewSteps != 1 {
+		t.Errorf("阅读页复核步骤数 = %d，期望恰好 1 处（strict 组稿前作者批量复核命令行渠道的确认）", reviewSteps)
 	}
 	if inputRefs < 30 {
 		t.Errorf("带文本输入的步骤 = %d，期望素材、草稿、收口、审稿、交接等合计不少于 30", inputRefs)

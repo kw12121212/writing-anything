@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/kw12121212/writing-anything/internal/authorreview"
 	"github.com/kw12121212/writing-anything/internal/brief"
 	"github.com/kw12121212/writing-anything/internal/canon"
 	"github.com/kw12121212/writing-anything/internal/catalog"
@@ -512,8 +513,9 @@ func checkWorkspace(dir string) (checked []string, works []*work.Work, problems 
 	rpchecked, rpps := reviewpacket.CheckWorks(dir, works)
 	imchecked, imps := impact.CheckWorks(dir, works)
 	plchecked, plps := plan.CheckUnitArtifacts(dir, works, catalog.LoadMethods(dir), unitDefaultMethod)
-	checked = slices.Concat(checked, more, wchecked, schecked, uchecked, bchecked, ochecked, fchecked, rchecked, mchecked, dchecked, lchecked, xchecked, cchecked, pchecked, echecked, tchecked, ychecked, kchecked, thchecked, stchecked, knchecked, cochecked, vpchecked, rpchecked, imchecked, plchecked)
-	return checked, works, slices.Concat(problems, ps, wps, sps, ups, bps, ops, fps, rps, mps, dps, lps, xps, cps, pps, eps, tps, yps, kps, thps, stps, knps, cops, vpps, rpps, imps, plps)
+	archecked, arps := authorreview.Check(dir)
+	checked = slices.Concat(checked, more, wchecked, schecked, uchecked, bchecked, ochecked, fchecked, rchecked, mchecked, dchecked, lchecked, xchecked, cchecked, pchecked, echecked, tchecked, ychecked, kchecked, thchecked, stchecked, knchecked, cochecked, vpchecked, rpchecked, imchecked, plchecked, archecked)
+	return checked, works, slices.Concat(problems, ps, wps, sps, ups, bps, ops, fps, rps, mps, dps, lps, xps, cps, pps, eps, tps, yps, kps, thps, stps, knps, cops, vpps, rpps, imps, plps, arps)
 }
 
 // defaultMethodOf 返回单元产物 rel 适用的文体默认写作法：只有作品的根单元适用，子单元不继承；
@@ -662,7 +664,7 @@ func next(p workspace.Problem, dir string) []string {
 			// 作品目录中缺少 work.yaml：init 不会补齐它，作品只能用 wa-cli new 创建。
 			return []string{"wa-cli help new --json", validateAll}
 		}
-		if k := schema.KindFor(p.Path); k != nil && (k.Name == "brief" || k.Name == "outline" || k.Name == "review" || k.Name == "acceptance" || k.Name == "marketing") {
+		if k := schema.KindFor(p.Path); k != nil && (k.Name == "brief" || k.Name == "outline" || k.Name == "review" || k.Name == "acceptance" || k.Name == "marketing" || k.Name == "author-reviews") {
 			// brief.yaml 途经符号链接或不是普通文件：需要作者把它换成普通文件，init 不会修复它。
 			return []string{status, validateAll}
 		}

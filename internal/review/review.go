@@ -94,6 +94,7 @@ type Acceptance struct {
 	DraftSHA256       string  `json:"draft_sha256"`
 	ConfirmedByAuthor bool    `json:"confirmed_by_author"`
 	Confirmation      *string `json:"confirmation"`
+	Channel           *string `json:"channel"` // 确认渠道（Confirmation Channel）；只在经作者确认时记录，缺失按 cli 解释
 	AcceptedAt        string  `json:"accepted_at"`
 }
 
@@ -489,16 +490,21 @@ func anchored(rel, field string) workspace.Problem {
 	return errorAt(CodeAnchoredValue, rel, field, "该处经由 YAML 锚点、别名或合并键得到，wa-cli 无法只修改这一处；请先去掉锚点、别名与合并键")
 }
 
-// Accept 整体替换单元目录 dir 下的 acceptance.yaml，记录关卡强度、正文 SHA-256、是否经作者确认、确认原话摘要
-// （confirmed 为 false 时不记录）与验收时间 now（UTC）。返回写入的验收与变更的路径。
+// Accept 以命令行渠道（cli）验收，见 AcceptVia。
 func Accept(root, dir, level, draftSHA string, confirmed bool, confirmation string, now time.Time) (*Acceptance, []string, []workspace.Problem) {
+	return AcceptVia(root, dir, level, draftSHA, confirmed, confirmation, workspace.ChannelCLI, now)
+}
+
+// AcceptVia 整体替换单元目录 dir 下的 acceptance.yaml，记录关卡强度、正文 SHA-256、是否经作者确认、确认原话摘要与
+// 确认渠道 channel（confirmed 为 false 时都不记录）与验收时间 now（UTC）。返回写入的验收与变更的路径。
+func AcceptVia(root, dir, level, draftSHA string, confirmed bool, confirmation, channel string, now time.Time) (*Acceptance, []string, []workspace.Problem) {
 	rel := AcceptancePath(dir)
 	a := &Acceptance{GateLevel: level, DraftSHA256: draftSHA, ConfirmedByAuthor: confirmed, AcceptedAt: now.UTC().Format("2006-01-02T15:04:05Z")}
 	kv := []any{"schema_version", workspace.Int(1), "gate_level", workspace.Str(level), "draft_sha256", workspace.Str(draftSHA),
 		"confirmed_by_author", &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!bool", Value: fmt.Sprint(confirmed)}}
 	if confirmed {
-		a.Confirmation = &confirmation
-		kv = append(kv, "confirmation", workspace.Str(confirmation))
+		a.Confirmation, a.Channel = &confirmation, &channel
+		kv = append(kv, "confirmation", workspace.Str(confirmation), "channel", workspace.Str(channel))
 	}
 	kv = append(kv, "accepted_at", workspace.Str(a.AcceptedAt))
 	doc := &yaml.Node{Kind: yaml.DocumentNode, HeadComment: "验收（Acceptance）记录；请用 wa-cli accept 写入。", Content: []*yaml.Node{mapping(kv...)}}

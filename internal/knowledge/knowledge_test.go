@@ -207,11 +207,11 @@ func TestConfirmRejectTransitions(t *testing.T) {
 		t.Fatalf("want already-decided, got %v", ps)
 	}
 	// 撤销已确认条目。
-	e, _, ps = Reject(root, w, "know-1", "作者撤销该知情", time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC))
+	e, _, ps = RejectVia(root, w, "know-1", "作者撤销该知情", "preview", time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC))
 	if len(ps) > 0 {
 		t.Fatal(ps)
 	}
-	if e.Status != StatusRejected {
+	if e.Status != StatusRejected || e.Channel == nil || *e.Channel != "preview" {
 		t.Fatalf("rejected event = %+v", e)
 	}
 	// rejected 是终态。

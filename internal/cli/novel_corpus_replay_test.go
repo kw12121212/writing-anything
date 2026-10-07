@@ -2,9 +2,14 @@ package cli
 
 import (
 	"crypto/sha256"
+	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -97,6 +102,10 @@ func replayNovelCorpus(t *testing.T, dir string) {
 		for _, step := range st.Steps {
 			total++
 			label := strings.Join(step.Command, " ")
+			if wk := step.AuthorReview; wk != nil {
+				replayAuthorReview(t, dir, *wk, st.Stage)
+				continue
+			}
 			if wf := step.WriteFile; wf != nil {
 				if step.InputRef == nil {
 					t.Fatalf("[%s] write_file 步骤缺少 input_ref", st.Stage)
@@ -179,6 +188,47 @@ func replayNovelCorpus(t *testing.T, dir string) {
 		if verbSeen && shapeSeen && keyHits[key] == 0 {
 			t.Errorf("变异清单键 %v 被语料命令形态覆盖但从未命中（键控或语料漂移）", key)
 		}
+	}
+}
+
+// replayAuthorReview 重放作者在本地阅读页（preview --serve）上的批量复核：取 wa-cli next 列出的待作者复核
+// （Pending Author Review）项，带令牌与回环 Host 经 POST /author-review 全部提交，断言写入复核记录、next 不再列出。
+func replayAuthorReview(t *testing.T, dir, workID, stage string) {
+	t.Helper()
+	pending := func() []string {
+		_, res := runWSIn(t, dir, "", "next", workID)
+		var out struct {
+			Pending []struct {
+				Key string `json:"key"`
+			} `json:"pendingAuthorReviews"`
+		}
+		if err := json.Unmarshal([]byte(res.stdout), &out); err != nil {
+			t.Fatal(err)
+		}
+		var keys []string
+		for _, p := range out.Pending {
+			keys = append(keys, p.Key)
+		}
+		return keys
+	}
+	keys := pending()
+	if len(keys) == 0 {
+		t.Fatalf("[%s] author_review %s: next 没有列出待作者复核项", stage, workID)
+	}
+	const host = "127.0.0.1:4170"
+	s := &previewServer{inv: &invocation{stdout: io.Discard}, dir: dir, ref: workID, token: "corpus-token", hosts: []string{host},
+		view: &previewView{Unit: workID, Units: []string{}}, done: make(chan struct{})}
+	body, _ := json.Marshal(map[string][]string{"keys": keys})
+	req := httptest.NewRequest(http.MethodPost, "http://"+host+"/author-review", strings.NewReader(string(body)))
+	req.Header.Set("X-WA-Token", "corpus-token")
+	rec := httptest.NewRecorder()
+	s.ServeHTTP(rec, req)
+	var res result
+	if err := json.Unmarshal(rec.Body.Bytes(), &res); err != nil || rec.Code != http.StatusOK || !slices.Contains(res.ChangedPaths, ".writing-anything/author-reviews.yaml") {
+		t.Fatalf("[%s] author_review %s: %d %s", stage, workID, rec.Code, rec.Body.String())
+	}
+	if left := pending(); len(left) != 0 {
+		t.Fatalf("[%s] author_review %s: 复核后仍有待复核项 %v", stage, workID, left)
 	}
 }
 

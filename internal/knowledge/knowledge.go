@@ -60,6 +60,14 @@ var Statuses = map[string]string{
 	StatusRejected:  "已拒绝",
 }
 
+// orCLI 返回渠道 c；为空时为 cli。
+func orCLI(c string) string {
+	if c == "" {
+		return workspace.ChannelCLI
+	}
+	return c
+}
+
 // timestamp 返回决定时间的统一格式（UTC，RFC 3339）。
 func timestamp(now time.Time) string { return now.UTC().Format(time.RFC3339) }
 
@@ -72,6 +80,7 @@ type Event struct {
 	Terms        []string `json:"terms"`
 	Status       string   `json:"status"`
 	Confirmation *string  `json:"confirmation"`
+	Channel      *string  `json:"channel"` // 确认渠道（Confirmation Channel）；已决定而缺失时按 cli 解释
 	DecidedAt    *string  `json:"decided_at"`
 }
 
@@ -301,7 +310,7 @@ func eventsNode(doc *yaml.Node) *yaml.Node {
 }
 
 // eventOrder 是知情事件中字段的固定顺序。
-var eventOrder = []string{"id", "scene", "entry", "character", "terms", "status", "confirmation", "decided_at"}
+var eventOrder = []string{"id", "scene", "entry", "character", "terms", "status", "confirmation", "channel", "decided_at"}
 
 // checkText 检查写入产物的文本参数是合法的 UTF-8（workspace-artifacts/yaml-text-utf8）。
 func checkText(field, v string) []workspace.Problem {
@@ -476,6 +485,7 @@ type SetInput struct {
 	Terms             *[]string
 	ConfirmedByAuthor bool
 	Confirmation      string
+	Channel           string // 重新确认的确认渠道（Confirmation Channel）；空为 cli
 }
 
 // Set 修改作品 w 的知情表中 id 的条目，只改动给出的字段，保留其他条目、其他内容与 YAML 注释。proposed 条目
@@ -566,6 +576,8 @@ func Set(root string, w *work.Work, id string, in SetInput, now time.Time) (*Eve
 	}
 	if entry.Status == StatusConfirmed && in.ConfirmedByAuthor {
 		next.Confirmation = &in.Confirmation
+		channel := orCLI(in.Channel)
+		next.Channel = &channel
 		stamp := timestamp(now)
 		next.DecidedAt = &stamp
 	}
@@ -592,26 +604,36 @@ func Set(root string, w *work.Work, id string, in SetInput, now time.Time) (*Eve
 	return &e, []string{rel}, warns
 }
 
-// Confirm 把作品 w 知情表中 id 的条目确认为 confirmed 并写入确认记录（confirmation 与 decided_at）。
+// Confirm 以命令行渠道（cli）确认条目，见 ConfirmVia。
+func Confirm(root string, w *work.Work, id, confirmation string, now time.Time) (*Event, []string, []workspace.Problem) {
+	return ConfirmVia(root, w, id, confirmation, workspace.ChannelCLI, now)
+}
+
+// ConfirmVia 把作品 w 知情表中 id 的条目确认为 confirmed 并写入确认记录（confirmation、channel 与 decided_at）。
 // 条目必须是 proposed；摘要为空白时报告 knowledge.incomplete-confirmation。返回修改后的条目、变更的路径与其他
 // 条目悬空引用的 warning；出错时不修改文件。
-func Confirm(root string, w *work.Work, id, confirmation string, now time.Time) (*Event, []string, []workspace.Problem) {
-	return decide(root, w, id, confirmation, now, StatusConfirmed,
+func ConfirmVia(root string, w *work.Work, id, confirmation, channel string, now time.Time) (*Event, []string, []workspace.Problem) {
+	return decide(root, w, id, confirmation, channel, now, StatusConfirmed,
 		"条目 "+id+" 已是 "+StatusConfirmed+"，不能重复确认",
 		"作者确认必须给出 --confirmed-by-author 与非空白的 --confirmation（作者原话摘要）")
 }
 
-// Reject 把作品 w 知情表中 id 的条目改为 rejected 并写入确认记录：条目为 proposed 时即作者拒绝该提议，为
-// confirmed 时即作者撤销已生效的知情事件（此后该获知者的已知列表不再含该条目带来的信息）。已是 rejected 时
-// 报告 knowledge.already-decided。其余同 Confirm。
+// Reject 以命令行渠道（cli）拒绝或撤销条目，见 RejectVia。
 func Reject(root string, w *work.Work, id, confirmation string, now time.Time) (*Event, []string, []workspace.Problem) {
-	return decide(root, w, id, confirmation, now, StatusRejected,
+	return RejectVia(root, w, id, confirmation, workspace.ChannelCLI, now)
+}
+
+// RejectVia 把作品 w 知情表中 id 的条目改为 rejected 并写入确认记录：条目为 proposed 时即作者拒绝该提议，为
+// confirmed 时即作者撤销已生效的知情事件（此后该获知者的已知列表不再含该条目带来的信息）。已是 rejected 时
+// 报告 knowledge.already-decided。其余同 ConfirmVia。
+func RejectVia(root string, w *work.Work, id, confirmation, channel string, now time.Time) (*Event, []string, []workspace.Problem) {
+	return decide(root, w, id, confirmation, channel, now, StatusRejected,
 		"条目 "+id+" 已被作者拒绝（rejected），是终态；重新登记请用 wa-cli knowledge propose 提交新条目",
 		"作者拒绝或撤销必须给出 --confirmed-by-author 与非空白的 --confirmation（作者原话摘要）")
 }
 
 // decide 是 confirm 与 reject 的共同实现：status 为 to（confirmed 或 rejected），拒绝重复决定与终态操作。
-func decide(root string, w *work.Work, id, confirmation string, now time.Time, to, already, incomplete string) (*Event, []string, []workspace.Problem) {
+func decide(root string, w *work.Work, id, confirmation, channel string, now time.Time, to, already, incomplete string) (*Event, []string, []workspace.Problem) {
 	if strings.TrimSpace(confirmation) == "" {
 		return nil, nil, []workspace.Problem{{Code: CodeIncompleteConfirmation, Severity: workspace.SeverityError, Field: "confirmation", Message: incomplete}}
 	}
@@ -643,6 +665,8 @@ func decide(root string, w *work.Work, id, confirmation string, now time.Time, t
 	}
 	entry.Status = to
 	entry.Confirmation = &confirmation
+	channel = orCLI(channel)
+	entry.Channel = &channel
 	stamp := timestamp(now)
 	entry.DecidedAt = &stamp
 	if p := editEvent(events, at, rel, entry); p != nil {
@@ -679,7 +703,7 @@ func editEvent(events *yaml.Node, at int, rel string, next Event) *workspace.Pro
 		n   *yaml.Node // nil 表示删除该字段
 	}
 	kvs := []kv{{"scene", str(next.Scene)}, {"entry", str(next.Entry)}, {"character", str(next.Character)},
-		{"terms", termsSeq(next.Terms)}, {"status", str(next.Status)}, {"confirmation", node(next.Confirmation)}, {"decided_at", node(next.DecidedAt)}}
+		{"terms", termsSeq(next.Terms)}, {"status", str(next.Status)}, {"confirmation", node(next.Confirmation)}, {"channel", node(next.Channel)}, {"decided_at", node(next.DecidedAt)}}
 	for _, pair := range kvs {
 		if f, ok := workspace.SetKey(item, eventOrder, pair.key, pair.n); !ok {
 			return &workspace.Problem{Code: CodeAnchoredValue, Severity: workspace.SeverityError, Path: rel, Field: field + "." + f,

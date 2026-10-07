@@ -1,0 +1,10 @@
+schema_version: 1
+events:
+  - id: state-1
+    scene: my-novel/s1
+    entry: canon-1
+    state: 受伤
+    status: confirmed
+    confirmation: 作者确认
+    channel: phone
+    decided_at: "2026-10-03T08:00:00Z"
