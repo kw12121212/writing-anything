@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"slices"
@@ -172,5 +173,62 @@ func TestContinuityTimelineGate(t *testing.T) {
 	}
 	if code, res = runWS(t, dir, "accept", "my-novel/scene-1", "--confirmed-by-author", "--confirmation", "作者：可以"); code != 0 {
 		t.Fatalf("accept after fix: exit code = %d, result = %+v", code, res)
+	}
+}
+
+// 因果冲突经连续性审查阻塞验收：场景起因引用后续场景才声明的事件时，wa-cli continuity 报告 error 级发现（保留
+// scene.event-not-yet-happened 原码），accept 被阻塞并生成豁免决策；修正起因后 continuity 全绿、accept 通过。
+func TestContinuityCausalityBlocksAccept(t *testing.T) {
+	dir := continuityFixture(t)
+	run(t, "unit", "add", "my-novel/chapter-one", "scene", "scene-2", "--dir", dir)
+	unitsDir := filepath.Join(dir, ".writing-anything", "works", "my-novel", "units")
+	s2 := filepath.Join(unitsDir, "scene-2")
+	if err := os.MkdirAll(s2, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(s2, "outline.yaml"),
+		"schema_version: 1\nsections:\n  - {id: sc1, title: 场景, reason: 推进, pov: 守灯人, characters: [守灯人], events: [ev-lamp-lit]}\n")
+	s1Outline := filepath.Join(unitsDir, "scene-1", "outline.yaml")
+	writeFile(t, s1Outline,
+		"schema_version: 1\nsections:\n  - {id: sc1, title: 场景, reason: 推进情节, pov: 守灯人, characters: [守灯人], causes: [ev-lamp-lit]}\n")
+
+	code, res := runWS(t, dir, "continuity", "my-novel/scene-1")
+	if code != 0 {
+		t.Fatalf("continuity: exit = %d, diagnostics = %+v", code, res.Diagnostics)
+	}
+	var out struct {
+		Findings []struct {
+			Scene, Code, Severity, Message string
+			Waived                         bool
+		} `json:"findings"`
+	}
+	if err := json.Unmarshal([]byte(res.stdout), &out); err != nil {
+		t.Fatal(err)
+	}
+	if len(out.Findings) != 1 {
+		t.Fatalf("findings = %+v", out.Findings)
+	}
+	f := out.Findings[0]
+	if f.Scene != "my-novel/scene-1" || f.Code != "continuity.dangling-reference" || f.Severity != "error" || f.Waived ||
+		!contains(f.Message, "scene.event-not-yet-happened") || !contains(f.Message, "ev-lamp-lit") {
+		t.Fatalf("finding = %+v", f)
+	}
+	code, res = runWS(t, dir, "accept", "my-novel/scene-1", "--confirmed-by-author", "--confirmation", "作者：可以")
+	if d := diag(t, res, "continuity.dangling-reference"); code != 1 || d.Severity != "error" || !contains(d.Message, "scene.event-not-yet-happened") ||
+		!slices.Contains(res.ChangedPaths, ".writing-anything/decisions.yaml") {
+		t.Fatalf("accept: exit = %d, changedPaths = %v, diagnostics = %+v", code, res.ChangedPaths, res.Diagnostics)
+	}
+	if _, err := os.Stat(filepath.Join(unitsDir, "scene-1", "acceptance.yaml")); err == nil {
+		t.Fatal("blocked accept must not write acceptance.yaml")
+	}
+
+	// 修正：删去引用尚未发生事件的起因（scene-2 仍声明该事件，后文可以引用）。
+	writeFile(t, s1Outline,
+		"schema_version: 1\nsections:\n  - {id: sc1, title: 场景, reason: 推进情节, pov: 守灯人, characters: [守灯人]}\n")
+	if code, res = runWS(t, dir, "continuity", "my-novel"); code != 0 || !contains(res.stdout, `"findings":[]`) {
+		t.Fatalf("continuity after fix: exit = %d, stdout = %s", code, res.stdout)
+	}
+	if code, res = runWS(t, dir, "accept", "my-novel/scene-1", "--confirmed-by-author", "--confirmation", "作者：可以"); code != 0 {
+		t.Fatalf("accept after fix: exit = %d, diagnostics = %+v", code, res.Diagnostics)
 	}
 }

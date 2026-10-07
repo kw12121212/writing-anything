@@ -50,13 +50,16 @@ entries:
     test: TestNovelCorpusDesign
 - id: T-CONTRACT-02
   feature: scene-contract
-  scene: ch2-s1
-  command: wa-cli scene contract ch2-s1 --cause <ch1-s3 的等配件事件>
-  expected: 全绿（exit 0）
-  assertion: 起因引用已发生的既有事件被接受；引用不存在的事件时被拒绝（章间与章内因果承接均落地）。
+  scene: ch1-s2
+  command: wa-cli scene contract ch1-s2 sc --cause ev-watch-accepted + --cause ev-letter-handed
+  expected: 前者全绿（exit 0）；后者被拒绝（scene.event-not-yet-happened，exit 1）
+  assertion: 起因引用前文已发生的事件（ch1-s1 声明的 ev-watch-accepted）被接受；引用尚未发生的事件（ch2-s3 才声明的 ev-letter-handed）以 scene.event-not-yet-happened 拒绝（exit 1）。
   evidence:
   - kind: script
     token: --cause ev-watch-accepted
+  - kind: script
+    token: scene contract stopped-at-417/ch1-s2 sc --cause ev-letter-handed
+    expect_code: scene.event-not-yet-happened
 - id: T-CONTRACT-03
   feature: scene-contract
   scene: ch2-s2
@@ -248,6 +251,19 @@ entries:
     test: TestNovelCorpusReplay
   - kind: golden
     file: context-ch3-s2.json
+- id: T-CTX-03
+  feature: context
+  scene: ch3-s2
+  command: wa-cli context stopped-at-417/<scene>（逐场景，视角人物尚未获知溺水真相时）
+  expected: 全绿（exit 0）；masked 报告被遮蔽的人物卡句数
+  assertion: 秘密遮蔽：kn-05/kn-07 登记揭示词后无需改写人物卡；视角人物获知之前的场景上下文不含陈守拙人物卡中的溺水真相句（ch3-s2 masked 报告 char-chen-shouzhuo 1 句），获知之后（ch3-s3、陈守拙视角的 ch1-s3）恢复全文；语料整体校验没有 knowledge.missing-terms。
+  evidence:
+  - kind: script
+    token: --terms 为了救人,潮生溺水,救溺水的潮生
+  - kind: structure
+    test: TestNovelCorpusSecretMasking
+  - kind: golden
+    file: context-ch3-s2.json
 - id: T-METHOD-01
   feature: method
   scene: book
@@ -339,6 +355,12 @@ entries:
   evidence:
   - kind: script
     token: review plan stopped-at-417/ch-2 --dimension character
+    stdout_contains: '"dimension":"character","scope":"stopped-at-417/ch-2"'
+  - kind: script
+    token: review plan stopped-at-417/ch2-s3
+    stdout_contains: '"dimension":"pov-reveal","scope":"stopped-at-417/ch2-s3"'
+  - kind: structure
+    test: TestNovelCorpusPacketBudget
 - id: T-REVIEWPK-02
   feature: reviewpacket
   scene: ch2-s3
@@ -465,13 +487,13 @@ entries:
     file: novel-export.txt
 - id: T-NEG-01
   feature: continuity
-  scene: book
-  command: wa-cli canon set stopped-at-417 rule-clock-freeze（无 --decision）
-  expected: 发现项 canon.author-pinned（error）并生成阻塞决策
-  assertion: 设定冲突类注入：修改作者钦定条目被拒，唯一写入为决策队列；见 TestNovelCorpusNegativeInjections (1)。
+  scene: ch3-s3
+  command: wa-cli state propose/confirm stopped-at-417 st-x（韩江在 ch2-s3 死亡）+ wa-cli continuity stopped-at-417
+  expected: 发现项 continuity.dead-acting（error，归属 ch3-s3）
+  assertion: 设定冲突类注入：已死人物出场——确认韩江死亡后，其出场的 ch3-s3 由连续性审查报 error 级 continuity.dead-acting；state reject 撤销后全绿，不留下待决决策；见 TestNovelCorpusNegativeInjections (1)。
   evidence:
   - kind: negative
-    code: canon.author-pinned
+    code: continuity.dead-acting
 - id: T-NEG-02
   feature: knowledge
   scene: ch2-s2

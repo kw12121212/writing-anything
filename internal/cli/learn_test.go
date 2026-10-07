@@ -45,19 +45,29 @@ func TestPackLearnConfirmReject(t *testing.T) {
 	if code, stdout, _ := run(t, "pack", "learn", "me", "--dir", dir); code != 0 || !strings.Contains(stdout, "平均句长 5") || !strings.Contains(stdout, "- style-1（style）多用短句：proposed") {
 		t.Fatalf("text: %q", stdout)
 	}
-	// 未确认的提议不影响规则。
-	if code, res := runJSON(t, "config", "resolved", "--dir", dir, "--json"); code != 0 || strings.Contains(mustJSON(t, res), "多用短句") {
-		t.Fatalf("resolved before confirm: %v", res)
-	}
-	code, out = runProposal(t, "confirm", "me", "--item", "baseline", "--item", "style-1", "--confirmation", "作者：就按这个来", "--dir", dir)
-	if code != 0 || out.Proposal.Items[1].Status != "confirmed" || *out.Proposal.Items[1].Confirmation != "作者：就按这个来" ||
+	// 未确认的提议不影响规则：先只确认 baseline（生成规范包 mine）并启用它，此时规范包已生效（styleProfile 来自 pack:mine），
+	// 但仍为 proposed 的 style-1 与 avoid-1 不进入生效配置——断言在规范包启用后执行，不会因规范包缺席而空转。
+	code, out = runProposal(t, "confirm", "me", "--item", "baseline", "--confirmation", "作者：基线先用着", "--dir", dir)
+	if code != 0 || out.Proposal.Items[0].Status != "confirmed" || out.Proposal.Items[1].Status != "proposed" ||
 		strings.Join(out.ChangedPaths, ",") != ".writing-anything/packs/mine.yaml,.writing-anything/proposals/me.yaml" {
-		t.Fatalf("confirm: %d %+v", code, out)
+		t.Fatalf("confirm baseline: %d %+v", code, out)
 	}
 	run(t, "config", "set", "packs", "mine", "--dir", dir)
 	code, res := runJSON(t, "config", "resolved", "--dir", dir, "--json")
 	resolved := mustJSON(t, res["resolved"])
-	if code != 0 || !strings.Contains(resolved, `"styleProfile":{"source":"pack:mine","value":{"chars":15`) || !strings.Contains(resolved, "多用短句") {
+	if code != 0 || !strings.Contains(resolved, `"styleProfile":{"source":"pack:mine","value":{"chars":15`) ||
+		strings.Contains(resolved, "多用短句") || strings.Contains(resolved, "赋能") {
+		t.Fatalf("resolved before confirming style-1: %d %s", code, resolved)
+	}
+	code, out = runProposal(t, "confirm", "me", "--item", "style-1", "--confirmation", "作者：就按这个来", "--dir", dir)
+	if code != 0 || out.Proposal.Items[1].Status != "confirmed" || *out.Proposal.Items[1].Confirmation != "作者：就按这个来" ||
+		strings.Join(out.ChangedPaths, ",") != ".writing-anything/packs/mine.yaml,.writing-anything/proposals/me.yaml" {
+		t.Fatalf("confirm: %d %+v", code, out)
+	}
+	code, res = runJSON(t, "config", "resolved", "--dir", dir, "--json")
+	resolved = mustJSON(t, res["resolved"])
+	if code != 0 || !strings.Contains(resolved, `"styleProfile":{"source":"pack:mine","value":{"chars":15`) || !strings.Contains(resolved, "多用短句") ||
+		strings.Contains(resolved, "赋能") {
 		t.Fatalf("resolved after confirm: %s", resolved)
 	}
 	if code, out := runProposal(t, "reject", "me", "--item", "avoid-1", "--dir", dir); code != 0 || out.Proposal.Items[2].Status != "rejected" || out.Proposal.Items[2].DecidedAt == nil {
@@ -166,6 +176,26 @@ func TestPackPrefer(t *testing.T) {
 	}
 	if code, _ := runJSON(t, "validate", ".writing-anything/works/my-post/edits.yaml", "--dir", dir, "--json"); code != 0 {
 		t.Fatalf("validate edits: %d", code)
+	}
+	// 偏好提议确认前不影响规则：只确认 style-1（生成规范包 mine）并启用后，仍为 proposed 的 avoid-1（禁用词赋能）不进入生效配置；
+	// 确认 avoid-1 后，禁用词以 pack:mine 为来源生效。
+	if code, out := runProposal(t, "confirm", "prefs", "--item", "style-1", "--confirmation", "作者：确实想写短一点", "--dir", dir); code != 0 ||
+		out.Proposal.Items[0].Status != "proposed" || out.Proposal.Items[1].Status != "confirmed" {
+		t.Fatalf("confirm style-1: %d %+v", code, out)
+	}
+	run(t, "config", "set", "packs", "mine", "--dir", dir)
+	code, res = runJSON(t, "config", "resolved", "--dir", dir, "--json")
+	resolved := mustJSON(t, res["resolved"])
+	if code != 0 || !strings.Contains(resolved, `"style":[{"source":"pack:mine","text":"作者修改后的段落比 Agent 初稿短约 32%：写得更精简"}]`) ||
+		!strings.Contains(resolved, `"bannedTerms":[]`) || strings.Contains(resolved, "赋能") {
+		t.Fatalf("resolved before confirming avoid-1: %d %s", code, resolved)
+	}
+	if code, out := runProposal(t, "confirm", "prefs", "--item", "avoid-1", "--confirmation", "作者：别再写赋能", "--dir", dir); code != 0 || out.Proposal.Items[0].Status != "confirmed" {
+		t.Fatalf("confirm avoid-1: %d %+v", code, out)
+	}
+	code, res = runJSON(t, "config", "resolved", "--dir", dir, "--json")
+	if resolved = mustJSON(t, res["resolved"]); code != 0 || !strings.Contains(resolved, `"bannedTerms":[{"source":"pack:mine","term":"赋能"}]`) {
+		t.Fatalf("resolved after confirming avoid-1: %d %s", code, resolved)
 	}
 	if code, out := runProposal(t, "prefer", "other", "--dir", dir); code != 1 || !hasNext(diag(t, out.result, "proposal.missing-pack"), "wa-cli help pack prefer") {
 		t.Fatalf("missing pack: %d %+v", code, out)

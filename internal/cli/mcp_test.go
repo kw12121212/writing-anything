@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -347,31 +348,7 @@ func TestMCPEveryTool(t *testing.T) {
 			if _, err := os.Stat(filepath.Join(dir, ".writing-anything")); err != nil {
 				run(t, "init", "--dir", dir) // MCP 服务需要工作区；样例在空目录中运行的命令（如 skills install）照常调用
 			}
-			args := map[string]any{}
-			for i, a := range inv.args {
-				args[c.args[i].Name] = a
-			}
-			for name, v := range inv.values {
-				switch spec := findFlag(c.allFlags(), name); {
-				case name == "dir" || name == "json" || name == "help":
-				case name == "file":
-					path := v
-					if !filepath.IsAbs(path) {
-						path = filepath.Join(dir, path)
-					}
-					args["input"] = readFile(t, path)
-				case spec.Type == flagBool:
-					args[name] = true
-				case spec.Type == flagList:
-					items := []any{}
-					for _, x := range inv.lists[name] {
-						items = append(items, x)
-					}
-					args[name] = items
-				default:
-					args[name] = v
-				}
-			}
+			args := mcpSampleArgs(t, c, inv, dir)
 			s := startMCP(t, dir)
 			if r := s.call(strings.ReplaceAll(c.name, " ", "_"), args); r["isError"] != false {
 				t.Fatalf("%v: %v", args, r["content"])
@@ -379,4 +356,136 @@ func TestMCPEveryTool(t *testing.T) {
 			s.close()
 		})
 	}
+}
+
+// mcpSampleArgs 把命令样例解析结果转换为 tool 参数：位置参数按名称，命名参数按类型；--dir、--json、--help 由服务给出或不适用，
+// --file 的内容作为 input。
+func mcpSampleArgs(t *testing.T, c *command, inv *invocation, dir string) map[string]any {
+	t.Helper()
+	args := map[string]any{}
+	for i, a := range inv.args {
+		args[c.args[i].Name] = a
+	}
+	for name, v := range inv.values {
+		switch spec := findFlag(c.allFlags(), name); {
+		case name == "dir" || name == "json" || name == "help":
+		case name == "file":
+			path := v
+			if !filepath.IsAbs(path) {
+				path = filepath.Join(dir, path)
+			}
+			args["input"] = readFile(t, path)
+		case spec.Type == flagBool:
+			args[name] = true
+		case spec.Type == flagList:
+			items := []any{}
+			for _, x := range inv.lists[name] {
+				items = append(items, x)
+			}
+			args[name] = items
+		default:
+			args[name] = v
+		}
+	}
+	return args
+}
+
+// mcpReadOnlyKnown 是必须被识别为只读的命令：样例调用不改变工作区。防止只读判定因样例变化静默丢失覆盖。
+var mcpReadOnlyKnown = []string{"help", "version", "validate", "status", "config resolved", "pack list", "source list", "next",
+	"decisions", "feedback list", "continuity", "context", "threads", "timeline", "skills list", "brief show", "outline show",
+	"plan show", "canon list", "claim list", "state list", "state at", "knowledge list", "knowledge at", "method list", "method show",
+	"review show", "review report", "handoff show", "metrics show", "series show", "summary show", "marketing show", "impact list",
+	"recall", "lint", "diff", "provenance", "curve"}
+
+// mcp-same-as-cli（只读命令全集）：遍历命令注册表中有 tool 的命令，样例调用前后工作区逐字节不变者按只读处理（含只读命令、
+// 不产生变更的幂等调用与被拒绝的调用）；在同一工作区分别以
+// 新版请求（2026-07-28，带 _meta）与旧版会话（Legacy Session，2025-11-25 与 2025-06-18 以 initialize 握手后不带 _meta）调用对应 tool，content 文本必须逐字节
+// 等于 CLI --json 的标准输出、isError 与退出码一致，且调用后工作区仍不变。
+func TestMCPReadOnlySameAsCLI(t *testing.T) {
+	frozen := time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)
+	now = func() time.Time { return frozen }
+	defer func() { now = time.Now }()
+
+	var readOnly []string
+	for _, c := range registry {
+		if slices.Contains(mcpExcluded, c.name) {
+			continue
+		}
+		t.Run(c.name, func(t *testing.T) {
+			argv := sampleArgs(t, c.name)
+			if !slices.Contains(argv, "--json") {
+				argv = append(argv, "--json")
+			}
+			inv, d := parseArgs(c, argv[len(strings.Fields(c.name)):])
+			if d != nil {
+				t.Fatalf("sample %v: %s", argv, d.Message)
+			}
+			dir := inv.values["dir"]
+			if dir == "" {
+				dir = newWorkspace(t)
+			}
+			if _, err := os.Stat(filepath.Join(dir, ".writing-anything")); err != nil {
+				run(t, "init", "--dir", dir)
+			}
+			args := mcpSampleArgs(t, c, inv, dir)
+			stdin := ""
+			if in, ok := args["input"].(string); ok {
+				stdin = in
+				for i := 0; i+1 < len(argv); i++ {
+					if argv[i] == "--file" {
+						argv = slices.Delete(slices.Clone(argv), i, i+2) // --file 的内容改由标准输入提供，与 tool 的 input 一致
+						break
+					}
+				}
+			}
+			before := snapshotTree(t, dir)
+			code, want, _ := runIn(t, stdin, argv...)
+			if !strings.HasPrefix(want, "{") {
+				t.Fatalf("CLI %v 没有输出 JSON 信封: %q", argv, want)
+			}
+			if !maps.Equal(before, snapshotTree(t, dir)) {
+				return // 样例调用改变了工作区：不是只读命令
+			}
+			readOnly = append(readOnly, c.name)
+			tool := strings.ReplaceAll(c.name, " ", "_")
+			raw, _ := json.Marshal(args)
+			for _, era := range []string{"2026-07-28", "2025-11-25", "2025-06-18"} {
+				s := startMCP(t, dir)
+				var m map[string]any
+				if era == "2026-07-28" {
+					m = s.request("tools/call", fmt.Sprintf(`"name":%q,"arguments":%s`, tool, raw))
+				} else {
+					init := s.rawRequest("initialize", `"protocolVersion":"`+era+`","capabilities":{},"clientInfo":{"name":"old","version":"1"}`)
+					if r, _ := init["result"].(map[string]any); r["protocolVersion"] != era {
+						t.Fatalf("initialize: %v", init)
+					}
+					fmt.Fprintln(s.w, `{"jsonrpc":"2.0","method":"notifications/initialized"}`)
+					m = s.rawRequest("tools/call", fmt.Sprintf(`"name":%q,"arguments":%s`, tool, raw))
+				}
+				r, ok := m["result"].(map[string]any)
+				if !ok {
+					t.Fatalf("%s tools/call: %v", era, m)
+				}
+				got := r["content"].([]any)[0].(map[string]any)["text"].(string)
+				if got != want || r["isError"] != (code != 0) {
+					t.Errorf("%s: tool 输出与 CLI 不一致（isError=%v，exit=%d）\n--- MCP ---\n%s\n--- CLI ---\n%s", era, r["isError"], code, got, want)
+				}
+				if c := s.close(); c != 0 {
+					t.Fatalf("%s: mcp exit %d", era, c)
+				}
+				if !maps.Equal(before, snapshotTree(t, dir)) {
+					t.Fatalf("%s: 只读 tool 调用改变了工作区", era)
+				}
+			}
+		})
+	}
+	for _, name := range mcpReadOnlyKnown {
+		if !slices.Contains(readOnly, name) {
+			t.Errorf("已知只读命令 %s 没有被识别为只读（样例调用改变了工作区或被跳过）", name)
+		}
+	}
+	if len(readOnly) < 30 {
+		t.Errorf("只识别出 %d 条只读命令，期望不少于 30：%v", len(readOnly), readOnly)
+	}
+	t.Logf("只读命令 %d 条：%v", len(readOnly), readOnly)
 }

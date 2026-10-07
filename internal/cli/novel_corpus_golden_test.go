@@ -106,8 +106,8 @@ func TestNovelCorpusGolden(t *testing.T) {
 	}
 }
 
-// 四类注入违例的负向断言：重放副本上逐类注入，断言对应审查以 error 级报告且诊断码正确，
-// 修回合规后恢复全绿。知情违例有两条断言：台账注入（提前登记获知事件，knowledge at 暴露）与
+// 四类注入违例的负向断言：重放副本上逐类注入，直接断言对应审查发现项（或诊断）的 severity 为 error 且错误码正确，
+// 修回合规后恢复全绿。设定冲突类注入由 wa-cli continuity 报告（已死人物出场），不依赖写保护拒绝。知情违例有两条断言：台账注入（提前登记获知事件，knowledge at 暴露）与
 // prose 注入（正文提前出现揭示词，continuity.knowledge-early，error 级——knowledge-reveal-terms 变更补齐）。
 func TestNovelCorpusNegativeInjections(t *testing.T) {
 	frozen := time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)
@@ -117,7 +117,8 @@ func TestNovelCorpusNegativeInjections(t *testing.T) {
 	dir := t.TempDir()
 	replayNovelCorpus(t, dir)
 
-	findings := func() map[string]bool {
+	// findings 返回未豁免发现项的错误码 → severity（同码多条时任一非 error 即记录该 severity，使 error 断言更严格）。
+	findings := func() map[string]string {
 		t.Helper()
 		code, res := runWS(t, dir, "continuity", "stopped-at-417")
 		if code != 0 {
@@ -125,18 +126,22 @@ func TestNovelCorpusNegativeInjections(t *testing.T) {
 		}
 		var out struct {
 			Findings []struct {
-				Code   string `json:"code"`
-				Waived bool   `json:"waived"`
-				Scene  string `json:"scene"`
+				Code     string `json:"code"`
+				Severity string `json:"severity"`
+				Waived   bool   `json:"waived"`
+				Scene    string `json:"scene"`
 			} `json:"findings"`
 		}
 		if err := json.Unmarshal([]byte(res.stdout), &out); err != nil {
 			t.Fatalf("continuity 输出解析失败: %v; %s", err, res.stdout)
 		}
-		codes := map[string]bool{}
+		codes := map[string]string{}
 		for _, f := range out.Findings {
-			if !f.Waived {
-				codes[f.Code] = true
+			if f.Waived {
+				continue
+			}
+			if old, seen := codes[f.Code]; !seen || old == "error" {
+				codes[f.Code] = f.Severity
 			}
 		}
 		return codes
@@ -147,20 +152,29 @@ func TestNovelCorpusNegativeInjections(t *testing.T) {
 		t.Fatalf("基线连续性应全绿，实际 %v", codes)
 	}
 
-	// (1) 设定冲突：修改作者钦定条目被拒（canon.author-pinned，error 级）并生成阻塞决策
-	//（唯一写入是决策队列；设定集不变，作者未 decide 前修改不生效）。
-	before := snapshotTree(t, dir)
-	code, res := runWS(t, dir, "canon", "set", "stopped-at-417", "rule-clock-freeze", "--text", "测试：停摆之约改为可修")
-	if code != 1 || !diagCode(res, "canon.author-pinned") {
-		t.Fatalf("修改钦定条目: exit = %d, diagnostics = %+v", code, res.Diagnostics)
+	// (1) 设定冲突：已死人物出场——登记并确认韩江在 ch2-s3 死亡（state propose + state confirm），其后 ch3-s3 的出场人物
+	// 含韩江 → wa-cli continuity 报告 continuity.dead-acting（error，归属 ch3-s3）；作者撤销该状态（state reject）后全绿。
+	// 全程不产生待决决策（连续性审查只读，豁免决策只在 accept 阻塞时生成）。
+	if code, res := runWS(t, dir, "state", "propose", "stopped-at-417", "--scene", "stopped-at-417/ch2-s3", "--entry", "char-han-jiang", "--state", "死亡", "--id", "st-x"); code != 0 {
+		t.Fatalf("注入死亡状态: exit = %d, diagnostics = %+v", code, res.Diagnostics)
 	}
-	for _, p := range res.ChangedPaths {
-		if p != ".writing-anything/decisions.yaml" {
-			t.Fatalf("被拒的钦定修改只应写决策队列，实际写 %v", res.ChangedPaths)
-		}
+	if code, res := runWS(t, dir, "state", "confirm", "stopped-at-417", "st-x", "--confirmed-by-author", "--confirmation", "作者：确认韩江在此死亡。"); code != 0 {
+		t.Fatalf("确认注入的死亡状态: exit = %d, diagnostics = %+v", code, res.Diagnostics)
 	}
-	if after := snapshotTree(t, dir); len(after) != len(before) {
-		t.Fatalf("被拒的钦定修改不应新增/删除文件：%d → %d", len(before), len(after))
+	if code, res := runWS(t, dir, "continuity", "stopped-at-417/ch3-s3"); code != 0 || !strings.Contains(res.stdout, `"scene":"stopped-at-417/ch3-s3","code":"continuity.dead-acting","severity":"error"`) {
+		t.Fatalf("已死人物出场应在 ch3-s3 报 error 级 continuity.dead-acting: exit = %d, %s", code, res.stdout)
+	}
+	if codes := findings(); codes["continuity.dead-acting"] != "error" || len(codes) != 1 {
+		t.Fatalf("已死人物出场应只报 error 级 continuity.dead-acting，实际 %v", codes)
+	}
+	if code, res := runWS(t, dir, "state", "reject", "stopped-at-417", "st-x", "--confirmed-by-author", "--confirmation", "作者：撤销这条死亡状态。"); code != 0 {
+		t.Fatalf("撤销注入的死亡状态: exit = %d, diagnostics = %+v", code, res.Diagnostics)
+	}
+	if codes := findings(); len(codes) > 0 {
+		t.Fatalf("撤销死亡状态后应全绿，实际 %v", codes)
+	}
+	if code, res := runWS(t, dir, "decisions"); code != 0 || strings.Contains(res.stdout, `"status":"open"`) {
+		t.Fatalf("设定冲突注入不应留下待决决策: exit = %d, %s", code, res.stdout)
 	}
 
 	// (2) 知情违例：提前引用秘密——向倒叙场景注入林晚获知溺亡真相的知情事件（close-out --replace）。
@@ -206,7 +220,7 @@ func TestNovelCorpusNegativeInjections(t *testing.T) {
 	if code, res := runWSIn(t, dir, injectedProse, "draft", "write", "stopped-at-417/ch1-s3"); code != 0 {
 		t.Fatalf("注入揭示词正文: exit = %d, diagnostics = %+v", code, res.Diagnostics)
 	}
-	if codes := findings(); !codes["continuity.knowledge-early"] {
+	if codes := findings(); codes["continuity.knowledge-early"] != "error" {
 		t.Fatalf("正文提前揭示应报 continuity.knowledge-early，实际 %v", codes)
 	}
 	// 修回合规：重写原始正文后全绿。
@@ -221,7 +235,7 @@ func TestNovelCorpusNegativeInjections(t *testing.T) {
 	if code, res := runWS(t, dir, "threads", "set", "stopped-at-417", "th-a", "--status", "open"); code != 0 {
 		t.Fatalf("回退 th-a: exit = %d, diagnostics = %+v", code, res.Diagnostics)
 	}
-	if codes := findings(); !codes["continuity.thread-anomaly"] {
+	if codes := findings(); codes["continuity.thread-anomaly"] != "error" {
 		t.Fatalf("删除伏笔回收后应报 continuity.thread-anomaly，实际 %v", codes)
 	}
 	if code, res := runWS(t, dir, "threads", "set", "stopped-at-417", "th-a", "--status", "paid", "--recovered-in", "stopped-at-417/ch3-s3"); code != 0 {
@@ -235,11 +249,11 @@ func TestNovelCorpusNegativeInjections(t *testing.T) {
 	if code, res := runWS(t, dir, "scene", "contract", "stopped-at-417/ch2-s1", "sc", "--after", "stopped-at-417/ch2-s2"); code != 0 {
 		t.Fatalf("注入互指 after: exit = %d, diagnostics = %+v", code, res.Diagnostics)
 	}
-	code, res = runWS(t, dir, "timeline", "stopped-at-417")
-	if code != 1 || !diagCode(res, "timeline.cycle") || !diagCode(res, "timeline.order-conflict") {
+	code, res := runWS(t, dir, "timeline", "stopped-at-417")
+	if code != 1 || !diagError(res, "timeline.cycle") || !diagError(res, "timeline.order-conflict") {
 		t.Fatalf("时间线倒置: exit = %d, diagnostics = %+v", code, res.Diagnostics)
 	}
-	if codes := findings(); !codes["timeline.cycle"] || !codes["timeline.order-conflict"] {
+	if codes := findings(); codes["timeline.cycle"] != "error" || codes["timeline.order-conflict"] != "error" {
 		t.Fatalf("连续性审查应携带时间线发现，实际 %v", codes)
 	}
 	if code, res := runWS(t, dir, "scene", "contract", "stopped-at-417/ch2-s1", "sc", "--after", ""); code != 0 {
@@ -250,13 +264,9 @@ func TestNovelCorpusNegativeInjections(t *testing.T) {
 	}
 }
 
-func diagCode(res result, code string) bool {
-	for _, d := range res.Diagnostics {
-		if d.Code == code {
-			return true
-		}
-	}
-	return false
+// diagError 报告 res 是否含错误码为 code 的 error 级诊断。
+func diagError(res result, code string) bool {
+	return slices.ContainsFunc(res.Diagnostics, func(d Diagnostic) bool { return d.Code == code && d.Severity == "error" })
 }
 
 // 秘密遮蔽（Secret Masking）在语料上的完成标准：沈望舒溺水真相（设定条目 char-shen-wangshu，kn-05/kn-07 登记

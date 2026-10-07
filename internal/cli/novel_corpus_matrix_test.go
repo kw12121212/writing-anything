@@ -31,7 +31,7 @@ type matrixEntryFull struct {
 }
 
 // negativeAssertionsOf 从 TestNovelCorpusNegativeInjections 的源码机械推导其断言的全部
-// 负向码（diagCode/codes 索引字面量）与标记，防止清单与断言漂移；
+// 负向码（diagError/codes 索引字面量）与标记，防止清单与断言漂移；
 // knowledge-at-leak 是知情违例的台账暴露标记（产品暂无对应诊断码，见测试注释）。
 func negativeAssertionsOf(t *testing.T) map[string]bool {
 	t.Helper()
@@ -40,7 +40,7 @@ func negativeAssertionsOf(t *testing.T) map[string]bool {
 		t.Fatal(err)
 	}
 	out := map[string]bool{"knowledge-at-leak": true}
-	re := regexp.MustCompile(`(?:diagCode\(res, "|codes\[")([a-z]+\.[a-z-]+)"`)
+	re := regexp.MustCompile(`(?:diagError\(res, "|codes\[")([a-z]+\.[a-z-]+)"`)
 	for _, m := range re.FindAllStringSubmatch(string(src), -1) {
 		out[m[1]] = true
 	}
@@ -50,11 +50,30 @@ func negativeAssertionsOf(t *testing.T) map[string]bool {
 	return out
 }
 
-// structureAssertionTests 是可作为 structure 锚点的测试名。
-var structureAssertionTests = map[string]bool{
-	"TestNovelCorpusScript": true,
-	"TestNovelCorpusDesign": true,
-	"TestNovelCorpusReplay": true,
+// structureAssertionsOf 从 novel_corpus_*_test.go 源码机械推导可作为 structure 锚点的测试名（语料专项测试函数），
+// 测试改名或删除时引用它的矩阵条目立即失败。
+func structureAssertionsOf(t *testing.T) map[string]bool {
+	t.Helper()
+	files, err := filepath.Glob("novel_corpus_*_test.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := map[string]bool{}
+	re := regexp.MustCompile(`(?m)^func (TestNovelCorpus[A-Za-z]+)\(t \*testing\.T\)`)
+	for _, f := range files {
+		src, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, m := range re.FindAllStringSubmatch(string(src), -1) {
+			out[m[1]] = true
+		}
+	}
+	if !out["TestNovelCorpusMatrix"] || len(out) < 5 {
+		t.Fatalf("从语料测试源码推导测试名失败：仅 %v", out)
+	}
+	delete(out, "TestNovelCorpusMatrix") // 对账测试自身不作为锚点
+	return out
 }
 
 // 矩阵完备性对账（双向）：每条矩阵条目的 evidence 必须解析到真实存在的断言；反向地，
@@ -100,6 +119,7 @@ func TestNovelCorpusMatrix(t *testing.T) {
 		}
 	}
 	negativeAssertions := negativeAssertionsOf(t)
+	structureAssertions := structureAssertionsOf(t)
 	goldens := map[string]bool{}
 	gs, err := os.ReadDir(filepath.Join(corpusDir, "golden"))
 	if err != nil {
@@ -195,7 +215,7 @@ func TestNovelCorpusMatrix(t *testing.T) {
 				}
 				usedNegative[*ev.Code] = e.ID
 			case "structure":
-				if ev.Test == nil || !structureAssertionTests[*ev.Test] {
+				if ev.Test == nil || !structureAssertions[*ev.Test] {
 					missing = append(missing, fmt.Sprintf("%s: 结构测试 %v 不存在", e.ID, ev.Test))
 				}
 			default:

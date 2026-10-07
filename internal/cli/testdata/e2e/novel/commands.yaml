@@ -1308,6 +1308,17 @@ stages:
     expect_code: null
     stdout_contains: null
   - command:
+    - scene
+    - contract
+    - stopped-at-417/ch1-s2
+    - sc
+    - --cause
+    - ev-letter-handed
+    input_ref: null
+    expect_exit: 1
+    expect_code: scene.event-not-yet-happened
+    stdout_contains: null
+  - command:
     - outline
     - set
     - stopped-at-417/ch1-s2
@@ -1998,7 +2009,7 @@ stages:
     input_ref: null
     expect_exit: 0
     expect_code: null
-    stdout_contains: null
+    stdout_contains: '"dimension":"pov-reveal","scope":"stopped-at-417/ch2-s3"'
   - command:
     - review
     - plan
@@ -2008,7 +2019,7 @@ stages:
     input_ref: null
     expect_exit: 0
     expect_code: null
-    stdout_contains: null
+    stdout_contains: '"dimension":"character","scope":"stopped-at-417/ch-2"'
   - command:
     - review
     - submit
