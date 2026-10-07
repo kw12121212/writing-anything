@@ -31,6 +31,12 @@ func TestSceneContractCommand(t *testing.T) {
 	writeFile(t, filepath.Join(dir, ".writing-anything", "works", "my-novel", "outline.yaml"),
 		"schema_version: 1\nsections:\n  - {id: b1, title: 开端, reason: 节拍}\n")
 
+	// 伏笔先登记进伏笔台账（Foreshadowing Ledger），plants 才能引用它（threads-contract-checks）。
+	if code, _ := runWS(t, dir, "threads", "add", "my-novel", "--text", "灯塔的旧账", "--plant-in", "my-novel/scene-1",
+		"--recover-at", "my-novel/scene-1", "--id", "fs-1"); code != 0 {
+		t.Fatalf("threads add fs-1: exit code = %d", code)
+	}
+
 	// contract-new-scene：首个场景声明完整契约。
 	code, res := runOutline(t, dir, "scene", "contract", "my-novel/scene-1", "sc1", "--title", "灯下对峙",
 		"--pov", "守灯人", "--characters", "守灯人,精灵", "--location", "灯室", "--beats", "b1",

@@ -373,7 +373,7 @@ func TestListOverdue(t *testing.T) {
 	}
 }
 
-// ContractProblems：recovers 引用未登记或晚埋、plants 引用异场景的伏笔时报告对应错误码；无台账不检查。
+// ContractProblems：recovers 引用未登记或晚埋、plants 引用异场景的伏笔时报告对应错误码；无台账按空台账检查。
 func TestContractProblems(t *testing.T) {
 	root, w := newNovel(t)
 	s1 := ".writing-anything/works/my-novel/units/scene-1"
@@ -381,17 +381,41 @@ func TestContractProblems(t *testing.T) {
 	write(t, root, outline.Path(s1), "schema_version: 1\nsections:\n  - {id: sc1, title: 灯下, plants: [f-1]}\n")
 	write(t, root, outline.Path(s2), "schema_version: 1\nsections:\n  - {id: sc2, title: 收线, recovers: [f-9, f-2]}\n")
 
-	// 没有台账：不做交叉检查。
+	// 没有台账：按空台账检查，plants 与 recovers 的每个引用都未登记。
 	scenes := []outline.Scene{{Ref: "my-novel/scene-1", Dir: s1}, {Ref: "my-novel/scene-2", Dir: s2}}
-	if ps := ContractProblems(root, w, scenes); ps != nil {
+	ps := ContractProblems(root, w, scenes)
+	if len(ps) != 3 || !has(ps, CodeUnknownThread, "sections[0].plants[0]") ||
+		!has(ps, CodeUnknownThread, "sections[0].recovers[0]") || !has(ps, CodeUnknownThread, "sections[0].recovers[1]") {
 		t.Fatalf("no ledger: %+v", ps)
+	}
+
+	// 台账存在但不通过 Schema 校验：不做交叉检查（其问题由台账校验报告）。
+	write(t, root, Path("my-novel"), "schema_version: 1\nentries:\n  - {id: f-1, status: closed}\n")
+	if ps := ContractProblems(root, w, scenes); ps != nil {
+		t.Fatalf("broken ledger: %+v", ps)
+	}
+	os.Remove(filepath.Join(root, filepath.FromSlash(Path("my-novel"))))
+
+	// threads.yaml 途经符号链接：不按空台账检查；CheckWorks 计入 checked 并报告 artifact.not-found。
+	target := filepath.Join(t.TempDir(), "threads.yaml")
+	os.WriteFile(target, []byte("schema_version: 1\nentries: []\n"), 0o644)
+	ledger := filepath.Join(root, filepath.FromSlash(Path("my-novel")))
+	if err := os.Symlink(target, ledger); err == nil { // 不支持符号链接的平台跳过本段
+		if ps := ContractProblems(root, w, scenes); ps != nil {
+			t.Fatalf("symlinked ledger: %+v", ps)
+		}
+		if checked, ps := CheckWorks(root, []*work.Work{w}); !slices.Equal(checked, []string{Path("my-novel")}) ||
+			len(ps) != 1 || ps[0].Code != "artifact.not-found" {
+			t.Fatalf("symlinked ledger CheckWorks: checked = %v, ps = %+v", checked, ps)
+		}
+		os.Remove(ledger)
 	}
 
 	// 台账：f-1 埋在 scene-1，f-2 埋在 scene-2（比 recovers 它的 scene-2 晚不存在——同场景可以）；
 	// f-9 未登记；f-3 埋在 scene-2，被 scene-2 之前没有问题；另埋 f-late 在 scene-2，被…（不存在此用例）。
 	Add(root, w, AddInput{Text: "f-1", PlantIn: "my-novel/scene-1", RecoverAt: "my-novel/scene-2", ID: "f-1"})
 	Add(root, w, AddInput{Text: "f-2", PlantIn: "my-novel/scene-3", RecoverAt: "my-novel/scene-3", ID: "f-2"})
-	ps := ContractProblems(root, w, scenes)
+	ps = ContractProblems(root, w, scenes)
 	// f-9 未登记（threads.unknown-thread）；f-2 埋在 scene-3，按先序晚于 recovers 它的 scene-2（threads.recover-not-planted）。
 	if len(ps) != 2 || !has(ps, CodeUnknownThread, "sections[0].recovers[0]") || !has(ps, CodeRecoverNotPlanted, "sections[0].recovers[1]") {
 		t.Fatalf("contract problems = %+v", ps)
@@ -444,12 +468,20 @@ func TestCheckWorks(t *testing.T) {
 		t.Fatalf("mixed problems: %+v", ps)
 	}
 
-	// 没有台账的作品：不计入 checked。
+	// 没有台账的作品：不计入 checked；大纲没有 plants 与 recovers 时没有问题。
 	root2 := t.TempDir()
 	workspace.Init(root2, nil)
 	w2, _, _ := work.Create(root2, "minimal", "my-post")
 	if checked, ps = CheckWorks(root2, []*work.Work{w2}); len(checked) != 0 || len(ps) != 0 {
 		t.Fatalf("no ledger: checked = %v, ps = %+v", checked, ps)
+	}
+
+	// 没有台账的长篇：不计入 checked，但 recovers 引用的伏笔按空台账报告 threads.unknown-thread。
+	root3, w3 := newNovel(t)
+	write(t, root3, outline.Path(s2), "schema_version: 1\nsections:\n  - {id: sc2, title: 收线, recovers: [f-1]}\n")
+	checked, ps = CheckWorks(root3, []*work.Work{w3})
+	if len(checked) != 0 || len(ps) != 1 || !has(ps, CodeUnknownThread, "sections[0].recovers[0]") || ps[0].Path != outline.Path(s2) {
+		t.Fatalf("no ledger novel: checked = %v, ps = %+v", checked, ps)
 	}
 }
 

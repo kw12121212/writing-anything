@@ -183,7 +183,7 @@ func causalityPrecheck(dir string, w *work.Work, u *work.Unit, e outline.Edit, e
 
 // threadsPrecheck 以写入后的状态检查场景契约的 plants/recovers 与伏笔台账（Foreshadowing Ledger）的交叉一致
 // （threads-contract-checks），只拦截被编辑的节上、由本次 --plant/--recover 引起的问题：不填 path，字段去掉
-// sections[i] 前缀。作品没有 threads.yaml 时不检查（ContractProblems 返回空）；其他节或其他场景的既有问题不阻止
+// sections[i] 前缀。作品没有 threads.yaml 时按空台账检查（被引用的伏笔都未登记）；其他节或其他场景的既有问题不阻止
 // 写入，由整体校验报告。
 func threadsPrecheck(dir string, w *work.Work, u *work.Unit, e outline.Edit, existing *outline.Outline) []workspace.Problem {
 	scenes := w.Scenes()

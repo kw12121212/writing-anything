@@ -232,7 +232,7 @@ func TestThreadsOverdue(t *testing.T) {
 	}
 }
 
-// scene contract 的写前预检：--recover 引用未登记伏笔拒绝且不写文件；无台账作品照常写入。
+// scene contract 的写前预检：--recover 引用未登记伏笔拒绝且不写文件；无台账作品按空台账同样拒绝。
 func TestThreadsScenePrecheck(t *testing.T) {
 	dir := threadsFixture(t)
 	code, res := runWS(t, dir, "scene", "contract", "my-novel/scene-2", "beat-1", "--title", "收线", "--recover", "f-9")
@@ -259,10 +259,58 @@ func TestThreadsScenePrecheck(t *testing.T) {
 	if code, _ := runWS(t, dir, "scene", "contract", "my-novel/scene-2", "beat-1", "--title", "收线", "--recover", "f-1"); code != 0 {
 		t.Fatalf("valid recover: exit code = %d", code)
 	}
-	// 没有台账的作品：不做伏笔交叉检查。
+	// 没有台账的作品：按空台账检查，--plant 引用的伏笔未登记，拒绝写入并指向 threads add。
 	dir2 := newNovel(t)
-	if code, _ := runWS(t, dir2, "scene", "contract", "my-novel/scene-1", "beat-1", "--title", "灯下", "--plant", "f-1"); code != 0 {
-		t.Fatalf("no ledger plant: exit code = %d", code)
+	code, res = runWS(t, dir2, "scene", "contract", "my-novel/scene-1", "beat-1", "--title", "灯下", "--plant", "f-1")
+	if code != 1 {
+		t.Fatalf("no ledger plant: exit code = %d, want 1", code)
+	}
+	if d := diag(t, res, "threads.unknown-thread"); d.Field != "plants[0]" || d.Path != "" || !hasNext(d, "wa-cli help threads add --json") ||
+		!hasNext(d, "wa-cli help scene contract --json") || !hasNext(d, "wa-cli threads my-novel") {
+		t.Fatalf("no ledger plant = %+v", d)
+	}
+	if len(res.ChangedPaths) != 0 {
+		t.Fatalf("outline written on refusal: %v", res.ChangedPaths)
+	}
+	if _, err := os.Stat(dir2 + "/.writing-anything/works/my-novel/units/scene-1/outline.yaml"); err == nil {
+		t.Fatalf("outline created on refusal")
+	}
+	// 没有 --plant/--recover 的契约照常写入。
+	if code, _ := runWS(t, dir2, "scene", "contract", "my-novel/scene-1", "beat-1", "--title", "灯下"); code != 0 {
+		t.Fatalf("no ledger plain contract: exit code = %d", code)
+	}
+}
+
+// 没有台账的作品：validate 整体校验与 continuity 按空台账报告 recovers 引用的未登记伏笔，不把 threads.yaml 计入 checked。
+func TestThreadsValidateNoLedger(t *testing.T) {
+	dir := newNovel(t)
+	os.MkdirAll(dir+"/.writing-anything/works/my-novel/units/scene-2", 0o755)
+	writeFile(t, dir+"/.writing-anything/works/my-novel/units/scene-2/outline.yaml",
+		"schema_version: 1\nsections:\n  - {id: beat-1, title: 收线, reason: 收线, recovers: [f-9]}\n")
+	code, out := runValidateJSON(t, dir)
+	if code != 1 {
+		t.Fatalf("no ledger recover: exit code = %d, want 1, diagnostics = %+v", code, out.Diagnostics)
+	}
+	d := diag(t, out, "threads.unknown-thread")
+	if d.Field != "sections[0].recovers[0]" || d.Path != ".writing-anything/works/my-novel/units/scene-2/outline.yaml" {
+		t.Fatalf("no ledger diag = %+v", d)
+	}
+	if slices.Contains(out.Checked, ".writing-anything/works/my-novel/threads.yaml") {
+		t.Fatalf("checked = %v", out.Checked)
+	}
+	// continuity 把同一问题报告为 error 级发现项（continuity.dangling-reference，message 带原错误码）。
+	_, res := runWS(t, dir, "continuity", "my-novel")
+	var cont struct {
+		Findings []struct{ Scene, Code, Severity, Message string } `json:"findings"`
+	}
+	if err := json.Unmarshal([]byte(res.stdout), &cont); err != nil {
+		t.Fatalf("continuity output: %v", err)
+	}
+	if !slices.ContainsFunc(cont.Findings, func(f struct{ Scene, Code, Severity, Message string }) bool {
+		return f.Scene == "my-novel/scene-2" && f.Code == "continuity.dangling-reference" && f.Severity == "error" &&
+			strings.Contains(f.Message, "threads.unknown-thread")
+	}) {
+		t.Fatalf("continuity no ledger: %s", res.stdout)
 	}
 }
 
