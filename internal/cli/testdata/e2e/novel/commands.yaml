@@ -1533,7 +1533,7 @@ stages:
     input_ref: null
     expect_exit: 0
     expect_code: null
-    stdout_contains: null
+    stdout_contains: 'units/ch1-s3/acceptance.yaml",".writing-anything/works/stopped-at-417/units/part-1/checkpoint.yaml"'
   - command:
     - advance
     - stopped-at-417/ch1-s3
@@ -1587,14 +1587,6 @@ stages:
     - stopped-at-417/part-1
     - --text
     - 上部（第一章 停摆）：修表匠接到恩人之女送修的怀表，认出刻字不点破；镇规挡住一切打听；拖延的谎言背后是二十年的自责。刻字与大钟两条伏笔入土。
-    input_ref: null
-    expect_exit: 0
-    expect_code: null
-    stdout_contains: null
-  - command:
-    - volume
-    - checkpoint
-    - stopped-at-417/part-1
     input_ref: null
     expect_exit: 0
     expect_code: null
@@ -1951,7 +1943,7 @@ stages:
     input_ref: null
     expect_exit: 0
     expect_code: null
-    stdout_contains: null
+    stdout_contains: 'units/ch2-s3/acceptance.yaml",".writing-anything/works/stopped-at-417/units/part-2/checkpoint.yaml"'
   - command:
     - advance
     - stopped-at-417/ch2-s3
@@ -2220,14 +2212,6 @@ stages:
     - impact
     - list
     - stopped-at-417
-    input_ref: null
-    expect_exit: 0
-    expect_code: null
-    stdout_contains: null
-  - command:
-    - volume
-    - checkpoint
-    - stopped-at-417/part-2
     input_ref: null
     expect_exit: 0
     expect_code: null
@@ -2708,7 +2692,7 @@ stages:
     input_ref: null
     expect_exit: 0
     expect_code: null
-    stdout_contains: null
+    stdout_contains: 'units/ch3-s3/acceptance.yaml",".writing-anything/works/stopped-at-417/units/part-3/checkpoint.yaml"'
   - command:
     - advance
     - stopped-at-417/ch3-s3
@@ -2999,14 +2983,6 @@ stages:
     - markdown
     - --output
     - novel-export.md
-    input_ref: null
-    expect_exit: 0
-    expect_code: null
-    stdout_contains: null
-  - command:
-    - volume
-    - checkpoint
-    - stopped-at-417/part-3
     input_ref: null
     expect_exit: 0
     expect_code: null

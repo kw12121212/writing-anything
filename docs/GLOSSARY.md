@@ -100,7 +100,7 @@
 | 场景契约 | Scene Contract | 场景契约 | 动笔前声明场景的出场人物、承担的情节节拍（Story Beat）与揭示边界（Reveal Boundary）；长篇在此基础上扩展视角（POV）、地点、状态变化、伏笔与因果链，由 `wa-cli scene contract` 写入 |
 | 写后收口 | Close-out | 收口 | 场景写完后提交抽取结果，使台账与正文同步；由 `wa-cli scene close-out` 一次提交，收口产物 closeout.yaml 记录正文 SHA-256、提交的台账条目 id、确认的事件与豁免名单，收口未完成或提议未经作者处理时场景不能验收 |
 | 分层摘要 | Layered Summary | 分层摘要 | 已验收场景的摘要逐层汇总为章、部与全书摘要：由 Agent 撰写，`wa-cli summary set` 校验子层齐全（缺失报 summary.children-missing）与过期状态（子场景正文变化的串联指纹） |
-| 卷末检查点 | Volume Checkpoint | 卷末检查点 | 每部最后一个场景验收后由 `wa-cli volume checkpoint` 生成的作者核对产物：汇总本部新增设定、已确认状态变化、伏笔变化与未处理决策，并确定性抽取收口条目；strict 关卡下未经 `wa-cli volume confirm` 确认，下一部的场景不能验收 |
+| 卷末检查点 | Volume Checkpoint | 卷末检查点 | 每部最后一个场景经 `wa-cli accept` 验收成功后自动生成的作者核对产物（只写汇总、不代作者确认；`wa-cli volume checkpoint` 可重新生成）：汇总本部新增设定、已确认状态变化、伏笔变化与未处理决策，并确定性抽取收口条目；strict 关卡下更早的部缺少检查点（`volume.missing`）或未经 `wa-cli volume confirm` 确认（`volume.unconfirmed`）时，下一部的场景不能验收 |
 | 组稿 | Assembly | 组稿 | `wa-cli assemble` 按单元树先序把已验收场景组成整书（书名、目录、部/章标题、去注释正文与按出处的 AI 参与说明），导出 Markdown 或纯文本；存在未完成场景、连续性阻塞或 open 复查标记时拒绝组稿 |
 | 影响传播 | Ripple Analysis | 影响传播 | 按磁盘引用图（场景契约、事件、知情表、伏笔台账、recall 索引）确定性计算修改的受影响后续场景：`wa-cli impact` 预览，`wa-cli impact mark` 标记复查并生成审查任务包，复查通过或作者确认后解除 |
 | 复查标记 | Recheck Mark | 复查标记 | 影响传播落盘的受影响场景标记（rechecks/<work>.yaml，只能追加）：open 时阻塞组稿，经 `wa-cli impact clear`（作者确认或重新审查通过）解除 |

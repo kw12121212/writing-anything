@@ -15,6 +15,7 @@ import (
 	"github.com/kw12121212/writing-anything/internal/outline"
 	"github.com/kw12121212/writing-anything/internal/review"
 	"github.com/kw12121212/writing-anything/internal/schema"
+	"github.com/kw12121212/writing-anything/internal/volume"
 	"github.com/kw12121212/writing-anything/internal/work"
 	"github.com/kw12121212/writing-anything/internal/workspace"
 )
@@ -423,8 +424,8 @@ func step(dir string, w *work.Work, u *work.Unit) stepView {
 }
 
 // progress 返回单元的阻塞项与可以直接运行的下一步命令，next 与 status 共用；数组永不为 nil。
-// 汇总单元（Aggregated Unit）不能推进：阻塞项为未完成子单元的汇总，commands 恒为空数组
-// （逐场景的可执行命令列在各自的条目上）。
+// 汇总单元（Aggregated Unit）不能推进：阻塞项为未完成子单元的汇总，commands 为空数组（逐场景的可执行命令列在
+// 各自的条目上），唯一例外是部（卷）有未确认的卷末检查点时列出 volume confirm。
 func progress(dir string, w *work.Work, u *work.Unit) ([]blockerView, []string) {
 	blockers, commands := []blockerView{}, []string{}
 	if w.Aggregated(u) {
@@ -434,6 +435,11 @@ func progress(dir string, w *work.Work, u *work.Unit) ([]blockerView, []string) 
 				v.Decision = &b.Decision
 			}
 			blockers = append(blockers, v)
+		}
+		// 部（卷）的卷末检查点已生成而未经作者确认时，列出确认命令（units-and-lifecycle 的 derived-stage）。
+		if pendingCheckpoint(dir, w, u) {
+			commands = append(commands, shellCommand("wa-cli", "volume", "confirm", u.Ref, "--dir", dir, "--json"),
+				"wa-cli help volume confirm --json")
 		}
 		return blockers, commands
 	}
@@ -539,6 +545,15 @@ func artifactWriter(u *work.Unit, artifact string) (command, file string, ok boo
 	return "", "", false
 }
 
+// pendingCheckpoint 报告部（卷）单元 u 是否有通过校验而未经作者确认的卷末检查点。
+func pendingCheckpoint(dir string, w *work.Work, u *work.Unit) bool {
+	if !volume.IsVolume(w, u) {
+		return false
+	}
+	v, ps := volume.Load(dir, w, u)
+	return v != nil && len(ps) == 0 && !v.ConfirmedByAuthor
+}
+
 // latestHandoff 返回工作区最近一条交接记录的摘要（没有记录或文件不合法时为 nil，问题由命令层报告）。
 func latestHandoff(dir string) *handoffRef {
 	note, ps := handoff.Latest(dir)
@@ -552,14 +567,19 @@ func latestHandoff(dir string) *handoffRef {
 func action(dir string, w *work.Work, u *work.Unit, blockers []blockerView) string {
 	if w.Aggregated(u) {
 		done, total := w.Progress(u)
+		var text string
 		switch {
 		case total == 0:
-			return "汇总单元（Aggregated Unit）：下面还没有场景，先用 wa-cli unit add 添加场景"
+			text = "汇总单元（Aggregated Unit）：下面还没有场景，先用 wa-cli unit add 添加场景"
 		case done < total:
-			return fmt.Sprintf("汇总单元（Aggregated Unit）：已完成 %d/%d 个场景，还有 %d 个未完成；先推进未完成的场景", done, total, total-done)
+			text = fmt.Sprintf("汇总单元（Aggregated Unit）：已完成 %d/%d 个场景，还有 %d 个未完成；先推进未完成的场景", done, total, total-done)
 		default:
-			return fmt.Sprintf("汇总单元（Aggregated Unit）：全部 %d 个场景已完成", total)
+			text = fmt.Sprintf("汇总单元（Aggregated Unit）：全部 %d 个场景已完成", total)
 		}
+		if pendingCheckpoint(dir, w, u) {
+			text += "；本部的卷末检查点（Volume Checkpoint）已生成、尚未经作者确认：请作者核对后用 wa-cli volume confirm 确认"
+		}
+		return text
 	}
 	switch {
 	case u.Stage == catalog.StageDone:

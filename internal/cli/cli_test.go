@@ -584,6 +584,10 @@ func sampleArgs(t *testing.T, name string) []string {
 		return []string{"continuity", "my-story/s1", "--dir", dir, "--json"}
 	case "volume checkpoint":
 		dir := volumeWork(t)
+		// accept 已自动生成检查点；删除它以登记一次真正写文件的重新生成。
+		if err := os.Remove(filepath.Join(dir, ".writing-anything", "works", "my-novel", "units", "part-one", "checkpoint.yaml")); err != nil {
+			t.Fatal(err)
+		}
 		return []string{"volume", "checkpoint", "my-novel/part-one", "--dir", dir, "--json"}
 	case "volume confirm":
 		dir := volumeWork(t)

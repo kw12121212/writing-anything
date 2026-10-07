@@ -168,6 +168,17 @@ func TestConfirmationChannelStrict(t *testing.T) {
 			t.Errorf("closing %s: %d %v", path, code, o)
 		}
 	}
+	// part-one 的最后场景 scene-1 验收时已自动生成卷末检查点（未确认），strict 下阻塞 part-two 的验收：作者在阅读页
+	// 确认它（渠道 preview，不需要复核）。
+	if !strings.Contains(pageGet(t, s), "卷末检查点（Volume Checkpoint）my-novel/part-one") {
+		t.Fatal("page lacks part-one checkpoint")
+	}
+	if code, o := pagePost(t, s, "/confirm", s.token, map[string]string{"kind": "volume", "unit": "my-novel/part-one", "confirmation": "作者：上部无误"}); code != 200 {
+		t.Fatalf("page volume confirm: %d %v", code, o)
+	}
+	if c := readFile(t, unitFile(dir, "part-one", "checkpoint.yaml")); !strings.Contains(c, "channel: preview") {
+		t.Fatalf("checkpoint: %s", c)
+	}
 	// 阅读页验收：关卡阻塞（没有审稿）时 400 并列出阻塞项；记录审稿后验收成功，渠道 preview，不需要复核。
 	if code, o := pagePost(t, s, "/confirm", s.token, acceptBody); code != 400 || !slices.Contains(diagCodes(o), "accept.review-missing") {
 		t.Fatalf("blocked acceptance: %d %v", code, o)
@@ -176,6 +187,10 @@ func TestConfirmationChannelStrict(t *testing.T) {
 	code, o := pagePost(t, s, "/confirm", s.token, acceptBody)
 	if c, _ := o["confirmation"].(map[string]any); code != 200 || c["channel"] != "preview" || c["kind"] != "acceptance" {
 		t.Fatalf("page acceptance: %d %v", code, o)
+	}
+	// 阅读页验收与命令行一样在部的最后一个场景验收后自动生成卷末检查点。
+	if cp, _ := o["changedPaths"].([]any); !slices.Contains(cp, any(".writing-anything/works/my-novel/units/part-two/checkpoint.yaml")) {
+		t.Fatalf("page acceptance changedPaths = %v", o["changedPaths"])
 	}
 	if a := readFile(t, unitFile(dir, "scene-9", "acceptance.yaml")); !strings.Contains(a, "channel: preview") {
 		t.Fatalf("scene-9 acceptance: %s", a)
@@ -223,24 +238,13 @@ func TestConfirmationChannelStrict(t *testing.T) {
 		t.Fatalf("validate: %d %v %+v", code, res.Checked, res.Diagnostics)
 	}
 
-	// 卷末检查点：命令行确认列为待复核；阅读页确认的不需要复核。
-	mustRunWS(t, dir, "volume", "checkpoint", "my-novel/part-one")
-	mustRunWS(t, dir, "volume", "checkpoint", "my-novel/part-two")
-	mustRunWS(t, dir, "volume", "confirm", "my-novel/part-one", "--confirmed-by-author", "--confirmation", "作者：上部无误")
-	if !strings.Contains(pageGet(t, s), "卷末检查点（Volume Checkpoint）my-novel/part-two") {
-		t.Fatal("page lacks part-two checkpoint")
-	}
-	if code, o := pagePost(t, s, "/confirm", s.token, map[string]string{"kind": "volume", "unit": "my-novel/part-two", "confirmation": "作者：下部无误"}); code != 200 {
-		t.Fatalf("page volume confirm: %d %v", code, o)
-	}
-	if c := readFile(t, unitFile(dir, "part-two", "checkpoint.yaml")); !strings.Contains(c, "channel: preview") {
-		t.Fatalf("checkpoint: %s", c)
-	}
+	// 卷末检查点：命令行确认列为待复核；阅读页确认的（part-one）不需要复核。
+	mustRunWS(t, dir, "volume", "confirm", "my-novel/part-two", "--confirmed-by-author", "--confirmation", "作者：下部无误")
 	_, res = runWS(t, dir, "next")
-	if keys := pendingKeys(t, res.stdout); len(keys) != 1 || !strings.HasPrefix(keys[0], "volume-checkpoint:my-novel/part-one@") {
+	if keys := pendingKeys(t, res.stdout); len(keys) != 1 || !strings.HasPrefix(keys[0], "volume-checkpoint:my-novel/part-two@") {
 		t.Fatalf("pending after volume confirms = %v", keys)
 	}
-	if code, res := runWS(t, dir, "assemble", "my-novel"); code != 1 || diag(t, res, "assemble.unreviewed").Path != ".writing-anything/works/my-novel/units/part-one/checkpoint.yaml" {
+	if code, res := runWS(t, dir, "assemble", "my-novel"); code != 1 || diag(t, res, "assemble.unreviewed").Path != ".writing-anything/works/my-novel/units/part-two/checkpoint.yaml" {
 		t.Fatalf("assemble with cli checkpoint: %d %+v", code, res.Diagnostics)
 	}
 

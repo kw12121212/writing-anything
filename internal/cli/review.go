@@ -73,7 +73,7 @@ var reviewResolveCommand = &command{
 var acceptCommand = &command{
 	name: "accept",
 	summary: "验收（Acceptance）单元（Unit）：按工作区的关卡强度（Gate Level）检查文本检查、审稿（Review）、修订任务（Revision Task）、" +
-		"阻塞决策与作者确认，没有阻塞项时写入 acceptance.yaml；之后用 wa-cli advance 推进",
+		"阻塞决策与作者确认，没有阻塞项时写入 acceptance.yaml；部的最后一个场景验收后自动生成该部的卷末检查点（Volume Checkpoint）；之后用 wa-cli advance 推进",
 	args: []argSpec{{"unit", unitRefHelp, true}},
 	flags: []flagSpec{dirFlag,
 		{"confirmed-by-author", flagBool, "作者已确认验收；必须同时给出 --confirmation"},
@@ -394,7 +394,19 @@ func gateNext(dir, ref string, b review.Blocker) []string {
 		closeout.CodeMissingStateChange, closeout.CodeMissingRecovery, closeout.CodeMissingPlant, closeout.CodeMissingEvent:
 		return []string{shellCommand("wa-cli", "scene", "close-out", ref, "--dir", dir, "--json"),
 			"wa-cli help scene close-out --json", show}
-	case volume.CodeUnconfirmed, volume.CodeInvalid:
+	case volume.CodeMissing, volume.CodeScenesOpen:
+		next := []string{"wa-cli help volume checkpoint --json", show}
+		if b.Path != "" {
+			next = append([]string{shellCommand("wa-cli", "volume", "checkpoint", volumePartRef(ref, b.Path), "--dir", dir, "--json")}, next...)
+		}
+		return next
+	case volume.CodeInvalid:
+		// 不通过校验的检查点既不能确认也不能被重新生成覆盖：先校验定位问题，修复或删除后再生成。
+		if b.Path != "" {
+			return []string{shellCommand("wa-cli", "validate", b.Path, "--dir", dir, "--json"), "wa-cli help volume checkpoint --json", show}
+		}
+		return []string{"wa-cli help volume checkpoint --json", show}
+	case volume.CodeUnconfirmed:
 		next := []string{"wa-cli help volume confirm --json", show}
 		if b.Path != "" {
 			next = append([]string{shellCommand("wa-cli", "volume", "confirm", volumePartRef(ref, b.Path), "--dir", dir, "--json")}, next...)
@@ -679,6 +691,11 @@ func acceptVia(dir string, w *work.Work, u *work.Unit, confirmed bool, confirmat
 	res.Acceptance = &acceptanceView{Unit: u.Ref, Path: review.AcceptancePath(unitDir), GateLevel: a.GateLevel, DraftSHA256: a.DraftSHA256,
 		ConfirmedByAuthor: a.ConfirmedByAuthor, Confirmation: a.Confirmation, Channel: channelView(a.ConfirmedByAuthor, a.Channel), AcceptedAt: a.AcceptedAt}
 	res.ChangedPaths = changed
+	// 部的最后一个场景验收后自动生成卷末检查点（volume 主规格的 checkpoint-on-accept）：只写汇总、不代作者确认；
+	// 生成问题为 warning，不撤销验收。
+	_, vchanged, vps := volume.OnAccept(dir, w, u)
+	res.ChangedPaths = append(res.ChangedPaths, vchanged...)
+	gate = append(gate, vps...)
 	return problems, gate
 }
 

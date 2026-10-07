@@ -383,12 +383,19 @@ entries:
 - id: T-VOLUME-01
   feature: volume
   scene: part-1
-  command: wa-cli volume checkpoint part-1（及 part-2、part-3）
-  expected: 全绿（exit 0）
-  assertion: 部内全部场景完成后生成卷末检查点：canon/states/threads/decisions 并集与确定性抽样核对样本；同指纹重生成不写文件。
+  command: wa-cli accept 各部最后一个场景（ch1-s3、ch2-s3、ch3-s3）
+  expected: 全绿（exit 0），changedPaths 含该部的 checkpoint.yaml
+  assertion: 部的最后一个场景验收成功后自动生成卷末检查点（confirmed_by_author 为 false，只写汇总、不代作者确认）：canon/states/threads/decisions 并集与确定性抽样核对样本（changedPaths 中紧随验收记录之后）。
   evidence:
   - kind: script
-    token: volume checkpoint stopped-at-417/part-1
+    token: accept stopped-at-417/ch1-s3
+    stdout_contains: 'units/ch1-s3/acceptance.yaml",".writing-anything/works/stopped-at-417/units/part-1/checkpoint.yaml"'
+  - kind: script
+    token: accept stopped-at-417/ch2-s3
+    stdout_contains: 'units/ch2-s3/acceptance.yaml",".writing-anything/works/stopped-at-417/units/part-2/checkpoint.yaml"'
+  - kind: script
+    token: accept stopped-at-417/ch3-s3
+    stdout_contains: 'units/ch3-s3/acceptance.yaml",".writing-anything/works/stopped-at-417/units/part-3/checkpoint.yaml"'
 - id: T-VOLUME-02
   feature: volume
   scene: part-1

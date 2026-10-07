@@ -283,13 +283,14 @@ func (s *previewServer) applyConfirm(w *work.Work, req confirmRequest, res *prev
 	var problems []workspace.Problem
 	switch req.Kind {
 	case confirmAcceptance:
-		_, u, ps := work.Resolve(s.dir, req.Unit)
+		// 单元与作品取自同一次解析：卷末检查点等按单元树判定祖先的检查依赖同一棵树。
+		uw, u, ps := work.Resolve(s.dir, req.Unit)
 		if u == nil {
 			return ps
 		}
 		var gate []workspace.Problem
 		ar := &acceptResult{}
-		problems, gate = acceptVia(s.dir, w, u, true, req.Confirmation, ch, ar)
+		problems, gate = acceptVia(s.dir, uw, u, true, req.Confirmation, ch, ar)
 		for _, d := range diagnostics(gate, s.dir) {
 			d.Next = gateNext(s.dir, u.Ref, review.Blocker{Code: d.Code, Path: d.Path})
 			res.Diagnostics = append(res.Diagnostics, d)
