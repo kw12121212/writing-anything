@@ -244,7 +244,8 @@ type Pack struct {
 	Neighbors                []Neighbor
 	Series                   *Series // 作品不属于系列时为 nil
 	Trimmed                  []Trim
-	items                    []item // 保留的内容项，按优先级顺序，供 Markdown 使用
+	Masked                   []Masked // 场景级：文本被秘密遮蔽的出场人物卡与视角人物已知条目，按组装顺序；非 scene 单元为 nil
+	items                    []item   // 保留的内容项，按优先级顺序，供 Markdown 使用
 }
 
 // item 是一个内容项：body 是计入预算的 Markdown 文本。
@@ -558,10 +559,10 @@ func Build(root string, w *work.Work, u *work.Unit) (*Pack, []workspace.Problem)
 	if u.Type == "scene" {
 		// scene 单元按 context-trim 的场景优先级整体重排（稳定排序：同 part 保持构造顺序）；非 scene 单元保持
 		// 既有顺序（本变更的 unchanged behavior）。
-		rank := map[string]int{PartOutline: 0, PartBrief: 1, PartSection: 2, PartState: 3, PartKnowledge: 4,
-			PartReaderOnly: 5, PartReveal: 6, PartThread: 7, PartPriorEnding: 8, PartChapSummary: 9, PartPartSummary: 10,
-			PartBookSummary: 11, PartFeedback: 12, PartDecision: 13, PartFact: 14, PartSummary: 15, PartSceneSummary: 16,
-			PartRules: 17, PartGlossary: 18, PartBannedTerms: 19, PartStyle: 20, PartSource: 21, PartNeighbor: 22}
+		rank := map[string]int{PartOutline: 0, PartBrief: 1, PartSection: 2, PartCharacter: 3, PartState: 4, PartKnowledge: 5,
+			PartReaderOnly: 6, PartReveal: 7, PartThread: 8, PartPriorEnding: 9, PartChapSummary: 10, PartPartSummary: 11,
+			PartBookSummary: 12, PartFeedback: 13, PartDecision: 14, PartFact: 15, PartSummary: 16, PartSceneSummary: 17,
+			PartRules: 18, PartGlossary: 19, PartBannedTerms: 20, PartStyle: 21, PartSource: 22, PartNeighbor: 23}
 		slices.SortStableFunc(items, func(a, b item) int { return rank[a.part] - rank[b.part] })
 	}
 	p.fit(items)
@@ -622,6 +623,30 @@ func sceneItems(root string, w *work.Work, u *work.Unit, own *outline.Outline, p
 		}
 	}
 	var out []item
+	// 视角人物（POV）的知情与读者已知：knowledge.yaml 不存在时 For 返回空重放；存在但不通过校验时返回阻止组装
+	// 的问题（同 threads.yaml 的处理）。人物卡与知情条目的文本先按视角人物尚未获知的揭示词（Reveal Terms）
+	// 遮蔽（秘密遮蔽，Secret Masking），因此重放先于组装出场人物；没有解析到视角人物时全部已确认揭示词都参与遮蔽。
+	rep, fatal := knowledge.For(root, w, u, canonEntries)
+	if fatal != nil {
+		return nil, fatal
+	}
+	povID := ""
+	if pov != "" {
+		for _, e := range entries {
+			if e.Type == canon.TypeCharacter && e.Name != nil && *e.Name == pov {
+				povID = e.ID
+				break
+			}
+		}
+	}
+	hidden := hiddenTerms(rep.Hidden(povID))
+	mask := func(part, id, text string) string {
+		masked, n := maskText(text, hidden)
+		if n > 0 {
+			p.Masked = append(p.Masked, Masked{Part: part, ID: id, Sentences: n})
+		}
+		return masked
+	}
 	// 出场人物与视角人物解析到的设定条目（按声明顺序去重），供状态快照重放过滤。
 	var memberIDs []string
 	if len(names) > 0 {
@@ -637,7 +662,7 @@ func sceneItems(root string, w *work.Work, u *work.Unit, own *outline.Outline, p
 					if !slices.Contains(memberIDs, e.ID) {
 						memberIDs = append(memberIDs, e.ID)
 					}
-					v := Character{ID: e.ID, Name: name, Text: e.Text, Protection: e.Protection}
+					v := Character{ID: e.ID, Name: name, Text: mask(PartCharacter, e.ID, e.Text), Protection: e.Protection}
 					p.Characters = append(p.Characters, v)
 					id := e.ID
 					out = append(out, item{part: PartCharacter, id: id, body: v.markdown(), drop: func() {
@@ -651,20 +676,7 @@ func sceneItems(root string, w *work.Work, u *work.Unit, own *outline.Outline, p
 			}
 		}
 	}
-	// 视角人物（POV）的知情与读者已知：knowledge.yaml 不存在时 For 返回空重放；存在但不通过校验时返回阻止组装
-	// 的问题（同 threads.yaml 的处理）。
-	rep, fatal := knowledge.For(root, w, u, canonEntries)
-	if fatal != nil {
-		return nil, fatal
-	}
-	povID := ""
 	if pov != "" {
-		for _, e := range entries {
-			if e.Type == canon.TypeCharacter && e.Name != nil && *e.Name == pov {
-				povID = e.ID
-				break
-			}
-		}
 		if povID == "" {
 			*warnings = append(*warnings, workspace.Problem{Code: CodePOVNotInCanon, Severity: workspace.SeverityWarning,
 				Message: fmt.Sprintf("场景契约的视角人物「%s」在设定集（canon.yaml）中没有同名 character 条目；wa-cli canon add 登记后，wa-cli context 才会带出视角人物已知与读者已知的条目", pov)})
@@ -695,7 +707,7 @@ func sceneItems(root string, w *work.Work, u *work.Unit, own *outline.Outline, p
 			known[it.Entry] = true
 			v := KnowledgeItem{Entry: it.Entry, Name: it.Name, Event: it.Event, Scene: it.Scene}
 			if c, ok := canonEntries[it.Entry]; ok {
-				v.Text = c.Text
+				v.Text = mask(PartKnowledge, it.Entry, c.Text)
 			}
 			p.Knowledge = append(p.Knowledge, v)
 			out = append(out, item{part: PartKnowledge, id: v.Entry, body: v.markdown(), drop: func() {

@@ -1,4 +1,4 @@
-# 《停在四点十七分》可重放命令脚本（corpus-authoring 一次性真实创作录制；knowledge-reveal-terms 变更补录揭示词步骤）。
+# 《停在四点十七分》可重放命令脚本（corpus-authoring 一次性真实创作录制；knowledge-reveal-terms 变更补录揭示词步骤；context-pov-filter 变更为溺水真相扩展揭示词）。
 # 格式见 script-format.md；--dir/--json 由重放器补齐，文本输入统一经 input_ref 提供标准输入
 #（原命令的 --file 已折算为 input_ref，stdin 步骤原样保留）。
 stages:
@@ -2435,7 +2435,7 @@ stages:
     - stopped-at-417
     - kn-05
     - --terms
-    - 为了救人
+    - 为了救人,潮生溺水,救溺水的潮生
     - --confirmed-by-author
     - --confirmation
     - 作者：补登溺亡真相的揭示词。
@@ -2473,7 +2473,7 @@ stages:
     - stopped-at-417
     - kn-07
     - --terms
-    - 为了救人
+    - 为了救人,潮生溺水,救溺水的潮生
     - --confirmed-by-author
     - --confirmation
     - 作者：读者同场获知，揭示词一致。

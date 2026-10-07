@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -253,4 +254,60 @@ func diagCode(res result, code string) bool {
 		}
 	}
 	return false
+}
+
+// 秘密遮蔽（Secret Masking）在语料上的完成标准：沈望舒溺水真相（设定条目 char-shen-wangshu，kn-05/kn-07 登记
+// 揭示词）在视角人物获知之前的场景不出现在 wa-cli context 输出中，获知之后出现；补登揭示词后无需改写人物卡，
+// 语料整体校验没有 knowledge.missing-terms。
+func TestNovelCorpusSecretMasking(t *testing.T) {
+	frozen := time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)
+	now = func() time.Time { return frozen }
+	defer func() { now = time.Now }()
+
+	dir := t.TempDir()
+	replayNovelCorpus(t, dir)
+
+	truths := []string{"潮生溺水被沈望舒救起", "为救溺水的潮生下水"}
+	povs := map[string]string{
+		"ch1-s1": "char-chen-shouzhuo", "ch1-s2": "char-lin-wan", "ch1-s3": "char-chen-shouzhuo",
+		"ch2-s1": "char-lin-wan", "ch2-s2": "char-han-jiang", "ch2-s3": "char-chen-shouzhuo",
+		"ch3-s1": "char-lin-wan", "ch3-s2": "char-lin-wan", "ch3-s3": "char-lin-wan",
+	}
+	contextOf := func(scene string) string {
+		t.Helper()
+		code, res := runWS(t, dir, "context", "stopped-at-417/"+scene)
+		if code != 0 {
+			t.Fatalf("context %s: exit = %d, diagnostics = %+v", scene, code, res.Diagnostics)
+		}
+		return res.stdout
+	}
+	for scene, pov := range povs {
+		code, res := runWS(t, dir, "knowledge", "at", "stopped-at-417/"+scene, "--character", pov)
+		if code != 0 {
+			t.Fatalf("knowledge at %s: exit = %d", scene, code)
+		}
+		if strings.Contains(res.stdout, `"entry":"char-shen-wangshu"`) {
+			continue
+		}
+		out := contextOf(scene)
+		for _, truth := range truths {
+			if strings.Contains(out, truth) {
+				t.Errorf("%s（视角 %s 尚未获知）的上下文包含溺水真相「%s」", scene, pov, truth)
+			}
+		}
+	}
+	// 林晚在 ch3-s2 获知：ch3-s2 遮蔽陈守拙人物卡的真相句，ch3-s3 恢复。
+	if out := contextOf("ch3-s2"); !strings.Contains(out, `"masked":[{"part":"character","id":"char-chen-shouzhuo","sentences":1}]`) {
+		t.Errorf("ch3-s2 masked: %s", out)
+	}
+	if out := contextOf("ch3-s3"); !strings.Contains(out, "二十年前儿子潮生溺水被沈望舒救起，此后沉默守护恩人之女。") {
+		t.Errorf("ch3-s3 应包含溺水真相: %s", out)
+	}
+	// 陈守拙在 ch1-s1 获知：以他为视角的 ch1-s3 不遮蔽。
+	if out := contextOf("ch1-s3"); strings.Contains(out, "另有未揭示设定") {
+		t.Errorf("ch1-s3 不应遮蔽: %s", out)
+	}
+	if _, res := runWS(t, dir, "validate"); slices.ContainsFunc(res.Diagnostics, func(d Diagnostic) bool { return d.Code == "knowledge.missing-terms" }) {
+		t.Errorf("语料不应有 knowledge.missing-terms: %+v", res.Diagnostics)
+	}
 }

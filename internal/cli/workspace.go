@@ -675,6 +675,12 @@ func next(p workspace.Problem, dir string) []string {
 		return []string{initCmd}
 	case source.CodeModified:
 		return []string{validateAll}
+	case knowledge.CodeMissingTerms:
+		// 揭示词只能由作者决定，不给出带占位符的 knowledge set：给出用法与该作品的全部知情事件。
+		if parts := strings.Split(p.Path, "/"); len(parts) >= 4 {
+			return []string{"wa-cli help knowledge set --json", shellCommand("wa-cli", "knowledge", "list", parts[2], "--all", "--dir", dir, "--json")}
+		}
+		return []string{"wa-cli help knowledge set --json", validateAll}
 	case decision.CodeBlocking, brief.CodeMissingField, brief.CodeUnsourcedMessage, brief.CodeUnconfirmedMessage,
 		brief.CodeUnsourcedPremise, brief.CodeUnconfirmedPremise, brief.CodeInvalid,
 		outline.CodeInvalid, outline.CodeUncoveredMessage, outline.CodeMissingReason, marketing.CodeInvalid, marketing.CodeMissingField, marketing.CodeTooManyHeadlines, marketing.CodeHeadlineUnasked, marketing.CodeHeadlineStale:

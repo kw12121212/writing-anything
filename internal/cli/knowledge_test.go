@@ -535,3 +535,67 @@ func TestParseTerms(t *testing.T) {
 		}
 	}
 }
+
+// 缺揭示词提示与秘密遮蔽（Secret Masking）：validate 报告 warning 级 knowledge.missing-terms（next 为用法与全部
+// 知情事件，退出码 0），补登揭示词后消失；context --json 的 masked 与人物卡占位随视角人物获知前后变化。
+func TestKnowledgeMissingTermsAndMasking(t *testing.T) {
+	dir := knowledgeFixture(t)
+	runWS(t, dir, "knowledge", "confirm", "my-novel", "know-1", "--confirmed-by-author", "--confirmation", "作者确认")
+	code, res := runWS(t, dir, "validate")
+	d := diag(t, res, "knowledge.missing-terms")
+	if code != 0 || d.Severity != "warning" || d.Field != "events[0]" ||
+		!slices.Equal(d.Next, []string{"wa-cli help knowledge set --json", shellCommand("wa-cli", "knowledge", "list", "my-novel", "--all", "--dir", dir, "--json")}) {
+		t.Fatalf("missing terms: exit code = %d, diagnostic = %+v", code, d)
+	}
+	if code, res = runWS(t, dir, "validate", ".writing-anything/works/my-novel/knowledge.yaml"); code != 0 || diag(t, res, "knowledge.missing-terms").Code == "" {
+		t.Fatalf("validate path: exit code = %d, diagnostics = %+v", code, res.Diagnostics)
+	}
+	if code, res = runWS(t, dir, "knowledge", "set", "my-novel", "know-1", "--terms", "黎明", "--confirmed-by-author", "--confirmation", "作者补登揭示词"); code != 0 {
+		t.Fatalf("set terms: exit code = %d, diagnostics = %+v", code, res.Diagnostics)
+	}
+	if _, res = runWS(t, dir, "validate"); slices.ContainsFunc(res.Diagnostics, func(d Diagnostic) bool { return d.Code == "knowledge.missing-terms" }) {
+		t.Fatalf("terms registered, diagnostics = %+v", res.Diagnostics)
+	}
+
+	// 学徒的人物卡写着守灯人在 scene-1 才获知的秘密：scene-1（获知前）被遮蔽，scene-2（获知后）恢复。
+	runWS(t, dir, "canon", "add", "my-novel", "--type", "character", "--name", "学徒", "--text", "沉默寡言。他知道灯油只烧到黎明。")
+	for _, s := range []string{"my-novel/scene-1", "my-novel/scene-2"} {
+		runWS(t, dir, "scene", "contract", s, "sc1", "--title", "灯下", "--pov", "守灯人", "--characters", "学徒")
+	}
+	type maskedOut struct {
+		Context *struct {
+			Characters []struct {
+				Text string `json:"text"`
+			} `json:"characters"`
+			Masked []struct {
+				Part      string `json:"part"`
+				ID        string `json:"id"`
+				Sentences int    `json:"sentences"`
+			} `json:"masked"`
+		} `json:"context"`
+	}
+	var out maskedOut
+	_, res = runWS(t, dir, "context", "my-novel/scene-1")
+	if err := json.Unmarshal([]byte(res.stdout), &out); err != nil {
+		t.Fatal(err)
+	}
+	if out.Context == nil || len(out.Context.Characters) != 1 || out.Context.Characters[0].Text != "沉默寡言。（另有未揭示设定）" ||
+		len(out.Context.Masked) != 1 || out.Context.Masked[0].Part != "character" || out.Context.Masked[0].ID != "canon-3" || out.Context.Masked[0].Sentences != 1 {
+		t.Fatalf("scene-1 context = %s", res.stdout)
+	}
+	if _, stdout, _ := run(t, "context", "my-novel/scene-1", "--dir", dir); !strings.Contains(stdout, "## 被遮蔽的设定") || strings.Contains(stdout, "只烧到黎明") {
+		t.Fatalf("scene-1 markdown:\n%s", stdout)
+	}
+	out = maskedOut{}
+	_, res = runWS(t, dir, "context", "my-novel/scene-2")
+	if err := json.Unmarshal([]byte(res.stdout), &out); err != nil {
+		t.Fatal(err)
+	}
+	if out.Context == nil || out.Context.Characters[0].Text != "沉默寡言。他知道灯油只烧到黎明。" || out.Context.Masked == nil || len(out.Context.Masked) != 0 {
+		t.Fatalf("scene-2 context = %s", res.stdout)
+	}
+	// 非 scene 单元：masked 为空数组。
+	if _, res = runWS(t, dir, "context", "my-novel"); !strings.Contains(res.stdout, `"masked":[]`) {
+		t.Fatalf("root context = %s", res.stdout)
+	}
+}

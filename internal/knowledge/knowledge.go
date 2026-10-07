@@ -36,6 +36,7 @@ const (
 	CodeAlreadyDecided         = "knowledge.already-decided"
 	CodeIncompleteConfirmation = "knowledge.incomplete-confirmation"
 	CodeAnchoredValue          = "knowledge.anchored-value"
+	CodeMissingTerms           = "knowledge.missing-terms"
 )
 
 // FileName 是知情表文件名；Path 返回作品 id 的台账路径（只在作品根单元目录中识别）。
@@ -756,6 +757,21 @@ func List(root string, w *work.Work, all bool) ([]Event, []workspace.Problem) {
 type Replay struct {
 	first map[string]map[string]Event // 获知者 → 设定条目 → 最早适用事件
 	canon map[string]canon.Entry      // 设定条目 id → 条目（取 name）
+	terms map[string][]string         // 设定条目 → 全部已确认事件（不论绑定场景先后）的揭示词并集，去重升序
+}
+
+// Hidden 返回获知者 character 在本单元开始时尚未获知、且登记了揭示词（Reveal Terms）的设定条目及其揭示词
+// （全部已确认事件的并集，去重升序）。character 为空表示没有可用的获知者：全部登记了揭示词的条目都算未获知。
+// 供上下文包（Context Pack）按句遮蔽视角人物（POV）尚未获知的秘密。
+func (r *Replay) Hidden(character string) map[string][]string {
+	out := map[string][]string{}
+	for entry, terms := range r.terms {
+		if _, known := r.first[character][entry]; known {
+			continue
+		}
+		out[entry] = slices.Clone(terms)
+	}
+	return out
 }
 
 // Known 返回获知者 character 的已知条目，按 entry 升序，每项含 entry、name、event（最早适用事件的 id）与
@@ -785,7 +801,7 @@ func For(root string, w *work.Work, u *work.Unit, canonEntries map[string]canon.
 		if len(ps) > 0 {
 			return nil, ps
 		}
-		return &Replay{first: map[string]map[string]Event{}, canon: map[string]canon.Entry{}}, nil
+		return &Replay{first: map[string]map[string]Event{}, canon: map[string]canon.Entry{}, terms: map[string][]string{}}, nil
 	}
 	if canonEntries == nil {
 		var cps []workspace.Problem
@@ -798,11 +814,21 @@ func For(root string, w *work.Work, u *work.Unit, canonEntries map[string]canon.
 	}
 	pos, _ := units(w)
 	confirmed := make([]Event, 0, len(f.Events))
+	terms := map[string][]string{}
 	for _, e := range f.Events {
+		if e.Status == StatusConfirmed && len(e.Terms) > 0 {
+			terms[e.Entry] = append(terms[e.Entry], e.Terms...)
+		}
 		if e.Status != StatusConfirmed || pos[e.Scene] >= pos[u.Ref] {
 			continue
 		}
 		confirmed = append(confirmed, e)
+	}
+	for entry, ts := range terms {
+		for i := range ts {
+			ts[i] = strings.TrimSpace(ts[i])
+		}
+		terms[entry] = slices.Compact(slices.Sorted(slices.Values(ts)))
 	}
 	slices.SortStableFunc(confirmed, func(a, b Event) int { return pos[a.Scene] - pos[b.Scene] })
 	first := map[string]map[string]Event{}
@@ -814,7 +840,7 @@ func For(root string, w *work.Work, u *work.Unit, canonEntries map[string]canon.
 			first[e.Character][e.Entry] = e
 		}
 	}
-	return &Replay{first: first, canon: canonEntries}, nil
+	return &Replay{first: first, canon: canonEntries, terms: terms}, nil
 }
 
 // KnownAt 输出单元 u（scene 类型）开始时获知者 character 的已知条目（knowledge-at 主规格）：character 必须为
@@ -853,8 +879,34 @@ func CheckWorks(root string, works []*work.Work) (checked []string, problems []w
 		checked = append(checked, rel)
 		canonEntries, _ := canonByID(root, w)
 		problems = append(problems, checkEvents(rel, *f, w, canonEntries)...)
+		problems = append(problems, missingTerms(rel, *f)...)
 	}
 	return checked, problems
+}
+
+// missingTerms 报告没有登记揭示词（Reveal Terms）的已确认知情事件（warning，knowledge.missing-terms）：按设定条目
+// 判定——条目只要有一条已确认事件登记了揭示词，该条目的其他已确认事件不再提示，因为上下文包遮蔽与连续性审查
+// 都按条目对揭示词求并集。只供整体与单产物校验使用，不进入 checkEvents（不影响重放、列表与写前复查的阻塞判断）。
+func missingTerms(rel string, f file) []workspace.Problem {
+	covered := map[string]bool{}
+	for _, e := range f.Events {
+		if e.Status == StatusConfirmed && len(e.Terms) > 0 {
+			covered[e.Entry] = true
+		}
+	}
+	workID := "<作品>"
+	if parts := strings.Split(rel, "/"); len(parts) >= 4 {
+		workID = parts[2]
+	}
+	var out []workspace.Problem
+	for i, e := range f.Events {
+		if e.Status != StatusConfirmed || covered[e.Entry] {
+			continue
+		}
+		out = append(out, workspace.Problem{Code: CodeMissingTerms, Severity: workspace.SeverityWarning, Path: rel, Field: fmt.Sprintf("events[%d]", i),
+			Message: fmt.Sprintf("已确认的知情事件（Knowledge Event）%s（设定条目 %s）所在条目没有任何已确认事件登记揭示词（Reveal Terms）：上下文包（Context Pack）无法在获知之前遮蔽人物卡与设定条目中写出该秘密的句子，连续性审查（Continuity Review）也无法检查提前揭示；请与作者商定揭示词后用 wa-cli knowledge set %s %s --terms <揭示词> --confirmed-by-author --confirmation <作者原话摘要> 补登", e.ID, e.Entry, workID, e.ID)})
+	}
+	return out
 }
 
 // CheckArtifact 对 rel（作品根单元目录下的 knowledge.yaml）做 Schema 与领域检查，供 wa-cli validate <path>。
@@ -872,5 +924,5 @@ func CheckArtifact(root, rel string) []workspace.Problem {
 	if w != nil {
 		canonEntries, _ = canonByID(root, w)
 	}
-	return checkEvents(rel, *f, w, canonEntries)
+	return append(checkEvents(rel, *f, w, canonEntries), missingTerms(rel, *f)...)
 }

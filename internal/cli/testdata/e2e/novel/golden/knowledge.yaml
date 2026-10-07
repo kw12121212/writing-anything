@@ -40,6 +40,8 @@ events:
     character: char-lin-wan
     terms:
       - 为了救人
+      - 潮生溺水
+      - 救溺水的潮生
     status: confirmed
     confirmation: 作者：补登溺亡真相的揭示词。
     channel: cli
@@ -58,6 +60,8 @@ events:
     character: reader
     terms:
       - 为了救人
+      - 潮生溺水
+      - 救溺水的潮生
     status: confirmed
     confirmation: 作者：读者同场获知，揭示词一致。
     channel: cli
