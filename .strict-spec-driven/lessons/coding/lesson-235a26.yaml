@@ -1,0 +1,19 @@
+schema: strict-spec-driven/lesson/v1
+schema_version: 1
+artifact_type: lesson
+schema_file: templates/strict-spec-driven/schemas/lesson.yaml
+lesson:
+  id: lesson-235a26
+  title: 修改后才计算影响范围，会漏掉只在修改前引用目标的对象
+category: coding
+status: active
+created_at: '2026-10-07T17:24:59.013Z'
+updated_at: '2026-10-07T17:24:59.013Z'
+context: impact-auto-hint 让 canon set、threads set、state set、knowledge set 写入后按引用图自动标记受影响场景
+observation: 最初只在写入后调用 impact.Compute：改名后场景契约里的旧称谓不再解析到该条目，改计划回收位置或改绑定场景后旧场景的引用边消失，恰好最该复查的已验收场景一个都没被标记；独立审查发现后改为写入前后各算一次取并集
+takeaway: 按引用关系推导「谁受这次修改影响」时，引用图必须同时取修改前与修改后的状态（并集）；修改可能正好改掉引用边本身（名称、位置、绑定），只看修改后的状态会系统性漏报
+applies_when: 在修改命令中按引用图、倒排索引或绑定关系推导受影响对象（影响传播、失效标记、缓存失效、通知）时，尤其是修改可能改变名称、别名、位置或绑定字段
+occurrences:
+  - origin: impact-auto-hint
+    date: '2026-10-07'
+    evidence: internal/cli 各 set 命令写入前调用 preAffected，impact.AutoMark 合并 pre；TestCanonRenameAutoMark 与 threads recover-at 移动用例

@@ -275,6 +275,11 @@ categories:
       status: active
       occurrences: 1
       path: .strict-spec-driven/lessons/coding/cli-9e5084.yaml
+    lesson-235a26:
+      title: 修改后才计算影响范围，会漏掉只在修改前引用目标的对象
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/coding/lesson-235a26.yaml
   documentation:
     must-must-6af326:
       title: 修改一条 MUST 需求时，要检查同一规格里相邻的 MUST 是否因此冲突
@@ -289,7 +294,7 @@ categories:
     spec-next-7d39fd:
       title: spec 语句里的 next 命令必须写成可执行形态
       status: active
-      occurrences: 1
+      occurrences: 2
       path: .strict-spec-driven/lessons/documentation/spec-next-7d39fd.yaml
   performance:
     lesson-d20dc5:

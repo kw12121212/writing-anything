@@ -1,0 +1,33 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: impact-auto-hint
+  status: proposed
+summary:
+  what:
+    - canon set、state set、knowledge set、threads set 与 scene contract 成功写入且语义字段变化时，按影响传播（Ripple Analysis）引用图自动处理受影响后续场景：已验收（stage 为 done）的场景自动落盘复查标记（Recheck Mark）并生成 causality 审查任务包，未验收场景只在输出中提示
+    - 上述命令的输出新增 impact 数组（每个目标一项：target、marked、existing、unaccepted），文本输出逐行列出；changedPaths 如实列出 rechecks 文件与新任务包
+    - wa-cli next 对有 open 复查标记的场景给出 wa-cli impact clear --confirmed-by-author --confirmation 与 wa-cli review plan --dimension causality 命令；不带 unit 参数时，已 done 但有 open 复查标记的场景也列出
+  why:
+    - 2026-10-07 路线图里程碑审计：impact mark 需 Agent 手动执行，canon set 等命令不提示，Agent 忘记时已验收的后续场景不会被标为需复查，组稿关卡形同虚设
+    - 作者已于 2026-10-07 确认决策（里程碑 intake_questions impact-auto-mark）：已验收引用自动落盘、未验收只提示、只有语义字段变化触发、open 标记去重且不重复生成任务包、不提供跳过参数
+scope:
+  in:
+    - internal/impact：新增自动传播入口（按已验收拆分、同（场景，目标）open 去重、只为此前没有 open 标记的场景生成任务包、可按起始场景过滤），抽取与 impact mark 共用的落盘逻辑，新增语义比较辅助
+    - internal/cli：canon set、state set、knowledge set、threads set、scene contract 在写入成功后比较修改前后语义字段并调用自动传播；输出 impact 数组与文本提示；自动传播失败时报告 warning 而不回滚已完成的写入
+    - internal/cli next：open 复查标记场景的 commands 追加 impact clear 与 review plan 命令，done 场景有 open 标记时也列出
+    - impact 主规格增量与 wa-continuity、长篇相关技能说明同步；GLOSSARY 如需新增术语同步更新
+    - 单元与 CLI 测试：已验收触发落盘、未验收只提示、只改注释或排版（空白）不触发、非语义字段不触发、重复修改去重、清除后可再次触发、next 命令
+  out:
+    - 新增命令或文体；跳过自动标记的参数（作者已决定不提供）
+    - 多层传递闭包、改变 impact 预览与 impact mark 的计算规则；组稿关卡规则
+    - 里程碑中其他计划变更（节拍位置、next 文本交接记录、诊断下一步、Windows 安装）
+unchanged_behavior:
+  - wa-cli impact、impact mark、impact clear、impact list 的行为与输出不变
+  - 命令写入失败或取值未变（changedPaths 为空）时不触发自动传播，原有输出字段、错误码与退出码不变
+  - wa-cli status 的 commands 不变；next 中复查标记仍不进入 blockers
+roadmap:
+  milestone: usability-polish
+  planned_change: impact-auto-hint

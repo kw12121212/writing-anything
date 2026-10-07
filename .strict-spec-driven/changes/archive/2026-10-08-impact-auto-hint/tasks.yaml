@@ -1,0 +1,42 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: impact-auto-hint
+sections:
+  Implementation:
+    impact-automark:
+      text: internal/impact：抽取 appendMarks 共用落盘逻辑；新增 AutoMark（已验收拆分、from 过滤、（场景，目标）去重、按场景去重任务包）、Ripple 输出结构、SemanticKey 与 impact.auto-mark-failed 错误码
+      status: complete
+    cli-set-commands:
+      text: internal/cli：canon set、state set、knowledge set、threads set、scene contract 写入成功且语义字段变化时调用自动传播，输出 impact 数组、追加 changedPaths、文本提示；失败时 warning
+      status: complete
+    cli-next:
+      text: internal/cli next：open 复查标记场景的 commands 追加 impact clear 与 review plan 命令；done 场景有 open 标记时列出并提示
+      status: complete
+    docs-skills:
+      text: 同步 wa-continuity 等技能说明、命令帮助与 GLOSSARY（如有新术语）
+      status: complete
+    spec-delta:
+      text: 生成 impact 主规格增量：ADDED impact-auto-mark，MODIFIED impact-validation 的 next 行为，反映实际实现
+      status: complete
+  Testing:
+    unit-tests:
+      text: impact 与 cli 测试：已验收触发落盘、未验收只提示、只改注释或排版不触发、非语义字段不触发、重复修改去重且不重复生成任务包、清除后可再次触发、state/knowledge/threads/scene contract 触发、next 命令与 done 场景列出
+      status: complete
+      command: go test ./internal/impact/ ./internal/cli/
+    full-regression:
+      text: 完整回归（含覆盖率阈值 80%）
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    verify-change:
+      text: strict-spec-cli verify impact-auto-hint 通过，任务全部完成
+      status: complete
+      command: strict-spec-cli verify impact-auto-hint
+    archive-ready:
+      text: 审查通过后归档，规格增量合并入 impact 主规格，路线图计划变更标记完成
+      status: complete
+testing_gates:
+  validation_task: full-regression
+  unit_test_task: unit-tests

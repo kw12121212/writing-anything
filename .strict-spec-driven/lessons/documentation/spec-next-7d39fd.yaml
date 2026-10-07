@@ -8,7 +8,7 @@ lesson:
 category: documentation
 status: active
 created_at: '2026-10-05T03:43:25.904Z'
-updated_at: '2026-10-05T03:43:25.904Z'
+updated_at: '2026-10-07T17:18:21.815Z'
 context: knowledge-reveal-terms 的 continuity delta spec 语句写了带占位符且缺值的 next 命令
 observation: 语句中的 wa-cli knowledge set 占位符形态（含 work/id 占位符且 --terms 无取值）违反 runnable-next（不得含需要替换的占位符），实现只能改用可执行的 knowledge list --all，造成规格-实现分歧，须在归档前改写语句。
 takeaway: 撰写 delta spec 的诊断契约时，next 里的命令要么给具体可粘贴形态，要么写 wa-cli help 形态引用；先查 cli-contract 的 runnable-next 再落笔，避免实现被迫偏离语句或照抄违反 MUST。
@@ -17,3 +17,6 @@ occurrences:
   - origin: knowledge-reveal-terms
     date: '2026-10-05'
     evidence: specs/continuity.yaml delta 语句改写为 knowledge list 可执行形态；cli-contract/runnable-next 标准
+  - origin: impact-auto-hint
+    date: '2026-10-07'
+    evidence: planned change details 要求 next 给出 wa-cli impact clear --confirmed-by-author --confirmation 命令，但 --confirmation 必须是作者原话；按 runnable-next 改为在 next 的 action 中写该用法、commands 只放可直接运行的 review plan 与不带确认参数的 impact clear（design 决策 next-confirmation-in-action）

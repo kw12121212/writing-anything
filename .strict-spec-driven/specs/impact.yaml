@@ -60,7 +60,7 @@ requirements:
         - THEN: 报告 impact.not-found，退出码为 1
   impact-validation:
     strength: MUST
-    statement: wa-cli validate 整体校验必须对 .writing-anything/rechecks/ 下每个作品的复查标记文件（rechecks/<work>.yaml）做 Schema 与领域校验并计入 checked：scene 必须是该作品的场景单元（否则 impact.unknown-target，field 为对应位置）；via 取值合法；同（scene， target）至多一条 open 标记（否则 impact.invalid）；open 标记不得含 cleared_at（impact.invalid）；cleared 标记必须含 cleared_at（impact.invalid）与解除依据（confirmation 或 review_based，否则 impact.incomplete-confirmation）；途经符号链接按 artifact.not-found 处理。wa-cli validate <path> 对该位置的复查标记文件执行同样的检查。wa-cli next 对有 open 复查标记的场景，在该单元的 action 中追加提示（不进入 blockers，复查标记不是推进关卡；组稿侧的阻塞由 assemble 引入）；其余输出不变。
+    statement: wa-cli validate 整体校验必须对 .writing-anything/rechecks/ 下每个作品的复查标记文件（rechecks/<work>.yaml）做 Schema 与领域校验并计入 checked：scene 必须是该作品的场景单元（否则 impact.unknown-target，field 为对应位置）；via 取值合法；同（scene， target）至多一条 open 标记（否则 impact.invalid）；open 标记不得含 cleared_at（impact.invalid）；cleared 标记必须含 cleared_at（impact.invalid）与解除依据（confirmation 或 review_based，否则 impact.incomplete-confirmation）；途经符号链接按 artifact.not-found 处理。wa-cli validate <path> 对该位置的复查标记文件执行同样的检查。wa-cli next 对有 open 复查标记的场景（不论阶段）：action 追加提示，列出标记数量与目标，说明复查路径，并写明作者确认无影响时的用法 wa-cli impact clear <scene> <target> --confirmed-by-author --confirmation <作者原话摘要>（作者原话由作者给出，不进入 commands）；commands 在原有命令之后追加 wa-cli review plan <scene> --dimension causality --dir <dir> --json、每个目标一条 wa-cli impact clear <scene> <target> --dir <dir> --json（重新审查通过后的解除）与 wa-cli help impact clear --json；复查标记不进入 blockers（不是推进关卡，组稿侧的阻塞由 assemble 引入）。不带 unit 参数时，stage 为 done 但有 open 复查标记的场景也出现在 steps 中（next-skips-done 的唯一例外）。其余输出不变。
     scenarios:
       validate-open-with-cleared-at:
         - GIVEN: rechecks/my-novel.yaml 的 open 标记含 cleared_at
@@ -69,4 +69,40 @@ requirements:
       next-hint-not-blocker:
         - GIVEN: scene-2 有 open 复查标记且阶段产物齐备
         - WHEN: 运行 wa-cli next my-novel/scene-2 --dir D --json
-        - THEN: blockers 为空数组，action 提示存在复查标记，commands 含 wa-cli advance，退出码为 0
+        - THEN: blockers 为空数组，action 提示存在复查标记并给出 impact clear --confirmed-by-author 用法，commands 依次含 wa-cli advance、wa-cli review plan my-novel/scene-2 --dimension causality 与 wa-cli impact clear，退出码为 0
+      next-lists-done-marked:
+        - GIVEN: 已验收（stage 为 done）的 scene-1 有针对 canon-1 的 open 复查标记
+        - WHEN: 运行 wa-cli next --dir D --json
+        - THEN: steps 含 my-novel/scene-1，其 blockers 为空数组，commands 含 wa-cli review plan my-novel/scene-1 --dimension causality --dir D --json 与 wa-cli impact clear my-novel/scene-1 canon-1 --dir D --json，且不含 < 或 >，退出码为 0
+  impact-auto-mark:
+    strength: MUST
+    statement: wa-cli canon set、state set、knowledge set、threads set 与 scene contract 在写入成功（changedPaths 非空）且语义字段变化时，必须按 impact 的引用图自动处理受影响场景，不提供跳过参数；受影响场景取修改前与修改后引用图结果的并集（改名、改计划回收位置或改绑定后，只在修改前引用目标的场景同样受影响）。语义字段：canon set 为 type、name、aliases、text 与 members（目标为该条目）；state set 为 scene 与 state（目标为绑定的设定条目，只计不早于新旧绑定场景中先序较早者的场景）；knowledge set 为 scene、entry、character 与 terms（目标为新旧绑定条目，场景范围同 state set）；threads set 为 text、planned_recover、status 与 recovered_in（目标为该伏笔）；scene contract 为被编辑节的 causes 与 state_changes（目标为该场景）。比较时字符串去首尾空白并折叠连续空白、集合型列表不计顺序，因此只改注释、排版或其他字段（如 sources、protection、标题）不触发。受影响场景中 stage 为 done（已验收）者自动写入复查标记（同 impact mark 的产物格式与追加规则，同（场景，目标）已有 open 标记时跳过），并只为此前没有任何 open 复查标记的场景生成 causality 审查任务包；未验收场景只在输出中列出，不写任何文件。命令 --json 输出新增 impact 数组（未触发时为空数组），每个目标一项：target、marked（本次新增标记，同 impact mark 的 marked 项）、existing（已有 open 标记而跳过的已验收场景）与 unaccepted（只提示的未验收场景），后两者每项含 scene、via 与 reason；changedPaths 追加 rechecks 文件与新任务包。不加 --json 时逐行列出新增标记、跳过与只提示的场景。自动处理失败时原写入保留、不写复查标记（出错前已生成的任务包列入 changedPaths），追加 impact.auto-mark-failed 的 warning（next 含 wa-cli impact mark <work>/<target> --dir <dir> --json），退出码不因此改变。
+    scenarios:
+      auto-mark-accepted:
+        - GIVEN: canon-1 被已验收场景 scene-2、scene-3 与未验收场景 scene-4 的出场人物引用
+        - WHEN: 运行 wa-cli canon set my-novel canon-1 --text 新设定 --dir D --json
+        - THEN: impact[0].marked 含 scene-2 与 scene-3，unaccepted 含 scene-4，changedPaths 含 rechecks/my-novel.yaml 与两个 causality 任务包，wa-cli impact list my-novel 列出两条 open 标记，退出码为 0
+      auto-mark-dedup:
+        - GIVEN: 上一场景之后 scene-2、scene-3 已有针对 canon-1 的 open 标记
+        - WHEN: 再次运行 wa-cli canon set my-novel canon-1 --text 又一版设定 --dir D --json
+        - THEN: impact[0].marked 为空数组、existing 含 scene-2 与 scene-3，changedPaths 只含 canon.yaml，没有新增标记与任务包
+      auto-mark-after-clear:
+        - GIVEN: scene-2 对 canon-1 的标记已经 impact clear 解除
+        - WHEN: 再次以新文本运行 wa-cli canon set my-novel canon-1
+        - THEN: impact[0].marked 含 scene-2 的新 open 标记，退出码为 0
+      auto-mark-non-semantic:
+        - GIVEN: canon-1 被已验收场景引用，scene-1 与 scene-2 已有针对 canon-1 的 open 标记
+        - WHEN: 作者手工只修改 canon.yaml 的 YAML 注释后运行 wa-cli canon set my-novel canon-1 --text 与当前文本只差首尾空白的值 --dir D --json，或运行 wa-cli canon set my-novel canon-1 --pin --dir D --json
+        - THEN: changedPaths 只含 canon.yaml，impact 为空数组，rechecks 文件逐字节不变，退出码为 0
+      auto-mark-other-commands:
+        - GIVEN: scene-2 已验收、scene-3 未验收；状态变更提议 state-1 绑定 scene-2 与 canon-1
+        - WHEN: 运行 wa-cli state set my-novel state-1 --state 重伤 --dir D --json
+        - THEN: impact[0].target 为 canon-1，受影响场景含 scene-2 与 scene-3、不含先序更早的 scene-1，退出码为 0
+      auto-mark-failure-warning:
+        - GIVEN: rechecks/my-novel.yaml 不通过 Schema 校验
+        - WHEN: 运行 wa-cli canon set my-novel canon-1 --text 新设定 --dir D --json
+        - THEN: canon.yaml 照常写入（changedPaths 只含它），impact 为空数组，诊断含 warning 级 impact.auto-mark-failed（next 含 wa-cli impact mark my-novel/canon-1），退出码为 0
+      auto-mark-rename:
+        - GIVEN: canon-1（守灯人）被已验收场景 scene-1、scene-2 与未验收场景 scene-3 的出场人物引用
+        - WHEN: 运行 wa-cli canon set my-novel canon-1 --name 老守灯人 --dir D --json
+        - THEN: impact[0].marked 含 scene-1 与 scene-2、unaccepted 含 scene-3（按修改前的引用图计入），退出码为 0
