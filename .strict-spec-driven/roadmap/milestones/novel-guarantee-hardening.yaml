@@ -1,0 +1,62 @@
+schema: strict-spec-driven/roadmap-milestone/v2
+schema_version: 2
+artifact_type: roadmap_milestone
+schema_file: ../schemas/roadmap-milestone.yaml
+milestone:
+  novel-guarantee-hardening:
+    title: 长篇保证加固（Novel Guarantee Hardening）
+order: 200
+goal: 让长篇的记忆与审查保证在实现上与已交付的完成标准一致：上下文包（Context Pack）不泄露视角人物未知的秘密；写后收口（Close-out）能发现正文中漏抽的专有名词；审查任务包（Review Task Packet）严格不超预算；伏笔回收引用总被校验；小说不继承文章类文风；MCP 服务能被只发送 initialize 的现有客户端接入；并补齐让这些保证可回归的测试。
+scope:
+  in:
+    - 写后收口扫描场景正文中的疑似专有名词（确定性规则），与大纲字段扫描合并提示补录或豁免；修正 closeout 规格只扫大纲的写法
+    - 审查任务包预算硬上限：台账切片与检查清单参与裁剪，仍超预算时拆分任务包或报告 error 诊断
+    - 伏笔回收引用校验不依赖伏笔台账文件是否存在
+    - 默认规范包文风按文体隔离，novel 与 short-story 不继承文章类文风
+    - 测试补齐：因果冲突经连续性审查阻塞验收；E2E 设定冲突注入改由审查命令发现；注入违例直接断言 error 级；pack learn 与 pack prefer 提议确认前不影响规则；AIDA 缺段负向用例；MCP 与 CLI 输出一致性按命令注册表比对
+    - 上下文包复用知情揭示词（Reveal Terms）按句遮蔽：人物卡与设定条目文本中含视角人物尚未获知的知情事件揭示词的句子替换为未揭示占位；已确认但未登记揭示词的知情事件由 validate 警告；读者已知、人物未知的单列保持不变
+    - MCP 双代服务端（Dual-era Server）：保留 2026-07-28 无状态语义，同时对 initialize 按旧版语义服务 2025-11-25 与 2025-06-18 客户端（作用域为该 stdio 进程）；不支持的版本在 initialize 错误中列出支持版本
+  out:
+    - 新的长篇特性、向量检索或任何模型调用
+    - HTTP、SSE 等远程 MCP 传输
+    - 核心门禁与确认渠道（core-gate-hardening）
+done_criteria:
+  - wa-cli review plan 生成的每个任务包 chars 不超过上下文预算，包括台账切片很大的夹具；novel-e2e 断言每个任务包 chars 不超过 budget
+  - 作品没有 threads.yaml 时，场景契约 recovers 引用不存在的伏笔使 wa-cli validate 以非零退出并报告 threads.unknown-thread
+  - novel 作品的 wa-cli config resolved 与 context 输出不含技术博客文风条目，语料黄金文件随之再生成
+  - 四类注入违例测试都直接断言对应审查发现项 severity 为 error；设定冲突注入由 wa-cli continuity 报告，不再依赖写保护拒绝
+  - 因果冲突转连续性发现项的分支被测试执行并断言阻塞验收；continuity 与 reviewpacket 包内覆盖率不低于 80%
+  - 完整回归命令 go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out 通过
+  - novel-e2e 语料中陈守拙溺水真相在其知情事件确认之前的场景、以不知情人物为视角时，wa-cli context 输出不含该真相文本，知情之后的场景包含；测试断言没有任何获知者已知的受约束条目不出现在任何视角的上下文中
+  - 测试夹具场景正文出现未登记、大纲未声明的人名时，wa-cli scene close-out 输出 closeout.suspected-name 警告；--waive 后不再提示；novel-e2e 语料全部场景收口时该警告为零
+  - 以 2025-11-25 与 2025-06-18 发送 initialize 的客户端分别协商到所请求版本，完成 initialized 后能列出并调用 tool、读取并订阅 wa://feedback 收到更新通知；请求其他版本时协商到 2025-11-25；带 _meta 的 2026-07-28 请求行为不变；server/discover 的 supportedVersions 列出三个版本；测试覆盖每个版本
+  - 验证揭示词遮蔽：novel-e2e 中为陈守拙溺水真相的知情事件登记揭示词后无需改写人物卡；已确认但未登记揭示词的知情事件使 wa-cli validate 输出警告
+intake_questions:
+  - id: secret-model
+    question: 如何判定人物卡中哪些内容受知情约束？
+    context: 人物卡是整段文本，知情表以设定条目为单位；语料中秘密直接写在人物卡全文里；已交付的知情揭示词（knowledge propose --terms）已被 continuity 用于提前揭示检查
+    impact: 决定设定集是否扩展、上下文过滤粒度与语料改写量
+    recommendation: 已定（2026-10-07 作者确认）：复用知情揭示词按句遮蔽，人物卡与设定条目文本中含视角人物尚未获知的知情事件揭示词的句子替换为未揭示占位；已确认但未登记揭示词的知情事件由 validate 警告；需严格结构化的秘密仍可登记为独立设定条目，两者不冲突；不改写语料人物卡，只补登揭示词
+  - id: name-heuristic
+    question: 正文专有名词扫描采用什么确定性规则？
+    context: wa-cli 不调用模型，中文没有大小写，误报会增加作者负担；现有 continuity.unknown-character 只检查大纲声明的出场人物，没有可直接复用的正文规则
+    impact: 决定收口提示的召回率与误报率
+    recommendation: 已定边界：确定性、只报 warning、可 --waive、不调用模型；验收为测试夹具的正文新人名被提示且 novel-e2e 语料零误报。具体规则（称谓后缀、对话前导、多次出现的未登记 2 至 4 字词等组合）在变更设计阶段按该验收选定
+  - id: mcp-versions
+    question: MCP 服务需要兼容哪些协议版本？
+    context: 当前只支持 2026-07-28 版（无握手、每个请求带 _meta），发送 initialize 的旧客户端被 check() 以 -32602 拒绝且错误未列出支持版本；规范 2026-07-28 basic/versioning 允许双代服务端，并要求只支持新版的服务端在 initialize 错误中列出支持版本（SHOULD）
+    impact: 决定协议协商实现与测试矩阵
+    recommendation: 已定（2026-10-07 作者确认，依据 Context7 上的 MCP 2026-07-28 规范 basic/versioning 与 transports/stdio）：实现双代服务端，兼容 2025-11-25 与 2025-06-18 的 initialize 握手，请求其他版本时回复 2025-11-25；不支持 2025-03-26 及更早版本；initialize 错误列出支持版本；claude-code 与 codex 实际使用的版本在 agent-dogfood 中记录，若两者都已使用新版可把旧版兼容降为可选
+planned_changes: {}
+dependencies:
+  - core-gate-hardening：卷末检查点与确认渠道会改变语料命令序列，先落地后统一再生成黄金文件
+risks:
+  - 正文专有名词扫描为启发式，误报会增加作者负担；只报 warning 并支持豁免
+  - 多协议版本兼容扩大 MCP 维护面，需按版本隔离握手逻辑
+  - 揭示词遮蔽只覆盖已登记的揭示词，人物卡用其他措辞写出秘密时仍会泄露；以 validate 对无揭示词知情事件的警告与技能提示缓解，需严格结构化的秘密可登记为独立设定条目
+  - 文风隔离与揭示词补登会改变 novel-e2e 黄金文件，需人工复核差异
+status: proposed
+notes:
+  - 来源：2026-10-07 路线图里程碑审计 P1 项；语料黄金上下文中陈守拙人物卡含溺水真相、norms.style 出现「结论先行」文章文风，是本里程碑的复现依据
+  - 收口、上下文等改变 Agent 可见流程的计划变更，须同步更新 core-gate-hardening 落地的长篇技能文字，TestSkillCommandsExist 保持通过
+details: 审计证据：ctxpack.go 出场人物卡全文未按知情过滤；closeout.go scan 只读大纲字段（specs/closeout.yaml 同样写死）；reviewpacket.go budgetExcerpt 只裁正文、最少保留 100 字；threads.go ContractProblems 无台账时直接返回 nil；continuity.go 因果冲突分支覆盖计数为 0；E2E 设定冲突注入断言的是 canon.author-pinned；internal/mcp/mcp.go check() 要求每个请求带 _meta，initialize 被以 -32602 拒绝。已定结论（2026-10-07 作者确认）：秘密以知情揭示词按句遮蔽；MCP 实现双代服务端兼容 2025-11-25 与 2025-06-18；正文专名扫描规则在设计阶段按验收选定。

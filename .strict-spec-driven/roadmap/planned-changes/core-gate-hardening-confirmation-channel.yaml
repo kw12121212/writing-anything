@@ -1,0 +1,11 @@
+schema: strict-spec-driven/planned-change/v1
+schema_version: 1
+artifact_type: planned_change
+schema_file: ../../templates/strict-spec-driven/schemas/planned-change.yaml
+planned_change:
+  id: confirmation-channel
+  milestone: core-gate-hardening
+status: planned
+summary: 确认记录写明确认渠道，阅读页提供作者确认队列，strict 下组稿前批量复核命令行渠道的关键确认
+details: 为验收、决策、规划步骤、状态与知情、卷末检查点、钦定设定修改的确认记录新增渠道字段 channel（cli 或 preview），JSON Schema 同步，旧记录缺省视为 cli。preview --serve 新增待确认队列与确认操作（复用回环监听、随机令牌与 Host 校验），作者点击即写入 channel 为 preview 的确认记录，原话摘要由作者在页面填写。strict 关卡下：验收、钦定设定修改与卷末检查点的 cli 渠道确认照常生效，review show 与 next 将其列为待作者复核；阅读页提供批量复核操作，写入复核记录（channel 为 preview）；assemble 在存在未复核的此类确认时以非零退出并列出清单，next 给出打开阅读页的命令。standard 与 fast 关卡只标出渠道。不拒绝 cli 渠道。docs 与技能写明边界：这是可审计的流程约束而非安全隔离，同机同账户的 Agent 能读到令牌，防范目标是疏忽或幻觉式代填。新术语「确认渠道（Confirmation Channel）」「待作者复核」加入 docs/GLOSSARY.md。测试：渠道字段写入、无令牌与错令牌不能写入确认或复核、strict 组稿因未复核被阻塞、批量复核后放行、standard 不阻塞。novel-e2e 命令序列补充复核步骤并再生成黄金文件。
+depends_on: []

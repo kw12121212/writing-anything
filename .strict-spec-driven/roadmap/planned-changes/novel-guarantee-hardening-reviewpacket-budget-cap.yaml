@@ -1,0 +1,11 @@
+schema: strict-spec-driven/planned-change/v1
+schema_version: 1
+artifact_type: planned_change
+schema_file: ../../templates/strict-spec-driven/schemas/planned-change.yaml
+planned_change:
+  id: reviewpacket-budget-cap
+  milestone: novel-guarantee-hardening
+status: planned
+summary: 审查任务包预算硬上限：台账切片与检查清单参与裁剪，仍超预算则拆包或报错
+details: reviewpacket 计算 chars 时计入正文、台账切片与检查清单；先裁正文，再按相关度裁台账切片，清单不可裁时按清单项拆分为多个任务包；仍无法满足时报告 error 诊断而非静默超预算。测试使用大台账夹具断言每包 chars 不超过 budget，并为 novel-e2e 增加同样断言；把 reviewpacket 包内覆盖率提升到 80% 以上。
+depends_on: []

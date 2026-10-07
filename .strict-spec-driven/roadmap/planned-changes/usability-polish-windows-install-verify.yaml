@@ -1,0 +1,11 @@
+schema: strict-spec-driven/planned-change/v1
+schema_version: 1
+artifact_type: planned_change
+schema_file: ../../templates/strict-spec-driven/schemas/planned-change.yaml
+planned_change:
+  id: windows-install-verify
+  milestone: usability-polish
+status: planned
+summary: install.ps1 在 pwsh 中实际运行并纳入发布校验
+details: 在开发环境安装 PowerShell（pwsh）后运行 TestInstallPs1 并修复暴露的问题（注意 coding 教训 irm-iex-powershell-bom-iex-4cdfc3：经 irm | iex 分发的脚本不能带 BOM，测试必须走 iex 路径）；release 技能增加检测 pwsh 并运行该测试的步骤，缺少 pwsh 时明确提示并要求作者在 Windows 本机执行，而非静默跳过；docs/INSTALL.md 补充 Windows 验证记录（pwsh 版本、架构与结果）。
+depends_on: []

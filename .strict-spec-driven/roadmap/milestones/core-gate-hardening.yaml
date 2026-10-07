@@ -1,0 +1,53 @@
+schema: strict-spec-driven/roadmap-milestone/v2
+schema_version: 2
+artifact_type: roadmap_milestone
+schema_file: ../schemas/roadmap-milestone.yaml
+milestone:
+  core-gate-hardening:
+    title: 核心门禁加固（Core Gate Hardening）
+order: 100
+goal: 修复 2026-10-07 里程碑审计中与已交付完成标准直接冲突、或动摇「帮 Agent 规范地协助人写作」定位的五个缺口：wa-cli next 在前三个阶段给出可执行命令；卷末检查点（Volume Checkpoint）不可被绕过；跨作品连续性冲突阻塞验收；内置技能（Skill）覆盖长篇全流程；作者确认记录写明确认渠道（Confirmation Channel），作者可在本地阅读页直接确认，strict 关卡（Gate）下经命令行渠道的关键确认在组稿前须由作者在阅读页统一复核，使 Agent 代填确认成为显式、可审计的动作。
+scope:
+  in:
+    - wa-cli next / status：brief、outline、draft 阶段缺少必需产物时给出对应的 wa-cli 写入命令（brief set、outline set 或 scene contract、draft write），action 文字不再要求直接编辑结构化产物
+    - 跨作品连续性：系列成员作品的场景验收运行系列范围的连续性审查，error 级跨作品发现项阻塞验收；修复时间线系列识别与系列文件形式（<id>.yaml）不匹配导致 SeriesID 未生效的问题
+    - 长篇技能：新增或扩展内置技能，覆盖场景契约、写后收口、状态与知情确认、连续性审查、审查任务包的子 Agent 并行调度、影响传播、卷末检查点、会话交接、时间线与组稿；wa-auto 增加 novel 路径
+    - 作者确认渠道：所有确认记录写明渠道（cli 或 preview）；本地阅读页（preview --serve）提供待确认队列与确认操作；strict 关卡下验收、钦定设定修改与卷末检查点经 cli 渠道的确认照常生效但标为待作者复核，组稿前须在阅读页批量复核，否则 assemble 被阻塞
+    - 卷末检查点：部的最后一个场景验收成功后自动生成检查点（只写汇总、不代作者确认）；strict 关卡下更早的部缺少或未确认检查点时拒绝下一部场景验收；同步修正 volume 规格中「检查点存在才检查」的写法
+  out:
+    - 上下文视角过滤、收口正文扫描、审查任务包预算硬上限等保证类加固（novel-guarantee-hardening）
+    - 诊断下一步命令全面具体化等体验收尾（usability-polish）
+    - 身份认证、多作者权限与远程确认服务
+done_criteria:
+  - 新建 tech-blog 文章与 novel 场景在 brief、outline、draft 三个阶段运行 wa-cli next --json 时，每个缺少必需产物的阻塞项都至少带一条非 help 的可执行 wa-cli 命令，测试逐阶段断言；units_test.go 中「无命令」的断言被替换为该断言
+  - 系列中 book-2 场景与 book-1 存在同一时间两地等 error 级跨作品发现项时，wa-cli accept 该场景以非零退出并列出发现项；修正后验收成功
+  - 测试校验 novel 生命周期关键命令（scene contract、scene close-out、state confirm、knowledge confirm、continuity、review plan、review submit、impact mark、volume checkpoint、volume confirm、assemble、handoff write）都至少被一个内置技能引用，且引用的命令与参数都存在于 wa-cli help --json
+  - 完整回归命令 go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out 通过
+  - 部的最后一个场景 wa-cli accept 成功后，该部目录下自动出现 checkpoint.yaml 且 confirmed_by_author 为 false，changedPaths 列出该文件；strict 关卡下 part-one 检查点缺失或未确认时，part-two 场景的 wa-cli accept 以非零退出并报告卷末检查点阻塞，作者确认后验收成功
+  - 系列中 book-1 已确认某人物死亡、book-2 场景该人物仍出场时，wa-cli continuity <series> 报告 error 级发现项，wa-cli accept 该场景以非零退出
+  - 验收、决策、规划、状态与知情、卷末检查点、钦定设定修改的确认记录都含渠道字段；经阅读页确认的记录渠道为 preview；测试覆盖无令牌或错令牌请求不能写入确认
+  - strict 关卡下存在 cli 渠道的验收、钦定设定修改或卷末检查点确认且未经阅读页复核时，wa-cli review show 将其列为待作者复核，wa-cli assemble 以非零退出并列出这些确认；作者在阅读页批量复核后组稿成功；standard 与 fast 关卡只标出渠道、不阻塞
+intake_questions:
+  - id: author-confirmation
+    question: strict 关卡下作者确认必须经由哪种渠道？
+    context: 当前 --confirmed-by-author 与 --confirmation 是 Agent 可自行传入的参数；阅读页令牌由启动它的 Agent 可见，任何本地机制都无法在同机同账户下技术性阻止 Agent 代填
+    impact: 决定确认记录数据模型、阅读页交互范围与 strict 关卡下组稿门禁
+    recommendation: 已定（2026-10-07 作者确认）：所有确认记录写明渠道（cli 或 preview）；阅读页提供待确认队列与确认操作；strict 关卡下验收、钦定设定修改与卷末检查点经 cli 渠道的确认照常生效但标为待作者复核，组稿前须在阅读页批量复核；不拒绝 cli 渠道；文档写明这是可审计约束而非安全隔离
+  - id: volume-checkpoint-trigger
+    question: 卷末检查点由验收自动生成，还是只在 next 中列为阻塞项？
+    context: 当前只能手动 wa-cli volume checkpoint 生成，从未生成时门禁不生效
+    impact: 决定 accept 是否产生额外产物以及 E2E 命令序列的变化
+    recommendation: 已定：部的最后一个场景验收时自动生成检查点（只写汇总、不代作者确认），依据已归档 novel 里程碑完成标准；strict 下更早的部缺失或未确认检查点都阻塞下一部验收
+planned_changes: {}
+dependencies:
+  - 无未满足依赖：kernel-foundation 至 novel-e2e 的全部里程碑均已交付归档
+risks:
+  - 卷末检查点与确认渠道改动会改变 novel-e2e 语料命令序列与黄金文件，需要再生成并人工复核差异
+  - 跨作品审查进入验收路径后大系列验收变慢，需按系列成员与引用范围裁剪
+  - 跨作品终态人物检测依赖更早成员作品的状态台账已确认；未确认的状态不参与判断，需在技能中提示先确认前作状态
+  - 确认渠道是可审计的流程约束而非安全隔离：Agent 与作者同机同账户时能读到阅读页令牌并自行提交，本地机制无法阻止；docs 与技能必须写明这一边界，防范目标是 Agent 疏忽或幻觉式代填而非恶意伪造
+status: proposed
+notes:
+  - 来源：2026-10-07 路线图里程碑审计——60 条完成标准中 46 条达标、13 条部分达标、1 条未达标（novel 卷末检查点）；本里程碑承接 P0 项
+  - 卷末检查点缺口源于规格本身被写弱（specs/volume.yaml volume-accept-gate），修复须同步修正规格，不只改实现
+details: 审计证据：internal/cli/units.go artifactNext 只为 marketing、review、acceptance 登记命令；internal/volume/volume.go AcceptanceBlockers 只在 checkpoint.yaml 存在时检查；continuity.AcceptanceBlockers 只运行单作品 Run，实测跨作品同时两地 error 时 accept book-2/s1 成功；跨作品只检查 conflicting-state，状态台账按作品读取，跨作品已死人物仍行动检测不到；internal/skills/skills 下 9 个 wa-* 技能未引用任何长篇连续性命令；--confirmed-by-author 与 decide --confirmation 只校验非空文本。已定结论：卷末检查点在部的最后一个场景验收时自动生成（依据已归档 novel 里程碑完成标准「每部（卷）最后一个场景验收后生成卷末检查点」），只写汇总、不代作者确认；跨作品已死人物仍行动必须检测（依据已归档 novel-series 完成标准「第二部场景与第一部设定集冲突时报告阻塞」）；作者确认渠道按 2026-10-07 作者决定：记录渠道、阅读页确认、strict 下组稿前阅读页批量复核 cli 渠道关键确认，不拒绝 cli 渠道。实施顺序：next 命令、卷末检查点、跨作品门禁与确认渠道可并行，长篇技能最后落地以描述最终行为。

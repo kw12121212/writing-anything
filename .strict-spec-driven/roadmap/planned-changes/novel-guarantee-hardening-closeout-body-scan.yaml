@@ -1,0 +1,11 @@
+schema: strict-spec-driven/planned-change/v1
+schema_version: 1
+artifact_type: planned_change
+schema_file: ../../templates/strict-spec-driven/schemas/planned-change.yaml
+planned_change:
+  id: closeout-body-scan
+  milestone: novel-guarantee-hardening
+status: planned
+summary: 写后收口扫描场景正文中的疑似专有名词
+details: scene close-out 在现有大纲字段扫描（closeout.go scan）之外新增正文扫描：读取场景 draft.md 去注释正文，用确定性规则找出未解析到设定集称谓或别名、且不在豁免名单中的疑似专有名词，与大纲来源合并去重，沿用 closeout.suspected-name 警告与 canon add、--waive 两条 next 命令；不阻塞收口。规则在设计阶段按 intake name-heuristic 的验收选定（夹具新人名被提示、novel-e2e 语料零误报）。修正 specs/closeout.yaml 只扫大纲的条款。测试：正文新人名提示、已登记别名不提示、豁免后不提示、语料零误报。同步更新长篇技能中收口步骤的说明。
+depends_on: []

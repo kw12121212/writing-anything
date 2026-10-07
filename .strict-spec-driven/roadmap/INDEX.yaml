@@ -3,7 +3,19 @@ schema_version: 2
 artifact_type: roadmap_index
 schema_file: ../schemas/roadmap-index.yaml
 milestones:
-  novel-e2e:
-    title: 真实小说端到端测试（Real-novel E2E）
-    path: roadmap/milestones/novel-e2e.yaml
-    status: complete
+  core-gate-hardening:
+    title: 核心门禁加固（Core Gate Hardening）
+    path: roadmap/milestones/core-gate-hardening.yaml
+    status: proposed
+  novel-guarantee-hardening:
+    title: 长篇保证加固（Novel Guarantee Hardening）
+    path: roadmap/milestones/novel-guarantee-hardening.yaml
+    status: proposed
+  usability-polish:
+    title: 体验收尾（Usability Polish）
+    path: roadmap/milestones/usability-polish.yaml
+    status: proposed
+  real-use-and-release:
+    title: 真实使用验证与发布（Real-use Validation & Release）
+    path: roadmap/milestones/real-use-and-release.yaml
+    status: proposed

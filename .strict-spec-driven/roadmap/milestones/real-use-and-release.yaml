@@ -1,0 +1,45 @@
+schema: strict-spec-driven/roadmap-milestone/v2
+schema_version: 2
+artifact_type: roadmap_milestone
+schema_file: ../schemas/roadmap-milestone.yaml
+milestone:
+  real-use-and-release:
+    title: 真实使用验证与发布（Real-use Validation & Release）
+order: 400
+goal: 用真实 Agent 接入与系列小说端到端测试（E2E）验证加固后的产品；建立里程碑完成标准到测试的对账机制，防止规格被写弱后里程碑仍被标为完成；最后发布 v0.2.0。
+scope:
+  in:
+    - 真实接入验证（Dogfooding）：Claude Code 与 Codex 分别经技能与 MCP 接入，各完成一篇技术博客与一篇公众号文章，记录问题清单并以缺陷变更修复
+    - 系列小说 E2E：复用 novel-e2e 的重放、黄金文件与测试矩阵框架，用两部短作品覆盖跨作品设定集、全局时间线与跨作品连续性审查
+    - 完成标准对账：为全部已归档里程碑建立「完成标准 → 测试名」对账表，由测试强制每个引用的测试存在且被执行；审计中被写弱的规格同步回补
+    - 发布 v0.2.0：完整回归通过后经 release 技能把 dev 合并到 main 并打标签
+  out:
+    - 向公众号等外部平台发布文章或调用平台 API
+    - 产品功能扩展；验证中发现的新需求另立里程碑
+done_criteria:
+  - docs 下有真实接入记录：两个客户端 × 两种文体共四次运行都走到导出，记录含客户端版本与命令序列，每个问题都链接到已归档的缺陷变更或写明不修理由
+  - 系列 E2E 纳入 go test 默认执行且无跳过；注入跨作品设定冲突与跨作品时间矛盾时断言 error 级发现项并阻塞验收；UPDATE_GOLDEN=1 可一键再生成黄金文件；同一环境两次重放结果一致
+  - main 分支上存在 v0.2.0 标签，发布产物含 linux、macOS、Windows 的 amd64 与 arm64 二进制及 SHA256SUMS
+  - 对账表覆盖执行时全部已归档里程碑的每条完成标准，每条映射到至少一个测试函数；go test ./... 中的对账检查在条目缺失、引用的测试函数不存在（go/ast 解析）或函数体首层有无条件 t.Skip 时失败；审计列出的 14 条部分达标或未达标标准都已映射到加固后新增或修正的测试
+intake_questions:
+  - id: reconciliation-home
+    question: 完成标准对账表放在哪里、由谁强制？
+    context: 产品运行时不得依赖 strict-spec-driven，但仓库测试可以读取仓库内文件；里程碑 YAML 位于 .strict-spec-driven/roadmap
+    impact: 决定对账是否成为完整回归的一部分，以及新里程碑归档时的维护流程
+    recommendation: 已定：对账表与检查放在 internal/tools 下（不进入产品二进制、不计入覆盖率，依据 AGENTS.md 覆盖率范围与 config 规则「产品运行时不得依赖 strict-spec-driven」），由 go test ./... 执行，读取 .strict-spec-driven/roadmap/archive/milestones 的 done_criteria；新里程碑归档时同步补表
+  - id: dogfood-clients
+    question: 真实接入验证用哪些客户端版本、由谁执行？
+    context: wa-cli 不调用模型，真实接入需要实际操作客户端；项目不使用 CI
+    impact: 决定验证记录的可复现程度与工作量
+    recommendation: 已定：由作者在本机用执行时的当前版本 Claude Code 与 Codex 执行，素材使用 testdata 夹具，记录客户端版本、命令序列与问题清单
+planned_changes: {}
+dependencies:
+  - core-gate-hardening、novel-guarantee-hardening、usability-polish 全部完成：真实接入与对账应针对加固后的行为
+risks:
+  - 真实接入受客户端版本变化影响，结果不能完全复现；以记录客户端版本与命令序列缓解
+  - 系列 E2E 增加回归耗时；规模控制在两部作品、各一章两个场景，采用进程内重放
+  - 发布 v0.2.0 是对外操作，执行前须作者明确确认
+status: proposed
+notes:
+  - 来源：2026-10-07 路线图里程碑审计 P2 项与流程建议：多条完成标准在规格层被写弱（卷末检查点、收口扫描、影响传播），实现与规格一致、验证通过后里程碑仍被标为完成；对账机制把 novel-e2e 的矩阵对账推广到所有里程碑
+details: 系列 E2E 是 novel-e2e 明确留待后续的范围（scope.out 第一条）。对账表与检查只存在于仓库测试与 internal/tools 下，不进入产品二进制，产品运行时不依赖 strict-spec-driven。真实接入由作者在本机执行，wa-cli 不调用模型。

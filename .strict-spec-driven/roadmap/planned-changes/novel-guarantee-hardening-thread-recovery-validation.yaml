@@ -1,0 +1,11 @@
+schema: strict-spec-driven/planned-change/v1
+schema_version: 1
+artifact_type: planned_change
+schema_file: ../../templates/strict-spec-driven/schemas/planned-change.yaml
+planned_change:
+  id: thread-recovery-validation
+  milestone: novel-guarantee-hardening
+status: planned
+summary: 伏笔回收引用校验不依赖伏笔台账是否存在
+details: threads.ContractProblems 在作品没有 threads.yaml 时把台账视为空集，场景契约 recovers 或 plants 引用不存在的伏笔报告 threads.unknown-thread；validate 与 scene contract 写入路径行为一致。测试覆盖无台账与有台账两种情况。
+depends_on: []

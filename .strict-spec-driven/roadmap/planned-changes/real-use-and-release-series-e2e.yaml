@@ -1,0 +1,11 @@
+schema: strict-spec-driven/planned-change/v1
+schema_version: 1
+artifact_type: planned_change
+schema_file: ../../templates/strict-spec-driven/schemas/planned-change.yaml
+planned_change:
+  id: series-e2e
+  milestone: real-use-and-release
+status: planned
+summary: 系列小说端到端测试：两部短作品覆盖跨作品设定、全局时间线与跨作品连续性
+details: 复用 internal/cli/testdata/e2e 下 novel-e2e 的重放、黄金与矩阵框架，新增系列语料（两部作品各一章两个场景、真实中文正文）；矩阵覆盖系列级与作品级设定覆盖（含原因与作者确认）、全局时间线、同一时间两地、跨作品已死人物行动；注入违例断言 error 级并阻塞验收；冻结时间源，两次重放一致；README 补充系列语料维护流程。
+depends_on: []

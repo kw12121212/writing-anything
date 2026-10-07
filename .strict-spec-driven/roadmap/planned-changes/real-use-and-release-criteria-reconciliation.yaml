@@ -1,0 +1,11 @@
+schema: strict-spec-driven/planned-change/v1
+schema_version: 1
+artifact_type: planned_change
+schema_file: ../../templates/strict-spec-driven/schemas/planned-change.yaml
+planned_change:
+  id: criteria-reconciliation
+  milestone: real-use-and-release
+status: planned
+summary: 里程碑完成标准到测试函数的对账表与强制检查
+details: 在 internal/tools 下新增对账检查（例如 internal/tools/criteria）与对账表（testdata 中的 YAML）：逐条把执行时全部已归档里程碑的 done_criteria 原文映射到一个或多个测试函数（包路径 + 函数名）。检查在 go test ./... 中运行：读取 .strict-spec-driven/roadmap/archive/milestones/*.yaml，任一 done_criteria 缺映射、映射的测试函数用 go/ast 解析不到、或函数体首层有无条件 t.Skip 时失败；完成标准文本变化时要求重新确认映射。审计中被写弱的规格（volume、closeout、impact）若前序里程碑未回补则在此回补。在 docs 或 release 技能中写明：新里程碑归档时同步补表。产品二进制与 wa-cli 运行时不引用该检查。
+depends_on: []
