@@ -238,7 +238,7 @@ categories:
     id-id-9e45ba:
       title: 重建式生成命令的 id 分配要避开全部既有 id，保留项匹配要看文件自身
       status: active
-      occurrences: 1
+      occurrences: 2
       path: .strict-spec-driven/lessons/coding/id-id-9e45ba.yaml
     schema-f67fa7:
       title: 新产物的写入路径必须与注册的 Schema 路径模式当场对上

@@ -1,0 +1,54 @@
+schema: strict-spec-driven/question-list/v1
+schema_version: 1
+artifact_type: question_list
+schema_file: templates/strict-spec-driven/schemas/question-list.yaml
+change: reviewpacket-budget-cap
+open: []
+resolved:
+  - id: requirement-problem
+    question: 今天具体出了什么问题，对谁？
+    context: 证据：里程碑 details「reviewpacket.go budgetExcerpt 只裁正文、最少保留 100 字」与 planned change summary。影响 proposal 范围。
+    answer: 调度审查任务包的 Agent：台账切片很大时任务包静默超出上下文预算，Agent 拿到的包超过其可承载的上下文，违背 packet-plan 主规格的预算保证
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-outcome
+    question: 什么可观察的变化证明问题解决了？
+    context: 证据：里程碑 done_criteria 第一条与 planned change details。影响 spec delta 与测试。
+    answer: wa-cli review plan 生成的每个任务包 chars 不超过上下文预算（含台账切片很大的夹具）；novel-e2e 断言每个任务包 chars 不超过 budget；无法满足时报告 error 诊断；reviewpacket 包内覆盖率不低于 80%
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-trigger
+    question: 为什么现在做？
+    context: 证据：里程碑 notes「来源：2026-10-07 路线图里程碑审计 P1 项」；planned change depends_on 为空。影响优先级。
+    answer: 2026-10-07 里程碑审计把任务包超预算列为 P1 项，本变更没有未满足依赖
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-non-goals
+    question: 哪些明确不做？
+    context: 证据：里程碑 scope.out 与 planned change details 只涉及预算装配。影响 proposal 范围。
+    answer: 不改变各维度的生成范围与切片来源、不调用模型、不做里程碑其他计划变更
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-interpretation
+    question: 「先裁正文，再按相关度裁台账切片，清单不可裁时按清单项拆分」应如何理解？
+    context: 证据：planned change details。影响 spec delta 与实现。
+    answer: 正文先缩到最小可审片段；仍超预算时按确定性相关度逐条省略台账切片；检查清单本身不裁，清单与最小正文仍超预算时把清单拆到多个同范围任务包；单个清单项也放不下时报告 error 诊断且不写文件
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: relevance-rule
+    question: 台账切片的相关度如何确定？
+    context: roadmap 只写「按相关度」；wa-cli 不调用模型，必须确定性。影响实现与测试。
+    answer: 契约类切片最高；其余按所指场景与审查范围在单元树先序中的距离，越远越低、范围之后低于范围之前；无法定位的最低；同等级先省略靠后的（见 design）
+    status: resolved
+    answered_by: roadmap
+  - id: min-excerpt
+    question: 最小正文片段多大？
+    context: 主规格既有「不足 100 字符时仍截取 100 字符以内的最小可审片段」；Schema 要求 excerpt.text 非空。影响 spec delta。
+    answer: 沿用 min(100, 正文长度)；占位说明与 style 固定说明不可裁
+    status: resolved
+    answered_by: roadmap

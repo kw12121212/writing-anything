@@ -1,0 +1,41 @@
+schema: strict-spec-driven/delta-spec/v1
+schema_version: 1
+artifact_type: delta_spec
+schema_file: templates/strict-spec-driven/schemas/delta-spec.yaml
+target_spec: reviewpacket
+operations:
+  ADDED: {}
+  MODIFIED:
+    packet-plan:
+      strength: MUST
+      statement: wa-cli review plan <work|unit> [--dimension <维度>] 必须按维度生成语义审查任务包（Review Task Packet），写入 .writing-anything/packets/<work>/ 下的一包一文件（文件名 <dimension>-<n>.yaml，id 为文件名去扩展名，新包的 n 避开该作品全部既有 id 递增）。维度与生成范围：(1) character（人物一致性）：对本范围内每个章（chapter 单元），对其子树场景大纲声明出场、且解析到唯一设定集条目的人物各建一包（名与别名解析到同一条目的合并为一包）——scope 为章引用，excerpt 为该章内声明该人物的场景正文按先序拼接（计入预算后截断），slices 为该人物的状态台账条目（全部状态按先序）与知情台账中该人物获知的全部条目；(2) thread（伏笔回收质量）：对伏笔台账每个条目各建一包——scope 为伏笔 id，excerpt 为埋设场景与回收场景（有 recovered_in 时）的正文结尾片段，slices 为台账条目的文本、计划回收位置与状态；(3) causality（因果与动机）：对范围内每个场景各建一包——scope 为场景引用，excerpt 为场景正文，slices 为大纲节的 causes 与 events、每个起因事件声明场景的正文结尾（找不到声明场景或没有正文时省略该切片）；(4) pov-reveal（视角与揭示边界）：对范围内每个场景各建一包——excerpt 为场景正文，slices 为各节 reveal 与视角人物（解析与重放语义同 context 主规格 scene-context）：视角人物已知条目与读者已知人物未知条目（视角人物未声明或未解析到条目时省略知情切片）；(5) style（文风与情绪节奏）：对范围内每个章各建一包（纵向任务）——excerpt 的 text 为固定说明文字，slices 为章分层摘要（summary.yaml 的 text 与 stale）与章内各场景已记录的 AI 评分（metrics.yaml 最新会话的分值），没有数据时对应切片省略。每个包含 schema_version（1）、id、work、dimension、scope、subject（仅 character 包，为该人物的设定条目 id，区分同一章的不同人物包）、excerpt（text 与 truncated；范围还没有正文时 text 为固定的占位说明）、slices、checklist 与 status（open）。固定检查清单：character 为 behavior-state（人物的言行与最新已确认状态一致吗）、naming（人物称谓与设定集一致吗）、knowledge-boundary（人物言行未超出其已知信息吗）、state-change（状态变化的过渡可信吗）；thread 为 plant-natural（伏笔的埋设自然吗）、payoff-earned（回收兑现了埋设的期待吗）、continuity（跨场景的伏笔提示连贯吗）；causality 为 cause-holds（场景起因在正文成立吗）、event-produced（契约声明的事件在正文产生了吗）、motivation（人物行动的动机可信吗）；pov-reveal 为 pov-consistent（视角与人称保持一致吗）、no-early-reveal（正文未提前透露揭示边界吗）、reader-knowledge（读者已知的信息运用得当吗）；style 为 style-consistent（文风与画像基线一致吗）、pacing-curve（情绪节奏符合评分与目标吗）、drift-check（评分与摘要中的异常核实了吗）。每个包的 chars 为 excerpt.text、每个切片（kind：text）与每个清单项（id：question）的字符数（Unicode 码点）之和，必须不超过作品的上下文预算（context_budget），按以下顺序满足：(1) 先裁正文：excerpt 取扣除切片与清单后的剩余预算，超出时截断并置 truncated 为 true，但有正文时（去掉开头空白后）至少保留 min(100, 正文字符数) 的最小可审片段（无正文的占位说明与 style 的固定说明文字不裁）；(2) 仍超预算时按相关度从低到高逐条省略切片——thread、cause、event、reveal、chapter-summary 与 cross-cause 切片相关度最高，其余切片按其所指场景与审查范围在单元树先序中的距离计算（越远越低，范围之后的低于范围之前的，无法定位的最低），同相关度先省略靠后的——省略后 excerpt 重新取剩余预算，包文件以 omitted_slices 记录省略条数（未省略时不写）；(3) 检查清单不裁：清单与最小正文片段之和仍超预算时，按清单顺序把清单拆分到多个同 dimension、同 scope 的任务包（每包装入尽可能多的连续清单项，各包分别执行 (1)(2)）；(4) 单个清单项与最小正文片段之和仍超预算时报告 error 级 packet.over-budget（field 为 context_budget，message 含首个放不下的维度与范围、放不下的包数、当前预算与使全部任务包放得下所需的最小预算，next 含 wa-cli config resolved --dir <dir> --json 与 wa-cli help config set --json），不写任何文件，退出码为 1。系列级任务包遵守同样的预算规则。所有包先构造并统一预检（编码、重新解析与 Schema 校验），任一包不合法时不写任何文件（本次已生成的包全部不落盘）。重复运行时按（dimension, scope, subject, 清单项 id 集合）匹配：status 为 done 的包保留（不重写、id 不被重编号复用），status 为 open 的包沿用其 id 原位重建，其余新建（新 id 避开该目录全部既有文件名）；本次维度与范围内没有被重建的 open 包（键已不再生成的过期包与同键的重复包）删除，done 包、其他维度与范围外（给出 unit 时该子树之外的章与场景）的包不动；系列级任务包按同样规则匹配与清理；--dimension 只生成该维度；给出 unit 时范围为该单元子树。--json 输出 packets 数组（每项含 id、dimension、scope、status、results、chars、truncated 与 omittedSlices（省略的切片条数，未省略为 0）；没有可建包的内容时为空数组）与 changedPaths（写入与删除的包文件）；退出码为 0。不加 --json 时以人读文本按维度分组列出。 给出系列 id（.writing-anything/series/<id>.yaml 存在且成员多于一部）时，生成系列级任务包——新增 series-causality 维度（causes 引用另一作品声明事件的场景，切片含声明场景的正文结尾，清单为 cross-cause-holds、event-chain 与 motivation）；character 维度生成跨作品包（人物 × 其出场的全部作品的章合并一包，excerpt 按合并时间线的各场景正文，slices 含各作品的状态与知情；只在一部作品的章出场时不重复生成）；包写入 .writing-anything/packets/<series-id>/ 下，scope 与 message 标明系列与涉及作品；单作品路径（成员为一）退化为既有 Plan 行为。
+      scenarios:
+        plan-series-causality:
+          - GIVEN: 系列 guide 中 book-2/s1 的 causes 引用 book-1 声明的 ev-1
+          - WHEN: 运行 wa-cli review plan guide --dimension series-causality --dir D --json
+          - THEN: packets 含 book-2/s1 的 series-causality 包（切片含声明场景结尾），写入 packets/guide/ 下，退出码为 0
+        plan-series-character:
+          - GIVEN: 守灯人在 guide 两部作品的章都出场
+          - WHEN: 运行 wa-cli review plan guide --dimension character --dir D --json
+          - THEN: packets 含一个跨作品 character 包（scope 为两部章的合并），单作品人物包不再重复生成，退出码为 0
+        plan-large-ledger-within-budget:
+          - GIVEN: my-novel 的守灯人有 200 条状态台账条目，章 chapter-one 有正文，上下文预算为 1000
+          - WHEN: 运行 wa-cli review plan my-novel --dimension character --dir D --json
+          - THEN: 每个任务包 chars 不超过 1000，omittedSlices 大于 0，保留的状态切片是与 chapter-one 先序距离最近的条目，退出码为 0
+        plan-split-checklist:
+          - GIVEN: 上下文预算小到检查清单与最小正文片段之和放不下，但单个清单项加最小正文片段放得下
+          - WHEN: 运行 wa-cli review plan my-novel --dimension character --dir D --json
+          - THEN: 同一 scope 生成多个 character 任务包，各包清单项按顺序互不重复、合起来为完整清单，每包 chars 不超过预算，退出码为 0
+        plan-over-budget:
+          - GIVEN: 上下文预算小于单个清单项与最小正文片段之和
+          - WHEN: 运行 wa-cli review plan my-novel --dir D --json
+          - THEN: 报告 error 级 packet.over-budget（field 为 context_budget，next 含 wa-cli config resolved），packets 为空数组，packets 目录下没有写入或删除任何文件，退出码为 1
+        plan-replan-in-place:
+          - GIVEN: my-novel 的 chapter-one 有守灯人与林晚两个人物包 character-1、character-2，character-1 已 done
+          - WHEN: 再次运行 wa-cli review plan my-novel --dimension character --dir D --json
+          - THEN: packets 依次为 done 的 character-1 与 open 的 character-2，changedPaths 只含 character-2.yaml，packets 目录下没有新增重复的人物包，退出码为 0
+        plan-narrow-scope-keeps-outside:
+          - GIVEN: my-novel 已为 scene-1 与 scene-2 生成 open 的 causality 包 causality-1、causality-2，另有旧版本留下的与 causality-1 同键的 open 副本 causality-9
+          - WHEN: 运行 wa-cli review plan my-novel/scene-1 --dimension causality --dir D --json
+          - THEN: causality-1 原位重建，causality-9 被删除并列入 changedPaths，范围外的 causality-2 保留不动，退出码为 0
+  REMOVED: {}
