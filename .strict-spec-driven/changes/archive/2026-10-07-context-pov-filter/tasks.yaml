@@ -1,0 +1,45 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: context-pov-filter
+sections:
+  Implementation:
+    knowledge-hidden-terms:
+      text: internal/knowledge：Replay 收集已确认事件揭示词并集，新增 Hidden(character)；CheckWorks/CheckArtifact 追加 knowledge.missing-terms（warning，按条目判定）
+      status: complete
+    ctxpack-mask:
+      text: internal/ctxpack：按中文句末标点切句的遮蔽函数；sceneItems 先解析视角人物与重放，再对 characters 与 knowledge 文本遮蔽；Pack.Masked 与 Markdown「被遮蔽的设定」；排序表补 PartCharacter
+      status: complete
+    cli-output:
+      text: internal/cli：context --json 输出 masked 数组与 outputKeys 说明；next() 为 knowledge.missing-terms 给出 help knowledge set 与 knowledge list --all
+      status: complete
+    corpus-terms:
+      text: novel-e2e 命令脚本 kn-05/kn-07 补登揭示词扩展为 为了救人,潮生溺水,救溺水的潮生；UPDATE_GOLDEN=1 再生成黄金文件并人工复核差异
+      status: complete
+    docs-skills:
+      text: wa-scene 技能提示登记揭示词与遮蔽行为；docs/GLOSSARY.md 更新揭示词释义并加入秘密遮蔽（Secret Masking）
+      status: complete
+    spec-deltas:
+      text: 生成 context 与 knowledge 主规格增量，反映实际实现
+      status: complete
+  Testing:
+    unit-tests:
+      text: ctxpack 与 knowledge 单元测试：知情前不含秘密句、知情后包含、无人知晓的受约束句不出现在任何视角、无 pov 全遮蔽、readerOnly 不遮蔽、相邻句合并、masked 报告；missing-terms 警告与按条目豁免；cli context --json masked 与 validate next；novel-e2e 断言 ch3-s2 不含、ch3-s3 包含溺水真相句
+      status: complete
+      command: go test ./internal/knowledge/ ./internal/ctxpack/ ./internal/cli/
+    full-regression:
+      text: 完整回归（含覆盖率阈值 80%）
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    verify-change:
+      text: strict-spec-cli verify context-pov-filter 通过，任务全部完成
+      status: complete
+      command: strict-spec-cli verify context-pov-filter
+    archive-ready:
+      text: 审查通过后归档，规格增量合并入 context 与 knowledge 主规格，路线图计划变更标记完成
+      status: complete
+testing_gates:
+  validation_task: full-regression
+  unit_test_task: unit-tests

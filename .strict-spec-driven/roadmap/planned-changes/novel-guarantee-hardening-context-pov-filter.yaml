@@ -5,7 +5,7 @@ schema_file: ../../templates/strict-spec-driven/schemas/planned-change.yaml
 planned_change:
   id: context-pov-filter
   milestone: novel-guarantee-hardening
-status: planned
+status: complete
 summary: 上下文包复用知情揭示词按句遮蔽视角人物未知的秘密
 details: ctxpack 组装出场人物卡与设定条目时，取视角人物在该场景开始时尚未获知（knowledge at 已知列表之外）的已确认知情事件的揭示词，把文本中含任一揭示词的句子（按中文句末标点切分）替换为「另有未揭示设定」占位，并在 --json 中报告被遮蔽的条目与句数；读者已知、人物未知的单列保持不变。validate 对已确认但 terms 为空的知情事件报告 warning（新诊断码，next 给出 wa-cli knowledge set <id> --terms）。补 ctxpack.go 排序表遗漏的 PartCharacter。novel-e2e 为陈守拙溺水真相等知情事件补登揭示词（不改写人物卡），再生成黄金文件。测试：知情前不含秘密句、知情后包含、无人知晓的受约束句不出现在任何视角、无揭示词警告。同步 context 与 knowledge 规格，技能中提示登记揭示词。
 depends_on: []

@@ -1,0 +1,34 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: context-pov-filter
+approach:
+  - knowledge.For 在既有的按获知者最早事件重放之外，收集全部已确认事件（不论绑定场景先后）的揭示词，按设定条目求并集；新增 Replay.Hidden(character) 返回该获知者在本场景开始时未获知的设定条目及其揭示词。ctxpack.sceneItems 先解析视角人物与重放，再组装出场人物卡：每张人物卡与每条 knowledge 文本经 mask 按中文句末标点（。！？!?…及换行）切句，含任一隐藏揭示词（复用 lint.MatchedTerms 的匹配）的句子替换为「（另有未揭示设定）」，相邻被遮蔽句合并为一个占位；遮蔽在计入预算之前完成，Pack.Masked 记录 part、id 与句数。readerOnly 文本不遮蔽。
+  - knowledge.CheckWorks 与 CheckArtifact 在领域检查之后追加 knowledge.missing-terms：对 status 为 confirmed 的事件，若其 entry 没有任何 confirmed 事件带非空 terms，则报告 warning（path 为 knowledge.yaml，field 为 events[i]）。该检查不进入 checkEvents，从而不影响 knowledge.For、List 与写前复查对问题的阻塞判断。cli 的 next 给出 wa-cli help knowledge set --json 与 wa-cli knowledge list <work> --all --dir <dir> --json。
+  - 审查后补充：切句时句末空白归入前一句；先对全文匹配一次再逐句只匹配命中的揭示词；Hidden 返回揭示词切片的副本；Markdown 遮蔽说明与 wa-scene 技能提示：本场景契约要求揭示的内容正好被遮蔽时先向作者确认。
+decisions:
+  no-pov-masks-all:
+    decision: 场景没有声明视角人物或视角人物未解析到 character 条目时，按已知列表为空处理：所有已确认揭示词都参与遮蔽
+    rationale: 没有视角人物就无法证明任何秘密已被叙述者获知；保守遮蔽符合「没有任何获知者已知的受约束条目不出现在任何视角的上下文中」的完成标准，作者补全 pov 后即恢复正常
+  entry-level-missing-terms:
+    decision: knowledge.missing-terms 按设定条目判定：同一条目只要有一条已确认事件登记了揭示词，该条目的其他已确认事件不再警告
+    rationale: 遮蔽与连续性审查都按条目对揭示词求并集，同一秘密只需登记一次揭示词即可生效；逐事件警告会让语料与真实作品在补登一次后仍持续报出无法改善遮蔽效果的噪音
+  placeholder-text:
+    decision: 占位文本固定为「（另有未揭示设定）」，相邻的被遮蔽句合并为一个占位，并在 --json 的 masked 中报告 part（character 或 knowledge）、id 与 sentences
+    rationale: 固定占位让 Agent 知道此处有不能写出的设定而不是信息缺失；合并相邻句避免重复占位浪费预算；masked 让作者与 Agent 可以审计遮蔽范围
+  next-without-placeholders:
+    decision: knowledge.missing-terms 的 next 不直接给出带占位符的 knowledge set 命令，而给出 wa-cli help knowledge set --json 与该作品的 knowledge list --all 命令，message 写明补登方式
+    rationale: 项目约定诊断的 next 必须可直接运行、不含需要替换的占位符；揭示词只能由作者决定，无法自动填入
+  e2e-terms:
+    decision: novel-e2e 在既有 kn-05 与 kn-07 的补登步骤中把揭示词扩展为 为了救人,潮生溺水,救溺水的潮生，不改写人物卡与正文
+    rationale: 两词分别命中陈守拙与沈望舒人物卡中的溺水真相句，且不出现在任何场景正文中，不改变连续性审查结果；沿用既有补登步骤避免新增命令序列
+alternatives:
+  - option: 把秘密拆成独立设定条目、按条目整体过滤人物卡
+    reason: 需要改写语料与作者已有人物卡，里程碑已由作者确认采用揭示词按句遮蔽
+  - option: 按逐事件判定 knowledge.missing-terms
+    reason: 同一条目补登一次后其他事件仍持续警告，噪音无法通过补登消除，且与遮蔽按条目求并集的语义不一致
+risks:
+  - 人物卡用揭示词以外的措辞写出秘密时仍会泄露；以 knowledge.missing-terms 与 wa-scene 技能提示缓解
+  - 揭示词过短（如单个人名）会遮蔽大量无关句子，需作者选择具体的揭示词
+  - 视角人物在本场景才获知的秘密（揭示场景）起草时仍被遮蔽：按作者确认的「场景开始时尚未获知」语义实现，以 Markdown 说明与技能提示要求先向作者确认；是否对揭示场景放开遮蔽需作者另行决定

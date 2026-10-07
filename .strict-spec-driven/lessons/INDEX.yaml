@@ -14,6 +14,11 @@ categories:
       status: active
       occurrences: 1
       path: .strict-spec-driven/lessons/architecture/lesson-e43bdb.yaml
+    lesson-28cf23:
+      title: 按「场景开始时已知」过滤信息会把本场景要揭示的内容也挡在起草上下文之外
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/architecture/lesson-28cf23.yaml
   coding:
     go-flag-bd930f:
       title: Go flag 包的默认报错不符合中文术语约定

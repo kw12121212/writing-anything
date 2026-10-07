@@ -130,3 +130,19 @@ requirements:
         - GIVEN: 知情表有 proposed 条目 know-1，作品的阅读页 preview --serve 正在运行
         - WHEN: '带令牌 POST /confirm：{kind: knowledge, id: know-1, action: reject, confirmation: 作者：读者此时不知道}'
         - THEN: know-1 的 status 为 rejected、channel 为 preview；wa-cli knowledge list my-novel --all --json 输出的 channel 为 preview
+  knowledge-missing-terms:
+    strength: MUST
+    statement: wa-cli validate（整体校验与 validate <knowledge.yaml 路径>）必须对 status 为 confirmed、且其 entry 没有任何 status 为 confirmed 的知情事件登记非空 terms 的知情事件（Knowledge Event）逐条报告 severity 为 warning 的诊断 knowledge.missing-terms：path 为该 knowledge.yaml，field 为 events[i]，message 含事件 id、设定条目 id，并说明缺少揭示词（Reveal Terms）时上下文包（Context Pack）无法在获知之前遮蔽写出该秘密的句子、连续性审查也无法检查提前揭示，给出补登方式 wa-cli knowledge set <work> <id> --terms <揭示词> --confirmed-by-author --confirmation <作者原话摘要>；next 含 wa-cli help knowledge set --json 与 wa-cli knowledge list <work> --all --dir <dir> --json。同一设定条目只要有一条已确认事件登记了揭示词，该条目的其他已确认事件不报告；proposed 与 rejected 事件不报告，也不算登记。共用整体校验的命令（如 wa-cli status）同样带出该 warning。该诊断不改变任何命令的退出码，不出现在 knowledge list、knowledge at 与 wa-cli context 的诊断中，也不阻止任何命令。
+    scenarios:
+      missing-terms-warning:
+        - GIVEN: my-novel 的 knowledge.yaml 有已确认事件 know-1（entry 为 canon-2，terms 为空），canon-2 没有其他登记揭示词的已确认事件
+        - WHEN: 运行 wa-cli validate --dir D --json
+        - THEN: diagnostics 含 knowledge.missing-terms（severity 为 warning，field 为 events[0]，next 含 wa-cli help knowledge set --json 与 wa-cli knowledge list my-novel --all --dir D --json），退出码为 0
+      missing-terms-cleared:
+        - GIVEN: 同上，已运行 wa-cli knowledge set my-novel know-1 --terms 黎明 --confirmed-by-author --confirmation 作者补登揭示词
+        - WHEN: 运行 wa-cli validate --dir D --json
+        - THEN: diagnostics 不含 knowledge.missing-terms
+      entry-covered:
+        - GIVEN: canon-2 有两条已确认事件，只有其中一条登记了揭示词
+        - WHEN: 运行 wa-cli validate --dir D --json
+        - THEN: 两条事件都不报告 knowledge.missing-terms

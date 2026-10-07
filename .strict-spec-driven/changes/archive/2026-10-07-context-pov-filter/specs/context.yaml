@@ -1,0 +1,45 @@
+schema: strict-spec-driven/delta-spec/v1
+schema_version: 1
+artifact_type: delta_spec
+schema_file: templates/strict-spec-driven/schemas/delta-spec.yaml
+target_spec: context
+operations:
+  ADDED:
+    scene-context-masking:
+      strength: MUST
+      statement: wa-cli context 对单元类型为 scene 的单元必须按知情揭示词（Reveal Terms）对出场人物卡与视角人物已知条目做秘密遮蔽（Secret Masking）；本要求修饰 scene-context 中 characters 与 knowledge 每项的 text（遮蔽后的文本取代设定集条目原文），其余字段不变。隐藏词为 knowledge.yaml 中全部 status 为 confirmed 的知情事件（不论绑定场景先后）按设定条目求并集的揭示词里，视角人物在本场景开始时尚未获知（按 knowledge 主规格 knowledge-at 的语义不在其已知列表中）的条目的揭示词；场景没有声明 pov 或 pov 没有解析到 character 条目时，全部条目的揭示词都是隐藏词；proposed 与 rejected 事件的揭示词不参与。text 按句末标点（。！？!?…与换行）切句，紧随的收尾引号与括号（”’」』）)】》，不含 ASCII 双引号）及其后的空白属于本句；含任一隐藏词（匹配方式同 continuity 主规格的揭示词检查）的句子替换为「（另有未揭示设定）」，句末空白保留，相邻且之间没有空白的被遮蔽句合并为一个占位；遮蔽在计入上下文预算之前完成。readerOnly、states、reveal、threads 与其他内容项的文本不遮蔽。--json 的 context.masked 为数组，按组装顺序列出 text 被遮蔽的内容项，每项含 part（character 或 knowledge）、id（设定条目 id）与 sentences（被遮蔽的句数），与该项是否随后被裁剪无关；没有遮蔽或非 scene 单元时为空数组。不加 --json 时，有遮蔽的上下文包在裁剪报告之前输出「## 被遮蔽的设定」一节，说明不要写出、暗示或补全被遮蔽的信息、本场景契约要求揭示的内容正好被遮蔽时先向作者确认，并逐项列出 part、id 与句数。作品没有 knowledge.yaml 或没有任何已确认揭示词时，文本逐字不变。
+      scenarios:
+        mask-before-knowing:
+          - GIVEN: novel 作品中沈望舒条目的已确认知情事件登记了揭示词「潮生溺水」，林晚在 ch3-s2 获知，陈守拙人物卡含句「二十年前儿子潮生溺水被沈望舒救起，此后沉默守护恩人之女。」，场景 ch3-s2 以林晚为视角、陈守拙出场
+          - WHEN: 运行 wa-cli context <作品>/ch3-s2 --dir D --json
+          - THEN: '陈守拙的 characters.text 以「（另有未揭示设定）」代替该句，context.masked 为 [{part: character, id: char-chen-shouzhuo, sentences: 1}]，退出码为 0'
+        restore-after-knowing:
+          - GIVEN: 同上，场景 ch3-s3 排在 ch3-s2 之后、以林晚为视角
+          - WHEN: 运行 wa-cli context <作品>/ch3-s3 --dir D --json
+          - THEN: 陈守拙的 characters.text 含完整的溺水真相句，masked 中没有该条目
+        nobody-knows:
+          - GIVEN: 设定条目的唯一已确认知情事件绑定在作品最后一个场景，登记了揭示词「灯塔会塌」
+          - WHEN: 以任意视角人物（或不声明视角人物）对任一场景运行 wa-cli context
+          - THEN: 输出中不出现含「灯塔会塌」的句子
+        reader-only-unmasked:
+          - GIVEN: 读者已在前序场景获知 canon-3（揭示词「灯芯所化」），视角人物尚未获知
+          - WHEN: 运行 wa-cli context 该场景 --dir D --json
+          - THEN: readerOnly 中 canon-3 的 text 保持原文，人物卡中含「灯芯所化」的句子被遮蔽
+  MODIFIED:
+    context-trim:
+      strength: MUST
+      statement: 上下文包必须把内容控制在上下文预算（Context Budget，见 context-budget）之内：每个内容项按其 Markdown 文本的字符数（Unicode 码点）计入预算。非 scene 单元按以下优先级从高到低依次放入：写作简报、本单元大纲、本节大纲条目、每条作者反馈、每个决策、每条系列事实、每份前序作品摘要、每份前序场景摘要（priorScenes）、规范要点的规则、术语表、禁用词、文风、每份素材原文、每个相邻节。scene 单元按以下优先级从高到低依次放入：场景契约（本单元大纲各节，含契约字段）、写作简报、本节大纲条目、每个出场人物设定项（characters）、每个出场人物状态快照条目（states）、每条视角人物已知条目（knowledge）、每条读者已知人物未知条目（readerOnly）、每条揭示边界（reveal）、每条未回收伏笔（threads）、每条前序场景结尾（priorEndings）、每份分层摘要（章、部、全书，按此顺序）、每条作者反馈、每个决策、每条系列事实、每份前序作品摘要、每份前序场景摘要（priorScenes）、规范要点的规则、术语表、禁用词、文风、每份素材原文、每个相邻节；canon 人物设定项、states、knowledge、readerOnly、reveal、threads、priorEndings、分层摘要与前序场景摘要只在 scene 单元出现（见 scene-context）。单元信息头与裁剪报告不计入预算。放入某项会超出预算时：素材原文与前序场景结尾在剩余预算大于其标题行所占字符数加 1 时截断到剩余字符数（截断后的内容仍以换行结尾），否则与其他项一样整项裁剪，继续尝试之后的项。used 为保留的内容项字符数之和，不超过预算；trimmed 为被裁剪或截断的项，按优先级顺序，每项含 part（brief、outline、section、character、state、knowledge、reader-only、reveal、thread、prior-ending、chapter-summary、part-summary、book-summary、feedback、decision、fact、summary、scene-summary、rules、glossary、bannedTerms、style、source 或 neighbor）、id（反馈、决策、事实、素材、canon 人物设定、状态快照与知情条目对应设定条目、未回收伏笔的 id，前序场景结尾与分层摘要的单元引用，摘要的作品 id、前序场景摘要的场景单元引用与相邻节的单元引用，其他为 null）、chars（原字符数）与 keptChars（保留的字符数，整项裁剪时为 0）；被整项裁剪的内容不出现在 context 的对应字段中（对应字段为 null 或不含该项）。
+      scenarios:
+        trim-scene-priority:
+          - GIVEN: 场景 my-novel/scene-2 的预算只放得下场景契约与部分状态快照
+          - WHEN: 运行 wa-cli context my-novel/scene-2 --dir D --json
+          - THEN: 契约与 states 在场，被裁剪的 knowledge 条目进入 trimmed（keptChars 为 0），used 不超过预算，退出码为 0
+        trim-prior-ending:
+          - GIVEN: 场景预算在放入一条前序场景结尾时只剩标题行以下不足 400 字符
+          - WHEN: 运行 wa-cli context <该场景> --dir D --json
+          - THEN: 该结尾截断到剩余字符数（keptChars 为保留数且大于 0），不足标题行时整项裁剪（keptChars 为 0），退出码为 0
+        trim-character-before-states:
+          - GIVEN: 场景 my-novel/scene-2 声明了出场人物与视角人物，预算只放得下场景契约、出场人物设定与一条视角人物已知条目
+          - WHEN: 运行 wa-cli context my-novel/scene-2 --dir D --json
+          - THEN: characters 与该 knowledge 条目在场，读者已知人物未知条目与揭示边界进入 trimmed；不加 --json 时「出场人物（Characters）」一节排在本节大纲条目之后、状态快照之前
+  REMOVED: {}
