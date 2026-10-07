@@ -203,7 +203,7 @@ entries:
   scene: ch2-s3
   command: wa-cli scene close-out ch2-s3
   expected: 全绿（exit 0）
-  assertion: 收口提交 ST-1 状态变化与 KN-04 知情变化，契约声明的必发变化齐备；疑似专有名词扫描无未处理提示。
+  assertion: 收口提交 ST-1 状态变化与 KN-04 知情变化，契约声明的必发变化齐备；正文疑似专有名词扫描无提示（大纲地点未登记的提示为语料既有状态）。
   evidence:
   - kind: script
     token: scene close-out stopped-at-417/ch2-s3

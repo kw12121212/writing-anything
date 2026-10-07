@@ -214,6 +214,33 @@ func TestSceneCloseOutSuspectedWarning(t *testing.T) {
 	}
 }
 
+// 正文扫描：正文中未登记的新人名以 source 为 draft 的疑似专有名词提示，人读输出标注「正文」，豁免后不再列出。
+func TestSceneCloseOutBodyScan(t *testing.T) {
+	dir := closeoutFixture(t)
+	writeFile(t, filepath.Join(dir, ".writing-anything", "works", "my-novel", "units", "scene-1", "draft.md"), "赵铁柱说：“灯灭了。”\n守灯人没有回头。赵铁柱问：“你听见了吗？”\n")
+	code, res := runWS(t, dir, "scene", "close-out", "my-novel/scene-1", "--file", "closeout-input.yaml")
+	if code != 0 {
+		t.Fatalf("exit code = %d, result = %+v", code, res)
+	}
+	out := closeoutOf(t, res)
+	if len(out.Closeout.Suspected) != 1 || out.Closeout.Suspected[0].Name != "赵铁柱" || out.Closeout.Suspected[0].Source != "draft" {
+		t.Fatalf("suspected = %+v", out.Closeout.Suspected)
+	}
+	d := diag(t, res, "closeout.suspected-name")
+	if d.Severity != "warning" || !strings.Contains(d.Message, "正文：赵铁柱") || len(d.Next) != 2 ||
+		d.Next[0] != "wa-cli help canon add --json" || d.Next[1] != "wa-cli help scene close-out --json" {
+		t.Fatalf("diagnostic = %+v", d)
+	}
+	code, stdout, stderr := run(t, "scene", "close-out", "my-novel/scene-1", "--replace", "--file", "closeout-input.yaml", "--dir", dir)
+	if code != 0 || !strings.Contains(stdout, "疑似专有名词（正文）：赵铁柱") {
+		t.Fatalf("exit code = %d, stdout = %q, stderr = %q", code, stdout, stderr)
+	}
+	code, res = runWS(t, dir, "scene", "close-out", "my-novel/scene-1", "--waive", "赵铁柱")
+	if out := closeoutOf(t, res); code != 0 || len(out.Closeout.Suspected) != 0 {
+		t.Fatalf("waive: exit code = %d, closeout = %+v", code, out.Closeout)
+	}
+}
+
 func TestSceneCloseOutWaive(t *testing.T) {
 	dir := closeoutFixture(t)
 	writeFile(t, filepath.Join(dir, "bare-input.yaml"), "state_changes:\n  - {entry: canon-1, state: 灯芯易主给精灵, contract: sc-1}\nrecovers: [f-1]\nevents: [ev-2]\n")

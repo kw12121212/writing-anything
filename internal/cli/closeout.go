@@ -118,6 +118,8 @@ func suspectedSourceText(source string) string {
 		return "视角人物"
 	case "location":
 		return "地点"
+	case closeout.SourceDraft:
+		return "正文"
 	}
 	return "出场人物"
 }

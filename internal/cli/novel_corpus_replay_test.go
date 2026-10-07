@@ -97,7 +97,7 @@ func replayNovelCorpus(t *testing.T, dir string) {
 	}
 
 	keyHits := map[[2]string]int{}
-	total := 0
+	total, closeouts := 0, 0
 	for _, st := range script.Stages {
 		for _, step := range st.Steps {
 			total++
@@ -153,6 +153,24 @@ func replayNovelCorpus(t *testing.T, dir string) {
 			if step.StdoutContains != nil && !strings.Contains(res.stdout, *step.StdoutContains) {
 				t.Fatalf("[%s] %s: stdout 缺少 %q", st.Stage, label, *step.StdoutContains)
 			}
+			// 写后收口的正文疑似专有名词扫描在语料全部场景上零误报（closeout/closeout-body-scan）。大纲 location
+			// 取值（如守拙钟表行）未登记进设定集产生的大纲来源提示是语料既有状态，不在此断言。
+			if len(step.Command) > 1 && step.Command[0] == "scene" && step.Command[1] == "close-out" && code == 0 {
+				closeouts++
+				var out struct {
+					Closeout struct {
+						Suspected []struct{ Name, Source string } `json:"suspected"`
+					} `json:"closeout"`
+				}
+				if err := json.Unmarshal([]byte(res.stdout), &out); err != nil {
+					t.Fatalf("[%s] %s: 解析收口输出: %v", st.Stage, label, err)
+				}
+				for _, sp := range out.Closeout.Suspected {
+					if sp.Source == "draft" {
+						t.Fatalf("[%s] %s: 语料正文不应有疑似专有名词提示: %+v", st.Stage, label, sp)
+					}
+				}
+			}
 			if code == 0 && isMutating(step.Command) {
 				key := [2]string{step.Command[0], ""}
 				if len(step.Command) > 1 && mutating[[2]string{step.Command[0], step.Command[1]}] {
@@ -164,6 +182,9 @@ func replayNovelCorpus(t *testing.T, dir string) {
 				}
 			}
 		}
+	}
+	if closeouts < 9 {
+		t.Fatalf("成功的写后收口步数 = %d，语料九个场景都应收口", closeouts)
 	}
 	if total < 200 {
 		t.Fatalf("重放步数 = %d，语料应不少于 200 步（与 TestNovelCorpusScript 的下限互指）", total)
