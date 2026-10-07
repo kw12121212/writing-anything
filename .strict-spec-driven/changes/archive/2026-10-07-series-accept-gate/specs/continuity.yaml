@@ -1,0 +1,49 @@
+schema: strict-spec-driven/delta-spec/v1
+schema_version: 1
+artifact_type: delta_spec
+schema_file: templates/strict-spec-driven/schemas/delta-spec.yaml
+target_spec: continuity
+operations:
+  ADDED:
+    continuity-series-dead-acting:
+      strength: MUST
+      statement: wa-cli continuity <series> 的系列范围检查必须报告跨作品终态人物出场：对系列 works 中排在第二部及以后的作品里带长篇场景契约的场景，出场称谓（characters 与首个非空 pov）在本作品设定集唯一命中 character 条目、且本作品在该场景之前（单元树先序）没有该条目的已确认（confirmed）状态时，按 works 逆序在排在本作品之前的成员作品中，用同一称谓在该作品设定集唯一命中的条目，取其按单元树先序最后生效的已确认状态，首个找到的即为最新状态；其完整描述精确等于保留词（死亡、已死亡、已亡故、失踪、已退场）之一时报告 error 级 continuity.dead-acting，归属出场场景，message 以 [系列] 开头并含称谓、更早作品、其场景与状态。只有 proposed 状态、非保留词状态或称谓在更早作品中未命中或命中多条时不报告；本作品已有更早的已确认状态时由单作品检查负责。
+      scenarios:
+        series-dead-acting-reported:
+          - GIVEN: 系列 guide 的 book-1 把守灯人（canon-1）在 book-1/s1 确认为 死亡，book-2/s1 的场景契约 characters 含守灯人，book-2 在 s1 之前没有该人物的已确认状态
+          - WHEN: 运行 wa-cli continuity guide --dir D --json
+          - THEN: findings 含一条 continuity.dead-acting（scene 为 book-2/s1，severity 为 error，message 含守灯人、book-1 与 死亡），退出码为 0
+        series-dead-acting-proposed-ignored:
+          - GIVEN: 同上，但 book-1 的死亡状态为 proposed
+          - WHEN: 运行 wa-cli continuity guide --dir D --json
+          - THEN: 没有 continuity.dead-acting 发现
+    continuity-series-accept-gate:
+      strength: MUST
+      statement: 作品属于系列（.writing-anything/series/<id>.yaml 的 works 含该作品，系列文件须通过校验）且系列至少有两部可加载的成员作品时，场景的连续性阻塞项计算（accept、review show 的 gate.blockers 与 assemble 共用）必须在单作品检查之外追加系列范围检查中涉及该场景、且涉及系列内另一作品的 error 级发现：错误码为 timeline.same-time-presence、continuity.conflicting-state 或 continuity.dead-acting；涉及指发现归属该场景或 message 以完整场景引用提及该场景（dead-acting 只按归属场景，不阻塞更早作品中确认终态的场景）。纳入的发现归属改为该场景，按（场景， 错误码）进入既有豁免通道：accept 被拒时对 continuity.* 与 timeline.* 阻塞项一样幂等生成豁免决策（changedPaths 列出决策队列路径），诊断 next 含 wa-cli continuity <unit> 与 wa-cli decisions；作者选择允许后不再阻塞，只读命令不生成决策；豁免键不区分单作品与跨作品来源，同一场景同一错误码的已有豁免同样覆盖跨作品发现。跨作品同一时间两地的 message 以 [系列] 开头且修复提示不重复。不属于系列的作品与只含一部作品的系列，连续性阻塞项与引入本要求前完全一致；组稿关卡的系列范围发现不再重复列出已由本作品场景阻塞项覆盖的发现（作者已豁免的此类发现不阻塞该作品组稿），未被本作品场景阻塞项覆盖的系列发现（如后续作品的 dead-acting 之于更早作品）照常列出。
+      scenarios:
+        series-same-time-blocks-accept:
+          - GIVEN: 系列 guide 的 book-1/s1 已验收并推进到 done，book-2/s1 与 book-1/s1 声明相同 time 且都出场守灯人、两场景间没有 after，book-2/s1 已审稿
+          - WHEN: 运行 wa-cli accept book-2/s1 --confirmed-by-author --confirmation 作者：可以 --dir D --json
+          - THEN: 退出码为 1，诊断含 timeline.same-time-presence（message 含 book-1/s1 与 book-2/s1），changedPaths 含决策队列路径
+        series-fix-unblocks-accept:
+          - GIVEN: 同上，之后把 book-2/s1 的大纲改为 after [book-1/s1] 并重新审稿
+          - WHEN: 再次运行 wa-cli accept book-2/s1 --confirmed-by-author --confirmation 作者：可以 --dir D --json
+          - THEN: 验收成功，退出码为 0
+        series-dead-acting-blocks-accept:
+          - GIVEN: book-1 已确认守灯人 死亡，book-2/s1 的场景契约出场守灯人且已审稿
+          - WHEN: 运行 wa-cli accept book-2/s1 --confirmed-by-author --confirmation 作者：可以 --dir D --json
+          - THEN: 退出码为 1，诊断含 continuity.dead-acting；作者经决策队列选择允许后再次 accept 成功
+        non-series-unchanged:
+          - GIVEN: 作品不属于任何系列
+          - WHEN: 运行 wa-cli review show 与 wa-cli accept
+          - THEN: 连续性阻塞项与引入本要求前一致
+        assemble-respects-waiver:
+          - GIVEN: book-2/s1 的跨作品 dead-acting 已由作者豁免并验收、推进到 done
+          - WHEN: 运行 wa-cli assemble book-2 --dir D --json
+          - THEN: 该发现不再阻塞组稿，退出码为 0
+        earlier-work-assemble-lists:
+          - GIVEN: book-1 已确认守灯人 死亡，book-2/s1 仍出场守灯人，book-1 全部场景 done
+          - WHEN: 运行 wa-cli assemble book-1 --dir D --json
+          - THEN: 退出码为 1，诊断列出该 continuity.dead-acting 系列发现
+  MODIFIED: {}
+  REMOVED: {}

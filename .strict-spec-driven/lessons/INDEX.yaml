@@ -88,7 +88,7 @@ categories:
     lesson-660304:
       title: 按错误码挑选下一步命令，会漏掉保留原错误码的阻塞项
       status: active
-      occurrences: 2
+      occurrences: 3
       path: .strict-spec-driven/lessons/coding/lesson-660304.yaml
     lesson-65fb6a:
       title: 记录关卡结论的产物要记下关卡强度，强度提高后旧结论不再有效

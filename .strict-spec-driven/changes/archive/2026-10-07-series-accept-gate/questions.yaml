@@ -1,0 +1,48 @@
+schema: strict-spec-driven/question-list/v1
+schema_version: 1
+artifact_type: question_list
+schema_file: templates/strict-spec-driven/schemas/question-list.yaml
+change: series-accept-gate
+open: []
+resolved:
+  - id: filter-scope
+    question: 验收门禁纳入哪些系列范围发现？
+    context: 证据：planned change details「只保留涉及当前场景的 error 级发现项：同一时间两地、conflicting-state，以及新增的跨作品终态人物出场」。影响实现范围与测试。
+    answer: 只纳入 timeline.same-time-presence、continuity.conflicting-state 与 continuity.dead-acting 三类、涉及当前场景的 error 级发现
+    status: resolved
+    answered_by: roadmap
+  - id: requirement-problem
+    question: 今天具体出了什么问题，对谁？
+    context: 证据：里程碑 core-gate-hardening details 审计结论「continuity.AcceptanceBlockers 只运行单作品 Run，实测跨作品同时两地 error 时 accept book-2/s1 成功；跨作品只检查 conflicting-state，跨作品已死人物仍行动检测不到」。影响 proposal 范围。
+    answer: 写系列小说的作者与接入的 Agent：book-2 场景与 book-1 同一时间两地、或 book-1 已确认死亡的人物在 book-2 仍出场时，wa-cli accept 照样放行，跨作品冲突只能靠作者事后手动运行 continuity <series> 发现
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-outcome
+    question: 什么可观察的变化证明问题解决了？
+    context: 证据：里程碑 done_criteria 第二条与第六条、planned change details 的测试列表。影响 spec delta 与测试。
+    answer: 系列中 book-2 场景与 book-1 存在同一时间两地等 error 级跨作品发现项时，wa-cli accept 该场景以非零退出并列出发现项，修正后验收成功；book-1 已确认某人物死亡、book-2 场景该人物仍出场时，wa-cli continuity <series> 报告 error 级发现，accept 该场景以非零退出；单作品行为不变
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-trigger
+    question: 为什么现在做？
+    context: 证据：里程碑 notes「本里程碑承接 P0 项」与 details 的已定结论。影响优先级。
+    answer: 2026-10-07 里程碑审计把跨作品连续性冲突不阻塞验收列为与已归档 novel-series 完成标准直接冲突的 P0 缺口，本变更无未满足依赖
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-non-goals
+    question: 哪些明确不做？
+    context: 证据：里程碑 scope.out 与 planned change details。影响 proposal 范围。
+    answer: 不改单作品连续性检查与不属于系列的作品行为；不把跨作品 cycle、order-conflict、unknown-scene 纳入验收；不做保证类加固（novel-guarantee-hardening）、长篇技能（novel-skills）与诊断体验收尾
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-interpretation
+    question: 「涉及当前场景」与「跨作品终态人物出场」应如何理解？
+    context: 证据：planned change details「只保留涉及当前场景的 error 级发现项」「按 works 顺序读取更早成员作品已确认的状态台账，人物最新终态为死亡、失踪等保留词时报告 continuity.dead-acting」；仓库 RunSeries 把双场景发现归到先序更早作品的场景。影响 spec delta 与实现。
+    answer: 涉及当前场景：发现的归属场景或 message 提及当前场景（dead-acting 只看出场场景）；跨作品终态：只读取排在当前作品之前的成员作品的已确认状态，取最新的一条，且本作品在该场景之前已有该人物已确认状态时以本作品为准
+    status: resolved
+    kind: requirement
+    answered_by: roadmap

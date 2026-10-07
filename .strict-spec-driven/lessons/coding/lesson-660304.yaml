@@ -8,7 +8,7 @@ lesson:
 category: coding
 status: active
 created_at: '2026-10-01T02:01:23.637Z'
-updated_at: '2026-10-01T02:29:59.527Z'
+updated_at: '2026-10-07T07:55:14.912Z'
 context: review-and-acceptance 的 accept 先把关卡的阻塞项转成 Problem，再在诊断层按 accept.* 错误码挑选需要 review show 的诊断。
 observation: fresh-context 审查复现：decision.blocking、decision.invalid-queue、review.yaml 的 Schema 诊断与文本检查无法完成的问题保留了原错误码，走默认的 next 映射，缺少 spec 要求的复查命令 wa-cli review show；测试只抽查了部分错误码。
 takeaway: 一组来源相同的诊断需要共同的下一步时，在构造诊断处按来源（如关卡阻塞项）统一给出 next，不要事后按错误码白名单挑选；测试遍历全部 error 级诊断断言共同的 next。
@@ -20,3 +20,6 @@ occurrences:
   - origin: writing-method-templates
     date: '2026-10-01'
     evidence: 新增的 outline.missing-method-part、outline.method-order、outline.unknown-role 与 outline.beat-position 没有加入 blockerNext 与 next 的错误码分支，next 为空或落到 validate config.yaml；补上分支并在 TestMethodDanglingAndNext 与 TestMethodBeatsAndRubric 中断言 next。
+  - origin: series-accept-gate
+    date: '2026-10-07'
+    evidence: accept 的豁免决策生成与 gateNext 只按 continuity.* 前缀识别连续性阻塞项，而连续性审查同样产出 timeline.* 发现（同一时间两地等），被拒时不生成豁免决策、next 落到 validate；改为 continuityCode 同时识别两个前缀，并在 TestContinuityTimelineGate 与 TestSeriesAcceptGateSameTime 断言 changedPaths 与 next。
