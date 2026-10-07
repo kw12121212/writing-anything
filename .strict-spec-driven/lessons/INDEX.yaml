@@ -265,6 +265,11 @@ categories:
       status: active
       occurrences: 1
       path: .strict-spec-driven/lessons/coding/lesson-0e4b1a.yaml
+    cli-9e5084:
+      title: 技能正文里对 CLI 输出字段与阻塞码的陈述，测试只校验命令与参数存在，不会发现陈述错误
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/coding/cli-9e5084.yaml
   documentation:
     must-must-6af326:
       title: 修改一条 MUST 需求时，要检查同一规格里相邻的 MUST 是否因此冲突

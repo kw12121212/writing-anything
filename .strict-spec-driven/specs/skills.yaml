@@ -8,14 +8,14 @@ spec:
 requirements:
   builtin-skills:
     strength: MUST
-    statement: wa-cli 必须随二进制提供八个技能（Skill）：wa-init、wa-brief、wa-outline、wa-draft、wa-review、wa-revise、wa-publish 与 wa-auto，不需要网络访问或额外文件。每个技能是一个目录，含 SKILL.md：开头为 --- 包住的 YAML 文件头，只含 name（与目录名相同，小写字母、数字与连字符，不超过 64 个字符）与 description（非空，不超过 1024 个字符），之后为非空的正文；目录结构与通用的 Agent Skills 格式兼容。技能的正文只说明何时调用哪些 wa-cli 命令、何时必须停下来询问作者（含「必须停下来问作者」一节），不实现业务逻辑；正文中 wa-cli 之后的命令名（一个或两个小写词）都必须是 wa-cli help --json 列出的命令，同一处写出的 --参数 都必须是该命令声明的参数。wa-cli skills list 必须只读地输出 skills 数组（按名称排序），每项含 name、description 与 commands（引用的 wa-cli 命令，按命令注册表规范化：两个词组成已登记的命令时取两个词，否则只取命令名；去重、按出现顺序），不需要工作区。
+    statement: wa-cli 必须随二进制提供十二个技能（Skill）：wa-init、wa-brief、wa-outline、wa-draft、wa-review、wa-revise、wa-publish、wa-plan、wa-scene、wa-continuity、wa-assemble 与 wa-auto，不需要网络访问或额外文件。每个技能是一个目录，含 SKILL.md：开头为 --- 包住的 YAML 文件头，只含 name（与目录名相同，小写字母、数字与连字符，不超过 64 个字符）与 description（非空，不超过 1024 个字符），之后为非空的正文；目录结构与通用的 Agent Skills 格式兼容。技能的正文只说明何时调用哪些 wa-cli 命令、何时必须停下来询问作者（含「必须停下来问作者」一节），不实现业务逻辑；正文中 wa-cli 之后的命令名（一个或两个小写词）都必须是 wa-cli help --json 列出的命令，同一处写出的 --参数 都必须是该命令声明的参数。wa-cli skills list 必须只读地输出 skills 数组（按名称排序），每项含 name、description 与 commands（引用的 wa-cli 命令，按命令注册表规范化：两个词组成已登记的命令时取两个词，否则只取命令名；去重、按出现顺序），不需要工作区。
     scenarios:
       list-skills:
         - GIVEN: 任意目录
         - WHEN: 运行 wa-cli skills list --json
-        - THEN: skills 依次为 wa-auto、wa-brief、wa-draft、wa-init、wa-outline、wa-publish、wa-review 与 wa-revise，每项的 commands 非空，退出码为 0
+        - THEN: skills 依次为 wa-assemble、wa-auto、wa-brief、wa-continuity、wa-draft、wa-init、wa-outline、wa-plan、wa-publish、wa-review、wa-revise 与 wa-scene，每项的 commands 非空，退出码为 0
       commands-exist:
-        - GIVEN: 内置的八个技能
+        - GIVEN: 内置的十二个技能
         - WHEN: 把每个技能引用的命令与 wa-cli help --json 的 commands 对照
         - THEN: 每个引用的命令都在其中
   skills-install:
@@ -25,7 +25,7 @@ requirements:
       install-claude:
         - GIVEN: 不含 .claude/ 的目录 D
         - WHEN: 运行 wa-cli skills install --agent claude-code --dir D --json
-        - THEN: D/.claude/skills 下有八个技能目录，各含与内置内容相同的 SKILL.md；skills 每项的 changed 为 true，changedPaths 列出新建的 .claude、.claude/skills、八个技能目录与八个文件，退出码为 0
+        - THEN: D/.claude/skills 下有十二个技能目录，各含与内置内容相同的 SKILL.md；skills 每项的 changed 为 true，changedPaths 列出新建的 .claude、.claude/skills、十二个技能目录与十二个文件，退出码为 0
       install-codex-again:
         - GIVEN: 已在 D 中运行过 wa-cli skills install --agent codex
         - WHEN: 再次运行 wa-cli skills install --agent codex --dir D --json
@@ -46,3 +46,15 @@ requirements:
         - GIVEN: 任意目录 D
         - WHEN: 运行 wa-cli skills install --agent vim --dir D --json
         - THEN: diagnostics 中有一条错误码为 input.invalid-value、field 为 agent 的诊断，退出码为 1
+  novel-skill-coverage:
+    strength: MUST
+    statement: 内置技能必须覆盖长篇（novel）生命周期：wa-cli scene contract、scene close-out、state confirm、knowledge confirm、continuity、review plan、review submit、impact mark、volume checkpoint、volume confirm、assemble 与 handoff write 这十二条命令都必须至少被一个内置技能引用（出现在 wa-cli skills list 某个技能的 commands 中），且都是 wa-cli help --json 列出的命令。wa-auto 必须按作品的文体（Genre）分流文章路径与小说路径，并说明会话结束前用 wa-cli handoff write 写交接记录（Handoff Note）、新会话先读 wa-cli next 输出中的 handoff。长篇技能必须在「必须停下来问作者」一节写明作者确认节点：状态变更提议与知情事件的确认、卷末检查点（Volume Checkpoint）的确认、复查标记（Recheck Mark）以作者确认解除与场景验收，都只能在作者明确同意后以作者的原话摘要记录，不能由 Agent 代填。
+    scenarios:
+      novel-commands-covered:
+        - GIVEN: 内置技能
+        - WHEN: 运行 wa-cli skills list --json 并合并各技能的 commands
+        - THEN: 并集包含 scene contract、scene close-out、state confirm、knowledge confirm、continuity、review plan、review submit、impact mark、volume checkpoint、volume confirm、assemble 与 handoff write，且每条都在 wa-cli help --json 的 commands 中
+      auto-novel-path:
+        - GIVEN: 内置的 wa-auto 技能
+        - WHEN: 读取其正文
+        - THEN: 正文按文体分出文章路径与 novel 路径，novel 路径引用 wa-plan、wa-scene、wa-continuity 与 wa-assemble，并写明 wa-cli handoff write 与新会话读取 wa-cli next 中的 handoff

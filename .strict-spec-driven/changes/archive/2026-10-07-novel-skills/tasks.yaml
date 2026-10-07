@@ -1,0 +1,42 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: novel-skills
+sections:
+  Implementation:
+    add-wa-scene:
+      text: 新增 internal/skills/skills/wa-scene/SKILL.md：场景契约、写作简报与大纲、draft write、lint、scene close-out（输入 YAML 七节与 --replace/--waive）、状态变更提议与知情事件交作者确认（state/knowledge confirm、reject、set）、审稿与验收衔接，并列出必须停下来问作者的节点
+      status: complete
+    add-wa-continuity:
+      text: 新增 internal/skills/skills/wa-continuity/SKILL.md：continuity（含系列范围与先确认前作状态的提示）、review plan 按维度以全新子 Agent 会话并行执行任务包、review submit（verdicts 输入）、review report、impact 预览与 impact mark / list / clear
+      status: complete
+    add-wa-assemble:
+      text: 新增 internal/skills/skills/wa-assemble/SKILL.md：volume checkpoint / confirm（部末自动生成、strict 下阻塞下一部）、timeline、assemble 阻塞项处理与待作者复核、export、handoff write / show
+      status: complete
+    extend-wa-auto:
+      text: 扩展 wa-auto：按文体分流文章与小说路径，novel 串起 wa-plan、wa-scene、wa-review、wa-continuity、wa-publish 与 wa-assemble；会话结束前 handoff write、新会话先读 next 的 handoff；必要时在 wa-plan 与 wa-publish 补衔接句
+      status: complete
+    sync-spec-docs:
+      text: 同步 docs/INSTALL.md 的技能列表；确认新技能使用的术语均已在 docs/GLOSSARY.md 中
+      status: complete
+  Testing:
+    unit-tests:
+      text: 更新 internal/skills 与 internal/cli 技能测试的技能数量与安装产物数；新增 novel 关键命令覆盖测试（十二条命令都被至少一个技能引用且存在于 help --json）；TestSkillCommandsExist 覆盖新技能的命令与参数
+      status: complete
+      command: go test ./internal/skills/ ./internal/cli/ -run 'Skill|Install|Novel|MCP'
+    full-regression:
+      text: 运行完整回归命令（含覆盖率 80% 门槛）
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    verify-change:
+      text: 运行 strict-spec-cli verify novel-skills，确认任务、delta 规格与实现一致
+      status: complete
+      command: strict-spec-cli verify novel-skills
+    archive-ready:
+      text: 确认 skills 主规格的 MODIFIED 与 ADDED delta 可以合并（archive 合并无冲突）
+      status: complete
+testing_gates:
+  validation_task: full-regression
+  unit_test_task: unit-tests

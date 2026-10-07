@@ -1,0 +1,19 @@
+schema: strict-spec-driven/lesson/v1
+schema_version: 1
+artifact_type: lesson
+schema_file: templates/strict-spec-driven/schemas/lesson.yaml
+lesson:
+  id: cli-9e5084
+  title: 技能正文里对 CLI 输出字段与阻塞码的陈述，测试只校验命令与参数存在，不会发现陈述错误
+category: coding
+status: active
+created_at: '2026-10-07T11:43:57.354Z'
+updated_at: '2026-10-07T11:43:57.354Z'
+context: novel-skills 新增 wa-scene、wa-continuity、wa-assemble 并扩展 wa-auto；TestSkillCommandsExist 与新增覆盖测试全部通过
+observation: 独立审查发现技能写错了多处 CLI 行为：next 的 steps[].handoff 只含 id 与 todo（技能却让 Agent 从中读作者指示与风险）、status 输出没有作品级文体字段、--replace 会再次写入台账而不只是替换收口记录；审查者自己也误判 closeout.pending-proposals 不阻塞验收，直到对照 review 规格才纠正
+takeaway: 写或审技能时，每一句关于输出字段、阻塞错误码、命令副作用的陈述都要对照主规格语句或实际运行 --json 输出逐条核对；命令存在性测试通过不代表技能描述正确
+applies_when: 新增或修改内置技能（internal/skills/skills/*/SKILL.md）或文档中描述 wa-cli 输出字段、阻塞码与副作用的文字时
+occurrences:
+  - origin: novel-skills
+    date: '2026-10-07'
+    evidence: internal/skills/skills/wa-auto/SKILL.md 第 1、2 步与 wa-scene/SKILL.md 第 5、6 步的审查修订；specs/handoff.yaml handoff 字段、specs/review.yaml closeout.pending-proposals

@@ -6,7 +6,7 @@ milestones:
   core-gate-hardening:
     title: 核心门禁加固（Core Gate Hardening）
     path: roadmap/milestones/core-gate-hardening.yaml
-    status: proposed
+    status: complete
   novel-guarantee-hardening:
     title: 长篇保证加固（Novel Guarantee Hardening）
     path: roadmap/milestones/novel-guarantee-hardening.yaml

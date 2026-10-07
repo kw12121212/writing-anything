@@ -1,0 +1,21 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: novel-skills
+approach:
+  - 按计划变更 details 新增 wa-scene、wa-continuity、wa-assemble 三个技能，每个技能只写何时调用哪些 wa-cli 命令与何时必须停下来问作者；命令顺序取自 novel E2E 语料 commands.yaml 的真实命令序列（scene contract → brief set → outline set → draft write → lint → scene close-out → knowledge/state confirm → review record → accept；部末 volume confirm、handoff write；成书 continuity、assemble、export）。wa-auto 按 wa-cli status 或 next 中作品的文体分流，novel 路径串起 wa-plan 与三个新技能，并加入交接记录的写入与接续。覆盖测试放在 internal/cli 包，用 skills list --json 规范化后的 commands 与 help --json 的命令注册表对照，清单即里程碑完成标准列出的十二条命令。
+decisions:
+  three-new-skills:
+    decision: 新增三个技能而不是把长篇步骤塞进既有的 wa-draft、wa-review 与 wa-publish
+    rationale: 长篇的写后收口、台账确认、任务包并行调度与卷末/组稿流程篇幅大，混入文章技能会让文章路径的 Agent 读到无关步骤；计划变更 details 也以 wa-scene、wa-continuity、wa-assemble 为首选拆分；MCP prompts 随技能目录自动增加，无需改实现
+  coverage-via-skills-list:
+    decision: novel 关键命令覆盖测试基于 wa-cli skills list --json 的规范化 commands 断言，再与 help --json 对照
+    rationale: skills list 已按命令注册表规范化两词命令（如 impact mark、volume confirm），直接复用可以避免在测试里重写解析；help --json 对照满足完成标准「引用的命令与参数都存在」的前半句，参数存在由既有 TestSkillCommandsExist 保证
+  fix-stale-skill-count:
+    decision: skills 主规格同步写为十二个技能并列出 wa-plan
+    rationale: 现行规格仍写八个技能，漏了已交付的 wa-plan（测试与 docs 已是九个）；本变更改动技能清单时一并修正，避免规格与实现继续漂移
+alternatives: []
+risks:
+  - 技能文字中的 wa-cli 命令与参数一旦拼错会使 TestSkillCommandsExist 失败；以完整回归兜底
+  - 安装产物数量变化会影响断言 changedPaths 数量的测试（skills 包与 cli 包），需同步更新
