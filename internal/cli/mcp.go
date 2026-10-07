@@ -25,7 +25,7 @@ const codeMissingDir = "mcp.missing-dir"
 
 var mcpCommand = &command{
 	name: "mcp",
-	summary: "以 stdio 方式运行 MCP 服务（MCP Server，协议版本 " + mcp.ProtocolVersion + "）：tools 由命令注册表生成并调用同一条 wa-cli 命令，" +
+	summary: "以 stdio 方式运行 MCP 服务（MCP Server，双代服务端（Dual-era Server），支持协议版本 " + strings.Join(mcp.SupportedVersions, "、") + "，旧版客户端以 initialize 握手进入旧版会话（Legacy Session））：tools 由命令注册表生成并调用同一条 wa-cli 命令，" +
 		"resources 暴露工作区产物、生效配置与作者反馈（可订阅更新），prompts 对应各技能（Skill）；必须用 --dir 指定项目根目录",
 	flags:      []flagSpec{dirFlag, {"interval", flagString, "资源订阅的轮询间隔（毫秒），正整数，默认 1000"}},
 	outputKeys: []outputKey{{"mcp", "加 --json 时，标准输入结束、退出前写出的汇总：requests（处理的请求数）；标准输出的其余各行是 MCP 消息"}},

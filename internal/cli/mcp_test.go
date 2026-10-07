@@ -240,6 +240,68 @@ func TestMCPFeedbackNotification(t *testing.T) {
 	s.close()
 }
 
+// rawRequest 发送一个不带 _meta 的请求（旧版会话），返回 id 相同的响应（其间的通知交给 notes）。
+func (s *mcpSession) rawRequest(method, params string, notes ...*[]map[string]any) map[string]any {
+	s.t.Helper()
+	s.id++
+	fmt.Fprintf(s.w, `{"jsonrpc":"2.0","id":%d,"method":%q,"params":{%s}}`+"\n", s.id, method, params)
+	for {
+		m := s.next()
+		if m["id"] == float64(s.id) {
+			return m
+		}
+		if len(notes) > 0 {
+			*notes[0] = append(*notes[0], m)
+		}
+	}
+}
+
+// mcp-legacy-session：只发送 initialize 的旧版客户端（2025-11-25 与 2025-06-18）协商到所请求的版本，initialized 后能列出并调用
+// tool，订阅 wa://feedback 后作者提交反馈时收到更新通知；同一进程中带 _meta 的 2026-07-28 请求行为不变。
+func TestMCPLegacyClients(t *testing.T) {
+	for _, version := range []string{"2025-11-25", "2025-06-18"} {
+		t.Run(version, func(t *testing.T) {
+			dir := newWork(t)
+			s := startMCP(t, dir, "--interval", "20")
+			init := s.rawRequest("initialize", `"protocolVersion":"`+version+`","capabilities":{},"clientInfo":{"name":"old","version":"1"}`)
+			r, _ := init["result"].(map[string]any)
+			if r["protocolVersion"] != version || r["serverInfo"].(map[string]any)["name"] != "wa-cli" ||
+				r["capabilities"].(map[string]any)["resources"].(map[string]any)["subscribe"] != true {
+				t.Fatalf("initialize: %v", init)
+			}
+			fmt.Fprintln(s.w, `{"jsonrpc":"2.0","method":"notifications/initialized"}`)
+			tools, _ := s.rawRequest("tools/list", "")["result"].(map[string]any)
+			names := []string{}
+			for _, tl := range tools["tools"].([]any) {
+				names = append(names, tl.(map[string]any)["name"].(string))
+			}
+			if !slices.Contains(names, "feedback_add") || slices.Contains(names, "mcp") {
+				t.Fatalf("tools/list: %v", names)
+			}
+			call, _ := s.rawRequest("tools/call", `"name":"feedback_list","arguments":{}`)["result"].(map[string]any)
+			if call["isError"] != false || call["structuredContent"].(map[string]any)["valid"] != true {
+				t.Fatalf("tools/call: %v", call)
+			}
+			read, _ := s.rawRequest("resources/read", `"uri":"wa://feedback"`)["result"].(map[string]any)
+			if read["contents"].([]any)[0].(map[string]any)["mimeType"] != "application/json" {
+				t.Fatalf("resources/read: %v", read)
+			}
+			if sub := s.rawRequest("resources/subscribe", `"uri":"wa://feedback"`); sub["result"] == nil {
+				t.Fatalf("subscribe: %v", sub)
+			}
+			mustRunWS(t, dir, "feedback", "add", "my-post", "--text", "这里读不下去了")
+			up := s.next()
+			if up["method"] != "notifications/resources/updated" || up["params"].(map[string]any)["uri"] != "wa://feedback" {
+				t.Fatalf("updated: %v", up)
+			}
+			if m := s.request("server/discover", ""); m["result"].(map[string]any)["resultType"] != "complete" {
+				t.Fatalf("modern request in legacy session: %v", m)
+			}
+			s.close()
+		})
+	}
+}
+
 // missing-dir、不合法的 --interval 与 --json 的汇总信封。
 func TestMCPCommand(t *testing.T) {
 	code, stdout, _ := runIn(t, "", "mcp", "--json")

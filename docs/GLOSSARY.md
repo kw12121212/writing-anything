@@ -361,7 +361,9 @@
 | 技能 | Skill | 技能 | Agent Skills 格式的操作说明包；wa-cli 内置的技能用 wa-cli skills install 安装 |
 | 模型上下文协议 | Model Context Protocol | MCP | Agent 调用外部工具的开放协议 |
 | 大语言模型 | Large Language Model | LLM | Agent 背后的 AI 模型；`wa-cli` 本身不调用 |
-| MCP 服务 | MCP Server | MCP 服务 | 由 `wa-cli mcp --dir <项目目录>` 以 stdio 方式提供（MCP 2026-07-28 版协议）：tools 对应命令，resources 暴露工作区产物、生效配置与作者反馈，prompts 对应技能 |
+| MCP 服务 | MCP Server | MCP 服务 | 由 `wa-cli mcp --dir <项目目录>` 以 stdio 方式提供（双代服务端，支持 MCP 2026-07-28、2025-11-25 与 2025-06-18 版协议）：tools 对应命令，resources 暴露工作区产物、生效配置与作者反馈，prompts 对应技能 |
+| 双代服务端 | Dual-era Server | 双代服务端 | 同时服务两代 MCP 客户端的 MCP 服务：`_meta` 中带协议版本的请求按 2026-07-28 无状态语义处理，发送 `initialize` 的客户端得到旧版会话 |
+| 旧版会话 | Legacy Session | 旧版会话 | 旧版 MCP 客户端（2025-11-25、2025-06-18）以 `initialize` 握手、`notifications/initialized` 确认后在该 stdio 进程内使用的会话；请求不需要 `_meta`，用 `resources/subscribe` 订阅资源 |
 | 工具 | Tool | tool | MCP 服务提供的可调用操作；wa-cli 的每个 tool 对应一条命令（命令名的空格换成下划线） |
 | 资源 | Resource | 资源 | MCP 服务提供的只读内容，如工作区产物、生效配置与作者反馈，以 URI 标识 |
 | 提示模板 | Prompt | prompt | MCP 服务提供的流程说明；wa-cli 的每个 prompt 对应一个技能 |

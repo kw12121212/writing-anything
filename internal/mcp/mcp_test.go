@@ -14,6 +14,8 @@ import (
 
 const meta = `"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}}`
 
+var allVersions = []string{"2026-07-28", "2025-11-25", "2025-06-18"}
+
 // fake 记录命令调用，并提供可修改的资源。
 type fake struct {
 	mu    sync.Mutex
@@ -110,13 +112,13 @@ func TestProtocol(t *testing.T) {
 		t.Fatalf("requests %d, messages %d: %v", n, len(msgs), msgs)
 	}
 	d := msgs[0]["result"].(map[string]any)
-	if d["resultType"] != "complete" || !slices.Equal(toStrings(d["supportedVersions"]), []string{"2026-07-28"}) ||
+	if d["resultType"] != "complete" || !slices.Equal(toStrings(d["supportedVersions"]), allVersions) ||
 		d["capabilities"].(map[string]any)["resources"].(map[string]any)["subscribe"] != true ||
 		d["_meta"].(map[string]any)["io.modelcontextprotocol/serverInfo"].(map[string]any)["name"] != "wa-cli" {
 		t.Fatalf("discover: %v", d)
 	}
 	e := msgs[1]["error"].(map[string]any)
-	if e["code"] != -32022.0 || e["data"].(map[string]any)["requested"] != "2025-11-25" || !slices.Equal(toStrings(e["data"].(map[string]any)["supported"]), []string{"2026-07-28"}) {
+	if e["code"] != -32022.0 || e["data"].(map[string]any)["requested"] != "2025-11-25" || !slices.Equal(toStrings(e["data"].(map[string]any)["supported"]), allVersions) {
 		t.Fatalf("version: %v", e)
 	}
 	for i, want := range []float64{-32602, -32700, -32600, -32600, -32601} {
