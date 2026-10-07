@@ -90,7 +90,7 @@ func TestPreferRemovedTermsAndLength(t *testing.T) {
 	if _, _, ps := Confirm(root, "prefs", []string{"style-1"}, "作者：对", now); ps != nil {
 		t.Fatal(ps)
 	}
-	if pack, _ := catalog.LoadPackFile(root, ".writing-anything/packs/mine.yaml"); len(pack.Style) != 1 || !strings.Contains(pack.Style[0], "短") {
+	if pack, _ := catalog.LoadPackFile(root, ".writing-anything/packs/mine.yaml"); len(pack.Style) != 1 || !strings.Contains(pack.Style[0].Text, "短") {
 		t.Fatalf("pack = %+v", pack)
 	}
 	addSource(t, root, "a1", "past-article", "今天下雨。")

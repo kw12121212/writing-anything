@@ -4,6 +4,8 @@ title: 团队规范
 description: 测试用规范包
 style:
   - 结论先行
+  - text: 多用感官细节
+    applies_to: [fiction]
 glossary:
   - term: 规范包
     english: Pack

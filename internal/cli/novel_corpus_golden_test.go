@@ -311,3 +311,72 @@ func TestNovelCorpusSecretMasking(t *testing.T) {
 		t.Errorf("语料不应有 knowledge.missing-terms: %+v", res.Diagnostics)
 	}
 }
+
+// 文风按文体隔离：novel-e2e 语料的 config resolved 与每个场景的上下文包都不含 default 规范包的文章类文风，
+// config resolved 在 excludedStyle 中列出被排除的条目与原因；人读输出同样列出（genre-style-isolation）。
+func TestNovelCorpusStyleIsolation(t *testing.T) {
+	dir := t.TempDir()
+	replayNovelCorpus(t, dir)
+
+	articleStyle := []string{"结论先行", "用具体的事实、数据和例子代替空泛的形容词"}
+	code, res := runWS(t, dir, "config", "resolved")
+	if code != 0 {
+		t.Fatalf("config resolved: exit = %d, diagnostics = %+v", code, res.Diagnostics)
+	}
+	var out struct {
+		Resolved struct {
+			Genre struct {
+				ID       string `json:"id"`
+				Category string `json:"category"`
+			} `json:"genre"`
+			Style []struct {
+				Text string `json:"text"`
+			} `json:"style"`
+			ExcludedStyle []struct {
+				Text      string   `json:"text"`
+				Source    string   `json:"source"`
+				AppliesTo []string `json:"appliesTo"`
+				Reason    string   `json:"reason"`
+			} `json:"excludedStyle"`
+		} `json:"resolved"`
+	}
+	if err := json.Unmarshal([]byte(res.stdout), &out); err != nil {
+		t.Fatal(err)
+	}
+	r := out.Resolved
+	if r.Genre.ID != "novel" || r.Genre.Category != "fiction" || len(r.ExcludedStyle) != 2 {
+		t.Fatalf("resolved = %+v", r)
+	}
+	for _, s := range r.Style {
+		for _, a := range articleStyle {
+			if strings.Contains(s.Text, a) {
+				t.Errorf("resolved.style 含文章类文风 %q", s.Text)
+			}
+		}
+	}
+	for i, e := range r.ExcludedStyle {
+		if !strings.Contains(e.Text, articleStyle[i]) || e.Source != "pack:default" || !slices.Equal(e.AppliesTo, []string{"article"}) ||
+			!strings.Contains(e.Reason, "novel") || !strings.Contains(e.Reason, "fiction") {
+			t.Errorf("excludedStyle[%d] = %+v", i, e)
+		}
+	}
+	code, text, _ := run(t, "config", "resolved", "--dir", dir)
+	if code != 0 || !strings.Contains(text, "文体类别（Genre Category）fiction") || !strings.Contains(text, "未生效的文风（按文体类别排除）") ||
+		!strings.Contains(text, "结论先行，先说结果再说过程。（来自 pack:default）：只适用于文章类（article）文体，当前文体 novel 属于小说类（fiction）") {
+		t.Fatalf("config resolved text: exit = %d\n%s", code, text)
+	}
+	for _, scene := range []string{"ch1-s1", "ch2-s2", "ch3-s3"} {
+		code, res := runWS(t, dir, "context", "stopped-at-417/"+scene)
+		if code != 0 {
+			t.Fatalf("context %s: exit = %d", scene, code)
+		}
+		if !strings.Contains(res.stdout, `"style":[]`) {
+			t.Errorf("context %s 的 norms.style 不为空", scene)
+		}
+		for _, a := range articleStyle {
+			if strings.Contains(res.stdout, a) {
+				t.Errorf("context %s 含文章类文风 %q", scene, a)
+			}
+		}
+	}
+}

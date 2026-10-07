@@ -2,6 +2,7 @@ schema_version: 1
 id: essay
 title: 随笔
 description: 测试用文体
+category: article
 unit_types:
   - id: article
     title: 文章

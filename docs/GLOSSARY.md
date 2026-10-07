@@ -32,6 +32,7 @@
 | 内置 | Built-in | 内置 | 随 `wa-cli` 二进制提供的文体与规范包，如 `default` 规范包 |
 | 配置层 | Config Layer | 配置层 | 参与合并的一层设置：文体默认、规范包、项目配置，后者覆盖前者；来源写作 `genre:<id>`、`pack:<id>`、`project` |
 | 解析后配置 | Resolved Config | 解析后配置 | 各配置层合并后的生效设置，每项注明来源层，由 `wa-cli config resolved` 输出 |
+| 文体类别 | Genre Category | 文体类别 | 文体用 `category` 声明的类别：`article`（文章类）或 `fiction`（小说类）；规范包的文风条目用 `applies_to` 限定适用的类别，类别不符的条目不生效，列在 `wa-cli config resolved` 的 `excludedStyle` 中 |
 
 ## 写作流程
 

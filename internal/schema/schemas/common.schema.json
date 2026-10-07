@@ -4,6 +4,7 @@
   "$defs": {
     "id": {"type": "string", "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$"},
     "text": {"type": "string", "minLength": 1},
+    "genreCategory": {"enum": ["article", "fiction"], "description": "文体类别（Genre Category）：article 为文章类，fiction 为小说类"},
     "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
     "channel": {"enum": ["cli", "preview"], "description": "确认渠道（Confirmation Channel）：cli 为命令行参数写入，preview 为作者在本地阅读页上确认；缺省按 cli 解释"},
     "ids": {"type": "array", "uniqueItems": true, "items": {"$ref": "#/$defs/id"}},

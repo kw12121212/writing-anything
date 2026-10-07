@@ -1,11 +1,14 @@
-# 内置默认规范包：config.yaml 的 packs 为空时生效。只放与文体无关的通用中文写作规范。
+# 内置默认规范包：config.yaml 的 packs 为空时生效。放通用的中文写作规范；只适用于文章类文体的文风条目用
+# applies_to: [article] 限定，小说类文体（short-story、novel）不继承。
 schema_version: 1
 id: default
 title: 默认规范包
 description: 通用的中文写作规范：中文排版、常见 AI 腔、禁用词与术语一致。
 style:
-  - 结论先行，先说结果再说过程。
-  - 用具体的事实、数据和例子代替空泛的形容词。
+  - text: 结论先行，先说结果再说过程。
+    applies_to: [article]
+  - text: 用具体的事实、数据和例子代替空泛的形容词。
+    applies_to: [article]
 rules:
   cjk-typography:
     type: cjk-typography

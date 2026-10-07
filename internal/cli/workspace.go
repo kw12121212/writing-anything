@@ -96,7 +96,7 @@ var configResolvedCommand = &command{
 	name:       "config resolved",
 	summary:    "按 文体（Genre）→ 规范包（Pack）→ 项目配置 合并生效的设置，并列出每项的来源",
 	flags:      []flagSpec{dirFlag},
-	outputKeys: []outputKey{{"resolved", "解析后配置（Resolved Config），含 genre、packs、unitTypes、stages、rules、glossary、bannedTerms、style、rubric，每项带 source；有 error 级诊断时为 null"}},
+	outputKeys: []outputKey{{"resolved", "解析后配置（Resolved Config），含 genre（文体声明类别时带 category）、packs、unitTypes、stages、rules、glossary、bannedTerms、style、excludedStyle（按文体类别排除的文风条目及原因）、rubric，每项带 source；有 error 级诊断时为 null"}},
 	exitCodes:  standardExitCodes,
 	run:        runConfigResolved,
 }
@@ -359,7 +359,11 @@ func resolvedText(r *resolve.Resolved) string {
 	if r.Genre == nil {
 		b.WriteString("文体（Genre）：未设置\n")
 	} else {
-		fmt.Fprintf(&b, "文体（Genre）：%s（%s）\n", r.Genre.ID, r.Genre.Origin)
+		category := ""
+		if r.Genre.Category != "" {
+			category = "，文体类别（Genre Category）" + r.Genre.Category
+		}
+		fmt.Fprintf(&b, "文体（Genre）：%s（%s%s）\n", r.Genre.ID, r.Genre.Origin, category)
 	}
 	b.WriteString("规范包（Pack），按应用顺序：\n")
 	for _, p := range r.Packs {
@@ -444,6 +448,12 @@ func resolvedText(r *resolve.Resolved) string {
 	if section("文风（Writing Style）", len(r.Style)) {
 		for _, s := range r.Style {
 			fmt.Fprintf(&b, "  %s%s\n", s.Text, from(s.Source))
+		}
+	}
+	if len(r.ExcludedStyle) > 0 {
+		b.WriteString("未生效的文风（按文体类别排除）：\n")
+		for _, s := range r.ExcludedStyle {
+			fmt.Fprintf(&b, "  %s%s：%s\n", s.Text, from(s.Source), s.Reason)
 		}
 	}
 	if section("评分标准（Rubric）", len(r.Rubric)) {

@@ -4,6 +4,7 @@ schema_version: 1
 id: wechat-marketing
 title: 公众号营销文章
 description: 面向公众号读者的营销文章：标题由作者从候选中选定，开头抓人、结尾有明确的行动号召，避免广告法极限词，亲历与数据出自作者素材。
+category: article
 default_method: aida
 unit_types:
   - id: article

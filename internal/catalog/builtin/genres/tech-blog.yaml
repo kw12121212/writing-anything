@@ -4,6 +4,7 @@ schema_version: 1
 id: tech-blog
 title: 技术博客
 description: 面向工程师的技术文章：结论先行，代码块标注语言，版本号与 API 说法有出处，亲历与数据出自作者素材。
+category: article
 default_method: pyramid-scqa
 unit_types:
   - id: article

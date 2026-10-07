@@ -272,6 +272,17 @@ func Learn(root string, req Request) (*Proposal, []string, []workspace.Problem) 
 	return &next, changed, warnings
 }
 
+// styleText 返回规范包一条文风的文字：字符串条目为其取值，{text, applies_to} 对象为 text。
+func styleText(n *yaml.Node) string {
+	if n.Kind == yaml.MappingNode {
+		if v, _ := workspace.Lookup(n, "text"); v != nil {
+			return v.Value
+		}
+		return ""
+	}
+	return n.Value
+}
+
 func nextID(items []Item, prefix string) string {
 	for n := 1; ; n++ {
 		id := fmt.Sprintf("%s-%d", prefix, n)
@@ -616,7 +627,7 @@ func editPack(root, rel string, pr *Proposal, apply []Item) ([]byte, []workspace
 			if ps != nil {
 				return nil, ps
 			}
-			if !slices.ContainsFunc(s.Content, func(n *yaml.Node) bool { return n.Value == it.Text }) {
+			if !slices.ContainsFunc(s.Content, func(n *yaml.Node) bool { return styleText(n) == it.Text }) {
 				s.Content = append(s.Content, workspace.Str(it.Text))
 				workspace.BlockSequence(m, "style")
 			}
