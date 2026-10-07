@@ -7,8 +7,7 @@ package assembly
 import (
 	"bytes"
 	"fmt"
-	"os"
-	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/kw12121212/writing-anything/internal/authorreview"
@@ -176,11 +175,13 @@ func Gate(root string, w *work.Work) []workspace.Problem {
 	}
 	// 连续性：只读阻塞计算（不生成决策），按场景过滤 error 级发现；系列成员作品再算跨作品发现
 	//（series-continuity-review 主规格）。
+	// 涉及本作品场景的跨作品发现由按场景阻塞项承担（含豁免，continuity-series-accept-gate），系列范围发现只算一次。
+	seriesWorks, seriesAll, seriesGate := continuity.SeriesGate(root, w)
 	for _, u := range w.Units() {
 		if u.Type != outline.SceneType {
 			continue
 		}
-		blockers, fatal := continuity.Blockers(root, w, u)
+		blockers, fatal := continuity.BlockersWith(root, w, u, seriesGate)
 		if len(fatal) > 0 {
 			problems = append(problems, errorAt(CodeContinuity, "",
 				"连续性台账无法加载："+fatal[0].Message))
@@ -191,12 +192,13 @@ func Gate(root string, w *work.Work) []workspace.Problem {
 				fmt.Sprintf("场景 %s 的连续性发现 %s：%s", u.Ref, b.Code, b.Message)))
 		}
 	}
-	if seriesWorks := seriesMembers(root, w); len(seriesWorks) > 1 {
-		if findings, _ := continuity.RunSeries(root, seriesWorks); len(findings) > 0 {
-			for _, f := range findings {
-				problems = append(problems, errorAt(CodeContinuity, "",
-					fmt.Sprintf("[系列] 场景 %s 的跨作品连续性发现 %s：%s", f.Scene, f.Code, f.Message)))
+	if len(seriesWorks) > 1 {
+		for _, f := range seriesAll {
+			if slices.ContainsFunc(seriesGate, func(g continuity.Finding) bool { return g.Code == f.Code && g.Message == f.Message }) {
+				continue // 已由本作品场景的阻塞项列出（并尊重作者豁免）
 			}
+			problems = append(problems, errorAt(CodeContinuity, "",
+				fmt.Sprintf("[系列] 场景 %s 的跨作品连续性发现 %s：%s", f.Scene, f.Code, f.Message)))
 		}
 		// 组稿关卡的复查标记扩展到系列内全部作品（message 标明作品）。
 		var items []string
@@ -392,42 +394,4 @@ func Assemble(root string, w *work.Work, format, output, footer string) (*View, 
 		}
 	}
 	return &View{Work: w.ID, Path: rel, Format: format, Scenes: book.Scenes, Parts: parts, Chars: len([]rune(body))}, changed, nil
-}
-
-// seriesMembers 返回作品所属系列的成员作品（按 works 顺序；不属于系列时只含自身）；系列文件坏时降级为自身。
-func seriesMembers(root string, w *work.Work) []*work.Work {
-	entries, err := os.ReadDir(filepath.Join(root, filepath.FromSlash(".writing-anything/series")))
-	if err != nil {
-		return []*work.Work{w}
-	}
-	for _, e := range entries {
-		if e.IsDir() || strings.HasPrefix(e.Name(), ".") || !strings.HasSuffix(e.Name(), ".yaml") {
-			continue
-		}
-		rel := ".writing-anything/series/" + e.Name()
-		doc, ps := workspace.Read(root, rel)
-		if doc == nil || len(ps) > 0 {
-			continue
-		}
-		var f struct {
-			Works []string `json:"works"`
-		}
-		catalogDecode(doc, &f)
-		for _, id := range f.Works {
-			if id != w.ID {
-				continue
-			}
-			var out []*work.Work
-			for _, wid := range f.Works {
-				if ww, wps := work.Load(root, wid); ww != nil && len(wps) == 0 {
-					out = append(out, ww)
-				}
-			}
-			if len(out) == 0 {
-				return []*work.Work{w}
-			}
-			return out
-		}
-	}
-	return []*work.Work{w}
 }

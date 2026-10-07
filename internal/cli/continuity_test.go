@@ -3,6 +3,7 @@ package cli
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -155,6 +156,13 @@ func TestContinuityTimelineGate(t *testing.T) {
 	code, res = runWS(t, dir, "accept", "my-novel/scene-1", "--confirmed-by-author", "--confirmation", "作者：可以")
 	if code != 1 || diag(t, res, "timeline.same-time-presence").Code == "" {
 		t.Fatalf("accept: exit code = %d, diagnostics = %+v", code, res.Diagnostics)
+	}
+	// 时间线发现同走（场景， 错误码）豁免通道：生成豁免决策，next 指向 continuity 与 decisions。
+	if !slices.Contains(res.ChangedPaths, ".writing-anything/decisions.yaml") {
+		t.Fatalf("changedPaths = %v", res.ChangedPaths)
+	}
+	if next := strings.Join(diag(t, res, "timeline.same-time-presence").Next, "\n"); !contains(next, "wa-cli continuity my-novel/scene-1") || !contains(next, "wa-cli decisions") {
+		t.Fatalf("next = %s", next)
 	}
 	// 修正声明（scene-2 晚于 scene-1）后通过。
 	writeFile(t, filepath.Join(s2, "outline.yaml"),

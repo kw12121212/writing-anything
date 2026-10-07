@@ -13,6 +13,7 @@ import (
 	"github.com/kw12121212/writing-anything/internal/decision"
 	"github.com/kw12121212/writing-anything/internal/draft"
 	"github.com/kw12121212/writing-anything/internal/feedback"
+	"github.com/kw12121212/writing-anything/internal/outline"
 	"github.com/kw12121212/writing-anything/internal/resolve"
 	"github.com/kw12121212/writing-anything/internal/review"
 	"github.com/kw12121212/writing-anything/internal/schema"
@@ -287,8 +288,9 @@ type gateState struct {
 	lint      lintSummary
 	feedback  []feedbackView
 	decisions []decision.Decision
-	problems  []workspace.Problem // 无法收集关卡输入的问题（如没有正文、合并失败）以及不影响关卡的 warning
-	changed   []string            // 收集关卡时产生的副作用路径（如连续性豁免决策的决策队列）
+	problems  []workspace.Problem  // 无法收集关卡输入的问题（如没有正文、合并失败）以及不影响关卡的 warning
+	changed   []string             // 收集关卡时产生的副作用路径（如连续性豁免决策的决策队列）
+	series    []continuity.Finding // 系列范围的门禁发现（只算一次，accept 生成豁免决策时复用）
 }
 
 // collectGate 为单元 u 收集验收关卡的输入：文本检查、审稿、未处理的作者反馈、关联的决策与评分标准。
@@ -351,17 +353,25 @@ func collectGate(dir string, w *work.Work, u *work.Unit) *gateState {
 	// 连续性审查（Continuity Review）：只读计算 error 级阻塞项（review show 同用此路径，不产生副作用）；
 	// 豁免决策只在 accept 的阻塞路径上生成（见 accept 函数），只读命令不得写入决策队列。
 	var cps []workspace.Problem
-	if g.in.Continuity, cps = continuity.Blockers(dir, w, u); len(cps) > 0 {
+	if u.Type == outline.SceneType {
+		g.series = continuity.SeriesGateFindings(dir, w)
+	}
+	if g.in.Continuity, cps = continuity.BlockersWith(dir, w, u, g.series); len(cps) > 0 {
 		g.problems = append(g.problems, cps...)
 	}
 	return g
+}
+
+// continuityCode 报告阻塞项是否来自连续性审查：continuity.* 与时间线检查的 timeline.*（同走（场景， 错误码）豁免通道）。
+func continuityCode(code string) bool {
+	return strings.HasPrefix(code, "continuity.") || strings.HasPrefix(code, "timeline.")
 }
 
 // gateNext 返回验收阻塞项的下一步命令：解除它的命令，以及能复查它的 wa-cli review show。
 func gateNext(dir, ref string, b review.Blocker) []string {
 	show := shellCommand("wa-cli", "review", "show", ref, "--dir", dir, "--json")
 	lintCmd := shellCommand("wa-cli", "lint", ref, "--dir", dir, "--json")
-	if strings.HasPrefix(b.Code, "continuity.") {
+	if continuityCode(b.Code) {
 		return []string{shellCommand("wa-cli", "continuity", ref, "--dir", dir, "--json"),
 			shellCommand("wa-cli", "decisions", "--dir", dir, "--json"), show}
 	}
@@ -643,8 +653,8 @@ func acceptVia(dir string, w *work.Work, u *work.Unit, confirmed bool, confirmat
 	blockers, warnings := review.Gate(g.in)
 	// 阻塞项里有连续性发现时，为未豁免的（场景， 错误码）幂等生成豁免决策（阻塞路径的副作用，如实计入
 	// changedPaths；只读的 review show 不走这里）。
-	if slices.ContainsFunc(blockers, func(b review.Blocker) bool { return strings.HasPrefix(b.Code, "continuity.") }) {
-		changed, cps := continuity.EnsureWaivers(dir, w, u)
+	if slices.ContainsFunc(blockers, func(b review.Blocker) bool { return continuityCode(b.Code) }) {
+		changed, cps := continuity.EnsureWaiversWith(dir, w, u, g.series)
 		if len(cps) > 0 {
 			problems = append(problems, cps...)
 		}
