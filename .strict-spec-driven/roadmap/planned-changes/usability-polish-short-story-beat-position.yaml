@@ -5,7 +5,7 @@ schema_file: ../../templates/strict-spec-driven/schemas/planned-change.yaml
 planned_change:
   id: short-story-beat-position
   milestone: usability-polish
-status: planned
+status: complete
 summary: 短篇节拍位置检查在场景单元流程中生效
 details: BeatPositions 支持根单元的结构类写作法节拍通过场景大纲 beats 映射到场景，按场景在单元树先序中的相对位置判断节拍是否超出写作法范围，只输出提示；不再要求正文存在同名 Markdown 标题。测试用短篇夹具覆盖超范围提示与不阻塞验收。同步 methods 规格。
 depends_on: []

@@ -1,0 +1,33 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: short-story-beat-position
+  status: proposed
+summary:
+  what:
+    - 场景单元的大纲节以 beats 引用根单元大纲的节（情节节拍（Story Beat）），且该节的 role 是根单元选用的结构类写作法的节拍时，wa-cli lint <场景>（以及共用同一检查的 review show 与 accept）按场景在作品全部场景中的单元树先序相对位置核对节拍，超出写作法范围时给出 warning 级诊断 outline.beat-position，不阻塞验收
+    - 场景节拍位置核对不要求正文存在与大纲节同名的 Markdown 标题；诊断指向场景 outline.yaml 中引用该节拍的 sections[i].beats[j]，next 给出 wa-cli lint <场景> --dir <dir> --json
+  why:
+    - 2026-10-07 路线图里程碑审计：outline.go 的 BeatPositions 只看本单元大纲的 role 且要求正文有同名标题；短篇的节拍挂在根单元大纲上而正文在场景单元，正常流程中节拍位置提示永不触发
+    - planned change short-story-beat-position 要求根单元结构类写作法的节拍通过场景大纲 beats 映射到场景，按场景先序相对位置只输出提示，并用短篇夹具覆盖超范围提示与不阻塞验收
+scope:
+  in:
+    - internal/outline/outline.go：新增按场景先序位置核对根单元写作法节拍的纯函数 SceneBeatPositions
+    - internal/cli/lint.go：beatPositions 对场景单元加载根单元写作法与大纲、场景大纲与场景序号，合并场景节拍位置提示；保留单元自身写作法的标题核对
+    - internal/cli/workspace.go：outline.beat-position 的 next 按诊断路径所在单元目录推导单元引用（同时支持 draft.md 与 outline.yaml）
+    - methods 主规格 beat-positions 需求的增量（场景节拍位置核对）
+    - 单元测试：outline 包纯函数测试；cli 包短篇夹具覆盖超范围提示、范围内无提示、review show 展示但不进入验收阻塞项
+    - internal/cli/method.go 与 internal/cli/curve.go：抽出 rootStructure，curve 的节拍目标张力与 lint 的场景节拍位置共用根单元写作法与大纲的加载（行为不变）
+  out:
+    - 新增命令、参数或诊断码；修改内置写作法的 position 数据
+    - 按场景正文字数加权的位置计算；根单元或部、章单元上的跨场景汇总提示
+    - 里程碑中的其他计划变更（诊断下一步命令具体化、Windows 安装校验）
+unchanged_behavior:
+  - 单元自身选用结构类写作法时按正文同名标题核对节拍位置的既有行为（含 tech-blog 等单篇作品）不变
+  - outline.beat-position 始终为 warning，不影响 lint 退出码，不是 accept 的阻塞项
+  - wa-cli curve 的节拍目标张力映射、大纲关卡与 validate 的写作法缺口检查不变
+roadmap:
+  milestone: usability-polish
+  planned_change: short-story-beat-position

@@ -1,0 +1,29 @@
+schema: strict-spec-driven/delta-spec/v1
+schema_version: 1
+artifact_type: delta_spec
+schema_file: templates/strict-spec-driven/schemas/delta-spec.yaml
+target_spec: methods
+operations:
+  ADDED: {}
+  MODIFIED:
+    beat-positions:
+      strength: MUST
+      statement: 单元选用结构类写作法时，wa-cli lint 必须按字数比例核对成稿中节拍的位置：每个节拍取承担它的第一个大纲节，在 draft.md 中找标题文字与该节标题相同的第一个 Markdown 标题行，以该行之前的字符数占全文字符数的比例作为位置；超出节拍的 position 范围时给出一条 warning 级诊断 outline.beat-position（path 为 draft.md，line 为标题行，message 含节拍、实际位置与建议范围，next 包含 wa-cli lint <unit> --dir <dir> --json），不影响退出码；正文先把 CRLF 换成 LF，围栏代码块中的行不算标题行；找不到标题行的节拍不核对。此外，对有正文的场景单元（type 为 scene），wa-cli lint 必须按场景的单元树先序位置核对它承担的情节节拍（Story Beat）：场景大纲节的 beats 引用根单元大纲的节，该节的 role 是根单元选用的结构类写作法（写作简报的 method，为空时为文体的 default_method）的节拍时，作品共有 n 个场景单元、本场景按单元树先序为第 k 个（从 1 起）时，以 (k − 0.5) ÷ n 作为该节拍的相对位置；超出节拍的 position 范围时给出一条 warning 级诊断 outline.beat-position（path 为场景的 outline.yaml，field 为第一次引用该节拍的 sections[i].beats[j]，message 含场景、节拍、根单元大纲节、场景序号、相对位置与建议范围，next 包含 wa-cli lint <场景> --dir <dir> --json），同一场景的同一节拍至多一条，不要求正文存在同名标题，不影响退出码；根单元没有选用结构类写作法（含 none）、根单元的写作简报不能读取（没有写作简报时按文体的 default_method）、根单元大纲缺失或不能读取、或场景没有可读取的大纲时不做这项核对；场景自身写作简报的问题不影响这项核对。wa-cli review show 与 accept 同样展示这些 warning，它们不是验收的阻塞项。
+      scenarios:
+        beat-out-of-range:
+          - GIVEN: 作品 my-post 选用结构类写作法 three-act（setup 位置 0–30%，climax 位置 70–100%），大纲节「开端」role 为 setup、「高潮」role 为 climax，正文先写「## 高潮」再写「## 开端」
+          - WHEN: 运行 wa-cli lint my-post --dir D --json
+          - THEN: diagnostics 中有两条 severity 为 warning、错误码为 outline.beat-position 的诊断，退出码为 0
+        scene-beat-out-of-range:
+          - GIVEN: short-story 作品 lamp 使用默认写作法 three-act，根单元大纲节 peak 的 role 为 climax（位置 70–100%），作品有 s1 到 s4 四个场景，s1 的大纲节 beats 为 [peak]，s1 有正文且正文中没有任何标题
+          - WHEN: 运行 wa-cli lint lamp/s1 --dir D --json
+          - THEN: diagnostics 中有一条 severity 为 warning、错误码为 outline.beat-position 的诊断，path 为 s1 的 outline.yaml，field 为 sections[0].beats[0]，message 含 climax、peak 与「第 1 个」，next 包含 wa-cli lint lamp/s1 --dir D --json，退出码为 0
+        scene-beat-in-range:
+          - GIVEN: 同 scene-beat-out-of-range，另有 s4 的大纲节 beats 为 [peak, end]，根单元大纲节 end 的 role 为 resolution（位置 85–100%）
+          - WHEN: 运行 wa-cli lint lamp/s4 --dir D --json
+          - THEN: diagnostics 中没有 outline.beat-position（s4 的相对位置约 88%），退出码为 0
+        scene-beat-not-blocking:
+          - GIVEN: 同 scene-beat-out-of-range
+          - WHEN: 运行 wa-cli review show lamp/s1 --dir D --json
+          - THEN: diagnostics 中有 outline.beat-position 的 warning，验收阻塞项中不含 outline.beat-position
+  REMOVED: {}

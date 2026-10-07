@@ -1,0 +1,24 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: short-story-beat-position
+approach:
+  - internal/cli/workspace.go 中 outline.beat-position 的 next 改为取诊断路径的目录推导单元引用，同时支持 draft.md 与 outline.yaml
+  - 在 internal/outline 新增 SceneBeatPositions(rel, ref string, scene, root *Outline, m *catalog.Method, k, n int)：m 为结构类写作法时，建立根单元大纲节 id → 其 role 承担的节拍的映射；按场景大纲节与 beats 的顺序，对每个映射到节拍且声明了 position 的引用，以 (k + 0.5) ÷ n（k 从 0 起）作为场景的相对位置，超出 position 范围时给出一条 warning（每个节拍至多一条，field 为第一次引用的 sections[i].beats[j]）
+  - internal/cli/method.go 新增 rootStructure，返回根单元选用的结构类写作法与宽松加载的根单元大纲，curve 的节拍目标张力与 lint 的场景节拍位置共用。internal/cli/lint.go 引入 lintDeps（生效设置与根单元节拍数据各按作品只计算一次，lint、review show、accept 与 preview 共用 runUnitLintWith）；beatPositions 保留单元自身写作法的标题核对，单元类型为 scene 时再以 w.Scenes() 求场景先序序号与总数，复用已加载的场景大纲（没有时以空 Messages 宽松加载），合并 SceneBeatPositions 的结果
+decisions:
+  slot-midpoint:
+    decision: 场景的相对位置取其在全部场景中所占等分区间的中点 (k + 0.5) ÷ n
+    rationale: planned change 要求按单元树先序相对位置判断；用区间起点会让最后一个场景永远达不到 0.85 以上（四个场景时为 0.75），把 three-act 的 resolution 放在最后一个场景也会被误报；中点在场景数较少时与作者直觉一致
+  outline-path:
+    decision: 场景节拍位置诊断的 path 为场景的 outline.yaml，field 为 sections[i].beats[j]，不填 line
+    rationale: 节拍由场景大纲 beats 声明，修复动作是调整 beats 或场景顺序；正文中没有对应标题行，指向 draft.md 的行号没有意义
+  keep-heading-check:
+    decision: 单元自身选用结构类写作法时的同名标题核对保留不变，场景核对是新增路径
+    rationale: 单篇作品（如 tech-blog 选用结构类写作法）只有标题能定位节拍；planned change 中「不再要求同名标题」针对场景流程，移除既有行为会让单篇作品失去提示
+  scenes-only-root-method:
+    decision: 只按根单元选用的写作法映射场景 beats；根单元不用写作法、写作法不是结构类、根单元大纲缺失或有致命问题、或场景大纲缺失时不做场景核对
+    rationale: 场景契约的 beats 按定义引用故事根单元大纲的节（GLOSSARY 情节节拍）；与 curve 的节拍目标张力映射保持同一来源
+alternatives: []
+risks: []
