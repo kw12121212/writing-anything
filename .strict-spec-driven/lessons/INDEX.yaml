@@ -83,7 +83,7 @@ categories:
     lesson-65573d:
       title: 启发式检查的「已登记」判断必须按触发区间覆盖，不能按句子包含子串
       status: active
-      occurrences: 1
+      occurrences: 2
       path: .strict-spec-driven/lessons/coding/lesson-65573d.yaml
     lesson-660304:
       title: 按错误码挑选下一步命令，会漏掉保留原错误码的阻塞项
@@ -328,3 +328,8 @@ categories:
       status: active
       occurrences: 1
       path: .strict-spec-driven/lessons/testing/internal-cli-null-1ddaed.yaml
+    lesson-b17b72:
+      title: 零提示类完成标准要先实测现状，矩阵断言文字不会被测试强制
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/testing/lesson-b17b72.yaml

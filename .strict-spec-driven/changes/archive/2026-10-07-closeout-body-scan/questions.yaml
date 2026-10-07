@@ -1,0 +1,48 @@
+schema: strict-spec-driven/question-list/v1
+schema_version: 1
+artifact_type: question_list
+schema_file: templates/strict-spec-driven/schemas/question-list.yaml
+change: closeout-body-scan
+open: []
+resolved:
+  - id: name-heuristic
+    question: 正文专有名词扫描采用什么确定性规则？
+    context: 里程碑 intake 问题 name-heuristic 已定边界：确定性、只报 warning、可 --waive、不调用模型；验收为测试夹具的正文新人名被提示且 novel-e2e 语料零误报，具体规则在变更设计阶段按该验收选定。影响：扫描实现、spec delta 与测试。
+    answer: 按路线图授权在设计阶段选定：命名引入、对话前导、称谓三类上下文模式 + 常见姓氏表 + 虚词排除，已解析判定见 design.yaml；原型在 novel-e2e 九场景与作者直编稿上零误报，以回归测试固定。
+    status: resolved
+    answered_by: roadmap
+  - id: requirement-problem
+    question: 今天具体出了什么问题，对谁？
+    context: 证据：里程碑 novel-guarantee-hardening details「closeout.go scan 只读大纲字段（specs/closeout.yaml 同样写死）」与 scope.in 第一条。影响 proposal 范围。
+    answer: 写长篇小说的作者与接入的 Agent：场景正文里新出现、但大纲未声明且未登记进设定集的人名，写后收口不会提示，设定集漏抽后上下文包与连续性审查看不到这些人物
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-outcome
+    question: 什么可观察的变化证明问题解决了？
+    context: 证据：里程碑 done_criteria「测试夹具场景正文出现未登记、大纲未声明的人名时，wa-cli scene close-out 输出 closeout.suspected-name 警告；--waive 后不再提示；novel-e2e 语料全部场景收口时该警告为零」与 planned change details 的测试列表。影响 spec delta 与测试。
+    answer: 正文出现未登记、大纲未声明的人名时 wa-cli scene close-out 输出 warning 级 closeout.suspected-name；已登记别名不提示；--waive 后不再提示；novel-e2e 语料全部场景收口时该警告为零
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-trigger
+    question: 为什么现在做？
+    context: 证据：里程碑 notes「来源：2026-10-07 路线图里程碑审计 P1 项」；planned change depends_on 为空。影响优先级。
+    answer: 2026-10-07 里程碑审计把收口只扫大纲列为长篇保证与已交付完成标准不一致的 P1 项，本变更无未满足依赖
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-non-goals
+    question: 哪些明确不做？
+    context: 证据：planned change details「不阻塞收口」「沿用 closeout.suspected-name 警告与 canon add、--waive 两条 next 命令」，里程碑 scope.out「任何模型调用」。影响 proposal 范围。
+    answer: 不调用模型或分词库；不让疑似专有名词阻塞收口或验收；不改错误码、next 命令、closeout.yaml 与收口输入 Schema；不做里程碑其他计划变更
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-interpretation
+    question: 「正文扫描」应如何理解？
+    context: 证据：planned change details「读取场景 draft.md 去注释正文，用确定性规则找出未解析到设定集称谓或别名、且不在豁免名单中的疑似专有名词，与大纲来源合并去重」。影响 spec delta 与实现。
+    answer: 扫描对象为去掉 HTML 注释后的 draft.md 正文；候选以确定性规则提取，按设定集 name 与别名解析，排除 waived，与大纲候选按取值去重（大纲来源优先），只报 warning
+    status: resolved
+    kind: requirement
+    answered_by: roadmap

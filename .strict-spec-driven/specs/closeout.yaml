@@ -36,7 +36,7 @@ requirements:
         - THEN: checked 含该 closeout.yaml，diagnostics 中有一条错误码为 artifact.not-found、path 为该文件的诊断，退出码为 1
   closeout-submit:
     strength: MUST
-    statement: wa-cli scene close-out <unit> [--file <路径>] [--replace] 必须从 --file（相对 --dir 或为绝对路径）或标准输入读取收口输入并完成场景的写后收口。输入为 YAML，含可选的 canon（新增设定条目数组，每项含 type、非空 text、可选 name、aliases、sources 与 id）、state_changes（状态变化提交数组，每项含 entry、非空 state、可选 contract（对应契约节内 state_changes 的 id）与 id）、knowledge（知情提交数组，每项含 entry、character 与可选 id）、plants（计划外埋设数组，每项含非空 text、recover_at 与可选 id）、recovers（回收的既有伏笔 id 数组）、events（确认产生的事件 id 数组）与 waived（豁免的疑似专有名词文本数组）七节，缺省视为空。命令必须先完成全部预检再写入：<unit> 引用的单元不存在时报告 unit.not-found，存在但类型不为 scene 时报告 scene.not-scene（message 含实际类型）；单元目录下没有 draft.md 时报告 draft.not-found；输入不符合收口输入的 Schema 或无法解析时报告 artifact.schema-violation 或 artifact.parse-error（field 为输入中的位置，path 为空）；目标台账（canon.yaml、state.yaml、knowledge.yaml、threads.yaml）已有 Schema、id 重复或确认记录不完整等既有诊断，或其追加点途经 YAML 锚点、别名或合并键时报告其诊断；closeout.yaml 已存在且未给出 --replace 时报告 closeout.already-closed（next 含 wa-cli help scene close-out --json）。预检还必须按写入后状态对照场景契约（合并该场景 outline.yaml 全部节的契约字段）：契约每个 state_changes 的节内 id 必须有载荷 state_changes 中 contract 等于它的提交，否则报告 closeout.missing-state-change（message 含契约 id 与要求的变化文本）；契约每个 recovers 伏笔 id 在写入后必须是 threads.yaml 中 status 为 paid 且 recovered_in 为该场景的条目，否则报告 closeout.missing-recovery；契约每个 plants 伏笔 id 在写入后必须是 planted_in 为该场景的条目，否则报告 closeout.missing-plant；载荷 events 必须恰好覆盖契约 events 声明的每个 id（缺漏报告 closeout.missing-event，含契约外 id 报告 closeout.unknown-event，message 含该 id）。这些诊断的 next 包含 wa-cli help scene close-out --json 与 wa-cli help scene contract --json。任一预检或对照失败时不得写入或创建任何文件，退出码为 1。全部通过时按 canon add、state propose、knowledge propose、threads add 与 threads set --status paid --recovered-in <该场景> 的既有语义与领域校验依次写入各台账（id 缺省沿用各自生成规则，追加保留其他内容与 YAML 注释），随后整体写出单元目录下的 closeout.yaml：draft_sha256 为当前 draft.md 原始字节的 SHA-256，canon、knowledge、plants、recovers 记录本次写入的条目 id，state 记录每条提交的 id 与 contract 关联（无关联时省略 contract），events 与 waived 为载荷取值；--replace 整体替换既有 closeout.yaml，不清理也不撤销已写入的台账条目。changedPaths 为本次实际写入的台账文件与 closeout.yaml，--json 输出的 closeout 字段含 unit、path、draftSha256、canon、state、knowledge、plants、recovers（各为 id 数组）、events、waived 与 suspected（疑似专有名词名单，见下），退出码为 0。写入成功的同时必须执行疑似专有名词扫描并以 warning 报告：取该场景大纲各节的 characters 取值、pov 与 location 文本为候选，与写入后 canon 条目的 name 与别名（Alias）完全相等匹配（同 recall 的解析规则），未命中且不在 waived 中的取值逐条报告 warning 级 closeout.suspected-name（message 含该取值与所在字段并说明补录或豁免的做法，next 含 wa-cli help canon add --json 与 wa-cli help scene close-out --json）；扫描不改变退出码。不加 --json 时以人读文本输出收口结果与疑似名单。
+    statement: wa-cli scene close-out <unit> [--file <路径>] [--replace] 必须从 --file（相对 --dir 或为绝对路径）或标准输入读取收口输入并完成场景的写后收口。输入为 YAML，含可选的 canon（新增设定条目数组，每项含 type、非空 text、可选 name、aliases、sources 与 id）、state_changes（状态变化提交数组，每项含 entry、非空 state、可选 contract（对应契约节内 state_changes 的 id）与 id）、knowledge（知情提交数组，每项含 entry、character 与可选 id）、plants（计划外埋设数组，每项含非空 text、recover_at 与可选 id）、recovers（回收的既有伏笔 id 数组）、events（确认产生的事件 id 数组）与 waived（豁免的疑似专有名词文本数组）七节，缺省视为空。命令必须先完成全部预检再写入：<unit> 引用的单元不存在时报告 unit.not-found，存在但类型不为 scene 时报告 scene.not-scene（message 含实际类型）；单元目录下没有 draft.md 时报告 draft.not-found；输入不符合收口输入的 Schema 或无法解析时报告 artifact.schema-violation 或 artifact.parse-error（field 为输入中的位置，path 为空）；目标台账（canon.yaml、state.yaml、knowledge.yaml、threads.yaml）已有 Schema、id 重复或确认记录不完整等既有诊断，或其追加点途经 YAML 锚点、别名或合并键时报告其诊断；closeout.yaml 已存在且未给出 --replace 时报告 closeout.already-closed（next 含 wa-cli help scene close-out --json）。预检还必须按写入后状态对照场景契约（合并该场景 outline.yaml 全部节的契约字段）：契约每个 state_changes 的节内 id 必须有载荷 state_changes 中 contract 等于它的提交，否则报告 closeout.missing-state-change（message 含契约 id 与要求的变化文本）；契约每个 recovers 伏笔 id 在写入后必须是 threads.yaml 中 status 为 paid 且 recovered_in 为该场景的条目，否则报告 closeout.missing-recovery；契约每个 plants 伏笔 id 在写入后必须是 planted_in 为该场景的条目，否则报告 closeout.missing-plant；载荷 events 必须恰好覆盖契约 events 声明的每个 id（缺漏报告 closeout.missing-event，含契约外 id 报告 closeout.unknown-event，message 含该 id）。这些诊断的 next 包含 wa-cli help scene close-out --json 与 wa-cli help scene contract --json。任一预检或对照失败时不得写入或创建任何文件，退出码为 1。全部通过时按 canon add、state propose、knowledge propose、threads add 与 threads set --status paid --recovered-in <该场景> 的既有语义与领域校验依次写入各台账（id 缺省沿用各自生成规则，追加保留其他内容与 YAML 注释），随后整体写出单元目录下的 closeout.yaml：draft_sha256 为当前 draft.md 原始字节的 SHA-256，canon、knowledge、plants、recovers 记录本次写入的条目 id，state 记录每条提交的 id 与 contract 关联（无关联时省略 contract），events 与 waived 为载荷取值；--replace 整体替换既有 closeout.yaml，不清理也不撤销已写入的台账条目。changedPaths 为本次实际写入的台账文件与 closeout.yaml，--json 输出的 closeout 字段含 unit、path、draftSha256、canon、state、knowledge、plants、recovers（各为 id 数组）、events、waived 与 suspected（疑似专有名词名单，见下），退出码为 0。写入成功的同时必须执行疑似专有名词扫描并以 warning 报告，候选有两个来源：一是该场景大纲各节的 characters 取值、pov 与 location 文本，与写入后 canon 条目的 name 与别名（Alias）完全相等匹配（同 recall 的解析规则）；二是正文扫描（见 closeout-body-scan）。未解析且不在 waived 中的取值按取值去重（大纲来源在前，正文来源按首次出现顺序在后），逐条报告 warning 级 closeout.suspected-name（message 含该取值与所在字段或正文并说明补录或豁免的做法，next 含 wa-cli help canon add --json 与 wa-cli help scene close-out --json）；suspected 每项含 name 与 source（characters、pov、location 或 draft）；扫描不改变退出码。不加 --json 时以人读文本输出收口结果与疑似名单。
     scenarios:
       submit-full:
         - GIVEN: 'novel 作品 my-novel 的场景 s1 有正文，其大纲节声明 state_changes [{id: sc-1, text: 精灵交出灯芯}]、plants [fs-1]（threads.yaml 已有 planted_in 为 s1 的 fs-1）、recovers [f-1] 与 events [ev-2]，canon.yaml 有条目 canon-1，threads.yaml 的 f-1 为 open'
@@ -106,3 +106,43 @@ requirements:
         - GIVEN: 场景 s1 没有 closeout.yaml
         - WHEN: 运行 wa-cli scene close-out my-novel/s1 --waive 精灵 --dir D --json
         - THEN: 报告 closeout.not-closed，没有任何文件被创建或修改，退出码为 1
+  closeout-body-scan:
+    strength: MUST
+    statement: 写后收口的疑似专有名词扫描（scene close-out 提交与 --waive 共用）必须同时扫描场景正文：读取单元目录下的 draft.md，去掉 HTML 注释（<!-- 与 --> 之间的内容，含作者批注与单处豁免）后，以文首、行首、空白、标点或符号为边界，在以下位置提取候选——命名引入：「叫」「名叫」「叫做」（「叫」前不是大、喊、惊、尖、呼、哭、嚎、狂、怪、乱等表示喊叫的字）之后紧跟、以常见姓氏开头、姓氏之后有 1 至 2 个汉字且其后为边界或文末的词；对话前导：位于边界之后，以常见姓氏开头、姓氏之后至少 1 字、总长不超过 4 字，紧跟「说」「问」「喊」「答」或其后为边界的「道」，且在去注释正文中至少出现两次的词；称谓：位于边界之后的「常见姓氏 + 称谓词（师傅、老板、先生、小姐、太太、老师、大爷、大妈、阿姨、大哥、大姐、叔叔、婶子、叔、婶、伯）」（也常作介词的姓氏字向、于除外；称谓命中时同一位置不再按对话前导取词），或其后为边界、文末或「说」「问」「道」的「老或小 + 常见姓氏」。命名引入与对话前导中姓氏之后的字含常见虚词、副词、代词、动作或方位字（如 声、也、都、就、才、还、再、是、在、了、不、没、他、她、我、你、这、那、笑、轻、低、时、前、后、上、下）时不取。候选在以下情况下视为已解析、不报告：与写入后设定集任一条目的 name 或别名完全相等；以设定集中至少 2 字的 name 或别名开头；称谓类候选的姓氏是某个人物（character）条目 name 的开头（单姓为首字，复姓为前两字）；在 waived 中；或已作为大纲来源报告。其余候选按首次出现顺序去重，以 source 为 draft 报告 warning 级 closeout.suspected-name（message 含该取值并注明来自正文，next 同 closeout-submit），不改变退出码与写入行为。--waive 只读取正文用于重算、不写正文，正文缺失或无法读取时只按大纲扫描且不报告读取问题。扫描是确定性的，不调用模型。
+    scenarios:
+      body-new-name:
+        - GIVEN: novel 作品 my-novel 的场景 s1 大纲声明 characters [守灯人]，canon.yaml 只有 name 为守灯人的人物条目，正文含「赵铁柱说：灯灭了。」与「赵铁柱问：谁在那儿？」，载荷不含 waived
+        - WHEN: 运行 wa-cli scene close-out my-novel/s1 --dir D --json，标准输入为空载荷
+        - THEN: diagnostics 中有一条 severity 为 warning、错误码为 closeout.suspected-name、message 含赵铁柱的诊断，closeout.suspected 含 name 为赵铁柱、source 为 draft 的项，收口照常完成，退出码为 0
+      body-registered-name:
+        - GIVEN: canon.yaml 有 name 为林晚、别名晚晚的人物条目与 name 为陈守拙的人物条目，正文含「林晚说」「林晚没再问」「我叫林晚。」「晚晚，回来。」与「陈师傅，劳你」
+        - WHEN: 运行 wa-cli scene close-out my-novel/s1 --dir D --json，标准输入为空载荷
+        - THEN: 没有 closeout.suspected-name 诊断，退出码为 0
+      body-waived:
+        - GIVEN: 场景 s1 已收口，收口时正文中的赵铁柱被提示为疑似专有名词
+        - WHEN: 运行 wa-cli scene close-out my-novel/s1 --waive 赵铁柱 --dir D --json
+        - THEN: closeout.yaml 的 waived 含赵铁柱，输出的 suspected 不再含赵铁柱，退出码为 0
+      body-comment-ignored:
+        - GIVEN: '正文中「我叫赵铁柱。」只出现在作者批注 <!-- @me: 我叫赵铁柱。 --> 中'
+        - WHEN: 运行 wa-cli scene close-out my-novel/s1 --dir D --json，标准输入为空载荷
+        - THEN: 没有 message 含赵铁柱的 closeout.suspected-name 诊断，退出码为 0
+      body-outline-dedupe:
+        - GIVEN: 场景 s1 大纲声明 characters [赵铁柱]，canon.yaml 没有赵铁柱，正文含「我叫赵铁柱。」
+        - WHEN: 运行 wa-cli scene close-out my-novel/s1 --dir D --json，标准输入为空载荷
+        - THEN: message 含赵铁柱的 closeout.suspected-name 诊断只有一条，suspected 中该项的 source 为 characters，退出码为 0
+      body-common-phrase:
+        - GIVEN: 正文含「，高声说」「方才说」与「他说」，canon.yaml 没有相关条目
+        - WHEN: 运行 wa-cli scene close-out my-novel/s1 --dir D --json，标准输入为空载荷
+        - THEN: 没有 closeout.suspected-name 诊断，退出码为 0
+      corpus-zero:
+        - GIVEN: novel E2E 语料《停在四点十七分》按命令脚本重放
+        - WHEN: 九个场景依次运行 wa-cli scene close-out --json
+        - THEN: 每次收口输出的 suspected 中都没有 source 为 draft 的项（大纲 location 未登记产生的提示不属于正文扫描）
+      body-single-dialogue:
+        - GIVEN: 正文只含一次「赵铁柱说：灯灭了。」，canon.yaml 没有赵铁柱
+        - WHEN: 运行 wa-cli scene close-out my-novel/s1 --dir D --json，标准输入为空载荷
+        - THEN: 没有 message 含赵铁柱的 closeout.suspected-name 诊断（对话前导候选须至少出现两次），退出码为 0
+      body-honorific-speech:
+        - GIVEN: canon.yaml 有 name 为陈守拙的人物条目，正文含「陈师傅说：走。」与「，向老师请教」
+        - WHEN: 运行 wa-cli scene close-out my-novel/s1 --dir D --json，标准输入为空载荷
+        - THEN: 没有 closeout.suspected-name 诊断，退出码为 0

@@ -1,0 +1,31 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: closeout-body-scan
+approach:
+  - 候选在以下情况下视为已解析、不报告：与写后状态设定集任一条目的 name 或别名完全相等；以设定集中长度不少于 2 字的 name 或别名开头（对话前导跨入状语，如「林晚没再问」）；称谓类候选的姓氏是某个 character 类型条目 name 的首字（如「陈师傅」对应陈守拙）；在 waived 中；已由大纲扫描报告。剩余候选按首次出现顺序去重，source 记为 draft，并接在大纲候选之后；Submit 与 Waive 共用同一个 scan，因此 --waive 输出的 suspected 也按写后状态重算正文来源。命令层把 draft 来源显示为「正文」。
+  - 在 internal/closeout/bodyscan.go 中新增正文扫描：读取场景 draft.md，按 (?s)<!--.*?--> 去掉 HTML 注释（含作者批注与单处豁免），以文首、空白、标点或符号为边界，在剩余正文上运行三类确定性模式提取候选：命名引入（叫、名叫、叫做 + 常见姓氏 + 1 至 2 个汉字，其后为边界或文末；叫前为大、喊、惊、尖等喊叫字时不取）；对话前导（边界 + 常见姓氏开头、总长不超过 4 字 + 说、问、喊、答或其后为边界的道，且该词在正文中至少出现两次，次数以一遍滑窗统计）；称谓（边界 + 常见姓氏 + 称谓词，向、于除外，称谓命中时同一位置不再按对话前导取词；或边界 + 老、小 + 常见姓氏，其后为边界或说、问、道）。常见姓氏为内置的固定单字姓氏表与少量复姓。
+  - 命名引入与对话前导的名字部分（姓氏之后的字）含内置的常见虚词、副词、代词、动作与方位字时不取为候选，用以排除「高声说」「方才说」一类短语。Waive 读取正文失败时只按大纲扫描。
+  - 对话前导的出现次数按候选词在去注释正文中的全部出现统计（不限于对话前导位置）。
+decisions:
+  precision-first-patterns:
+    decision: 采用高精度的上下文模式（命名引入、对话前导、称谓）而不是按出现频次统计未登记的 2 至 4 字词
+    rationale: 中文没有大小写与分词边界，wa-cli 不调用模型也不内置大词典；按频次统计会把大量普通词语当作专名，违背 novel-e2e 语料零误报的验收。上下文模式只在人名高度可能出现的位置取词，原型在语料九个场景及作者直编稿上零误报，同时能抓到对话、介绍与称呼中出现的新人名
+  surname-resolution:
+    decision: 称谓类候选（X师傅、老X 等）只要姓氏与某个人物（character）条目 name 的首字相同即视为已解析
+    rationale: 称谓是对已登记人物的常见指代，语料中「韩伯」「陈师傅」等称呼都指向已登记人物；只按完全相等匹配会对每种称呼变体都要求登记别名，误报不可接受；同姓新人物的称谓被漏报是可接受的召回损失，因为只报 warning
+  reuse-warning-contract:
+    decision: 正文来源沿用 closeout.suspected-name、warning 级别、既有 next 命令与 waived 名单，Suspected.source 新增取值 draft
+    rationale: 路线图要求沿用既有警告与两条 next 命令且不阻塞收口；复用同一错误码让 Agent 的处理流程（补录或豁免）不变，closeout.yaml 与收口输入 Schema 无需修改
+  dialogue-repeat:
+    decision: 对话前导候选须在去注释正文中至少出现两次；道须其后为边界
+    rationale: 独立审查发现「白天说好的」「金色大道」「高兴道：」等一次性短语会被对话前导误取；新人物在正文中通常不止出现一次，要求重复出现能以很小的召回损失排除这些普通短语，而命名引入与称谓两类上下文本身精度较高，保留单次即报
+alternatives:
+  - option: 按出现两次以上的未登记 2 至 4 字词提示
+    reason: 没有分词与词典时普通词语（如「街上」「抽屉」）大量命中，语料误报无法归零
+  - option: 复用 continuity.unknown-character 的出场人物检查
+    reason: 该检查只比对大纲声明的出场人物，不读正文，无法发现正文中新出现的人名
+risks:
+  - 启发式召回有限：不在常见姓氏表中的人名、无称谓与对话的叙述性提及不会被提示；以 warning 定位、技能提示 Agent 仍需自查新设定来缓解
+  - 常见姓氏字也是普通字（如高、方、白），对话前导模式可能命中「高声说」一类短语；以边界要求、长度上限与语料零误报回归测试约束
