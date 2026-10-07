@@ -61,7 +61,7 @@ func TestSkillCommandsExist(t *testing.T) {
 
 func TestSkillsCommands(t *testing.T) {
 	code, list := runJSON(t, "skills", "list", "--json")
-	if code != 0 || len(list["skills"].([]any)) != 9 || len(list["skills"].([]any)[0].(map[string]any)["commands"].([]any)) == 0 {
+	if code != 0 || len(list["skills"].([]any)) != 12 || len(list["skills"].([]any)[0].(map[string]any)["commands"].([]any)) == 0 {
 		t.Fatalf("skills list: %v", list)
 	}
 	dir := t.TempDir()
@@ -73,7 +73,7 @@ func TestSkillsCommands(t *testing.T) {
 	if err := json.Unmarshal([]byte(res.stdout), &out); err != nil {
 		t.Fatal(err)
 	}
-	if code != 0 || len(out.Skills) != 9 || out.Skills[0]["path"] != ".agents/skills/wa-auto/SKILL.md" || len(res.ChangedPaths) != 20 {
+	if code != 0 || len(out.Skills) != 12 || out.Skills[0]["path"] != ".agents/skills/wa-assemble/SKILL.md" || len(res.ChangedPaths) != 26 {
 		t.Fatalf("install codex: code = %d, %+v %v", code, out.Skills, res.ChangedPaths)
 	}
 	if !strings.Contains(readFile(t, filepath.Join(dir, ".agents", "skills", "wa-auto", "SKILL.md")), "name: wa-auto") {
@@ -108,6 +108,44 @@ func TestSkillsCommands(t *testing.T) {
 	for _, args := range [][]string{{"skills", "list"}, {"skills", "install", "--agent", "claude-code", "--dir", dir}} {
 		if code, stdout, _ := run(t, args...); code != 0 || stdout == "" {
 			t.Errorf("%v text: %q", args, stdout)
+		}
+	}
+}
+
+// 内置技能覆盖长篇生命周期：关键命令都至少被一个技能引用，且都是 help --json 登记的命令；wa-auto 按文体分出 novel 路径
+// 并说明交接记录的写入与接续（skills/novel-skill-coverage）。
+func TestNovelSkillCoverage(t *testing.T) {
+	_, help := runJSON(t, "help", "--json")
+	registered := map[string]bool{}
+	for _, c := range help["commands"].([]any) {
+		registered[c.(map[string]any)["name"].(string)] = true
+	}
+	_, list := runJSON(t, "skills", "list", "--json")
+	referenced := map[string][]string{}
+	for _, sk := range list["skills"].([]any) {
+		m := sk.(map[string]any)
+		for _, c := range m["commands"].([]any) {
+			referenced[c.(string)] = append(referenced[c.(string)], m["name"].(string))
+		}
+	}
+	for _, cmd := range []string{"scene contract", "scene close-out", "state confirm", "knowledge confirm", "continuity", "review plan",
+		"review submit", "impact mark", "volume checkpoint", "volume confirm", "assemble", "handoff write"} {
+		if !registered[cmd] {
+			t.Errorf("novel command %q is not in wa-cli help --json", cmd)
+		}
+		if len(referenced[cmd]) == 0 {
+			t.Errorf("novel command %q is not referenced by any built-in skill", cmd)
+		}
+	}
+	var auto string
+	for _, s := range skills.All() {
+		if s.Name == "wa-auto" {
+			auto = string(s.Content)
+		}
+	}
+	for _, want := range []string{"小说路径（novel）", "wa-plan", "wa-scene", "wa-continuity", "wa-assemble", "wa-cli handoff write", "wa-cli handoff show", "`handoff`"} {
+		if !strings.Contains(auto, want) {
+			t.Errorf("wa-auto does not mention %q", want)
 		}
 	}
 }

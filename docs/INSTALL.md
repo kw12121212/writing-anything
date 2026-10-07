@@ -64,7 +64,7 @@ wa-cli version
 
 ## 安装技能（Skill）
 
-wa-cli 内置一组技能，告诉 Agent 何时调用哪些 wa-cli 命令、何时停下来询问作者：wa-init、wa-brief、wa-outline、wa-draft、wa-review、wa-revise、wa-publish 与 wa-auto。在项目目录中运行：
+wa-cli 内置一组技能，告诉 Agent 何时调用哪些 wa-cli 命令、何时停下来询问作者：文章与通用流程为 wa-init、wa-brief、wa-outline、wa-draft、wa-review、wa-revise、wa-publish 与 wa-auto，长篇（novel）另有 wa-plan（规划）、wa-scene（逐场景推进）、wa-continuity（连续性审查与影响传播）与 wa-assemble（卷末检查点、组稿与交接记录）。在项目目录中运行：
 
 ```sh
 wa-cli skills install --agent claude-code   # 写入 .claude/skills/<技能>/SKILL.md

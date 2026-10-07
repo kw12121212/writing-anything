@@ -7,7 +7,7 @@ description: 请作者确认验收，推进单元并导出 Markdown 或公众号
 
 ## 步骤
 
-1. 运行 `wa-cli review show <单元> --json` 查看审稿（Review）与验收关卡，确认 `gate.ready` 为 true；不为 true 时按 `gate.blockers` 回到 wa-revise。
+1. 运行 `wa-cli review show <单元> --json` 查看审稿（Review）与验收关卡，确认 `gate.ready` 为 true；不为 true 时按 `gate.blockers` 回到 wa-revise。长篇（novel）场景的连续性发现转到 wa-continuity，未收口、收口过期或收口的状态与知情提议待确认（closeout.*）转到 wa-scene，更早部的卷末检查点（volume.*）转到 wa-assemble。
 2. 把审稿结论、修订情况与成稿交给作者确认。优先请作者自己在本地阅读页（Reading View）上确认：运行 `wa-cli preview <作品> --serve --json`，把首行输出中的 preview.url 交给作者在浏览器中打开，作者在「待作者确认」区填写原话摘要并确认，记录的确认渠道（Confirmation Channel）为 preview。作者在对话中同意时，也可以用作者的原话作为确认记录（Confirmation Record）运行 `wa-cli accept <单元> --confirmed-by-author --confirmation <作者原话摘要> --json`，此时渠道记为 cli。
 3. 运行 `wa-cli advance <单元> --json` 把单元推进到 done。
    作品属于系列（Series，见 `wa-cli series show <系列> --json`）时，验收后为作品撰写摘要（Summary），用 `wa-cli summary set <作品 id> --text <摘要> --json` 为作品的根单元写入；字数范围见诊断，后面的作品写作时会在上下文包中看到它。摘要只写已经验收的内容，正文之后被修改时摘要会过期，需要重新撰写。
