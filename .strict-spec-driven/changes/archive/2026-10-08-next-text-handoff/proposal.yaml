@@ -1,0 +1,32 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: next-text-handoff
+  status: proposed
+summary:
+  what:
+    - wa-cli next 文本模式（不加 --json）在输出顶部显示一次最近一条交接记录（Handoff Note）：id、写入时间、未完成事项（todo）与作者新指示（instructions），内容与 --json 的 handoff 字段一致
+    - wa-cli next --json 每个单元条目的 handoff 字段在 id 与 todo 之外新增 instructions 数组（作者新指示，永不为 null），使文本与 JSON 承载同样的交接信息
+  why:
+    - 2026-10-07 路线图里程碑审计：next 文本模式不显示交接记录（仅 --json 有 handoff 字段），作者或以文本方式查看的 Agent 在新会话中看不到上一次会话的未完成事项与作者指示
+    - planned change next-text-handoff 要求 next 文本输出在顶部显示最近一条交接记录的 id、未完成事项与作者新指示，与 --json 的 handoff 字段一致
+scope:
+  in:
+    - internal/cli/units.go：handoffRef 新增 instructions；runNext 文本渲染在有步骤时于顶部输出最近交接记录
+    - handoff 主规格 handoff-show 需求的增量（next 文本模式显示交接记录、JSON handoff 含 instructions）
+    - wa-auto、wa-scene、wa-assemble 技能中关于 next handoff 字段只含 id 与 todo 的说明同步为含 instructions
+    - 单元测试：写入交接后断言 next 文本输出含 id、todo 与 instructions，无交接时文本不含交接段；JSON handoff 含 instructions
+    - novel-e2e 语料 commands.yaml 在第一部 handoff write 之后补一次 next 断言，并同步 matrix.yaml 的 T-HANDOFF-01 证据
+  out:
+    - 新增命令或参数；handoff show、handoff write 的行为与输出
+    - next 的 blockers、action、commands、feedback、progress 与 pendingAuthorReviews 计算规则
+    - 里程碑中其他计划变更（节拍位置、诊断下一步、Windows 安装）
+unchanged_behavior:
+  - wa-cli next --json 的其余字段与没有交接记录时 handoff 为 null 的行为不变
+  - 没有交接记录（含没有 handoffs.yaml 或文件不合法）时 next 文本输出与之前逐字一致
+  - wa-cli handoff show、handoff write、validate 的行为与输出不变
+roadmap:
+  milestone: usability-polish
+  planned_change: next-text-handoff

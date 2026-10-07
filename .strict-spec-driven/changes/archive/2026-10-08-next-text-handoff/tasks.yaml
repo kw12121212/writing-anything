@@ -1,0 +1,39 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: next-text-handoff
+sections:
+  Implementation:
+    json-instructions:
+      text: internal/cli/units.go：handoffRef 新增 instructions 数组（永不为 null），latestHandoff 填充
+      status: complete
+    text-handoff:
+      text: internal/cli/units.go：runNext 文本渲染在有步骤且有最近交接时，于顶部输出一次交接摘要（id、写入时间、未完成事项与作者新指示）
+      status: complete
+    skills-sync:
+      text: 同步 wa-auto、wa-scene、wa-assemble 技能中 next handoff 字段的说明（含 id、todo 与 instructions，文本模式顶部显示）
+      status: complete
+    e2e-next-step:
+      text: novel-e2e 语料 commands.yaml 在第一部 handoff write 之后补一次 next stopped-at-417 断言（stdout 含最近交接 id），同步 matrix.yaml 的 T-HANDOFF-01 证据
+      status: complete
+  Testing:
+    unit-tests:
+      text: 单元测试：写入交接后 next 文本输出含交接 id、todo 与 instructions；无交接时文本不含交接段；JSON handoff 含 instructions；novel 语料重放通过
+      status: complete
+      command: go test ./internal/cli/ -run 'Handoff|Next|NovelCorpus' -count=1
+    full-regression:
+      text: 完整回归（含覆盖率阈值 80%）
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    verify-change:
+      text: 运行 strict-spec-cli verify next-text-handoff，确认任务、增量规格与范围一致
+      status: complete
+      command: strict-spec-cli verify next-text-handoff
+    archive-ready:
+      text: 确认增量规格能合并进 handoff 主规格，归档后路线图 next-text-handoff 标记完成
+      status: complete
+testing_gates:
+  validation_task: full-regression
+  unit_test_task: unit-tests
