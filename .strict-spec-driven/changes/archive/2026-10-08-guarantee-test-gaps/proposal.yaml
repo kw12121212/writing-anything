@@ -1,0 +1,30 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: guarantee-test-gaps
+  status: proposed
+summary:
+  what:
+    - 补齐长篇保证类回归测试：因果冲突经连续性审查（Continuity Review）报告并阻塞验收的 CLI 与包内测试，使 continuity 包内因果分支与 toFinding 被执行，包内覆盖率提升到 80% 以上
+    - novel-e2e 语料负向注入：设定冲突注入改为已死人物出场（state propose/confirm 登记死亡后，后续出场场景由 wa-cli continuity 报告 continuity.dead-acting），不再留下作者钦定修改的待决决策；四类注入（设定冲突、知情违例、伏笔悬空、时间线倒置）都直接断言发现项 severity 为 error
+    - 修正 TestPackLearnConfirmReject 在规范包未启用时空转的「提议不影响规则」断言；新增 pack prefer 提议确认前不影响 config resolved 的测试；补 AIDA 缺段负向用例
+    - MCP 与 CLI 一致性测试：遍历命令注册表，对样例调用不改变工作区的只读命令，在新版（2026-07-28 带 _meta）与旧版会话（Legacy Session，initialize 握手）中逐字节比对 tool 输出与 CLI --json 标准输出
+    - 更新 novel-e2e 矩阵锚点：T-CONTRACT-02 增加起因引用尚未发生事件被拒绝的脚本断言，T-REVIEWPK-01 增加带断言的脚本锚点与预算测试锚点，新增秘密遮蔽（Secret Masking）矩阵条目
+  why:
+    - 2026-10-07 里程碑审计发现：continuity.go 因果冲突分支覆盖计数为 0；E2E 设定冲突注入断言的是 canon.author-pinned 写保护拒绝而非审查发现，且残留阻塞决策；注入只断言错误码不断言 error 级；TestPackLearnConfirmReject 在规范包未启用时断言恒真；MCP 与 CLI 一致性只比对单条命令；T-REVIEWPK-01、T-CONTRACT-02 只有无断言的存在性锚点。这些缺口让已交付的长篇保证无法被回归发现
+scope:
+  in:
+    - internal/continuity 包内测试：因果冲突（起因引用尚未发生或不存在的事件）转连续性发现项并阻塞 AcceptanceBlockers；EnsureWaivers/Blockers 等未覆盖路径
+    - internal/cli 测试：continuity 因果冲突阻塞 accept；novel_corpus_golden_test 负向注入改写与 severity 断言；learn_test 修正与 pack prefer 新测试；marketing_test AIDA 负向；mcp_test 只读命令一致性（新旧会话）
+    - novel-e2e 语料：commands.yaml 增加起因被拒绝的负向步骤与 review plan 的 stdout 断言；matrix.yaml 更新 T-NEG-01、T-CONTRACT-02、T-REVIEWPK-01 并新增秘密遮蔽条目；matrix 测试的 structure 锚点改为按源码中真实存在的测试函数校验
+  out:
+    - 任何产品行为、CLI 输出、错误码或规格变更（本变更只加测试与测试夹具）
+    - 里程碑之外的新特性；agent-dogfood 与发布
+unchanged_behavior:
+  - wa-cli 全部命令的行为、输出与诊断不变；主规格不变
+  - novel-e2e 黄金文件内容不变（新增负向步骤不写入任何产物）
+roadmap:
+  milestone: novel-guarantee-hardening
+  planned_change: guarantee-test-gaps

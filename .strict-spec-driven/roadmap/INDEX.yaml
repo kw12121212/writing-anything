@@ -10,7 +10,7 @@ milestones:
   novel-guarantee-hardening:
     title: 长篇保证加固（Novel Guarantee Hardening）
     path: roadmap/milestones/novel-guarantee-hardening.yaml
-    status: proposed
+    status: complete
   usability-polish:
     title: 体验收尾（Usability Polish）
     path: roadmap/milestones/usability-polish.yaml

@@ -343,3 +343,8 @@ categories:
       status: active
       occurrences: 1
       path: .strict-spec-driven/lessons/testing/io-pipe-mcp-a460e7.yaml
+    events-2ef336:
+      title: 场景大纲一旦声明 events 等扩展契约字段，验收就要求收口记录
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/testing/events-2ef336.yaml

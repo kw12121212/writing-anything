@@ -55,7 +55,7 @@ risks:
   - 多协议版本兼容扩大 MCP 维护面，需按版本隔离握手逻辑
   - 揭示词遮蔽只覆盖已登记的揭示词，人物卡用其他措辞写出秘密时仍会泄露；以 validate 对无揭示词知情事件的警告与技能提示缓解，需严格结构化的秘密可登记为独立设定条目
   - 文风隔离与揭示词补登会改变 novel-e2e 黄金文件，需人工复核差异
-status: proposed
+status: complete
 notes:
   - 来源：2026-10-07 路线图里程碑审计 P1 项；语料黄金上下文中陈守拙人物卡含溺水真相、norms.style 出现「结论先行」文章文风，是本里程碑的复现依据
   - 收口、上下文等改变 Agent 可见流程的计划变更，须同步更新 core-gate-hardening 落地的长篇技能文字，TestSkillCommandsExist 保持通过

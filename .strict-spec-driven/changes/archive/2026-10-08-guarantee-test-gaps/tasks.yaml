@@ -1,0 +1,49 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: guarantee-test-gaps
+sections:
+  Implementation:
+    causality-tests:
+      text: continuity 包内与 CLI 测试：场景起因引用尚未发生/不存在的事件时 wa-cli continuity 报告 error 级发现（含 scene.event-not-yet-happened 原码）并阻塞 accept，修正后通过；补 EnsureWaivers/Blockers 等路径，continuity 包内覆盖率高于 80%
+      status: complete
+    corpus-injections:
+      text: novel_corpus_golden_test：设定冲突注入改为 state propose/confirm 韩江死亡 → ch3-s3 continuity.dead-acting，state reject 后全绿，不残留待决决策；四类注入直接断言 severity 为 error；矩阵 T-NEG-01 改指 continuity.dead-acting
+      status: complete
+    pack-proposal-tests:
+      text: learn_test：TestPackLearnConfirmReject 先确认 baseline 并启用规范包，再断言未确认条目不进入 config resolved；新增 pack prefer 提议确认前不影响、确认后进入 config resolved 的测试
+      status: complete
+    aida-negative:
+      text: marketing_test：AIDA 写作法下大纲缺 action 章节时 validate 报告 outline.missing-method-part，补齐后消失
+      status: complete
+    mcp-readonly-parity:
+      text: mcp_test：遍历命令注册表的只读命令（样例调用前后工作区不变），在新版请求与旧版会话中 tool 输出逐字节等于 CLI --json 标准输出，工作区仍不变；断言只读命令数量下限与已知只读命令被识别
+      status: complete
+    matrix-anchors:
+      text: commands.yaml 增加 ch1-s2 起因引用尚未发生事件被拒绝的负向步骤，review plan 步骤加 stdout 断言；matrix.yaml 更新 T-CONTRACT-02、T-REVIEWPK-01，新增秘密遮蔽条目；matrix 测试 structure 锚点从源码推导真实测试函数
+      status: complete
+  Testing:
+    unit-tests:
+      text: 受影响包测试通过
+      status: complete
+      command: go test ./internal/continuity/ ./internal/cli/
+    continuity-coverage:
+      text: continuity 与 reviewpacket 包内覆盖率不低于 80%
+      status: complete
+      command: go test -cover ./internal/continuity/ ./internal/reviewpacket/
+    full-regression:
+      text: 完整回归（含覆盖率阈值 80%）
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    verify-change:
+      text: strict-spec-cli verify guarantee-test-gaps 通过，任务全部完成
+      status: complete
+      command: strict-spec-cli verify guarantee-test-gaps
+    archive-ready:
+      text: 审查通过后归档；无规格增量，路线图计划变更标记完成
+      status: complete
+testing_gates:
+  validation_task: full-regression
+  unit_test_task: unit-tests

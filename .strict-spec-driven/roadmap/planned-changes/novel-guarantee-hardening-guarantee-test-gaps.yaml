@@ -5,7 +5,7 @@ schema_file: ../../templates/strict-spec-driven/schemas/planned-change.yaml
 planned_change:
   id: guarantee-test-gaps
   milestone: novel-guarantee-hardening
-status: planned
+status: complete
 summary: 补齐保证类回归测试：因果冲突阻塞、E2E 注入断言 error 级、提议不影响规则、AIDA 负向、MCP 与 CLI 一致性
 details: 新增因果冲突经 continuity 报告并阻塞 accept 的测试，使 continuity.go 因果分支被执行；novel-e2e 设定冲突注入改为让已死人物行动等由 wa-cli continuity 报告的场景冲突，并清理遗留待决决策；四类注入都直接断言 severity 为 error；修正 TestPackLearnConfirmReject 在规范包未启用时空转的断言，并补 pack prefer 提议确认前不影响 config resolved 的测试；补 AIDA 缺段负向用例；MCP 与 CLI 一致性测试遍历命令注册表中的只读命令逐字节比对（覆盖新版与旧版会话）；把 continuity 包内覆盖率提升到 80% 以上；更新 novel-e2e 矩阵锚点，使 T-REVIEWPK-01、T-CONTRACT-02 有实际断言，并为揭示词遮蔽新增矩阵条目。
 depends_on:
