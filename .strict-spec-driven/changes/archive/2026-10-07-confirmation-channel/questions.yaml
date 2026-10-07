@@ -1,0 +1,63 @@
+schema: strict-spec-driven/question-list/v1
+schema_version: 1
+artifact_type: question_list
+schema_file: templates/strict-spec-driven/schemas/question-list.yaml
+change: confirmation-channel
+open: []
+resolved:
+  - id: author-confirmation-channel
+    question: strict 关卡下作者确认必须经由哪种渠道？是否拒绝 cli 渠道？
+    context: 影响确认记录数据模型、阅读页交互范围与 strict 组稿门禁（proposal 范围、spec delta、实现与测试）。证据：里程碑 core-gate-hardening 的 intake_questions.author-confirmation 记录 2026-10-07 作者已定。
+    answer: 所有确认记录写明渠道（cli 或 preview）；阅读页提供待确认队列与确认操作；strict 下验收、钦定设定修改与卷末检查点经 cli 渠道的确认照常生效但标为待作者复核，组稿前须在阅读页批量复核；不拒绝 cli 渠道；文档写明这是可审计约束而非安全隔离
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: channel-record-scope
+    question: 哪些确认记录需要渠道字段？
+    context: 影响 Schema、写入函数与测试范围（spec delta、实现）。证据：planned change confirmation-channel 的 details 与里程碑 done_criteria 逐项列出验收、决策、规划步骤、状态与知情、卷末检查点、钦定设定修改。
+    answer: 按 planned change 列出的六类：验收、决策、规划步骤、状态变更提议、知情事件、卷末检查点；钦定设定修改经授权决策记录渠道。其他确认类字段（影响传播、伏笔放弃、偏好学习等）不在本变更范围
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: review-record-channel
+    question: 阅读页批量复核写入的复核记录用什么渠道、作者是否需要再填原话？
+    context: 影响复核记录 Schema 与阅读页交互（spec delta、实现）。证据：planned change details「阅读页提供批量复核操作，写入复核记录（channel 为 preview）」，未要求复核另填原话。
+    answer: 复核记录 channel 固定为 preview，记录复核时间；批量复核只需作者在页面勾选并提交，不另填原话摘要
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-problem
+    question: What is concretely going wrong today, and for whom?
+    context: 'Why this is asked: the change is planned against a need, and the need lives only with the requester. A "problem" here means what someone does or suffers today — not a feature that is missing. If the answer names a button, a field, a page, or an endpoint, it is a solution, and the underlying problem is still unstated. What a sufficient answer contains: who is affected, what they do today instead, and how often. Worked example: "every Monday one person spends forty minutes copying order rows into a spreadsheet to send the weekly report". What it changes: this becomes the proposal''s why, and it decides whether the change is worth making.'
+    answer: 今天 --confirmed-by-author 与 --confirmation 只校验非空文本，Agent 可以在作者不知情时代填验收、钦定设定修改与卷末检查点等关键确认，事后无法区分哪些确认出自作者本人；受影响的是依赖确认记录把关的作者（来源：里程碑 core-gate-hardening goal 与 details 的审计证据）
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-outcome
+    question: What observable difference proves the problem is solved?
+    context: 'Why this is asked: without a success condition, nobody can tell afterwards whether the change worked. "Observable" means someone outside the system can check it without reading the code. What a sufficient answer contains: what a person will see, or no longer have to do, once this is done. Worked example: "the report is in the manager''s inbox on Monday morning without anyone assembling it". What it changes: this becomes the delta spec''s scenarios and the acceptance evidence at review time.'
+    answer: 确认记录写明渠道（cli 或 preview）；作者可在本地阅读页直接确认并记为 preview；strict 下存在未复核的 cli 渠道验收、钦定设定修改或卷末检查点时 review show 列为待作者复核、assemble 以非零退出并列出清单，阅读页批量复核后组稿成功；无令牌或错令牌请求不能写入（来源：里程碑 done_criteria）
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-trigger
+    question: Why now — what forced this?
+    context: 'Why this is asked: work that nothing forced is the work most often thrown away later. This question catches a request that sounds reasonable but has no real driver behind it. What a sufficient answer contains: the concrete event, deadline, incident, or cost that made this surface now, or an honest statement that nothing did. Worked example: "the report was missed last month and it was raised with the team". What it changes: a change with no trigger is a candidate for deferral, and the answer is weighed at review before archive.'
+    answer: 2026-10-07 路线图里程碑审计把作者确认可被代填列为动摇「帮 Agent 规范地协助人写作」定位的 P0 缺口，作者当日确定了确认渠道方案（来源：里程碑 notes 与 intake_questions.author-confirmation）
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-non-goals
+    question: What must explicitly not change?
+    context: 'Why this is asked: the requester knows which nearby behavior other people depend on, and the agent does not. A "non-goal" is something the change must leave alone even though it sits close to the work. What a sufficient answer contains: the behavior, setting, or output that must survive untouched, and who relies on it. Worked example: "do not change the saved filters — several people rely on their own". What it changes: these become the proposal''s unchanged_behavior items, which review checks the finished result against.'
+    answer: 不拒绝 cli 渠道；standard 与 fast 关卡只标出渠道、不阻塞；不做身份认证、多作者权限与远程确认服务；--confirmed-by-author 与 --confirmation 的既有语义、既有错误码与退出码不变（来源：planned change details 与里程碑 scope.out）
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-interpretation
+    question: Which reading of the request is intended, where more than one is possible?
+    context: 'Why this is asked: a short request usually admits several readings, and building the wrong one is indistinguishable from building nothing. What a sufficient answer contains: the reading that is meant, stated plainly enough to rule the others out — or a statement that only one reading exists and what it is. Worked example: "export means the version sent to the manager, not the one I read myself". What it changes: this fixes the scope boundary before any code is written, and settles disputes about what was asked for.'
+    answer: 「阅读页确认」指 preview --serve 的本地页面新增待确认队列与确认操作、写入 channel 为 preview 的确认记录；「批量复核」指 strict 下对 cli 渠道的验收、钦定设定修改与卷末检查点在页面上勾选复核、写入复核记录，组稿前必须完成；钦定设定修改即授权修改或删除作者钦定条目的决策（来源：planned change details）
+    status: resolved
+    kind: requirement
+    answered_by: roadmap

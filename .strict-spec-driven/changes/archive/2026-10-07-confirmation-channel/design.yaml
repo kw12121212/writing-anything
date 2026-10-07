@@ -1,0 +1,27 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: confirmation-channel
+approach:
+  - 在各确认写入点增加渠道参数：CLI 命令一律写 cli，阅读页写 preview；新增 internal/authorreview 统一计算待作者复核清单并维护复核记录台账；review show、next、assemble 与阅读页共用该清单；阅读页在既有令牌与 Host 校验之后新增两个 POST 端点，复用 CLI 同一套写入函数，不另实现业务规则
+decisions:
+  d-channel-field:
+    decision: channel 为确认记录上的可选字段，取值 cli 或 preview；只在写入确认（confirmation）时写入，确认被清除或条目回到待确认时一并删除；缺失时按 cli 解释，--json 视图对已确认记录输出 channel（缺失输出 cli），未确认输出 null
+    rationale: 旧工作区无需迁移即可通过校验；字段与确认记录同生同灭，不会出现确认已撤销而渠道残留
+  d-review-ledger:
+    decision: 复核记录集中写入 .writing-anything/author-reviews.yaml（schema_version 1，reviews 数组，每项 kind、work、ref、confirmed_at、channel=preview、reviewed_at）；待复核项按 (kind, ref, 确认时间) 与台账匹配，确认重写后确认时间变化，旧复核自然失效
+    rationale: 单一写入点与单一 Schema，不必改写 acceptance.yaml、checkpoint.yaml 与 decisions.yaml 三种格式；确认时间入键保证作者复核的就是当前这次确认
+  d-pending-kinds:
+    decision: 待作者复核只覆盖 strict 关卡下 channel 为 cli（或缺失）的三类：已确认的验收（acceptance.yaml confirmed_by_author 为 true）、钦定设定修改（status 为 decided、choice 为 a、问题文本为钦定条目修改或删除、units 含该作品的决策）与已确认的卷末检查点；清单按作品计算
+    rationale: 与 planned change 与里程碑 done_criteria 列出的三类一致；钦定设定修改本身经决策授权，按 canon 包既有的固定问题文本识别
+  d-page-endpoints:
+    decision: 阅读页新增 POST /confirm（kind 为 acceptance、decision、plan、state、knowledge 或 volume，按类型带 unit、id、action、option、answer 与 confirmation）与 POST /author-review（keys 为待复核项的键数组，必须全部是当前待复核项，否则 400 且不写入）；令牌与 Host 校验同 /feedback，失败返回 403 且不写入；成功各输出一行信封（confirmation 或 authorReview 字段）；--max 仍只计反馈
+    rationale: 复用既有回环、令牌与 Host 校验；按当前工作区重新计算队列，拒绝过期或越界的目标
+  d-api-compat:
+    decision: 各包保留既有函数签名（默认 cli 渠道），另增带渠道参数的变体（如 ConfirmVia、DecideVia、AcceptVia）；state 与 knowledge 的 SetInput 增加 Channel 字段，空值为 cli
+    rationale: 避免改动七十余处既有测试调用，同时让阅读页与 CLI 走同一写入实现
+alternatives: []
+risks:
+  - novel-e2e 语料为 strict 关卡并组稿：重放必须在组稿前增加阅读页复核步骤，否则 assemble 被 assemble.unreviewed 阻塞；黄金文件中的台账会多出 channel 字段，需要再生成并人工核对差异
+  - 同机同账户的 Agent 能读到阅读页令牌并自行提交；文档与技能必须写明这是可审计的流程约束而非安全隔离

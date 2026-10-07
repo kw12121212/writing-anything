@@ -313,3 +313,8 @@ categories:
       status: active
       occurrences: 1
       path: .strict-spec-driven/lessons/testing/lesson-ee8ae5.yaml
+    internal-cli-null-1ddaed:
+      title: 新增可空输出字段要同时登记 internal/cli 测试里的两份 null 白名单
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/testing/internal-cli-null-1ddaed.yaml

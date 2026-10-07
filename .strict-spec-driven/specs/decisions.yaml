@@ -90,3 +90,15 @@ requirements:
         - GIVEN: .writing-anything/decisions.yaml 是指向项目目录之外的符号链接
         - WHEN: 运行 wa-cli decisions --dir D --json
         - THEN: diagnostics 中有一条错误码为 artifact.not-found、path 为 .writing-anything/decisions.yaml 的诊断，其 next 包含 wa-cli validate 命令，退出码为 1
+  decide-channel:
+    strength: MUST
+    statement: 决定决策时必须在该决策上记录确认渠道（Confirmation Channel）channel：wa-cli decide 写入 cli，作者在本地阅读页确认（preview 主规格的 preview-confirm）写入 preview；channel 只能为 cli 或 preview，否则报告 artifact.schema-violation。没有 channel 的已决定决策照常通过校验并按 cli 解释。decision、decisions 与 decide 等命令 --json 输出的决策含 channel：已决定时为记录的渠道（缺失时为 cli），open 时为 null。修改或删除作者钦定条目的授权决策即钦定设定修改的确认记录，其渠道参与待作者复核（见 review 主规格的 review-show-author-review）。
+    scenarios:
+      decide-records-cli:
+        - GIVEN: 决策队列有 open 决策 dec-1，选项 a、b
+        - WHEN: 运行 wa-cli decide dec-1 --option a --confirmation 作者：用甲 --dir D --json
+        - THEN: 'decisions.yaml 中 dec-1 含 channel: cli，--json 输出的 decision.channel 为 cli，退出码为 0'
+      open-null:
+        - GIVEN: 决策 dec-2 为 open
+        - WHEN: 运行 wa-cli decisions --dir D --json
+        - THEN: dec-2 的 channel 为 null

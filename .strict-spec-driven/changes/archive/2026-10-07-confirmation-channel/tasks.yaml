@@ -1,0 +1,50 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: confirmation-channel
+sections:
+  Implementation:
+    channel-records:
+      text: workspace 渠道常量；review、decision、plan、state、knowledge、volume 的确认写入 channel（既有函数默认 cli，新增带渠道变体），清除确认时删除 channel，视图输出 channel；六个 JSON Schema 增加 channel 属性
+      status: complete
+    authorreview-pkg:
+      text: 新包 internal/authorreview：author-reviews.yaml 的 Schema 与 schema 登记、加载校验、Pending（strict 下 cli 渠道的验收、钦定设定修改决策与卷末检查点）、Review（批量写入复核记录，键须全部为当前待复核项）
+      status: complete
+    cli-surfaces:
+      text: internal/cli：accept 按渠道参数化；review show 与 next 输出 pendingAuthorReviews（含打开阅读页的命令）；assemble 增加 assemble.unreviewed 关卡与下一步命令；各命令 --json 视图含 channel，help 输出键同步
+      status: complete
+    preview-queue:
+      text: preview --serve：页面待确认队列与待作者复核区、POST /confirm（acceptance、decision、plan、state、knowledge、volume）与 POST /author-review，令牌与 Host 校验同 /feedback，成功各输出一行信封
+      status: complete
+    docs-skills:
+      text: docs/GLOSSARY.md 新增确认渠道（Confirmation Channel）、待作者复核（Pending Author Review）、复核记录（Author Review Record）；运行手册与内置技能写明阅读页确认、strict 组稿前批量复核与可审计而非安全隔离的边界
+      status: complete
+    corpus-wiring:
+      text: novel-e2e：重放器支持阅读页复核步骤，commands.yaml 在组稿前补充复核；UPDATE_GOLDEN 再生成黄金文件并核对差异只来自 channel 字段；matrix、DESIGN 与 README 同步
+      status: complete
+  Testing:
+    unit-tests:
+      text: 各包单测：渠道写入与清除、旧记录缺省 cli、authorreview 待复核计算与复核记录写入、Schema 校验
+      status: complete
+      command: go test ./internal/review/ ./internal/decision/ ./internal/plan/ ./internal/state/ ./internal/knowledge/ ./internal/volume/ ./internal/authorreview/ ./internal/schema/
+    cli-tests:
+      text: CLI 与阅读页测试：无令牌或错令牌不能写入确认或复核、阅读页确认写入 channel preview、strict 组稿因未复核被阻塞且 review show 列出、批量复核后组稿成功、standard 不阻塞、语料重放与黄金
+      status: complete
+      command: go test ./internal/cli/
+    full-regression:
+      text: 完整项目回归（含覆盖率阈值 80%）
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    ready-check:
+      text: strict-spec-cli ready confirmation-channel
+      status: complete
+      command: strict-spec-cli ready confirmation-channel
+    verify-check:
+      text: strict-spec-cli verify confirmation-channel
+      status: complete
+      command: strict-spec-cli verify confirmation-channel
+testing_gates:
+  validation_task: full-regression
+  unit_test_task: unit-tests

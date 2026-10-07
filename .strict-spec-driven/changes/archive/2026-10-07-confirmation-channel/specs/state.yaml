@@ -1,0 +1,17 @@
+schema: strict-spec-driven/delta-spec/v1
+schema_version: 1
+artifact_type: delta_spec
+schema_file: templates/strict-spec-driven/schemas/delta-spec.yaml
+target_spec: state
+operations:
+  ADDED:
+    state-decide-channel:
+      strength: MUST
+      statement: wa-cli state confirm、state reject 与带作者重新确认的 state set 写入确认记录时，必须同时写入确认渠道（Confirmation Channel）channel 为 cli；作者在本地阅读页确认或拒绝时写入 preview。channel 只能为 cli、preview 或 null，否则报告 artifact.schema-violation（field 为 events[i].channel）；已决定而没有 channel 的条目照常通过校验并按 cli 解释。state 命令 --json 输出的条目含 channel：已决定时为记录的渠道（缺失时为 cli），proposed 时为 null。
+      scenarios:
+        confirm-records-cli:
+          - GIVEN: 状态台账有 proposed 条目 state-1
+          - WHEN: 运行 wa-cli state confirm my-novel state-1 --confirmed-by-author --confirmation 作者：属实 --dir D --json
+          - THEN: 'state.yaml 中 state-1 含 channel: cli，--json 输出的 event.channel 为 cli，退出码为 0'
+  MODIFIED: {}
+  REMOVED: {}

@@ -122,3 +122,11 @@ requirements:
         - GIVEN: my-novel 存在
         - WHEN: 运行 wa-cli knowledge propose my-novel --scene my-novel/c1/s1 --entry canon-5 --character reader --terms 为了救人,为了救人 --dir D --json
         - THEN: 报告 artifact.schema-violation（field 为 terms），knowledge.yaml 未被修改，退出码为 1
+  knowledge-decide-channel:
+    strength: MUST
+    statement: wa-cli knowledge confirm、knowledge reject 与带作者重新确认的 knowledge set 写入确认记录时，必须同时写入确认渠道（Confirmation Channel）channel 为 cli；作者在本地阅读页确认或拒绝时写入 preview。channel 只能为 cli、preview 或 null，否则报告 artifact.schema-violation（field 为 events[i].channel）；已决定而没有 channel 的条目照常通过校验并按 cli 解释。knowledge 命令 --json 输出的条目含 channel：已决定时为记录的渠道（缺失时为 cli），proposed 时为 null。
+    scenarios:
+      reject-on-page:
+        - GIVEN: 知情表有 proposed 条目 know-1，作品的阅读页 preview --serve 正在运行
+        - WHEN: '带令牌 POST /confirm：{kind: knowledge, id: know-1, action: reject, confirmation: 作者：读者此时不知道}'
+        - THEN: know-1 的 status 为 rejected、channel 为 preview；wa-cli knowledge list my-novel --all --json 输出的 channel 为 preview

@@ -1,0 +1,16 @@
+schema: strict-spec-driven/delta-tech/v1
+schema_version: 1
+artifact_type: delta_tech
+schema_file: templates/strict-spec-driven/schemas/delta-tech.yaml
+target_standard: workspace-artifacts
+operations:
+  ADDED:
+    confirmation-channel-field:
+      strength: SHOULD
+      statement: 产物中的确认记录（Confirmation Record：作者原话摘要 confirmation 与确认时间）应同时记录确认渠道（Confirmation Channel）channel：Schema 引用 common.schema.json#/$defs/channel（可空记录用 cli、preview 与 null 的枚举），写入确认时由领域包带渠道参数的写入函数（如 ConfirmVia、DecideVia、AcceptVia）写入——命令行入口写 cli，本地阅读页入口写 preview——确认被清除或条目回到待确认时一并删除；--json 视图经 internal/cli 的 channelView 输出（未确认为 null，已确认而缺失渠道的旧记录为 cli），并在 null 白名单与输出键说明中同步登记。
+      rationale: confirmation-channel 让 strict 关卡下的待作者复核与组稿门禁依赖渠道判断；新的确认类产物或写入入口漏写渠道，会让阅读页确认被当成命令行代填，或让命令行代填逃过复核
+      enforcement:
+        method: review
+        detail: 现有六类确认记录（验收、决策、规划步骤、状态变更提议、知情事件、卷末检查点）均已遵循；影响传播、伏笔放弃、偏好学习等其他确认字段尚未纳入，新增确认入口时按本规则补齐
+  MODIFIED: {}
+  REMOVED: {}

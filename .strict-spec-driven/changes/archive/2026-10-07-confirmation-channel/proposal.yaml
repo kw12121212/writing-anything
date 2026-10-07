@@ -1,0 +1,30 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: confirmation-channel
+  status: proposed
+summary:
+  what:
+    - 为验收（Acceptance）、决策（Decision）、规划步骤、状态变更提议与知情事件、卷末检查点（Volume Checkpoint）的确认记录（Confirmation Record）新增确认渠道（Confirmation Channel）字段 channel（cli 或 preview；旧记录缺省视为 cli），JSON Schema 与 --json 输出同步；钦定设定修改的确认即授权它的决策，随决策记录渠道
+    - 本地阅读页（preview --serve）新增待确认队列与确认操作：列出该作品待作者确认的验收、决策、规划步骤、状态与知情提议和卷末检查点，作者在页面填写原话摘要并点击确认，写入 channel 为 preview 的确认记录（复用回环监听、随机令牌与 Host 校验）
+    - strict 关卡（Gate）下经 cli 渠道的验收、钦定设定修改（决策选择允许）与卷末检查点确认照常生效，但列为待作者复核（Pending Author Review）：review show 与 next 输出 pendingAuthorReviews 并给出打开阅读页的命令；阅读页提供批量复核操作，把复核记录（channel 为 preview）写入 .writing-anything/author-reviews.yaml；存在未复核的此类确认时 assemble 以 assemble.unreviewed 拒绝组稿并逐项列出；standard 与 fast 关卡只标出渠道、不列出也不阻塞
+  why:
+    - milestone core-gate-hardening：--confirmed-by-author 与 --confirmation 只校验非空文本，Agent 可以自行代填作者确认；按 2026-10-07 作者决定，确认记录写明渠道、作者可在阅读页直接确认、strict 下组稿前在阅读页批量复核 cli 渠道的关键确认，使代填成为显式、可审计的动作（可审计的流程约束而非安全隔离）
+scope:
+  in:
+    - internal/workspace：渠道常量；internal/review、decision、plan、state、knowledge、volume：确认写入渠道（CLI 写 cli，阅读页写 preview）、清除确认时清除渠道、视图输出 channel；internal/schema：acceptance、decisions、plan、state、knowledge、checkpoint 的 channel 属性与新的 author-reviews Schema（validate 识别 .writing-anything/author-reviews.yaml）
+    - 新包 internal/authorreview：计算作品的待作者复核清单（strict 下 cli 渠道的验收、钦定设定修改决策与卷末检查点，按 kind、ref 与确认时间匹配复核记录）与写入复核记录
+    - internal/cli：review show 与 next 输出 pendingAuthorReviews；assemble 增加 assemble.unreviewed 关卡；accept 逻辑按渠道参数化；preview --serve 新增 POST /confirm 与 POST /author-review、页面待确认队列与待作者复核区；help 与输出键同步
+    - docs（docs/GLOSSARY.md 新增确认渠道（Confirmation Channel）、待作者复核（Pending Author Review）、复核记录（Author Review Record））、preview 命令帮助与内置技能 wa-publish 写明阅读页确认、strict 组稿前批量复核与「可审计的流程约束而非安全隔离」的边界；novel-e2e 语料重放增加阅读页复核步骤（author_review）并再生成黄金文件
+  out:
+    - 不拒绝 cli 渠道的确认；不做身份认证、多作者权限或远程确认服务；不改变 --confirmed-by-author 与 --confirmation 的既有语义
+    - 影响传播、伏笔放弃、写作简报、偏好学习、评分校准与设定覆盖等其他确认类字段不加渠道（不在本 planned change 列出的六类之内）
+    - 卷末检查点自动生成与门禁加固、跨作品验收门禁、next 前三阶段命令与长篇技能（同里程碑其他 planned change）
+unchanged_behavior:
+  - standard 与 fast 关卡下验收、决策、组稿的门禁行为不变；既有错误码、退出码与已有字段的取值不变；没有 channel 字段的旧记录照常通过校验并按 cli 处理
+  - preview 静态页与 --serve 的反馈提交、令牌与 Host 校验、--max 计数（只计反馈）不变
+roadmap:
+  milestone: core-gate-hardening
+  planned_change: confirmation-channel
