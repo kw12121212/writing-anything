@@ -352,7 +352,8 @@ func TestNext(t *testing.T) {
 	s := res.Steps[0]
 	b := s["blockers"].([]any)[0].(map[string]any)
 	if s["unit"] != "my-post" || s["stage"] != "brief" || !slices.Equal(blockerCodes(s), []string{"lifecycle.missing-artifact"}) || b["artifact"] != "brief" ||
-		b["path"] != ".writing-anything/works/my-post" || len(commands(s)) != 0 || !strings.Contains(s["action"].(string), "brief.yaml") {
+		b["path"] != ".writing-anything/works/my-post" || !strings.Contains(s["action"].(string), "wa-cli brief set") || !strings.Contains(s["action"].(string), "brief.yaml") ||
+		!slices.Equal(commands(s), []string{"wa-cli brief show my-post --dir " + shellCommand(dir) + " --json", "wa-cli help brief set --json"}) {
 		t.Fatalf("next-blocked: step = %v", s)
 	}
 
@@ -431,8 +432,9 @@ func TestStatusUnits(t *testing.T) {
 		t.Fatalf("units = %v", res.Units)
 	}
 	for _, u := range res.Units {
-		if !slices.Equal(blockerCodes(u), []string{"lifecycle.missing-artifact"}) || len(commands(u)) != 0 {
-			t.Errorf("unit %v: want one missing-artifact blocker and no commands", u)
+		want := []string{shellCommand("wa-cli", "brief", "show", u["unit"].(string), "--dir", dir, "--json"), "wa-cli help brief set --json"}
+		if !slices.Equal(blockerCodes(u), []string{"lifecycle.missing-artifact"}) || !slices.Equal(commands(u), want) {
+			t.Errorf("unit %v: want one missing-artifact blocker and commands %v", u, want)
 		}
 	}
 	artifact(t, dir, "my-post", "", "brief.yaml")
@@ -452,5 +454,114 @@ func TestStatusUnits(t *testing.T) {
 	if want := "单元（Unit）：\n  my-post（article）：阶段 brief\n    下一步：wa-cli advance my-post --dir " + shellCommand(dir) + " --json\n" +
 		"    my-post/intro（section）：阶段 brief，阻塞项 1 项\n      阻塞项：阶段 brief 的必需产物（Required Artifact）brief 缺失："; code != 0 || !strings.Contains(stdout, want) {
 		t.Fatalf("text: exit code = %d, stdout = %q", code, stdout)
+	}
+}
+
+// setStage 把作品 work 中 id 为 unitID 的单元的 stage 从 from 改为 to（直接改写 work.yaml，只用于构造测试前提）。
+func setStage(t *testing.T, dir, work, unitID, from, to string) {
+	t.Helper()
+	path := workFile(dir, work)
+	content := readFile(t, path)
+	i := strings.Index(content, "id: "+unitID+"\n")
+	if i < 0 {
+		t.Fatalf("setStage: no unit %s in %s", unitID, content)
+	}
+	// 单元的字段依次为 id、genre（仅根单元）、type、stage：stage 必须在 id 之后的前三行内，否则可能改到子单元。
+	lines := strings.SplitN(content[i:], "\n", 5)
+	j := strings.Index(strings.Join(lines[:min(4, len(lines))], "\n")+"\n", "stage: "+from+"\n")
+	if j < 0 {
+		t.Fatalf("setStage: unit %s is not at stage %s in %s", unitID, from, content)
+	}
+	writeFile(t, path, content[:i+j]+"stage: "+to+content[i+j+len("stage: "+from):])
+}
+
+// 新建 tech-blog 文章与 novel 场景在 brief、outline、draft 阶段缺少必需产物时，next 与 status 给出登记的命令：
+// 至少一条不是 help 的命令且能直接运行成功，写入命令的用法存在；action 指向 wa-cli 写入命令而不是直接编辑产物
+// （next-steps 的 next-blocked、next-outline-commands、next-scene-outline-commands、next-draft-commands）。
+func TestNextStageCommands(t *testing.T) {
+	blog := newWorkspace(t, "--genre", "tech-blog")
+	if code, stdout, _ := run(t, "new", "tech-blog", "post", "--dir", blog); code != 0 {
+		t.Fatalf("new tech-blog: %s", stdout)
+	}
+	novel := newNovel(t)
+	type stage struct {
+		stage, show, help, writer, file string
+	}
+	sceneStages := []stage{
+		{"brief", "brief show", "wa-cli help brief set --json", "wa-cli brief set", "brief.yaml"},
+		{"outline", "outline show", "wa-cli help scene contract --json", "wa-cli scene contract", "outline.yaml"},
+		{"draft", "context", "wa-cli help draft write --json", "wa-cli draft write", "draft.md"},
+	}
+	articleStages := slices.Clone(sceneStages)
+	articleStages[1] = stage{"outline", "outline show", "wa-cli help outline set --json", "wa-cli outline set", "outline.yaml"}
+	for _, c := range []struct {
+		name, dir, work, unitID, ref string
+		stages                       []stage
+	}{
+		{"tech-blog", blog, "post", "post", "post", articleStages},
+		{"novel-scene", novel, "my-novel", "scene-1", "my-novel/scene-1", sceneStages},
+	} {
+		for i, st := range c.stages {
+			if i > 0 {
+				setStage(t, c.dir, c.work, c.unitID, c.stages[i-1].stage, st.stage)
+			}
+			_, res := runUnits(t, c.dir, "next", c.ref)
+			s := res.Steps[0]
+			show := append(append([]string{"wa-cli"}, strings.Fields(st.show)...), c.ref, "--dir", c.dir, "--json")
+			want := []string{shellCommand(show...), st.help}
+			if s["stage"] != st.stage || !slices.Equal(blockerCodes(s), []string{"lifecycle.missing-artifact"}) || !slices.Equal(commands(s), want) {
+				t.Fatalf("%s %s: step = %v, want commands %v", c.name, st.stage, s, want)
+			}
+			action := s["action"].(string)
+			if !strings.Contains(action, st.writer) || !strings.Contains(action, st.file) || strings.Contains(action, "下写入") || strings.Contains(action, "draft.yaml") {
+				t.Errorf("%s %s: action = %q", c.name, st.stage, action)
+			}
+			// 非 help 命令能直接运行成功，help 命令指向存在的命令用法。
+			if code, stdout, _ := run(t, show[1:]...); code != 0 {
+				t.Errorf("%s %s: %v exit code = %d, stdout = %s", c.name, st.stage, show, code, stdout)
+			}
+			if code, stdout, _ := run(t, strings.Fields(st.help)[1:]...); code != 0 {
+				t.Errorf("%s %s: %s exit code = %d, stdout = %s", c.name, st.stage, st.help, code, stdout)
+			}
+			// status 为同一单元给出相同的命令。
+			_, sres := runUnits(t, c.dir, "status")
+			if k := slices.IndexFunc(sres.Units, func(u map[string]any) bool { return u["unit"] == c.ref }); k < 0 || !slices.Equal(commands(sres.Units[k]), want) {
+				t.Errorf("%s %s: status units = %v", c.name, st.stage, sres.Units)
+			}
+		}
+	}
+
+	// 文本输出逐条列出下一步命令。
+	if _, stdout, _ := run(t, "next", "post", "--dir", blog); !strings.Contains(stdout, "下一步：wa-cli context post") || !strings.Contains(stdout, "下一步：wa-cli help draft write --json") {
+		t.Errorf("text next: %q", stdout)
+	}
+	// wechat-marketing 草稿阶段缺少营销要素（Marketing Elements）时同样有非 help 的命令。
+	wechat := newWorkspace(t, "--genre", "wechat-marketing")
+	run(t, "new", "wechat-marketing", "ad", "--dir", wechat)
+	setStage(t, wechat, "ad", "ad", "brief", "draft")
+	if _, res := runUnits(t, wechat, "next", "ad"); !slices.Contains(commands(res.Steps[0]), "wa-cli marketing show ad --dir "+shellCommand(wechat)+" --json") ||
+		!slices.Contains(commands(res.Steps[0]), "wa-cli help marketing set --json") || !strings.Contains(res.Steps[0]["action"].(string), "wa-cli marketing set") {
+		t.Errorf("marketing: step = %v", res.Steps[0])
+	}
+	if code, _, _ := run(t, "marketing", "show", "ad", "--dir", wechat, "--json"); code != 0 {
+		t.Errorf("marketing show: exit code = %d", code)
+	}
+}
+
+// advance 的缺失产物诊断指向 wa-cli next <unit>，沿它得到的 commands 含登记的非 help 命令（next-matches-advance）。
+func TestAdvanceNextMatchesNext(t *testing.T) {
+	dir := newWorkspace(t, "--genre", "tech-blog")
+	run(t, "new", "tech-blog", "post", "--dir", dir)
+	setStage(t, dir, "post", "post", "brief", "outline")
+	before := readFile(t, workFile(dir, "post"))
+	code, res := runUnits(t, dir, "advance", "post")
+	d := diag(t, res.result, "lifecycle.missing-artifact")
+	nextCmd := "wa-cli next post --dir " + shellCommand(dir) + " --json"
+	if code != 1 || !slices.Contains(d.Next, nextCmd) || readFile(t, workFile(dir, "post")) != before {
+		t.Fatalf("advance: exit code = %d, next = %v", code, d.Next)
+	}
+	_, nres := runUnits(t, dir, "next", "post")
+	if !slices.Contains(commands(nres.Steps[0]), "wa-cli outline show post --dir "+shellCommand(dir)+" --json") {
+		t.Fatalf("next after advance: commands = %v", commands(nres.Steps[0]))
 	}
 }

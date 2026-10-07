@@ -446,7 +446,7 @@ func progress(dir string, w *work.Work, u *work.Unit) ([]blockerView, []string) 
 		// 被缺失产物阻塞时只能列出为该产物登记的生成命令（见 artifactNext）。
 		cmds := blockerNext(dir, b.Code, b.Path)
 		if b.Code == work.CodeMissingArtifact {
-			cmds = artifactNext(dir, b.Artifact, b.Path)
+			cmds = artifactNext(dir, u, b.Artifact, b.Path)
 		}
 		for _, c := range cmds {
 			if !slices.Contains(commands, c) {
@@ -460,7 +460,7 @@ func progress(dir string, w *work.Work, u *work.Unit) ([]blockerView, []string) 
 	return blockers, commands
 }
 
-// blockerNext 返回解除一个阻塞项的下一步命令（brief-gate、decision-blocking）；缺失产物没有登记的命令。advance 的诊断
+// blockerNext 返回解除一个阻塞项的下一步命令（brief-gate、decision-blocking）；缺失产物的命令由 artifactNext 登记。advance 的诊断
 // （经 next）与 next、status 的 commands 都由它给出；path 为阻塞项的路径。
 func blockerNext(dir, code, path string) []string {
 	switch code {
@@ -492,17 +492,51 @@ func blockerNext(dir, code, path string) []string {
 	return nil
 }
 
-// artifactNext 返回为必需产物登记的生成命令：营销要素（marketing）、审稿（review）与验收（acceptance）；其他产物还没有登记命令。
-func artifactNext(dir, artifact, unitDir string) []string {
+// artifactNext 返回为缺失的必需产物（Required Artifact）登记的命令：每个登记的产物至少有一条不是 wa-cli help 的可执行命令
+// （查看现状或起草所需的上下文），写入命令需要作者或 Agent 给出取值，以 help 给出用法（cli-contract/runnable-next）。
+// 场景（scene）单元的大纲以场景契约（Scene Contract）写入。没有登记的产物返回 nil。
+func artifactNext(dir string, u *work.Unit, artifact, unitDir string) []string {
+	ref := work.RefOf(unitDir)
 	switch artifact {
+	case "brief":
+		return []string{shellCommand("wa-cli", "brief", "show", ref, "--dir", dir, "--json"), "wa-cli help brief set --json"}
+	case "outline":
+		if u.Type == outline.SceneType {
+			return []string{shellCommand("wa-cli", "outline", "show", ref, "--dir", dir, "--json"), "wa-cli help scene contract --json"}
+		}
+		return []string{shellCommand("wa-cli", "outline", "show", ref, "--dir", dir, "--json"), "wa-cli help outline set --json"}
+	case "draft":
+		return []string{shellCommand("wa-cli", "context", ref, "--dir", dir, "--json"), "wa-cli help draft write --json"}
 	case "marketing":
-		return []string{"wa-cli help marketing set --json"}
+		return []string{shellCommand("wa-cli", "marketing", "show", ref, "--dir", dir, "--json"), "wa-cli help marketing set --json"}
 	case "review":
-		return []string{"wa-cli help review record --json", shellCommand("wa-cli", "provenance", work.RefOf(unitDir), "--dir", dir, "--json")}
+		return []string{"wa-cli help review record --json", shellCommand("wa-cli", "provenance", ref, "--dir", dir, "--json")}
 	case "acceptance":
-		return []string{shellCommand("wa-cli", "review", "show", work.RefOf(unitDir), "--dir", dir, "--json"), "wa-cli help accept --json"}
+		return []string{shellCommand("wa-cli", "review", "show", ref, "--dir", dir, "--json"), "wa-cli help accept --json"}
 	}
 	return nil
+}
+
+// artifactWriter 返回产出必需产物的 wa-cli 写入命令与产物文件名，供 action 说明；没有登记时 ok 为 false。
+func artifactWriter(u *work.Unit, artifact string) (command, file string, ok bool) {
+	switch artifact {
+	case "brief":
+		return "wa-cli brief set", "brief.yaml", true
+	case "outline":
+		if u.Type == outline.SceneType {
+			return "wa-cli scene contract", "outline.yaml", true
+		}
+		return "wa-cli outline set", "outline.yaml", true
+	case "draft":
+		return "wa-cli draft write", "draft.md", true
+	case "marketing":
+		return "wa-cli marketing set", "marketing.yaml", true
+	case "review":
+		return "wa-cli review record", "review.yaml", true
+	case "acceptance":
+		return "wa-cli accept", "acceptance.yaml", true
+	}
+	return "", "", false
 }
 
 // latestHandoff 返回工作区最近一条交接记录的摘要（没有记录或文件不合法时为 nil，问题由命令层报告）。
@@ -553,7 +587,11 @@ func action(dir string, w *work.Work, u *work.Unit, blockers []blockerView) stri
 			case strings.HasPrefix(b.Code, "marketing."):
 				elements = append(elements, strings.TrimSuffix(b.Message, "。"))
 			default:
-				missing = append(missing, fmt.Sprintf("%s（在 %s/ 下写入 %s.yaml 或 %s.md）", b.Artifact, b.Path, b.Artifact, b.Artifact))
+				if cmd, file, ok := artifactWriter(u, b.Artifact); ok {
+					missing = append(missing, fmt.Sprintf("%s（用 %s 写入 %s/%s）", b.Artifact, cmd, b.Path, file))
+				} else {
+					missing = append(missing, fmt.Sprintf("%s（在 %s/ 下写入 %s.yaml 或 %s.md）", b.Artifact, b.Path, b.Artifact, b.Artifact))
+				}
 			}
 		}
 		var todo []string
