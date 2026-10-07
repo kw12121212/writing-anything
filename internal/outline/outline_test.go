@@ -498,6 +498,33 @@ func TestMethodGaps(t *testing.T) {
 	}
 }
 
+// 场景节拍位置：根单元大纲节的 role 映射到写作法节拍，场景按先序等分区间的中点核对；同一节拍只报一次，没有 position 的节拍
+// 与不属于写作法的 role 不核对。
+func TestSceneBeatPositions(t *testing.T) {
+	m := &catalog.Method{ID: "three", Kind: catalog.MethodStructure, Beats: []catalog.MethodPart{
+		{ID: "setup", Title: "建置", Position: &catalog.Position{Min: 0, Max: 0.3}},
+		{ID: "climax", Title: "高潮", Position: &catalog.Position{Min: 0.7, Max: 1}},
+		{ID: "free", Title: "自由"}}}
+	root := &Outline{Sections: []Section{{ID: "open", Role: "setup"}, {ID: "peak", Role: "climax"}, {ID: "peak2", Role: "climax"},
+		{ID: "any", Role: "free"}, {ID: "plain"}}}
+	scene := &Outline{Sections: []Section{{ID: "a", Beats: []string{"plain", "open", "any"}}, {ID: "b", Beats: []string{"peak", "peak2"}}}}
+	ps := SceneBeatPositions("o.yaml", "w/s1", scene, root, m, 0, 4)
+	if len(ps) != 1 || ps[0].Code != CodeBeatPosition || ps[0].Severity != "warning" || ps[0].Path != "o.yaml" || ps[0].Field != "sections[1].beats[0]" ||
+		!strings.Contains(ps[0].Message, "w/s1") || !strings.Contains(ps[0].Message, "第 1 个") || !strings.Contains(ps[0].Message, "70%–100%") {
+		t.Fatalf("first scene: %+v", ps)
+	}
+	// 第 4 个场景（87.5%）：climax 在范围内，setup 超出范围。
+	if ps := SceneBeatPositions("o.yaml", "w/s4", scene, root, m, 3, 4); len(ps) != 1 || ps[0].Field != "sections[0].beats[1]" || !strings.Contains(ps[0].Message, "setup") {
+		t.Fatalf("last scene: %+v", ps)
+	}
+	if SceneBeatPositions("o.yaml", "r", nil, root, m, 0, 1) != nil || SceneBeatPositions("o.yaml", "r", scene, nil, m, 0, 1) != nil ||
+		SceneBeatPositions("o.yaml", "r", scene, root, &catalog.Method{Kind: catalog.MethodArticle}, 0, 1) != nil ||
+		SceneBeatPositions("o.yaml", "r", scene, root, nil, 0, 1) != nil || SceneBeatPositions("o.yaml", "r", scene, root, m, -1, 4) != nil ||
+		SceneBeatPositions("o.yaml", "r", scene, root, m, 4, 4) != nil {
+		t.Fatal("nil outlines, non-structure method or scene out of range")
+	}
+}
+
 // 节拍位置：按标题行之前的字符比例核对；围栏代码块中的 # 行不算标题，CRLF 与 LF 结果相同。
 func TestBeatPositions(t *testing.T) {
 	m := &catalog.Method{ID: "three", Kind: catalog.MethodStructure, Beats: []catalog.MethodPart{

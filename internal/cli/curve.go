@@ -6,7 +6,6 @@ import (
 	"math"
 	"strings"
 
-	"github.com/kw12121212/writing-anything/internal/brief"
 	"github.com/kw12121212/writing-anything/internal/catalog"
 	"github.com/kw12121212/writing-anything/internal/decision"
 	"github.com/kw12121212/writing-anything/internal/draft"
@@ -83,13 +82,11 @@ func curve(dir string, w *work.Work, res *curveResult) []workspace.Problem {
 			Message: "作品的文体与启用的规范包都没有声明 AI 评分指标（scored_metrics）；请在规范包中声明后启用"}}
 	}
 	units := w.Units()
-	root := units[0]
 	// 根单元选用的结构类写作法给出节拍的目标张力：情节节拍 id（根单元大纲的节 id）→ 该节 role 承担的节拍声明的张力。
 	beatTension := map[string]float64{}
-	ms := outline.LoadMessages(dir, w.UnitDir(root), brief.LoadQueue(dir), outline.Picker{Methods: catalog.LoadMethods(dir), Default: unitDefaultMethod(w, root)})
-	if o, fatal, _ := outline.LoadLenient(dir, w.UnitDir(root), ms); len(fatal) == 0 && o != nil && ms.Method != nil && ms.Method.Kind == catalog.MethodStructure {
+	if m, o := rootStructure(dir, w); m != nil {
 		for _, s := range o.Sections {
-			for _, p := range ms.Method.Parts() {
+			for _, p := range m.Parts() {
 				if s.Role == p.ID && p.Tension != nil {
 					beatTension[s.ID] = *p.Tension
 				}

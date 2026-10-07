@@ -701,7 +701,10 @@ func next(p workspace.Problem, dir string) []string {
 			return append(blockerNext(dir, p.Code, p.Path), shellCommand("wa-cli", "method", "list", "--dir", dir, "--json"))
 		}
 	case outline.CodeBeatPosition:
-		return []string{shellCommand("wa-cli", "lint", work.RefOf(strings.TrimSuffix(p.Path, "/"+draft.FileName)), "--dir", dir, "--json")}
+		// 单元自身的节拍指向 draft.md，场景的节拍指向 outline.yaml：都取文件所在的单元目录。
+		if i := strings.LastIndex(p.Path, "/"); i > 0 {
+			return []string{shellCommand("wa-cli", "lint", work.RefOf(p.Path[:i]), "--dir", dir, "--json")}
+		}
 	case brief.CodeUnknownMethod:
 		if p.Path != "" {
 			return []string{shellCommand("wa-cli", "method", "list", "--dir", dir, "--json"), validate}

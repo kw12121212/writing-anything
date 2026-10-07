@@ -153,9 +153,9 @@ func refs(units []*work.Unit) []string {
 
 // unitLint 返回对作品 w 的单元运行文本检查的函数，结果与 wa-cli lint 相同。
 func unitLint(dir string, w *work.Work) preview.LintFunc {
-	resolved := workResolver(dir, w)
+	deps := workLintDeps(dir, w)
 	return func(u *work.Unit) (*lint.Result, []workspace.Problem) {
-		out, _, _, ps := runUnitLintWith(dir, w, u, resolved)
+		out, _, _, ps := runUnitLintWith(dir, w, u, deps)
 		return out, ps
 	}
 }
