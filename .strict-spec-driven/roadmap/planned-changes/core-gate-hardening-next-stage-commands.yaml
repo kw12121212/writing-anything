@@ -5,7 +5,7 @@ schema_file: ../../templates/strict-spec-driven/schemas/planned-change.yaml
 planned_change:
   id: next-stage-commands
   milestone: core-gate-hardening
-status: planned
+status: complete
 summary: wa-cli next / status 在 brief、outline、draft 阶段为缺少的必需产物给出可执行写入命令
 details: 扩展 internal/cli/units.go 的 artifactNext：brief → wa-cli brief set <unit>（附 brief show）；outline → 文章类 wa-cli outline set，场景单元 wa-cli scene contract；draft → wa-cli draft write <unit>。action 文字改为指向这些命令，不再提示直接写 brief.yaml。修改 units_test.go:434 的「无命令」断言为逐阶段断言命令存在，补 advance 诊断 next 与 next 输出一致的测试；同步 units-and-lifecycle 规格。
 depends_on: []

@@ -1,0 +1,22 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: next-stage-commands
+approach:
+  - 在 artifactNext 中按产物与单元类型登记命令：每个缺失产物至少给出一条不含占位符、可直接运行的只读 wa-cli 命令（brief show、outline show、context、marketing show），再附写入命令的用法（help brief set、help outline set 或 help scene contract、help draft write、help marketing set）；progress 把单元传给 artifactNext 以区分 scene 类型单元。action 中缺失产物的说明由「在目录下写入 a.yaml 或 a.md」改为「用 wa-cli <写入命令> 写入 <路径>」，未登记写入命令的产物保留原文字。
+decisions:
+  read-plus-help:
+    decision: brief、outline、draft 阶段的 commands 列出只读查看命令与写入命令的 help，而不是直接列出 wa-cli brief set <unit> 或 wa-cli draft write <unit>
+    rationale: next-steps 要求 commands 可以直接运行且不含占位符；brief set 不带字段参数时报告 input.invalid-value，outline set 与 scene contract 需要大纲节 id 与标题，draft write 无 --file 时从标准输入读正文，都无法在不替作者或 Agent 填值的情况下直接运行。brief show 在 brief.yaml 缺失时仍输出需要向作者提问的问题，outline show 输出覆盖缺口，context 输出起草所需的上下文包，与 brief-gate、outline-gate 既有的「show + help set」命令形态一致
+  scene-contract-for-scenes:
+    decision: scene 类型单元的 outline 产物登记 wa-cli help scene contract --json，其他单元登记 wa-cli help outline set --json
+    rationale: scene contract 只接受 scene 类型单元（outline.not-scene），长篇与短篇场景的大纲以场景契约（Scene Contract）为准；文章类单元用 outline set
+  advance-next-unchanged:
+    decision: advance 的 lifecycle.missing-artifact 诊断 next 保持 wa-cli next <unit>，以测试保证沿该命令得到的 commands 含非 help 命令
+    rationale: advance 诊断不携带产物名，指向 next 能让两者共用同一份登记，避免两处命令清单漂移；规格 advance-stage 无需修改
+alternatives:
+  - option: 在 advance 的诊断 next 中直接展开各产物的命令
+    reason: 需要给诊断增加产物字段或解析 message，扩大改动面且与 next 重复维护
+risks:
+  - novel-e2e 语料或其他测试若断言 next 文本输出的完整内容，新增的下一步行会导致差异，需要逐一复核

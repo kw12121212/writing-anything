@@ -1,0 +1,69 @@
+schema: strict-spec-driven/delta-spec/v1
+schema_version: 1
+artifact_type: delta_spec
+schema_file: templates/strict-spec-driven/schemas/delta-spec.yaml
+target_spec: units-and-lifecycle
+operations:
+  ADDED: {}
+  MODIFIED:
+    next-steps:
+      strength: MUST
+      statement: wa-cli next [<unit>] 必须只读地输出下一步：--json 输出 steps 数组，未给出 unit 时包含工作区中所有可加载作品里 stage 不为 done 的单元（按作品 id 排序、单元树先序），给出 unit 时只含该单元。每项含 unit（单元引用）、stage、blockers、action、commands 与 feedback。blockers 为阻塞项（Blocker）数组，每项含 code、artifact、path、decision 与 message：缺失的必需产物（code 为 lifecycle.missing-artifact，decision 为 null），写作简报阻塞项（code 为 brief.invalid、brief.missing-field、brief.unsourced-message、brief.unconfirmed-message、brief.unsourced-premise 或 brief.unconfirmed-premise，artifact 为 brief，decision 为 null，见 brief 主规格的 brief-gate），大纲阻塞项（code 为 outline.invalid、outline.uncovered-message 或 outline.missing-reason，artifact 为 outline，decision 为 null，见 outline 主规格的 outline-gate），营销要素阻塞项（code 为 marketing.invalid、marketing.missing-field、marketing.too-many-headlines、marketing.headline-unasked 或 marketing.headline-stale，artifact 为 marketing，decision 为 null，见 marketing 主规格的 marketing-gate），验收阻塞项（code 为 acceptance.invalid、acceptance.stale 或 acceptance.weaker-gate，artifact 为 acceptance，decision 为 null，见 advance-stage），以及决策阻塞项（code 为 decision.blocking 或 decision.invalid-queue，artifact 为 decisions，见 decisions 主规格的 decision-blocking），按此顺序排列；action 为人读说明；commands 为可以直接运行、不含占位符的 wa-cli 命令：没有阻塞项时为 [wa-cli advance <unit> --dir <dir> --json]，被缺失产物阻塞时列出为该产物登记的命令，每个登记的产物至少含一条不是 wa-cli help 的命令（brief 为 wa-cli brief show <unit> --dir <dir> --json 与 wa-cli help brief set --json；outline 为 wa-cli outline show <unit> --dir <dir> --json 与 wa-cli help outline set --json，scene 类型单元的 outline 改为 wa-cli outline show <unit> --dir <dir> --json 与 wa-cli help scene contract --json；draft 为 wa-cli context <unit> --dir <dir> --json 与 wa-cli help draft write --json；marketing 为 wa-cli marketing show <unit> --dir <dir> --json 与 wa-cli help marketing set --json；review 为 wa-cli help review record --json 与 wa-cli provenance <unit> --dir <dir> --json；acceptance 为 wa-cli review show <unit> --dir <dir> --json 与 wa-cli help accept --json；没有登记的产物不列出），action 列出所缺产物、产出它的 wa-cli 写入命令（brief set、outline set 或场景单元的 scene contract、draft write、marketing set、review record、accept）与期望的文件路径，不要求直接编辑结构化产物，被验收阻塞时列出 wa-cli review show <unit> --dir <dir> --json 与 wa-cli help accept --json，被写作简报阻塞时列出 brief-gate 为这些阻塞项给出的下一步命令，action 列出需要向作者提问的问题；被大纲阻塞时列出 outline-gate 为这些阻塞项给出的下一步命令，action 列出覆盖缺口；被营销要素阻塞时列出 marketing-gate 为这些阻塞项给出的下一步命令，action 列出仍缺的营销要素；被决策阻塞时列出 wa-cli decisions --dir <dir> --json，action 提示先请作者决定；有多种阻塞项时 commands 为各阻塞项的命令按阻塞项顺序去重后的并集。feedback 为该单元未处理完（status 为 open 或 accepted）的作者反馈数组，每项的字段与 wa-cli feedback list 相同（见 feedback 主规格的 feedback-list），有未处理的反馈时 action 提示先处理这些反馈；反馈不是阻塞项，不影响 blockers 与 commands。给出的单元已是 done 时，该项 blockers 与 commands 为空数组。changedPaths 为空数组；有作品不通过作品校验时报告其诊断、valid 为 false、退出码为 1，其他作品照常列出；否则退出码为 0。不加 --json 时以人读文本输出同样的信息。
+      scenarios:
+        next-blocked:
+          - GIVEN: 刚用 wa-cli new minimal my-post --dir D 创建的作品
+          - WHEN: 运行 wa-cli next --dir D --json
+          - THEN: steps 只含一项：unit 为 my-post，stage 为 brief，blockers 中有一条 code 为 lifecycle.missing-artifact、artifact 为 brief 的阻塞项，commands 依次为 wa-cli brief show my-post --dir D --json 与 wa-cli help brief set --json，action 提到 wa-cli brief set 与 brief.yaml；valid 为 true，changedPaths 为空数组，退出码为 0
+        next-unblocked:
+          - GIVEN: 同上，D/.writing-anything/works/my-post/brief.yaml 已存在且含 audience 与 purpose
+          - WHEN: 运行 wa-cli next my-post --dir D --json
+          - THEN: steps 只含 my-post 一项，blockers 为空数组，commands 只含一条 wa-cli advance my-post 命令，退出码为 0
+        next-skips-done:
+          - GIVEN: 作品 my-post 的 stage 为 done，子单元 intro 的 stage 为 draft
+          - WHEN: 运行 wa-cli next --dir D --json
+          - THEN: steps 只含 unit 为 my-post/intro 的一项，退出码为 0
+        next-read-only:
+          - GIVEN: 含作品的合法工作区
+          - WHEN: 运行 wa-cli next --dir D --json
+          - THEN: changedPaths 为空数组，工作区内所有文件的内容与修改时间不变
+        next-lists-feedback:
+          - GIVEN: 作品 my-post 有 open 的 fb-1、accepted 的 fb-2 与 resolved 的 fb-3
+          - WHEN: 运行 wa-cli next my-post --dir D --json
+          - THEN: steps 只含 my-post 一项，其 feedback 依次为 fb-1 与 fb-2，action 提到作者反馈；blockers 与 commands 与没有反馈时相同，退出码为 0
+        next-blocked-by-decision:
+          - GIVEN: 作品 my-post 的 brief.yaml 存在且含 audience 与 purpose，决策队列有关联 my-post 的 open 阻塞决策 dec-1
+          - WHEN: 运行 wa-cli next my-post --dir D --json
+          - THEN: steps 只含 my-post 一项，blockers 为一条 code 为 decision.blocking、artifact 为 decisions、decision 为 dec-1 的阻塞项，commands 只含一条 wa-cli decisions 命令，退出码为 0
+        next-blocked-by-brief:
+          - GIVEN: 作品 my-post 的 brief.yaml 只有 audience
+          - WHEN: 运行 wa-cli next my-post --dir D --json
+          - THEN: steps 只含 my-post 一项，blockers 为一条 code 为 brief.missing-field、artifact 为 brief、path 为 .writing-anything/works/my-post/brief.yaml、decision 为 null 的阻塞项，commands 依次为 wa-cli brief show my-post --dir D --json 与 wa-cli help brief set --json，action 含向作者提问的问题，退出码为 0
+        next-review-commands:
+          - GIVEN: 作品 my-post 处于审稿阶段，没有 review.yaml 与 acceptance.yaml
+          - WHEN: 运行 wa-cli next my-post --dir D --json
+          - THEN: blockers 中有 artifact 为 review 与 acceptance 的 lifecycle.missing-artifact 阻塞项，commands 含 wa-cli help review record --json 与 wa-cli review show my-post 命令，退出码为 0
+        next-blocked-by-marketing:
+          - GIVEN: wechat-marketing 作品 post 处于草稿阶段，有 draft.md，marketing.yaml 只有两个标题候选
+          - WHEN: 运行 wa-cli next post --dir D --json
+          - THEN: blockers 中有 artifact 为 marketing、code 为 marketing.missing-field 的阻塞项（digest、opening、cta）与 code 为 marketing.headline-unasked 的阻塞项，commands 含 wa-cli marketing show post 命令、wa-cli help marketing set --json 与 wa-cli help marketing ask --json，退出码为 0
+        next-blocked-by-premise:
+          - GIVEN: short-story 作品 my-story 的 brief.yaml 填齐必填项，premise 含非空 text 但没有 sources 与 decision
+          - WHEN: 运行 wa-cli next my-story --dir D --json
+          - THEN: steps 只含 my-story 一项，blockers 为一条 code 为 brief.unsourced-premise、artifact 为 brief 的阻塞项，commands 含 wa-cli brief show my-story --dir D --json 与 wa-cli help brief set --json，退出码为 0
+        next-outline-commands:
+          - GIVEN: tech-blog 作品 post 处于大纲阶段，没有 outline.yaml
+          - WHEN: 运行 wa-cli next post --dir D --json
+          - THEN: blockers 中有一条 code 为 lifecycle.missing-artifact、artifact 为 outline 的阻塞项，commands 依次为 wa-cli outline show post --dir D --json 与 wa-cli help outline set --json，action 提到 wa-cli outline set 与 outline.yaml，退出码为 0
+        next-scene-outline-commands:
+          - GIVEN: novel 作品 my-novel 的场景 s1 处于大纲阶段，场景目录下没有 outline.yaml
+          - WHEN: 运行 wa-cli next my-novel/s1 --dir D --json
+          - THEN: blockers 中有一条 artifact 为 outline 的 lifecycle.missing-artifact 阻塞项，commands 依次为 wa-cli outline show my-novel/s1 --dir D --json 与 wa-cli help scene contract --json，action 提到 wa-cli scene contract，退出码为 0
+        next-draft-commands:
+          - GIVEN: tech-blog 作品 post 处于草稿阶段，没有 draft.md
+          - WHEN: 运行 wa-cli next post --dir D --json
+          - THEN: blockers 中有一条 artifact 为 draft 的 lifecycle.missing-artifact 阻塞项，commands 依次为 wa-cli context post --dir D --json 与 wa-cli help draft write --json，action 提到 wa-cli draft write 与 draft.md，不提到直接写入 draft.yaml，退出码为 0
+        next-matches-advance:
+          - GIVEN: tech-blog 作品 post 处于大纲阶段，没有 outline.yaml
+          - WHEN: 运行 wa-cli advance post --dir D --json，再运行其 lifecycle.missing-artifact 诊断 next 中的 wa-cli next post 命令
+          - THEN: advance 退出码为 1 且不修改文件；next 输出的 post 条目 commands 含 wa-cli outline show post --dir D --json
+  REMOVED: {}

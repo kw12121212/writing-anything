@@ -1,0 +1,36 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: next-stage-commands
+sections:
+  Implementation:
+    register-stage-commands:
+      text: 在 internal/cli/units.go 的 artifactNext 中为 brief、outline（区分 scene 单元）、draft 登记只读命令与写入命令用法，marketing 补登 marketing show
+      status: complete
+    action-text:
+      text: 改写 action 中缺失产物的说明，指向对应 wa-cli 写入命令与产物路径，不再提示直接写入结构化产物
+      status: complete
+    docs-skills-sync:
+      text: 检查 docs/ 与内置技能中描述 next 缺失产物命令的文字，与新行为保持一致
+      status: complete
+  Testing:
+    unit-tests:
+      text: 替换 units_test.go 中缺失产物无命令的断言；新增 tech-blog 文章与 novel 场景在 brief、outline、draft 阶段逐阶段断言 commands 含非 help 的可执行命令、action 指向写入命令；新增 advance 诊断 next 指向的 next 输出含这些命令的测试
+      status: complete
+      command: go test ./internal/cli/ -run 'Next|Status|Advance|StageCommands'
+    full-regression:
+      text: 运行完整回归命令（含覆盖率 80% 门槛）
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    verify-change:
+      text: 运行 strict-spec-cli verify next-stage-commands，确认任务、delta 规格与实现一致
+      status: complete
+      command: strict-spec-cli verify next-stage-commands
+    archive-ready:
+      text: 确认 units-and-lifecycle 的 MODIFIED delta 可以合并（archive 合并报告无冲突）
+      status: complete
+testing_gates:
+  validation_task: full-regression
+  unit_test_task: unit-tests
