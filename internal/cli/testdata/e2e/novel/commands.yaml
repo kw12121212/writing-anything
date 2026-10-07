@@ -2020,8 +2020,8 @@ stages:
   - command:
     - review
     - submit
-    - stopped-at-417/pov-reveal-2
-    input_ref: inputs/reviews/packet-pov-reveal-2.yaml
+    - stopped-at-417/pov-reveal-1
+    input_ref: inputs/reviews/packet-pov-reveal-1.yaml
     expect_exit: 0
     expect_code: null
     stdout_contains: null

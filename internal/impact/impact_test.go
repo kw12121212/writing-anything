@@ -274,3 +274,22 @@ scenes:
 		t.Fatalf("problems = %+v", problems)
 	}
 }
+
+// 两个受影响场景的任务包都保留（逐场景生成不互相删除）；预算放不下时报告 packet.over-budget，复查标记不写。
+func TestMarkPacketsPerSceneAndOverBudget(t *testing.T) {
+	root, w := newNovel(t)
+	if _, _, ps := MarkTarget(root, w, "my-novel/scene-1", 5, time.Now()); len(ps) != 1 || ps[0].Code != "packet.over-budget" {
+		t.Fatalf("over budget = %+v", ps)
+	}
+	if _, err := os.Stat(filepath.Join(root, ".writing-anything", "rechecks", "my-novel.yaml")); err == nil {
+		t.Fatal("rechecks written although packets failed")
+	}
+	marked, changed, ps := MarkTarget(root, w, "my-novel/scene-1", 16000, time.Now())
+	if ps != nil || len(marked) != 2 {
+		t.Fatalf("mark = %+v %+v", marked, ps)
+	}
+	entries, _ := os.ReadDir(filepath.Join(root, ".writing-anything", "packets", "my-novel"))
+	if len(entries) != 2 {
+		t.Fatalf("packets = %d, changed = %v", len(entries), changed)
+	}
+}

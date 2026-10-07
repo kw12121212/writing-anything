@@ -515,12 +515,6 @@ func MarkTarget(root string, w *work.Work, target string, budget int, now time.T
 	if sps := schema.Named("rechecks").ValidateNode(written); len(sps) > 0 {
 		return nil, nil, workspace.FromSchema(rel, sps)
 	}
-	if err := os.MkdirAll(filepath.Dir(filepath.Join(root, filepath.FromSlash(rel))), 0o755); err != nil {
-		return nil, nil, []workspace.Problem{errorAt(workspace.CodeWriteFailed, rel, "", "创建目录失败："+err.Error())}
-	}
-	if err := workspace.WriteFile(root, rel, data); err != nil {
-		return nil, nil, []workspace.Problem{errorAt(workspace.CodeWriteFailed, rel, "", "写入复查标记失败："+err.Error())}
-	}
 	// 先生成审查任务包，全部成功后再写复查标记（precheck-before-side-effects：两个副作用一个事务，
 	// 包生成失败时 rechecks 逐字节不变）。
 	changed := []string{}

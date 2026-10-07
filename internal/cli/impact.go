@@ -7,6 +7,7 @@ import (
 
 	"github.com/kw12121212/writing-anything/internal/impact"
 	"github.com/kw12121212/writing-anything/internal/resolve"
+	"github.com/kw12121212/writing-anything/internal/reviewpacket"
 	"github.com/kw12121212/writing-anything/internal/series"
 	"github.com/kw12121212/writing-anything/internal/work"
 	"github.com/kw12121212/writing-anything/internal/workspace"
@@ -252,6 +253,8 @@ func impactNext(ds []Diagnostic, dir string) {
 			ds[i].Next = []string{"wa-cli help impact clear --json"}
 		case impact.CodeNotFound:
 			ds[i].Next = []string{"wa-cli help impact mark --json", shellCommand("wa-cli", "impact", "list", "--dir", dir, "--json")}
+		case reviewpacket.CodeOverBudget:
+			ds[i].Next = overBudgetNext(dir)
 		}
 	}
 }

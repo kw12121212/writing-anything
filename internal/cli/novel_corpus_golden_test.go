@@ -8,6 +8,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
+
+	"go.yaml.in/yaml/v3"
 )
 
 // corpusGolden 是一个黄金对象：名称、采集方式（文件路径或命令 stdout）。
@@ -122,9 +125,9 @@ func TestNovelCorpusNegativeInjections(t *testing.T) {
 		}
 		var out struct {
 			Findings []struct {
-				Code    string `json:"code"`
-				Waived  bool   `json:"waived"`
-				Scene   string `json:"scene"`
+				Code   string `json:"code"`
+				Waived bool   `json:"waived"`
+				Scene  string `json:"scene"`
 			} `json:"findings"`
 		}
 		if err := json.Unmarshal([]byte(res.stdout), &out); err != nil {
@@ -379,4 +382,116 @@ func TestNovelCorpusStyleIsolation(t *testing.T) {
 			}
 		}
 	}
+}
+
+// 审查任务包预算硬上限在语料上的完成标准：重放后（含语料脚本生成的任务包）与全书重新 review plan 时，
+// 每个任务包的 chars（正文切片 + 每个切片「kind：text」+ 每个清单项「id：question」）都不超过上下文预算；
+// 把预算收紧到台账切片放不下时，重建的每个包仍不超过预算（省略低相关切片或拆包），落盘文件与输出一致；
+// 已 done 的包按规格保留、不随预算重写。
+func TestNovelCorpusPacketBudget(t *testing.T) {
+	dir := t.TempDir()
+	replayNovelCorpus(t, dir)
+
+	packetDir := filepath.Join(dir, ".writing-anything", "packets", "stopped-at-417")
+	fileChars := func() map[string]int {
+		t.Helper()
+		out := map[string]int{}
+		entries, err := os.ReadDir(packetDir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, e := range entries {
+			data, err := os.ReadFile(filepath.Join(packetDir, e.Name()))
+			if err != nil {
+				t.Fatal(err)
+			}
+			var p struct {
+				Excerpt struct {
+					Text string `yaml:"text"`
+				} `yaml:"excerpt"`
+				Status    string                          `yaml:"status"`
+				Slices    []struct{ Kind, Text string }   `yaml:"slices"`
+				Checklist []struct{ ID, Question string } `yaml:"checklist"`
+			}
+			if err := yaml.Unmarshal(data, &p); err != nil {
+				t.Fatalf("%s: %v", e.Name(), err)
+			}
+			n := utf8.RuneCountInString(p.Excerpt.Text)
+			for _, s := range p.Slices {
+				n += utf8.RuneCountInString(s.Kind + "：" + s.Text)
+			}
+			for _, c := range p.Checklist {
+				n += utf8.RuneCountInString(c.ID + "：" + c.Question)
+			}
+			if p.Status == "done" {
+				n = -n // done 包保留生成时的内容，不随预算重写；以负数标记
+			}
+			out[strings.TrimSuffix(e.Name(), ".yaml")] = n
+		}
+		return out
+	}
+	plan := func(budget int) {
+		t.Helper()
+		code, res := runWS(t, dir, "review", "plan", "stopped-at-417")
+		if code != 0 {
+			t.Fatalf("review plan (budget %d): exit = %d, diagnostics = %+v", budget, code, res.Diagnostics)
+		}
+		var out struct {
+			Packets []struct {
+				ID            string `json:"id"`
+				Status        string `json:"status"`
+				Chars         int    `json:"chars"`
+				OmittedSlices int    `json:"omittedSlices"`
+			} `json:"packets"`
+		}
+		if err := json.Unmarshal([]byte(res.stdout), &out); err != nil {
+			t.Fatal(err)
+		}
+		if len(out.Packets) == 0 {
+			t.Fatalf("review plan 没有生成任务包: %s", res.stdout)
+		}
+		onDisk := fileChars()
+		omitted := 0
+		for _, p := range out.Packets {
+			if p.Status == "open" && p.Chars > budget {
+				t.Errorf("预算 %d：任务包 %s chars = %d 超出预算", budget, p.ID, p.Chars)
+			}
+			if p.Status == "open" && onDisk[p.ID] != p.Chars {
+				t.Errorf("任务包 %s 输出 chars = %d，落盘为 %d", p.ID, p.Chars, onDisk[p.ID])
+			}
+			omitted += p.OmittedSlices
+		}
+		for id, n := range onDisk {
+			if n > budget {
+				t.Errorf("预算 %d：落盘 open 任务包 %s chars = %d 超出预算", budget, id, n)
+			}
+		}
+		if budget < 1000 && omitted == 0 {
+			t.Errorf("预算 %d 下应省略部分台账切片", budget)
+		}
+	}
+
+	code, res := runWS(t, dir, "config", "resolved")
+	if code != 0 {
+		t.Fatalf("config resolved: exit = %d", code)
+	}
+	var cfg struct {
+		Resolved struct {
+			ContextBudget struct {
+				Value int `json:"value"`
+			} `json:"contextBudget"`
+		} `json:"resolved"`
+	}
+	if err := json.Unmarshal([]byte(res.stdout), &cfg); err != nil || cfg.Resolved.ContextBudget.Value <= 0 {
+		t.Fatalf("contextBudget: %v %s", err, res.stdout)
+	}
+	budget := cfg.Resolved.ContextBudget.Value
+	for id, n := range fileChars() {
+		if n = max(n, -n); n > budget {
+			t.Errorf("语料任务包 %s chars = %d 超出预算 %d", id, n, budget)
+		}
+	}
+	plan(budget)
+	mustRunWS(t, dir, "config", "set", "context_budget", "600")
+	plan(600)
 }
