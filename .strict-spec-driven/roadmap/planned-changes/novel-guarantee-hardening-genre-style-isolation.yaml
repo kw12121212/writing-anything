@@ -5,7 +5,7 @@ schema_file: ../../templates/strict-spec-driven/schemas/planned-change.yaml
 planned_change:
   id: genre-style-isolation
   milestone: novel-guarantee-hardening
-status: planned
+status: complete
 summary: 默认规范包文风按文体隔离，小说不继承文章类文风
 details: 调整内置 default 规范包与文体合并规则：style 等文风条目按文体类别（文章类、小说类）声明适用范围，novel 与 short-story 不继承「结论先行」等文章文风；config resolved 列出被排除条目及原因。注意 architecture 教训 lesson-8f8885（文体默认值沿单元级应用点生效）。再生成受影响的黄金文件并测试 novel 的 config resolved 与 context 不含文章文风。
 depends_on: []

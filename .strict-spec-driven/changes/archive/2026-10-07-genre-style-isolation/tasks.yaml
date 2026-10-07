@@ -1,0 +1,45 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: genre-style-isolation
+sections:
+  Implementation:
+    schema-catalog:
+      text: internal/schema：genre.schema.json 加 category（article|fiction），pack.schema.json 的 style 条目支持字符串或 {text, applies_to}；internal/catalog：Genre.Category 与 Pack.Style []StyleEntry 解码两种形式
+      status: complete
+    resolve-filter:
+      text: internal/resolve：merge 按文体类别过滤 style，被排除条目写入 ExcludedStyle（text、source、appliesTo、reason）；Ref 带 category
+      status: complete
+    builtin-data:
+      text: '内置数据：default 规范包两条文风加 applies_to: [article] 并更新注释；tech-blog、wechat-marketing 声明 category: article，short-story、novel 声明 category: fiction'
+      status: complete
+    cli-output:
+      text: internal/cli：config resolved 人读输出显示文体类别与被排除的文风条目及原因；internal/learn：pack learn/confirm 写入文风时识别对象形式的同文条目，不重复追加
+      status: complete
+    golden-docs:
+      text: UPDATE_GOLDEN=1 再生成 novel-e2e 黄金文件并复核差异只少了文章类文风；docs/GLOSSARY.md 加入文体类别（Genre Category）
+      status: complete
+    spec-deltas:
+      text: 生成 genres-and-packs 主规格增量，反映实际实现
+      status: complete
+  Testing:
+    unit-tests:
+      text: resolve、catalog、schema、learn 与 cli 测试：novel 与 short-story 的 resolved.style 不含文章文风且 excludedStyle 列出原因；tech-blog 保留；无文体与 minimal 全部生效；字符串条目对所有文体生效；schema 拒绝未知类别；novel-e2e 断言 config resolved 与 context 不含结论先行
+      status: complete
+      command: go test ./internal/resolve/ ./internal/catalog/ ./internal/schema/ ./internal/learn/ ./internal/cli/
+    full-regression:
+      text: 完整回归（含覆盖率阈值 80%）
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    verify-change:
+      text: strict-spec-cli verify genre-style-isolation 通过，任务全部完成
+      status: complete
+      command: strict-spec-cli verify genre-style-isolation
+    archive-ready:
+      text: 审查通过后归档，规格增量合并入 genres-and-packs 主规格，路线图计划变更标记完成
+      status: complete
+testing_gates:
+  validation_task: full-regression
+  unit_test_task: unit-tests

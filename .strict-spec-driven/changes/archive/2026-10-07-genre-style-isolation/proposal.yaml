@@ -1,0 +1,33 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: genre-style-isolation
+  status: proposed
+summary:
+  what:
+    - 文体用 category 声明文体类别（Genre Category）：tech-blog 与 wechat-marketing 为 article（文章类），short-story 与 novel 为 fiction（小说类）；规范包的 style 条目除字符串外可写成 {text, applies_to} 对象，声明只适用于哪些文体类别
+    - 内置 default 规范包的两条文风（结论先行、用事实与数据代替空泛形容词）声明为只适用于文章类；按作品文体合并时，与文体类别不符的文风条目不进入 resolved.style，从而不进入上下文包（Context Pack）的 norms.style
+    - wa-cli config resolved 新增 excludedStyle，列出被排除的文风条目、来源、适用范围与排除原因；resolved.genre 带出文体类别；人读输出同样列出
+  why:
+    - 2026-10-07 里程碑审计发现 novel-e2e 语料黄金上下文的 norms.style 出现「结论先行」等技术博客文风，小说继承了文章类写作规范，误导起草场景的 Agent
+scope:
+  in:
+    - genre 与 pack 的 JSON Schema：genre.category、pack.style 条目的对象形式与 applies_to
+    - internal/catalog 解码文体类别与文风条目；internal/resolve 在唯一合并入口按文体类别过滤并记录 excludedStyle
+    - 内置 default 规范包与四个内置文体的数据更新；wa-cli config resolved 人读输出；pack learn 写入文风时识别对象形式的同文条目
+    - novel-e2e 语料黄金文件再生成；单元、CLI 与 E2E 测试；docs/GLOSSARY.md 加入文体类别
+    - genres-and-packs 主规格增量
+  out:
+    - 新增小说类专用文风条目或改写其他规范包内容
+    - glossary、bannedTerms、rules、rubric 等其他条目的按类别适用范围
+    - 工作区自定义文体；里程碑中的其他计划变更
+unchanged_behavior:
+  - 未声明 applies_to 的字符串文风条目对所有文体生效，追加顺序与来源不变
+  - 没有设置文体或文体未声明类别（如 minimal）时所有文风条目都生效，现有 init 工作区的 config resolved 结果中 style 不变
+  - tech-blog 与 wechat-marketing 作品的 resolved.style 与上下文包 norms.style 不变
+  - 规范包只能是数据；其他合并规则、来源标识与诊断不变
+roadmap:
+  milestone: novel-guarantee-hardening
+  planned_change: genre-style-isolation
