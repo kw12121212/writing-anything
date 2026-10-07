@@ -1,0 +1,35 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: mcp-protocol-compat
+approach:
+  - 在 internal/mcp 中把请求按时代（Era）路由：method 为 initialize 的请求进入旧版握手；params._meta 含 io.modelcontextprotocol/protocolVersion 的请求按 2026-07-28 无状态语义处理（沿用现有 check 与 dispatch）；该 stdio 进程已建立旧版会话时，不含该键的请求按旧版语义处理；其余请求沿用现有校验（缺少 _meta 返回 -32602）。
+  - 旧版握手与会话状态放在新文件 internal/mcp/legacy.go：legacySession 记录是否已收到 notifications/initialized 与 resources/subscribe 订阅的 URI 集合（协商的版本只在 initialize 结果中返回，之后的处理不随版本变化，因此不保存）；initialized 之前的旧版请求（ping 除外）在解析 params 之前即以 -32600 拒绝；旧版 dispatch 处理 ping、resources/subscribe、resources/unsubscribe，其余方法交给两代共用的业务映射 common（tools/list、tools/call、resources/list、resources/read、prompts/list、prompts/get）；旧版结果不加 resultType 与 _meta.serverInfo。订阅由一个按 Config.Interval 轮询的 goroutine 服务，资源变化时在持有会话锁的情况下发送 params 只含 uri 的 notifications/resources/updated，使 resources/unsubscribe 回复之后不再出现该 URI 的通知。
+decisions:
+  era-routing:
+    decision: initialize 总是进入旧版握手；带 _meta 协议版本键的请求总按 2026-07-28 处理，即使在旧版会话中；旧版会话中不带该键的请求按旧版处理
+    rationale: planned change details 规定「带 _meta 的请求按 2026-07-28 无状态处理（现有行为不变）」「initialize 请求在该 stdio 进程内选择旧版语义」「旧版会话中不要求 _meta」；以协议版本键而非整个 _meta 判定，是因为旧版客户端也可能在 _meta 中携带 progressToken 等字段
+  version-negotiation:
+    decision: initialize 请求 2025-11-25 或 2025-06-18 时回复同一版本，其他字符串版本回复 2025-11-25；protocolVersion 缺失或不是字符串返回 -32602，重复 initialize 返回 -32600，两者的 message 列出支持版本且 data.supported 为三个版本
+    rationale: 2025-06-18 lifecycle 规定服务端不支持所请求版本时必须回复自己支持的另一个版本（应为最新），客户端不支持时自行断开；2026-07-28 versioning 要求 initialize 错误中写明支持的版本，旧版客户端只能显示这条信息
+  supported-versions:
+    decision: SupportedVersions 为 [2026-07-28, 2025-11-25, 2025-06-18]，同时用于 server/discover 的 supportedVersions、-32022 的 data.supported 与 initialize 错误
+    rationale: planned change 要求 discover 列出三个版本；2026-07-28 规范的 UnsupportedProtocolVersionError 示例在 supported 中同时列出新旧版本，客户端据此选择改用 initialize，两处不一致会让探测客户端得到矛盾的信息
+  handshake-gate:
+    decision: 旧版会话在收到 notifications/initialized 之前，除 ping 外的请求返回 -32600；未 initialize 且不带 _meta 的请求沿用 -32602，message 提示可先发送 initialize
+    rationale: planned change details 要求「收到 notifications/initialized 后接受」各方法与「旧版会话未 initialize 即调用被拒」；2025 lifecycle 允许初始化期间只发送 ping；未 initialize 时保留 -32602 使 version-errors 场景不变
+  legacy-subscribe:
+    decision: resources/subscribe 只接受 resources/read 能读取的 URI（否则 -32602 Resource not found），重复订阅幂等，至多 64 个 URI；resources/unsubscribe 移除该 URI；更新通知不含 _meta.subscriptionId
+    rationale: 旧版订阅没有订阅请求 id，按 URI 管理即可；资源存在性与错误码复用共用的读取映射，上限沿用 workspace-artifacts/input-limits 中每个订阅 64 个资源的约束；planned change 只要求订阅更新沿用现有通知方法
+  legacy-result-shape:
+    decision: 旧版会话的成功结果不加 resultType 与 _meta.serverInfo，服务身份放在 initialize 结果的 serverInfo 中
+    rationale: resultType 与 _meta.serverInfo 是 2026-07-28 引入的字段，旧版 InitializeResult 以 serverInfo 字段给出身份（Context7 查询 2025-06-18 与 2025-11-25 规范确认两版 initialize 结果字段同为 protocolVersion、capabilities、serverInfo、instructions，2025-11-25 只多出本服务不声明的 tasks 能力与可选展示字段）
+alternatives:
+  - option: 按整个进程首个请求的时代锁定语义，之后拒绝另一时代的请求
+    reason: 会改变带 _meta 请求在旧版会话中的行为，违背「带 _meta 的请求现有行为不变」，也让先 discover 探测再回退 initialize 的客户端失败
+  - option: 旧版订阅复用 subscriptions/listen 的订阅表与 goroutine
+    reason: 两代订阅的标识（请求 id 与 URI）、确认通知和取消方式不同，混用会让版本隔离失效并使 32 个订阅的上限计数含义混乱
+risks:
+  - 多协议版本扩大 MCP 维护面：握手与会话状态集中在 legacy.go，业务映射只有一份
+  - claude-code 与 codex 实际使用的版本尚未真实验证，由 agent-dogfood 记录；若两者都已使用新版，旧版兼容可降为可选

@@ -338,3 +338,8 @@ categories:
       status: active
       occurrences: 1
       path: .strict-spec-driven/lessons/testing/lesson-b17b72.yaml
+    io-pipe-mcp-a460e7:
+      title: 用 io.Pipe 驱动进程内 MCP 服务时，连发两条请求再读取会死锁
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/testing/io-pipe-mcp-a460e7.yaml
