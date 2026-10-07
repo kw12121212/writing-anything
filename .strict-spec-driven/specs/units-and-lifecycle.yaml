@@ -232,7 +232,7 @@ requirements:
         - THEN: advance 退出码为 1 且不修改文件；next 输出的 post 条目 commands 含 wa-cli outline show post --dir D --json
   derived-stage:
     strength: MUST
-    statement: 文体（Genre）可以把单元类型声明为汇总单元（Aggregated Unit）：单元类型上的布尔字段 stage_from_children 为 true（声明与校验见 genres-and-packs 主规格的 aggregated-unit-types）。汇总单元的阶段（Stage）不由推进得出，而是由子单元汇总的推导阶段（Derived Stage）：取其子单元树中所有非汇总子孙单元（走生命周期的单元）里最落后者的阶段——按该文体阶段序列排序最靠前的阶段；没有非汇总子孙单元时为文体的第一个阶段；全部为 done 时为 done。work.yaml 中汇总单元仍必须存有合法 stage（JSON Schema 不变，wa-cli unit add 写入文体的第一个阶段作为存储值），wa-cli 的行为以推导阶段为准：wa-cli advance <汇总单元> 不修改文件，报告错误码 lifecycle.derived-stage（path 为该 work.yaml，next 包含 wa-cli status --dir <dir> --json），退出码 1。wa-cli next 对汇总单元：steps 中该单元的 stage 为推导阶段，blockers 为其未完成非汇总子孙单元的阻塞项按 next-steps 规定顺序去重后的并集（同一 code、artifact、path 与 decision 的阻塞项只保留一条），commands 为空数组，action 提示未完成的非汇总子孙单元数量，feedback 仍为该单元自身的未处理反馈；推导阶段为 done 的汇总单元不出现在不带 unit 参数的 next 输出中（同 next-skips-done）。给出 unit 参数且该单元为汇总单元时同样输出上述条目。非汇总单元在 next 中的行为不变。
+    statement: 文体（Genre）可以把单元类型声明为汇总单元（Aggregated Unit）：单元类型上的布尔字段 stage_from_children 为 true（声明与校验见 genres-and-packs 主规格的 aggregated-unit-types）。汇总单元的阶段（Stage）不由推进得出，而是由子单元汇总的推导阶段（Derived Stage）：取其子单元树中所有非汇总子孙单元（走生命周期的单元）里最落后者的阶段——按该文体阶段序列排序最靠前的阶段；没有非汇总子孙单元时为文体的第一个阶段；全部为 done 时为 done。work.yaml 中汇总单元仍必须存有合法 stage（JSON Schema 不变，wa-cli unit add 写入文体的第一个阶段作为存储值），wa-cli 的行为以推导阶段为准：wa-cli advance <汇总单元> 不修改文件，报告错误码 lifecycle.derived-stage（path 为该 work.yaml，next 包含 wa-cli status --dir <dir> --json），退出码 1。wa-cli next 对汇总单元：steps 中该单元的 stage 为推导阶段，blockers 为其未完成非汇总子孙单元的阻塞项按 next-steps 规定顺序去重后的并集（同一 code、artifact、path 与 decision 的阻塞项只保留一条），commands 为空数组——唯一例外是部单元（卷，见 volume 主规格）目录下已有通过校验而 confirmed_by_author 不为 true 的卷末检查点（Volume Checkpoint）checkpoint.yaml 时，commands 为 [wa-cli volume confirm <part> --dir <dir> --json, wa-cli help volume confirm --json]，action 另提示请作者核对并确认该检查点；action 提示未完成的非汇总子孙单元数量，feedback 仍为该单元自身的未处理反馈；推导阶段为 done 的汇总单元不出现在不带 unit 参数的 next 输出中（同 next-skips-done）。给出 unit 参数且该单元为汇总单元时同样输出上述条目；wa-cli status 的 units 中汇总单元的 blockers 与 commands 与 next 相同。非汇总单元在 next 中的行为不变。
     scenarios:
       derive-weakest:
         - GIVEN: novel 作品 my-novel 有 part-one（chapter-one 下 scene-1 的 stage 为 done、scene-2 为 draft，chapter-two 下 scene-3 为 brief）
@@ -254,6 +254,10 @@ requirements:
         - GIVEN: novel 作品 my-novel 的 chapter-one 下 scene-1 缺 brief 产物、scene-2 缺 brief 产物
         - WHEN: 运行 wa-cli next my-novel/chapter-one --dir D --json
         - THEN: steps 只含 chapter-one 一项，stage 为 brief，blockers 为 scene-1 与 scene-2 的 lifecycle.missing-artifact 阻塞项去重后的并集（两条，path 各为场景的单元目录），commands 为空数组，action 提示未完成的场景数量，退出码为 0
+      next-volume-confirm:
+        - GIVEN: novel 作品 my-novel 的 part-one 最后一个场景已验收，wa-cli accept 自动生成了未确认的 checkpoint.yaml
+        - WHEN: 运行 wa-cli next my-novel/part-one --dir D --json
+        - THEN: steps 只含 part-one 一项，commands 依次为 wa-cli volume confirm my-novel/part-one --dir D --json 与 wa-cli help volume confirm --json，action 提到 wa-cli volume confirm，退出码为 0；确认后 commands 为空数组
   unit-insert:
     strength: MUST
     statement: wa-cli unit add <parent> <type> <id> 必须支持可选的 --before <sibling-id> 与 --after <sibling-id>（互斥）：给出时在该父单元子单元序列中锚点兄弟单元之前/之后插入新单元，而不是末尾追加；两个参数都省略时仍在末尾追加（行为同 unit-add）。新单元的 id、type、stage（文体的第一个阶段）与 units 为空数组，既有校验（work.child-type-not-allowed、artifact.schema-violation、artifact.duplicate-id、work.anchored-value）与成功输出（unit、type、parent、stage）不变，只修改 work.yaml 中插入位置处的节点，保留其他内容与 YAML 注释。锚点 id 在作品中不存在时报告错误码 unit.not-found（既有）；锚点单元存在但不是 parent 的直接子单元时报告错误码 unit.not-sibling（message 含锚点 id 与父单元引用）；--before 与 --after 同时给出时报告 input.invalid-value（field 为 before）。这些情况都不修改文件，退出码为 1。

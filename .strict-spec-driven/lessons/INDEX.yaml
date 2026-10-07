@@ -260,6 +260,11 @@ categories:
       status: active
       occurrences: 1
       path: .strict-spec-driven/lessons/coding/shell-var-shell-9b16fa.yaml
+    lesson-0e4b1a:
+      title: 作品与单元来自不同加载时，按指针比较祖先会静默判错
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/coding/lesson-0e4b1a.yaml
   documentation:
     must-must-6af326:
       title: 修改一条 MUST 需求时，要检查同一规格里相邻的 MUST 是否因此冲突

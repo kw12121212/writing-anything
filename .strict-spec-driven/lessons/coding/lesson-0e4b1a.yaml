@@ -1,0 +1,19 @@
+schema: strict-spec-driven/lesson/v1
+schema_version: 1
+artifact_type: lesson
+schema_file: templates/strict-spec-driven/schemas/lesson.yaml
+lesson:
+  id: lesson-0e4b1a
+  title: 作品与单元来自不同加载时，按指针比较祖先会静默判错
+category: coding
+status: active
+created_at: '2026-10-07T11:29:16.611Z'
+updated_at: '2026-10-07T11:29:16.611Z'
+context: volume-checkpoint-gate 让卷末检查点门禁在没有检查点时也生效，并在阅读页验收路径上自动生成检查点
+observation: preview_confirm 的验收把外层 work.Load 得到的作品 w 与另一次 work.Resolve 得到的单元 u 一起传给 acceptVia；volume.AcceptanceBlockers 用 p == x 判定单元所属的部，结果把本部当成更早的部报告 volume.missing。原先只因本部检查点不存在而被跳过，缺陷一直没暴露
+takeaway: 跨函数传递单元树节点时，祖先、子树与同一单元的判定一律按单元引用（Ref）比较；或者保证作品与单元出自同一次解析，不混用两次加载的结果
+applies_when: 代码在单元树上用指针相等判定祖先、子孙或同一单元，且调用方可能分别加载作品与单元
+occurrences:
+  - origin: volume-checkpoint-gate
+    date: '2026-10-07'
+    evidence: internal/cli/preview_confirm.go 验收分支改用 work.Resolve 返回的作品；internal/volume/volume.go AcceptanceBlockers 与 subtreeScenes 改为比较 Ref；TestConfirmationChannelStrict 首次失败的诊断含 part-two 的 volume.missing

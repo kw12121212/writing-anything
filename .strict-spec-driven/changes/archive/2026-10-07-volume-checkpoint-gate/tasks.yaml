@@ -1,0 +1,45 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: volume-checkpoint-gate
+sections:
+  Implementation:
+    volume-on-accept:
+      text: internal/volume：抽出 generate(root, w, u, accepted)，新增 OnAccept（部先序最后场景验收后生成检查点，其余场景未完成或生成失败时返回 warning）
+      status: complete
+    volume-missing-gate:
+      text: internal/volume AcceptanceBlockers：更早且子树含场景的部缺少 checkpoint.yaml 时报告 volume.missing（strict error，其他 warning），更新包注释
+      status: complete
+    accept-wiring:
+      text: internal/cli acceptVia 调用 volume.OnAccept，检查点路径并入 changedPaths、warning 并入关卡 warning；gateNext 为 volume.missing 与 volume.scenes-open 给出 wa-cli volume checkpoint 等下一步
+      status: complete
+    next-confirm:
+      text: internal/cli units.go：部单元检查点已生成未确认时 next/status 的 commands 列出 wa-cli volume confirm <part> 与 wa-cli help volume confirm --json，action 追加提示
+      status: complete
+    e2e-corpus:
+      text: novel-e2e：删去三处手动 volume checkpoint 步骤，各部最后场景 accept 步骤断言检查点路径，更新 matrix.yaml T-VOLUME-01 与相关说明，UPDATE_GOLDEN=1 再生成黄金文件并人工复核差异
+      status: complete
+    spec-and-docs:
+      text: 同步 volume 主规格（新增 checkpoint-on-accept，修改 volume-accept-gate）与 units-and-lifecycle 主规格（derived-stage）的 delta；docs/GLOSSARY.md 卷末检查点释义改为验收自动生成、缺失或未确认即阻塞
+      status: complete
+  Testing:
+    volume-tests:
+      text: 测试：最后场景验收自动生成检查点（confirmed_by_author 为 false、changedPaths 含 checkpoint.yaml）、部内场景未完成时不生成并提示、strict 缺失阻塞（volume.missing）、strict 未确认阻塞、standard 仅提示、确认后放行、空部不参与、next 列出 volume confirm；修正受影响的既有夹具
+      status: complete
+      command: go test ./internal/volume/ ./internal/cli/
+    full-regression:
+      text: 运行完整回归（含覆盖率阈值 80%）
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    verify-change:
+      text: strict-spec-cli verify volume-checkpoint-gate 通过，任务全部完成
+      status: complete
+      command: strict-spec-cli verify volume-checkpoint-gate
+    archive-ready:
+      text: 审查通过后归档，确认 delta spec 合并进 volume 与 units-and-lifecycle 主规格，路线图 planned change 标记完成
+      status: complete
+testing_gates:
+  validation_task: full-regression
+  unit_test_task: volume-tests
