@@ -1,0 +1,32 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: criteria-reconciliation
+approach:
+  - 对账表为 YAML：schema_version 1 与 entries 数组，每项含 milestone（里程碑 id）、criterion（完成标准原文，逐字一致）、tests（「包目录.函数名」形式的测试引用数组，如 internal/cli.TestNext）与可选 hardened_by（修复该标准审计缺口的已归档加固变更名数组）。检查以仓库根目录为输入：读取 archive/milestones/*.yaml 的 milestone id 与 done_criteria，与表项按（milestone, criterion）双向比对；对每个测试引用解析该目录下全部 *_test.go（go/parser），确认存在同名 Test 函数，并检查函数体首层语句没有对 Skip、Skipf、SkipNow 的无条件调用；hardened_by 的变更名必须对应 .strict-spec-driven/changes/archive/<日期>-<变更名> 目录。全部问题汇总后按稳定顺序输出，任一问题使退出码为 1。
+  - run(args, stdout, stderr) int 遵循 injectable-io；-root 默认为当前目录、-table 默认为 internal/tools/criteria/testdata/criteria.yaml、-min-hardened 默认为 14（审计加固表项下限，不足时作为问题报告）。main_test.go 的 TestCriteriaReconciliation 以仓库根目录运行真实对账；其余测试在 t.TempDir() 中按测试内常量搭建最小夹具仓库（每个用例独立），逐一触发缺表项、原文变化、测试不存在、非测试签名与小写 Testxxx、当前平台不编译的测试文件（构建约束）、首层无条件跳过、未知加固变更、加固表项不足与表格式错误。
+decisions:
+  tool-location:
+    decision: 检查放在 internal/tools/criteria（package main），表放在其 testdata/ 下
+    rationale: 里程碑 intake 问题 reconciliation-home 已定：不进入产品二进制、不计入覆盖率（dev-tools-isolation、AGENTS.md 覆盖率范围），产品运行时不依赖 strict-spec-driven；TestNoDevToolDependency 已保证产品不 import internal/tools/**
+  verbatim-criterion:
+    decision: 表项保存完成标准原文并按原文匹配，原文变化即视为表项过期且该标准缺表项
+    rationale: 计划变更要求完成标准文本变化时重新确认映射；保存原文比哈希可读，审阅者能直接看出映射是否仍然成立
+  archived-only:
+    decision: 只对账 roadmap/archive/milestones 下的里程碑
+    rationale: 计划变更 details 明确读取 archive/milestones；尚在 milestones/ 下的里程碑（含已 complete 的三个加固里程碑）在归档时按 release 技能与技术规范写明的流程补表，避免对未归档或尚无测试可映射的标准（如发布标签）提前失败
+  audit-hardened-by:
+    decision: 以 hardened_by 登记审计缺口与加固变更，断言变更已归档且此类表项不少于 14 条
+    rationale: 审计的 14 条清单未以文件形式留存，只能从加固里程碑 details 与各加固变更 proposal 的审计证据还原；以加固变更为锚点可机械校验，登记全部有审计证据的标准（超集）保证 14 条都被覆盖
+  no-delta-spec:
+    decision: 不新增规格增量，specs/ 留空
+    rationale: 对账只存在于仓库测试与 internal/tools 下，不改变 wa-cli、MCP 服务与内置技能的可观察行为；被写弱的 volume、closeout、impact 主规格已由前序加固变更回补；新增工程约束以 go-project-structure 技术规范增量记录
+alternatives:
+  - option: 在每个测试函数上加注释标签反向登记完成标准
+    reason: 标签分散在几十个文件中，难以审阅一条标准对应哪些测试，也无法检测完成标准缺映射
+  - option: 运行 go test -json 解析实际执行与跳过结果
+    reason: 需要再跑一遍完整测试，耗时且与 go test ./... 嵌套；计划变更指定 go/ast 静态解析
+risks:
+  - 表项映射正确性只能静态校验函数存在与非无条件跳过，无法证明测试断言了标准的全部内容；以审阅与 hardened_by 登记缓解
+  - 里程碑归档后完整回归立即失败直到补表；这是有意的强制，release 技能与技术规范写明处理方式

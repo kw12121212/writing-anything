@@ -1,0 +1,40 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: criteria-reconciliation
+sections:
+  Implementation:
+    criteria-tool:
+      text: 新增 internal/tools/criteria/main.go：读取对账表与 archive/milestones，双向比对完成标准原文，go/ast 解析测试函数与首层无条件 t.Skip，校验 hardened_by 变更已归档，汇总问题并以退出码报告
+      status: complete
+    criteria-table:
+      text: 编写 internal/tools/criteria/testdata/criteria.yaml：全部已归档里程碑的每条完成标准映射到至少一个测试函数；为有审计证据的标准登记 hardened_by（不少于 14 条）
+      status: complete
+    release-skill-doc:
+      text: release 技能写明对账检查与新里程碑归档时同步补表；project_skills_test 登记 internal/tools/criteria 引用；docs/GLOSSARY.md 新增完成标准、完成标准对账与对账表
+      status: complete
+    delta-tech:
+      text: 生成 go-project-structure 技术规范增量 criteria-reconciliation 规则
+      status: complete
+  Testing:
+    focused-tests:
+      text: 运行对账工具与项目技能的聚焦测试：真实仓库对账通过，夹具覆盖缺表项、过期表项、测试不存在、首层无条件跳过、未知加固变更与表格式错误
+      status: complete
+      command: go test ./internal/tools/criteria ./internal/skills -count=1 && go run ./internal/tools/criteria
+    full-regression:
+      text: 运行完整回归命令（含覆盖率阈值 80%）
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    ready-verify:
+      text: 运行 strict-spec-cli verify 确认变更产物完整、任务全部完成
+      status: complete
+      command: strict-spec-cli verify criteria-reconciliation
+    scope-check:
+      text: 核对产品代码与主规格未被修改，产品二进制不依赖 internal/tools/criteria（TestNoDevToolDependency）
+      status: complete
+      command: git diff --stat -- .strict-spec-driven/specs cmd && go test ./cmd/wa-cli -run TestNoDevToolDependency -count=1
+testing_gates:
+  validation_task: full-regression
+  unit_test_task: focused-tests
