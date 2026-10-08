@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -307,27 +308,49 @@ func TestInstallShEndToEnd(t *testing.T) {
 }
 
 // TestInstallPs1 在有 PowerShell（pwsh）时运行 install.ps1；PROCESSOR_ARCHITECTURE 与 OS 由环境变量模拟。
-// 每个用例分别以 -File 与模拟 irm | iex（按 UTF-8 解码脚本后交给 Invoke-Expression）两种方式运行。
+// 每个用例分别以三种方式运行：-File；按 UTF-8 解码脚本后交给 Invoke-Expression（iex）；
+// 以及与文档推荐的安装命令相同的 irm <url> | iex，脚本由测试服务器按 raw.githubusercontent.com 的
+// Content-Type（text/plain; charset=utf-8）提供。
+// 没有 pwsh 时跳过；设置 WA_REQUIRE_PWSH=1 时改为失败，供 release 技能确认 Windows 安装校验确实运行过。
 func TestInstallPs1(t *testing.T) {
 	pwsh, err := exec.LookPath("pwsh")
 	if err != nil {
-		t.Skip("没有 pwsh，跳过 install.ps1 的测试")
+		if os.Getenv("WA_REQUIRE_PWSH") == "1" {
+			t.Fatal("WA_REQUIRE_PWSH=1 但没有 pwsh：请安装 PowerShell 7（pwsh）后重跑；在 Windows 本机同样需要 PowerShell 7，在其中执行 $env:WA_REQUIRE_PWSH='1'; go test ./internal/tools/release -run TestInstallPs1 -count=1 -v")
+		}
+		t.Skip("没有 pwsh，跳过 install.ps1 的测试（设置 WA_REQUIRE_PWSH=1 时改为失败）")
 	}
 	script, err := filepath.Abs(filepath.Join(repoRoot, "install.ps1"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if data := readFile(t, script); strings.HasPrefix(data, "\uFEFF") {
+	scriptData := readFile(t, script)
+	if strings.HasPrefix(scriptData, "\uFEFF") {
 		t.Fatal("install.ps1 带 BOM：irm | iex 会把 BOM 当作命令")
+	}
+	scriptServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/install.ps1" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		io.WriteString(w, scriptData)
+	}))
+	t.Cleanup(scriptServer.Close)
+	expressions := map[string]string{
+		"iex": "[Text.Encoding]::UTF8.GetString([IO.File]::ReadAllBytes($env:WA_TEST_SCRIPT)) | Invoke-Expression",
+		"irm": "Invoke-RestMethod -Uri $env:WA_TEST_SCRIPT_URL | Invoke-Expression",
 	}
 	modes := map[string][]string{
 		"file": {"-File", script},
-		"iex":  {"-Command", "[Text.Encoding]::UTF8.GetString([IO.File]::ReadAllBytes($env:WA_TEST_SCRIPT)) | Invoke-Expression"},
+		"iex":  {"-Command", expressions["iex"]},
+		"irm":  {"-Command", expressions["irm"]},
 	}
+	scriptEnv := []string{"WA_TEST_SCRIPT=" + script, "WA_TEST_SCRIPT_URL=" + scriptServer.URL + "/install.ps1"}
 	run := func(t *testing.T, mode string, files map[string][]byte, dir string, env ...string) installResult {
 		server := newAssetServer(t, files)
 		cmd := exec.Command(pwsh, append([]string{"-NoProfile", "-NonInteractive"}, modes[mode]...)...)
-		cmd.Env = append(os.Environ(), "WA_TEST_SCRIPT="+script, "OS=Windows_NT", "PROCESSOR_ARCHITEW6432=", "WA_VERSION=", "WA_BASE_URL="+server.URL, "WA_INSTALL_DIR="+dir)
+		cmd.Env = append(append(os.Environ(), scriptEnv...), "OS=Windows_NT", "PROCESSOR_ARCHITEW6432=", "WA_VERSION=", "WA_BASE_URL="+server.URL, "WA_INSTALL_DIR="+dir)
 		cmd.Env = append(cmd.Env, env...)
 		var stdout, stderr strings.Builder
 		cmd.Stdout, cmd.Stderr = &stdout, &stderr
@@ -408,15 +431,23 @@ func TestInstallPs1(t *testing.T) {
 		}
 	}
 
-	// 成功安装后，脚本的设置、变量与函数不留在调用者的会话里。
-	server := newAssetServer(t, fakeAssets())
-	cmd := exec.Command(pwsh, "-NoProfile", "-NonInteractive", "-Command",
-		"$ErrorActionPreference = 'Continue'; [Text.Encoding]::UTF8.GetString([IO.File]::ReadAllBytes($env:WA_TEST_SCRIPT)) | Invoke-Expression | Out-Null; "+
-			"Write-Output \"$ErrorActionPreference|$(Test-Path function:Fail)|$([bool](Get-Variable target, installDir -ErrorAction SilentlyContinue))\"")
-	cmd.Env = append(os.Environ(), "WA_TEST_SCRIPT="+script, "OS=Windows_NT", "PROCESSOR_ARCHITECTURE=AMD64", "PROCESSOR_ARCHITEW6432=",
-		"WA_VERSION=", "WA_BASE_URL="+server.URL, "WA_INSTALL_DIR="+t.TempDir())
-	out, err := cmd.Output()
-	if err != nil || strings.TrimSpace(string(out)) != "Continue|False|False" {
-		t.Fatalf("session state after iex = %q (err %v), want Continue|False|False", out, err)
+	// 以 iex 或 irm | iex 成功安装后，脚本的设置、变量与函数不留在调用者的会话里。
+	for mode, expression := range expressions {
+		t.Run("session/"+mode, func(t *testing.T) {
+			server := newAssetServer(t, fakeAssets())
+			dir := t.TempDir()
+			cmd := exec.Command(pwsh, "-NoProfile", "-NonInteractive", "-Command",
+				"$ErrorActionPreference = 'Continue'; "+expression+" | Out-Null; "+
+					"Write-Output \"$ErrorActionPreference|$(Test-Path function:Fail)|$([bool](Get-Variable target, installDir -ErrorAction SilentlyContinue))\"")
+			cmd.Env = append(append(os.Environ(), scriptEnv...), "OS=Windows_NT", "PROCESSOR_ARCHITECTURE=AMD64", "PROCESSOR_ARCHITEW6432=",
+				"WA_VERSION=", "WA_BASE_URL="+server.URL, "WA_INSTALL_DIR="+dir)
+			out, err := cmd.Output()
+			if err != nil || strings.TrimSpace(string(out)) != "Continue|False|False" {
+				t.Fatalf("session state after %s = %q (err %v), want Continue|False|False", mode, out, err)
+			}
+			if got := readFile(t, filepath.Join(dir, "wa-cli.exe")); got != "fake windows/amd64\n" {
+				t.Fatalf("installed %q, want the windows/amd64 asset", got)
+			}
+		})
 	}
 }

@@ -393,6 +393,8 @@
 | 发布产物 | Release Asset | 发布产物 | 随版本发布的文件：各平台的 `wa-cli-<os>-<arch>` 二进制与 `SHA256SUMS` |
 | 校验文件 | Checksum File | 校验文件 | 记录每个发布产物 SHA-256 的 `SHA256SUMS`，格式与 `sha256sum` 兼容 |
 | 安装脚本 | Install Script | 安装脚本 | `install.sh`（Linux、macOS）与 `install.ps1`（Windows）：下载、校验并把 `wa-cli` 安装到用户级目录 |
+| PowerShell | PowerShell | PowerShell | Windows 的命令行外壳与脚本语言，`install.ps1` 在其中运行；PowerShell 7 跨平台，可执行文件为 `pwsh`，Windows 自带的 Windows PowerShell 5.1 为 `powershell.exe` |
+| Linux 子系统 | WSL（Windows Subsystem for Linux） | WSL | 在 Windows 上运行 Linux 环境的子系统；本项目的开发环境之一，`install.ps1` 的测试可在其中用 Linux 版 pwsh 运行 |
 | 锁定文件 | Lock File | 锁定文件 | 记录已安装规范包来源、git 提交与内容 SHA-256 的文件 `.writing-anything/packs.lock.yaml`，由 `wa-cli pack install` 与 `wa-cli pack remove` 维护 |
 | 规范包仓库 | Registry | 规范包仓库 | 中心化发布与查找规范包的服务；尚未支持，`<owner>/<name>` 写法为它保留 |
 | 全文检索 | Full-text Search | 全文检索 | 按关键词查找正文中的出现位置 |

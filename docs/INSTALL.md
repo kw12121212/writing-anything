@@ -36,6 +36,18 @@ irm https://raw.githubusercontent.com/kw12121212/writing-anything/main/install.p
 curl -fsSL https://raw.githubusercontent.com/kw12121212/writing-anything/main/install.sh | WA_VERSION=v1.2.3 WA_INSTALL_DIR="$HOME/bin" sh
 ```
 
+## Windows 验证记录
+
+`install.ps1` 由 `internal/tools/release` 的 `TestInstallPs1` 验证：以 `-File`、iex（按 UTF-8 解码后交给 `Invoke-Expression`）与 `irm <url> | iex`（测试服务器按 `text/plain; charset=utf-8` 提供脚本，与 raw.githubusercontent.com 相同）三种方式运行，覆盖 amd64 与 arm64 安装成功，以及哈希不一致、`SHA256SUMS` 中没有记录、下载失败、不支持的架构、非 Windows 系统五类失败（失败时已安装的 `wa-cli.exe` 不变），并检查以 iex 与 `irm | iex` 运行后调用者会话没有残留设置、变量与函数。
+
+没有 PowerShell（pwsh）时该测试跳过；正式发布时 release 技能以 `WA_REQUIRE_PWSH=1 go test ./internal/tools/release -run TestInstallPs1 -count=1 -v` 运行它，缺少 pwsh 时测试失败而不是跳过。
+
+| 日期 | pwsh 版本 | 系统与架构 | 运行方式 | 结果 |
+|---|---|---|---|---|
+| 2026-10-08 | PowerShell 7.6.6 | Linux x64，运行在 Linux 子系统（WSL）2 中；以环境变量模拟 Windows 的 `OS` 与 `PROCESSOR_ARCHITECTURE` | `-File`、iex、`irm <url> \| iex` | `TestInstallPs1` 全部 23 个用例通过，未发现脚本缺陷 |
+
+尚未覆盖：在原生 Windows 上运行、Windows PowerShell 5.1，以及默认安装目录下把目录写入用户级 `PATH`（`HKCU\Environment` 注册表）的分支。`TestInstallPs1` 总是指定 `WA_INSTALL_DIR` 并只用 pwsh 运行，即使在 Windows 本机执行也不覆盖后两项；它们需要在 Windows 上不设置环境变量、分别用 Windows PowerShell 5.1 与 PowerShell 7 手动运行 `irm https://raw.githubusercontent.com/kw12121212/writing-anything/main/install.ps1 | iex`，确认新开的终端中 `wa-cli version` 可用。完成任一项验证后，请在上表追加一行并写明覆盖的部分。
+
 ## 用 go install 安装
 
 已安装 Go 1.27 或更高版本时：
