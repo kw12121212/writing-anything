@@ -1,0 +1,33 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: series-e2e
+approach:
+  - 语料沿用 novel-e2e 的格式契约（script-format.md 的 command/write_file/author_review/input_ref/expect_exit/expect_code/stdout_contains 字段），放在 internal/cli/testdata/e2e/series/。系列《雾港灯火》（harbor）含两部 novel 作品：第一部《雾港》（fog-harbor，1998 年）与第二部《归帆》（homeward，2008 年），各 part-1/ch-1/s1、s2 两个场景，场景按完整生命周期（简报→大纲→草稿→文本检查→收口→审稿→验收）推进，部末写分层摘要、确认卷末检查点；第二部的上下文包读取系列事实与第一部摘要。
+  - 系列级设定：系列素材与事实经 series set/fact 登记；系列级世界规则（雾笛规程）与物品经 canon add --scope series 写入共享设定集；第二部以作品级同 id 条目覆盖雾笛规程，脚本先录制缺少确认时被 canon.override-unconfirmed 拒绝的真实负向步骤，再带 --override-reason、--confirmed-by-author 与 --confirmation 覆盖。人物在各作品设定集登记（state/knowledge 只引用作品级条目），第一部确认老看守人陆山的终态，第二部场景以 after 跨作品声明晚于第一部，形成全局时间线。
+  - 测试复用：把 replayNovelCorpus 拆成 replayCorpus(t, dir, corpusDir, stopBefore)（返回步数与收口数，stopBefore 为命令串时在该步前停下）与小说专用下限检查；黄金比对抽成 compareCorpusGoldens；矩阵双向对账抽成 reconcileCorpusMatrix（参数为语料目录、黄金与负向断言源码文件、结构测试名前缀与最少条目数）。TestSeriesCorpusNegativeInjections 重放到第二部最后一个场景验收之前，逐类注入跨作品违例：断言 continuity harbor 报 error 级发现、accept homeward/s2 以退出码 1 拒绝并列出该错误码，修回后全绿，最后验收通过。
+decisions:
+  fixture-scale:
+    decision: 系列语料规模为两部作品、各一章两个场景，每场正文约 1000–1500 字（rune 计数），采用进程内重放
+    rationale: 里程碑 risks 写明系列 E2E 增加回归耗时，规模控制在两部作品、各一章两个场景并采用进程内重放；novel 文体单元层级固定为部→章→场景，因此每部作品含一个部
+  fix-in-change:
+    decision: 在本变更内修复 canon add --scope series 首次写入失败、覆盖 override 未写入 canon.yaml 与覆盖 confirmed_at 直取系统时钟三个缺陷
+    rationale: 三个缺陷直接阻止完成标准成立：第一个让系列级设定无法经 CLI 首次登记，第二个让「覆盖含原因与作者确认」无从落盘与校验，第三个让冻结时间源下两次重放不一致；TestInjectableClock 白名单注释已写明该例外「待系列覆盖确定性变更处理」，修复面都集中在 canon.Add 一处写入路径，单独立缺陷变更会让本计划变更无法独立完成
+  inject-before-accept:
+    decision: 负向注入在第二部最后一个场景处于审稿阶段、验收之前进行，用 accept 的真实退出码证明阻塞验收
+    rationale: 完成标准要求注入违例后阻塞验收；已验收场景不能再走 accept，重放到该步之前停下可以对同一个真实场景断言 accept 被拒、修回后验收通过，且不需要另造夹具
+  series-canon-shape:
+    decision: 系列级设定只放世界规则与物品，人物在各作品设定集登记
+    rationale: state、knowledge 与 closeout 只读取作品级设定集：系列级人物无法登记终态，也会在写后收口中被提示为疑似专有名词；跨作品已死人物检查按称谓在各作品设定集中解析，作品级人物即可覆盖该特性
+  no-delta-spec:
+    decision: 不新增主规格增量，specs/ 留空；时钟例外的撤销以 go-project-structure 技术规范增量记录
+    rationale: 语料与测试不改变 wa-cli 可观察行为；两处修复让实现符合 sources-and-provenance 主规格既有的 canon add --scope series 与覆盖记录要求，没有主规格要求需要变更
+alternatives:
+  - option: 为系列语料另写一套独立的重放器与对账器
+    reason: 与 novel 语料的断言逻辑重复，两套实现会漂移；技术规范 matrix-assertion-reconciliation 要求反向清单从断言源机械推导，共用助手才能保证两份语料一致
+  - option: 把注入放到完整重放之后，用 review show 的 gate.blockers 代替 accept
+    reason: review show 只读呈现阻塞项，不能证明 accept 真的以非零退出，达不到完成标准「阻塞验收」的证据强度
+risks:
+  - 回归耗时增加：系列语料约 120 步，重放四次（Replay 两次、Golden 与 NegativeInjections 各一次）
+  - 抽取助手时改变小说语料断言：以六个 TestNovelCorpus* 测试保持全绿与黄金文件不变作为回归证据

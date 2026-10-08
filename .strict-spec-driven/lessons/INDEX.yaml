@@ -358,3 +358,8 @@ categories:
       status: active
       occurrences: 1
       path: .strict-spec-driven/lessons/testing/lesson-2a8b24.yaml
+    yaml-0dfb79:
+      title: 只用手写 YAML 夹具测试的写入路径，真实命令序列第一次跑就会暴露缺陷
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/testing/yaml-0dfb79.yaml

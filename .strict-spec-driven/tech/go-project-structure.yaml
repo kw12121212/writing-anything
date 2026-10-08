@@ -109,18 +109,18 @@ rules:
       detail: 断言实现在 internal/cli 的 TestNovelCorpusScript：遍历脚本步骤中的 --base 参数与 ch1-s3-author.md 的 SHA-256 比对。
   injectable-clock:
     strength: MUST
-    statement: 领域包写入时间戳（decided_at、confirmed_at、recorded_at、written_at 等）必须以 time.Time 参数接收时钟，由 internal/cli 统一传包级 now()（cli/review.go 定义、测试可替换）；internal/ 非测试代码不得直取 time.Now() 或硬编码 time.Date 时刻，预检查函数（如 draft.Precheck）与实际写入必须传入同一时钟；唯一例外是 internal/canon 系列级同 id 覆盖的 ConfirmedAt（canon.go），新增例外须登记在本规则排除清单并由 TestInjectableClock 静态扫描强制。
-    rationale: 同一缺陷模式反复出现：decision/handoff/volume/review 先接入注入时钟，后加的 state/knowledge/plan/draft 又私取系统时钟、cli 新调用点直传 time.Now()，语料重放双跑一致性全部失守；fix-state-knowledge-clock 修复后以 TestInjectableClock（internal/cli）静态扫描强制，防止下一个时间戳再漏网。
+    statement: 领域包写入时间戳（decided_at、confirmed_at、recorded_at、written_at 等）必须以 time.Time 参数接收时钟，由 internal/cli 统一传包级 now()（cli/review.go 定义、测试可替换）；internal/ 非测试代码不得直取 time.Now() 或硬编码 time.Date 时刻，预检查函数（如 draft.Precheck）与实际写入必须传入同一时钟；没有例外（internal/canon 系列级同 id 覆盖的 ConfirmedAt 同样经 AddInput 接收时钟），新增例外须登记在本规则排除清单并由 TestInjectableClock 静态扫描强制。
+    rationale: 同一缺陷模式反复出现：decision/handoff/volume/review 先接入注入时钟，后加的 state/knowledge/plan/draft 又私取系统时钟、cli 新调用点直传 time.Now()，语料重放双跑一致性全部失守；fix-state-knowledge-clock 修复后以 TestInjectableClock（internal/cli）静态扫描强制。series-e2e 的系列语料录制作品级覆盖，覆盖的 confirmed_at 直取系统时钟会让冻结时间源下两次重放不一致，因此撤销原登记的 canon 例外。
     enforcement:
       method: lint
-      detail: 强制测试：internal/cli TestInjectableClock 扫描 internal/** 非测试 .go 文件的 time.Now() 与硬编码 time.Date(202* 行，白名单为 cli/review.go（now 定义处）与 canon/canon.go（登记排除）。
+      detail: 强制测试：internal/cli TestInjectableClock 扫描 internal/** 非测试 .go 文件的 time.Now() 与硬编码 time.Date(202* 行，白名单只有 cli/review.go（now 定义处）。
   matrix-assertion-reconciliation:
     strength: SHOULD
     statement: 以清单（测试矩阵、对账表等）登记断言意图时，应附双向对账校验测试：每条清单条目都必须解析到真实存在的断言（缺失项清单化输出），且全部实质断言（黄金文件、负向断言码、脚本内嵌断言等）都必须被至少一条清单条目引用。两条硬性细则：(1) 无断言过滤的宽匹配锚点只作存在性锚点，不得作为反向登记来源；(2) 反向清单的输入必须从断言源（测试源码字面量、脚本 YAML、黄金目录）机械推导，不得手工转录。
-    rationale: matrix-check 建立了该模式：对账测试首轮就抓到 6 处 evidence 与脚本事实不符、以及宽 token 使三个负向码的反向覆盖变成顺带命中的漏洞；手工转录的负向码清单与机械推导的清单之间的差距正是「断言漏登」的温床。
+    rationale: matrix-check 建立了该模式：对账测试首轮就抓到 6 处 evidence 与脚本事实不符、以及宽 token 使三个负向码的反向覆盖变成顺带命中的漏洞；手工转录的负向码清单与机械推导的清单之间的差距正是「断言漏登」的温床。series-e2e 把对账逻辑抽成按语料参数化的 reconcileCorpusMatrix，小说与系列语料共用。
     enforcement:
       method: test
-      detail: 强制实例：internal/cli TestNovelCorpusMatrix（负向码从 novel_corpus_golden_test.go 源码 diagCode/codes 字面量推导；黄金目录与黄金测试采集清单一一对应）。
+      detail: 强制实例：internal/cli 的 TestNovelCorpusMatrix 与 TestSeriesCorpusMatrix，都经 reconcileCorpusMatrix 执行（负向码从各自负向注入测试源码的 diagError/codes 字面量推导；黄金目录与黄金测试采集清单一一对应）。
   project-skill-location:
     strength: MUST
     statement: 仓库级项目技能（指导开发流程、不随二进制分发的 Agent Skills）放在 .agents/skills/<name>/SKILL.md：frontmatter 只含 name 与 description，name 与目录名相同，格式与内置技能一致；格式与引用完整性由 internal/skills 的结构校验测试覆盖。产品运行时（wa-cli、内置技能、MCP 服务）不得依赖这些文件
@@ -149,3 +149,10 @@ rules:
     enforcement:
       method: test
       detail: internal/tools/criteria 的 TestCriteriaReconciliation 以仓库根目录运行对账；也可用 go run ./internal/tools/criteria 单独运行并列出全部问题
+  corpus-shared-harness:
+    strength: SHOULD
+    statement: 新增可重放的端到端（E2E）语料应复用 internal/cli 的共享语料助手——replayCorpus（逐步重放与断言，可在指定步骤前停下）、assertSameTree（双跑目录树一致）、compareCorpusGoldens（黄金比对与 UPDATE_GOLDEN=1 再生成）与 reconcileCorpusMatrix（矩阵双向对账）——不另写重放器、黄金比对或对账器；语料专属的规模下限、负向注入与结构断言放在该语料自己的包装函数与测试中。
+    rationale: series-e2e 为系列语料复用 novel-e2e 框架时把三套逻辑抽成按语料目录参数化的助手；两套各自维护的重放与对账实现会在变异命令清单、收口零提示断言与反向对账规则上漂移，共用助手让任一语料发现的断言缺口同时作用于全部语料。
+    enforcement:
+      method: review
+      detail: 现有实例：TestNovelCorpus*（replayNovelCorpus 包装）与 TestSeriesCorpus*（replaySeriesCorpus 包装）；审查新语料时核对其测试只调用共享助手。

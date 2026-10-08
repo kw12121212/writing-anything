@@ -1,0 +1,49 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: series-e2e
+sections:
+  Implementation:
+    canon-series-fixes:
+      text: 修复 canon add --scope series 首次写入时系列设定集目录不存在导致的 workspace.write-failed；把作品级覆盖的 override 记录写入 canon.yaml；AddInput 增加时钟参数 At，覆盖的 confirmed_at 使用 internal/cli 注入的 now()；补 internal/canon 回归测试；TestInjectableClock 移除 canon/canon.go 白名单
+      status: complete
+    delta-tech:
+      text: 生成 go-project-structure 技术规范增量：injectable-clock 规则删除 canon 系列覆盖 ConfirmedAt 的例外与白名单说明
+      status: complete
+    corpus-helpers:
+      text: 把 replayNovelCorpus、黄金比对与 TestNovelCorpusMatrix 的对账逻辑抽成按语料目录参数化的助手（replayCorpus、compareCorpusGoldens、reconcileCorpusMatrix），小说语料断言与黄金文件不变
+      status: complete
+    series-corpus:
+      text: 编写系列语料 internal/cli/testdata/e2e/series/：素材、四个场景真实中文正文、收口与审稿载荷、交接记录，按真实执行录制 commands.yaml（含 canon.override-unconfirmed 真实负向步骤与跨作品 after 时间线）
+      status: complete
+    series-tests:
+      text: 新增 internal/cli/series_corpus_test.go：TestSeriesCorpusScript、TestSeriesCorpusReplay（冻结时间源、双跑逐字节一致）、TestSeriesCorpusGolden（UPDATE_GOLDEN=1 再生成）、TestSeriesCorpusNegativeInjections（跨作品已死人物、跨作品状态矛盾、跨作品同一时间两地：error 级发现 + accept 退出码 1，修回后验收通过）、TestSeriesCorpusMatrix（双向对账）
+      status: complete
+    matrix-and-docs:
+      text: 编写 matrix.yaml（系列级与作品级设定覆盖、全局时间线、同一时间两地、跨作品已死人物行动等条目及 evidence）、生成黄金文件、编写 series/README.md（语料设计与维护流程）并在 novel/README.md 补充指引；docs/GLOSSARY.md 如引入新术语同步补充
+      status: complete
+    review-fixes:
+      text: 处理独立审查发现：系列设定集写入与读取逐级拒绝符号链接（workspace.Blocked、workspace.EnsureDir 与两种符号链接布局的测试）；删除 seriesMemberCache 并补跨工作区不缓存的回归测试；小说矩阵推导下限恢复为 5/5；系列负向注入补充 [系列] 与第一部场景的断言；README 措辞对齐
+      status: complete
+  Testing:
+    focused-tests:
+      text: 运行系列与小说语料、canon 与注入时钟的聚焦测试
+      status: complete
+      command: go test ./internal/cli/ -run 'TestSeriesCorpus|TestNovelCorpus|TestInjectableClock|TestCanon' -count=1 && go test ./internal/canon/ -count=1
+    full-regression:
+      text: 运行完整回归命令（含覆盖率阈值 80%）
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    ready-verify:
+      text: 运行 strict-spec-cli verify 确认变更产物完整、任务全部完成
+      status: complete
+      command: strict-spec-cli verify series-e2e
+    scope-check:
+      text: 核对小说语料黄金文件与命令脚本未变、主规格未修改，系列语料测试无 t.Skip
+      status: complete
+      command: git diff --stat -- internal/cli/testdata/e2e/novel/golden internal/cli/testdata/e2e/novel/commands.yaml .strict-spec-driven/specs && ! grep -n 't.Skip' internal/cli/series_corpus_test.go
+testing_gates:
+  validation_task: full-regression
+  unit_test_task: focused-tests

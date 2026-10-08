@@ -1,0 +1,19 @@
+schema: strict-spec-driven/lesson/v1
+schema_version: 1
+artifact_type: lesson
+schema_file: templates/strict-spec-driven/schemas/lesson.yaml
+lesson:
+  id: yaml-0dfb79
+  title: 只用手写 YAML 夹具测试的写入路径，真实命令序列第一次跑就会暴露缺陷
+category: testing
+status: active
+created_at: '2026-10-08T03:53:26.376Z'
+updated_at: '2026-10-08T03:53:26.376Z'
+context: series-e2e 为系列小说录制真实 wa-cli 命令序列；此前 canon add --scope series 与作品级覆盖只有 internal/canon、internal/cli 的单元测试，夹具用手写 YAML 预先建好 .writing-anything/series/<id>/canon.yaml 与带 override 的条目
+observation: 录制第一步就失败：系列设定集目录不存在时 canon add --scope series 报 workspace.write-failed；覆盖记录 override 只出现在命令输出，从未写入 canon.yaml（单元测试只断言返回值）；confirmed_at 直取系统时钟让双跑不一致。三个缺陷都被手写夹具绕过——夹具替命令建了目录、替命令写了 override。
+takeaway: 为写入命令写测试时，至少一条用例从空工作区只经命令本身走到写入，并在写入后重新读取文件断言落盘内容，而不是只断言函数返回值；手写 YAML 夹具只用于读取侧与校验侧测试。新功能完成后尽早用真实命令序列（E2E 语料或临时目录脚本）跑一遍。
+applies_when: 为创建或修改产物的 wa-cli 命令写测试，且夹具用手写 YAML 预先建好目标文件或目录时
+occurrences:
+  - origin: series-e2e
+    date: '2026-10-08'
+    evidence: internal/canon/scope_test.go TestAddSeriesFirstWriteAndPersistedOverride；scopeProject 夹具预写 series/guide/canon.yaml；canon.go Add 原先只把 override 赋给返回值 e.Override
