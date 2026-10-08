@@ -353,3 +353,8 @@ categories:
       status: active
       occurrences: 1
       path: .strict-spec-driven/lessons/testing/events-2ef336.yaml
+    lesson-2a8b24:
+      title: 源码扫描只认字面量，会漏掉经辅助函数展开构造的同类位置
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/testing/lesson-2a8b24.yaml

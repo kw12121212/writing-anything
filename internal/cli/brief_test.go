@@ -200,7 +200,8 @@ func TestBriefSetRejects(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			code, res := runBrief(t, dir, append([]string{"brief", "set", "my-post"}, tt.args...)...)
 			d := diag(t, res.result, tt.code)
-			if code != 1 || res.Valid || d.Field != tt.field || d.Path != "" || !hasNext(d, tt.next) || res.Brief != nil || len(res.ChangedPaths) != 0 {
+			if code != 1 || res.Valid || d.Field != tt.field || d.Path != "" || !hasNext(d, tt.next) ||
+				d.Next[0] != shellCommand("wa-cli", "brief", "show", "my-post", "--dir", dir, "--json") || res.Brief != nil || len(res.ChangedPaths) != 0 {
 				t.Fatalf("exit code = %d, diagnostic = %+v", code, d)
 			}
 			if readFile(t, wsPath(dir, briefRel)) != before {
@@ -227,7 +228,8 @@ func TestBriefSetRejects(t *testing.T) {
 	}
 	writeFile(t, wsPath(dir, briefRel), "schema_version: 1\naudience: &a 读者\npurpose: *a\n")
 	code, res = runBrief(t, dir, "brief", "set", "my-post", "--purpose", "p")
-	if d := diag(t, res.result, "brief.anchored-value"); code != 1 || d.Field != "purpose" || !hasNext(d, "wa-cli help brief set --json") {
+	if d := diag(t, res.result, "brief.anchored-value"); code != 1 || d.Field != "purpose" ||
+		!concreteFirst(d, shellCommand("wa-cli", "brief", "show", "my-post", "--dir", dir, "--json"), "wa-cli help brief set --json") {
 		t.Fatalf("anchored: exit code = %d, diagnostic = %+v", code, d)
 	}
 	if code, res := runBrief(t, dir, "brief", "set", "nope", "--audience", "a"); code != 1 || diag(t, res.result, "work.not-found").Code == "" {

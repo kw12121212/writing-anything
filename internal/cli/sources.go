@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/kw12121212/writing-anything/internal/catalog"
@@ -229,6 +230,16 @@ func helpNext(ds []Diagnostic, name string, codes []string, extra ...string) {
 	}
 }
 
+// concreteHelpNext 把诊断 ds 中错误码属于 codes 的下一步改为具体命令 first 在前、查看 name 命令的用法在后
+// （生命周期主路径命令，见 cli 主规格 diagnostic-next-concrete）。
+func concreteHelpNext(ds []Diagnostic, first, name string, codes []string) {
+	for i := range ds {
+		if slices.Contains(codes, ds[i].Code) {
+			ds[i].Next = []string{first, "wa-cli help " + name + " --json"}
+		}
+	}
+}
+
 func runSourceAdd(inv *invocation) int {
 	dir := projectDir(inv)
 	res := &sourceAddResult{}
@@ -314,7 +325,8 @@ func runDraftWrite(inv *invocation) int {
 		}
 	}
 	res.Diagnostics = diagnostics(problems, dir)
-	helpNext(res.Diagnostics, "draft write", []string{codeInputReadFailed, draft.CodeEmpty, draft.CodeTooLarge, draft.CodeEditsAnchored})
+	concreteHelpNext(res.Diagnostics, shellCommand("wa-cli", "context", inv.args[0], "--dir", dir, "--json"), "draft write",
+		[]string{codeInputReadFailed, draft.CodeEmpty, draft.CodeTooLarge, draft.CodeEditsAnchored})
 	return finish(inv, res, func(w io.Writer) error {
 		if res.Draft == nil {
 			return nil

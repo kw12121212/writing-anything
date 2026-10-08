@@ -279,14 +279,16 @@ func TestDraftWriteChildAndRejects(t *testing.T) {
 		t.Fatalf("child: code = %d, changedPaths = %v", code, res.ChangedPaths)
 	}
 	code, res = runSrc(t, dir, " \n", "draft", "write", "my-post")
-	if d := diag(t, res.result, "draft.empty"); code != 1 || d.Next[0] != "wa-cli help draft write --json" {
+	if d := diag(t, res.result, "draft.empty"); code != 1 ||
+		!concreteFirst(d, shellCommand("wa-cli", "context", "my-post", "--dir", dir, "--json"), "wa-cli help draft write --json") {
 		t.Errorf("empty: code = %d, %+v", code, d)
 	}
 	if _, err := os.Stat(wsPath(dir, ".writing-anything/works/my-post/draft.md")); err == nil {
 		t.Error("empty write created draft.md")
 	}
 	code, res = runSrc(t, dir, strings.Repeat("段\n\n", 10001), "draft", "write", "my-post")
-	if d := diag(t, res.result, "draft.too-large"); code != 1 || d.Next[0] != "wa-cli help draft write --json" {
+	if d := diag(t, res.result, "draft.too-large"); code != 1 ||
+		!concreteFirst(d, shellCommand("wa-cli", "context", "my-post", "--dir", dir, "--json"), "wa-cli help draft write --json") {
 		t.Errorf("too large: code = %d, %+v", code, d)
 	}
 	if code, res = runSrc(t, dir, "x", "draft", "write", "my-post/nope"); code != 1 {
@@ -309,7 +311,7 @@ func TestProvenance(t *testing.T) {
 	dir := newWork(t)
 	draftRel := wsPath(dir, ".writing-anything/works/my-post/draft.md")
 	code, res := runSrc(t, dir, "", "provenance", "my-post")
-	if d := diag(t, res.result, "draft.not-found"); code != 1 || d.Path != ".writing-anything/works/my-post/draft.md" || d.Next[0] != "wa-cli help draft write --json" || res.Provenance != nil {
+	if d := diag(t, res.result, "draft.not-found"); code != 1 || d.Path != ".writing-anything/works/my-post/draft.md" || !slices.Equal(d.Next, []string{"wa-cli context my-post --dir " + dir + " --json", "wa-cli help draft write --json"}) || res.Provenance != nil {
 		t.Fatalf("no draft: code = %d, %+v", code, d)
 	}
 	// 没有写入记录：全部为 human。

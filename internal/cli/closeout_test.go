@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -158,8 +159,8 @@ func TestSceneCloseOutContractGap(t *testing.T) {
 	if d.Code == "" {
 		t.Fatalf("diagnostics = %+v", res.Diagnostics)
 	}
-	if !strings.Contains(strings.Join(d.Next, "\n"), "wa-cli help scene close-out") ||
-		!strings.Contains(strings.Join(d.Next, "\n"), "wa-cli help scene contract") {
+	if !concreteFirst(d, shellCommand("wa-cli", "outline", "show", "my-novel/scene-1", "--dir", dir, "--json"), "wa-cli help scene close-out --json") ||
+		!slices.Contains(d.Next, "wa-cli help scene contract --json") {
 		t.Fatalf("next = %v", d.Next)
 	}
 	if _, err := os.Stat(filepath.Join(dir, ".writing-anything", "works", "my-novel", "state.yaml")); err == nil {
@@ -176,7 +177,8 @@ func TestSceneCloseOutContractGap(t *testing.T) {
 
 func TestSceneCloseOutNotSceneNoDraft(t *testing.T) {
 	dir := closeoutFixture(t)
-	if code, res := runWS(t, dir, "scene", "close-out", "my-novel/chapter-one"); code != 1 || diag(t, res, "scene.not-scene").Code == "" {
+	if code, res := runWS(t, dir, "scene", "close-out", "my-novel/chapter-one"); code != 1 ||
+		!concreteFirst(diag(t, res, "scene.not-scene"), shellCommand("wa-cli", "status", "--dir", dir, "--json"), "wa-cli help scene close-out --json") {
 		t.Fatalf("not-scene: exit code = %d, diagnostics = %+v", code, res.Diagnostics)
 	}
 	if code, res := runWSIn(t, dir, "{}\n", "scene", "close-out", "my-novel/scene-2"); code != 1 || diag(t, res, "draft.not-found").Code == "" {
@@ -227,8 +229,8 @@ func TestSceneCloseOutBodyScan(t *testing.T) {
 		t.Fatalf("suspected = %+v", out.Closeout.Suspected)
 	}
 	d := diag(t, res, "closeout.suspected-name")
-	if d.Severity != "warning" || !strings.Contains(d.Message, "正文：赵铁柱") || len(d.Next) != 2 ||
-		d.Next[0] != "wa-cli help canon add --json" || d.Next[1] != "wa-cli help scene close-out --json" {
+	if d.Severity != "warning" || !strings.Contains(d.Message, "正文：赵铁柱") || !slices.Equal(d.Next, []string{"wa-cli canon list my-novel --dir " + dir + " --json",
+		"wa-cli help canon add --json", "wa-cli help scene close-out --json"}) {
 		t.Fatalf("diagnostic = %+v", d)
 	}
 	code, stdout, stderr := run(t, "scene", "close-out", "my-novel/scene-1", "--replace", "--file", "closeout-input.yaml", "--dir", dir)
@@ -263,7 +265,8 @@ func TestSceneCloseOutWaive(t *testing.T) {
 		t.Fatal(err)
 	}
 	writeFile(t, filepath.Join(dir, ".writing-anything", "works", "my-novel", "units", "scene-2", "draft.md"), "正文。\n")
-	if code, res := runWS(t, dir, "scene", "close-out", "my-novel/scene-2", "--waive", "精灵"); code != 1 || diag(t, res, "closeout.not-closed").Code == "" {
+	if code, res := runWS(t, dir, "scene", "close-out", "my-novel/scene-2", "--waive", "精灵"); code != 1 ||
+		!concreteFirst(diag(t, res, "closeout.not-closed"), shellCommand("wa-cli", "outline", "show", "my-novel/scene-2", "--dir", dir, "--json"), "wa-cli help scene close-out --json") {
 		t.Fatalf("not-closed: exit code = %d, diagnostics = %+v", code, res.Diagnostics)
 	}
 }
@@ -514,5 +517,31 @@ func TestCloseoutE2E(t *testing.T) {
 	}
 	if code, res := runWS(t, dir, "validate"); code != 0 {
 		t.Fatalf("final validate: exit code = %d, result = %+v", code, res)
+	}
+}
+
+// TestSceneCloseOutInputNext：收口输入引起的问题先给出场景契约或设定集，再给出 scene close-out 的用法（cli/diagnostic-next-concrete）。
+func TestSceneCloseOutInputNext(t *testing.T) {
+	dir := closeoutFixture(t)
+	help := "wa-cli help scene close-out --json"
+	writeFile(t, filepath.Join(dir, "bad-input.yaml"), "state_changes: 5\n")
+	code, res := runWS(t, dir, "scene", "close-out", "my-novel/scene-1", "--file", "bad-input.yaml")
+	if d := diag(t, res, "artifact.schema-violation"); code != 1 || d.Path != "" ||
+		!concreteFirst(d, shellCommand("wa-cli", "outline", "show", "my-novel/scene-1", "--dir", dir, "--json"), help) {
+		t.Fatalf("schema-violation: exit code = %d, diagnostics = %+v", code, res.Diagnostics)
+	}
+	writeFile(t, filepath.Join(dir, "entry-input.yaml"),
+		"state_changes:\n  - {entry: canon-9, state: 精灵交出灯芯, contract: sc-1}\nrecovers: [f-1]\nevents: [ev-2]\n")
+	code, res = runWS(t, dir, "scene", "close-out", "my-novel/scene-1", "--file", "entry-input.yaml")
+	if d := diag(t, res, "state.unknown-entry"); code != 1 ||
+		!concreteFirst(d, shellCommand("wa-cli", "canon", "list", "my-novel", "--dir", dir, "--json"), help) {
+		t.Fatalf("unknown-entry: exit code = %d, diagnostics = %+v", code, res.Diagnostics)
+	}
+	writeFile(t, filepath.Join(dir, "event-input.yaml"),
+		"state_changes:\n  - {entry: canon-1, state: 精灵交出灯芯, contract: sc-1}\nrecovers: [f-1]\nevents: [ev-2, ev-9]\n")
+	code, res = runWS(t, dir, "scene", "close-out", "my-novel/scene-1", "--file", "event-input.yaml")
+	if d := diag(t, res, "closeout.unknown-event"); code != 1 ||
+		!concreteFirst(d, shellCommand("wa-cli", "outline", "show", "my-novel/scene-1", "--dir", dir, "--json"), help) {
+		t.Fatalf("unknown-event: exit code = %d, diagnostics = %+v", code, res.Diagnostics)
 	}
 }

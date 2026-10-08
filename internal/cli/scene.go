@@ -295,7 +295,8 @@ func runSceneContract(inv *invocation) int {
 		sceneContractParamNext(&res.outlineResult, dir, inv.args[0])
 		for i, d := range res.Diagnostics {
 			if d.Code == outline.CodeAnchoredValue {
-				res.Diagnostics[i].Next = []string{"wa-cli help scene contract --json"}
+				res.Diagnostics[i].Next = []string{shellCommand("wa-cli", "outline", "show", inv.args[0], "--dir", dir, "--json"),
+					"wa-cli help scene contract --json"}
 			}
 		}
 	}
@@ -313,26 +314,23 @@ func runSceneContract(inv *invocation) int {
 	})
 }
 
-// sceneContractParamNext 为参数引起的问题（不填 path）给出用法与相关的查看命令；已有产物中的问题保留默认的复查命令。
+// sceneContractParamNext 为参数引起的问题（不填 path）先给出该场景的大纲，再给出用法与相关的查看命令；已有产物中的问题保留默认的复查命令。
 func sceneContractParamNext(res *outlineResult, dir, ref string) {
+	show := shellCommand("wa-cli", "outline", "show", ref, "--dir", dir, "--json")
+	work, _, _ := strings.Cut(ref, "/")
 	for i, d := range res.Diagnostics {
 		if d.Path != "" {
 			continue
 		}
-		next := []string{"wa-cli help scene contract --json"}
+		next := []string{show, "wa-cli help scene contract --json"}
 		switch d.Code {
 		case outline.CodeUnknownBeat:
-			if w, _, found := strings.Cut(ref, "/"); found {
-				ref = w
+			// 节拍由根单元的写作法声明：场景的问题再给出根单元的大纲。
+			if work != ref {
+				next = append(next, shellCommand("wa-cli", "outline", "show", work, "--dir", dir, "--json"))
 			}
-			next = append(next, shellCommand("wa-cli", "outline", "show", ref, "--dir", dir, "--json"))
-		case outline.CodeUnknownEvent, outline.CodeEventNotHappened, outline.CodeDuplicateEvent:
-			next = append(next, shellCommand("wa-cli", "outline", "show", ref, "--dir", dir, "--json"))
 		case threads.CodeUnknownThread, threads.CodeRecoverNotPlanted:
-			if w, _, found := strings.Cut(ref, "/"); found {
-				ref = w
-			}
-			next = append(next, "wa-cli help threads add --json", shellCommand("wa-cli", "threads", ref, "--dir", dir, "--json"))
+			next = append(next, "wa-cli help threads add --json", shellCommand("wa-cli", "threads", work, "--dir", dir, "--json"))
 		}
 		res.Diagnostics[i].Next = next
 	}

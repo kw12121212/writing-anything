@@ -343,7 +343,7 @@ func runAdvance(inv *invocation) int {
 	res.Diagnostics = diagnostics(problems, dir)
 	for i, p := range problems {
 		if p.Code == work.CodeAnchoredValue {
-			res.Diagnostics[i].Next = []string{"wa-cli help advance --json"}
+			res.Diagnostics[i].Next = []string{shellCommand("wa-cli", "next", inv.args[0], "--dir", dir, "--json"), "wa-cli help advance --json"}
 		}
 	}
 	return finish(inv, res, func(w io.Writer) error {

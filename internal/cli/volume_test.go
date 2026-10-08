@@ -67,6 +67,11 @@ func TestVolumeAcceptGate(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(dir, ".writing-anything", "works", "my-novel", "units", "scene-9", "acceptance.yaml")); err == nil {
 		t.Fatal("acceptance.yaml must not be written while blocked")
 	}
+	// 缺少作者原话摘要时拒绝确认，next 先给出该部的下一步（cli/diagnostic-next-concrete）。
+	if code, res := runWS(t, dir, "volume", "confirm", "my-novel/part-one", "--confirmed-by-author"); code != 1 ||
+		!concreteFirst(diag(t, res, "volume.incomplete-confirmation"), shellCommand("wa-cli", "next", "my-novel/part-one", "--dir", dir, "--json"), "wa-cli help volume confirm --json") {
+		t.Fatalf("incomplete confirmation: exit code = %d, result = %+v", code, res)
+	}
 	// 确认检查点后通过。
 	if code, res := runWS(t, dir, "volume", "confirm", "my-novel/part-one", "--confirmed-by-author", "--confirmation", "作者：本部核对无误"); code != 0 {
 		t.Fatalf("confirm: exit code = %d, result = %+v", code, res)
@@ -106,7 +111,8 @@ func TestVolumeCheckpointCLI(t *testing.T) {
 		t.Fatalf("human output: %q", stdout)
 	}
 	// 非部单元被拒。
-	if code, res := runWS(t, dir, "volume", "checkpoint", "my-novel/chapter-one"); code != 1 || diag(t, res, "volume.not-volume").Code == "" {
+	if code, res := runWS(t, dir, "volume", "checkpoint", "my-novel/chapter-one"); code != 1 ||
+		!concreteFirst(diag(t, res, "volume.not-volume"), shellCommand("wa-cli", "status", "--dir", dir, "--json"), "wa-cli help volume checkpoint --json") {
 		t.Fatalf("chapter: exit code = %d, diagnostics = %+v", code, res.Diagnostics)
 	}
 	// validate 计入 checked。

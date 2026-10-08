@@ -164,7 +164,8 @@ func TestSceneContractCommand(t *testing.T) {
 	if code != 1 {
 		t.Fatalf("without title: exit code = %d", code)
 	}
-	if d := diag(t, res.result, "input.invalid-value"); !strings.Contains(d.Message, "--title") {
+	if d := diag(t, res.result, "input.invalid-value"); !strings.Contains(d.Message, "--title") ||
+		!concreteFirst(d, shellCommand("wa-cli", "outline", "show", "my-novel/scene-1", "--dir", dir, "--json"), "wa-cli help scene contract --json") {
 		t.Fatalf("without-title diagnostic = %+v", d)
 	}
 	// 已存在而没有给出任何修改参数。
@@ -303,5 +304,20 @@ func TestSceneContractPrecheckScope(t *testing.T) {
 	}
 	if d := diag(t, res, "scene.duplicate-event"); d.Path != sceneRel("scene-2") {
 		t.Fatalf("duplicate-event diagnostic = %+v", d)
+	}
+}
+
+// TestSceneContractAnchoredNext：场景大纲经由 YAML 锚点得到的取值无法只改一处，next 先给出该场景的大纲（cli/diagnostic-next-concrete）。
+func TestSceneContractAnchoredNext(t *testing.T) {
+	dir := newNovel(t)
+	rel := ".writing-anything/works/my-novel/units/scene-1/outline.yaml"
+	if err := os.MkdirAll(filepath.Dir(wsPath(dir, rel)), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, wsPath(dir, rel), "schema_version: 1\nsections:\n  - &s {id: sc1, title: 灯下对峙, reason: r}\n")
+	code, res := runOutline(t, dir, "scene", "contract", "my-novel/scene-1", "sc1", "--pov", "守灯人")
+	if code != 1 || !concreteFirst(diag(t, res.result, "outline.anchored-value"),
+		shellCommand("wa-cli", "outline", "show", "my-novel/scene-1", "--dir", dir, "--json"), "wa-cli help scene contract --json") {
+		t.Fatalf("exit code = %d, diagnostics = %+v", code, res.Diagnostics)
 	}
 }

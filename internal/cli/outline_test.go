@@ -143,7 +143,8 @@ func TestOutlineSetRejects(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			code, res := runOutline(t, dir, append([]string{"outline", "set", "my-post"}, tt.args...)...)
 			d := diag(t, res.result, tt.code)
-			if code != 1 || res.Valid || d.Field != tt.field || d.Path != "" || !hasNext(d, tt.next) || res.Outline != nil || len(res.ChangedPaths) != 0 {
+			if code != 1 || res.Valid || d.Field != tt.field || d.Path != "" || !hasNext(d, tt.next) ||
+				d.Next[0] != shellCommand("wa-cli", "outline", "show", "my-post", "--dir", dir, "--json") || res.Outline != nil || len(res.ChangedPaths) != 0 {
 				t.Fatalf("exit code = %d, diagnostic = %+v", code, d)
 			}
 			if readFile(t, wsPath(dir, outlineRel)) != before {
@@ -163,10 +164,12 @@ func TestOutlineSetRejects(t *testing.T) {
 		t.Fatalf("invalid existing: exit code = %d", code)
 	}
 	writeFile(t, wsPath(dir, outlineRel), "schema_version: 1\nsections:\n  - &s {id: why, title: t, reason: r}\n")
-	if code, res := runOutline(t, dir, "outline", "set", "my-post", "why", "--title", "u"); code != 1 || !hasNext(diag(t, res.result, "outline.anchored-value"), "wa-cli help outline set --json") {
+	if code, res := runOutline(t, dir, "outline", "set", "my-post", "why", "--title", "u"); code != 1 ||
+		!concreteFirst(diag(t, res.result, "outline.anchored-value"), shellCommand("wa-cli", "outline", "show", "my-post", "--dir", dir, "--json"), "wa-cli help outline set --json") {
 		t.Fatalf("anchored: exit code = %d", code)
 	}
-	if code, res := runOutline(t, dir, "outline", "remove", "my-post", "why"); code != 1 || !hasNext(diag(t, res.result, "outline.anchored-value"), "wa-cli help outline remove --json") {
+	if code, res := runOutline(t, dir, "outline", "remove", "my-post", "why"); code != 1 ||
+		!concreteFirst(diag(t, res.result, "outline.anchored-value"), shellCommand("wa-cli", "outline", "show", "my-post", "--dir", dir, "--json"), "wa-cli help outline remove --json") {
 		t.Fatalf("remove anchored: exit code = %d", code)
 	}
 	// 写作简报不通过校验时，给出 --covers 报告写作简报的诊断。

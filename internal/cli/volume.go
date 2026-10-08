@@ -143,9 +143,9 @@ func volumeNext(ds []Diagnostic, ref, dir string) {
 		case volume.CodeScenesOpen:
 			ds[i].Next = []string{shellCommand("wa-cli", "status", "--dir", dir, "--json"), "wa-cli help volume checkpoint --json"}
 		case volume.CodeNotVolume:
-			ds[i].Next = []string{"wa-cli help volume checkpoint --json"}
+			ds[i].Next = []string{shellCommand("wa-cli", "status", "--dir", dir, "--json"), "wa-cli help volume checkpoint --json"}
 		case volume.CodeIncompleteConfirmation:
-			ds[i].Next = []string{"wa-cli help volume confirm --json"}
+			ds[i].Next = []string{shellCommand("wa-cli", "next", ref, "--dir", dir, "--json"), "wa-cli help volume confirm --json"}
 		case volume.CodeNotFound:
 			ds[i].Next = []string{"wa-cli help volume checkpoint --json",
 				shellCommand("wa-cli", "volume", "checkpoint", ref, "--dir", dir, "--json")}

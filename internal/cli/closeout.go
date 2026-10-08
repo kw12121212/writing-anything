@@ -124,16 +124,20 @@ func suspectedSourceText(source string) string {
 	return "出场人物"
 }
 
-// closeoutNext 为收口的诊断给出下一步命令：契约缺口与既有产物问题给出用法与复查命令（由参数引起、不填 path 的
-// 诊断指向 scene close-out 与 scene contract 的用法；warning 的疑似专有名词指向 canon add 用法与豁免方法）。
+// closeoutNext 为收口的诊断给出下一步命令：由收口输入引起、不填 path 的诊断先给出该场景的大纲（场景契约），
+// 再给出 scene close-out 与相关命令的用法；单元不是场景或参数取值不合法时先给出 wa-cli status；
+// warning 的疑似专有名词先给出设定集，再指向 canon add 用法与豁免方法。既有产物中的问题保留默认的复查命令。
 func closeoutNext(ds []Diagnostic, dir, ref string) {
 	work := ref
 	if w, _, found := strings.Cut(ref, "/"); found {
 		work = w
 	}
+	contract := shellCommand("wa-cli", "outline", "show", ref, "--dir", dir, "--json")
+	canonList := shellCommand("wa-cli", "canon", "list", work, "--dir", dir, "--json")
+	const help = "wa-cli help scene close-out --json"
 	for i, d := range ds {
 		if d.Code == closeout.CodeSuspectedName {
-			ds[i].Next = []string{"wa-cli help canon add --json", "wa-cli help scene close-out --json"}
+			ds[i].Next = []string{canonList, "wa-cli help canon add --json", help}
 			continue
 		}
 		if d.Path != "" {
@@ -141,27 +145,20 @@ func closeoutNext(ds []Diagnostic, dir, ref string) {
 		}
 		switch d.Code {
 		case closeout.CodeMissingStateChange, closeout.CodeMissingRecovery, closeout.CodeMissingPlant, closeout.CodeMissingEvent:
-			ds[i].Next = []string{"wa-cli help scene close-out --json", "wa-cli help scene contract --json"}
-		case closeout.CodeUnknownEvent:
-			ds[i].Next = []string{"wa-cli help scene close-out --json",
-				shellCommand("wa-cli", "outline", "show", ref, "--dir", dir, "--json")}
-		case closeout.CodeAlreadyClosed, closeout.CodeNotClosed, closeout.CodeInvalid:
-			ds[i].Next = []string{"wa-cli help scene close-out --json"}
+			ds[i].Next = []string{contract, help, "wa-cli help scene contract --json"}
+		case closeout.CodeUnknownEvent, closeout.CodeAlreadyClosed, closeout.CodeNotClosed, closeout.CodeInvalid,
+			"artifact.schema-violation", "artifact.parse-error", "artifact.duplicate-id",
+			threads.CodeUnknownUnit, threads.CodeRecoverBeforePlant:
+			ds[i].Next = []string{contract, help}
 		case state.CodeUnknownEntry, "knowledge.unknown-entry", "knowledge.unknown-character":
-			ds[i].Next = []string{
-				shellCommand("wa-cli", "canon", "list", work, "--dir", dir, "--json"),
-				"wa-cli help scene close-out --json",
-			}
+			ds[i].Next = []string{canonList, help}
 		case threads.CodeNotFound:
 			ds[i].Next = []string{
 				shellCommand("wa-cli", "threads", work, "--all", "--dir", dir, "--json"),
-				"wa-cli help scene close-out --json",
+				help,
 			}
 		case outline.CodeNotScene, "input.invalid-value":
-			ds[i].Next = []string{"wa-cli help scene close-out --json"}
-		case "artifact.schema-violation", "artifact.parse-error", "artifact.duplicate-id",
-			threads.CodeUnknownUnit, threads.CodeRecoverBeforePlant:
-			ds[i].Next = []string{"wa-cli help scene close-out --json"}
+			ds[i].Next = []string{shellCommand("wa-cli", "status", "--dir", dir, "--json"), help}
 		}
 	}
 }

@@ -747,7 +747,12 @@ func next(p workspace.Problem, dir string) []string {
 	case source.CodeExists:
 		return []string{shellCommand("wa-cli", "source", "list", "--dir", dir, "--json")}
 	case draft.CodeNotFound:
-		return []string{"wa-cli help draft write --json"}
+		// 单元还没有正文：先给出该单元的上下文包，草拟后用 draft write 写入。
+		if strings.HasSuffix(p.Path, "/"+draft.FileName) {
+			return []string{shellCommand("wa-cli", "context", work.RefOf(strings.TrimSuffix(p.Path, "/"+draft.FileName)), "--dir", dir, "--json"),
+				"wa-cli help draft write --json"}
+		}
+		return []string{status, "wa-cli help draft write --json"}
 	case draft.CodeHumanEdited, draft.CodeBaseMismatch:
 		return []string{shellCommand("wa-cli", "diff", work.RefOf(strings.TrimSuffix(p.Path, "/"+draft.FileName)), "--dir", dir, "--json")}
 	case draft.CodeUnknownSource:
@@ -782,8 +787,8 @@ func next(p workspace.Problem, dir string) []string {
 	case work.CodeNotFound, work.CodeUnitNotFound, work.CodeExists, work.CodeAlreadyDone, work.CodeDerivedStage:
 		return []string{status}
 	case work.CodeNotSibling, work.CodeMoveRoot, work.CodeMoveUnderSelf:
-		// 由本次参数引起的问题：unit add 与 unit move 会改写为各自的用法；这里给出两个用法兜底。
-		return []string{"wa-cli help unit add --json", "wa-cli help unit move --json"}
+		// 由本次参数引起的问题：unit add 与 unit move 会改写为各自的用法；这里给出单元树与两个用法兜底。
+		return []string{status, "wa-cli help unit add --json", "wa-cli help unit move --json"}
 	case work.CodeMissingArtifact:
 		return []string{shellCommand("wa-cli", "next", work.RefOf(p.Path), "--dir", dir, "--json")}
 	case review.CodeAcceptanceStale, review.CodeAcceptanceInvalid, review.CodeAcceptanceWeakerGate:
@@ -803,7 +808,8 @@ func next(p workspace.Problem, dir string) []string {
 		}
 		return append(out, validate)
 	case schema.CodeUnknownKind:
-		return []string{"wa-cli help validate --json"}
+		// 给出的路径不是已知产物：整体校验列出工作区中的全部产物问题。
+		return []string{validateAll, "wa-cli help validate --json"}
 	case resolve.CodeUnknownGenre:
 		var out []string
 		for _, g := range catalog.BuiltinGenres() {
@@ -824,7 +830,7 @@ func next(p workspace.Problem, dir string) []string {
 		// 合并问题涉及多个配置层，只有整体校验能重新检出。
 		return []string{validateAll}
 	case workspace.CodeUnknownConfigKey, workspace.CodeConfigKept, workspace.CodeAnchoredValue:
-		return []string{"wa-cli help config set --json"}
+		return []string{shellCommand("wa-cli", "config", "resolved", "--dir", dir, "--json"), "wa-cli help config set --json"}
 	case workspace.CodeWriteFailed, workspace.CodeReadFailed:
 		if strings.HasPrefix(p.Path, workspace.WorksPath+"/") || inSources {
 			return []string{status}

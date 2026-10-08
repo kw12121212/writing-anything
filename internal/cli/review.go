@@ -178,7 +178,7 @@ func runReviewRecord(inv *invocation) int {
 			}
 		}
 	}
-	helpNext(res.Diagnostics, "review record", []string{codeInputReadFailed})
+	concreteHelpNext(res.Diagnostics, shellCommand("wa-cli", "review", "show", inv.args[0], "--dir", dir, "--json"), "review record", []string{codeInputReadFailed})
 	return finish(inv, res, func(w io.Writer) error {
 		if res.Review == nil {
 			return nil
@@ -560,7 +560,7 @@ func runReviewResolve(inv *invocation) int {
 		case d.Code == review.CodeFindingNotFound:
 			res.Diagnostics[i].Next = []string{show, "wa-cli help review record --json"}
 		case d.Path == "" || d.Code == review.CodeAnchoredValue:
-			res.Diagnostics[i].Next = []string{"wa-cli help review resolve --json"}
+			res.Diagnostics[i].Next = []string{show, "wa-cli help review resolve --json"}
 		}
 	}
 	return finish(inv, res, func(w io.Writer) error {
@@ -618,7 +618,7 @@ func runAccept(inv *invocation) int {
 		case review.CodeWrongStage:
 			res.Diagnostics[i].Next = []string{shellCommand("wa-cli", "next", ref, "--dir", dir, "--json")}
 		case review.CodeIncompleteConfirmation:
-			res.Diagnostics[i].Next = []string{"wa-cli help accept --json"}
+			res.Diagnostics[i].Next = []string{shellCommand("wa-cli", "review", "show", ref, "--dir", dir, "--json"), "wa-cli help accept --json"}
 		}
 	}
 	return finish(inv, res, func(w io.Writer) error {

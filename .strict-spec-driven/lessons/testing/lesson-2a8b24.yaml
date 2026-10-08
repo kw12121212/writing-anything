@@ -1,0 +1,19 @@
+schema: strict-spec-driven/lesson/v1
+schema_version: 1
+artifact_type: lesson
+schema_file: templates/strict-spec-driven/schemas/lesson.yaml
+lesson:
+  id: lesson-2a8b24
+  title: 源码扫描只认字面量，会漏掉经辅助函数展开构造的同类位置
+category: testing
+status: active
+created_at: '2026-10-08T02:59:58.830Z'
+updated_at: '2026-10-08T02:59:58.830Z'
+context: diagnostic-next-commands 用 go/ast 扫描 next 只含 wa-cli help 的 []string 字面量，并把作为 append 首参、后面还追加元素的字面量当作含具体命令而豁免。
+observation: 辅助函数 helpNext 写成 append([]string{help}, extra...)，extra 为空的约 20 个调用处（含主路径的 draft write 与 review record）都被豁免，白名单比对全绿；fresh-context 审查用构建出的二进制实测才发现。函数内 const 声明的 help 字符串同样漏检。
+takeaway: 写源码扫描测试时先枚举被测模式的全部构造途径（字面量、局部变量、const/var、辅助函数调用、可变参数展开），对取值未知的 extra... 不要豁免，而是按辅助函数的调用处计数；扫描器自测要为每种途径各写一行正例和反例。
+applies_when: 用 go/ast 或正则写源码扫描测试来约束某种写法（如诊断 next、错误码、命令字符串），并以白名单比对结果时
+occurrences:
+  - origin: diagnostic-next-commands
+    date: '2026-10-08'
+    evidence: internal/cli/help_next_scan_test.go helpOnlyLiterals 的 helpNext 调用处计数与 allHelp；TestHelpOnlyScannerDetects 第 12–14 行用例

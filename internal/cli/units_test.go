@@ -313,7 +313,7 @@ func TestAdvance(t *testing.T) {
 		t.Fatalf("invalid-work: exit code = %d, result = %+v", code, res)
 	}
 	writeFile(t, workFile(dir, "my-post"), strings.Replace(before, "stage: brief # 作者的注释", "stage: &s brief", 1))
-	if code, res := runUnits(t, dir, "advance", "my-post"); code != 1 || !slices.Equal(diag(t, res.result, "work.anchored-value").Next, []string{"wa-cli help advance --json"}) {
+	if code, res := runUnits(t, dir, "advance", "my-post"); code != 1 || !slices.Equal(diag(t, res.result, "work.anchored-value").Next, []string{"wa-cli next my-post --dir " + dir + " --json", "wa-cli help advance --json"}) {
 		t.Fatalf("anchored stage: exit code = %d, result = %+v", code, res)
 	}
 	writeFile(t, workFile(dir, "my-post"), before)
