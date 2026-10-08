@@ -14,7 +14,7 @@ milestones:
   usability-polish:
     title: 体验收尾（Usability Polish）
     path: roadmap/milestones/usability-polish.yaml
-    status: proposed
+    status: complete
   real-use-and-release:
     title: 真实使用验证与发布（Real-use Validation & Release）
     path: roadmap/milestones/real-use-and-release.yaml

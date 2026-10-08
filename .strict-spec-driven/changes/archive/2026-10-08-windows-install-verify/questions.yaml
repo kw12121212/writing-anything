@@ -1,0 +1,53 @@
+schema: strict-spec-driven/question-list/v1
+schema_version: 1
+artifact_type: question_list
+schema_file: templates/strict-spec-driven/schemas/question-list.yaml
+change: windows-install-verify
+open: []
+resolved:
+  - id: requirement-problem
+    question: 今天具体出了什么问题，对谁？
+    context: 证据：里程碑 details「TestInstallPs1 因本机无 pwsh 跳过，Windows 安装链路从未运行」。影响 proposal 范围。
+    answer: Windows 作者使用的 install.ps1 从未在任何环境实际运行过，回归测试在没有 pwsh 的开发机上一直跳过，发布前无人能发现 Windows 安装回归
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-outcome
+    question: 什么可观察的变化证明问题解决了？
+    context: 证据：里程碑 done_criteria「TestInstallPs1 在装有 pwsh 的开发环境中执行通过，release 技能列出 Windows 安装校验步骤」与完整回归通过。影响测试与验证任务。
+    answer: 装有 pwsh 的开发环境中 TestInstallPs1 执行（不跳过）并通过；release 技能列出 Windows 安装校验步骤，缺少 pwsh 时明确停止；docs/INSTALL.md 有验证记录；完整回归通过
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-trigger
+    question: 为什么现在做？
+    context: 证据：里程碑 notes「来源：2026-10-07 路线图里程碑审计 P2 项」；planned change depends_on 为空，roadmap-recommend 选中。影响优先级。
+    answer: 审计 P2 项，无依赖，是体验收尾里程碑的最后一项，路线图推荐为下一项
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-non-goals
+    question: 哪些明确不做？
+    context: 证据：里程碑 scope.out「新增命令或文体」「持续集成与持续交付（CI/CD）」；planned change details 只要求修复实跑暴露的问题。影响 proposal 范围。
+    answer: 不新增命令，不引入 CI/CD，不在没有实跑证据时修改 install.ps1；原生 Windows 与 Windows PowerShell 5.1 的验证不在本环境完成，只记录为发布者在 Windows 本机执行的步骤
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-interpretation
+    question: 请求有多种理解时，取哪一种？
+    context: 证据：planned change details「release 技能增加检测 pwsh 并运行该测试的步骤，缺少 pwsh 时明确提示并要求作者在 Windows 本机执行，而非静默跳过」与里程碑 risks「无法安装时须由作者在 Windows 本机执行并记录结果」。影响实现与技能文本。
+    answer: 「实跑」指在装有 pwsh 的开发环境运行 TestInstallPs1 且不被跳过；「不静默跳过」通过 WA_REQUIRE_PWSH=1 让缺少 pwsh 时测试失败来保证，日常回归不受影响
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: spec-impact
+    question: 本变更是否需要修改 cli 主规格 install-script？
+    context: 影响 spec delta：主规格 install-script 已要求 irm <url> | iex 与 -File 行为相同，本变更只补测试、技能与文档，不改变 install.ps1 行为。
+    answer: 不需要规格增量；新增的 irm 测试方式验证既有要求，release 技能是不随二进制分发的项目技能，不属于产品规格
+    status: resolved
+    answered_by: roadmap
+  - id: pwsh-installable
+    question: 开发环境（WSL）能否安装 pwsh？
+    context: 影响实现文件与验证结果：无法安装时只能交由作者在 Windows 本机执行（里程碑 risks）。环境证据：无 sudo，PowerShell 官方提供 linux-x64 tar.gz。
+    answer: 可以（本机实测）：官方 powershell-7.6.6-linux-x64.tar.gz 解压到 ~/.local/opt/powershell 并链接到 ~/.local/bin/pwsh，pwsh 7.6.6、X64 可用
+    status: resolved

@@ -1,0 +1,48 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: windows-install-verify
+sections:
+  Implementation:
+    install-pwsh:
+      text: 在开发环境以用户级目录安装 PowerShell 7.6.6（pwsh，linux-x64 官方 tar.gz，无需 sudo），确认 pwsh 在 PATH 中
+      status: complete
+      command: pwsh -NoProfile -Command '$PSVersionTable.PSVersion.ToString()'
+    run-existing-ps1:
+      text: 在装有 pwsh 的环境运行既有 TestInstallPs1，记录结果并修复暴露的问题（实跑 16 个子测试全部通过，无需修复 install.ps1）
+      status: complete
+      command: go test ./internal/tools/release -run TestInstallPs1 -count=1 -v
+    irm-mode:
+      text: TestInstallPs1 增加 irm 运行方式：测试服务器以 text/plain; charset=utf-8 提供 install.ps1，执行 irm <url> | iex；会话残留检查同时覆盖 iex 与 irm
+      status: complete
+    require-pwsh-gate:
+      text: TestInstallPs1 在 WA_REQUIRE_PWSH=1 且缺少 pwsh 时失败并提示安装 pwsh 或在 Windows 本机执行，未设置时保持跳过
+      status: complete
+    release-skill-step:
+      text: release 技能增加 Windows 安装校验步骤（检测 pwsh、以 WA_REQUIRE_PWSH=1 运行 TestInstallPs1、缺少 pwsh 时停止并要求在 Windows 本机执行），project_skills_test 登记 install.ps1 引用
+      status: complete
+    install-doc-record:
+      text: docs/INSTALL.md 补充 Windows 验证记录（pwsh 版本、架构、运行方式、结果与未覆盖部分）；docs/GLOSSARY.md 加入 PowerShell 术语
+      status: complete
+  Testing:
+    focused-tests:
+      text: 运行 install.ps1 与项目技能的聚焦测试，并验证 WA_REQUIRE_PWSH=1 在没有 pwsh 的 PATH 下使测试失败
+      status: complete
+      command: WA_REQUIRE_PWSH=1 go test ./internal/tools/release -run TestInstallPs1 -count=1 -v && go test ./internal/skills -run TestProjectSkills -count=1
+    full-regression:
+      text: 运行完整回归命令（含覆盖率阈值 80%）
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    ready-verify:
+      text: 运行 strict-spec-cli ready 与 verify 确认变更产物完整、任务全部完成
+      status: complete
+      command: strict-spec-cli verify windows-install-verify
+    scope-check:
+      text: 核对 install.ps1、install.sh 与 cli 主规格未被修改，缺少 pwsh 且未设置 WA_REQUIRE_PWSH 时测试仍跳过
+      status: complete
+      command: git diff --stat -- install.ps1 install.sh .strict-spec-driven/specs
+testing_gates:
+  validation_task: full-regression
+  unit_test_task: focused-tests

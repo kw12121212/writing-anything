@@ -1,0 +1,34 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: windows-install-verify
+  status: proposed
+summary:
+  what:
+    - 在开发环境（WSL2，linux-x64）以用户级目录安装 PowerShell 7.6.6（pwsh，无需 sudo）后实际运行 TestInstallPs1：-File 与 iex 两种方式下 AMD64、ARM64 安装与五类失败用例全部通过，未暴露 install.ps1 缺陷
+    - TestInstallPs1 增加真实的 irm 运行方式：测试服务器以 text/plain; charset=utf-8（与 raw.githubusercontent.com 相同）提供 install.ps1，执行 irm <url> | iex，覆盖文档推荐的分发路径，成功安装后同样检查调用者会话没有残留
+    - 环境变量 WA_REQUIRE_PWSH=1 时，缺少 pwsh 使 TestInstallPs1 失败而不是跳过，失败信息说明安装 pwsh 或在 Windows 本机执行
+    - release 技能增加 Windows 安装校验步骤：检测 pwsh，以 WA_REQUIRE_PWSH=1 运行 TestInstallPs1 并确认结果为 PASS；缺少 pwsh 时停止并要求发布者安装 pwsh 或在 Windows 本机执行，不得静默跳过
+    - docs/INSTALL.md 补充 Windows 验证记录（pwsh 版本、架构、运行方式与结果，以及未覆盖的部分）
+  why:
+    - 里程碑审计发现 TestInstallPs1 因本机没有 pwsh 一直跳过，Windows 安装链路从未实际运行
+    - 发布流程中没有 Windows 安装校验，缺少 pwsh 时测试静默跳过，install.ps1 回归无法被发现
+scope:
+  in:
+    - internal/tools/release/install_test.go：TestInstallPs1 的 irm 运行方式与 WA_REQUIRE_PWSH 开关
+    - .agents/skills/release/SKILL.md：Windows 安装校验步骤；internal/skills/project_skills_test.go 登记 install.ps1 引用
+    - docs/INSTALL.md：Windows 验证记录；docs/GLOSSARY.md：PowerShell 术语
+    - go-project-structure 技术规范增量：新增 optional-tool-require-gate（SHOULD），把 WA_REQUIRE_<TOOL> 开关固化为依赖外部工具的必需校验的通用做法
+  out:
+    - 修改 install.ps1 的行为（实跑未暴露缺陷）；修改 install.sh 与发布工具
+    - 在原生 Windows 或 Windows PowerShell 5.1 上的验证、默认安装目录写入用户级 PATH（注册表）分支：本环境无法运行，记录为待发布者在 Windows 本机执行
+    - 持续集成与持续交付（CI/CD）
+unchanged_behavior:
+  - install.ps1 与 install.sh 的内容和行为不变；cli 主规格 install-script 要求不变
+  - 没有设置 WA_REQUIRE_PWSH 时，缺少 pwsh 的环境中 TestInstallPs1 仍然跳过，完整回归命令不因缺少 pwsh 失败
+  - release 技能原有步骤与必须停下来问发布者的事项不变
+roadmap:
+  milestone: usability-polish
+  planned_change: windows-install-verify

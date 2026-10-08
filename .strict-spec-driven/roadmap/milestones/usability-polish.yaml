@@ -38,7 +38,7 @@ risks:
   - 诊断码数量多，具体化需分批并保持错误码稳定
   - 自动落盘复查标记可能使组稿被频繁阻塞，需在 next 中给出 impact clear 路径
   - windows-install-verify 需要在开发环境（WSL）安装 PowerShell（pwsh）；无法安装时须由作者在 Windows 本机执行并记录结果
-status: proposed
+status: complete
 notes:
   - 来源：2026-10-07 路线图里程碑审计 P2 项
 details: 审计证据：outline.go BeatPositions 只看本单元大纲 role 且要求正文有同名标题，短篇节拍挂在根单元而正文在场景单元，正常流程永不触发；impact mark 需 Agent 手动执行，canon set 不提示；next 文本模式不显示 handoff（仅 --json 有 handoff 字段）；大量诊断 next 只是 wa-cli help；TestInstallPs1 因本机无 pwsh 跳过，Windows 安装链路从未运行。

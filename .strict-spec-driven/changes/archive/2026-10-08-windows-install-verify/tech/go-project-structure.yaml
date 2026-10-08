@@ -1,0 +1,16 @@
+schema: strict-spec-driven/delta-tech/v1
+schema_version: 1
+artifact_type: delta_tech
+schema_file: templates/strict-spec-driven/schemas/delta-tech.yaml
+target_standard: go-project-structure
+operations:
+  ADDED:
+    optional-tool-require-gate:
+      strength: SHOULD
+      statement: 依赖外部工具（pwsh、git、sh、curl 等）、在缺少工具时 t.Skip 的测试，若被发布或验收流程当作必须通过的校验，应提供环境变量 WA_REQUIRE_<TOOL>=1：设置后缺少工具改为 t.Fatal，失败信息说明如何安装该工具或在哪里执行；执行该校验的流程（如 release 技能）固定设置该变量并以退出码判定，不靠阅读 go test -v 输出区分跳过与通过。未设置时保持跳过，使完整回归命令在缺少工具的机器上仍可运行
+      rationale: go test 对跳过的测试退出码为 0，发布流程只看退出码时会把从未运行的校验当成通过；TestInstallPs1 曾因此长期跳过而无人发现。仓库中还有其他依赖外部工具的跳过（internal/packinstall 的 git、install.sh 测试的 sh 与 curl），需要被流程强制时应采用同一模式
+      enforcement:
+        method: review
+        detail: internal/tools/release 的 TestInstallPs1 实现 WA_REQUIRE_PWSH；internal/skills 的 TestProjectSkills 断言 release 技能含 WA_REQUIRE_PWSH=1 的 TestInstallPs1 命令
+  MODIFIED: {}
+  REMOVED: {}
