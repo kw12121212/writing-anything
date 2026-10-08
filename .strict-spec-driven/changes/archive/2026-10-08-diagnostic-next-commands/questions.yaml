@@ -1,0 +1,54 @@
+schema: strict-spec-driven/question-list/v1
+schema_version: 1
+artifact_type: question_list
+schema_file: templates/strict-spec-driven/schemas/question-list.yaml
+change: diagnostic-next-commands
+open: []
+resolved:
+  - id: main-path-mapping
+    question: 路线图列出的生命周期主路径包（cli、brief、outline、draft、lint、review、closeout、continuity、assembly、volume）如何对应到要改造的代码位置？
+    context: 影响实现文件与白名单范围。仓库证据：internal/** 非测试代码中所有 wa-cli help 提示都位于 internal/cli（当前 129 处、36 个文件，高于路线图基线 110 处/33 个文件，因为之后的变更又新增了诊断）；其他包只产出错误码，next 统一由 internal/cli 组装。
+    answer: 按命令归属映射到 internal/cli 中对应文件：brief.go、outline.go 与 scene.go（大纲/场景契约）、workspace.go 的默认 next（draft、validate、config 等 cli 通用兜底）、lint.go、review.go（review resolve、accept）、closeout.go、continuity.go、assembly.go、volume.go、units.go（advance）。lint.go、continuity.go、assembly.go 当前没有只给 help 的位置。
+    status: resolved
+    answered_by: roadmap
+  - id: spec-mandated-help
+    question: 主规格明确写死 next 为 wa-cli help 的诊断（如 unit move 跨作品参数、preview、pack install）是否在本变更内改写？
+    context: 影响规格增量范围：改写需要以 MODIFIED 重述整条主规格要求。路线图 details 允许「其余位置写入带理由的白名单」，并提示改造量过大时按包拆分。
+    answer: 不改写，写入白名单并注明对应主规格；用法错误（usage.*）发生在解析出单元之前，同样登记理由。
+    status: resolved
+    answered_by: roadmap
+  - id: requirement-problem
+    question: 今天具体出了什么问题，对谁？
+    context: 证据：里程碑 details「大量诊断 next 只是 wa-cli help」与 planned change details 基线「wa-cli help 提示 110 处、分布在 33 个文件」。影响 proposal 范围。
+    answer: 接入的 Agent 在 brief set、outline set、scene close-out、review resolve、accept 等主路径命令出错时，诊断 next 只给出 wa-cli help 用法，Agent 仍需自行推断该查看哪个单元、哪个产物才能修复
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-outcome
+    question: 什么可观察的变化证明问题解决了？
+    context: 证据：里程碑 done_criteria「新增源码扫描测试（go/ast）列出 internal/** 中 next 只含 wa-cli help 字面量的诊断构造位置并与白名单比对……生命周期主路径包的 error 级诊断不再只给 help，剩余位置逐条写明理由；新增只给 help 的位置时测试失败」。影响 spec delta 与测试。
+    answer: 源码扫描测试与白名单比对通过，新增只给 help 的位置时失败；主路径命令的 error 级诊断 next 第一条是带单元引用的具体命令（如 wa-cli brief show my-post），help 只作补充；每个改造的诊断码有断言 next 的测试
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-trigger
+    question: 为什么现在做？
+    context: 证据：里程碑 notes「来源：2026-10-07 路线图里程碑审计 P2 项」；depends_on 的 short-story-beat-position 与 impact-auto-hint 已归档，roadmap-recommend 选中。影响优先级。
+    answer: 审计 P2 项，依赖已完成，路线图推荐为下一项
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-non-goals
+    question: 哪些明确不做？
+    context: 证据：里程碑 scope.out「新增命令或文体」；里程碑 risks「诊断码数量多，具体化需分批并保持错误码稳定」。影响 proposal 范围。
+    answer: 不新增命令、参数或诊断码，不改错误码、severity、message、path 与 field；不改写主规格中写死 next 为 help 的诊断；非主路径命令只登记白名单理由
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-interpretation
+    question: 请求有多种理解时，取哪一种？
+    context: 证据：planned change details「按生命周期主路径包……把 error 级诊断的 next 改为带单元引用或产物路径的具体修复命令……help 仅作补充，其余位置写入带理由的白名单」。影响 spec delta 与实现。
+    answer: 「只给 help」指 next 中每一条都是 wa-cli help 提示；改造为在 help 之前加入只读的具体命令（show、status、next、context、validate、config resolved），不删除 help；白名单以文件:函数计数，见 design 决策 key-by-function 与 concrete-first
+    status: resolved
+    kind: requirement
+    answered_by: roadmap

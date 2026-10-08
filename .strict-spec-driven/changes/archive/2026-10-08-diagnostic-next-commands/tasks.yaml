@@ -1,0 +1,50 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: diagnostic-next-commands
+sections:
+  Implementation:
+    scan-test:
+      text: 新增 internal/cli/help_next_scan_test.go：go/ast 扫描器、按文件:函数计数的白名单（含理由）与扫描器自测
+      status: complete
+    brief-outline-scene:
+      text: brief.go、outline.go、scene.go：参数问题与锚点值问题的 next 先给 brief show / outline show <unit>，help 只作补充；修正循环中改写 ref 影响后续诊断的问题
+      status: complete
+    closeout-review-volume:
+      text: closeout.go、review.go、volume.go、units.go（runAdvance）：收口、审稿处理、验收确认、卷末检查点与推进的 help-only next 改为带单元引用的具体命令在前
+      status: complete
+    default-next:
+      text: workspace.go 默认 next：draft.not-found 给出 wa-cli context <unit>，unit 参数兜底加 status，schema.unknown-kind 给出整体 validate，配置键问题给出 config resolved
+      status: complete
+    allowlist-reasons:
+      text: 其余只给 help 的位置在白名单中逐条写明理由（用法错误、规格规定、非主路径命令）
+      status: complete
+    delta-spec:
+      text: cli 主规格增量（diagnostic-next-concrete）与 cli-contract 技术规范增量（invalid-value-code、help-only-next-allowlist），反映实际实现
+      status: complete
+  Testing:
+    next-assertions:
+      text: 为每个改造的诊断码补充断言 next 内容的测试，并更新断言 next[0] 为 help 的既有测试
+      status: complete
+      command: go test ./internal/cli/...
+    scan-run:
+      text: 运行源码扫描测试与扫描器自测
+      status: complete
+      command: go test ./internal/cli -run 'TestHelpOnly' -v
+    full-regression:
+      text: 完整回归（含 80% 覆盖率门槛）
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    ready-verify:
+      text: strict-spec-cli ready 与 verify 通过
+      status: complete
+      command: strict-spec-cli verify diagnostic-next-commands
+    archive-check:
+      text: 归档并确认路线图中 diagnostic-next-commands 标为完成
+      status: complete
+      command: strict-spec-cli archive diagnostic-next-commands
+testing_gates:
+  validation_task: scan-run
+  unit_test_task: full-regression
