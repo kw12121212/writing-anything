@@ -12,8 +12,7 @@ import (
 // go-project-structure 技术标准的 injectable-clock 规则中。
 func TestInjectableClock(t *testing.T) {
 	allowed := map[string]string{
-		"cli/review.go":  "包级可注入时钟 now 的定义与测试恢复点",
-		"canon/canon.go": "已登记排除：系列级同 id 覆盖的 ConfirmedAt，待系列覆盖确定性变更处理",
+		"cli/review.go": "包级可注入时钟 now 的定义与测试恢复点",
 	}
 	var files []string
 	err := filepath.Walk("..", func(p string, info os.FileInfo, err error) error {

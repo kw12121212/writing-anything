@@ -345,6 +345,48 @@ func regular(root, rel string) bool {
 	return true
 }
 
+// Blocked 报告 rel 在工作区目录之下途经的某一级存在但不是真实目录（如符号链接），或 rel 本身存在但不是普通
+// 文件；不存在的路径不算受阻。读取侧据此区分「不存在」与「途经符号链接，按不存在处理并报告」
+// （workspace-artifacts/validated-path-segments）。
+func Blocked(root, rel string) bool {
+	segs := strings.Split(rel, "/")
+	for i := 2; i <= len(segs); i++ {
+		info, err := os.Lstat(abs(root, strings.Join(segs[:i], "/")))
+		if err != nil {
+			return false
+		}
+		if i < len(segs) && !info.IsDir() || i == len(segs) && !info.Mode().IsRegular() {
+			return true
+		}
+	}
+	return false
+}
+
+// ErrNotRealDir 表示工作区目录之下途经的某一级存在但不是真实目录（如符号链接）。
+var ErrNotRealDir = errors.New("途经符号链接或不是真实目录")
+
+// EnsureDir 逐级创建工作区目录 rel（相对项目目录）之下缺失的各级目录，不跟随符号链接：途经的某一级存在但
+// 不是真实目录时不再创建并返回 ErrNotRealDir（workspace-artifacts/validated-path-segments）。
+func EnsureDir(root, rel string) error {
+	segs := strings.Split(rel, "/")
+	for i := 2; i <= len(segs); i++ {
+		p := abs(root, strings.Join(segs[:i], "/"))
+		info, err := os.Lstat(p)
+		switch {
+		case err == nil && info.IsDir():
+			continue
+		case err == nil:
+			return ErrNotRealDir
+		case !errors.Is(err, fs.ErrNotExist):
+			return err
+		}
+		if err := os.Mkdir(p, 0o755); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // Read 读取并解析 root 下的产物 rel；失败时返回 nil 与问题。
 func Read(root, rel string) (*yaml.Node, []Problem) { return read(root, rel) }
 

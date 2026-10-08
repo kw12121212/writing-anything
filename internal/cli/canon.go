@@ -144,6 +144,7 @@ func runCanonAdd(inv *invocation) int {
 					Series:          inv.values["scope"] == "series",
 					OverrideReason:  inv.values["override-reason"],
 					OverrideConfirm: inv.values["confirmation"],
+					At:              now(),
 				}
 				if inv.values["scope"] != "" && inv.values["scope"] != "series" && inv.values["scope"] != "work" {
 					problems = []workspace.Problem{{Code: "input.invalid-value", Severity: workspace.SeverityError, Field: "scope",

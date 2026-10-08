@@ -47,63 +47,7 @@ func TestNovelCorpusGolden(t *testing.T) {
 	}
 	goldens = append(goldens, corpusGolden{name: "novel-export.txt", path: filepath.Join(dir, "novel-export.txt")})
 
-	update := os.Getenv("UPDATE_GOLDEN") == "1"
-	goldenDir := filepath.Join("testdata", "e2e", "novel", "golden")
-	if update {
-		if err := os.MkdirAll(goldenDir, 0o755); err != nil {
-			t.Fatal(err)
-		}
-	}
-	for _, g := range goldens {
-		var data []byte
-		if g.path != "" {
-			var err error
-			if data, err = os.ReadFile(g.path); err != nil {
-				t.Fatalf("%s: 采集失败: %v", g.name, err)
-			}
-		} else {
-			code, res := runWS(t, dir, g.cmd...)
-			if code != 0 {
-				t.Fatalf("%v: exit = %d, diagnostics = %+v", g.cmd, code, res.Diagnostics)
-			}
-			// 命令输出的诊断 next 会内嵌临时目录绝对路径（--dir <tmp>），归一为占位符。
-			data = []byte(strings.ReplaceAll(res.stdout, dir, "<dir>"))
-		}
-		gp := filepath.Join(goldenDir, g.name)
-		if update {
-			if err := os.WriteFile(gp, data, 0o644); err != nil {
-				t.Fatal(err)
-			}
-			t.Logf("更新黄金文件 %s（%d 字节）", g.name, len(data))
-			continue
-		}
-		want, err := os.ReadFile(gp)
-		if err != nil {
-			t.Fatalf("黄金文件 %s 缺失（先 UPDATE_GOLDEN=1 生成）: %v", g.name, err)
-		}
-		if string(want) != string(data) {
-			at := 0
-			for at < len(want) && at < len(data) && want[at] == data[at] {
-				at++
-			}
-			lo, hi := at-120, at+120
-			if lo < 0 {
-				lo = 0
-			}
-			if hi > len(want) {
-				hi = len(want)
-			}
-			lo2, hi2 := at-120, at+120
-			if lo2 < 0 {
-				lo2 = 0
-			}
-			if hi2 > len(data) {
-				hi2 = len(data)
-			}
-			t.Fatalf("黄金文件 %s 不一致（期望 %d 字节，实际 %d 字节，首个差异在 %d）\n--- 期望 ---\n%s\n--- 实际 ---\n%s\n（UPDATE_GOLDEN=1 go test ./internal/cli/ -run TestNovelCorpusGolden 再生成）",
-				g.name, len(want), len(data), at, string(want[lo:hi]), string(data[lo2:hi2]))
-		}
-	}
+	compareCorpusGoldens(t, dir, filepath.Join("testdata", "e2e", "novel", "golden"), goldens, "TestNovelCorpusGolden")
 }
 
 // 四类注入违例的负向断言：重放副本上逐类注入，直接断言对应审查发现项（或诊断）的 severity 为 error 且错误码正确，
@@ -504,4 +448,66 @@ func TestNovelCorpusPacketBudget(t *testing.T) {
 	plan(budget)
 	mustRunWS(t, dir, "config", "set", "context_budget", "600")
 	plan(600)
+}
+
+// compareCorpusGoldens 采集重放工作区 dir 中的黄金对象（文件字节或命令 stdout，临时目录路径归一为 <dir>）并与
+// goldenDir 逐字节比对；UPDATE_GOLDEN=1 时改为写入 goldenDir。testName 用于失配时提示再生成命令。
+func compareCorpusGoldens(t *testing.T, dir, goldenDir string, goldens []corpusGolden, testName string) {
+	t.Helper()
+	update := os.Getenv("UPDATE_GOLDEN") == "1"
+	if update {
+		if err := os.MkdirAll(goldenDir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, g := range goldens {
+		var data []byte
+		if g.path != "" {
+			var err error
+			if data, err = os.ReadFile(g.path); err != nil {
+				t.Fatalf("%s: 采集失败: %v", g.name, err)
+			}
+		} else {
+			code, res := runWS(t, dir, g.cmd...)
+			if code != 0 {
+				t.Fatalf("%v: exit = %d, diagnostics = %+v", g.cmd, code, res.Diagnostics)
+			}
+			// 命令输出的诊断 next 会内嵌临时目录绝对路径（--dir <tmp>），归一为占位符。
+			data = []byte(strings.ReplaceAll(res.stdout, dir, "<dir>"))
+		}
+		gp := filepath.Join(goldenDir, g.name)
+		if update {
+			if err := os.WriteFile(gp, data, 0o644); err != nil {
+				t.Fatal(err)
+			}
+			t.Logf("更新黄金文件 %s（%d 字节）", g.name, len(data))
+			continue
+		}
+		want, err := os.ReadFile(gp)
+		if err != nil {
+			t.Fatalf("黄金文件 %s 缺失（先 UPDATE_GOLDEN=1 生成）: %v", g.name, err)
+		}
+		if string(want) != string(data) {
+			at := 0
+			for at < len(want) && at < len(data) && want[at] == data[at] {
+				at++
+			}
+			lo, hi := at-120, at+120
+			if lo < 0 {
+				lo = 0
+			}
+			if hi > len(want) {
+				hi = len(want)
+			}
+			lo2, hi2 := at-120, at+120
+			if lo2 < 0 {
+				lo2 = 0
+			}
+			if hi2 > len(data) {
+				hi2 = len(data)
+			}
+			t.Fatalf("黄金文件 %s 不一致（期望 %d 字节，实际 %d 字节，首个差异在 %d）\n--- 期望 ---\n%s\n--- 实际 ---\n%s\n（UPDATE_GOLDEN=1 go test ./internal/cli/ -run %s 再生成）",
+				g.name, len(want), len(data), at, string(want[lo:hi]), string(data[lo2:hi2]), testName)
+		}
+	}
 }

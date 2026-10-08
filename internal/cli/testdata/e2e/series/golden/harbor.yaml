@@ -1,0 +1,15 @@
+# 系列（Series）；请用 wa-cli series set、series add 与 series fact 修改。
+
+schema_version: 1
+id: harbor
+title: 雾港灯火
+works: [fog-harbor, homeward]
+packs: []
+sources: [series-note]
+facts:
+  - id: fact-lighthouse
+    text: 雾港北面的鹰嘴礁尽头立着一座白色灯塔，九十七级台阶，一任看守人接一任看守人守灯。
+    sources: [series-note]
+  - id: fact-ten-years
+    text: 两部作品相隔十年：第一部在一九九八年十月，第二部在二〇〇八年十月，同为陆山忌日前后。
+    sources: [series-note]

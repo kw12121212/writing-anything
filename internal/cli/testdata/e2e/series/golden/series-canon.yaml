@@ -1,0 +1,18 @@
+# 设定集（Canon）；请用 wa-cli canon add 追加设定条目。
+
+schema_version: 1
+entries:
+  - id: rule-fog-horn
+    type: world-rule
+    scope: series
+    text: 雾天每隔三十秒鸣一次雾笛，雾不散，笛不停；雾笛为铜喇叭，靠压气机供气，拉一次闸响八秒。
+    sources: [series-note]
+    protection: normal
+  - id: item-logbook
+    type: item
+    scope: series
+    name: 值守日志
+    aliases: [蓝皮日志, 日志]
+    text: 灯塔的蓝皮值守日志，从一九六八年起逐日记录天气、能见度、雾笛与进出港的船，一任看守人接一任看守人往下写。
+    sources: [series-note]
+    protection: normal

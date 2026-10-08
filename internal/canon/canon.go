@@ -5,9 +5,9 @@
 package canon
 
 import (
+	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
+	"path"
 	"reflect"
 	"slices"
 	"strings"
@@ -164,12 +164,11 @@ func loadCanon(root, rel string) (*yaml.Node, *canonFile, []workspace.Problem) {
 	return doc, &f, nil
 }
 
-// notRegular 报告 rel 是否存在但不是普通文件（如符号链接）。只检查最后一级：canon.yaml 的父目录是作品目录，
-// 作品能加载（work.yaml 可读）说明途经的目录都是真实目录（validated-path-segments）；validate <path> 的逐级
-// 检查由 workspace.ValidateArtifact 负责。
+// notRegular 报告 rel 途经的某一级存在但不是真实目录，或 rel 本身存在但不是普通文件（如符号链接）。逐级检查：
+// 作品级 canon.yaml 的父目录是已能加载的作品目录，系列级设定集途经 .writing-anything/series/<series>/，两级都可能
+// 被替换为符号链接（validated-path-segments）。
 func notRegular(root, rel string) bool {
-	info, err := os.Lstat(filepath.Join(root, filepath.FromSlash(rel)))
-	return err == nil && !info.Mode().IsRegular()
+	return workspace.Blocked(root, rel)
 }
 
 // checkEntries 检查已通过 Schema 校验的设定集：条目 id 唯一；别名（Alias）不得与任何条目的 name、其他条目的
@@ -385,9 +384,10 @@ type AddInput struct {
 	Members         []string // relationship 必填
 	Pinned          bool
 	ID              string
-	Series          bool   // --scope series：写入系列级设定集（作品须属于该系列）
-	OverrideReason  string // 覆盖系列级同 id 条目的原因（覆盖时必填）
-	OverrideConfirm string // 作者确认原话摘要（覆盖时必填）
+	Series          bool      // --scope series：写入系列级设定集（作品须属于该系列）
+	OverrideReason  string    // 覆盖系列级同 id 条目的原因（覆盖时必填）
+	OverrideConfirm string    // 作者确认原话摘要（覆盖时必填）
+	At              time.Time // 覆盖的确认时刻（override.confirmed_at），由 internal/cli 传入注入时钟 now()
 }
 
 // Add 在作品 w 的设定集末尾追加一个设定条目。id 为空时取 canon-<n>，n 从已有条目数加一开始递增到不重复；
@@ -424,7 +424,7 @@ func Add(root string, w *work.Work, in AddInput) (*Entry, []string, []workspace.
 								return nil, nil, []workspace.Problem{errorAt(CodeOverrideUnconfirmed, "", "override-reason",
 									"条目 "+in.ID+" 覆盖系列级同 id 条目，必须同时给出 --override-reason（覆盖原因）与 --confirmed-by-author、--confirmation（作者确认原话摘要）")}
 							}
-							override = &Override{Reason: strings.TrimSpace(in.OverrideReason), Confirmation: strings.TrimSpace(in.OverrideConfirm), ConfirmedAt: time.Now().UTC().Format("2006-01-02T15:04:05Z")}
+							override = &Override{Reason: strings.TrimSpace(in.OverrideReason), Confirmation: strings.TrimSpace(in.OverrideConfirm), ConfirmedAt: in.At.UTC().Format("2006-01-02T15:04:05Z")}
 							break
 						}
 					}
@@ -496,12 +496,23 @@ func Add(root string, w *work.Work, in AddInput) (*Entry, []string, []workspace.
 	if in.Type == TypeRelationship {
 		item.Content = append(item.Content, str("members"), seqNode(in.Members))
 	}
+	if override != nil {
+		item.Content = append(item.Content, str("override"), &yaml.Node{Kind: yaml.MappingNode, Content: []*yaml.Node{
+			str("reason"), str(override.Reason), str("confirmation"), str(override.Confirmation), str("confirmed_at"), str(override.ConfirmedAt),
+		}})
+	}
 	index := len(entries.Content)
 	workspace.BlockSequence(doc.Content[0], "entries")
 	entries.Content = append(entries.Content, item)
 	saved, data, ps, _ := recheck(root, rel, doc, index, true)
 	if len(ps) > 0 {
 		return nil, nil, ps
+	}
+	// 系列级设定集位于 .writing-anything/series/<series>/，首次登记时目录尚不存在；逐级创建、不跟随符号链接。
+	if err := workspace.EnsureDir(root, path.Dir(rel)); errors.Is(err, workspace.ErrNotRealDir) {
+		return nil, nil, []workspace.Problem{errorAt(schema.CodeNotFound, rel, "", "设定集途经符号链接或不是真实目录，按不存在处理")}
+	} else if err != nil {
+		return nil, nil, []workspace.Problem{errorAt(workspace.CodeWriteFailed, rel, "", "创建设定集目录失败："+err.Error())}
 	}
 	if err := workspace.WriteFile(root, rel, data); err != nil {
 		return nil, nil, []workspace.Problem{errorAt(workspace.CodeWriteFailed, rel, "", "写入设定集失败："+err.Error())}
@@ -901,16 +912,11 @@ func SeriesPath(seriesID string) string {
 	return ".writing-anything/series/" + seriesID + "/" + FileName
 }
 
-// seriesOf 返回作品所属系列 id（空表示不属于任何系列）；作品级缓存每命令一次。
+// seriesOf 返回作品所属系列 id（空表示不属于任何系列）。每次调用都重新读取系列文件：成员关系随 series add 即时
+// 生效，不跨命令或跨工作区缓存（进程内 MCP 会话与测试会在同一进程里先后操作多个工作区）。
 func seriesOf(root string, w *work.Work) string {
 	if w == nil {
 		return ""
-	}
-	if seriesMemberCache == nil {
-		seriesMemberCache = map[string]string{}
-	}
-	if id, ok := seriesMemberCache[w.ID]; ok {
-		return id
 	}
 	// 系列文件为平铺的 .writing-anything/series/<id>.yaml（series 主规格）；逐个读取 works 判定成员。
 	for _, name := range workspace.YAMLFiles(root, ".writing-anything/series") {
@@ -928,15 +934,11 @@ func seriesOf(root string, w *work.Work) string {
 			f.ID = strings.TrimSuffix(name, ".yaml")
 		}
 		if slices.Contains(f.Works, w.ID) {
-			seriesMemberCache[w.ID] = f.ID
 			return f.ID
 		}
 	}
-	seriesMemberCache[w.ID] = ""
 	return ""
 }
-
-var seriesMemberCache map[string]string
 
 // seriesFileName 是系列文件的文件名（series 主规格）。
 
@@ -944,7 +946,7 @@ var seriesMemberCache map[string]string
 func SeriesList(root, seriesID string) ([]Entry, []workspace.Problem) {
 	rel := SeriesPath(seriesID)
 	if _, ok, _ := workspace.ReadRegular(root, rel); !ok {
-		if info, err := os.Lstat(filepath.Join(root, filepath.FromSlash(rel))); err == nil && !info.Mode().IsRegular() {
+		if workspace.Blocked(root, rel) {
 			return nil, []workspace.Problem{errorAt(schema.CodeNotFound, rel, "", "系列设定集途经符号链接或不是普通文件，按不存在处理")}
 		}
 		return nil, nil

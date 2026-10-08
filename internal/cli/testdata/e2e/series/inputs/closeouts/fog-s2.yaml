@@ -1,0 +1,4 @@
+state_changes:
+  - {id: st-1, contract: sc-1, entry: char-lu-shan, state: 已亡故}
+knowledge: []
+events: [ev-lamp-handed]
