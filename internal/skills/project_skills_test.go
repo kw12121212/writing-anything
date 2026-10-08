@@ -16,16 +16,20 @@ var projectSkillReferences = map[string][]string{
 		"docs/INSTALL.md",
 		"install.ps1",
 		"install.sh",
+		"internal/tools/criteria",
+		"internal/tools/criteria/testdata/criteria.yaml",
 		"internal/tools/release",
 	},
 }
 
 // projectSkillPhrases 登记项目技能正文必须保留的关键命令片段：缺少它们时技能描述的校验步骤会失效。
-// release 的 Windows 安装校验必须以 WA_REQUIRE_PWSH=1 运行 TestInstallPs1，缺少 pwsh 时测试失败而不是静默跳过。
+// release 的 Windows 安装校验必须以 WA_REQUIRE_PWSH=1 运行 TestInstallPs1，缺少 pwsh 时测试失败而不是静默跳过；
+// 完成标准对账失败时须能单独运行对账工具列出全部问题。
 var projectSkillPhrases = map[string][]string{
 	"release": {
 		"WA_REQUIRE_PWSH=1 go test ./internal/tools/release -run TestInstallPs1",
 		"$env:WA_REQUIRE_PWSH='1'; go test ./internal/tools/release -run TestInstallPs1",
+		"go run ./internal/tools/criteria",
 	},
 }
 

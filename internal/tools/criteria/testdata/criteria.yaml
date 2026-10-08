@@ -1,0 +1,392 @@
+# 完成标准对账表（Reconciliation Table）：.strict-spec-driven/roadmap/archive/milestones 下每个已归档里程碑的
+# 每条完成标准（Done Criteria，原文逐字一致）映射到一个或多个测试函数（「包目录.测试函数名」）。
+# 由 internal/tools/criteria 的 TestCriteriaReconciliation（go test ./... 中执行）强制：缺表项、原文变化、
+# 测试函数不存在或首层无条件 t.Skip 时失败。hardened_by 登记 2026-10-07 里程碑审计发现缺口、
+# 由已归档加固变更修复的完成标准，tests 中含该加固变更新增或修正的测试。
+# 加固变更 closeout-body-scan（正文疑似专有名词扫描）与 genre-style-isolation（小说不继承文章文风）修复的
+# 审计缺口没有对应的已归档完成标准原文，因此不出现在 hardened_by 中；其测试由加固里程碑归档时补表覆盖。
+# 新里程碑归档（或修改已归档的完成标准）时，在同一变更中同步补表或重新确认映射。
+schema_version: 1
+entries:
+- milestone: kernel-foundation
+  criterion: wa-cli init 创建的工作区通过 wa-cli validate；损坏的产物返回带错误码、产物路径与修复命令的 --json 诊断
+  tests:
+  - internal/cli.TestInitFresh
+  - internal/cli.TestValidateMissingParts
+  - internal/cli.TestValidateSingleArtifact
+  - internal/cli.TestValidateConfigDiagnostics
+- milestone: kernel-foundation
+  criterion: 能用 CLI 创建一篇文章单元、登记作者素材，并通过 status / next 看到当前阶段与下一步命令
+  tests:
+  - internal/cli.TestNew
+  - internal/cli.TestSourceAdd
+  - internal/cli.TestStatusUnits
+  - internal/cli.TestNext
+  - internal/cli.TestNextStageCommands
+  hardened_by:
+  - next-stage-commands
+- milestone: kernel-foundation
+  criterion: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out 在干净仓库通过
+  tests:
+  - internal/tools/covercheck.TestCoverage
+  - cmd/wa-cli.TestNoDevToolDependency
+- milestone: kernel-foundation
+  criterion: wa-cli config resolved --json 输出 文体 → 规范包 → 项目配置 的合并结果与每项来源；含未知规则类型或可执行内容的规范包校验失败
+  tests:
+  - internal/cli.TestConfigResolvedLayers
+  - internal/cli.TestConfigResolvedDefault
+  - internal/cli.TestValidateConfigRuleTypes
+  - internal/cli.TestValidatePacksAndReferences
+  - internal/schema.TestExecutable
+- milestone: kernel-foundation
+  criterion: 存在未解决的阻塞决策时，wa-cli advance 拒绝推进关联单元
+  tests:
+  - internal/cli.TestDecisionBlocksAdvance
+  - internal/work.TestDecisionBlockers
+- milestone: kernel-foundation
+  criterion: 反馈按文本锚点定位；正文修改后能重新定位，无法定位时标为失去锚点；wa-cli feedback watch 能输出新增的反馈
+  tests:
+  - internal/cli.TestFeedbackListAndRelocation
+  - internal/cli.TestFeedbackWatch
+  - internal/feedback.TestRelocation
+- milestone: kernel-foundation
+  criterion: Agent 通过 wa-cli draft write 写入正文；作者直接修改 draft.md 后，draft write 拒绝覆盖并提示用 wa-cli diff 查看人工改动；正文批注被解析为作者反馈
+  tests:
+  - internal/cli.TestHumanEditProtection
+  - internal/cli.TestAuthorOnlyDraftAndDiffText
+  - internal/cli.TestCommentFeedback
+- milestone: mcp-integration
+  criterion: 每个注册到命令注册表的 wa-cli 命令都有对应的 MCP tool，测试逐一校验
+  tests:
+  - internal/cli.TestMCPToolPerCommand
+  - internal/cli.TestMCPEveryTool
+- milestone: mcp-integration
+  criterion: 同一操作经 MCP 与 CLI 调用，产物与 --json 输出一致
+  tests:
+  - internal/cli.TestMCPSameAsCLI
+  - internal/cli.TestMCPReadOnlySameAsCLI
+  hardened_by:
+  - guarantee-test-gaps
+- milestone: mcp-integration
+  criterion: wa-cli mcp install 重复执行结果幂等，并保留客户端配置中已有的其他条目
+  tests:
+  - internal/cli.TestMCPInstallClients
+  - internal/mcpinstall.TestJSONConfig
+  - internal/mcpinstall.TestCodex
+- milestone: mcp-integration
+  criterion: 作者提交新反馈后，订阅了反馈资源的 MCP 客户端收到资源更新通知
+  tests:
+  - internal/cli.TestMCPFeedbackNotification
+  - internal/mcp.TestSubscriptions
+  - internal/mcp.TestLegacySubscribe
+  hardened_by:
+  - mcp-protocol-compat
+- milestone: novel-continuity
+  criterion: 与状态快照、知情表、伏笔台账或因果链冲突的场景被 wa-cli continuity 标为阻塞，不能验收
+  tests:
+  - internal/cli.TestContinuityAcceptFlow
+  - internal/cli.TestContinuityTimelineGate
+  - internal/cli.TestContinuityCausalityBlocksAccept
+  - internal/continuity.TestCausalityConflictBlocksAcceptance
+  hardened_by:
+  - guarantee-test-gaps
+- milestone: novel-continuity
+  criterion: wa-cli review plan 生成的每个任务包都不超过上下文预算；每个清单项都有结论后，结果才能提交并汇总
+  tests:
+  - internal/reviewpacket.TestPlanLargeLedgerWithinBudget
+  - internal/reviewpacket.TestPlanOverBudget
+  - internal/reviewpacket.TestSubmitValidation
+  - internal/cli.TestNovelCorpusPacketBudget
+  hardened_by:
+  - reviewpacket-budget-cap
+- milestone: novel-continuity
+  criterion: 修改早期场景引用的设定条目后，所有引用该条目的后续场景被标为需复查并阻塞组稿
+  tests:
+  - internal/cli.TestCanonSetAutoMark
+  - internal/cli.TestOtherSetCommandsAutoMark
+  - internal/impact.TestMarkIdempotentAndPackets
+  - internal/cli.TestAssembleGates
+  hardened_by:
+  - impact-auto-hint
+- milestone: novel-continuity
+  criterion: 新会话运行 wa-cli next 时能看到最近的交接记录
+  tests:
+  - internal/cli.TestNextTextShowsLatestHandoff
+  - internal/cli.TestHandoffCommands
+  hardened_by:
+  - next-text-handoff
+- milestone: novel-continuity
+  criterion: 存在未验收单元、连续性阻塞或需复查标记时，wa-cli assemble 拒绝组稿并列出阻塞项
+  tests:
+  - internal/cli.TestAssembleGates
+  - internal/assembly.TestGateAndAssemble
+- milestone: novel-e2e
+  criterion: 测试矩阵覆盖已交付 novel 与 novel-continuity 里程碑的全部特性面，每条特性都有断言编号，且对应断言在测试中实际执行
+  tests:
+  - internal/cli.TestNovelCorpusMatrix
+  - internal/cli.TestNovelCorpusDesign
+- milestone: novel-e2e
+  criterion: 完整回归命令 go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out 通过，新 E2E 纳入 go test 默认执行且无跳过
+  tests:
+  - internal/cli.TestNovelCorpusReplay
+  - internal/cli.TestNovelCorpusGolden
+  - internal/tools/covercheck.TestCoverage
+  - internal/tools/criteria.TestCriteriaReconciliation
+- milestone: novel-e2e
+  criterion: 四类注入违例（设定冲突、知情违例、伏笔悬空、时间线倒置）都被对应审查命令以 error 级发现项报告，修回合规文本后恢复全绿
+  tests:
+  - internal/cli.TestNovelCorpusNegativeInjections
+  hardened_by:
+  - guarantee-test-gaps
+- milestone: novel-e2e
+  criterion: 组稿整书导出产物与黄金文件逐字节一致，UPDATE_GOLDEN=1 可一键再生成
+  tests:
+  - internal/cli.TestNovelCorpusGolden
+- milestone: novel-e2e
+  criterion: 重放测试在同一环境连续执行两次结果完全一致
+  tests:
+  - internal/cli.TestNovelCorpusReplay
+- milestone: novel-e2e
+  criterion: 语料正文人工可读：整部小说叙事完整、无占位文本，README 描述目录结构与维护方式；以 lint 零 error、审稿流程完整走通与作者确认记录齐备为可验证代理
+  tests:
+  - internal/cli.TestNovelCorpusReplay
+  - internal/cli.TestNovelCorpusScript
+  - internal/cli.TestNovelCorpusDesign
+- milestone: novel-series
+  criterion: 系列中第二部作品的场景若与第一部的设定集或时间线冲突，连续性审查报告阻塞
+  tests:
+  - internal/cli.TestSeriesAcceptGateDeadActing
+  - internal/cli.TestSeriesAcceptGateSameTime
+  - internal/continuity.TestRunSeriesConflictingState
+  - internal/continuity.TestRunSeriesDeadActing
+  - internal/continuity.TestSeriesGateBlockers
+  hardened_by:
+  - series-accept-gate
+- milestone: novel-series
+  criterion: 作品级设定可以覆盖系列级设定，并记录覆盖原因与作者确认
+  tests:
+  - internal/canon.TestResolveWorkOverridesSeries
+  - internal/canon.TestAddSeriesScopeAndOverride
+- milestone: novel-series
+  criterion: 人物在同一时间出现在两地等时间矛盾，在作品内与跨作品范围都能被 wa-cli continuity 报告
+  tests:
+  - internal/timeline.TestSameTimePresence
+  - internal/continuity.TestRunSeriesSameTimeCrossWork
+  - internal/cli.TestSeriesAcceptGateSameTime
+  - internal/cli.TestSeriesContinuityCLI
+  hardened_by:
+  - series-accept-gate
+- milestone: novel
+  criterion: wa-cli state at <scene> 输出的状态快照等于此前已确认事件的重放结果；测试夹具中修改早期事件后，后续快照随之变化
+  tests:
+  - internal/state.TestSnapshotReplay
+  - internal/cli.TestStateAt
+- milestone: novel
+  criterion: context 只包含视角人物已知的信息，并单列读者已知、人物未知的内容
+  tests:
+  - internal/ctxpack.TestSceneKnowledge
+  - internal/ctxpack.TestSecretMasking
+  - internal/cli.TestContextKnowledge
+  - internal/cli.TestNovelCorpusSecretMasking
+  hardened_by:
+  - context-pov-filter
+- milestone: novel
+  criterion: 伏笔回收引用不存在的埋设时校验失败；wa-cli threads 标出超过计划回收位置的未回收伏笔
+  tests:
+  - internal/threads.TestContractProblems
+  - internal/threads.TestListOverdue
+  - internal/cli.TestThreadsValidateNoLedger
+  - internal/cli.TestThreadsOverdue
+  hardened_by:
+  - thread-recovery-validation
+- milestone: novel
+  criterion: 场景起因引用不存在或尚未发生的事件时 validate 失败
+  tests:
+  - internal/cli.TestSceneCausalityValidateAndGate
+  - internal/outline.TestCausality
+- milestone: novel
+  criterion: 契约要求的状态变化或伏笔未在收口中提交时，wa-cli accept 被拒绝
+  tests:
+  - internal/cli.TestAcceptCloseoutMissing
+  - internal/cli.TestAcceptCloseoutContractExtended
+  - internal/closeout.TestAcceptanceBlockers
+- milestone: novel
+  criterion: wa-cli recall 按人物名或别名返回全部出现位置
+  tests:
+  - internal/cli.TestRecallCanonAliases
+  - internal/recall.TestRunAliasAndEntryID
+- milestone: novel
+  criterion: 雪花写作法的某一步未经作者确认时，不能进入下一步；场景列表与场景详述分别生成单元树中的场景和场景契约
+  tests:
+  - internal/cli.TestNovelSnowflakeE2E
+  - internal/plan.TestConfirmPreconditions
+  - internal/plan.TestSceneProducts
+- milestone: novel
+  criterion: 测试夹具中包含至少三章的长篇，任一场景的 context 输出都不超过文体配置的上下文预算
+  tests:
+  - internal/ctxpack.TestSceneBudgetAndDeterminism
+  - internal/ctxpack.TestSceneBudget
+  - internal/cli.TestNovelCorpusGolden
+- milestone: novel
+  criterion: 状态变更提议未经作者确认时不进入设定集，也不参与状态快照计算
+  tests:
+  - internal/state.TestSnapshotReplay
+  - internal/state.TestConfirmRejectTransitions
+  - internal/cli.TestStateConfirmReject
+- milestone: novel
+  criterion: 每部（卷）最后一个场景验收后生成卷末检查点；strict 关卡下检查点未经作者确认，下一部的场景不能验收
+  tests:
+  - internal/cli.TestVolumeAutoCheckpoint
+  - internal/cli.TestVolumeMissingGate
+  - internal/cli.TestVolumeAcceptGate
+  - internal/volume.TestOnAccept
+  - internal/volume.TestAcceptanceBlockers
+  hardened_by:
+  - volume-checkpoint-gate
+- milestone: packs-and-series
+  criterion: 文风画像与偏好只以提议形式出现，作者确认前不影响规则
+  tests:
+  - internal/cli.TestPackLearnConfirmReject
+  - internal/cli.TestPackPrefer
+  - internal/learn.TestLearnLifecycle
+  hardened_by:
+  - guarantee-test-gaps
+- milestone: packs-and-series
+  criterion: 单元在摘要生成后又被修改时，摘要被标为过期，context 输出中注明
+  tests:
+  - internal/cli.TestSeriesContextAndSummaries
+  - internal/series.TestChapterSummaryFingerprint
+- milestone: packs-and-series
+  criterion: 偏离文风画像超过阈值的单元输出漂移发现项，附带指标数值与段落位置
+  tests:
+  - internal/stylemetric.TestProfileDrift
+  - internal/cli.TestMetricsComputeProfileValuesAndNonBlocking
+- milestone: packs-and-series
+  criterion: 分歧超过阈值的 AI 评分转为作者决策；与作者一致率低于阈值的评分维度被降级为仅供参考
+  tests:
+  - internal/cli.TestMetricsRecordShowAndDecide
+  - internal/cli.TestMetricsCalibrate
+  - internal/metrics.TestRecordAndDisputes
+  - internal/metrics.TestCalibration
+- milestone: packs-and-series
+  criterion: 从 git 地址安装的规范包被锁定到具体版本，并能校验通过
+  tests:
+  - internal/cli.TestPackInstallFromGit
+  - internal/packinstall.TestInstallFromGit
+  - internal/packinstall.TestCheckLock
+- milestone: packs-and-series
+  criterion: 系列中第二篇文章的 context 输出包含第一篇的已验收摘要
+  tests:
+  - internal/cli.TestSeriesContextAndSummaries
+- milestone: short-story
+  criterion: 短篇小说端到端测试通过，场景逐个经历起草、审查、验收
+  tests:
+  - internal/cli.TestShortStoryEndToEnd
+- milestone: short-story
+  criterion: 对话标点与视角（POV）一致规则在测试夹具的违例文本上报告发现项，在合规文本上不报告
+  tests:
+  - internal/lint.TestDialoguePunctuation
+  - internal/lint.TestPOVConsistency
+- milestone: short-story
+  criterion: 写作简报中的前提与关键转折没有关联作者素材或确认记录时，推进被阻塞
+  tests:
+  - internal/cli.TestShortStoryEndToEnd
+  - internal/cli.TestBriefGate
+- milestone: short-story
+  criterion: 测试夹具中张力曲线偏离契约目标的场景被列为发现项，且默认不阻塞验收
+  tests:
+  - internal/cli.TestCurveContractTarget
+  - internal/cli.TestShortStoryCurve
+- milestone: short-story
+  criterion: 所选结构类写作法要求的节拍在大纲中缺失时 validate 失败；成稿后节拍位置超出范围只提示不阻塞
+  tests:
+  - internal/cli.TestMethodOutlineCheck
+  - internal/cli.TestSceneBeatPositions
+  - internal/outline.TestSceneBeatPositions
+  hardened_by:
+  - short-story-beat-position
+- milestone: short-story
+  criterion: Agent 试图修改作者钦定的设定条目时，命令被拒绝并生成阻塞决策
+  tests:
+  - internal/cli.TestCanonPinnedFlow
+  - internal/canon.TestPinnedProtection
+- milestone: tech-blog-workflow
+  criterion: 缺少核心观点覆盖、亲历内容无出处、命中禁用词或 AI 腔词表时，对应命令以非零退出并给出可执行修复命令
+  tests:
+  - internal/cli.TestOutlineValidate
+  - internal/cli.TestLintClaims
+  - internal/cli.TestLintConfiguredRules
+  - internal/cli.TestDefaultPackRules
+  - internal/cli.TestHelpOnlyNextAllowlist
+  hardened_by:
+  - diagnostic-next-commands
+- milestone: tech-blog-workflow
+  criterion: 没有作者确认记录时，strict 关卡下 accept 被拒绝
+  tests:
+  - internal/cli.TestReviewShowResolveAccept
+  - internal/review.TestGateLevels
+  - internal/cli.TestConfirmationChannelStrict
+  hardened_by:
+  - confirmation-channel
+- milestone: tech-blog-workflow
+  criterion: wa-cli skills install 把内置 Skill 安装到 Claude Code 与 Codex 的技能目录；测试校验每个 Skill 引用的 wa-cli 命令都存在于 wa-cli help --json 中
+  tests:
+  - internal/cli.TestSkillsCommands
+  - internal/cli.TestSkillCommandsExist
+  - internal/skills.TestInstall
+  - internal/cli.TestNovelSkillCoverage
+  hardened_by:
+  - novel-skills
+- milestone: tech-blog-workflow
+  criterion: 发布产物覆盖 linux、macOS、Windows 的 amd64 与 arm64 二进制并附 SHA-256 校验文件；安装脚本能下载、校验并安装 wa-cli
+  tests:
+  - internal/tools/release.TestAllTargets
+  - internal/tools/release.TestInstallShEndToEnd
+  - internal/tools/release.TestInstallPs1
+  hardened_by:
+  - windows-install-verify
+- milestone: tech-blog-workflow
+  criterion: 写作简报选定的写作法所要求的章节在大纲中缺失时，validate 与 advance 以非零退出；不选写作法时不做该检查
+  tests:
+  - internal/cli.TestMethodOutlineCheck
+  - internal/outline.TestMethodGaps
+- milestone: tech-blog-workflow
+  criterion: 审稿发现项与作者反馈都转为修订任务；未全部解决或豁免前，standard 与 strict 关卡下不能验收
+  tests:
+  - internal/cli.TestReviewShowResolveAccept
+  - internal/review.TestRecordResolveAccept
+- milestone: tech-blog-workflow
+  criterion: 用测试夹具中的作者素材跑通一篇技术博客从写作简报到 Markdown 导出的端到端测试
+  tests:
+  - internal/cli.TestTechBlogEndToEnd
+- milestone: wechat-marketing-and-mcp
+  criterion: 公众号文章端到端测试通过，导出的 HTML 只含内联样式
+  tests:
+  - internal/cli.TestWechatMarketingEndToEnd
+  - internal/cli.TestExportWechatHTML
+- milestone: wechat-marketing-and-mcp
+  criterion: 命中极限词时 lint 以非零退出，并标明规则来源
+  tests:
+  - internal/cli.TestLintAdCompliance
+  - internal/lint.TestAdCompliance
+- milestone: wechat-marketing-and-mcp
+  criterion: 段落出处包含 agent 时，导出结果带 AI 参与说明；不包含时不生成
+  tests:
+  - internal/cli.TestAIDisclosure
+  - internal/cli.TestAIDisclosureOrigins
+- milestone: wechat-marketing-and-mcp
+  criterion: 在阅读页选中文字提交的意见，立即出现在 wa-cli feedback list 与 feedback watch 的输出中
+  tests:
+  - internal/cli.TestPreviewServe
+- milestone: wechat-marketing-and-mcp
+  criterion: 选用 AIDA 或 PAS 写作法时，大纲缺少对应段落会被 validate 报告；标题候选按 4U 标题法的评分项审稿
+  tests:
+  - internal/cli.TestWechatMarketingAIDAMissingPart
+  - internal/cli.TestMarketingGate
+  - internal/cli.TestWechatMarketingEndToEnd
+  hardened_by:
+  - guarantee-test-gaps
+- milestone: wechat-marketing-and-mcp
+  criterion: wa-cli preview 不加 --serve 时生成可离线阅读的静态 HTML
+  tests:
+  - internal/cli.TestPreviewStatic

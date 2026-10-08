@@ -409,6 +409,9 @@
 | 路线图 | Roadmap | 路线图 | |
 | 里程碑 | Milestone | 里程碑 | |
 | 计划变更 | Planned Change | 计划变更 | 路线图中尚未开始的工作项 |
+| 完成标准 | Done Criteria | 完成标准 | 里程碑 `done_criteria` 中逐条列出、判定里程碑完成的可验证条件 |
+| 完成标准对账 | Criteria Reconciliation | 对账 | 核对每个已归档里程碑的每条完成标准都映射到存在且会执行的测试函数；由 `internal/tools/criteria` 在 `go test ./...` 中强制 |
+| 对账表 | Reconciliation Table | 对账表 | 完成标准原文到测试函数（`包目录.测试函数名`）的映射：`internal/tools/criteria/testdata/criteria.yaml`；里程碑归档时在同一变更中同步补表 |
 | 变更 | Change | 变更 | 一次提案到归档的开发单位 |
 | 规格 | Spec | 规格 | 可观察行为的要求 |
 | 用户场景 | Scene | 用户场景 | strict-spec-driven 中描述用户操作流程的产物；为与小说"场景"区分，统一称"用户场景" |
