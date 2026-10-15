@@ -1,0 +1,67 @@
+schema: strict-spec-driven/question-list/v1
+schema_version: 1
+artifact_type: question_list
+schema_file: templates/strict-spec-driven/schemas/question-list.yaml
+change: agent-dogfood
+open: []
+resolved:
+  - id: requirement-problem
+    question: What is concretely going wrong today, and for whom?
+    context: 'Why this is asked: the change is planned against a need, and the need lives only with the requester. A "problem" here means what someone does or suffers today — not a feature that is missing. If the answer names a button, a field, a page, or an endpoint, it is a solution, and the underlying problem is still unstated. What a sufficient answer contains: who is affected, what they do today instead, and how often. Worked example: "every Monday one person spends forty minutes copying order rows into a spreadsheet to send the weekly report". What it changes: this becomes the proposal''s why, and it decides whether the change is worth making.'
+    answer: 证据：里程碑 goal 与 notes、planned change summary。此前全部验证都是进程内重放与夹具测试，加固后的 wa-cli 从未由真实第三方 Agent（Claude Code、Codex）经技能与 MCP 接入走完从写作简报到导出的生命周期；作者与后续开发无法得知真实接入时的卡点，里程碑审计也指出验证通过不等于真实可用
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-outcome
+    question: What observable difference proves the problem is solved?
+    context: 'Why this is asked: without a success condition, nobody can tell afterwards whether the change worked. "Observable" means someone outside the system can check it without reading the code. What a sufficient answer contains: what a person will see, or no longer have to do, once this is done. Worked example: "the report is in the manager''s inbox on Monday morning without anyone assembling it". What it changes: this becomes the delta spec''s scenarios and the acceptance evidence at review time.'
+    answer: 证据：里程碑 done_criteria 第一条。docs 下有真实接入记录：两个客户端 × 两种文体共四次运行都走到导出，记录含客户端版本与命令序列，每个问题都链接到已归档的缺陷变更或写明不修理由
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-trigger
+    question: Why now — what forced this?
+    context: 'Why this is asked: work that nothing forced is the work most often thrown away later. This question catches a request that sounds reasonable but has no real driver behind it. What a sufficient answer contains: the concrete event, deadline, incident, or cost that made this surface now, or an honest statement that nothing did. Worked example: "the report was missed last month and it was raised with the team". What it changes: a change with no trigger is a candidate for deferral, and the answer is weighed at review before archive.'
+    answer: 证据：里程碑 dependencies 与 roadmap 依赖。三个加固里程碑与 criteria-reconciliation 已完成，真实接入应针对加固后的行为；release-v0-2-0 依赖本计划变更，发布前必须完成
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-non-goals
+    question: What must explicitly not change?
+    context: 'Why this is asked: the requester knows which nearby behavior other people depend on, and the agent does not. A "non-goal" is something the change must leave alone even though it sits close to the work. What a sufficient answer contains: the behavior, setting, or output that must survive untouched, and who relies on it. Worked example: "do not change the saved filters — several people rely on their own". What it changes: these become the proposal''s unchanged_behavior items, which review checks the finished result against.'
+    answer: 证据：里程碑 scope.out 与 details。不向公众号等外部平台发布文章或调用平台 API；不扩展产品功能，验证中发现的新需求另立里程碑；wa-cli 不调用模型，真实接入由作者在本机执行；产品运行时不依赖 strict-spec-driven
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-interpretation
+    question: Which reading of the request is intended, where more than one is possible?
+    context: 'Why this is asked: a short request usually admits several readings, and building the wrong one is indistinguishable from building nothing. What a sufficient answer contains: the reading that is meant, stated plainly enough to rule the others out — or a statement that only one reading exists and what it is. Worked example: "export means the version sent to the manager, not the one I read myself". What it changes: this fixes the scope boundary before any code is written, and settles disputes about what was asked for.'
+    answer: 证据：planned change details 与 intake dogfood-clients。「经技能与 MCP 接入两个客户端」解释为每个客户端都同时用 wa-cli skills install 与 wa-cli mcp install 接入，每次运行记录实际用到的接入方式；「各完成一篇」指每个客户端各一篇技术博客（导出 markdown）与一篇公众号文章（导出 wechat-html），共四次；「全程经阅读页确认」指作者的验收与决策确认通过 wa-cli preview --serve 阅读页完成；「以缺陷变更修复」指每个问题由独立的 strict-spec-bugfix 变更修复并归档，本变更只记录与链接
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: spec-impact
+    question: 本变更是否修改产品主规格或需要场景？
+    context: 影响 spec delta 与场景产物。变更产物只有 docs/dogfood/ 文档与记录、internal/tools/dogfood 开发工具，wa-cli 可观察行为不变；真实运行发现的行为缺陷在各自的缺陷变更中修改。
+    answer: 不修改主规格，specs/ 留空，不创建场景；design 记录 no-delta-spec 决策
+    status: resolved
+    answered_by: roadmap
+  - id: records-enforcement
+    question: 真实接入记录如何被测试强制，又不阻塞缺陷变更归档？
+    context: 影响实现文件与测试顺序。证据：里程碑 done_criteria 第四条要求每条完成标准映射到测试函数；criteria-reconciliation 技术规范要求里程碑归档时补对账表；缺陷变更归档前必须通过完整回归。
+    answer: 结构化记录 docs/dogfood/runs.yaml 由 internal/tools/dogfood 校验；读取真实记录的 TestDogfoodRecords 在全部问题处理完后最后加入，避免记录未齐时完整回归失败而阻塞缺陷变更归档
+    status: resolved
+    answered_by: roadmap
+  - id: client-versions
+    question: 真实接入用哪些客户端版本、由谁执行？
+    context: 影响验证记录的可复现程度。证据：里程碑 intake dogfood-clients 已定由作者在本机用执行时的当前版本执行；本机当前为 Claude Code 2.1.280 与 codex-cli 0.157.1。
+    answer: 由作者在本机、全新客户端会话与仓库外独立目录中执行，记录执行时的客户端版本与 wa-cli 提交
+    status: resolved
+    answered_by: roadmap
+  - id: wechat-source
+    question: 两次公众号营销文章（wechat-marketing）运行用什么素材和主题？
+    context: 影响：实现任务 run-claude-code-wechat 与 run-codex-wechat 的执行、docs/dogfood/README.md 的素材准备一节，以及 runs.yaml 中两次公众号运行的记录。证据：里程碑 intake dogfood-clients 的结论是「素材使用 testdata 夹具」，但仓库中只有技术博客的夹具（internal/cli/testdata/e2e 下的 go-docs.md、interview.md、author-note.md），没有公众号营销文章的素材夹具；营销文章的亲历内容、观点与数据必须链接到作者提供的素材，Agent 不能代为编造。选项：(A，推荐) 以 writing-anything 本身为推广对象，由作者提供一份产品要点与一段亲历使用笔记，作为新素材夹具检入 docs/dogfood/sources/，两次运行共用，便于对比 Claude Code 与 Codex；(B) 作者指定另一个真实产品或活动，并提供对应素材；(C) 由 Agent 编写一份虚构产品的素材夹具，作者确认后使用——这一项最快，但削弱了「真实接入」的意义。
+    answer: 选 A：以 writing-anything 本身为推广对象，由作者提供一份产品要点与一段亲历使用笔记，作为素材夹具检入 docs/dogfood/sources/，两次公众号运行共用
+    status: resolved
+    kind: technical
+    answered_by: human

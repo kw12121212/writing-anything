@@ -413,5 +413,7 @@
 | 完成标准对账 | Criteria Reconciliation | 对账 | 核对每个已归档里程碑的每条完成标准都映射到存在且会执行的测试函数；由 `internal/tools/criteria` 在 `go test ./...` 中强制 |
 | 对账表 | Reconciliation Table | 对账表 | 完成标准原文到测试函数（`包目录.测试函数名`）的映射：`internal/tools/criteria/testdata/criteria.yaml`；里程碑归档时在同一变更中同步补表 |
 | 变更 | Change | 变更 | 一次提案到归档的开发单位 |
+| 真实接入验证 | Dogfooding | 真实接入验证 | 由作者在本机操作真实 Agent 客户端（如 Claude Code、Codex），经技能与 MCP 服务接入 `wa-cli`，走完一篇文章从写作简报到导出的生命周期，以发现夹具测试覆盖不到的卡点；步骤见 `docs/dogfood/README.md` |
+| 真实接入记录 | Dogfood Record | 真实接入记录 | 一次真实接入验证运行的结构化记录：客户端与 `wa-cli` 版本、接入方式、命令序列、导出结果与问题清单，保存在 `docs/dogfood/runs.yaml`，由 `internal/tools/dogfood` 校验 |
 | 规格 | Spec | 规格 | 可观察行为的要求 |
 | 用户场景 | Scene | 用户场景 | strict-spec-driven 中描述用户操作流程的产物；为与小说"场景"区分，统一称"用户场景" |

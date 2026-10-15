@@ -1,0 +1,64 @@
+# 合法的真实接入记录夹具：四种组合齐全，含一个已修复问题与一个不修问题。
+schema_version: 1
+runs:
+  - id: claude-code-tech-blog
+    client: claude-code
+    client_version: 2.1.280 (Claude Code)
+    wa_cli_version: wa-cli dev (commit 0000000)
+    genre: tech-blog
+    channels: [skill, mcp]
+    date: "2026-10-12"
+    commands:
+      - wa-cli init
+      - wa-cli new tech-blog http-reuse
+      - wa-cli export http-reuse
+    export:
+      format: markdown
+      path: .writing-anything/exports/http-reuse.md
+    notes: 夹具
+    issues:
+      - id: cc-tb-1
+        summary: 已修复的问题
+        fix_change: fix-sample
+  - id: claude-code-wechat-marketing
+    client: claude-code
+    client_version: 2.1.280 (Claude Code)
+    wa_cli_version: wa-cli dev (commit 0000000)
+    genre: wechat-marketing
+    channels: [skill]
+    date: "2026-10-12"
+    commands:
+      - wa-cli export promo --format wechat-html
+    export:
+      format: wechat-html
+      path: .writing-anything/exports/promo.html
+    issues:
+      - id: cc-wm-1
+        summary: 不修的问题
+        wont_fix_reason: 属于新需求，转入后续里程碑
+  - id: codex-tech-blog
+    client: codex
+    client_version: codex-cli 0.157.1
+    wa_cli_version: wa-cli dev (commit 0000000)
+    genre: tech-blog
+    channels: [mcp]
+    date: "2026-10-13"
+    commands:
+      - wa-cli export http-reuse --format=markdown --json
+    export:
+      format: markdown
+      path: .writing-anything/exports/http-reuse.md
+    issues: []
+  - id: codex-wechat-marketing
+    client: codex
+    client_version: codex-cli 0.157.1
+    wa_cli_version: wa-cli dev (commit 0000000)
+    genre: wechat-marketing
+    channels: [mcp, skill]
+    date: "2026-10-13"
+    commands:
+      - wa-cli export promo --format wechat-html --output out/promo.html
+    export:
+      format: wechat-html
+      path: out/promo.html
+    issues: []

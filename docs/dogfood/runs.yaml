@@ -1,0 +1,184 @@
+# 真实接入记录（Dogfood Record）：字段说明见 docs/dogfood/README.md 的「记录格式」，
+# 由 go run ./internal/tools/dogfood 校验。
+schema_version: 1
+runs:
+  - id: claude-code-tech-blog
+    client: claude-code
+    client_version: 2.1.280 (Claude Code)
+    wa_cli_version: wa-cli v0.0.0-20261008040500-5ca203b42eee+dirty (commit 5ca203b42eee960930e507e66a15da2c011c84fa-dirty)
+    genre: tech-blog
+    channels: [skill]
+    date: "2026-10-14"
+    commands:
+      # 按出现顺序整理自会话记录；省略了穿插其中的 wa-cli help 查询。
+      - wa-cli next --json
+      - wa-cli status --json
+      - wa-cli handoff show --json
+      - wa-cli pack list --json
+      - wa-cli new tech-blog go-http-conn-reuse --json
+      - wa-cli source add --type author-note --file author-note.md --json
+      - wa-cli source add --type interview --file interview.md --json
+      - wa-cli source add --type reference --file go-docs.md --json
+      - wa-cli brief show go-http-conn-reuse --dir . --json
+      - wa-cli method list --json
+      - wa-cli genre show tech-blog --json
+      - wa-cli config resolved go-http-conn-reuse --json
+      - wa-cli config resolved --work go-http-conn-reuse --json
+      - wa-cli config resolved --json
+      - wa-cli brief set go-http-conn-reuse --audience ... --purpose ... --key-message ... --json
+      - wa-cli brief set go-http-conn-reuse --avoid ... --json
+      - wa-cli advance go-http-conn-reuse --json
+      - wa-cli outline set go-http-conn-reuse <section> --title ... --role ... --uses ... --reason ... --json
+      - wa-cli outline show go-http-conn-reuse --json
+      - wa-cli advance go-http-conn-reuse --json
+      - wa-cli context go-http-conn-reuse
+      - wa-cli draft write go-http-conn-reuse --file /tmp/wa-draft-go-http-conn-reuse.md --json
+      - wa-cli claim add go-http-conn-reuse --kind ... --text ... --sources ... --json
+      - wa-cli lint go-http-conn-reuse --json
+      - wa-cli advance go-http-conn-reuse --json
+      - wa-cli method show --json
+      - wa-cli provenance go-http-conn-reuse --json
+      - wa-cli review record go-http-conn-reuse --file /tmp/wa-review.yaml --json
+      - wa-cli metrics compute go-http-conn-reuse --json
+      - wa-cli review show go-http-conn-reuse --json
+      - wa-cli decision add --unit go-http-conn-reuse --blocking --id ... --json
+      - wa-cli preview go-http-conn-reuse --serve --json
+      - wa-cli decisions --json
+      - wa-cli decide <decision-id> --option <option> --confirmation ... --json
+      - wa-cli diff go-http-conn-reuse --json
+      - wa-cli draft write go-http-conn-reuse --file /tmp/wa-draft-r1.md --json
+      - wa-cli claim set go-http-conn-reuse claim-9 --text ... --json
+      - wa-cli review record go-http-conn-reuse --file /tmp/wa-review2.yaml --json
+      - wa-cli review resolve go-http-conn-reuse <finding-id> --status resolved --note ... --json
+      - wa-cli advance go-http-conn-reuse --json
+      - wa-cli series show --json
+      - wa-cli export go-http-conn-reuse --format markdown --front-matter --json
+      - wa-cli validate --json
+      # 2026-10-15 作者在同一会话中继续：经阅读页留下作者反馈 fb-1（小标题改口语化）后要求导出 wechat-html。
+      - wa-cli preview go-http-conn-reuse --serve --json
+      - wa-cli feedback list go-http-conn-reuse --json
+      - wa-cli draft write go-http-conn-reuse --file /tmp/wa-draft-r2.md --json
+      - wa-cli review record go-http-conn-reuse --file /tmp/wa-review3.yaml --json
+      - wa-cli export go-http-conn-reuse --format wechat-html --output .writing-anything/exports/probe.tmp.html --json
+      - wa-cli accept go-http-conn-reuse --confirmed-by-author --confirmation ... --json
+      - wa-cli advance go-http-conn-reuse --json
+      - wa-cli draft write go-http-conn-reuse --file /tmp/wa-work/draft-accepted.md --json
+      - wa-cli export go-http-conn-reuse --format wechat-html --json
+      - wa-cli handoff write --file /tmp/wa-work/handoff.yaml --json
+      # 2026-10-15 第二次在同一会话中继续：作者又提交反馈 fb-2、fb-3 并要求按口语化重新验收；Agent 经作者同意手工编辑
+      # work.yaml 把 stage 从 done 改回 review（绕过 wa-cli），之后：
+      - wa-cli validate --json
+      - wa-cli draft write go-http-conn-reuse --file /tmp/wa-work/draft-colloquial-full.md --json
+      - wa-cli claim set go-http-conn-reuse <claim-id> --text ... --json
+      - wa-cli review record go-http-conn-reuse --file <审稿结果文件> --json
+      - wa-cli preview go-http-conn-reuse --serve --json
+      - wa-cli advance go-http-conn-reuse --json
+      - wa-cli export go-http-conn-reuse --format wechat-html --json
+      - wa-cli export go-http-conn-reuse --format markdown --front-matter --json
+      - wa-cli handoff write --file /tmp/wa-work/handoff2.yaml --json
+    export:
+      format: markdown
+      path: .writing-anything/exports/go-http-conn-reuse.md
+    notes: >-
+      会话在项目目录的上级 ~/wa-dogfood 中启动，项目级技能（.claude/skills/）与 .mcp.json 都没有加载。第一句提示「用
+      writing-anything 帮我写」时，Claude Code 尝试调用不存在的 writing-anything 技能（Unknown skill），作者中断后重开会话、
+      改为点名 wa-auto；Agent 在子目录 claude-code-tech-blog 中找到 SKILL.md 后手动读取并照做，全程经 Bash 运行 wa-cli，
+      没有使用 MCP。写作简报、大纲取舍、亲历细节、禁区与修订决策都停下来问了作者；Agent 只按素材原话写亲历，没有补编排查过程。
+      审稿登记 6 个阻塞决策，作者选择在对话中接受 Agent 的建议并由命令行记录（6 个决策 channel 均为 cli），验收在阅读页上
+      确认（acceptance channel 为 preview）。作品走完 brief → outline → draft → review → done 并导出 Markdown，wa-cli validate 通过。
+      2026-10-15 作者在同一会话（本应继续另一项目的会话，误在上级目录用 claude --continue 接上了本会话）中经阅读页提交反馈
+      fb-1，Agent 按反馈改写小标题后，作品已是 done 阶段：export 以 export.unaccepted 拒绝并提示重新 accept，accept 以
+      accept.wrong-stage 拒绝，advance 以 lifecycle.already-done 拒绝，阅读页也没有待确认事项，无路可走；作者选择把正文逐字节
+      恢复为已验收版本后导出 wechat-html，fb-1 改为交接记录中的待办。随后作者再次（同样误接上本会话）提交反馈 fb-2、fb-3
+      要求整体口语化，Agent 征得作者同意后手工编辑 work.yaml 把 stage 从 done 改回 review（唯一一处绕过 wa-cli 的修改，
+      wa-cli validate 照常通过），改写正文、重新审稿后，作者在阅读页重新验收（channel preview），作品推进到 done，重新导出
+      Markdown 与 wechat-html；Claude Code 在会话末尾主动提示该缺陷值得报告。
+    issues:
+      - id: cc-tb-1
+        summary: >-
+          客户端在项目目录之外（上级目录）启动时，项目级技能与 MCP 服务都不会加载，作者按产品名说「用 writing-anything」
+          会触发不存在的技能并报 Unknown skill；wa-cli skills install 与 mcp install 的输出没有提示需要在项目目录中启动客户端。
+      - id: cc-tb-2
+        summary: >-
+          没有查看文体规则与评分标准（Rubric）的命令：Agent 先后试了不存在的 wa-cli genre show、带作品参数的
+          wa-cli config resolved <work> 与 --work，最后只能从全局 config resolved 推断；首次 review record 也因不知道完整
+          评分项而被 review.missing-verdict 拒绝。
+      - id: cc-tb-3
+        summary: >-
+          已验收（done 阶段）的作品在作者反馈后修改正文，就再也无法重新验收与导出：export 报 export.unaccepted 并让作者
+          「重新审稿并用 wa-cli accept 验收」，但 accept 报 accept.wrong-stage（done 阶段不需要验收），advance 报
+          lifecycle.already-done，next 没有步骤，阅读页也不列出待确认的验收；诊断给出的下一步无法执行，wa-cli 没有把单元退回
+          review 的途径。作者只能放弃修改，或像本次第二次继续时那样由 Agent 手工编辑 work.yaml 回退阶段，违反「结构化产物
+          只通过 wa-cli 变更」的约定（wa-cli validate 也不会发现这类手工回退）。
+        fix_change: fix-reopen-stale-acceptance
+  - id: claude-code-wechat-marketing
+    client: claude-code
+    client_version: 2.1.280 (Claude Code)
+    wa_cli_version: wa-cli v0.0.0-20261008040500-5ca203b42eee+dirty (commit 5ca203b42eee960930e507e66a15da2c011c84fa-dirty)
+    genre: wechat-marketing
+    channels: [skill]
+    date: "2026-10-15"
+    commands:
+      # 按出现顺序整理自会话记录；省略了穿插其中的 wa-cli help 查询。会话依次调用 wa-auto、wa-init、wa-brief、
+      # wa-outline、wa-draft、wa-review、wa-revise、wa-publish 技能。
+      - wa-cli next --json
+      - wa-cli handoff show --json
+      - wa-cli status --json
+      - wa-cli source list --json
+      - wa-cli source add --type reference --file product-points.md --json
+      - wa-cli source add --type author-note --file author-note.md --json
+      - wa-cli pack list --json
+      - wa-cli new wechat-marketing why-writing-anything --json
+      - wa-cli brief show why-writing-anything --json
+      - wa-cli method list --json
+      - wa-cli config resolved --json
+      - wa-cli brief set why-writing-anything --audience ... --purpose ... --key-message ... --json
+      - wa-cli advance why-writing-anything --json
+      - wa-cli context why-writing-anything --json
+      - wa-cli outline set why-writing-anything <section> --title ... --role ... --covers ... --uses ... --json
+      - wa-cli outline show why-writing-anything --json
+      - wa-cli advance why-writing-anything --json
+      - wa-cli draft write why-writing-anything --file /tmp/wa/draft.md --json
+      - wa-cli lint why-writing-anything --json
+      - wa-cli claim add why-writing-anything --id ... --kind ... --sources ... --text ... --json
+      - wa-cli marketing set why-writing-anything --headline ... --headline-text ... --digest ... --opening ... --cta ... --json
+      - wa-cli marketing ask why-writing-anything --json
+      - wa-cli preview why-writing-anything --serve --json
+      - wa-cli decisions --json
+      - wa-cli advance why-writing-anything --json
+      - wa-cli provenance why-writing-anything --json
+      - wa-cli review record why-writing-anything --json
+      - wa-cli review record why-writing-anything --file /tmp/wa/review.yaml --json
+      - wa-cli metrics compute why-writing-anything --json
+      - wa-cli review show why-writing-anything --json
+      - wa-cli feedback list why-writing-anything --json
+      - wa-cli diff why-writing-anything --json
+      - wa-cli draft write why-writing-anything --file /tmp/wa/draft2.md --json
+      - wa-cli claim set why-writing-anything <claim-id> --text ... --json
+      - wa-cli review resolve why-writing-anything headline-overstated --status waived --note 保留现标题 --json
+      - wa-cli review record why-writing-anything --file <审稿结果文件> --json
+      - wa-cli preview why-writing-anything --serve --json
+      - wa-cli advance why-writing-anything --json
+      - wa-cli export why-writing-anything --format wechat-html --json
+      - wa-cli validate --json
+    export:
+      format: wechat-html
+      path: .writing-anything/exports/why-writing-anything.html
+    notes: >-
+      在项目目录中启动，技能自动加载，/mcp 显示 writing-anything 已连接；Agent 依次调用 wa-auto、wa-init、wa-brief、wa-outline、
+      wa-draft、wa-review、wa-revise、wa-publish 技能，全程经 Bash 运行 wa-cli，MCP 工具调用次数为 0。写作简报、大纲、字数、
+      标题（阅读页上选定，决策 channel 为 preview）与两处修订取舍都停下来问了作者；18 条论断都关联到素材，广告法极限词与 AI 套话
+      检查 0 发现项。Agent 用一次空的 review record 试探出评分项清单（8 个 review.missing-verdict），第二次因标题类评分项
+      paragraphs 为空被 artifact.schema-violation 拒绝，填了第 2 段才通过。10-14 会话在等待作者验收时结束，阅读页服务随会话
+      停止；10-15 作者两次误在上级目录用 claude --continue 接上了技术博客的会话（记录在 claude-code-tech-blog），第三次用
+      claude --resume <会话 id> 接回本会话，Agent 重启阅读页，作者在页上确认验收（channel preview，「全部确认」）后导出
+      wechat-html（1864 字，只含内联样式，文末自动附 AI 参与说明「约 100% 的内容由 AI 起草」）。
+    issues:
+      - id: cc-wm-1
+        summary: >-
+          Claude Code 同时加载了技能与 MCP 服务（/mcp 显示已连接），但整次运行 MCP 工具调用为 0：技能正文只给出 shell 形式的
+          wa-cli 命令，Agent 一律经 Bash 运行；MCP 服务对能运行 shell 的客户端实际闲置，技能也没有说明何时应改用 MCP。
+      - id: cc-wm-2
+        summary: >-
+          审稿结果中针对标题的评分项（headline-useful 等 4U 项）评的是标题而不是正文段落，但 review record 要求每个评分项的
+          paragraphs 至少 1 项（artifact.schema-violation），Agent 只能填一个与结论无关的段落号凑数。
