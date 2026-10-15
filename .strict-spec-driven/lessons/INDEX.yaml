@@ -311,6 +311,12 @@ categories:
       status: active
       occurrences: 1
       path: .strict-spec-driven/lessons/documentation/roadmap-generate-91c10a.yaml
+  operations:
+    pr-gh-generate-notes-8e86ae:
+      title: 不走 PR 的仓库里 gh --generate-notes 只生成一行比较链接，不是提交清单
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/operations/pr-gh-generate-notes-8e86ae.yaml
   performance:
     lesson-d20dc5:
       title: 按词表计数复用已有匹配器

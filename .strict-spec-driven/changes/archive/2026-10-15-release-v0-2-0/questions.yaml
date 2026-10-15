@@ -11,12 +11,6 @@ resolved:
     answer: 不修改主规格与技术标准，specs/ 留空、不创建 tech/；design 记录 no-delta-spec 决策
     status: resolved
     answered_by: roadmap
-  - id: release-notes-scope
-    question: 发布说明需要包含什么、放在哪里？
-    context: 影响实施任务 write-release-notes 与 create-github-release。planned change details 要求发布说明汇总四个加固与验证里程碑的变化；release 技能现用 --generate-notes。
-    answer: 四段里程碑摘要写入仓库外临时文件，经 --notes-file 前置到 --generate-notes 自动生成的提交清单之前；不在仓库内提交发布说明文件
-    status: resolved
-    answered_by: roadmap
   - id: requirement-problem
     question: What is concretely going wrong today, and for whom?
     context: 'Why this is asked: the change is planned against a need, and the need lives only with the requester. A "problem" here means what someone does or suffers today — not a feature that is missing. If the answer names a button, a field, a page, or an endpoint, it is a solution, and the underlying problem is still unstated. What a sufficient answer contains: who is affected, what they do today instead, and how often. Worked example: "every Monday one person spends forty minutes copying order rows into a spreadsheet to send the weekly report". What it changes: this becomes the proposal''s why, and it decides whether the change is worth making.'
@@ -58,3 +52,9 @@ resolved:
     answer: 作者于 2026-10-15 明确授权：版本号 v0.2.0，正式版不加 --prerelease，回归、pwsh 校验与构建通过后完整执行 release 技能全部 10 步，包括推送 main、dev、v0.2.0 标签与创建 GitHub Release
     status: resolved
     answered_by: human
+  - id: release-notes-scope
+    question: 发布说明需要包含什么、放在哪里？
+    context: 影响实施任务 write-release-notes 与 create-github-release。planned change details 要求发布说明汇总四个加固与验证里程碑的变化；release 技能现用 --generate-notes。实施中发现：本仓库不走 PR，--generate-notes 只生成一行 Full Changelog 比较链接，不是提交清单。
+    answer: 四段里程碑摘要写入仓库外临时文件，经 --notes-file 前置到 --generate-notes 自动生成的部分之前；自动生成的部分只有 Full Changelog 比较链接，完整提交经该链接查看；不在仓库内提交发布说明文件
+    status: resolved
+    answered_by: roadmap

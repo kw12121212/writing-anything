@@ -1,0 +1,19 @@
+schema: strict-spec-driven/lesson/v1
+schema_version: 1
+artifact_type: lesson
+schema_file: templates/strict-spec-driven/schemas/lesson.yaml
+lesson:
+  id: pr-gh-generate-notes-8e86ae
+  title: 不走 PR 的仓库里 gh --generate-notes 只生成一行比较链接，不是提交清单
+category: operations
+status: active
+created_at: '2026-10-15T07:26:20.611Z'
+updated_at: '2026-10-15T07:26:20.611Z'
+context: release-v0-2-0 发布 v0.2.0 时，design 假定 gh release create --generate-notes 会生成提交清单，并据此把里程碑摘要设计为前置在提交清单之前
+observation: '本仓库 dev 直接 --no-ff 合并到 main、从不开 PR；GitHub Release Notes API 只按合并的 PR 生成条目，最终自动生成的部分只有一行「**Full Changelog**: compare/v0.1.0...v0.2.0」，design、questions 与 proposal 中「保留自动生成的提交清单」的前提不成立，审查时被判为部分不满足'
+takeaway: 不走 PR 的仓库里，发布说明的实质内容必须由 --notes / --notes-file 自己提供；--generate-notes 只能当作附带比较链接的手段。设计发布说明时不要把「自动生成的提交清单」写成验收依据，需要提交级清单时用 git log <上个标签>..<新标签> 自行生成
+applies_when: 用 gh release create --generate-notes（或 GitHub 自动发布说明）为一个直接合并分支、不使用 Pull Request 的仓库编写或规划发布说明时
+occurrences:
+  - origin: release-v0-2-0
+    date: '2026-10-15'
+    evidence: gh release view v0.2.0 的 body 在四段里程碑摘要后只有 Full Changelog 比较链接；design.yaml decision notes-prepended 在审查后改写

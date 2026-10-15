@@ -18,4 +18,4 @@ milestones:
   real-use-and-release:
     title: 真实使用验证与发布（Real-use Validation & Release）
     path: roadmap/milestones/real-use-and-release.yaml
-    status: proposed
+    status: complete

@@ -392,6 +392,7 @@
 | 持续集成与持续交付 | CI/CD | CI/CD | 推送后由服务端自动构建、测试与发布的机制；本项目不使用，仓库中不放置任何工作流文件 |
 | 发布产物 | Release Asset | 发布产物 | 随版本发布的文件：各平台的 `wa-cli-<os>-<arch>` 二进制与 `SHA256SUMS` |
 | 校验文件 | Checksum File | 校验文件 | 记录每个发布产物 SHA-256 的 `SHA256SUMS`，格式与 `sha256sum` 兼容 |
+| 发布说明 | Release Notes | 发布说明 | GitHub Release 页面上的版本说明：按里程碑汇总的变化摘要，后接 gh 自动生成的比较链接 |
 | 安装脚本 | Install Script | 安装脚本 | `install.sh`（Linux、macOS）与 `install.ps1`（Windows）：下载、校验并把 `wa-cli` 安装到用户级目录 |
 | PowerShell | PowerShell | PowerShell | Windows 的命令行外壳与脚本语言，`install.ps1` 在其中运行；PowerShell 7 跨平台，可执行文件为 `pwsh`，Windows 自带的 Windows PowerShell 5.1 为 `powershell.exe` |
 | Linux 子系统 | WSL（Windows Subsystem for Linux） | WSL | 在 Windows 上运行 Linux 环境的子系统；本项目的开发环境之一，`install.ps1` 的测试可在其中用 Linux 版 pwsh 运行 |

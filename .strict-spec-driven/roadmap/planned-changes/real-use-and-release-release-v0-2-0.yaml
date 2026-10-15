@@ -5,7 +5,7 @@ schema_file: ../../templates/strict-spec-driven/schemas/planned-change.yaml
 planned_change:
   id: release-v0-2-0
   milestone: real-use-and-release
-status: planned
+status: complete
 summary: 完整回归通过后经 release 技能发布 v0.2.0
 details: 执行前征得作者明确确认；按 .agents/skills/release 流程运行完整回归（含 pwsh 安装校验），把 dev 合并到 main，打 v0.2.0 标签，生成 6 个平台二进制与 SHA256SUMS 并推送；发布说明汇总四个加固与验证里程碑的变化。
 depends_on:

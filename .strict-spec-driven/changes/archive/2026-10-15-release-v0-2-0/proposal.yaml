@@ -8,7 +8,7 @@ change:
 summary:
   what:
     - 按项目技能 .agents/skills/release 发布 wa-cli v0.2.0：完整回归（含完成标准对账）与 pwsh 安装校验通过后，把 dev 以 --no-ff 合并到 main，在 main 上打 v0.2.0 注释标签，本地交叉编译 linux、darwin、windows 各 amd64 与 arm64 共 6 个二进制及 SHA256SUMS，推送 main、dev 与标签，并用 gh 创建 GitHub Release
-    - 发布说明（Release Notes）在 gh 自动生成的提交摘要之前，汇总 core-gate-hardening、novel-guarantee-hardening、usability-polish、real-use-and-release 四个加固与验证里程碑的变化
+    - 发布说明（Release Notes）以四段摘要汇总 core-gate-hardening、novel-guarantee-hardening、usability-polish、real-use-and-release 四个加固与验证里程碑的变化，前置于 gh 自动生成的 Full Changelog 比较链接之前
   why:
     - 里程碑 real-use-and-release 的完成标准要求 main 分支上存在 v0.2.0 标签，且发布产物含 6 个平台二进制与 SHA256SUMS；这是该里程碑最后一项计划变更
     - v0.1.0 之后完成了三个加固里程碑以及系列小说端到端测试、完成标准对账、真实接入验证，main 与已发布二进制仍停留在 v0.1.0，用户通过安装脚本拿不到加固后的行为
