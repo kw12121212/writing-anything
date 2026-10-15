@@ -65,3 +65,10 @@ resolved:
     status: resolved
     kind: technical
     answered_by: human
+  - id: run-scope
+    question: 取消 Codex × 公众号营销文章运行后，完成标准与记录怎么处理？
+    context: 影响 proposal 范围、internal/tools/dogfood 的校验规则、runs.yaml 与里程碑 real-use-and-release 完成标准第一条。选项：(A) 改为三次，未运行组合写明原因；(B) 保留四次，等额度恢复再跑，本变更与 v0.2.0 发布推迟；(C) 改用 Claude Code 补跑一篇公众号文章。
+    answer: 作者原话：「去掉这项 codex 任务，不再进行，因为额度不够了」，并选择 (A) 改为三次，记录未运行原因
+    status: resolved
+    kind: technical
+    answered_by: human

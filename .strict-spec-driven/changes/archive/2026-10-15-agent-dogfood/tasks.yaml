@@ -28,41 +28,47 @@ sections:
       status: complete
     run-codex-tech-blog:
       text: 【作者执行】在全新 Codex 会话中按运行手册完成一篇技术博客，走到 wa-cli export --format markdown，并写入 runs.yaml
-      status: pending
-    run-codex-wechat:
-      text: 【作者执行】在全新 Codex 会话中按运行手册完成一篇公众号营销文章，走到 wa-cli export --format wechat-html，并写入 runs.yaml
-      status: pending
+      status: complete
+    checker-skipped-runs:
+      text: internal/tools/dogfood 支持未运行组合：Run 增加 skipped_reason；有 skipped_reason 时只允许 id、client、genre，其他字段出现即报问题；新增「每个客户端、每种文体至少一次已运行」检查；补充夹具测试（合法未运行、未运行带多余字段、某客户端或某文体没有任何已运行记录）并更新 README.md 的记录格式说明
+      status: complete
+    record-skipped-run:
+      text: 在 runs.yaml 中把 codex-wechat-marketing 记为未运行，skipped_reason 写明作者因 Codex 额度不足取消；README.md 汇总说明三次运行与一个未运行组合
+      status: complete
+    milestone-criterion:
+      text: 修改里程碑 real-use-and-release 完成标准第一条的措辞，改为三次运行（Claude Code × 两种文体、Codex × 技术博客）都走到导出、未运行的组合写明原因，与 runs.yaml 和检查工具一致；只通过 strict-spec-cli 的路线图命令修改
+      status: complete
     triage-issues:
       text: 逐个处理 runs.yaml 中的问题：需要修复的以独立的 strict-spec-bugfix 变更修复并归档后，把变更名写入 fix_change；不修的写明 wont_fix_reason（如属于新需求，注明转入后续里程碑）；在 README.md 汇总问题清单与处理结果
-      status: pending
+      status: complete
     real-records-test:
       text: 全部问题处理完后，在 internal/tools/dogfood 中加入 TestDogfoodRecords：从仓库根目录读取真实 docs/dogfood/runs.yaml 并断言校验通过，函数体首层不得有无条件 t.Skip，供里程碑归档时写入完成标准对账表
-      status: pending
+      status: complete
   Testing:
     dogfood-unit-tests:
       text: 运行 internal/tools/dogfood 的单元测试（夹具测试与 TestDogfoodRecords）
-      status: pending
+      status: complete
       command: go test ./internal/tools/dogfood -count=1
     dogfood-records-check:
       text: 用校验工具检查真实接入记录 docs/dogfood/runs.yaml
-      status: pending
+      status: complete
       command: go run ./internal/tools/dogfood
     full-regression:
       text: 运行完整回归（含覆盖率阈值与完成标准对账）
-      status: pending
+      status: complete
       command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
   Verification:
     strict-ready:
       text: 确认变更可交接：strict-spec-cli ready agent-dogfood 无阻塞项
-      status: pending
+      status: complete
       command: strict-spec-cli ready agent-dogfood
     strict-verify:
       text: 确认产物结构与任务状态：strict-spec-cli verify agent-dogfood 通过
-      status: pending
+      status: complete
       command: strict-spec-cli verify agent-dogfood
     fix-links-archived:
       text: 归档前确认 runs.yaml 中每个 fix_change 都已在 .strict-spec-driven/changes/archive/ 下，且没有处于活动状态的缺陷变更
-      status: pending
+      status: complete
       command: strict-spec-cli list
 testing_gates:
   validation_task: dogfood-records-check

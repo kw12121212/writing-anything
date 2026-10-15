@@ -1,6 +1,6 @@
-// dogfood 校验真实接入记录（Dogfood Record）docs/dogfood/runs.yaml：两个客户端 × 两种文体的四次运行
-// 各恰好一条且都走到导出，记录含客户端版本、wa-cli 版本与命令序列，每个问题都链接到已归档的缺陷变更
-// 或写明不修理由。字段说明见 docs/dogfood/README.md。
+// dogfood 校验真实接入记录（Dogfood Record）docs/dogfood/runs.yaml：两个客户端 × 两种文体的每个组合恰好
+// 一条记录；已运行的走到导出，记录含客户端版本、wa-cli 版本与命令序列，每个问题都链接到已归档的缺陷变更或写明
+// 不修理由；未运行的只写明原因；两个客户端与两种文体各至少有一次已运行。字段说明见 docs/dogfood/README.md。
 //
 // 用法：go run ./internal/tools/dogfood [-root .] [-records docs/dogfood/runs.yaml]
 //
@@ -63,6 +63,7 @@ type Run struct {
 	Export        Export   `yaml:"export"`
 	Notes         string   `yaml:"notes"`
 	Issues        []Issue  `yaml:"issues"`
+	SkippedReason string   `yaml:"skipped_reason"` // 非空表示该组合未运行
 }
 
 // Export 是运行的导出结果。
@@ -81,7 +82,8 @@ type Issue struct {
 
 // Report 是一次校验的结果。
 type Report struct {
-	Runs     int      // 运行记录条数
+	Runs     int      // 已运行的记录条数
+	Skipped  int      // 写明原因的未运行记录条数
 	Issues   int      // 问题总数
 	Fixed    int      // 链接已归档缺陷变更的问题数
 	WontFix  int      // 写明不修理由的问题数
@@ -118,8 +120,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "dogfood：记录格式与问题分诊见 docs/dogfood/README.md。")
 		return 1
 	}
-	fmt.Fprintf(stdout, "dogfood：%d 次运行记录齐备（问题 %d 个：已修复 %d，不修 %d）\n",
-		report.Runs, report.Issues, report.Fixed, report.WontFix)
+	fmt.Fprintf(stdout, "dogfood：%d 次运行记录齐备，%d 个组合写明未运行原因（问题 %d 个：已修复 %d，不修 %d）\n",
+		report.Runs, report.Skipped, report.Issues, report.Fixed, report.WontFix)
 	return 0
 }
 
@@ -130,7 +132,6 @@ func Check(root, path string) (Report, error) {
 	if err != nil {
 		return report, err
 	}
-	report.Runs = len(recs.Runs)
 
 	var problems []string
 	add := func(format string, a ...any) { problems = append(problems, fmt.Sprintf(format, a...)) }
@@ -140,6 +141,7 @@ func Check(root, path string) (Report, error) {
 	}
 
 	seen := map[string]bool{}
+	ran := map[string]bool{} // 有已运行记录的客户端与文体
 	issueIDs := map[string]bool{}
 	for i, r := range recs.Runs {
 		at := fmt.Sprintf("runs[%d]（%s）", i, r.ID)
@@ -161,6 +163,16 @@ func Check(root, path string) (Report, error) {
 			}
 			seen[combo] = true
 		}
+		if strings.TrimSpace(r.SkippedReason) != "" {
+			// 未运行的组合只记录原因，不应有运行才有的字段。
+			report.Skipped++
+			if extra := runFields(r); len(extra) > 0 {
+				add("%s：未运行的记录只能含 id、client、genre 与 skipped_reason，多出 %s", at, strings.Join(extra, "、"))
+			}
+			continue
+		}
+		report.Runs++
+		ran[r.Client], ran[r.Genre] = true, true
 		if strings.TrimSpace(r.ClientVersion) == "" {
 			add("%s：缺少 client_version", at)
 		}
@@ -222,6 +234,11 @@ func Check(root, path string) (Report, error) {
 			}
 		}
 	}
+	for _, k := range append(slices.Clone(clients), genres...) {
+		if !ran[k] {
+			add("%s 没有任何已运行的记录：每个客户端与每种文体都至少要实际运行一次", k)
+		}
+	}
 	report.Problems = problems
 	return report, nil
 }
@@ -258,6 +275,24 @@ func checkChannels(at string, list []string, add func(string, ...any)) {
 		}
 		dup[c] = true
 	}
+}
+
+// runFields 返回未运行的记录中出现的、只属于已运行记录的字段名。
+func runFields(r Run) []string {
+	var out []string
+	for _, f := range []struct {
+		name string
+		set  bool
+	}{
+		{"client_version", r.ClientVersion != ""}, {"wa_cli_version", r.WaCliVersion != ""}, {"channels", len(r.Channels) > 0},
+		{"date", r.Date != ""}, {"commands", len(r.Commands) > 0}, {"export", r.Export != (Export{})}, {"notes", r.Notes != ""},
+		{"issues", len(r.Issues) > 0},
+	} {
+		if f.set {
+			out = append(out, f.name)
+		}
+	}
+	return out
 }
 
 // hasExport 判断命令序列中是否有以 format 导出的 wa-cli export 命令；省略 --format 时为 markdown。

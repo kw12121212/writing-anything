@@ -83,8 +83,8 @@ runs:
       会话在项目目录的上级 ~/wa-dogfood 中启动，项目级技能（.claude/skills/）与 .mcp.json 都没有加载。第一句提示「用
       writing-anything 帮我写」时，Claude Code 尝试调用不存在的 writing-anything 技能（Unknown skill），作者中断后重开会话、
       改为点名 wa-auto；Agent 在子目录 claude-code-tech-blog 中找到 SKILL.md 后手动读取并照做，全程经 Bash 运行 wa-cli，
-      没有使用 MCP。写作简报、大纲取舍、亲历细节、禁区与修订决策都停下来问了作者；Agent 只按素材原话写亲历，没有补编排查过程。
-      审稿登记 6 个阻塞决策，作者选择在对话中接受 Agent 的建议并由命令行记录（6 个决策 channel 均为 cli），验收在阅读页上
+      没有使用 MCP。写作简报（Brief）、大纲（Outline）取舍、亲历细节、禁区与修订决策（Decision）都停下来问了作者；Agent 只按素材原话写亲历，没有补编排查过程。
+      审稿（Review）登记 6 个阻塞决策，作者选择在对话中接受 Agent 的建议并由命令行记录（6 个决策 channel 均为 cli），验收（Acceptance）在阅读页（Reading View）上
       确认（acceptance channel 为 preview）。作品走完 brief → outline → draft → review → done 并导出 Markdown，wa-cli validate 通过。
       2026-10-15 作者在同一会话（本应继续另一项目的会话，误在上级目录用 claude --continue 接上了本会话）中经阅读页提交反馈
       fb-1，Agent 按反馈改写小标题后，作品已是 done 阶段：export 以 export.unaccepted 拒绝并提示重新 accept，accept 以
@@ -98,11 +98,13 @@ runs:
         summary: >-
           客户端在项目目录之外（上级目录）启动时，项目级技能与 MCP 服务都不会加载，作者按产品名说「用 writing-anything」
           会触发不存在的技能并报 Unknown skill；wa-cli skills install 与 mcp install 的输出没有提示需要在项目目录中启动客户端。
+        fix_change: fix-cli-install-hints
       - id: cc-tb-2
         summary: >-
           没有查看文体规则与评分标准（Rubric）的命令：Agent 先后试了不存在的 wa-cli genre show、带作品参数的
           wa-cli config resolved <work> 与 --work，最后只能从全局 config resolved 推断；首次 review record 也因不知道完整
           评分项而被 review.missing-verdict 拒绝。
+        fix_change: fix-review-rubric-discovery
       - id: cc-tb-3
         summary: >-
           已验收（done 阶段）的作品在作者反馈后修改正文，就再也无法重新验收与导出：export 报 export.unaccepted 并让作者
@@ -117,7 +119,7 @@ runs:
     wa_cli_version: wa-cli v0.0.0-20261008040500-5ca203b42eee+dirty (commit 5ca203b42eee960930e507e66a15da2c011c84fa-dirty)
     genre: wechat-marketing
     channels: [skill]
-    date: "2026-10-15"
+    date: "2026-10-14"
     commands:
       # 按出现顺序整理自会话记录；省略了穿插其中的 wa-cli help 查询。会话依次调用 wa-auto、wa-init、wa-brief、
       # wa-outline、wa-draft、wa-review、wa-revise、wa-publish 技能。
@@ -167,7 +169,7 @@ runs:
     notes: >-
       在项目目录中启动，技能自动加载，/mcp 显示 writing-anything 已连接；Agent 依次调用 wa-auto、wa-init、wa-brief、wa-outline、
       wa-draft、wa-review、wa-revise、wa-publish 技能，全程经 Bash 运行 wa-cli，MCP 工具调用次数为 0。写作简报、大纲、字数、
-      标题（阅读页上选定，决策 channel 为 preview）与两处修订取舍都停下来问了作者；18 条论断都关联到素材，广告法极限词与 AI 套话
+      标题（阅读页上选定，决策 channel 为 preview）与两处修订取舍都停下来问了作者；19 条论断（Claim）都关联到素材，广告法极限词与 AI 套话
       检查 0 发现项。Agent 用一次空的 review record 试探出评分项清单（8 个 review.missing-verdict），第二次因标题类评分项
       paragraphs 为空被 artifact.schema-violation 拒绝，填了第 2 段才通过。10-14 会话在等待作者验收时结束，阅读页服务随会话
       停止；10-15 作者两次误在上级目录用 claude --continue 接上了技术博客的会话（记录在 claude-code-tech-blog），第三次用
@@ -178,7 +180,91 @@ runs:
         summary: >-
           Claude Code 同时加载了技能与 MCP 服务（/mcp 显示已连接），但整次运行 MCP 工具调用为 0：技能正文只给出 shell 形式的
           wa-cli 命令，Agent 一律经 Bash 运行；MCP 服务对能运行 shell 的客户端实际闲置，技能也没有说明何时应改用 MCP。
+        wont_fix_reason: >-
+          作者分诊（2026-10-15）：符合预期，不修。MCP 服务面向不能运行 shell 的 Agent，能运行 shell 的客户端直接运行 wa-cli
+          与经 MCP 调用结果相同（mcp 主规格：每条命令对应一个 tool，结果与加 --json 运行相同）；Codex × 技术博客同样 0 次调用，
+          两个客户端行为一致。技能中何时使用 MCP 的说明并入 cx-tb-2 的技能说明修改。
       - id: cc-wm-2
         summary: >-
           审稿结果中针对标题的评分项（headline-useful 等 4U 项）评的是标题而不是正文段落，但 review record 要求每个评分项的
           paragraphs 至少 1 项（artifact.schema-violation），Agent 只能填一个与结论无关的段落号凑数。
+        fix_change: fix-review-rubric-discovery
+  - id: codex-tech-blog
+    client: codex
+    client_version: codex-cli 0.157.1
+    wa_cli_version: wa-cli v0.0.0-20261015051902-2d88c77272a9 (commit 2d88c77272a964167fc97bc3e8804d3b4798df94)
+    genre: tech-blog
+    channels: [skill]
+    date: "2026-10-15"
+    commands:
+      # 按出现顺序整理自 ~/.codex/sessions 的会话记录；省略了穿插其中的 wa-cli help 查询与读取 SKILL.md 的命令。
+      - wa-cli next --json
+      - wa-cli status --json
+      - wa-cli handoff show --json
+      - wa-cli new tech-blog go-docs-interview --json
+      - wa-cli source add --type reference --file go-docs.md --json
+      - wa-cli source add --type interview --file interview.md --json
+      - wa-cli source add --type author-note --file author-note.md --json
+      - wa-cli brief show go-docs-interview --dir . --json
+      - wa-cli brief set go-docs-interview --audience ... --purpose ... --length 900-1400 --avoid ... --key-message ... --json
+      - wa-cli outline show go-docs-interview --json
+      - wa-cli context go-docs-interview --json
+      - wa-cli outline set go-docs-interview <section> --title ... --role ... --reason ... --uses ... --json
+      - wa-cli preview go-docs-interview --serve --json
+      - wa-cli decision add --id outline-structure --question ... --option ... --option ... --recommend a --rationale ... --json
+      - nohup wa-cli preview go-docs-interview --serve --port 45445 --json > /tmp/wa-go-docs-interview-preview.log 2>&1 &
+      - wa-cli preview go-docs-interview --serve --port 45445 --json
+      - wa-cli decision show outline-structure --json
+      - wa-cli next go-docs-interview --json
+      - wa-cli advance go-docs-interview --json
+      - wa-cli context go-docs-interview --json
+      - wa-cli draft write go-docs-interview --file /tmp/go-docs-interview-draft.md --json
+      - wa-cli claim add go-docs-interview --kind ... --text ... --sources ... --json
+      - wa-cli config resolved --json
+      - wa-cli method show pyramid-scqa --json
+      - wa-cli provenance go-docs-interview --json
+      - wa-cli review record go-docs-interview --file /tmp/go-docs-interview-review.yaml --json
+      - wa-cli metrics compute go-docs-interview --json
+      - wa-cli review show go-docs-interview --json
+      - wa-cli advance go-docs-interview --json
+      - wa-cli export go-docs-interview --format markdown --front-matter --json
+      - wa-cli validate --json
+      - wa-cli handoff show --json
+    export:
+      format: markdown
+      path: .writing-anything/exports/go-docs-interview.md
+    notes: >-
+      运行前 wa-cli 升级到 2d88c77（含 reopen 修复），重新安装技能时 skills install 把旧版内置技能报成 skills.modified，
+      需加 --force 才能覆盖。在项目目录中启动 Codex，.agents/skills 下的技能自动加载；Agent 读取 wa-auto、wa-init、
+      wa-brief、wa-outline、wa-draft、wa-publish 的 SKILL.md 后照做，全程经 exec_command 运行 wa-cli，writing-anything 的
+      MCP 工具调用次数为 0（只为核对 net/http 文档调用了 context7 MCP）。作品短名与关卡强度、写作简报都先问了作者；
+      作者答复「这个由你自行决定」后，Agent 依据素材自拟受众、目的、核心观点与禁区。大纲以 Agent 新建的阻塞决策
+      outline-structure 交作者在阅读页确认（channel preview）。第一次启动的阅读页在作者打开时已不可用（Codex 的 exec 会话
+      结束后服务进程消失，write_stdin 报 Unknown process id），nohup 后台启动也没有留下进程，第三次在前台会话中启动才
+      保持运行；Agent 想查看决策时试了不存在的 wa-cli decision show。首次 review record 因漏掉 tech-blog 的 4 个评分项被
+      review.missing-verdict 拒绝（与 cc-tb-2 相同）。作者在阅读页验收（channel preview，「全部确认」），导出 Markdown，
+      wa-cli validate 通过；本次没有在验收后修改正文，reopen 没有用到。
+    issues:
+      - id: cx-tb-1
+        summary: >-
+          升级 wa-cli 后重新运行 wa-cli skills install，作者从未改过的旧版内置技能被报成 skills.modified（可能被改过），
+          必须加 --force 才能更新；skills install 无法区分「作者改过」与「旧版本内置内容」，--force 又会一并覆盖作者真正的修改。
+        fix_change: fix-skills-install-upgrade
+      - id: cx-tb-2
+        summary: >-
+          阅读页服务的生命周期依赖客户端怎么运行长驻进程：Codex 中第一次在 exec 会话里启动的 wa-cli preview --serve
+          在作者打开链接时已退出（作者回复「打不开」），nohup 后台启动也没有存活；Claude Code 中会话结束同样会停掉服务
+          （见 claude-code-wechat-marketing）。技能只说「运行 preview --serve 并把 url 交给作者」，没有说明服务需要
+          在作者确认期间持续运行，也没有给出确认服务仍在运行的方法。
+        fix_change: fix-preview-serve-guidance
+      - id: cx-tb-3
+        summary: >-
+          Agent 想查看刚登记的决策时运行 wa-cli decision show，得到 usage.unknown-command「decision 命令组可用的命令：
+          decision add」，next 只有 wa-cli help --json；诊断没有指向实际用于查看决策的 wa-cli decisions。
+        fix_change: fix-cli-install-hints
+  - id: codex-wechat-marketing
+    client: codex
+    genre: wechat-marketing
+    skipped_reason: >-
+      2026-10-15 作者因 Codex 额度不足取消本次运行，不再进行（agent-dogfood 的 questions.yaml run-scope）；Codex 的技能与
+      MCP 接入已由 codex-tech-blog 验证，公众号营销文章已由 claude-code-wechat-marketing 验证。

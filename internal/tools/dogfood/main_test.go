@@ -52,7 +52,7 @@ func TestCheckValid(t *testing.T) {
 	if len(report.Problems) != 0 {
 		t.Fatalf("合法夹具不应有问题：%v", report.Problems)
 	}
-	if report.Runs != 4 || report.Issues != 2 || report.Fixed != 1 || report.WontFix != 1 {
+	if report.Runs != 4 || report.Skipped != 0 || report.Issues != 2 || report.Fixed != 1 || report.WontFix != 1 {
 		t.Errorf("统计错误：%+v", report)
 	}
 }
@@ -199,9 +199,9 @@ func TestRun(t *testing.T) {
 		stderr     string
 		emptyOther bool
 	}{
-		{"通过", []string{"-root", root, "-records", valid}, 0, "dogfood：4 次运行记录齐备（问题 2 个：已修复 1，不修 1）", "", true},
+		{"通过", []string{"-root", root, "-records", valid}, 0, "dogfood：4 次运行记录齐备，0 个组合写明未运行原因（问题 2 个：已修复 1，不修 1）", "", true},
 		{"相对路径相对 root", []string{"-root", root, "-records", "runs.yaml"}, 0, "4 次运行记录齐备", "", true},
-		{"记录不全", []string{"-root", root, "-records", bad}, 1, "", "真实接入记录发现 4 个问题", true},
+		{"记录不全", []string{"-root", root, "-records", bad}, 1, "", "真实接入记录发现 8 个问题", true},
 		{"读取失败", []string{"-root", root, "-records", "missing.yaml"}, 1, "", "读取真实接入记录失败", true},
 		{"未知参数", []string{"extra"}, 2, "", "dogfood：未知参数：extra", true},
 		{"未知标志", []string{"-nope"}, 2, "", "nope", false},
@@ -225,5 +225,97 @@ func TestRun(t *testing.T) {
 				t.Errorf("失败时 stdout 应为空：%s", stdout.String())
 			}
 		})
+	}
+}
+
+// skippedFixture 把合法夹具中的 codex-wechat-marketing 改为写明原因的未运行记录。
+func skippedFixture(t *testing.T) string {
+	t.Helper()
+	valid := validFixture(t)
+	return valid[:strings.Index(valid, "  - id: codex-wechat-marketing\n")] +
+		"  - id: codex-wechat-marketing\n    client: codex\n    genre: wechat-marketing\n    skipped_reason: 作者因 Codex 额度不足取消\n"
+}
+
+func TestCheckSkipped(t *testing.T) {
+	root := fixtureRoot(t)
+	report, err := Check(root, writeRecords(t, root, skippedFixture(t)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(report.Problems) != 0 || report.Runs != 3 || report.Skipped != 1 {
+		t.Fatalf("report = %+v", report)
+	}
+	var stdout, stderr bytes.Buffer
+	if code := run([]string{"-root", root, "-records", "runs.yaml"}, &stdout, &stderr); code != 0 || !strings.Contains(stdout.String(), "3 次运行记录齐备，1 个组合写明未运行原因") {
+		t.Errorf("run: %d %s %s", code, stdout.String(), stderr.String())
+	}
+
+	cases := []struct {
+		name, old, new string
+		want           []string
+	}{
+		{"未运行带运行字段", "    skipped_reason: 作者因 Codex 额度不足取消\n", "    skipped_reason: 作者因 Codex 额度不足取消\n    client_version: codex-cli 0.157.1\n    commands: [wa-cli init]\n    issues: [{id: x, summary: y, wont_fix_reason: z}]\n",
+			[]string{"runs[3]（codex-wechat-marketing）：未运行的记录只能含 id、client、genre 与 skipped_reason，多出 client_version、commands、issues"}},
+		{"原因为空白", "    skipped_reason: 作者因 Codex 额度不足取消\n", "    skipped_reason: \" \"\n",
+			[]string{"runs[3]（codex-wechat-marketing）：缺少 client_version", "runs[3]（codex-wechat-marketing）：缺少 wa_cli_version",
+				`runs[3]（codex-wechat-marketing）：date 应为 YYYY-MM-DD，实际为 ""`, "runs[3]（codex-wechat-marketing）：channels 为空，应至少含 skill 或 mcp",
+				"runs[3]（codex-wechat-marketing）：wechat-marketing 的 export.format 应为 wechat-html，实际为 \"\"", "runs[3]（codex-wechat-marketing）：缺少 export.path",
+				"runs[3]（codex-wechat-marketing）：commands 为空"}},
+	}
+	base := skippedFixture(t)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			report, err := Check(root, writeRecords(t, root, strings.Replace(base, tc.old, tc.new, 1)))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if strings.Join(report.Problems, "\n") != strings.Join(tc.want, "\n") {
+				t.Errorf("问题不符：\n得到：%q\n期望：%q", report.Problems, tc.want)
+			}
+		})
+	}
+
+	// 某个客户端或某种文体没有任何已运行的记录。
+	t.Run("客户端全部未运行", func(t *testing.T) {
+		content := strings.Replace(base, "  - id: codex-tech-blog\n", "  - id: codex-tech-blog\n    skipped_reason: 额度不足\n", 1)
+		// 去掉 codex-tech-blog 的运行字段：截到下一条记录之前。
+		start := strings.Index(content, "    skipped_reason: 额度不足\n") + len("    skipped_reason: 额度不足\n")
+		end := strings.Index(content, "  - id: codex-wechat-marketing\n")
+		content = content[:start] + "    client: codex\n    genre: tech-blog\n" + content[end:]
+		report, err := Check(root, writeRecords(t, root, content))
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := []string{"codex 没有任何已运行的记录：每个客户端与每种文体都至少要实际运行一次"}
+		if strings.Join(report.Problems, "\n") != strings.Join(want, "\n") || report.Skipped != 2 {
+			t.Errorf("problems = %q, report = %+v", report.Problems, report)
+		}
+	})
+}
+
+// TestDogfoodRecords 校验仓库中的真实接入记录 docs/dogfood/runs.yaml：每个 客户端 × 文体 组合恰好一条，已运行的走到导出、
+// 记录齐全，未运行的写明原因，每个问题都链接到已归档的缺陷变更或写明不修理由（里程碑 real-use-and-release 的完成标准）。
+func TestDogfoodRecords(t *testing.T) {
+	root := filepath.Join("..", "..", "..")
+	report, err := Check(root, filepath.Join(root, DefaultRecords))
+	if err != nil {
+		t.Fatalf("读取真实接入记录失败：%v", err)
+	}
+	for _, p := range report.Problems {
+		t.Error(p)
+	}
+	// 完成标准点名了三次运行；唯一未运行的组合是作者因 Codex 额度不足取消的 Codex × 公众号营销文章。
+	recs, err := load(filepath.Join(root, DefaultRecords))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var skipped []string
+	for _, r := range recs.Runs {
+		if strings.TrimSpace(r.SkippedReason) != "" {
+			skipped = append(skipped, r.ID)
+		}
+	}
+	if report.Runs != 3 || strings.Join(skipped, ",") != "codex-wechat-marketing" {
+		t.Errorf("运行 %d 次、未运行的组合 %v；完成标准要求 Claude Code × 两种文体与 Codex × 技术博客三次运行，只有 codex-wechat-marketing 未运行", report.Runs, skipped)
 	}
 }

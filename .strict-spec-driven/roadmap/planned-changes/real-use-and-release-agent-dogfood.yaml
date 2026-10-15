@@ -5,8 +5,8 @@ schema_file: ../../templates/strict-spec-driven/schemas/planned-change.yaml
 planned_change:
   id: agent-dogfood
   milestone: real-use-and-release
-status: planned
-summary: Claude Code 与 Codex 经技能与 MCP 真实接入，跑通技术博客与公众号文章
-details: 按 intake dogfood-clients：作者在本机用 wa-cli skills install 与 wa-cli mcp install 接入两个客户端，各完成一篇技术博客（导出 Markdown）与一篇公众号文章（导出 wechat-html），全程经阅读页确认；把客户端版本、命令序列、卡点与问题清单写入 docs/dogfood/；每个问题以 strict-spec-bugfix 缺陷变更修复或写明不修理由。
+status: complete
+summary: Claude Code 与 Codex 经技能与 MCP 真实接入，跑通技术博客与公众号文章（Codex × 公众号文章因额度不足取消）
+details: 按 intake dogfood-clients：作者在本机用 wa-cli skills install 与 wa-cli mcp install 接入两个客户端，Claude Code 完成一篇技术博客（导出 Markdown）与一篇公众号文章（导出 wechat-html），Codex 完成一篇技术博客；Codex × 公众号文章因 Codex 额度不足由作者取消，记录中写明未运行原因。全程经阅读页确认；把客户端版本、命令序列、卡点与问题清单写入 docs/dogfood/；每个问题以 strict-spec-bugfix 缺陷变更修复或写明不修理由。
 depends_on:
   - criteria-reconciliation
