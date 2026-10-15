@@ -1,0 +1,67 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: release-v0-2-0
+sections:
+  Implementation:
+    sync-preconditions:
+      text: 前置检查：提交本变更规划产物使工作树干净；git fetch origin；本地 main 仅以 git merge --ff-only origin/main 快进同步；确认 main 上没有不来自 dev 的提交、gh auth status 通过；记录 dev 领先 origin/dev 的提交数，留待第 8 步推送
+      status: complete
+      command: git status --short && git fetch origin && git status --short --branch && git diff --stat main origin/main && gh auth status
+    confirm-version:
+      text: 用 git tag --list 'v*' --sort=-v:refname 确认最新标签为 v0.1.0，向作者确认版本号 v0.2.0 且不按预发布版发布（对应 questions.yaml 的 release-authorization）
+      status: complete
+      command: git tag --list 'v*' --sort=-v:refname
+    write-release-notes:
+      text: 在仓库外临时文件撰写发布说明：分四段汇总 core-gate-hardening、novel-guarantee-hardening、usability-polish、real-use-and-release 的变化，内容取自各里程碑 goal 与已归档计划变更 summary，术语遵循 docs/GLOSSARY.md
+      status: complete
+    merge-and-tag:
+      text: '在回归与 pwsh 校验通过后：git switch main && git merge --no-ff dev -m "chore: release v0.2.0"，再 git tag -a v0.2.0 -m "wa-cli v0.2.0"；冲突时停止交给作者'
+      status: pending
+      command: 'git switch main && git merge --no-ff dev -m "chore: release v0.2.0" && git tag -a v0.2.0 -m "wa-cli v0.2.0"'
+    build-assets:
+      text: 在 main 上构建发布产物，确认 dist/ 下有 6 个 wa-cli-<os>-<arch> 二进制与 SHA256SUMS；失败时删除本地标签、复位 main 并回 dev
+      status: pending
+      command: go run ./internal/tools/release -version v0.2.0 -out dist && ls dist && (cd dist && sha256sum -c SHA256SUMS)
+    push-release:
+      text: 取得作者对外发布的明确同意后推送 main、dev 与 v0.2.0 标签，切回 dev
+      status: pending
+      command: git push origin main dev && git push origin v0.2.0 && git switch dev
+    create-github-release:
+      text: 创建 GitHub Release，里程碑摘要经 --notes-file 前置到自动生成的说明之前
+      status: pending
+      command: gh release create v0.2.0 dist/* --title v0.2.0 --notes-file <仓库外的发布说明文件> --generate-notes
+  Testing:
+    run-full-regression:
+      text: 在 dev 上运行完整回归（含 TestCriteriaReconciliation 完成标准对账与 80% 覆盖率门槛），合并前必须通过
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+    run-pwsh-install-check:
+      text: 'Windows 安装校验：pwsh 存在时以 WA_REQUIRE_PWSH=1 运行 TestInstallPs1，退出码为 0 且输出含 --- PASS: TestInstallPs1'
+      status: complete
+      command: command -v pwsh && WA_REQUIRE_PWSH=1 go test ./internal/tools/release -run TestInstallPs1 -count=1 -v
+    run-release-tool-tests:
+      text: 运行发布工具与对账工具的单元测试，确认构建产物与对账检查在当前 dev 上可用
+      status: complete
+      command: go test ./internal/tools/release ./internal/tools/criteria -count=1
+  Verification:
+    verify-github-release:
+      text: gh release view v0.2.0 确认产物为 6 个平台二进制加 SHA256SUMS，发布说明含四个里程碑摘要；git ls-remote --tags origin v0.2.0 确认远端标签指向 main 上的合并提交
+      status: pending
+      command: gh release view v0.2.0 && git ls-remote --tags origin 'v0.2.0*' && git rev-parse origin/main
+    verify-done-criteria:
+      text: 对照里程碑 real-use-and-release 完成标准第三条：main 上存在 v0.2.0 标签，产物含 linux、macOS、Windows 的 amd64 与 arm64 二进制及 SHA256SUMS
+      status: pending
+      command: git merge-base --is-ancestor v0.2.0 origin/main && gh release view v0.2.0 --json assets --jq '.assets[].name'
+    verify-change:
+      text: 运行 ready 与 verify 确认本变更产物完整
+      status: pending
+      command: strict-spec-cli ready release-v0-2-0 && strict-spec-cli verify release-v0-2-0
+    verify-archive-readiness:
+      text: 发布完成后确认 roadmap-status 中里程碑 real-use-and-release 只剩本变更未归档，并在 dev 上归档本变更
+      status: pending
+      command: strict-spec-cli roadmap-status
+testing_gates:
+  validation_task: run-full-regression
+  unit_test_task: run-release-tool-tests
