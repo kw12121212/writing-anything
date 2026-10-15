@@ -80,6 +80,16 @@ var advanceCommand = &command{
 	run:        runAdvance,
 }
 
+var reopenCommand = &command{
+	name:       "reopen",
+	summary:    "把验收（Acceptance）失效的已完成（done）单元（Unit）退回文体中最后一个需要验收的阶段（Stage），之后重新审稿（Review）并经作者确认重新验收；验收仍有效时拒绝",
+	args:       []argSpec{{"unit", unitRefHelp, true}},
+	flags:      []flagSpec{dirFlag},
+	outputKeys: []outputKey{{"unit", "退回后的单元：unit、type、previousStage（done）与 stage；失败时为 null"}},
+	exitCodes:  standardExitCodes,
+	run:        runReopen,
+}
+
 var nextCommand = &command{
 	name:    "next",
 	summary: "列出单元（Unit）的当前阶段（Stage）、阻塞项（Blocker）与下一步命令；汇总单元（Aggregated Unit）的阶段与阻塞项由子单元汇总",
@@ -355,6 +365,41 @@ func runAdvance(inv *invocation) int {
 	})
 }
 
+func runReopen(inv *invocation) int {
+	dir := projectDir(inv)
+	res := &advanceResult{}
+	problems := workspace.Require(dir)
+	if problems == nil {
+		var w *work.Work
+		var u *work.Unit
+		var previous string
+		if w, u, previous, problems = work.Reopen(dir, inv.args[0]); u != nil {
+			res.Unit = &advancedUnit{Unit: u.Ref, Type: u.Type, PreviousStage: previous, Stage: u.Stage}
+			res.ChangedPaths = []string{w.Path}
+		}
+	}
+	res.Diagnostics = diagnostics(problems, dir)
+	ref := inv.args[0]
+	for i, p := range problems {
+		switch p.Code {
+		case work.CodeNotDone:
+			res.Diagnostics[i].Next = []string{shellCommand("wa-cli", "next", ref, "--dir", dir, "--json")}
+		case work.CodeAcceptanceCurrent:
+			res.Diagnostics[i].Next = []string{shellCommand("wa-cli", "review", "show", ref, "--dir", dir, "--json")}
+		case work.CodeAnchoredValue:
+			res.Diagnostics[i].Next = []string{shellCommand("wa-cli", "next", ref, "--dir", dir, "--json"), "wa-cli help reopen --json"}
+		}
+	}
+	return finish(inv, res, func(w io.Writer) error {
+		if res.Unit == nil {
+			return nil
+		}
+		_, err := fmt.Fprintf(w, "单元（Unit）%s 已从 %s 退回到 %s；请按当前正文重新审稿（Review）并经作者确认重新验收（Acceptance）\n",
+			res.Unit.Unit, res.Unit.PreviousStage, res.Unit.Stage)
+		return err
+	})
+}
+
 func runNext(inv *invocation) int {
 	dir := projectDir(inv)
 	res := &nextResult{Steps: []stepView{}, PendingAuthorReviews: []pendingReviewView{}}
@@ -375,7 +420,9 @@ func runNext(inv *invocation) int {
 				for _, u := range w.Units() {
 					// 汇总单元的阶段由子单元汇总：推导阶段为 done 时不再列出（同 next-skips-done）；
 					// 唯一例外是已 done 而有 open 复查标记的场景，列出以给出复查与解除命令。
-					if w.EffectiveStage(u) != catalog.StageDone || len(openMarkTargets(marks, u)) > 0 {
+					// 验收失效的已完成单元同样列出，以给出 wa-cli reopen（reopen-stage）。
+					if w.EffectiveStage(u) != catalog.StageDone || len(openMarkTargets(marks, u)) > 0 ||
+						!w.Aggregated(u) && len(w.Blockers(dir, u)) > 0 {
 						res.Steps = append(res.Steps, step(dir, w, u, marks))
 					}
 				}
@@ -483,6 +530,11 @@ func progress(dir string, w *work.Work, u *work.Unit) ([]blockerView, []string) 
 			v.Decision = &b.Decision
 		}
 		blockers = append(blockers, v)
+		if u.Stage == catalog.StageDone {
+			// 已完成单元的阻塞项只有验收失效，错误码与 review 阶段相同，下一步按阶段而不是错误码选择（reopen-stage）。
+			commands = []string{shellCommand("wa-cli", "reopen", u.Ref, "--dir", dir, "--json")}
+			continue
+		}
 		// 被缺失产物阻塞时只能列出为该产物登记的生成命令（见 artifactNext）。
 		cmds := blockerNext(dir, b.Code, b.Path)
 		if b.Code == work.CodeMissingArtifact {
@@ -629,6 +681,8 @@ func action(dir string, w *work.Work, u *work.Unit, blockers []blockerView) stri
 		return text
 	}
 	switch {
+	case u.Stage == catalog.StageDone && len(blockers) > 0:
+		return fmt.Sprintf("已走完全部阶段，但验收（Acceptance）已失效（%s），不能导出；用 wa-cli reopen %s 退回后，按当前正文重新审稿（Review）并请作者确认重新验收", blockers[0].Message, u.Ref)
 	case u.Stage == catalog.StageDone:
 		return "已走完全部阶段"
 	case len(blockers) > 0:

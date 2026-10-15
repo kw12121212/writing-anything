@@ -1,0 +1,19 @@
+schema: strict-spec-driven/lesson/v1
+schema_version: 1
+artifact_type: lesson
+schema_file: templates/strict-spec-driven/schemas/lesson.yaml
+lesson:
+  id: lesson-fd99d0
+  title: 终态产物会因后续修改失效时，必须同时提供退回终态的命令，并逐一核对每条拒绝诊断的下一步在该状态下可执行
+category: architecture
+status: active
+created_at: '2026-10-15T05:16:26.344Z'
+updated_at: '2026-10-15T05:16:26.344Z'
+context: acceptance-stale 检查在 review-and-acceptance 中加入：export 跳过验收过期的单元并让作者重新 accept；但 accept 只在需要验收的阶段可用，advance 拒绝 done，next 跳过 done，阅读页只列出 review 阶段的验收。
+observation: '真实接入验证中，作者对已导出的 done 文章提反馈并修改正文后，export、accept、advance、next 与阅读页互相指向对方却都不可执行，Agent 最终手工编辑 work.yaml 回退阶段。修复时首版又把『done 但没有验收记录』当作阻塞项，立即打破 6 个手写 stage: done 而不带产物的既有测试与 next-skips-done 场景。'
+takeaway: 为终态（done、archived 等）引入会失效的条件时，在同一变更中给出离开终态的显式命令，并按『在该状态下逐条执行诊断 next』写一个端到端测试；新阻塞项只覆盖确有失效证据的情形（存在但失效的记录），缺少记录的手写终态保持原行为，由退回命令单独接受。
+applies_when: 为已到达终态（如 stage 为 done）的单元或产物增加过期、失效或重新校验条件，或修改某条诊断的 next 指向另一条有阶段限制的命令时
+occurrences:
+  - origin: fix-reopen-stale-acceptance
+    date: '2026-10-15'
+    evidence: docs/dogfood/runs.yaml cc-tb-3；internal/cli/reopen_test.go 的 TestReopenStaleDone 修复前失败（export next 只有 review show、next 无步骤）；首版 doneBlockers 使 TestNext、TestStatusUnits、TestDecisionBlockers、TestCanonSetAutoMark 失败

@@ -88,10 +88,14 @@ func runExport(inv *invocation) int {
 		p.Field = "front-matter"
 		problems = []workspace.Problem{p}
 	}
+	reopenable := map[string]bool{} // wa-cli reopen 接受的单元：export.unaccepted 先给出 reopen（export-reopen-next）
 	if problems == nil {
 		var w *work.Work
 		var u *work.Unit
 		if w, u, problems = work.Resolve(dir, inv.args[0]); u != nil {
+			for _, c := range w.Units() {
+				reopenable[c.Ref] = w.Reopenable(dir, c)
+			}
 			if u.Parent != nil {
 				problems = []workspace.Problem{{Code: work.CodeNotFound, Severity: workspace.SeverityError, Field: "work",
 					Message: "export 导出整个作品；请给出作品 id（单元引用中 / 之前的部分），而不是子单元 " + u.Ref}}
@@ -142,7 +146,11 @@ func runExport(inv *invocation) int {
 	for i, d := range res.Diagnostics {
 		switch d.Code {
 		case export.CodeUnaccepted:
-			res.Diagnostics[i].Next = []string{shellCommand("wa-cli", "review", "show", work.RefOf(d.Path), "--dir", dir, "--json")}
+			ref := work.RefOf(d.Path)
+			res.Diagnostics[i].Next = []string{shellCommand("wa-cli", "review", "show", ref, "--dir", dir, "--json")}
+			if reopenable[ref] {
+				res.Diagnostics[i].Next = append([]string{shellCommand("wa-cli", "reopen", ref, "--dir", dir, "--json")}, res.Diagnostics[i].Next...)
+			}
 		case export.CodeUnknownProvenance:
 			res.Diagnostics[i].Next = []string{shellCommand("wa-cli", "provenance", work.RefOf(strings.TrimSuffix(d.Path, "/provenance.yaml")), "--dir", dir, "--json")}
 		case export.CodeNothing:

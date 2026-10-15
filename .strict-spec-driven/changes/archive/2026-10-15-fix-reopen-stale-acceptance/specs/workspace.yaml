@@ -1,0 +1,37 @@
+schema: strict-spec-driven/delta-spec/v1
+schema_version: 1
+artifact_type: delta_spec
+schema_file: templates/strict-spec-driven/schemas/delta-spec.yaml
+target_spec: workspace
+operations:
+  ADDED: {}
+  MODIFIED:
+    status-summary:
+      strength: MUST
+      statement: wa-cli status 必须汇总 --dir 下的工作区：--json 输出包含 workspace（相对项目目录的工作区路径）、config（language、defaultGenre、packs、gateLevel 与 contextBudget（未设置时为 null）；配置无法解析时为 null）、sources 与 works（sources/ 与 works/ 下的直接条目数，不含以 . 开头的隐藏条目），以及 units：按作品 id 排序、单元树先序列出每个可加载作品的每个单元，每项含 unit（单元引用）、work、type、parent（父单元的引用，根单元为 null）、stage、blockers 与 commands，blockers 与 commands 的含义与 wa-cli next 相同（stage 为 done 且验收有效或没有验收记录的单元两者为空数组；stage 为 done 而验收失效的非汇总单元，blockers 为验收阻塞项、commands 只含 wa-cli reopen <unit> --dir <dir> --json，见 units-and-lifecycle 主规格的 reopen-stage 与 next-steps）。工作区校验（与 validate-workspace 相同）全部通过时退出码为 0；有 error 级诊断时仍输出上述字段，但 valid 为 false，退出码为 1。不加 --json 时，以人读文本输出同样的信息，单元以缩进树列出。
+      scenarios:
+        status-fresh:
+          - GIVEN: 刚用 wa-cli init --dir D --genre minimal 创建的工作区
+          - WHEN: 运行 wa-cli status --dir D --json
+          - THEN: workspace 为 .writing-anything，config.defaultGenre 为 minimal，config.gateLevel 为 standard，sources 与 works 均为 0，units 为空数组，valid 为 true，退出码为 0
+        status-counts:
+          - GIVEN: 已初始化的工作区，已用 wa-cli new 创建两个作品，sources/ 下有一个文件
+          - WHEN: 运行 wa-cli status --dir D --json
+          - THEN: works 为 2，sources 为 1
+        status-invalid-config:
+          - GIVEN: 已初始化的工作区，config.yaml 中 gate_level 为 bogus
+          - WHEN: 运行 wa-cli status --dir D --json
+          - THEN: 输出仍包含 workspace、sources 与 works；diagnostics 中有一条错误码为 artifact.schema-violation 的诊断；valid 为 false，退出码为 1
+        status-unknown-genre:
+          - GIVEN: 已初始化的工作区，config.yaml 中 default_genre 为 no-such-genre
+          - WHEN: 运行 wa-cli status --dir D --json
+          - THEN: config.defaultGenre 仍为 no-such-genre；diagnostics 中有一条错误码为 config.unknown-genre 的诊断；valid 为 false，退出码为 1
+        status-units:
+          - GIVEN: 已用 wa-cli new minimal my-post --dir D 创建作品，并用 wa-cli unit add my-post section intro --dir D 追加子单元
+          - WHEN: 运行 wa-cli status --dir D --json
+          - THEN: units 依次为 my-post（type 为 article，parent 为 null，stage 为 brief）与 my-post/intro（type 为 section，parent 为 my-post，stage 为 brief），两项的 blockers 各有一条 lifecycle.missing-artifact 阻塞项，valid 为 true，退出码为 0
+        status-reopen-stale:
+          - GIVEN: 作品 my-post（minimal）已验收并推进到 done，之后用 wa-cli draft write 修改了正文
+          - WHEN: 运行 wa-cli status --dir D --json
+          - THEN: units 中 my-post 一项的 stage 为 done，blockers 为一条 code 为 acceptance.stale 的阻塞项，commands 只含一条 wa-cli reopen my-post 命令
+  REMOVED: {}

@@ -43,6 +43,9 @@ const (
 	CodeMissingArtifact     = "lifecycle.missing-artifact"
 	CodeAlreadyDone         = "lifecycle.already-done"
 	CodeDerivedStage        = "lifecycle.derived-stage"
+	CodeNotDone             = "lifecycle.not-done"
+	CodeAcceptanceCurrent   = "lifecycle.acceptance-current"
+	CodeNoAcceptanceStage   = "lifecycle.no-acceptance-stage"
 )
 
 // FileName 是作品目录中作品产物的文件名。
@@ -318,9 +321,13 @@ type Blocker struct {
 // Blockers 返回单元 u 在当前阶段的全部阻塞项；advance、next 与 status 都只通过它得到阻塞项。
 // 阻塞来源依次为：缺失的必需产物（Required Artifact），即单元目录下既没有 <a>.yaml 也没有 <a>.md；当前阶段要求 brief
 // 时的写作简报问题（brief-gate）；当前阶段要求 outline 时的覆盖缺口（outline-gate）；当前阶段要求 marketing 时仍缺的营销要素（marketing-gate）；当前阶段要求 acceptance 时失效的验收记录；决策队列无法加载时，偏安全地给出一条 decision.invalid-queue；关联该单元的未决定阻塞决策。
+// 已完成（done）的非汇总单元只有一种阻塞来源：验收失效（见 doneBlockers），由 wa-cli reopen 退回后解除。
 func (w *Work) Blockers(root string, u *Unit) []Blocker {
 	s := w.stage(u.Stage)
 	if s == nil {
+		if u.Stage == catalog.StageDone && !w.Aggregated(u) {
+			return w.doneBlockers(root, u)
+		}
 		return nil
 	}
 	dir := w.UnitDir(u)
@@ -507,6 +514,43 @@ func (w *Work) stage(id string) *catalog.Stage {
 		}
 	}
 	return nil
+}
+
+// acceptanceStage 返回文体阶段序列中最后一个必需产物含 acceptance 的阶段；没有时为空。
+func (w *Work) acceptanceStage() string {
+	for i := len(w.Genre.Stages) - 1; i >= 0; i-- {
+		if slices.Contains(w.Genre.Stages[i].RequiredArtifacts, "acceptance") {
+			return w.Genre.Stages[i].ID
+		}
+	}
+	return ""
+}
+
+// doneBlockers 返回已完成（done）单元验收失效的阻塞项（reopen-stage）：review.AcceptanceBlockers 给出的
+// acceptance.invalid、acceptance.stale 或 acceptance.weaker-gate。没有验收记录（如手写为 done 的单元）、验收有效或文体
+// 没有验收阶段时为空。
+func (w *Work) doneBlockers(root string, u *Unit) []Blocker {
+	if w.acceptanceStage() == "" {
+		return nil
+	}
+	var out []Blocker
+	for _, b := range review.AcceptanceBlockers(root, w.UnitDir(u), w.level(root)) {
+		out = append(out, Blocker{Code: b.Code, Artifact: "acceptance", Path: b.Path, Message: b.Message})
+	}
+	return out
+}
+
+// Reopenable 报告 wa-cli reopen 是否接受单元 u（reopen-stage）：stage 为 done 的非汇总单元，文体有需要验收的阶段，
+// 且验收失效或没有验收记录。
+func (w *Work) Reopenable(root string, u *Unit) bool {
+	return u.Stage == catalog.StageDone && !w.Aggregated(u) && w.acceptanceStage() != "" &&
+		(!w.hasAcceptance(root, u) || len(w.doneBlockers(root, u)) > 0)
+}
+
+// hasAcceptance 报告单元目录下是否有验收产物（acceptance.yaml 或 acceptance.md）。
+func (w *Work) hasAcceptance(root string, u *Unit) bool {
+	dir := w.UnitDir(u)
+	return isFile(root, dir+"/acceptance.yaml") || isFile(root, dir+"/acceptance.md")
 }
 
 // NextStage 返回单元 u 推进后的阶段：下一阶段，当前为最后一个阶段时为 done。
@@ -751,21 +795,59 @@ func advance(root, ref string, genres genreLookup) (*Work, *Unit, string, []work
 	if len(ps) > 0 {
 		return nil, nil, "", ps
 	}
+	return w.setStage(root, u, w.NextStage(u))
+}
+
+// setStage 在 YAML 节点树上只把单元 u 的 stage 改为 stage 并保存，返回保存后的作品、单元与原阶段；stage 经由锚点、
+// 别名或合并键得到时报告 work.anchored-value。advance 与 reopen 共用。
+func (w *Work) setStage(root string, u *Unit, stage string) (*Work, *Unit, string, []workspace.Problem) {
 	node := w.node(u)
-	var stage *yaml.Node
+	var n *yaml.Node
 	if node != nil {
-		stage, _ = field(node, "stage")
+		n, _ = field(node, "stage")
 	}
-	if stage == nil {
+	if n == nil {
 		return nil, nil, "", []workspace.Problem{anchored(w, u.fieldOf("stage"))}
 	}
 	previous := u.Stage
-	stage.Value, stage.Tag, stage.Style = w.NextStage(u), "!!str", 0
+	n.Value, n.Tag, n.Style = stage, "!!str", 0
 	saved, ps := w.save(root)
 	if saved == nil {
 		return nil, nil, "", ps
 	}
 	return saved, saved.find(u.ID), previous, nil
+}
+
+// Reopen 把验收失效或没有验收记录的已完成（done）单元退回文体中最后一个必需产物含 acceptance 的阶段（reopen-stage），
+// 只修改该单元的 stage，之后按原有流程重新审稿、验收并推进。返回保存后的作品、单元与原阶段（done）。
+func Reopen(root, ref string) (*Work, *Unit, string, []workspace.Problem) {
+	return reopen(root, ref, catalog.LoadGenre)
+}
+
+func reopen(root, ref string, genres genreLookup) (*Work, *Unit, string, []workspace.Problem) {
+	w, u, ps := resolve(root, ref, genres)
+	if u == nil {
+		return nil, nil, "", ps
+	}
+	target := w.acceptanceStage()
+	switch {
+	case w.Aggregated(u):
+		return nil, nil, "", []workspace.Problem{errorAt(CodeDerivedStage, w.Path, u.fieldOf("stage"),
+			fmt.Sprintf("单元 %s 是汇总单元（Aggregated Unit），阶段由子单元汇总得出，不能退回；当前推导阶段为 %s", u.Ref, w.DerivedStage(u)))}
+	case u.Stage != catalog.StageDone:
+		return nil, nil, "", []workspace.Problem{errorAt(CodeNotDone, w.Path, u.fieldOf("stage"),
+			fmt.Sprintf("单元 %s 的当前阶段为 %s，尚未完成（done），不需要退回", u.Ref, u.Stage))}
+	case target == "":
+		return nil, nil, "", []workspace.Problem{errorAt(CodeNoAcceptanceStage, w.Path, u.fieldOf("stage"),
+			fmt.Sprintf("作品 %s 的文体 %s 没有需要验收（Acceptance）的阶段，无法退回", w.ID, w.Genre.ID))}
+	case w.hasAcceptance(root, u) && len(w.doneBlockers(root, u)) == 0:
+		return nil, nil, "", []workspace.Problem{errorAt(CodeAcceptanceCurrent, review.AcceptancePath(w.UnitDir(u)), "",
+			fmt.Sprintf("单元 %s 的验收（Acceptance）仍然有效（验收后正文没有修改），不能退回", u.Ref))}
+	}
+	if len(ps) > 0 {
+		return nil, nil, "", ps
+	}
+	return w.setStage(root, u, target)
 }
 
 // Anchor 描述在父单元子单元序列中的插入位置：Sibling 为锚点单元的 id，After 表示插在锚点之后；

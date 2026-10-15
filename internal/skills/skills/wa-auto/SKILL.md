@@ -11,9 +11,9 @@ description: 用 wa-cli next 驱动整篇文章或整部长篇从写作简报走
 2. 按作品的文体（Genre）选择路径：在 `wa-cli status --json` 的 units 中，作品根单元的 type 为 novel、或作品下有 part、chapter 类型的单元时按小说路径处理，其余按文章路径处理（config.defaultGenre 只是新建作品时的默认文体）：
    - 文章路径（如 tech-blog、wechat-marketing、short-story）：对每个单元（Unit），按阶段（Stage）字段 `stage` 选择技能：brief 即写作简报（Brief）→ wa-brief，outline → wa-outline，draft → wa-draft，review → wa-review、wa-revise 与 wa-publish。
    - 小说路径（novel）：动笔前先用 wa-plan 逐步规划并经作者确认（`wa-cli plan show <作品> --json` 的 `currentStep` 为 null 表示规划完成）；之后按单元树顺序逐场景用 wa-scene 推进（场景契约、起草、写后收口、作者确认状态与知情），review 阶段用 wa-review 记录审稿、用 wa-continuity 做连续性审查与审查任务包，再按 wa-publish 请作者验收；一部的最后一个场景验收后用 wa-assemble 请作者确认卷末检查点；全书场景都验收后用 wa-assemble 组稿，再用 wa-publish 导出。修改已验收内容时先用 wa-continuity 做影响传播。
-   按 `commands` 运行可以直接运行的命令，按 `action` 与 `blockers` 判断还缺什么。
+   按 `commands` 运行可以直接运行的命令，按 `action` 与 `blockers` 判断还缺什么。stage 为 done 的条目表示已完成单元的验收（Acceptance）已失效（正文在验收后被修改、验收记录无效或关卡强度调高），其 commands 为 `wa-cli reopen <单元> --json`：先告诉作者哪些单元要退回并征得同意，再运行 reopen，之后按 wa-review、wa-publish 重新审稿并请作者重新验收。
 3. 单元有未处理的作者反馈（Feedback，见输出的 `feedback`）时先用 wa-revise 处理。
-4. 每推进一步都重新运行 `wa-cli next --json`，直到 `steps` 为空（所有单元都已走完全部阶段），再用 wa-publish 导出（长篇先用 wa-assemble 组稿）。`pendingAuthorReviews` 不为空时，运行其中的 command 启动阅读页，把输出的 preview.url 交给作者复核。
+4. 每推进一步都重新运行 `wa-cli next --json`，直到 `steps` 为空（所有单元都已走完全部阶段且验收有效），再用 wa-publish 导出（长篇先用 wa-assemble 组稿）。`pendingAuthorReviews` 不为空时，运行其中的 command 启动阅读页，把输出的 preview.url 交给作者复核。
 5. 会话结束前（作者要离开、上下文快用完或一部写完时），按 wa-assemble 的格式运行 `wa-cli handoff write --file <文件> --json` 写交接记录；新会话从第 1 步的 handoff 接续，需要更早的记录时运行 `wa-cli handoff show --last <条数> --json`。
 6. 遇到看不懂的诊断时运行 `wa-cli help <命令> --json` 查看用法。
 7. 只能使用 MCP 的 Agent 可以通过 `wa-cli mcp --dir <项目目录>` 接入：每条命令对应一个 tool（命令名的空格换成下划线，如 `feedback_add`），结果与加 `--json` 运行命令相同；订阅资源 wa://feedback 可以即时收到作者的新反馈。

@@ -784,7 +784,7 @@ func next(p workspace.Problem, dir string) []string {
 		}
 	case workspace.CodeNotFound, workspace.CodeMissingDirectory:
 		return []string{initCmd}
-	case work.CodeNotFound, work.CodeUnitNotFound, work.CodeExists, work.CodeAlreadyDone, work.CodeDerivedStage:
+	case work.CodeNotFound, work.CodeUnitNotFound, work.CodeExists, work.CodeAlreadyDone, work.CodeDerivedStage, work.CodeNoAcceptanceStage:
 		return []string{status}
 	case work.CodeNotSibling, work.CodeMoveRoot, work.CodeMoveUnderSelf:
 		// 由本次参数引起的问题：unit add 与 unit move 会改写为各自的用法；这里给出单元树与两个用法兜底。

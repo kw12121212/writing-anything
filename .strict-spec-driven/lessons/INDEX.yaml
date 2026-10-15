@@ -19,6 +19,11 @@ categories:
       status: active
       occurrences: 1
       path: .strict-spec-driven/lessons/architecture/lesson-28cf23.yaml
+    lesson-fd99d0:
+      title: 终态产物会因后续修改失效时，必须同时提供退回终态的命令，并逐一核对每条拒绝诊断的下一步在该状态下可执行
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/architecture/lesson-fd99d0.yaml
   coding:
     go-flag-bd930f:
       title: Go flag 包的默认报错不符合中文术语约定
