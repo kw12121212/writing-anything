@@ -6,13 +6,14 @@
 package reviewpacket
 
 import (
-	"maps"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"time"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/kw12121212/writing-anything/internal/canon"
@@ -38,6 +39,7 @@ const (
 	CodeNotFound       = "packet.not-found"
 	CodeAlreadyDone    = "packet.already-done"
 	CodeInvalid        = "packet.invalid"
+	CodeOverBudget     = "packet.over-budget"
 )
 
 // Dir 是任务包根目录（相对项目目录）；PacketsPath 返回某作品的包目录。
@@ -61,11 +63,19 @@ type ChecklistItem struct {
 	Question string `json:"question"`
 }
 
-// Slice 是一段台账或数据切片。
+// Slice 是一段台账或数据切片。rank 是装配预算时的相关度等级（越小越相关，不写入产物）。
 type Slice struct {
 	Kind string `json:"kind"`
 	Text string `json:"text"`
+	rank int
 }
+
+// 切片相关度等级（packet-plan）：契约类切片最高；台账切片按所指场景与审查范围的先序距离计算；无法定位的最低。
+const (
+	rankContract   = 0
+	rankUnlocated  = 1 << 30
+	minExcerptSize = 100 // 有正文时最小可审片段的字符数上限
+)
 
 // Result 是一项结论。
 type Result struct {
@@ -83,26 +93,29 @@ type fileRecord struct {
 	Work          string `json:"work"`
 	Dimension     string `json:"dimension"`
 	Scope         string `json:"scope"`
+	Subject       string `json:"subject"`
 	Excerpt       struct {
 		Text      string `json:"text"`
 		Truncated bool   `json:"truncated"`
 	} `json:"excerpt"`
-	Slices     []Slice         `json:"slices"`
-	Checklist  []ChecklistItem `json:"checklist"`
-	Status     string          `json:"status"`
-	Results    []Result        `json:"results"`
-	RecordedAt *string         `json:"recorded_at"`
+	Slices        []Slice         `json:"slices"`
+	OmittedSlices int             `json:"omitted_slices"`
+	Checklist     []ChecklistItem `json:"checklist"`
+	Status        string          `json:"status"`
+	Results       []Result        `json:"results"`
+	RecordedAt    *string         `json:"recorded_at"`
 }
 
 // Packet 是一个任务包的对外输出形态（生成、提交与报告共用；数组永不为 null）。
 type Packet struct {
-	ID        string   `json:"id"`
-	Dimension string   `json:"dimension"`
-	Scope     string   `json:"scope"`
-	Status    string   `json:"status"`
-	Results   []Result `json:"results"`
-	Chars     int      `json:"chars"`
-	Truncated bool     `json:"truncated"`
+	ID            string   `json:"id"`
+	Dimension     string   `json:"dimension"`
+	Scope         string   `json:"scope"`
+	Status        string   `json:"status"`
+	Results       []Result `json:"results"`
+	Chars         int      `json:"chars"`
+	Truncated     bool     `json:"truncated"`
+	OmittedSlices int      `json:"omittedSlices"`
 }
 
 // ViewOf 把提交后的任务包转换为输出形态（命令层使用）。
@@ -111,7 +124,7 @@ func ViewOf(f *File) Packet { return viewOf(f, 0) }
 // viewOf 把产物形态转换为输出形态。
 func viewOf(f *fileRecord, chars int) Packet {
 	return Packet{ID: f.ID, Dimension: f.Dimension, Scope: f.Scope, Status: f.Status,
-		Results: orEmptyResults(f.Results), Chars: chars, Truncated: f.Excerpt.Truncated}
+		Results: orEmptyResults(f.Results), Chars: chars, Truncated: f.Excerpt.Truncated, OmittedSlices: f.OmittedSlices}
 }
 
 func orEmptyResults(rs []Result) []Result {
@@ -155,15 +168,204 @@ func errorAt(code, path, field, msg string) workspace.Problem {
 	return workspace.Problem{Code: code, Severity: workspace.SeverityError, Path: path, Field: field, Message: msg}
 }
 
+// packetChars 是任务包的 chars：excerpt.text、每个切片（kind：text）与每个清单项（id：question）的字符数之和。
 func packetChars(f *fileRecord) int {
-	n := utf8.RuneCountInString(f.Excerpt.Text)
-	for _, s := range f.Slices {
-		n += utf8.RuneCountInString(s.Kind + "：" + s.Text)
-	}
-	for _, c := range f.Checklist {
-		n += utf8.RuneCountInString(c.ID + "：" + c.Question)
+	return utf8.RuneCountInString(f.Excerpt.Text) + slicesChars(f.Slices) + checklistChars(f.Checklist)
+}
+
+func sliceChars(s Slice) int { return utf8.RuneCountInString(s.Kind + "：" + s.Text) }
+
+func slicesChars(ss []Slice) int {
+	n := 0
+	for _, s := range ss {
+		n += sliceChars(s)
 	}
 	return n
+}
+
+func itemChars(c ChecklistItem) int { return utf8.RuneCountInString(c.ID + "：" + c.Question) }
+
+func checklistChars(cs []ChecklistItem) int {
+	n := 0
+	for _, c := range cs {
+		n += itemChars(c)
+	}
+	return n
+}
+
+// sceneOrder 返回作品场景的先序位置（场景引用 → 下标），用于计算台账切片的相关度。
+func sceneOrder(w *work.Work) map[string]int {
+	idx := map[string]int{}
+	for _, x := range w.Units() {
+		if x.Type == outline.SceneType {
+			idx[x.Ref] = len(idx)
+		}
+	}
+	return idx
+}
+
+// ledgerRank 返回所指场景 scene 相对审查范围（先序下标 [lo, hi]）的相关度等级：范围内为 1，距离越远等级越大，
+// 范围之后的低于范围之前的同距离切片；场景无法定位或范围没有场景时为最低。
+func ledgerRank(order map[string]int, lo, hi int, scene string) int {
+	i, ok := order[scene]
+	if !ok || lo < 0 {
+		return rankUnlocated
+	}
+	switch {
+	case i < lo:
+		return 1 + 2*(lo-i)
+	case i > hi:
+		return 2 + 2*(i-hi)
+	}
+	return 1
+}
+
+// sceneRange 返回场景集合在先序中的下标范围；没有场景时 lo 为 -1。
+func sceneRange(order map[string]int, scenes []*work.Unit) (lo, hi int) {
+	lo, hi = -1, -1
+	for _, s := range scenes {
+		i, ok := order[s.Ref]
+		if !ok {
+			continue
+		}
+		if lo < 0 || i < lo {
+			lo = i
+		}
+		if i > hi {
+			hi = i
+		}
+	}
+	return lo, hi
+}
+
+// fitBudget 按上下文预算装配任务包（packet-plan）：(1) 正文取扣除切片与清单后的剩余预算，有正文时至少保留
+// min(100, 正文字符数)；(2) 仍超预算时按相关度从低到高逐条省略切片（同等级先省略靠后的）；(3) 清单与最小正文
+// 仍超预算时按清单顺序拆分为多个同 dimension、同 scope 的任务包，各包分别执行 (1)(2)；(4) 单个清单项与最小
+// 正文仍超预算时返回 packet.over-budget。fixed 为 true 时 base.Excerpt.Text 是不可裁的固定说明文字。
+//
+// 放不下时返回 nil 与所需的最小预算（单个清单项与最小正文片段之和的最大值）。
+func fitBudget(base fileRecord, body string, fixed bool, budget int) ([]fileRecord, int) {
+	body = strings.TrimLeftFunc(body, unicode.IsSpace) // 截断后的片段不得只剩空白
+	full := body
+	switch {
+	case fixed:
+		full = base.Excerpt.Text
+	case strings.TrimSpace(body) == "":
+		full = "（该范围还没有正文；待正文写入后重新 wa-cli review plan 生成本包）"
+		fixed = true
+	}
+	minEx := utf8.RuneCountInString(full)
+	if !fixed {
+		minEx = min(minEx, minExcerptSize)
+	}
+	var groups [][]ChecklistItem
+	var cur []ChecklistItem
+	curChars, need := 0, 0
+	for _, c := range base.Checklist {
+		n := itemChars(c)
+		need = max(need, minEx+n)
+		if len(cur) > 0 && minEx+curChars+n > budget {
+			groups = append(groups, cur)
+			cur, curChars = nil, 0
+		}
+		cur = append(cur, c)
+		curChars += n
+	}
+	if need > budget {
+		return nil, need
+	}
+	groups = append(groups, cur)
+	out := make([]fileRecord, 0, len(groups))
+	for _, g := range groups {
+		f := base
+		f.Checklist = g
+		f.Slices = fitSlices(base.Slices, budget-minEx-checklistChars(g))
+		f.OmittedSlices = len(base.Slices) - len(f.Slices)
+		if fixed {
+			f.Excerpt.Text, f.Excerpt.Truncated = full, false
+		} else {
+			f.Excerpt.Text, f.Excerpt.Truncated = headN(body, budget-checklistChars(g)-slicesChars(f.Slices))
+		}
+		out = append(out, f)
+	}
+	return out, 0
+}
+
+// fitSlices 按相关度从低到高（同等级先省略靠后的）逐条省略切片，直到总字符数不超过 room；保留项维持原顺序。
+func fitSlices(ss []Slice, room int) []Slice {
+	total := slicesChars(ss)
+	if total <= room {
+		return slices.Clone(ss)
+	}
+	order := make([]int, len(ss))
+	for i := range order {
+		order[i] = i
+	}
+	slices.SortStableFunc(order, func(a, b int) int {
+		if ss[a].rank != ss[b].rank {
+			return ss[b].rank - ss[a].rank
+		}
+		return b - a
+	})
+	drop := map[int]bool{}
+	for _, i := range order {
+		if total <= room {
+			break
+		}
+		drop[i] = true
+		total -= sliceChars(ss[i])
+	}
+	kept := []Slice{}
+	for i, s := range ss {
+		if !drop[i] {
+			kept = append(kept, s)
+		}
+	}
+	return kept
+}
+
+// assembler 收集按预算装配后的任务包；放不下的包汇总为一条 packet.over-budget（message 含首个放不下的范围、
+// 放不下的包数与全部包所需的最小预算），调用方在任何写入之前返回该问题（先预检后副作用）。
+type assembler struct {
+	budget  int
+	packets []fileRecord
+	over    *workspace.Problem
+	need    int
+	failed  int
+}
+
+func (a *assembler) add(f fileRecord, body string, fixed bool) {
+	fs, need := fitBudget(f, body, fixed, a.budget)
+	if need == 0 {
+		a.packets = append(a.packets, fs...)
+		return
+	}
+	a.failed++
+	if a.over == nil {
+		a.over = &workspace.Problem{Code: CodeOverBudget, Severity: workspace.SeverityError, Field: "context_budget"}
+		a.over.Message = fmt.Sprintf("%s 维度范围 %s", f.Dimension, f.Scope)
+	}
+	a.need = max(a.need, need)
+}
+
+// problem 返回汇总后的 packet.over-budget；全部放得下时为 nil。
+func (a *assembler) problem() []workspace.Problem {
+	if a.over == nil {
+		return nil
+	}
+	p := *a.over
+	p.Message = fmt.Sprintf("%s 等 %d 个任务包放不下：单个检查清单项与最小正文片段至少需要 %d 字符，上下文预算只有 %d；请提高 context_budget 到不少于 %d 后重新运行 wa-cli review plan",
+		p.Message, a.failed, a.need, a.budget, a.need)
+	return []workspace.Problem{p}
+}
+
+// packetKey 是重 plan 时的匹配键：（dimension, scope, subject, 清单项 id 集合）。subject 区分同一章的不同人物包。
+func packetKey(f *fileRecord) string {
+	ids := make([]string, 0, len(f.Checklist))
+	for _, c := range f.Checklist {
+		ids = append(ids, c.ID)
+	}
+	return f.Dimension + "\x00" + f.Scope + "\x00" + f.Subject + "\x00" + strings.Join(ids, ",")
 }
 
 // chaptersIn 返回范围内的章（unit 为 nil 时为全部章）。
@@ -234,8 +436,8 @@ func sceneOutline(root, unitDir string) (*outline.Outline, []workspace.Problem) 
 	return &outline.Outline{Path: rel, Sections: f.Sections}, nil
 }
 
-// causeSceneTail 返回声明事件 ev 的场景正文结尾（含场景引用），找不到声明场景或没有正文时为空。
-func causeSceneTail(root string, w *work.Work, ev string) string {
+// causeSceneTail 返回声明事件 ev 的场景引用与正文结尾（含场景引用），找不到声明场景或没有正文时为空。
+func causeSceneTail(root string, w *work.Work, ev string) (string, string) {
 	for _, x := range w.Units() {
 		if x.Type != outline.SceneType {
 			continue
@@ -255,14 +457,15 @@ func causeSceneTail(root string, w *work.Work, ev string) string {
 			continue
 		}
 		if text, ok := draftOf(root, w, x); ok {
-			return fmt.Sprintf("%s（声明 %s）的结尾：%s", x.Ref, ev, tailN(text, 200))
+			return x.Ref, fmt.Sprintf("%s（声明 %s）的结尾：%s", x.Ref, ev, tailN(text, 200))
 		}
 	}
-	return ""
+	return "", ""
 }
 
 // povKnowledgeSlices 返回视角人物的已知条目与读者已知人物未知的条目切片。
-func povKnowledgeSlices(root string, w *work.Work, u *work.Unit, pov string, entriesByID map[string]canon.Entry) []Slice {
+func povKnowledgeSlices(root string, w *work.Work, u *work.Unit, pov string, entriesByID map[string]canon.Entry, order map[string]int) []Slice {
+	lo, hi := sceneRange(order, []*work.Unit{u})
 	if pov == "" {
 		return nil
 	}
@@ -288,7 +491,7 @@ func povKnowledgeSlices(root string, w *work.Work, u *work.Unit, pov string, ent
 		if c, ok := entriesByID[entry]; ok && c.Name != nil {
 			entry = entry + "（" + *c.Name + "）"
 		}
-		out = append(out, Slice{Kind: "pov-knowledge", Text: fmt.Sprintf("视角人物已知：%s（获知于 %s）", entry, it.Scene)})
+		out = append(out, Slice{Kind: "pov-knowledge", Text: fmt.Sprintf("视角人物已知：%s（获知于 %s）", entry, it.Scene), rank: ledgerRank(order, lo, hi, it.Scene)})
 	}
 	for _, it := range rep.Known("reader") {
 		if known[it.Entry] {
@@ -298,7 +501,7 @@ func povKnowledgeSlices(root string, w *work.Work, u *work.Unit, pov string, ent
 		if c, ok := entriesByID[entry]; ok && c.Name != nil {
 			entry = entry + "（" + *c.Name + "）"
 		}
-		out = append(out, Slice{Kind: "reader-only", Text: fmt.Sprintf("读者已知人物未知：%s（获知于 %s）", entry, it.Scene)})
+		out = append(out, Slice{Kind: "reader-only", Text: fmt.Sprintf("读者已知人物未知：%s（获知于 %s）", entry, it.Scene), rank: ledgerRank(order, lo, hi, it.Scene)})
 	}
 	return out
 }
@@ -327,8 +530,8 @@ func headN(text string, n int) (string, bool) {
 }
 
 // Plan 生成任务包并写入 packets/<work>/：unit 为 nil 时范围为整个作品；dimension 为空时生成全部维度。
-// 已有 status 为 done 的包按（dimension, scope）保留；范围内的 open 包重建（内容随台账与正文更新），范围外
-// 的包不动。返回生成的包、写入与删除的路径与问题。
+// 既有包按（dimension, scope, subject, 清单项集合）匹配：done 包保留；范围内的 open 包原位重建（内容随台账与
+// 正文更新），范围外的包不动。返回生成的包、写入与删除的路径与问题。
 func Plan(root string, w *work.Work, u *work.Unit, dimension string, budget int, now time.Time) ([]Packet, []string, []workspace.Problem) {
 	if dimension != "" && !slices.Contains(Dimensions, dimension) {
 		return nil, nil, []workspace.Problem{{Code: "input.invalid-value", Severity: workspace.SeverityError, Field: "dimension",
@@ -349,9 +552,10 @@ func Plan(root string, w *work.Work, u *work.Unit, dimension string, budget int,
 	threadItems, _ := threads.List(root, w, true)
 	chapters := chaptersIn(w, u)
 	scenes := scenesIn(w, u)
+	order := sceneOrder(w)
 
-	var packets []fileRecord
-	_ = packets // reassigned below
+	asm := &assembler{budget: budget}
+	add := asm.add
 	for _, dim := range dims {
 		switch dim {
 		case DimCharacter:
@@ -389,11 +593,13 @@ func Plan(root string, w *work.Work, u *work.Unit, dimension string, budget int,
 						}
 					}
 				}
+				lo, hi := sceneRange(order, chScenes)
 				for _, id := range slices.Sorted(maps.Keys(perCharacter)) {
 					var slicesOf []Slice
 					for _, e := range stateEvents {
 						if e.Entry == id {
-							slicesOf = append(slicesOf, Slice{Kind: "state", Text: fmt.Sprintf("%s：%s（%s，%s）", e.ID, e.State, e.Scene, e.Status)})
+							slicesOf = append(slicesOf, Slice{Kind: "state", Text: fmt.Sprintf("%s：%s（%s，%s）", e.ID, e.State, e.Scene, e.Status),
+								rank: ledgerRank(order, lo, hi, e.Scene)})
 						}
 					}
 					for _, e := range knowEvents {
@@ -402,7 +608,8 @@ func Plan(root string, w *work.Work, u *work.Unit, dimension string, budget int,
 							if c, ok := entriesByID[entry]; ok && c.Name != nil {
 								entry = entry + "（" + *c.Name + "）"
 							}
-							slicesOf = append(slicesOf, Slice{Kind: "knowledge", Text: fmt.Sprintf("%s：获知 %s 于 %s（%s）", e.ID, entry, e.Scene, e.Status)})
+							slicesOf = append(slicesOf, Slice{Kind: "knowledge", Text: fmt.Sprintf("%s：获知 %s 于 %s（%s）", e.ID, entry, e.Scene, e.Status),
+								rank: ledgerRank(order, lo, hi, e.Scene)})
 						}
 					}
 					var body strings.Builder
@@ -412,8 +619,8 @@ func Plan(root string, w *work.Work, u *work.Unit, dimension string, budget int,
 						}
 					}
 					f := newPacket(w.ID, DimCharacter, ch.Ref, slicesOf)
-					f.Excerpt.Text, f.Excerpt.Truncated = budgetExcerpt(body.String(), slicesOf, f.Checklist, budget)
-					packets = append(packets, f)
+					f.Subject = id
+					add(f, body.String(), false)
 				}
 			}
 		case DimThread:
@@ -433,13 +640,12 @@ func Plan(root string, w *work.Work, u *work.Unit, dimension string, budget int,
 						}
 					}
 				}
-				f := newPacket(w.ID, DimThread, it.ID, slicesOf)
-				f.Excerpt.Text, f.Excerpt.Truncated = budgetExcerpt(body.String(), slicesOf, f.Checklist, budget)
-				packets = append(packets, f)
+				add(newPacket(w.ID, DimThread, it.ID, slicesOf), body.String(), false)
 			}
 		case DimCausality, DimPovReveal:
 			for _, s := range scenes {
 				ol, _ := sceneOutline(root, w.UnitDir(s))
+				lo, hi := sceneRange(order, []*work.Unit{s})
 				var slicesOf []Slice
 				if ol != nil {
 					if dim == DimCausality {
@@ -447,8 +653,8 @@ func Plan(root string, w *work.Work, u *work.Unit, dimension string, budget int,
 							for _, c := range sec.Causes {
 								slicesOf = append(slicesOf, Slice{Kind: "cause", Text: "起因事件 " + c})
 								// 起因事件声明场景的正文结尾（packet-plan）。
-								if tail := causeSceneTail(root, w, c); tail != "" {
-									slicesOf = append(slicesOf, Slice{Kind: "cause-scene", Text: tail})
+								if ref, tail := causeSceneTail(root, w, c); tail != "" {
+									slicesOf = append(slicesOf, Slice{Kind: "cause-scene", Text: tail, rank: ledgerRank(order, lo, hi, ref)})
 								}
 							}
 							for _, e := range sec.Events {
@@ -466,15 +672,11 @@ func Plan(root string, w *work.Work, u *work.Unit, dimension string, budget int,
 							}
 						}
 						// 视角人物已知与读者已知人物未知的条目（解析与重放语义同 context 主规格 scene-context）。
-						for _, s2 := range povKnowledgeSlices(root, w, s, pov, entriesByID) {
-							slicesOf = append(slicesOf, s2)
-						}
+						slicesOf = append(slicesOf, povKnowledgeSlices(root, w, s, pov, entriesByID, order)...)
 					}
 				}
 				body, _ := draftOf(root, w, s)
-				f := newPacket(w.ID, dim, s.Ref, slicesOf)
-				f.Excerpt.Text, f.Excerpt.Truncated = budgetExcerpt(body, slicesOf, f.Checklist, budget)
-				packets = append(packets, f)
+				add(newPacket(w.ID, dim, s.Ref, slicesOf), body, false)
 			}
 		case DimStyle:
 			for _, ch := range chapters {
@@ -487,47 +689,63 @@ func Plan(root string, w *work.Work, u *work.Unit, dimension string, budget int,
 					slicesOf = append(slicesOf, Slice{Kind: "chapter-summary", Text: sum.Text + stale})
 				}
 				for _, d := range metricSlices(root, w, ch) {
-					slicesOf = append(slicesOf, Slice{Kind: "metric", Text: d})
+					slicesOf = append(slicesOf, Slice{Kind: "metric", Text: d, rank: 1}) // 章内场景：先序距离为 0
 				}
 				f := newPacket(w.ID, DimStyle, ch.Ref, slicesOf)
 				f.Excerpt.Text = "本任务为纵向审查：请阅读下方切片（章摘要、情绪曲线偏离点与文风漂移发现项），不读全文。"
-				f.Excerpt.Truncated = false
-				packets = append(packets, f)
+				add(f, "", true)
 			}
 		}
 	}
+	if ps := asm.problem(); ps != nil {
+		return nil, nil, ps
+	}
 
-	// 落盘：保留 done（按 dimension+scope 匹配），重建 open。新包的 id 避开全部既有 id（含 done 与未重建的
-	// open），防止重编号覆盖既有文件；过期的同维度 open 包（本次范围未再生成的）按其自身的 dimension、scope
-	// 与 status 判断后删除，不触碰 done 与其他维度。
-	packetDir := Dir + "/" + w.ID
+	// 范围内的 scope：给出 unit 时只清理该子树的章与场景（thread 维度不随 unit 收窄，始终在范围内）。
+	inScope := map[string]bool{}
+	for _, x := range append(chaptersIn(w, u), scenes...) {
+		inScope[x.Ref] = true
+	}
+	return persist(root, Dir+"/"+w.ID, asm.packets, dims, func(f *fileRecord) bool {
+		return u == nil || f.Dimension == DimThread || inScope[f.Scope]
+	})
+}
+
+// persist 落盘一次规划生成的任务包（packet-plan）：按 packetKey（dimension, scope, subject, 清单项集合）匹配
+// 既有包——done 包保留（不重写，输出取自落盘文件），open 包沿用其 id 原位重建；其余新建，新 id 避开全部既有
+// id。全部写入前统一预检（任一包不合法时不写任何文件）。之后删除本次维度与范围内、没有被重建的 open 包（键已
+// 不再生成的过期包，以及同键的重复包），不触碰 done、其他维度与范围外的包。
+func persist(root, packetDir string, packets []fileRecord, dims []string, inRange func(*fileRecord) bool) ([]Packet, []string, []workspace.Problem) {
 	type existingFile struct {
-		id, dimension, scope, status string
-		doneKey                      string // 命中 done 保留时的既有 id
+		id  string
+		rec *fileRecord
 	}
 	var existing []existingFile
+	taken := map[string]bool{}
 	if entries, err := os.ReadDir(filepath.Join(root, filepath.FromSlash(packetDir))); err == nil {
 		for _, e := range entries {
 			if e.IsDir() || !strings.HasSuffix(e.Name(), ".yaml") {
 				continue
 			}
+			taken[strings.TrimSuffix(e.Name(), ".yaml")] = true // 不合法的包文件也不被新 id 覆盖
 			f, ps := loadPacket(root, packetDir+"/"+e.Name())
 			if f == nil || len(ps) > 0 {
 				continue
 			}
-			existing = append(existing, existingFile{id: strings.TrimSuffix(e.Name(), ".yaml"),
-				dimension: f.Dimension, scope: f.Scope, status: f.Status})
+			existing = append(existing, existingFile{id: strings.TrimSuffix(e.Name(), ".yaml"), rec: f})
 		}
 	}
-	taken := map[string]bool{}
-	doneKey := map[string]string{} // dimension+"\x00"+scope → 既有 id
+	done := map[string]existingFile{} // packetKey → 既有 done 包
+	openKey := map[string][]string{}  // packetKey → 既有 open 包 id
 	for _, x := range existing {
 		taken[x.id] = true
-		if x.status == "done" {
-			doneKey[x.dimension+"\x00"+x.scope] = x.id
+		key := packetKey(x.rec)
+		if x.rec.Status == "done" {
+			done[key] = x
+		} else {
+			openKey[key] = append(openKey[key], x.id)
 		}
 	}
-	// 先全部构造并分配 id，再统一预检（precheck-before-side-effects：任一包不合法时不写任何文件）。
 	type toWrite struct {
 		rel string
 		rec *fileRecord
@@ -536,61 +754,49 @@ func Plan(root string, w *work.Work, u *work.Unit, dimension string, budget int,
 	out := []Packet{}
 	for i := range packets {
 		p := &packets[i]
-		if id, ok := doneKey[p.Dimension+"\x00"+p.Scope]; ok {
-			// 保留既有 done 包：不重写，输出中列出既有 id。
-			p.ID = id
-			p.Status = "done"
-			out = append(out, viewOf(p, packetChars(p)))
+		key := packetKey(p)
+		if d, ok := done[key]; ok {
+			stored := *d.rec
+			stored.ID = d.id
+			out = append(out, viewOf(&stored, packetChars(&stored)))
 			continue
 		}
-		for n := 1; ; n++ {
-			id := fmt.Sprintf("%s-%d", p.Dimension, n)
-			if !taken[id] {
-				p.ID = id
-				taken[id] = true
-				break
+		if ids := openKey[key]; len(ids) > 0 {
+			p.ID, openKey[key] = ids[0], ids[1:]
+		} else {
+			for n := 1; ; n++ {
+				id := fmt.Sprintf("%s-%d", p.Dimension, n)
+				if !taken[id] {
+					p.ID = id
+					taken[id] = true
+					break
+				}
 			}
 		}
 		writes = append(writes, toWrite{rel: packetDir + "/" + p.ID + ".yaml", rec: p})
 		out = append(out, viewOf(p, packetChars(p)))
 	}
-	var changed []string
 	for _, wv := range writes {
 		if err := precheckPacket(wv.rec); err != nil {
 			return nil, nil, []workspace.Problem{errorAt(workspace.CodeWriteFailed, wv.rel, "", "生成的任务包不通过校验："+err.Error())}
 		}
 	}
+	changed := []string{}
+	written := map[string]bool{}
 	for _, wv := range writes {
 		if err := writePacket(root, wv.rel, wv.rec); err != nil {
 			return nil, nil, []workspace.Problem{errorAt(workspace.CodeWriteFailed, wv.rel, "", "写入任务包失败："+err.Error())}
 		}
 		changed = append(changed, wv.rel)
+		written[wv.rec.ID] = true
 	}
-	// 删除过期的同维度 open 包：其（dimension, scope）不在本次生成集且不在 done 保留集。
-	regenerated := map[string]bool{}
-	for i := range packets {
-		regenerated[packets[i].Dimension+"\x00"+packets[i].Scope] = true
-	}
-	if entries, err := os.ReadDir(filepath.Join(root, filepath.FromSlash(packetDir))); err == nil {
-		for _, e := range entries {
-			if e.IsDir() || !strings.HasSuffix(e.Name(), ".yaml") {
-				continue
-			}
-			rel := packetDir + "/" + e.Name()
-			f, ps := loadPacket(root, rel)
-			if f == nil || len(ps) > 0 {
-				continue
-			}
-			if f.Status != "open" || !slices.Contains(dims, f.Dimension) {
-				continue
-			}
-			key := f.Dimension + "\x00" + f.Scope
-			if regenerated[key] || doneKey[key] != "" {
-				continue
-			}
-			if err := os.Remove(filepath.Join(root, filepath.FromSlash(rel))); err == nil {
-				changed = append(changed, rel)
-			}
+	for _, x := range existing {
+		if x.rec.Status != "open" || written[x.id] || !slices.Contains(dims, x.rec.Dimension) || !inRange(x.rec) {
+			continue
+		}
+		rel := packetDir + "/" + x.id + ".yaml"
+		if err := os.Remove(filepath.Join(root, filepath.FromSlash(rel))); err == nil {
+			changed = append(changed, rel)
 		}
 	}
 	return out, changed, nil
@@ -601,25 +807,6 @@ func deref(s *string) string {
 		return ""
 	}
 	return *s
-}
-
-// budgetExcerpt 按预算取正文：checklist 与 slices 优先，excerpt 用剩余预算（不足 100 字符时截到 100 以内）。
-func budgetExcerpt(body string, slicesOf []Slice, checklist []ChecklistItem, budget int) (string, bool) {
-	used := 0
-	for _, s := range slicesOf {
-		used += utf8.RuneCountInString(s.Kind + "：" + s.Text)
-	}
-	for _, c := range checklist {
-		used += utf8.RuneCountInString(c.ID + "：" + c.Question)
-	}
-	left := budget - used - 32 // 预留字段名与结构开销
-	if left < 100 {
-		left = 100 // 剩余不足 100 字符：仍给最小的可审片段（packet-plan）
-	}
-	if strings.TrimSpace(body) == "" {
-		return "（该范围还没有正文；待正文写入后重新 wa-cli review plan 生成本包）", false
-	}
-	return headN(body, left)
 }
 
 func newPacket(workID, dim, scope string, slicesOf []Slice) fileRecord {
@@ -715,6 +902,9 @@ func recordDoc(f *fileRecord) *yaml.Node {
 	m.Content = append(m.Content, workspace.Str("schema_version"), workspace.Int(1),
 		workspace.Str("id"), workspace.Str(f.ID), workspace.Str("work"), workspace.Str(f.Work),
 		workspace.Str("dimension"), workspace.Str(f.Dimension), workspace.Str("scope"), workspace.Str(f.Scope))
+	if f.Subject != "" {
+		m.Content = append(m.Content, workspace.Str("subject"), workspace.Str(f.Subject))
+	}
 	ex := &yaml.Node{Kind: yaml.MappingNode, Content: []*yaml.Node{
 		workspace.Str("text"), workspace.Str(f.Excerpt.Text),
 		workspace.Str("truncated"), &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!bool", Value: fmt.Sprint(f.Excerpt.Truncated)}}}
@@ -725,6 +915,9 @@ func recordDoc(f *fileRecord) *yaml.Node {
 			workspace.Str("kind"), workspace.Str(s.Kind), workspace.Str("text"), workspace.Str(s.Text)}})
 	}
 	m.Content = append(m.Content, workspace.Str("slices"), sn)
+	if f.OmittedSlices > 0 {
+		m.Content = append(m.Content, workspace.Str("omitted_slices"), workspace.Int(f.OmittedSlices))
+	}
 	cn := &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq"}
 	for _, c := range f.Checklist {
 		cn.Content = append(cn.Content, &yaml.Node{Kind: yaml.MappingNode, Content: []*yaml.Node{
@@ -1032,12 +1225,7 @@ func CheckArtifact(root, rel string) []workspace.Problem {
 	if f.ID != strings.TrimSuffix(parts[len(parts)-1], ".yaml") {
 		return []workspace.Problem{errorAt(CodeInvalid, rel, "id", "任务包 id 与文件名不一致")}
 	}
-	if f.Status == "done" {
-		for _, l := range []loaded{{p: f, rel: rel}} {
-			_ = l
-		}
-	}
-	// done 结论齐全性复用 loadAll 的判定：构造临时目录不现实，这里直接重复检查。
+	// done 结论齐全性与 loadAll 的判定相同，这里对单个文件直接检查。
 	if f.Status == "done" {
 		known := map[string]bool{}
 		for _, c := range f.Checklist {
@@ -1098,7 +1286,7 @@ func PlanSeries(root string, seriesID string, ws []*work.Work, dimension string,
 		tws = append(tws, &timelinePkgWork{W: w})
 	}
 	_, _ = timelinePkgOrder(root, tws) // 合并排序可用于后续按时间线切片的维度扩展；当前维度自行排序
-	var packets []fileRecord
+	asm := &assembler{budget: budget}
 	for _, dim := range dims {
 		switch dim {
 		case DimSeriesCausality:
@@ -1152,9 +1340,7 @@ func PlanSeries(root string, seriesID string, ws []*work.Work, dimension string,
 						slicesOf = append(slicesOf, Slice{Kind: "cross-cause", Text: "起因事件 " + c + " 声明于 " + declaredBy[c]})
 					}
 					body, _ := draftOf(root, w, u)
-					f := newPacket(seriesID, DimSeriesCausality, u.Ref, slicesOf)
-					f.Excerpt.Text, f.Excerpt.Truncated = budgetExcerpt(body, slicesOf, f.Checklist, budget)
-					packets = append(packets, f)
+					asm.add(newPacket(seriesID, DimSeriesCausality, u.Ref, slicesOf), body, false)
 				}
 			}
 		case DimCharacter:
@@ -1226,7 +1412,8 @@ func PlanSeries(root string, seriesID string, ws []*work.Work, dimension string,
 							}
 						}
 						for _, e := range stateEventsOf(root, w, id) {
-							p.slices = append(p.slices, Slice{Kind: "state", Text: fmt.Sprintf("[作品 %s] %s：%s（%s）", w.ID, e.ID, e.State, e.Scene)})
+							// 跨作品状态切片无法按单一作品的先序定位，相关度最低。
+							p.slices = append(p.slices, Slice{Kind: "state", Text: fmt.Sprintf("[作品 %s] %s：%s（%s）", w.ID, e.ID, e.State, e.Scene), rank: rankUnlocated})
 						}
 					}
 				}
@@ -1236,47 +1423,16 @@ func PlanSeries(root string, seriesID string, ws []*work.Work, dimension string,
 					continue // 只在一部作品的章出场：单作品包已覆盖
 				}
 				f := newPacket(seriesID, DimCharacter, strings.Join(p.chRefs, "+"), p.slices)
-				f.Excerpt.Text, f.Excerpt.Truncated = budgetExcerpt(strings.Join(p.bodies, ""), p.slices, f.Checklist, budget)
-				packets = append(packets, f)
+				f.Subject = p.entry
+				asm.add(f, strings.Join(p.bodies, ""), false)
 			}
 		}
 	}
-	// 落盘（沿用单作品的 id 避让与 done 保留）。
-	packetDir := Dir + "/" + seriesID
-	_ = packetDir
-	out := []Packet{}
-	var changed []string
-	taken := map[string]bool{}
-	// 既有包目录若存在则避让其 id。
-	if entries, err := os.ReadDir(filepath.Join(root, filepath.FromSlash(Dir+"/"+seriesID))); err == nil {
-		for _, e := range entries {
-			taken[strings.TrimSuffix(e.Name(), ".yaml")] = true
-		}
+	if ps := asm.problem(); ps != nil {
+		return nil, nil, ps
 	}
-	for i := range packets {
-		p := &packets[i]
-		for n := 1; ; n++ {
-			id := fmt.Sprintf("%s-%d", p.Dimension, n)
-			if !taken[id] {
-				p.ID = id
-				taken[id] = true
-				break
-			}
-		}
-		rel := Dir + "/" + seriesID + "/" + p.ID + ".yaml"
-		if err := precheckPacket(p); err != nil {
-			return nil, nil, []workspace.Problem{errorAt(workspace.CodeWriteFailed, rel, "", "生成的任务包不通过校验："+err.Error())}
-		}
-		out = append(out, viewOf(p, packetChars(p)))
-		_ = rel
-		changed = append(changed, rel)
-	}
-	for i := range packets {
-		if err := writePacket(root, Dir+"/"+seriesID+"/"+packets[i].ID+".yaml", &packets[i]); err != nil {
-			return nil, nil, []workspace.Problem{errorAt(workspace.CodeWriteFailed, Dir+"/"+seriesID+"/"+packets[i].ID+".yaml", "", "写入任务包失败："+err.Error())}
-		}
-	}
-	return out, changed, nil
+	// 落盘：与单作品相同的匹配、原位重建与过期清理（系列规划总是覆盖全部成员作品）。
+	return persist(root, Dir+"/"+seriesID, asm.packets, dims, func(*fileRecord) bool { return true })
 }
 
 // timelinePkgWork / timelinePkgOrder 是 internal/timeline 的薄别名（系列规划的合并排序复用）。

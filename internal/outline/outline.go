@@ -693,6 +693,42 @@ func BeatPositions(content []byte, rel string, o *Outline, m *catalog.Method) []
 	return out
 }
 
+// SceneBeatPositions 按场景在作品全部场景中的单元树先序位置核对根单元结构类写作法 m 的节拍：根单元大纲 root 的节以 role
+// 承担 m 的节拍，场景 ref 的大纲 scene 的节以 beats 引用根单元大纲的节（情节节拍）。作品共有 n 个场景、本场景为第 k 个
+// （从 0 起）时，相对位置取所占等分区间的中点 (k + 0.5) ÷ n；超出节拍的位置范围时给出一条 warning（path 为 rel，field
+// 为第一次引用该节拍的 sections[i].beats[j]），同一节拍至多一条。不要求正文存在同名标题。m 不是结构类写作法、root 或
+// scene 为 nil、k 不在 0 到 n − 1 之间时没有。
+func SceneBeatPositions(rel, ref string, scene, root *Outline, m *catalog.Method, k, n int) []workspace.Problem {
+	if scene == nil || root == nil || m == nil || m.Kind != catalog.MethodStructure || k < 0 || k >= n {
+		return nil
+	}
+	beats := map[string]catalog.MethodPart{} // 根单元大纲节 id → 该节 role 承担的节拍
+	for _, s := range root.Sections {
+		if i := slices.IndexFunc(m.Beats, func(b catalog.MethodPart) bool { return b.ID == s.Role }); i >= 0 && m.Beats[i].Position != nil {
+			beats[s.ID] = m.Beats[i]
+		}
+	}
+	at := (float64(k) + 0.5) / float64(n)
+	seen := map[string]bool{}
+	var out []workspace.Problem
+	for i, s := range scene.Sections {
+		for j, id := range s.Beats {
+			b, ok := beats[id]
+			if !ok || seen[b.ID] {
+				continue
+			}
+			seen[b.ID] = true
+			if at < b.Position.Min || at > b.Position.Max {
+				out = append(out, workspace.Problem{Code: CodeBeatPosition, Severity: workspace.SeverityWarning, Path: rel,
+					Field: fmt.Sprintf("sections[%d].beats[%d]", i, j),
+					Message: fmt.Sprintf("场景 %s 承担的节拍 %s「%s」（根单元大纲节 %s）位于全部 %d 个场景中的第 %d 个，相对位置约 %.0f%%，写作法 %s 建议的位置为 %.0f%%–%.0f%%；只是提示，不阻塞推进",
+						ref, b.ID, b.Title, id, n, k+1, at*100, m.ID, b.Position.Min*100, b.Position.Max*100)})
+			}
+		}
+	}
+	return out
+}
+
 // fenceRE 匹配围栏代码块的开始或结束行（去掉行首至多三个空格后以 ``` 或 ~~~ 开头）。
 var fenceRE = regexp.MustCompile("^ {0,3}(`{3,}|~{3,})")
 

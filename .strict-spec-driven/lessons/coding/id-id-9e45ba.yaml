@@ -8,7 +8,7 @@ lesson:
 category: coding
 status: active
 created_at: '2026-10-04T02:14:54.424Z'
-updated_at: '2026-10-04T02:14:54.424Z'
+updated_at: '2026-10-07T16:26:18.258Z'
 context: review plan 每次重建 open 任务包并按（维度, 范围）保留 done 包，包 id 形如 <dimension>-<n>
 observation: fresh-context 审查发现两处保留逻辑缺陷：新包 id 计数器只数本次生成的包，重编号会把重建包写到已保留的 done 包文件上（结果被静默删除）；过期清理按本次输出反查 scope，把范围外的 done 包一并删除。两处都在多包夹具下才复现，单包测试全部通过
 takeaway: 重建式命令里，可保留项（按内容键匹配）与新项共用 id 空间：id 分配要避开磁盘上的全部既有 id（含保留项），清理判断要读文件自身的（键, 状态）而不是从本次输出反推；测试夹具必须覆盖「保留项 + 重建项并存」与「范围收窄后保留项在范围外」两个形态
@@ -17,3 +17,6 @@ occurrences:
   - origin: review-task-packets 变更的 fresh-context 独立审查
     date: '2026-10-04'
     evidence: internal/reviewpacket/reviewpacket.go 的 id 避让与按文件自身判断的清理循环，与 TestReplanKeepsDoneIds、TestNarrowScopeKeepsOutsideDone
+  - origin: reviewpacket-budget-cap
+    date: '2026-10-07'
+    evidence: 同一保留逻辑又出现三处缺陷：匹配键（dimension, scope）不唯一——同一章的多个人物包 scope 相同，一个 done 包吞掉同章其他人物包；open 包每次另起新 id，留下同键重复包（旧的超预算包残留）；给出 unit 时过期清理不看范围，impact mark 逐场景生成时互相删除。修复为键加入 subject 与清单集合、open 包原位重建、清理限定在本次维度与范围内，共用 persist；见 TestReplanCharacterSubjects、TestReplanCleansDuplicatesWithinScope、impact 的 TestMarkPacketsPerSceneAndOverBudget

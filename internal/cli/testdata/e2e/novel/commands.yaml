@@ -1,4 +1,4 @@
-# 《停在四点十七分》可重放命令脚本（corpus-authoring 一次性真实创作录制；knowledge-reveal-terms 变更补录揭示词步骤）。
+# 《停在四点十七分》可重放命令脚本（corpus-authoring 一次性真实创作录制；knowledge-reveal-terms 变更补录揭示词步骤；context-pov-filter 变更为溺水真相扩展揭示词）。
 # 格式见 script-format.md；--dir/--json 由重放器补齐，文本输入统一经 input_ref 提供标准输入
 #（原命令的 --file 已折算为 input_ref，stdin 步骤原样保留）。
 stages:
@@ -1308,6 +1308,17 @@ stages:
     expect_code: null
     stdout_contains: null
   - command:
+    - scene
+    - contract
+    - stopped-at-417/ch1-s2
+    - sc
+    - --cause
+    - ev-letter-handed
+    input_ref: null
+    expect_exit: 1
+    expect_code: scene.event-not-yet-happened
+    stdout_contains: null
+  - command:
     - outline
     - set
     - stopped-at-417/ch1-s2
@@ -1533,7 +1544,7 @@ stages:
     input_ref: null
     expect_exit: 0
     expect_code: null
-    stdout_contains: null
+    stdout_contains: 'units/ch1-s3/acceptance.yaml",".writing-anything/works/stopped-at-417/units/part-1/checkpoint.yaml"'
   - command:
     - advance
     - stopped-at-417/ch1-s3
@@ -1593,14 +1604,6 @@ stages:
     stdout_contains: null
   - command:
     - volume
-    - checkpoint
-    - stopped-at-417/part-1
-    input_ref: null
-    expect_exit: 0
-    expect_code: null
-    stdout_contains: null
-  - command:
-    - volume
     - confirm
     - stopped-at-417/part-1
     - --confirmed-by-author
@@ -1617,6 +1620,13 @@ stages:
     expect_exit: 0
     expect_code: null
     stdout_contains: null
+  - command:
+    - next
+    - stopped-at-417
+    input_ref: null
+    expect_exit: 0
+    expect_code: null
+    stdout_contains: '"handoff":{"id":"handoff-1","todo":["第二部倒叙场景与铁盒交信、怀表修复"'
 - stage: part-2
   note: 中部（第二章 旧事）：倒叙场景、铁盒交信与怀表修复（ST-1）；审查任务包生成与提交；recall 三查；影响传播预览、复查标记与组稿阻塞（assemble.scenes-open + assemble.rechecks）后作者确认解除；卷末检查点（暂不确认）；部末交接
   steps:
@@ -1951,7 +1961,7 @@ stages:
     input_ref: null
     expect_exit: 0
     expect_code: null
-    stdout_contains: null
+    stdout_contains: 'units/ch2-s3/acceptance.yaml",".writing-anything/works/stopped-at-417/units/part-2/checkpoint.yaml"'
   - command:
     - advance
     - stopped-at-417/ch2-s3
@@ -2006,7 +2016,7 @@ stages:
     input_ref: null
     expect_exit: 0
     expect_code: null
-    stdout_contains: null
+    stdout_contains: '"dimension":"pov-reveal","scope":"stopped-at-417/ch2-s3"'
   - command:
     - review
     - plan
@@ -2016,7 +2026,7 @@ stages:
     input_ref: null
     expect_exit: 0
     expect_code: null
-    stdout_contains: null
+    stdout_contains: '"dimension":"character","scope":"stopped-at-417/ch-2"'
   - command:
     - review
     - submit
@@ -2028,8 +2038,8 @@ stages:
   - command:
     - review
     - submit
-    - stopped-at-417/pov-reveal-2
-    input_ref: inputs/reviews/packet-pov-reveal-2.yaml
+    - stopped-at-417/pov-reveal-1
+    input_ref: inputs/reviews/packet-pov-reveal-1.yaml
     expect_exit: 0
     expect_code: null
     stdout_contains: null
@@ -2220,14 +2230,6 @@ stages:
     - impact
     - list
     - stopped-at-417
-    input_ref: null
-    expect_exit: 0
-    expect_code: null
-    stdout_contains: null
-  - command:
-    - volume
-    - checkpoint
-    - stopped-at-417/part-2
     input_ref: null
     expect_exit: 0
     expect_code: null
@@ -2451,7 +2453,7 @@ stages:
     - stopped-at-417
     - kn-05
     - --terms
-    - 为了救人
+    - 为了救人,潮生溺水,救溺水的潮生
     - --confirmed-by-author
     - --confirmation
     - 作者：补登溺亡真相的揭示词。
@@ -2489,7 +2491,7 @@ stages:
     - stopped-at-417
     - kn-07
     - --terms
-    - 为了救人
+    - 为了救人,潮生溺水,救溺水的潮生
     - --confirmed-by-author
     - --confirmation
     - 作者：读者同场获知，揭示词一致。
@@ -2708,7 +2710,7 @@ stages:
     input_ref: null
     expect_exit: 0
     expect_code: null
-    stdout_contains: null
+    stdout_contains: 'units/ch3-s3/acceptance.yaml",".writing-anything/works/stopped-at-417/units/part-3/checkpoint.yaml"'
   - command:
     - advance
     - stopped-at-417/ch3-s3
@@ -2789,7 +2791,7 @@ stages:
     stdout_contains: null
 - stage: assemble-export
   note: 终局：组稿被悬空伏笔阻塞（assemble.continuity）→ threads set dropped 被拒并生成阻塞决策（threads.author-confirmation）→ 作者 decide 允许 → 带决策放弃
-    th-c → 书名与部/章标题节 → 组稿与整书导出 → part-3 卷末确认与交接 → 时间线与全区校验
+    th-c → strict 下命令行渠道的验收与卷末确认未经复核、组稿被拒（assemble.unreviewed）→ 作者在阅读页批量复核 → 书名与部/章标题节 → 组稿与整书导出 → part-3 卷末确认与交接 → 时间线与全区校验
   steps:
   - command:
     - assemble
@@ -2847,6 +2849,49 @@ stages:
     expect_exit: 0
     expect_code: null
     stdout_contains: th-c
+  - command:
+    - impact
+    - list
+    - stopped-at-417
+    input_ref: null
+    expect_exit: 0
+    expect_code: null
+    stdout_contains: ch3-s3
+  - command:
+    - impact
+    - clear
+    - stopped-at-417/ch3-s3
+    - th-c
+    - --confirmed-by-author
+    - --confirmation
+    - 作者：钥匙伏笔放弃后，第三章第三场正文本来就留白，无需改动，解除复查标记。
+    input_ref: null
+    expect_exit: 0
+    expect_code: null
+    stdout_contains: null
+  - command:
+    - assemble
+    - stopped-at-417
+    - --output
+    - book.md
+    input_ref: null
+    expect_exit: 1
+    expect_code: assemble.unreviewed
+    stdout_contains: null
+  - command:
+    - review
+    - show
+    - stopped-at-417
+    input_ref: null
+    expect_exit: 0
+    expect_code: null
+    stdout_contains: volume-checkpoint
+  - author_review: stopped-at-417
+    command: null
+    input_ref: null
+    expect_exit: 0
+    expect_code: null
+    stdout_contains: null
   - command:
     - assemble
     - stopped-at-417
@@ -2976,14 +3021,6 @@ stages:
     - markdown
     - --output
     - novel-export.md
-    input_ref: null
-    expect_exit: 0
-    expect_code: null
-    stdout_contains: null
-  - command:
-    - volume
-    - checkpoint
-    - stopped-at-417/part-3
     input_ref: null
     expect_exit: 0
     expect_code: null

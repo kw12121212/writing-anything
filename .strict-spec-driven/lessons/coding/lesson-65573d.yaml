@@ -8,7 +8,7 @@ lesson:
 category: coding
 status: active
 created_at: '2026-09-30T17:31:14.487Z'
-updated_at: '2026-09-30T17:31:14.487Z'
+updated_at: '2026-10-07T12:05:16.799Z'
 context: claim-source-check 的 claim-candidates 起初在句子包含任一已登记论断文字时就不报告该句。
 observation: fresh-context 审查复现：登记一个只含「我」的 fact 论断即可让所有含「我」的亲历与数据候选消失；逐个论断调用匹配器定位还使耗时随论断数线性增长（9000 个论断加 2 MiB 正文 49.6 秒）。
 takeaway: 用启发式候选与已登记产物比较时，只让覆盖触发区间（代词到标记词、数据本身）的、类型相符的登记项消除候选；所有登记项放进同一个多词匹配器一遍扫描，并测试「无关短登记项」与大量登记项两种输入。
@@ -17,3 +17,6 @@ occurrences:
   - origin: claim-source-check
     date: '2026-09-30'
     evidence: internal/lint/claims.go 的 candidates 与 firstOccurrences；claims_test.go 的 TestCandidateCoverage 与 TestClaimLocate。
+  - origin: closeout-body-scan
+    date: '2026-10-07'
+    evidence: internal/closeout/bodyscan.go：对话前导模式先于称谓模式在同一位置取词，「陈师傅说」以无姓氏信息的候选上报，绕过称谓的姓氏解析；改为称谓命中时同一位置不再按对话前导取词。另仅以 novel-e2e 语料零误报验证不够，独立审查用「白天说好的」「金色大道」「高兴道：」等常见短语找出误报，补充出现两次与道后边界要求（bodyscan_test.go TestScanBody）。

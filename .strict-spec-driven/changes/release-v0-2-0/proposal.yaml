@@ -1,0 +1,33 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: release-v0-2-0
+  status: proposed
+summary:
+  what:
+    - 按项目技能 .agents/skills/release 发布 wa-cli v0.2.0：完整回归（含完成标准对账）与 pwsh 安装校验通过后，把 dev 以 --no-ff 合并到 main，在 main 上打 v0.2.0 注释标签，本地交叉编译 linux、darwin、windows 各 amd64 与 arm64 共 6 个二进制及 SHA256SUMS，推送 main、dev 与标签，并用 gh 创建 GitHub Release
+    - 发布说明（Release Notes）在 gh 自动生成的提交摘要之前，汇总 core-gate-hardening、novel-guarantee-hardening、usability-polish、real-use-and-release 四个加固与验证里程碑的变化
+  why:
+    - 里程碑 real-use-and-release 的完成标准要求 main 分支上存在 v0.2.0 标签，且发布产物含 6 个平台二进制与 SHA256SUMS；这是该里程碑最后一项计划变更
+    - v0.1.0 之后完成了三个加固里程碑以及系列小说端到端测试、完成标准对账、真实接入验证，main 与已发布二进制仍停留在 v0.1.0，用户通过安装脚本拿不到加固后的行为
+scope:
+  in:
+    - 按 release 技能第 1 至 10 步执行：前置检查、完整回归、WA_REQUIRE_PWSH=1 的 TestInstallPs1、确认版本号、合并、打标签、构建产物、推送、创建 GitHub Release、核对产物
+    - 发布前处理已知的前置状态：本地 main 落后 origin/main 时快进同步；dev 领先 origin/dev 的提交在推送确认后一并推送
+    - 撰写四个里程碑的发布说明摘要，作为 gh release create 的 --notes 与 --generate-notes 一起使用
+    - 发布后在 GitHub 上核对 v0.2.0 产物齐全（6 个二进制 + SHA256SUMS）
+  out:
+    - 修改 wa-cli 产品代码、主规格或技术标准；回归或构建失败时停止发布，另走缺陷变更修复
+    - 修改 release 技能、internal/tools/release 或安装脚本
+    - 向公众号等外部平台发布文章；新增 CI/CD 工作流文件
+    - 未经作者明确确认就推送、打远端标签或创建 GitHub Release
+unchanged_behavior:
+  - wa-cli 的全部命令行为、诊断与工作区产物格式不变
+  - 安装脚本 install.sh 与 install.ps1 的下载地址约定与校验逻辑不变
+  - v0.1.0 标签与已发布的 v0.1.0 GitHub Release 不变
+  - 仓库中不新增任何工作流文件
+roadmap:
+  milestone: real-use-and-release
+  planned_change: release-v0-2-0

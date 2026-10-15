@@ -1,0 +1,24 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: fix-skills-install-upgrade
+approach:
+  - 新增嵌入文件 internal/skills/history.txt，每行「<技能名> <SHA-256>」，列出每个内置技能曾经发布过的全部内容哈希（含当前版本）；Install 读取已有技能文件后：与当前内置内容相同则不写；哈希在该技能的历史清单中则视为旧版本，直接写入当前内容（changed 为 true）；否则视为作者改过，按原规则报告 skills.modified 或在 --force 时覆盖。
+  - 测试 TestSkillHistoryCoversCurrent 断言每个当前内置技能的哈希都在清单中，改动技能内容而忘记登记时测试失败；历史上的旧哈希只追加不删除。初始清单用 git log 遍历 internal/skills/skills/*/SKILL.md 的全部已提交版本生成。
+decisions:
+  embedded-hash-history:
+    decision: 用打包进二进制的历史哈希清单识别旧版本，而不是在技能目录写入清单文件或在 SKILL.md 中加版本标记。
+    rationale: 技能目录属于 Agent 客户端，额外文件可能被客户端误当作技能或被作者删除；SKILL.md 的格式要与通用 Agent Skills 兼容（frontmatter 只含 name 与 description）。哈希清单不改变安装产物，只改变判定，且由测试强制随内容更新。
+  no-delta-tech:
+    decision: 不新增技术规范；清单登记由同包测试强制。
+    rationale: 这是 internal/skills 一处的约定，测试失败信息直接说明如何登记，不需要跨包的工程规则。
+  crlf-normalized:
+    decision: 查历史清单前把已有文件的 CRLF 规范为 LF；仓库新增 .gitattributes 使 internal/skills/** 不做换行转换。
+    rationale: 独立审查指出：Windows 用户把技能目录提交进自己的仓库并开启 core.autocrlf 时，未改过的旧版技能会变成 CRLF，cx-tb-1 会原样重现；只差换行符不是作者的修改。.gitattributes 让内嵌技能、夹具与哈希清单在任何平台检出都按字节一致。
+alternatives:
+  - option: 按 frontmatter 的 name 与 description 判断是否为内置技能
+    reason: 作者改的通常是正文，frontmatter 不变时会把作者的修改当作旧版本覆盖，丢失作者内容
+risks:
+  - 清单只覆盖已提交的历史版本；从未提交的本地构建版本（如开发中途安装的技能）仍会被视为改过，需要 --force，这是可接受的保守行为
+  - 只规范 CRLF；编辑器增删末尾换行等其他纯格式变化仍被视为改过，需要 --force，属有意的保守行为

@@ -1,0 +1,16 @@
+schema: strict-spec-driven/delta-tech/v1
+schema_version: 1
+artifact_type: delta_tech
+schema_file: templates/strict-spec-driven/schemas/delta-tech.yaml
+target_standard: go-project-structure
+operations:
+  ADDED:
+    criteria-reconciliation:
+      strength: MUST
+      statement: 里程碑完成标准（Done Criteria）与测试的对账表（Reconciliation Table）internal/tools/criteria/testdata/criteria.yaml 必须覆盖 .strict-spec-driven/roadmap/archive/milestones 下全部已归档里程碑的每条完成标准原文，每条映射到至少一个「包目录.测试函数名」；里程碑归档（或修改已归档的完成标准）的同一变更中必须同步补表或重新确认映射。引用的测试函数必须存在于该目录的 *_test.go，函数体首层不得无条件调用 t.Skip、t.Skipf 或 t.SkipNow；以 hardened_by 登记的加固变更必须已归档
+      rationale: 2026-10-07 里程碑审计发现多条完成标准在规格层被写弱，实现与规格一致、验证通过后里程碑仍被标为完成；对账把 novel-e2e 的矩阵对账（matrix-assertion-reconciliation）推广到全部里程碑，使完成标准与真实执行的测试之间的缺口在完整回归中失败
+      enforcement:
+        method: test
+        detail: internal/tools/criteria 的 TestCriteriaReconciliation 以仓库根目录运行对账；也可用 go run ./internal/tools/criteria 单独运行并列出全部问题
+  MODIFIED: {}
+  REMOVED: {}

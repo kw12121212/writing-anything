@@ -1,0 +1,31 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: windows-install-verify
+approach:
+  - pwsh 从 PowerShell 官方发布的 powershell-7.6.6-linux-x64.tar.gz 解压到用户目录（~/.local/opt/powershell，链接到 ~/.local/bin/pwsh），不需要 sudo；在此环境运行既有 TestInstallPs1 作为实跑证据。
+  - TestInstallPs1 在既有 file 与 iex 两种方式之外增加 irm 方式：用同一 httptest 服务器在 /install.ps1 以 Content-Type text/plain; charset=utf-8 返回仓库中的 install.ps1，pwsh 执行 irm $env:WA_TEST_SCRIPT_URL | iex；会话残留检查对 iex 与 irm 两种方式都执行。
+  - 缺少 pwsh 时，若环境变量 WA_REQUIRE_PWSH=1 则 t.Fatal 并提示安装 pwsh 或在 Windows 本机执行，否则保持 t.Skip；release 技能在回归之后以 WA_REQUIRE_PWSH=1 go test ./internal/tools/release -run TestInstallPs1 -count=1 -v 运行该测试。
+  - 审查后补充：release 技能给出 PowerShell 中的写法（$env:WA_REQUIRE_PWSH='1'; go test ...）并说明 Windows 本机同样需要 PowerShell 7；技能步骤本身不修改仓库文件，验证记录在发布后经 dev 正常流程补充；TestProjectSkills 断言 release 技能保留带 WA_REQUIRE_PWSH 的 TestInstallPs1 命令；docs/INSTALL.md 写明 TestInstallPs1 不覆盖 Windows PowerShell 5.1 与注册表 PATH 分支，需要手动 irm | iex 验证。
+decisions:
+  require-env-gate:
+    decision: 用测试级环境变量 WA_REQUIRE_PWSH=1 把缺少 pwsh 从跳过变为失败，release 技能固定设置它
+    rationale: 完整回归命令要在没有 pwsh 的机器上保持可运行，因此默认仍须跳过；而 release 只看 go test 的退出码时会把跳过当成通过。环境变量让发布步骤以退出码判定，不依赖人工阅读 -v 输出，且不影响日常回归
+  real-irm-mode:
+    decision: 增加经 HTTP 下载的 irm 运行方式，而不是只用按 UTF-8 解码文件的 iex 模拟
+    rationale: 文档推荐的安装命令是 irm <url> | iex；irm 依赖响应的 charset 解码并保留 BOM（lesson irm-iex-powershell-bom-iex-4cdfc3），只有真实经过 Invoke-RestMethod 才能覆盖这一分发路径的解码行为
+  no-script-change:
+    decision: install.ps1 不做修改，验证记录写入 docs/INSTALL.md
+    rationale: pwsh 7.6.6 实跑 16 个子测试全部通过，没有暴露缺陷；修改范围以实跑证据为准，避免无依据的改动
+  no-delta-spec:
+    decision: 不新增规格增量（specs/ 留空）
+    rationale: cli 主规格 install-script 已要求 install.ps1 以 irm <url> | iex 运行时与以 -File 运行时行为相同；本变更不改变 install.ps1 的可观察行为，只补测试方式、项目技能步骤与文档，release 技能不随二进制分发、不属于产品规格
+alternatives:
+  - option: release 技能用 go test -v 输出中是否出现 --- SKIP 判断测试是否被跳过
+    reason: 依赖人工或文本匹配解读输出，容易漏看；退出码判定更可靠，也能被任何脚本复用
+  - option: 去掉 t.Skip，缺少 pwsh 时总是失败
+    reason: 会使完整回归命令在没有 pwsh 的开发机器上失败，违背回归命令可在常规环境运行的约定
+risks:
+  - 开发环境是 WSL2 上的 Linux pwsh，以环境变量模拟 OS 与 PROCESSOR_ARCHITECTURE；默认安装目录写入用户级 PATH（HKCU 注册表）分支与 Windows PowerShell 5.1 未覆盖，需发布者在 Windows 本机补充验证
+  - irm 方式依赖 pwsh 对 charset 的处理，不同 pwsh 版本行为可能不同；验证记录写明版本

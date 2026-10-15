@@ -94,6 +94,7 @@ type Acceptance struct {
 	DraftSHA256       string  `json:"draft_sha256"`
 	ConfirmedByAuthor bool    `json:"confirmed_by_author"`
 	Confirmation      *string `json:"confirmation"`
+	Channel           *string `json:"channel"` // 确认渠道（Confirmation Channel）；只在经作者确认时记录，缺失按 cli 解释
 	AcceptedAt        string  `json:"accepted_at"`
 }
 
@@ -180,7 +181,18 @@ func Load(root, dir string) (*Review, []workspace.Problem) {
 	if ps := checkReview(rel, &r); len(ps) > 0 {
 		return nil, ps
 	}
+	normalizeParagraphs(r.Rubric)
 	return &r, nil
+}
+
+// normalizeParagraphs 把省略的 paragraphs 规范化为空数组：不针对段落的评分项（如评作者选定的标题）可以不给段落，
+// 写出与输出中仍是数组而不是 null（review-record）。
+func normalizeParagraphs(vs []Verdict) {
+	for i := range vs {
+		if vs[i].Paragraphs == nil {
+			vs[i].Paragraphs = []int{}
+		}
+	}
 }
 
 // LoadAcceptance 读取并校验单元目录 dir 下的 acceptance.yaml；不存在时返回 nil 与 nil。
@@ -283,7 +295,7 @@ func Record(root, dir string, data []byte, paragraphs []string, draftSHA string,
 	}
 	for _, it := range rubric {
 		if !seen[it.ID] {
-			out = append(out, errorAt(CodeMissingVerdict, "", "rubric", fmt.Sprintf("评分项 %s（%s）没有结论；每个评分项都要给出 pass 或 fail、证据与段落", it.ID, it.Title)))
+			out = append(out, errorAt(CodeMissingVerdict, "", "rubric", fmt.Sprintf("评分项 %s（%s）没有结论；每个评分项都要给出 pass 或 fail 与证据（依据的段落写在 paragraphs，不针对段落时可以省略）；评分项清单见 wa-cli review show 的 rubric", it.ID, it.Title)))
 		}
 	}
 	ids := map[string]bool{}
@@ -298,6 +310,7 @@ func Record(root, dir string, data []byte, paragraphs []string, draftSHA string,
 	}
 	used := map[string]bool{}
 	next := 1
+	normalizeParagraphs(in.Rubric)
 	r := &Review{DraftSHA256: draftSHA, Rubric: in.Rubric, Findings: []Finding{}}
 	for i, f := range in.Findings {
 		field := fmt.Sprintf("findings[%d]", i)
@@ -489,16 +502,21 @@ func anchored(rel, field string) workspace.Problem {
 	return errorAt(CodeAnchoredValue, rel, field, "该处经由 YAML 锚点、别名或合并键得到，wa-cli 无法只修改这一处；请先去掉锚点、别名与合并键")
 }
 
-// Accept 整体替换单元目录 dir 下的 acceptance.yaml，记录关卡强度、正文 SHA-256、是否经作者确认、确认原话摘要
-// （confirmed 为 false 时不记录）与验收时间 now（UTC）。返回写入的验收与变更的路径。
+// Accept 以命令行渠道（cli）验收，见 AcceptVia。
 func Accept(root, dir, level, draftSHA string, confirmed bool, confirmation string, now time.Time) (*Acceptance, []string, []workspace.Problem) {
+	return AcceptVia(root, dir, level, draftSHA, confirmed, confirmation, workspace.ChannelCLI, now)
+}
+
+// AcceptVia 整体替换单元目录 dir 下的 acceptance.yaml，记录关卡强度、正文 SHA-256、是否经作者确认、确认原话摘要与
+// 确认渠道 channel（confirmed 为 false 时都不记录）与验收时间 now（UTC）。返回写入的验收与变更的路径。
+func AcceptVia(root, dir, level, draftSHA string, confirmed bool, confirmation, channel string, now time.Time) (*Acceptance, []string, []workspace.Problem) {
 	rel := AcceptancePath(dir)
 	a := &Acceptance{GateLevel: level, DraftSHA256: draftSHA, ConfirmedByAuthor: confirmed, AcceptedAt: now.UTC().Format("2006-01-02T15:04:05Z")}
 	kv := []any{"schema_version", workspace.Int(1), "gate_level", workspace.Str(level), "draft_sha256", workspace.Str(draftSHA),
 		"confirmed_by_author", &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!bool", Value: fmt.Sprint(confirmed)}}
 	if confirmed {
-		a.Confirmation = &confirmation
-		kv = append(kv, "confirmation", workspace.Str(confirmation))
+		a.Confirmation, a.Channel = &confirmation, &channel
+		kv = append(kv, "confirmation", workspace.Str(confirmation), "channel", workspace.Str(channel))
 	}
 	kv = append(kv, "accepted_at", workspace.Str(a.AcceptedAt))
 	doc := &yaml.Node{Kind: yaml.DocumentNode, HeadComment: "验收（Acceptance）记录；请用 wa-cli accept 写入。", Content: []*yaml.Node{mapping(kv...)}}

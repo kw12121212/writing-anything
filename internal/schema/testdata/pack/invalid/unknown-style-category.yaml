@@ -1,0 +1,6 @@
+schema_version: 1
+id: house
+title: 团队规范
+style:
+  - text: 先给结论
+    applies_to: [poetry]

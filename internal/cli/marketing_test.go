@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -306,10 +307,19 @@ func TestWechatMarketingEndToEnd(t *testing.T) {
 	step("", "advance", "post")
 	// 审稿：评分标准含 4U 标题法的评分项，strict 关卡下需要作者确认。
 	review := "rubric:\n"
-	for _, id := range []string{"reader-benefit", "hook", "cta", "compliance", "headline-useful", "headline-urgent", "headline-unique", "headline-specific"} {
+	for _, id := range []string{"reader-benefit", "hook", "cta", "compliance"} {
 		review += "  - {item: " + id + ", verdict: pass, evidence: 作者选定的标题与正文一致, paragraphs: [1]}\n"
 	}
-	step(review+"findings: []\n", "review", "record", "post")
+	// 4U 标题评分项评的是作者选定的标题而不是正文段落，省略 paragraphs（review-record 的 verdict-without-paragraphs）。
+	for _, id := range []string{"headline-useful", "headline-urgent", "headline-unique", "headline-specific"} {
+		review += "  - {item: " + id + ", verdict: pass, evidence: 作者选定的标题给出了读者收益与具体场景}\n"
+	}
+	if res := step(review+"findings: []\n", "review", "record", "post"); strings.Count(res.stdout, `"paragraphs":[]`) != 4 {
+		t.Fatalf("review record headline verdicts: %s", res.stdout)
+	}
+	if got := readFile(t, filepath.Join(dir, ".writing-anything", "works", "post", "review.yaml")); strings.Count(got, "paragraphs: []") != 4 {
+		t.Fatalf("review.yaml: %s", got)
+	}
 	refuse("accept.unconfirmed", "accept", "post")
 	step("", "accept", "post", "--confirmed-by-author", "--confirmation", "作者：可以发")
 	if res := step("", "advance", "post"); !strings.Contains(res.stdout, `"stage":"done"`) {
@@ -357,5 +367,35 @@ func TestMarketingReaskOpenDecision(t *testing.T) {
 	}
 	if code, res := runMarketing(t, dir, "ask", "post"); code != 1 || hasNext(diag(t, res.result, "artifact.not-found"), "wa-cli help marketing set") {
 		t.Fatalf("symlink: %+v", res.Diagnostics)
+	}
+}
+
+// AIDA 缺段负向用例：默认写作法 AIDA 下大纲只承担 attention、interest、desire 时，validate 以非零退出并报告缺少 action 章节的
+// outline.missing-method-part（只报这一段）；补上 action 一节后不再报告写作法缺口。
+func TestWechatMarketingAIDAMissingPart(t *testing.T) {
+	dir := t.TempDir()
+	mustRunWS(t, dir, "init", "--genre", "wechat-marketing")
+	mustRunWS(t, dir, "new", "wechat-marketing", "post")
+	for _, s := range [][]string{
+		{"open", "开头", "attention"},
+		{"why", "为什么", "interest"},
+		{"offer", "有什么", "desire"},
+	} {
+		mustRunWS(t, dir, "outline", "set", "post", s[0], "--title", s[1], "--role", s[2], "--reason", "推进")
+	}
+	code, res := runWS(t, dir, "validate")
+	var gaps []Diagnostic
+	for _, d := range res.Diagnostics {
+		if d.Code == "outline.missing-method-part" {
+			gaps = append(gaps, d)
+		}
+	}
+	if code != 1 || len(gaps) != 1 || gaps[0].Severity != "error" || !strings.Contains(gaps[0].Message, "aida") || !strings.Contains(gaps[0].Message, "action") ||
+		strings.Contains(gaps[0].Message, "attention") {
+		t.Fatalf("aida missing action: exit = %d, diagnostics = %+v", code, res.Diagnostics)
+	}
+	mustRunWS(t, dir, "outline", "set", "post", "join", "--title", "怎么报名", "--role", "action", "--reason", "给出报名方式")
+	if code, res := runWS(t, dir, "validate"); code != 0 || slices.ContainsFunc(res.Diagnostics, func(d Diagnostic) bool { return strings.HasPrefix(d.Code, "outline.") }) {
+		t.Fatalf("aida complete: %+v", res.Diagnostics)
 	}
 }

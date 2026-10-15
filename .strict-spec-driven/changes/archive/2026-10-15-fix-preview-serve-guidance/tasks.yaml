@@ -1,0 +1,34 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: fix-preview-serve-guidance
+sections:
+  Implementation:
+    reproduce:
+      text: 【复现】新增 TestPreviewServeGuidance：使用 preview --serve 的技能必须说明持续运行、后台、确认该地址可以访问与打不开时重新运行；修改前三个技能都缺，记录失败输出
+      status: complete
+    skill-text:
+      text: 修改 wa-publish、wa-revise、wa-assemble 中 preview --serve 的说明，wa-auto 第 7 步补充 shell 与 MCP 的关系，并在 internal/skills/history.txt 追加新哈希
+      status: complete
+  Testing:
+    targeted-regression:
+      text: 运行定向回归测试（修复前失败、修复后通过）
+      status: complete
+      command: go test ./internal/skills ./internal/cli -count=1 -run 'Skill|Preview|History|Registry'
+    full-regression:
+      text: 运行完整回归（含覆盖率阈值与完成标准对账）
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    strict-ready:
+      text: strict-spec-cli ready 无阻塞项
+      status: complete
+      command: strict-spec-cli ready fix-preview-serve-guidance
+    strict-verify:
+      text: strict-spec-cli verify 通过
+      status: complete
+      command: strict-spec-cli verify fix-preview-serve-guidance
+testing_gates:
+  validation_task: targeted-regression
+  unit_test_task: full-regression

@@ -1,0 +1,40 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: fix-cli-install-hints
+sections:
+  Implementation:
+    reproduce:
+      text: 【复现】新增 TestSkillsInstallLaunchDir、TestUnknownSubcommandRelated（internal/cli）与 TestInstallLaunchHints（internal/mcpinstall）；修复前分别因缺少 launchDir 与提示、decision show 的诊断不含 decisions、首次注册误报「同名条目重新创建」而失败，记录失败输出
+      status: complete
+    skills-launch-dir:
+      text: internal/cli/skills.go：skills install 输出 launchDir 并在文本输出追加启动提示，outputKeys 声明
+      status: complete
+    mcp-hints:
+      text: internal/mcpinstall：official 记录移除是否成功，只在成功时写「同名条目重新创建」；claude-code 项目级与 codex 用户级注册的 message 追加启动或切换项目提示
+      status: complete
+    related-commands:
+      text: internal/cli/registry.go：unknownCommand 为命令组下不存在的子命令列出以组名开头的独立命令，next 先给出它们的 help
+      status: complete
+  Testing:
+    targeted-regression:
+      text: 运行定向回归测试（修复前失败、修复后通过）
+      status: complete
+      command: go test ./internal/mcpinstall -count=1 && go test ./internal/cli -count=1 -run 'Skills|Unknown|Install|Usage|Help'
+    full-regression:
+      text: 运行完整回归（含覆盖率阈值与完成标准对账）
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    strict-ready:
+      text: strict-spec-cli ready 无阻塞项
+      status: complete
+      command: strict-spec-cli ready fix-cli-install-hints
+    strict-verify:
+      text: strict-spec-cli verify 通过
+      status: complete
+      command: strict-spec-cli verify fix-cli-install-hints
+testing_gates:
+  validation_task: targeted-regression
+  unit_test_task: full-regression

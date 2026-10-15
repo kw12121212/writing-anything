@@ -56,11 +56,42 @@ type Unit struct {
 	Paragraphs []Paragraph
 }
 
-// Page 是一个阅读页。Serve 为 true 时页面内联提交意见的脚本。
+// Page 是一个阅读页。Serve 为 true 时页面内联提交意见、作者确认与复核的脚本，并列出待作者确认的事项（Confirms）；
+// Strict 为 true 时另列出待作者复核（Pending Author Review）的命令行渠道确认（Reviews）。
 type Page struct {
-	Title string
-	Units []Unit
-	Serve bool
+	Title    string
+	Units    []Unit
+	Serve    bool
+	Confirms []Confirm
+	Strict   bool
+	Reviews  []Review
+}
+
+// Option 是待确认决策的一个选项。
+type Option struct {
+	ID   string
+	Text string
+}
+
+// Confirm 是阅读页待作者确认队列中的一项：Kind 为 acceptance、decision、plan、state、knowledge 或 volume，Unit 与 ID
+// 标识目标（按 Kind 取用），Label 与 Detail 为人读说明；决策带选项（Options）或需要答复（NeedsAnswer），状态与知情
+// 提议可以拒绝（CanReject）。
+type Confirm struct {
+	Kind        string
+	Unit        string
+	ID          string
+	Label       string
+	Detail      string
+	Options     []Option
+	Recommend   string
+	NeedsAnswer bool
+	CanReject   bool
+}
+
+// Review 是阅读页待作者复核区的一项：Key 为待复核确认的键，Label 为人读说明。
+type Review struct {
+	Key   string
+	Label string
 }
 
 // LintFunc 对单元运行文本检查，结果与 wa-cli lint 相同；out 为 nil 时文本检查没有运行，problems 为其原因。

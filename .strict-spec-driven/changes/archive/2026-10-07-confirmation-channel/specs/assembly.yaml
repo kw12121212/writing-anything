@@ -1,0 +1,25 @@
+schema: strict-spec-driven/delta-spec/v1
+schema_version: 1
+artifact_type: delta_spec
+schema_file: templates/strict-spec-driven/schemas/delta-spec.yaml
+target_spec: assembly
+operations:
+  ADDED: {}
+  MODIFIED:
+    assemble-gate:
+      strength: MUST
+      statement: wa-cli assemble 在组稿前必须检查四类前置，任一存在时逐项给出 error 级诊断、不写任何文件、退出码为 1：(1) assemble.scenes-open——作品中存在 stage 不为 done 的场景（汇总单元按其子树场景折算，未完成场景的引用逐个列出，至多 5 项后加省略说明，next 含 wa-cli status --dir <dir> --json）；(2) assemble.continuity——任一场景存在未豁免的 error 级连续性发现（按 continuity 主规格的阻塞语义逐场景列出：场景引用、错误码与 message，next 含 wa-cli continuity <场景> --dir <dir> --json 与 wa-cli decisions --dir <dir> --json）；(3) assemble.rechecks——存在 open 复查标记（Recheck Mark，逐项列出场景与目标，next 含 wa-cli impact list <work> --dir <dir> --json 与 wa-cli help impact clear --json）。(4) assemble.unreviewed——工作区 gate_level 为 strict 时，该作品每一项待作者复核（Pending Author Review，见 review 主规格的 review-show-author-review）的确认各一条（path 为该确认所在产物，message 含确认类型、引用、确认时间与原话摘要，next 含 wa-cli preview <work> --serve --dir <dir> --json 与 wa-cli review show <work> --dir <dir> --json）；复核记录不通过校验时另报告其诊断并拒绝；standard 与 fast 下不检查。四类都为空时才组稿；连续性台账无法加载（error 级）时按 assemble.continuity 报告其诊断并拒绝。 作品属于系列（.writing-anything/series/<id>.yaml 的 works 含该作品）时，关卡按系列范围扩展：assemble.continuity 以跨作品检查为准（发现 message 标明 [系列] 与涉及作品）；assemble.rechecks 检查系列内全部作品的 open 复查标记（message 标明其他作品的场景与目标）。非系列作品（单成员或无系列）的关卡行为不变。
+      scenarios:
+        gate-series-rechecks:
+          - GIVEN: 系列 guide 的 book-1 有 open 复查标记（target canon-1），book-2 全部场景 done、连续性干净
+          - WHEN: 运行 wa-cli assemble book-2 --dir D --json
+          - THEN: diagnostics 中有一条错误码为 assemble.rechecks、message 含 book-1 场景的 [系列] 诊断，组稿被拒，退出码为 1
+        gate-unreviewed:
+          - GIVEN: gate_level 为 strict，作品 my-novel 全部场景 done、连续性干净、没有复查标记，scene-1 经 wa-cli accept 验收（渠道 cli）且未复核
+          - WHEN: 运行 wa-cli assemble my-novel --dir D --json
+          - THEN: diagnostics 中有一条错误码为 assemble.unreviewed、path 为 scene-1 的 acceptance.yaml 的诊断，next 含 wa-cli preview my-novel --serve，组稿被拒，退出码为 1；作者在阅读页复核后再运行组稿成功
+        gate-standard-unchecked:
+          - GIVEN: 同 gate-unreviewed，但 gate_level 为 standard
+          - WHEN: 运行 wa-cli assemble my-novel --dir D --json
+          - THEN: 没有 assemble.unreviewed 诊断，组稿成功，退出码为 0
+  REMOVED: {}

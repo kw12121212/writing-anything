@@ -1,0 +1,42 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: short-story-beat-position
+sections:
+  Implementation:
+    scene-beat-func:
+      text: internal/outline/outline.go：新增 SceneBeatPositions，按场景先序相对位置 (k + 0.5) ÷ n 核对根单元结构类写作法的节拍，超出范围给出 warning（path 为场景 outline.yaml，field 为 sections[i].beats[j]）
+      status: complete
+    lint-wiring:
+      text: internal/cli/lint.go：beatPositions 对场景单元加载根单元写作法与大纲、场景大纲与先序序号，合并 SceneBeatPositions 的结果；保留单元自身写作法的标题核对
+      status: complete
+    next-path:
+      text: internal/cli/workspace.go：outline.beat-position 的 next 按诊断路径所在目录推导单元引用，支持 draft.md 与 outline.yaml
+      status: complete
+    root-structure-helper:
+      text: internal/cli/method.go 新增 rootStructure，curve.go 与 lint.go 共用根单元结构类写作法与大纲的加载（审查发现的重复逻辑）
+      status: complete
+    delta-spec-sync:
+      text: methods 增量规格 beat-positions 与实际实现一致（场景核对、位置公式、诊断路径与不阻塞验收）
+      status: complete
+  Testing:
+    unit-tests:
+      text: 单元测试：outline 包 SceneBeatPositions 纯函数（超范围、范围内、非结构类、缺失大纲、场景序号越界、同一节拍只报一次）；cli 包短篇夹具 lint 场景超范围给出 warning 且退出码 0、范围内无提示、review show 展示但不进入验收阻塞项、场景写作简报不能读取时照常核对、根单元大纲或写作简报不能读取及 method 为 none 时不核对；curve 测试回归
+      status: complete
+      command: go test ./internal/outline/ ./internal/cli/ -run 'Beat|Curve' -count=1
+    full-regression:
+      text: 完整回归（含覆盖率阈值 80%）
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    verify-change:
+      text: 运行 strict-spec-cli verify short-story-beat-position，确认任务、增量规格与范围一致
+      status: complete
+      command: strict-spec-cli verify short-story-beat-position
+    archive-ready:
+      text: 确认增量规格能合并进 methods 主规格，归档后路线图 short-story-beat-position 标记完成
+      status: complete
+testing_gates:
+  validation_task: full-regression
+  unit_test_task: unit-tests

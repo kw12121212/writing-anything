@@ -1,0 +1,19 @@
+schema: strict-spec-driven/lesson/v1
+schema_version: 1
+artifact_type: lesson
+schema_file: templates/strict-spec-driven/schemas/lesson.yaml
+lesson:
+  id: lesson-b17b72
+  title: 零提示类完成标准要先实测现状，矩阵断言文字不会被测试强制
+category: testing
+status: active
+created_at: '2026-10-07T12:05:16.964Z'
+updated_at: '2026-10-07T12:05:16.964Z'
+context: closeout-body-scan 的完成标准要求 novel-e2e 语料全部场景收口时 closeout.suspected-name 为零，测试矩阵 T-CLOSEOUT-02 也写着「疑似专有名词扫描无未处理提示」
+observation: 在重放中加断言后发现语料每个场景都已有大纲地点（如守拙钟表行）未登记产生的提示；矩阵断言文字只做 evidence 锚点对账，从未被检查，早已与行为不符
+takeaway: 为既有语料新增零告警类断言前先实测当前输出；把断言限定到本变更引入的来源（如 suspected 的 source 为 draft），并在同一变更中更正失实的矩阵文字，不要为凑零去改语料或豁免真专名
+applies_when: 为端到端语料、测试矩阵或里程碑完成标准新增「零告警」「无提示」一类断言，或依据矩阵 assertion 文字判断现状时
+occurrences:
+  - origin: closeout-body-scan
+    date: '2026-10-07'
+    evidence: internal/cli/novel_corpus_replay_test.go 只断言 source 为 draft 的项；internal/cli/testdata/e2e/novel/matrix.yaml T-CLOSEOUT-02 文字更正

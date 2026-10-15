@@ -1,0 +1,33 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: series-accept-gate
+  status: proposed
+summary:
+  what:
+    - 系列成员作品的场景验收（accept）与只读关卡（review show）在单作品连续性审查之外追加系列范围检查：只保留涉及当前场景的 error 级跨作品发现项——同一时间两地（timeline.same-time-presence）、跨作品状态矛盾（continuity.conflicting-state）与新增的跨作品终态人物出场（continuity.dead-acting），并进入既有的（场景， 错误码）豁免通道
+    - wa-cli continuity <series> 新增跨作品终态人物出场检查：按 works 顺序读取更早成员作品已确认的状态台账，出场人物在更早作品中最新已确认状态为死亡、失踪等保留词，且本作品在该场景之前没有该人物的已确认状态时报告 error 级 continuity.dead-acting
+    - 修正测试卫生：cli 的 seriesFixture 改为检查退出码并让 book-1/s1 真正推进到 done；continuity 包系列夹具改用平铺的系列文件形式
+    - 时间线系列识别改用 series 包读取平铺的 .writing-anything/series/<id>.yaml（原实现以 IsDir 扫描目录，SeriesID 从未被赋值；timeline 包目前不读取该字段，故无可观察行为变化）；修正跨作品同一时间两地提示语中「请修正时间标记或补充 after」的重复
+  why:
+    - 2026-10-07 里程碑审计实测：系列中 book-2 场景与 book-1 存在同一时间两地的 error 级跨作品发现时 wa-cli accept book-2/s1 仍然成功，因为验收只运行单作品连续性审查；跨作品只检查 conflicting-state，book-1 已确认死亡的人物在 book-2 仍出场检测不到，与已归档 novel-series 完成标准「第二部场景与第一部设定集冲突时报告阻塞」冲突
+scope:
+  in:
+    - internal/continuity：Blockers、EnsureWaivers 与 AcceptanceBlockers 对系列成员作品追加涉及当前场景的系列范围 error 级发现；RunSeries 新增跨作品 dead-acting；系列识别改用 series 包（平铺 <id>.yaml）；修正跨作品提示语
+    - internal/assembly：组稿关卡的系列范围发现与按场景阻塞项去重（本作品场景已由按场景阻塞项覆盖，含豁免）
+    - 测试：跨作品同时两地阻塞 accept、跨作品已死人物出场阻塞 accept 与 continuity <series>、修正后放行、单作品行为不变；修正 seriesFixture 与 continuity 系列夹具
+    - continuity 与 series 主规格同步新增要求与场景
+    - internal/cli/review.go：accept 的豁免决策生成与阻塞项 next 同时识别 timeline.* 连续性发现（此前只识别 continuity.*，同一时间两地无法经决策豁免，与 continuity-command 的豁免通道要求不符）
+  out:
+    - 跨作品的 timeline.unknown-scene、cycle、order-conflict 进入验收门禁（本变更只纳入 planned change 列明的三类发现）
+    - 上下文视角过滤、收口正文扫描等保证类加固（novel-guarantee-hardening）与长篇技能（novel-skills）
+    - 非保留词状态（如 殒命）的语义判断与跨作品设定条目 id 映射之外的人物别名推断
+unchanged_behavior:
+  - 单作品连续性检查项、豁免问题文本格式「是否豁免场景 <场景> 的连续性检查 <错误码>？」与决策生成语义不变；只读命令仍不生成决策
+  - wa-cli continuity <series> 既有的 same-time-presence 与 conflicting-state 发现的错误码、归属场景与退出码不变
+  - 不属于任何系列的作品：continuity、review show 与 assemble 的输出、错误码与退出码不变；accept 的阻塞项与退出码不变，唯一例外是单作品 timeline.* 阻塞项现在与 continuity.* 一样生成豁免决策（changedPaths 列出决策队列）且 next 指向 wa-cli continuity 与 wa-cli decisions
+roadmap:
+  milestone: core-gate-hardening
+  planned_change: series-accept-gate

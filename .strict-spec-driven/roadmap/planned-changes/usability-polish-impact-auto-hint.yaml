@@ -1,0 +1,11 @@
+schema: strict-spec-driven/planned-change/v1
+schema_version: 1
+artifact_type: planned_change
+schema_file: ../../templates/strict-spec-driven/schemas/planned-change.yaml
+planned_change:
+  id: impact-auto-hint
+  milestone: usability-polish
+status: complete
+summary: 修改被已验收场景引用的目标时自动落盘复查标记，其余只提示
+details: canon set、state set、knowledge set、threads set 与 scene contract 成功写入后，比较修改前后的语义字段（设定文本与别名、状态描述、知情绑定、伏笔计划回收位置、契约起因与状态变化），无语义变化（只改注释或排版）时不触发。有变化时调用 impact 引用图：受影响场景中已验收者自动写入 rechecks/<work>.yaml 并生成 causality 审查任务包，changedPaths 列出；同一场景已有 open 标记时跳过且不重复生成任务包；未验收者只在输出中列出。命令输出新增受影响场景清单；next 对 open 标记给出 wa-cli impact clear --confirmed-by-author --confirmation 与 wa-cli review plan 命令。不提供跳过自动标记的参数。同步 impact 规格与长篇技能说明。测试：已验收触发落盘、未验收只提示、注释修改不触发、重复修改去重、清除后可再次触发。
+depends_on: []

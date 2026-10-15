@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -52,5 +53,33 @@ func TestReviewPacketCommands(t *testing.T) {
 	}
 	if !strings.Contains(strings.Join(res4.Checked, "\n"), "packets/my-story/causality-1.yaml") {
 		t.Fatalf("checked = %v", res4.Checked)
+	}
+}
+
+// 上下文预算放不下单个清单项与最小正文片段：review plan 报告 packet.over-budget（error），不写任何包文件，
+// next 给出查看与调整预算的命令；预算足够时人读输出标注省略的切片条数。
+func TestReviewPlanOverBudget(t *testing.T) {
+	dir := packetWork(t)
+	mustRunWS(t, dir, "config", "set", "context_budget", "20")
+	code, res := runWS(t, dir, "review", "plan", "my-story/s1", "--dimension", "causality")
+	if code != 1 || res.Valid || !strings.Contains(res.stdout, `"packets":[]`) {
+		t.Fatalf("plan over budget: exit code = %d, stdout = %s", code, res.stdout)
+	}
+	d := diag(t, res, "packet.over-budget")
+	if d.Severity != "error" || d.Field != "context_budget" || !hasNext(d, "wa-cli config resolved --dir ") || !hasNext(d, "wa-cli help config set --json") {
+		t.Fatalf("diagnostic = %+v", d)
+	}
+	if _, err := os.Stat(filepath.Join(dir, ".writing-anything", "packets")); err == nil {
+		t.Fatal("packets written on over-budget")
+	}
+	if code, stdout, _ := run(t, "review", "plan", "my-story/s1", "--dir", dir); code != 1 || strings.Contains(stdout, "没有可审查的内容") {
+		t.Fatalf("plan text over budget: exit code = %d, stdout = %s", code, stdout)
+	}
+	// 切片放不下时省略并在人读输出中标注。
+	mustRunWS(t, dir, "config", "set", "context_budget", "260")
+	writeFile(t, filepath.Join(dir, ".writing-anything", "works", "my-story", "units", "s1", "outline.yaml"),
+		"schema_version: 1\nsections:\n  - {id: sc1, title: 场景, reveal: "+strings.Repeat("揭示", 200)+"}\n")
+	if code, stdout, stderr := run(t, "review", "plan", "my-story/s1", "--dimension", "pov-reveal", "--dir", dir); code != 0 || !strings.Contains(stdout, "按预算省略 1 条切片") {
+		t.Fatalf("plan text: exit code = %d, stdout = %s, stderr = %s", code, stdout, stderr)
 	}
 }

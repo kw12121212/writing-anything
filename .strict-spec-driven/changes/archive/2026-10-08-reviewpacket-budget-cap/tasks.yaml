@@ -1,0 +1,39 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: reviewpacket-budget-cap
+sections:
+  Implementation:
+    budget-fit:
+      text: internal/reviewpacket：新增按预算装配（裁正文、按相关度省略切片、按清单项拆包、packet.over-budget），切片带相关度等级；Plan 与 PlanSeries 全部维度改用；done 包按（dimension, scope, 清单项集合）匹配保留
+      status: complete
+    schema-output:
+      text: packet.schema.json 增加可选 omitted_slices；Packet 输出增加 omittedSlices；cli review plan 人读输出标注省略条数，packet.over-budget 诊断给出 next
+      status: complete
+    docs-skill:
+      text: wa-continuity 技能说明预算裁剪、拆包与 over-budget 处理；docs/GLOSSARY.md 审查任务包条目同步
+      status: complete
+    spec-delta:
+      text: 生成 reviewpacket 主规格 packet-plan 的 MODIFIED 增量，反映实际实现
+      status: complete
+  Testing:
+    unit-tests:
+      text: reviewpacket 包测试：大台账夹具每包 chars 不超过 budget 且 omittedSlices 大于 0、按相关度省略、拆包、over-budget 不写文件、系列规划与校验路径；包内覆盖率不低于 80%；cli 测试 over-budget 诊断与 novel-e2e 每个任务包 chars 不超过 budget
+      status: complete
+      command: go test -cover ./internal/reviewpacket/ ./internal/cli/
+    full-regression:
+      text: 完整回归（含覆盖率阈值 80%）
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    verify-change:
+      text: strict-spec-cli verify reviewpacket-budget-cap 通过，任务全部完成
+      status: complete
+      command: strict-spec-cli verify reviewpacket-budget-cap
+    archive-ready:
+      text: 审查通过后归档，规格增量合并入 reviewpacket 主规格，路线图计划变更标记完成
+      status: complete
+testing_gates:
+  validation_task: full-regression
+  unit_test_task: unit-tests

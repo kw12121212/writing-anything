@@ -22,6 +22,7 @@ import (
 	"github.com/kw12121212/writing-anything/internal/lint"
 	"github.com/kw12121212/writing-anything/internal/outline"
 	"github.com/kw12121212/writing-anything/internal/schema"
+	"github.com/kw12121212/writing-anything/internal/series"
 	"github.com/kw12121212/writing-anything/internal/state"
 	"github.com/kw12121212/writing-anything/internal/threads"
 	"github.com/kw12121212/writing-anything/internal/timeline"
@@ -121,8 +122,8 @@ func Run(root string, w *work.Work, u *work.Unit) ([]Finding, []workspace.Proble
 	var ordered []timeline.Entry
 	if timeline.HasDeclaration(root, w) {
 		tw := []*timeline.Work{{W: w}}
-		if sid, _, ok := seriesOfForTimeline(root, w); ok {
-			tw[0].SeriesID = sid
+		if sr, _ := series.Of(root, w.ID); sr != nil {
+			tw[0].SeriesID = sr.ID
 		}
 		var tops []workspace.Problem
 		ordered, tops = timeline.Order(root, tw)
@@ -387,11 +388,21 @@ func Run(root string, w *work.Work, u *work.Unit) ([]Finding, []workspace.Proble
 
 // Blockers 只读地计算场景 u 的连续性阻塞项（不生成任何决策），供 review show 等只读命令复用；
 // 台账无法加载时按原问题阻塞（偏安全）。
+//
+// 作品属于系列时追加涉及该场景的跨作品发现（continuity-series-accept-gate）。
 func Blockers(root string, w *work.Work, u *work.Unit) ([]workspace.Problem, []workspace.Problem) {
 	if u.Type != outline.SceneType {
 		return nil, nil
 	}
-	findings, fatal := Run(root, w, u)
+	return BlockersWith(root, w, u, SeriesGateFindings(root, w))
+}
+
+// BlockersWith 同 Blockers，系列范围发现由调用方以 SeriesGateFindings 预先计算一次（逐场景复用，如组稿关卡）。
+func BlockersWith(root string, w *work.Work, u *work.Unit, seriesFindings []Finding) ([]workspace.Problem, []workspace.Problem) {
+	if u.Type != outline.SceneType {
+		return nil, nil
+	}
+	findings, fatal := sceneFindings(root, w, u, seriesFindings)
 	if len(fatal) > 0 {
 		return fatal, nil
 	}
@@ -427,7 +438,15 @@ func EnsureWaivers(root string, w *work.Work, u *work.Unit) ([]string, []workspa
 	if u.Type != outline.SceneType {
 		return nil, nil
 	}
-	findings, fatal := Run(root, w, u)
+	return EnsureWaiversWith(root, w, u, SeriesGateFindings(root, w))
+}
+
+// EnsureWaiversWith 同 EnsureWaivers，系列范围发现由调用方以 SeriesGateFindings 预先计算（与 BlockersWith 共用一次）。
+func EnsureWaiversWith(root string, w *work.Work, u *work.Unit, seriesFindings []Finding) ([]string, []workspace.Problem) {
+	if u.Type != outline.SceneType {
+		return nil, nil
+	}
+	findings, fatal := sceneFindings(root, w, u, seriesFindings)
 	if len(fatal) > 0 {
 		return nil, nil
 	}
@@ -467,7 +486,7 @@ func AcceptanceBlockers(root string, w *work.Work, u *work.Unit) ([]workspace.Pr
 	if u.Type != outline.SceneType {
 		return nil, nil, nil
 	}
-	findings, fatal := Run(root, w, u)
+	findings, fatal := sceneFindings(root, w, u, SeriesGateFindings(root, w))
 	if len(fatal) > 0 {
 		// 台账无法加载：不生成决策，按原问题报告（调用方决定如何阻塞）。
 		return nil, nil, fatal
@@ -510,6 +529,15 @@ func AcceptanceBlockers(root string, w *work.Work, u *work.Unit) ([]workspace.Pr
 	}
 	dedupe(&changed)
 	return blockers, changed, nil
+}
+
+// sceneFindings 返回场景 u 的单作品连续性发现，并追加 seriesFindings 中涉及该场景的跨作品发现（归属改写为该场景）。
+func sceneFindings(root string, w *work.Work, u *work.Unit, seriesFindings []Finding) ([]Finding, []workspace.Problem) {
+	findings, fatal := Run(root, w, u)
+	if len(fatal) > 0 {
+		return findings, fatal
+	}
+	return append(findings, sceneSeriesFindings(seriesFindings, u.Ref)...), nil
 }
 
 // waiveState 判定固定问题文本 q 的豁免状态：waived（作者已允许）、pending（已有 open 决策）、
@@ -696,33 +724,6 @@ func firstSentence(msg string) string {
 	return msg
 }
 
-// seriesOfForTimeline 返回作品所属系列 id（时间线跨作品默认序用）；continuity 不能 import series，
-// 以目录扫描 series.yaml 的 works 判定成员关系。
-func seriesOfForTimeline(root string, w *work.Work) (string, string, bool) {
-	entries, err := os.ReadDir(filepath.Join(root, filepath.FromSlash(".writing-anything/series")))
-	if err != nil {
-		return "", "", false
-	}
-	for _, e := range entries {
-		if !e.IsDir() || strings.HasPrefix(e.Name(), ".") {
-			continue
-		}
-		rel := ".writing-anything/series/" + e.Name() + ".yaml"
-		if doc, ps := workspace.Read(root, rel); doc != nil && len(ps) == 0 {
-			var f struct {
-				Works []string `json:"works"`
-			}
-			catalog.Decode(doc, &f)
-			for _, id := range f.Works {
-				if id == w.ID {
-					return e.Name(), "", true
-				}
-			}
-		}
-	}
-	return "", "", false
-}
-
 // RunSeries 对系列（或多作品集合）执行跨作品连续性检查（series-continuity-review 主规格）：合并成员作品的
 // 场景集合（按 works 顺序），在合并集合上执行时间线检查、系列级设定解析与跨作品状态矛盾（conflicting-state）；
 // 发现归属 message 中提及的场景（跨双作品的归先序更早作品的场景），message 标明涉及的作品。单作品调用
@@ -765,7 +766,7 @@ func RunSeries(root string, ws []*work.Work) ([]Finding, []workspace.Problem) {
 			continue
 		}
 		out = append(out, Finding{Scene: scene, Code: p.Code, Severity: "error",
-			Message: "[系列] " + p.Message + "；请修正时间标记或补充 after，或经作者决策豁免"})
+			Message: "[系列] " + p.Message + "，或经作者决策豁免"})
 	}
 	// 跨作品状态矛盾：同一设定条目在多部作品的最后生效 confirmed 状态不同。
 	perWork := map[string]map[string]string{} // work id → entry id → last confirmed state
@@ -807,7 +808,178 @@ func RunSeries(root string, ws []*work.Work) ([]Finding, []workspace.Problem) {
 			}
 		}
 	}
+	out = append(out, seriesDeadActing(root, ws)...)
 	return out, nil
+}
+
+// seriesDeadActing 报告跨作品终态人物出场（continuity-series-dead-acting）：对排在第二部及以后的作品中带长篇
+// 场景契约的场景，出场称谓在本作品设定集唯一命中 character 条目、且本作品在该场景之前没有该条目的已确认状态时，
+// 按 works 逆序在更早的作品中用同一称谓解析条目，取其最后生效的已确认状态（首个找到的即最新）；为保留词时报告
+// error 级 dead-acting，归属出场场景。台账或设定集无法加载的作品不参与，也不越过它向更早的作品查找。
+func seriesDeadActing(root string, ws []*work.Work) []Finding {
+	type ledger struct {
+		canon  []canon.Entry
+		events []state.Event
+		pos    map[string]int // 单元引用 → 单元树先序位置
+	}
+	ledgers := make([]*ledger, len(ws))
+	for i, w := range ws {
+		scoped, cps := canon.Resolve(root, w)
+		events, sps := state.List(root, w, true)
+		if (scoped == nil && hasError(cps)) || (events == nil && hasError(sps)) {
+			continue
+		}
+		l := &ledger{events: events, pos: map[string]int{}}
+		for k, x := range w.Units() {
+			l.pos[x.Ref] = k
+		}
+		for _, se := range scoped {
+			l.canon = append(l.canon, se.Entry)
+		}
+		ledgers[i] = l
+	}
+	var out []Finding
+	for j := 1; j < len(ws); j++ {
+		wj, lj := ws[j], ledgers[j]
+		if lj == nil {
+			continue
+		}
+		for _, s := range scenesIn(wj, wj.Root) {
+			ol, ops := sceneOutline(root, wj.UnitDir(s))
+			if len(ops) > 0 || !ExtendedContract(ol) {
+				continue
+			}
+			names, _ := declaredNames(ol)
+			for _, n := range names {
+				hits := matchCharacters(lj.canon, n)
+				if len(hits) != 1 || latestConfirmedState(lj.events, wj, hits[0].ID, s) != "" {
+					continue // 未命中或多义不判；本作品已有更早的已确认状态时由单作品检查负责
+				}
+				for i := j - 1; i >= 0; i-- {
+					li := ledgers[i]
+					if li == nil {
+						break // 更早作品的台账无法加载时不越过它判断（它可能记录了更晚的状态）
+					}
+					earlier := matchCharacters(li.canon, n)
+					if len(earlier) != 1 {
+						continue
+					}
+					st, scene := lastConfirmedState(li.events, li.pos, earlier[0].ID)
+					if st == "" {
+						continue
+					}
+					if slices.Contains(TerminalStates, st) {
+						out = append(out, Finding{Scene: s.Ref, Code: CodeDeadActing, Severity: "error",
+							Message: fmt.Sprintf("[系列] 出场人物「%s」在更早的作品 %s 中最新已确认状态为「%s」（场景 %s），仍在场景 %s 出场；请修正正文与状态，或经作者决策豁免",
+								n, ws[i].ID, st, scene, s.Ref)})
+					}
+					break // 只看最新的已确认状态
+				}
+			}
+		}
+	}
+	return out
+}
+
+// lastConfirmedState 返回条目 entry 按单元树先序（pos）最后生效的已确认状态与其场景（无则空串）。
+func lastConfirmedState(events []state.Event, pos map[string]int, entry string) (string, string) {
+	best, scene, at := "", "", -1
+	for _, e := range events {
+		p, ok := pos[e.Scene]
+		if !ok || e.Entry != entry || e.Status != state.StatusConfirmed || p < at {
+			continue
+		}
+		best, scene, at = e.State, e.Scene, p
+	}
+	return best, scene
+}
+
+// gateCodes 是纳入场景验收门禁的系列范围发现的错误码（continuity-series-accept-gate）。
+var gateCodes = []string{timeline.CodeSameTime, CodeConflictingState, CodeDeadActing}
+
+// SeriesGateFindings 返回作品 w 所在系列的、可纳入其场景验收门禁的跨作品发现（见 SeriesGate）。
+func SeriesGateFindings(root string, w *work.Work) []Finding {
+	_, _, gate := SeriesGate(root, w)
+	return gate
+}
+
+// SeriesGate 计算作品 w 所在系列的跨作品连续性：members 为按 works 顺序可加载的成员作品，all 为 RunSeries 的全部
+// 发现，gate 为可纳入 w 场景验收门禁的发现——error 级、错误码属于 gateCodes、涉及 w 的某个场景（同 involves）且涉及
+// 系列内另一作品。w 不属于系列、系列文件无法加载（按不属于系列处理）或可加载的成员不足两部时三者都为 nil。调用方在
+// 一条命令中复用结果（load-once-per-command）。
+func SeriesGate(root string, w *work.Work) (members []*work.Work, all, gate []Finding) {
+	s, _ := series.Of(root, w.ID)
+	if s == nil {
+		return nil, nil, nil
+	}
+	for _, id := range s.Works {
+		if id == w.ID {
+			members = append(members, w)
+		} else if mw, ps := work.Load(root, id); mw != nil && len(ps) == 0 {
+			members = append(members, mw)
+		}
+	}
+	if len(members) < 2 {
+		return nil, nil, nil
+	}
+	all, _ = RunSeries(root, members)
+	for _, f := range all {
+		if f.Severity != "error" || !slices.Contains(gateCodes, f.Code) {
+			continue
+		}
+		mine, other := false, false
+		for _, mw := range members {
+			for _, u := range scenesIn(mw, mw.Root) {
+				if mw.ID == w.ID {
+					mine = mine || involves(f, u.Ref)
+				} else {
+					other = other || f.Scene == u.Ref || mentions(f.Message, u.Ref)
+				}
+			}
+		}
+		if mine && other {
+			gate = append(gate, f)
+		}
+	}
+	return members, all, gate
+}
+
+// involves 报告发现 f 是否涉及场景 ref：归属该场景，或 message 以完整场景引用提及它；dead-acting 的过错只在出场
+// 场景，只按归属判定（不阻塞更早作品中确认终态的场景）。
+func involves(f Finding, ref string) bool {
+	return f.Scene == ref || (f.Code != CodeDeadActing && mentions(f.Message, ref))
+}
+
+// sceneSeriesFindings 从 SeriesGate 的 gate 中取涉及场景 ref 的发现（involves），归属改写为 ref，使豁免键为
+// （当前场景， 错误码）。
+func sceneSeriesFindings(fs []Finding, ref string) []Finding {
+	var out []Finding
+	for _, f := range fs {
+		if involves(f, ref) {
+			f.Scene = ref
+			out = append(out, f)
+		}
+	}
+	return out
+}
+
+// mentions 报告 message 是否以完整场景引用提及 ref：前后都不能紧跟 id 字符（避免 s1 匹配 s10）。
+func mentions(message, ref string) bool {
+	for i := 0; ; {
+		k := strings.Index(message[i:], ref)
+		if k < 0 {
+			return false
+		}
+		start, end := i+k, i+k+len(ref)
+		if (start == 0 || !isIDChar(message[start-1])) && (end == len(message) || !isIDChar(message[end])) {
+			return true
+		}
+		i = start + 1
+	}
+}
+
+func isIDChar(c byte) bool {
+	return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '-' || c == '_' || c == '/'
 }
 
 // firstMentionedScene 返回 message 中第一个被提及的（属于给定作品的）场景引用；两作品都提及时归先序更早
@@ -818,7 +990,7 @@ func firstMentionedScene(message string, ws []*work.Work) string {
 			if u.Type != outline.SceneType {
 				continue
 			}
-			if strings.Contains(message, u.Ref) {
+			if mentions(message, u.Ref) {
 				return u.Ref
 			}
 		}

@@ -1,0 +1,13 @@
+schema: strict-spec-driven/planned-change/v1
+schema_version: 1
+artifact_type: planned_change
+schema_file: ../../templates/strict-spec-driven/schemas/planned-change.yaml
+planned_change:
+  id: diagnostic-next-commands
+  milestone: usability-polish
+status: complete
+summary: 诊断下一步命令具体化，并以源码扫描测试防止回退
+details: 基线：grep 统计 internal/** 非测试代码中 "wa-cli help " 提示 110 处、分布在 33 个文件。先新增 go/ast 源码扫描测试，列出 next 只含 wa-cli help 字面量的诊断构造位置并与白名单比对；再按生命周期主路径包（cli、brief、outline、draft、lint、review、closeout、continuity、assembly、volume）把 error 级诊断的 next 改为带单元引用或产物路径的具体修复命令（例如 YAML 解析错误给出 validate <path> 与定位行号，help 仅作补充），其余位置写入带理由的白名单。每个被改造的诊断码补一条断言 next 内容的测试。注意 coding 教训 lesson-c2d85f（复用整体校验时错误码取决于检查顺序）与 lesson-ccfda7（参数问题判断）。若改造量超出单个变更合理规模，按包拆为多个缺陷变更。
+depends_on:
+  - short-story-beat-position
+  - impact-auto-hint

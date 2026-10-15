@@ -1,0 +1,32 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: fix-reopen-stale-acceptance
+approach:
+  - 在 internal/work 中新增 Reopen：解析单元后依次检查——汇总单元报告 lifecycle.derived-stage；stage 不是 done 报告 lifecycle.not-done；文体中没有任何阶段的必需产物含 acceptance 时报告 lifecycle.no-acceptance-stage；Work.Blockers 对该 done 单元没有验收阻塞项（验收仍有效）时报告 lifecycle.acceptance-current；否则在 YAML 节点树上只把该单元的 stage 改为文体中最后一个必需产物含 acceptance 的阶段并保存，复用 advance 的节点编辑与 work.anchored-value 处理。
+  - internal/cli：注册 reopen 命令（unit 参数、--dir、--json，输出键 unit 含 unit、type、previousStage 与 stage）；progress 对 done 单元有阻塞项时 commands 只含 wa-cli reopen <unit> --dir <dir> --json，按阶段而不是错误码选择下一步；next 未给出单元时列出 stage 为 done 但有阻塞项的非汇总单元；export 的 export.unaccepted 诊断对应单元 stage 为 done 时 next 依次为 wa-cli reopen 与 wa-cli review show。内置技能 wa-revise、wa-publish 各补一句 reopen 的用法。
+  - 按 single-blocker-source，把 done 单元的验收失效作为新的阻塞来源追加到 Work.Blockers：stage 为 done、非汇总单元、文体有验收阶段时，报告 review.AcceptanceBlockers 的 acceptance.invalid、acceptance.stale 或 acceptance.weaker-gate。没有验收记录的 done 单元（测试夹具与手写的 work.yaml 常见）不算阻塞项，保持 next-skips-done 场景不变，但 reopen 仍允许退回它们（否则无法导出）。advance 对 done 单元在调用 Blockers 之前就以 lifecycle.already-done 返回，行为不变。
+decisions:
+  reopen-command:
+    decision: 新增显式的 wa-cli reopen 命令把验收失效的 done 单元退回最后一个验收阶段，而不是放宽 accept 的阶段限制。
+    rationale: 作者选定（questions.yaml requirement-interpretation）。done 始终表示当前正文已验收；退回后审稿、阅读页确认、accept、advance 与导出全部复用现有流程与关卡，改动集中在一条命令与阻塞项来源；放宽 accept 会出现「done 但不能导出」的中间状态，并要改动 accept、next 与阅读页三处。
+  blockers-single-source:
+    decision: done 单元的验收失效作为阻塞项在 Work.Blockers 中计算，reopen 的资格判断、next 与 status 都通过它得到。
+    rationale: workspace-artifacts 技术规范 single-blocker-source（MUST）要求阻塞项只能由 Work.Blockers 计算、新增阻塞来源在其中追加；这样 reopen 的资格与 next 的列出条件同源，不会出现 next 提示 reopen 而 reopen 拒绝的情况。
+  next-by-stage:
+    decision: done 单元的阻塞项错误码与 review 阶段相同（acceptance.stale 等），下一步命令按单元阶段选择：done 时为 reopen，其他阶段沿用 review show 与 help accept。
+    rationale: lesson-660304：按错误码挑选下一步命令，会漏掉保留原错误码的阻塞项；同一错误码在两个阶段需要不同的下一步，必须按阶段分流。
+  no-delta-tech:
+    decision: 不新增或修改技术规范，tech/ 留空。
+    rationale: 实现遵循既有的 single-blocker-source、registry-declared、runnable-next、structured-edits 等规则，没有改变任何工程约定。
+alternatives:
+  - option: 放宽 accept：done 单元验收失效时允许直接 accept，并让 next 与阅读页列出
+    reason: 作者未选；会出现 stage 为 done 但正文未验收、不能导出的中间状态，改动分散在 accept、next、阅读页三处，阅读页的待确认列表还要识别 done 单元
+  - option: draft write 修改 done 单元正文时自动退回阶段
+    reason: 写入正文的副作用改变生命周期会让 Agent 的一次写入悄悄重开已完成作品，与「验收未过期时不能退回」的不变项冲突，也难以审计
+risks:
+  - next 未给出单元时会列出验收失效的 done 单元，依赖 next 输出「只含未完成单元」的调用方会看到新条目；规格 next-steps 同步修改
+  - 新命令自动成为 MCP tool（reopen），MCP 工具清单的测试与技能中的命令引用需要同步
+  - next 与 status 现在对每个 done 单元读取验收记录与正文并计算 SHA-256，开销与已完成正文总量成正比；长篇几百个已完成场景时可接受，后续若成瓶颈再按命令缓存
+  - 工作区 gate_level 调高后，所有在更宽松强度下验收的 done 单元都会以 acceptance.weaker-gate 出现在 next 中、下一步为 reopen；这与 export 拒绝它们一致，wa-auto 技能提示 Agent 先请作者确认再批量退回

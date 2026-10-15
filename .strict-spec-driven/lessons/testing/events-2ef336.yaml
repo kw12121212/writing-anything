@@ -1,0 +1,19 @@
+schema: strict-spec-driven/lesson/v1
+schema_version: 1
+artifact_type: lesson
+schema_file: templates/strict-spec-driven/schemas/lesson.yaml
+lesson:
+  id: events-2ef336
+  title: 场景大纲一旦声明 events 等扩展契约字段，验收就要求收口记录
+category: testing
+status: active
+created_at: '2026-10-07T17:01:18.958Z'
+updated_at: '2026-10-07T17:01:18.958Z'
+context: guarantee-test-gaps 为因果冲突写 CLI 验收测试：先让 scene-1 起因引用 scene-2 才声明的事件触发阻塞，再把事件改由 scene-1 声明来修正
+observation: 修正后 accept 仍以 closeout.missing 失败：场景大纲声明 events（以及 pov、state_changes、plants、recovers、causes 等扩展契约字段）后，验收关卡要求该场景有 closeout.yaml；另外决策队列无法加载时 continuity.Blockers 会把队列的解析错误当阻塞项返回，而不是作为第二个返回值
+takeaway: 在 CLI 验收类测试中修正冲突时，优先删除冲突字段而不是给被验收场景新增 events 等契约字段；若必须新增，先用 wa-cli scene close-out 补收口。断言 Blockers/EnsureWaivers 的失败路径前先读 Run 如何把台账与决策队列问题并入 fatal
+applies_when: 为 novel 等长篇作品编写 accept、review show 或连续性阻塞相关的 CLI 或包内测试，并在测试中修改场景大纲契约字段或构造决策队列损坏时
+occurrences:
+  - origin: guarantee-test-gaps
+    date: '2026-10-07'
+    evidence: internal/cli/continuity_test.go TestContinuityCausalityBlocksAccept 首版修正路径触发 closeout.missing；internal/continuity/causality_test.go TestCausalityQueueUnloadable 首版断言 Blockers 返回诊断失败

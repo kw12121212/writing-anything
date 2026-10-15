@@ -1,0 +1,37 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: fix-skills-install-upgrade
+sections:
+  Implementation:
+    reproduce:
+      text: 【复现】新增 TestInstallUpdatesOutdatedBuiltin：以 5ca203b 时的内置 wa-auto 为夹具（internal/skills/testdata/wa-auto-5ca203b.md），再次 Install 不应报告 skills.modified；修复前报告，记录失败输出
+      status: complete
+    history-file:
+      text: 生成 internal/skills/history.txt：遍历 git 中 internal/skills/skills/*/SKILL.md 的全部已提交版本与当前内容，每行「<技能名> <SHA-256>」，按技能名与首次出现顺序排列；go:embed 打包
+      status: complete
+    install-outdated:
+      text: internal/skills.Install：已有文件哈希在该技能的历史清单中时视为旧版本并写入当前内容；skills.modified 的诊断文字说明「与任何发布过的内置版本都不同」；新增 TestSkillHistoryCoversCurrent 强制当前内容已登记，并覆盖清单格式错误与未知技能名
+      status: complete
+  Testing:
+    targeted-regression:
+      text: 运行定向回归测试（修复前失败、修复后通过）
+      status: complete
+      command: go test ./internal/skills ./internal/cli -count=1 -run 'Install|Skill|History'
+    full-regression:
+      text: 运行完整回归（含覆盖率阈值与完成标准对账）
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    strict-ready:
+      text: strict-spec-cli ready 无阻塞项
+      status: complete
+      command: strict-spec-cli ready fix-skills-install-upgrade
+    strict-verify:
+      text: strict-spec-cli verify 通过
+      status: complete
+      command: strict-spec-cli verify fix-skills-install-upgrade
+testing_gates:
+  validation_task: targeted-regression
+  unit_test_task: full-regression

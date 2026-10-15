@@ -1,0 +1,61 @@
+schema: strict-spec-driven/question-list/v1
+schema_version: 1
+artifact_type: question_list
+schema_file: templates/strict-spec-driven/schemas/question-list.yaml
+change: impact-auto-hint
+open: []
+resolved:
+  - id: requirement-problem
+    question: 今天具体出了什么问题，对谁？
+    context: 证据：里程碑 details「impact mark 需 Agent 手动执行，canon set 不提示」与 intake_questions impact-auto-mark context。影响 proposal 范围。
+    answer: 写长篇的作者与接入的 Agent：修改被已验收场景引用的设定、状态、知情、伏笔或场景契约后，必须记得手动运行 impact mark，忘记时后续已验收场景不会被标为需复查，组稿关卡失效
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-outcome
+    question: 什么可观察的变化证明问题解决了？
+    context: 证据：里程碑 done_criteria 关于 canon set 的条目与 planned change details 的测试清单。影响 spec delta 与测试。
+    answer: 修改被两个后续已验收场景与一个未验收场景引用的设定条目文本后，canon set --json 的 changedPaths 含 rechecks 文件，impact list 列出两条 open 标记，未验收场景只出现在输出提示中；再次修改不新增标记与任务包；只改注释不触发；next 对 open 标记给出 impact clear --confirmed-by-author 命令
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-trigger
+    question: 为什么现在做？
+    context: 证据：里程碑 notes「来源：2026-10-07 路线图里程碑审计 P2 项」；planned change depends_on 为空，里程碑依赖的 core-gate-hardening 与 novel-guarantee-hardening 已完成。影响优先级。
+    answer: 审计 P2 项，作者已于 2026-10-07 确认方案，且没有未满足的依赖
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-non-goals
+    question: 哪些明确不做？
+    context: 证据：里程碑 scope.out 与 intake_questions recommendation「不提供跳过自动标记的参数」。影响 proposal 范围。
+    answer: 不新增命令或文体、不提供跳过参数、不改 impact 预览与 mark 的计算规则、不做里程碑其他计划变更
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-decision
+    question: 修改被引用的目标时，是否自动落盘复查标记？
+    context: 证据：里程碑 intake_questions impact-auto-mark 的 recommendation（已定，2026-10-07 作者确认）。影响 spec delta、实现与测试。
+    answer: 被已验收场景引用时自动落盘复查标记，只被未验收场景引用时只提示；只有语义字段变化（设定文本、状态描述、伏笔计划、契约起因与状态变化）触发，注释与排版不触发；open 标记去重且不重复生成任务包；作者确认无影响用 impact clear --confirmed-by-author 解除；不提供跳过参数
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: accepted-definition
+    question: 「已验收场景」如何判定？
+    context: 路线图未定义判定口径。影响实现与测试。证据：internal/recall、internal/assembly 与 impact.recallHit 都以 stage 为 done 表示已验收。
+    answer: 以场景 stage 为 done 判定（见 design 决策 accepted-means-done），与仓库既有口径一致
+    status: resolved
+    answered_by: roadmap
+  - id: dedup-granularity
+    question: 「同一场景已有 open 标记时跳过」按场景还是按（场景，目标）？
+    context: planned change details 写「同一场景已有 open 标记时跳过且不重复生成任务包」；rechecks 领域校验按（场景，目标）至多一条 open。影响实现与测试。
+    answer: 标记按（场景，目标）去重以保留每个修改来源，任务包按场景去重——场景已有任何 open 标记时不再生成任务包（见 design 决策 dedup-scene-target），同时满足作者「不重复标记、不重复生成任务包」的要求
+    status: resolved
+    answered_by: roadmap
+  - id: requirement-interpretation
+    question: Which reading of the request is intended, where more than one is possible?
+    context: 证据：planned change details 与里程碑 intake_questions impact-auto-mark 的 recommendation（2026-10-07 作者确认）。影响 spec delta 与实现。
+    answer: 按 planned change details 理解：五个修改命令写入成功后比较修改前后的语义字段，有变化才调用 impact 引用图；受影响场景中已验收者自动写入 rechecks/<work>.yaml 并生成 causality 任务包，同一场景已有 open 标记时不重复标记、不重复生成任务包，未验收者只在输出中列出；命令输出新增受影响场景清单；next 给出 impact clear --confirmed-by-author --confirmation 与 review plan 命令；不提供跳过参数
+    status: resolved
+    kind: requirement
+    answered_by: roadmap

@@ -164,7 +164,8 @@ func TestConfirmRejectTransitions(t *testing.T) {
 	if len(ps) > 0 {
 		t.Fatal(ps)
 	}
-	if e.Status != StatusConfirmed || e.Confirmation == nil || *e.Confirmation != "作者确认旧伤复发" || e.DecidedAt == nil || !strings.HasSuffix(*e.DecidedAt, "Z") {
+	if e.Status != StatusConfirmed || e.Confirmation == nil || *e.Confirmation != "作者确认旧伤复发" || e.DecidedAt == nil || !strings.HasSuffix(*e.DecidedAt, "Z") ||
+		e.Channel == nil || *e.Channel != "cli" {
 		t.Fatalf("confirmed event = %+v", e)
 	}
 	if len(changed) != 1 {

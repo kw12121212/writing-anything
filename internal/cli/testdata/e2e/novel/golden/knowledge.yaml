@@ -8,6 +8,7 @@ events:
     character: char-chen-shouzhuo
     status: confirmed
     confirmation: 作者：陈守拙二十年前就知道真相，登记无误。
+    channel: cli
     decided_at: "2026-06-20T12:00:00Z"
   - id: kn-02
     scene: stopped-at-417/ch1-s2
@@ -15,6 +16,7 @@ events:
     character: char-han-jiang
     status: confirmed
     confirmation: 作者：老韩揣着那封信二十年，登记无误。
+    channel: cli
     decided_at: "2026-06-20T12:00:00Z"
   - id: kn-03
     scene: stopped-at-417/ch2-s2
@@ -22,6 +24,7 @@ events:
     character: reader
     status: confirmed
     confirmation: 作者：倒叙里读者看见了铁盒里的信，登记到读者名下。
+    channel: cli
     decided_at: "2026-06-20T12:00:00Z"
   - id: kn-04
     scene: stopped-at-417/ch2-s3
@@ -29,6 +32,7 @@ events:
     character: char-chen-shouzhuo
     status: confirmed
     confirmation: 作者：信交到陈守拙手上，知情登记。
+    channel: cli
     decided_at: "2026-06-20T12:00:00Z"
   - id: kn-05
     scene: stopped-at-417/ch3-s2
@@ -36,8 +40,11 @@ events:
     character: char-lin-wan
     terms:
       - 为了救人
+      - 潮生溺水
+      - 救溺水的潮生
     status: confirmed
     confirmation: 作者：补登溺亡真相的揭示词。
+    channel: cli
     decided_at: "2026-06-20T12:00:00Z"
   - id: kn-06
     scene: stopped-at-417/ch3-s2
@@ -45,6 +52,7 @@ events:
     character: char-zhou-huifang
     status: confirmed
     confirmation: 作者：周慧芳当晚才听全。
+    channel: cli
     decided_at: "2026-06-20T12:00:00Z"
   - id: kn-07
     scene: stopped-at-417/ch3-s2
@@ -52,8 +60,11 @@ events:
     character: reader
     terms:
       - 为了救人
+      - 潮生溺水
+      - 救溺水的潮生
     status: confirmed
     confirmation: 作者：读者同场获知，揭示词一致。
+    channel: cli
     decided_at: "2026-06-20T12:00:00Z"
   - id: kn-08
     scene: stopped-at-417/ch3-s3
@@ -63,6 +74,7 @@ events:
       - 出生的时刻
     status: confirmed
     confirmation: 作者：信件内容的揭示词。
+    channel: cli
     decided_at: "2026-06-20T12:00:00Z"
   - id: kn-09
     scene: stopped-at-417/ch3-s3
@@ -72,4 +84,5 @@ events:
       - 出生的时刻
     status: confirmed
     confirmation: 作者：读者启信，揭示词一致。
+    channel: cli
     decided_at: "2026-06-20T12:00:00Z"

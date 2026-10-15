@@ -117,8 +117,11 @@ func TestDecide(t *testing.T) {
 	if len(ps) > 0 || d.Status != "decided" || *d.Choice != "b" || *d.Confirmation != "作者说就用乙" || *d.DecidedAt != "2026-09-30T04:00:00Z" || d.Answer != nil {
 		t.Fatalf("decide = %+v, %v", d, ps)
 	}
-	d, ps = Decide(root, "dec-2", "", "控制在 3000 字", "作者确认 3000 字", when)
-	if len(ps) > 0 || d.Choice != nil || *d.Answer != "控制在 3000 字" {
+	if d.Channel == nil || *d.Channel != "cli" {
+		t.Fatalf("decide channel = %v", d.Channel)
+	}
+	d, ps = DecideVia(root, "dec-2", "", "控制在 3000 字", "作者确认 3000 字", "preview", when)
+	if len(ps) > 0 || d.Choice != nil || *d.Answer != "控制在 3000 字" || *d.Channel != "preview" {
 		t.Fatalf("free answer = %+v, %v", d, ps)
 	}
 	Add(root, Input{Question: "开头", Options: []string{"甲", "乙"}}, units)

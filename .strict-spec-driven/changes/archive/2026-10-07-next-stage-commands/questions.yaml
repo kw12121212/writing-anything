@@ -1,0 +1,42 @@
+schema: strict-spec-driven/question-list/v1
+schema_version: 1
+artifact_type: question_list
+schema_file: templates/strict-spec-driven/schemas/question-list.yaml
+change: next-stage-commands
+open: []
+resolved:
+  - id: requirement-problem
+    question: 今天具体出了什么问题，对谁？
+    context: 证据：里程碑 core-gate-hardening details 的审计结论「internal/cli/units.go artifactNext 只为 marketing、review、acceptance 登记命令」，planned change next-stage-commands summary。影响 proposal 范围。
+    answer: 接入的 Agent 在新建作品或场景的 brief、outline、draft 阶段运行 wa-cli next 时得到空 commands，action 还要求直接在单元目录下写入 brief.yaml 等结构化产物，与「结构化产物只通过 wa-cli 变更」冲突
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-outcome
+    question: 什么可观察的变化证明问题解决了？
+    context: 证据：里程碑 done_criteria 第一条。影响测试与 spec delta。
+    answer: 新建 tech-blog 文章与 novel 场景在 brief、outline、draft 三个阶段运行 wa-cli next --json 时，每个缺少必需产物的阻塞项都至少带一条非 help 的可执行 wa-cli 命令，测试逐阶段断言；units_test.go 中「无命令」的断言被替换
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-trigger
+    question: 为什么现在做？
+    context: 证据：里程碑 core-gate-hardening notes「本里程碑承接 P0 项」与 order 100。影响优先级。
+    answer: 2026-10-07 里程碑审计把它列为与已交付完成标准直接冲突的 P0 缺口，属于核心门禁加固里程碑首批可并行的计划变更
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-non-goals
+    question: 哪些明确不做？
+    context: 证据：里程碑 scope.out 与 planned change details。影响 proposal 范围。
+    answer: 不做诊断下一步命令全面具体化（usability-polish）；不改 advance 诊断与阻塞项本身；不涉及卷末检查点、跨作品门禁、确认渠道与长篇技能
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-interpretation
+    question: 「给出 wa-cli brief set <unit> / draft write <unit>」应如何理解，命令仍须不含占位符吗？
+    context: 证据：planned change details「brief → wa-cli brief set <unit>（附 brief show）…draft → wa-cli draft write <unit>」；done_criteria 只要求「至少一条非 help 的可执行 wa-cli 命令」；规格 next-steps 要求 commands 可直接运行、不含占位符；仓库实测 brief set 无字段时报 input.invalid-value，draft write 无 --file 时读标准输入。影响 spec delta 与实现。
+    answer: commands 保持可直接运行：列出只读查看命令（brief show、outline show、context）作为非 help 命令，写入命令以 wa-cli help <命令> --json 给出用法；action 文字直接点名写入命令 brief set、outline set / scene contract、draft write
+    status: resolved
+    kind: requirement
+    answered_by: roadmap

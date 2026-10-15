@@ -38,8 +38,9 @@ stages:
 | --- | --- | --- |
 | stage | 是 | 生命周期阶段（如 `init`、`sources`、`brief`、`plan`、`outline`、`scene-contracts`、`draft`、`closeout`、`review`、`volume`、`recall`、`impact`、`handoff`、`assemble`、`export`）。分段注释用，重放器不依赖它改变行为。 |
 | note | 否 | 阶段说明，一句话，解释本阶段在写作流程中的位置。 |
-| command | 与 write_file 二选一 | wa-cli 参数序列（不含程序名、不含 `--dir`；原命令的 `--file` 已折算为 `input_ref`，文本输入一律经标准输入提供），数组元素均为字符串。 |
-| write_file | 与 command 二选一 | 文件级参与点：把 `input_ref` 的内容写入工作区内该相对路径（作者直接编辑正文等），此时 `command` 为 null。 |
+| command | 与 write_file、author_review 三选一 | wa-cli 参数序列（不含程序名、不含 `--dir`；原命令的 `--file` 已折算为 `input_ref`，文本输入一律经标准输入提供），数组元素均为字符串。 |
+| write_file | 与 command、author_review 三选一 | 文件级参与点：把 `input_ref` 的内容写入工作区内该相对路径（作者直接编辑正文等），此时 `command` 为 null。 |
+| author_review | 与 command、write_file 三选一 | 阅读页参与点：作品 id。重放器取 `wa-cli next <work>` 列出的待作者复核（Pending Author Review）项，模拟作者在本地阅读页（`preview --serve`）带令牌经 `POST /author-review` 批量复核，断言写入 `.writing-anything/author-reviews.yaml` 且复核后不再有待复核项；此时 `command` 为 null。 |
 | input_ref | write_file 必填；stdin 步骤可选 | 文本来源：相对语料目录的路径（如 `inputs/ch1-s1.md`）；无文本输入时为 null。 |
 | expect_exit | 是 | 期望退出码（Exit Code）：0 成功，1 校验或执行失败，2 用法错误。负向步骤（预期被拒绝的命令）以非 0 记录，同样真实发生在创作流程中。 |
 | expect_code | 否 | 期望诊断（Diagnostic）错误码（如 `volume.unconfirmed`）：失败步骤必填，成功步骤为 null；逗号分隔多个码时全部都必须出现在诊断中（如 `assemble.scenes-open,assemble.rechecks`）。 |
@@ -47,7 +48,7 @@ stages:
 
 ## 约定
 
-- 重放器（`replay-harness`）负责：在临时目录以 `--dir <tmp>` 执行；补 `--json`（解析输出信封时）；冻结时间源（`now` 固定，与 `TestTechBlogEndToEnd` 相同模式）；逐步断言 `expect_exit`、`expect_code` 与 `stdout_contains`，关键阶段校验 changedPaths；`write_file` 步骤按声明写入工作区文件。
-- `expect_exit` 非 0 的步骤是创作流程真实发生过的拒绝（人工编辑保护 `draft.human-edited`、部未确认时验收被 `volume.unconfirmed` 阻塞、open 复查标记与未完成场景下组稿被拒、悬空伏笔阻塞组稿 `assemble.continuity`、未经授权放弃伏笔 `threads.author-confirmation`），不是虚构的失败注入；临时注入违例属于 `golden-assertions`，不进本脚本。
+- 重放器（`replay-harness`）负责：在临时目录以 `--dir <tmp>` 执行；补 `--json`（解析输出信封时）；冻结时间源（`now` 固定，与 `TestTechBlogEndToEnd` 相同模式）；逐步断言 `expect_exit`、`expect_code` 与 `stdout_contains`，关键阶段校验 changedPaths；`write_file` 步骤按声明写入工作区文件；`author_review` 步骤按上表在进程内调用阅读页的复核端点。
+- `expect_exit` 非 0 的步骤是创作流程真实发生过的拒绝（人工编辑保护 `draft.human-edited`、部未确认时验收被 `volume.unconfirmed` 阻塞、open 复查标记与未完成场景下组稿被拒、悬空伏笔阻塞组稿 `assemble.continuity`、未经授权放弃伏笔 `threads.author-confirmation`、strict 下命令行渠道的确认未经作者复核时组稿被拒 `assemble.unreviewed`），不是虚构的失败注入；临时注入违例属于 `golden-assertions`，不进本脚本。
 - 脚本一次录制、只追加不重排：修订语料时按阶段追加或替换步骤后，同步更新 `matrix.yaml` 的对应条目与 `golden/` 黄金文件。
 - 命令中的中文文本（标题、确认原话等）允许内联；只有正文与长文本输入必须走 `input_ref`。

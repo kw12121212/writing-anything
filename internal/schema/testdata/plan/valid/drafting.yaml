@@ -7,6 +7,7 @@ steps:
     sources: [src-idea]
     confirmed_by_author: true
     confirmation: 作者：这句话就是这本书
+    channel: preview
     confirmed_at: 2026-10-03T08:00:00Z
   - id: cast
     title: 人物表

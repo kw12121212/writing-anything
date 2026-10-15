@@ -1,0 +1,43 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: fix-reopen-stale-acceptance
+sections:
+  Implementation:
+    reproduce-dead-end:
+      text: 【复现】在 internal/cli 新增回归测试：minimal 作品验收并推进到 done 后用 draft write 修改正文，断言 export 报 export.unaccepted、accept 报 accept.wrong-stage、advance 报 lifecycle.already-done、next 不列出该单元；并断言 wa-cli reopen 退回 review 后可重新审稿、accept、advance、export。修复前因 reopen 不存在而失败，记录失败输出
+      status: complete
+    work-reopen:
+      text: internal/work：新增 Reopen（汇总单元、not-done、no-acceptance-stage、acceptance-current、anchored-value 检查，只改 stage 为最后一个验收阶段，验收失效或没有验收记录时允许）与错误码常量；Work.Blockers 为 done 非汇总单元追加验收失效阻塞项（复用 review.AcceptanceBlockers）
+      status: complete
+    cli-reopen:
+      text: internal/cli：注册 reopen 命令与输出、诊断 next；progress 对 done 单元有阻塞项时 commands 只含 wa-cli reopen；next 未给出单元时列出验收失效的 done 单元；export.unaccepted 对 done 单元的 next 依次为 reopen 与 review show
+      status: complete
+    skills-reopen:
+      text: 内置技能 wa-revise、wa-publish 各补一句：修改已完成（done）作品的正文后验收失效，用 wa-cli reopen <单元> 退回再重新审稿、请作者验收；同步可能存在的命令清单（MCP 工具、技能引用）测试
+      status: complete
+    unit-tests:
+      text: 补充单元测试：internal/work 的 Reopen 各错误分支与 Blockers 的 done 分支；internal/cli 的 reopen 诊断 next、next/status 输出、export 三种格式的 next；断言具体错误码与字面量
+      status: complete
+  Testing:
+    targeted-regression:
+      text: 运行复现与修复的定向回归测试（修复前失败、修复后通过）
+      status: complete
+      command: go test ./internal/work ./internal/cli ./internal/export ./internal/skills ./internal/mcp -count=1 -run 'Reopen|Next|Export|Skill|Tool'
+    full-regression:
+      text: 运行完整回归（含覆盖率阈值与完成标准对账）
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    strict-ready:
+      text: strict-spec-cli ready 无阻塞项
+      status: complete
+      command: strict-spec-cli ready fix-reopen-stale-acceptance
+    strict-verify:
+      text: strict-spec-cli verify 通过
+      status: complete
+      command: strict-spec-cli verify fix-reopen-stale-acceptance
+testing_gates:
+  validation_task: targeted-regression
+  unit_test_task: full-regression

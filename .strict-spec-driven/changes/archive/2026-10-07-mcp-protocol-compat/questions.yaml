@@ -1,0 +1,48 @@
+schema: strict-spec-driven/question-list/v1
+schema_version: 1
+artifact_type: question_list
+schema_file: templates/strict-spec-driven/schemas/question-list.yaml
+change: mcp-protocol-compat
+open: []
+resolved:
+  - id: requirement-problem
+    question: 今天具体出了什么问题，对谁？
+    context: 证据：里程碑 novel-guarantee-hardening details「internal/mcp/mcp.go check() 要求每个请求带 _meta，initialize 被以 -32602 拒绝」与 intake_questions mcp-versions。影响 proposal 范围。
+    answer: 只发送 initialize 的现有 MCP 客户端（2025-11-25 与 2025-06-18）接入 wa-cli mcp 时 initialize 以 -32602 被拒且错误未列出支持版本，Agent 无法通过 MCP 使用 wa-cli，作者也看不到原因
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-outcome
+    question: 什么可观察的变化证明问题解决了？
+    context: 证据：里程碑 done_criteria 中 MCP 一条与 planned change details 的测试列表。影响 spec delta 与测试。
+    answer: 以 2025-11-25 与 2025-06-18 发送 initialize 的客户端分别协商到所请求版本，完成 initialized 后能列出并调用 tool、读取并订阅 wa://feedback 收到更新通知；请求其他版本时协商到 2025-11-25；带 _meta 的 2026-07-28 请求行为不变；server/discover 的 supportedVersions 列出三个版本；旧版会话未 initialize 即调用被拒；测试覆盖每个版本
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-trigger
+    question: 为什么现在做？
+    context: 证据：里程碑 notes「来源：2026-10-07 路线图里程碑审计 P1 项」，planned change depends_on 为空。影响优先级。
+    answer: 2026-10-07 里程碑审计把 MCP 服务无法被只发送 initialize 的现有客户端接入列为 P1 项，本变更没有未满足的依赖，且 agent-dogfood 依赖它
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-non-goals
+    question: 哪些明确不做？
+    context: 证据：里程碑 scope.out「HTTP、SSE 等远程 MCP 传输」与 planned change details「不支持 2025-03-26 及更早版本」。影响 proposal 范围。
+    answer: 不支持 2025-03-26 及更早版本，不做 HTTP、SSE 等远程传输，不新增 tool、资源或 prompt，不改变 2026-07-28 请求的行为；claude-code 与 codex 实际版本的真实验证留给 agent-dogfood
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-interpretation
+    question: 「双代服务端」与「作用域为该 stdio 进程」应如何理解？
+    context: 证据：里程碑 intake_questions mcp-versions 已定（2026-10-07 作者确认），planned change details「带 _meta 的请求按 2026-07-28 无状态处理（现有行为不变）；initialize 请求在该 stdio 进程内选择旧版语义」「握手与会话状态代码按版本隔离，工具、资源、提示的业务映射共用」。影响 spec delta 与实现。
+    answer: 同一个 wa-cli mcp 进程同时服务两代：带 _meta 协议版本的请求始终按 2026-07-28 处理；initialize 成功后该进程有一个旧版会话，之后不带 _meta 协议版本的请求按协商的旧版语义处理，会话随进程结束；握手与会话状态单独实现，tool、资源、prompt 的映射两代共用（见 design era-routing）
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: legacy-extra-methods
+    question: 旧版会话是否还需要 ping 与 resources/unsubscribe？
+    context: 证据：planned change details 列出 initialized 后接受的方法，不含 ping 与 resources/unsubscribe；但 2025-06-18 与 2025-11-25 规范（Context7 查询）中 ping 是基础协议的一部分、初始化期间也允许，resources/unsubscribe 是 subscribe 能力的配套方法。影响实现与测试，不影响范围外项。
+    answer: 在旧版会话中支持 ping（initialize 之后任何时候）与 resources/unsubscribe，二者不引入新的业务映射，只是让声明了 resources.subscribe 的旧版会话符合所协商版本的基础协议；2026-07-28 请求中 ping 仍返回 -32601
+    status: resolved
+    answered_by: roadmap

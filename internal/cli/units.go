@@ -15,6 +15,7 @@ import (
 	"github.com/kw12121212/writing-anything/internal/outline"
 	"github.com/kw12121212/writing-anything/internal/review"
 	"github.com/kw12121212/writing-anything/internal/schema"
+	"github.com/kw12121212/writing-anything/internal/volume"
 	"github.com/kw12121212/writing-anything/internal/work"
 	"github.com/kw12121212/writing-anything/internal/workspace"
 )
@@ -79,14 +80,25 @@ var advanceCommand = &command{
 	run:        runAdvance,
 }
 
-var nextCommand = &command{
-	name:       "next",
-	summary:    "列出单元（Unit）的当前阶段（Stage）、阻塞项（Blocker）与下一步命令；汇总单元（Aggregated Unit）的阶段与阻塞项由子单元汇总",
-	args:       []argSpec{{"unit", "只列出该单元；省略时列出所有未完成的单元。" + unitRefHelp, false}},
+var reopenCommand = &command{
+	name:       "reopen",
+	summary:    "把验收（Acceptance）失效的已完成（done）单元（Unit）退回文体中最后一个需要验收的阶段（Stage），之后重新审稿（Review）并经作者确认重新验收；验收仍有效时拒绝",
+	args:       []argSpec{{"unit", unitRefHelp, true}},
 	flags:      []flagSpec{dirFlag},
-	outputKeys: []outputKey{{"steps", "下一步数组，每项含 unit、stage、blockers、action、commands、feedback（未处理完的作者反馈）与 progress（汇总单元的进度，其他单元为 null）"}},
+	outputKeys: []outputKey{{"unit", "退回后的单元：unit、type、previousStage（done）与 stage；失败时为 null"}},
 	exitCodes:  standardExitCodes,
-	run:        runNext,
+	run:        runReopen,
+}
+
+var nextCommand = &command{
+	name:    "next",
+	summary: "列出单元（Unit）的当前阶段（Stage）、阻塞项（Blocker）与下一步命令；汇总单元（Aggregated Unit）的阶段与阻塞项由子单元汇总",
+	args:    []argSpec{{"unit", "只列出该单元；省略时列出所有未完成的单元。" + unitRefHelp, false}},
+	flags:   []flagSpec{dirFlag},
+	outputKeys: []outputKey{{"steps", "下一步数组，每项含 unit、stage、blockers、action、commands、feedback（未处理完的作者反馈）、progress（汇总单元的进度，其他单元为 null）与 handoff（最近一条交接记录（Handoff Note）的 id、todo 与 instructions，没有时为 null）"},
+		{"pendingAuthorReviews", "给出单元时为其所在作品、省略时为全部作品的" + pendingAuthorReviewsHelp}},
+	exitCodes: standardExitCodes,
+	run:       runNext,
 }
 
 type workView struct {
@@ -138,10 +150,13 @@ type blockerView struct {
 	Message  string  `json:"message"`
 }
 
-// handoffRef 是 next 条目附带的最近交接记录摘要。
+// handoffRef 是 next 条目附带的最近交接记录摘要：id、未完成事项与作者新指示（数组永不为 null）。
+// WrittenAt 只用于文本输出，不进入 JSON。
 type handoffRef struct {
-	ID   string   `json:"id"`
-	Todo []string `json:"todo"`
+	ID           string   `json:"id"`
+	Todo         []string `json:"todo"`
+	Instructions []string `json:"instructions"`
+	WrittenAt    string   `json:"-"`
 }
 
 type stepView struct {
@@ -153,7 +168,7 @@ type stepView struct {
 	Feedback []feedbackView `json:"feedback"`
 	// Progress 只对汇总单元（Aggregated Unit）非空：子单元树中走生命周期的单元的完成进度。
 	Progress *progressView `json:"progress"`
-	// Handoff 是工作区最近一条交接记录（Handoff Note）的 id 与待办，供新会话接续；没有记录时为 null。
+	// Handoff 是工作区最近一条交接记录（Handoff Note）的 id、待办与作者新指示，供新会话接续；没有记录时为 null。
 	Handoff *handoffRef `json:"handoff"`
 }
 
@@ -166,6 +181,8 @@ type progressView struct {
 type nextResult struct {
 	Result
 	Steps []stepView `json:"steps"`
+	// PendingAuthorReviews 是待作者复核（Pending Author Review）的确认（strict 关卡下），组稿前须由作者在阅读页复核。
+	PendingAuthorReviews []pendingReviewView `json:"pendingAuthorReviews"`
 }
 
 // unitView 是 status 输出 units 中的一项。
@@ -336,7 +353,7 @@ func runAdvance(inv *invocation) int {
 	res.Diagnostics = diagnostics(problems, dir)
 	for i, p := range problems {
 		if p.Code == work.CodeAnchoredValue {
-			res.Diagnostics[i].Next = []string{"wa-cli help advance --json"}
+			res.Diagnostics[i].Next = []string{shellCommand("wa-cli", "next", inv.args[0], "--dir", dir, "--json"), "wa-cli help advance --json"}
 		}
 	}
 	return finish(inv, res, func(w io.Writer) error {
@@ -348,35 +365,82 @@ func runAdvance(inv *invocation) int {
 	})
 }
 
-func runNext(inv *invocation) int {
+func runReopen(inv *invocation) int {
 	dir := projectDir(inv)
-	res := &nextResult{Steps: []stepView{}}
+	res := &advanceResult{}
 	problems := workspace.Require(dir)
 	if problems == nil {
+		var w *work.Work
+		var u *work.Unit
+		var previous string
+		if w, u, previous, problems = work.Reopen(dir, inv.args[0]); u != nil {
+			res.Unit = &advancedUnit{Unit: u.Ref, Type: u.Type, PreviousStage: previous, Stage: u.Stage}
+			res.ChangedPaths = []string{w.Path}
+		}
+	}
+	res.Diagnostics = diagnostics(problems, dir)
+	ref := inv.args[0]
+	for i, p := range problems {
+		switch p.Code {
+		case work.CodeNotDone:
+			res.Diagnostics[i].Next = []string{shellCommand("wa-cli", "next", ref, "--dir", dir, "--json")}
+		case work.CodeAcceptanceCurrent:
+			res.Diagnostics[i].Next = []string{shellCommand("wa-cli", "review", "show", ref, "--dir", dir, "--json")}
+		case work.CodeAnchoredValue:
+			res.Diagnostics[i].Next = []string{shellCommand("wa-cli", "next", ref, "--dir", dir, "--json"), "wa-cli help reopen --json"}
+		}
+	}
+	return finish(inv, res, func(w io.Writer) error {
+		if res.Unit == nil {
+			return nil
+		}
+		_, err := fmt.Fprintf(w, "单元（Unit）%s 已从 %s 退回到 %s；请按当前正文重新审稿（Review）并经作者确认重新验收（Acceptance）\n",
+			res.Unit.Unit, res.Unit.PreviousStage, res.Unit.Stage)
+		return err
+	})
+}
+
+func runNext(inv *invocation) int {
+	dir := projectDir(inv)
+	res := &nextResult{Steps: []stepView{}, PendingAuthorReviews: []pendingReviewView{}}
+	problems := workspace.Require(dir)
+	if problems == nil {
+		var works []*work.Work
 		if len(inv.args) == 1 {
 			var w *work.Work
 			var u *work.Unit
 			if w, u, problems = work.Resolve(dir, inv.args[0]); u != nil {
-				res.Steps = append(res.Steps, step(dir, w, u))
+				res.Steps = append(res.Steps, step(dir, w, u, impact.OpenMarks(dir, w.ID)))
+				works = []*work.Work{w}
 			}
 		} else {
-			var works []*work.Work
 			works, _, problems = work.LoadAll(dir)
 			for _, w := range works {
+				marks := impact.OpenMarks(dir, w.ID) // 每个作品只读一次复查标记文件
 				for _, u := range w.Units() {
-					// 汇总单元的阶段由子单元汇总：推导阶段为 done 时不再列出（同 next-skips-done）。
-					if w.EffectiveStage(u) != catalog.StageDone {
-						res.Steps = append(res.Steps, step(dir, w, u))
+					// 汇总单元的阶段由子单元汇总：推导阶段为 done 时不再列出（同 next-skips-done）；
+					// 唯一例外是已 done 而有 open 复查标记的场景，列出以给出复查与解除命令。
+					// 验收失效的已完成单元同样列出，以给出 wa-cli reopen（reopen-stage）。
+					if w.EffectiveStage(u) != catalog.StageDone || len(openMarkTargets(marks, u)) > 0 ||
+						!w.Aggregated(u) && len(w.Blockers(dir, u)) > 0 {
+						res.Steps = append(res.Steps, step(dir, w, u, marks))
 					}
 				}
 			}
 		}
+		var rps []workspace.Problem
+		res.PendingAuthorReviews, rps = pendingReviews(dir, works)
+		problems = append(problems, rps...)
 	}
 	res.Diagnostics = diagnostics(problems, dir)
 	return finish(inv, res, func(w io.Writer) error {
 		var b strings.Builder
-		if len(res.Steps) == 0 && !hasError(res.Diagnostics) {
+		if len(res.Steps) == 0 && len(res.PendingAuthorReviews) == 0 && !hasError(res.Diagnostics) {
 			b.WriteString("没有需要推进的单元（Unit）\n")
+		}
+		// 各步骤共享同一条最近交接记录，只在顶部输出一次（与 JSON 的 handoff 字段一致）。
+		if len(res.Steps) > 0 && res.Steps[0].Handoff != nil {
+			b.WriteString(handoffText(res.Steps[0].Handoff))
 		}
 		for _, s := range res.Steps {
 			stage := s.Stage
@@ -394,12 +458,14 @@ func runNext(inv *invocation) int {
 				fmt.Fprintf(&b, "  反馈：%s\n", feedbackText(f))
 			}
 		}
+		b.WriteString(pendingReviewsText(res.PendingAuthorReviews))
 		_, err := io.WriteString(w, b.String())
 		return err
 	})
 }
 
-func step(dir string, w *work.Work, u *work.Unit) stepView {
+// step 返回单元 u 的下一步条目；marks 为作品的 open 复查标记（impact.OpenMarks）。
+func step(dir string, w *work.Work, u *work.Unit, marks []impact.FileMark) stepView {
 	blockers, commands := progress(dir, w, u)
 	s := stepView{Unit: u.Ref, Stage: w.EffectiveStage(u), Blockers: blockers, Action: action(dir, w, u, blockers), Commands: commands,
 		Handoff:  latestHandoff(dir),
@@ -411,12 +477,36 @@ func step(dir string, w *work.Work, u *work.Unit) stepView {
 	if n := len(s.Feedback); n > 0 {
 		s.Action = fmt.Sprintf("先处理 %d 条未处理的作者反馈（Feedback）；%s", n, s.Action)
 	}
+	// 复查标记（Recheck Mark）不是推进关卡：不进入 blockers，只在 action 中提示并追加复查与解除命令。
+	if targets := openMarkTargets(marks, u); len(targets) > 0 {
+		s.Action += fmt.Sprintf("；注意：本场景有 %d 个 open 复查标记（Recheck Mark，目标 %s），组稿前必须清零：按 wa-cli review plan 生成的 causality 任务包复查并基于当前正文重新审稿后用 wa-cli impact clear 解除；作者核对后确认无影响时运行 wa-cli impact clear %s %s --confirmed-by-author --confirmation <作者原话摘要>",
+			len(targets), strings.Join(targets, "、"), u.Ref, targets[0])
+		s.Commands = append(s.Commands, shellCommand("wa-cli", "review", "plan", u.Ref, "--dimension", "causality", "--dir", dir, "--json"))
+		for _, t := range targets {
+			s.Commands = append(s.Commands, shellCommand("wa-cli", "impact", "clear", u.Ref, t, "--dir", dir, "--json"))
+		}
+		s.Commands = append(s.Commands, "wa-cli help impact clear --json")
+	}
 	return s
 }
 
+// openMarkTargets 返回 marks 中场景单元 u 的 open 复查标记目标（按标记顺序）；没有时为空。
+func openMarkTargets(marks []impact.FileMark, u *work.Unit) []string {
+	if u.Type != outline.SceneType {
+		return nil
+	}
+	var out []string
+	for _, m := range marks {
+		if m.Scene == u.Ref {
+			out = append(out, m.Target)
+		}
+	}
+	return out
+}
+
 // progress 返回单元的阻塞项与可以直接运行的下一步命令，next 与 status 共用；数组永不为 nil。
-// 汇总单元（Aggregated Unit）不能推进：阻塞项为未完成子单元的汇总，commands 恒为空数组
-// （逐场景的可执行命令列在各自的条目上）。
+// 汇总单元（Aggregated Unit）不能推进：阻塞项为未完成子单元的汇总，commands 为空数组（逐场景的可执行命令列在
+// 各自的条目上），唯一例外是部（卷）有未确认的卷末检查点时列出 volume confirm。
 func progress(dir string, w *work.Work, u *work.Unit) ([]blockerView, []string) {
 	blockers, commands := []blockerView{}, []string{}
 	if w.Aggregated(u) {
@@ -427,6 +517,11 @@ func progress(dir string, w *work.Work, u *work.Unit) ([]blockerView, []string) 
 			}
 			blockers = append(blockers, v)
 		}
+		// 部（卷）的卷末检查点已生成而未经作者确认时，列出确认命令（units-and-lifecycle 的 derived-stage）。
+		if pendingCheckpoint(dir, w, u) {
+			commands = append(commands, shellCommand("wa-cli", "volume", "confirm", u.Ref, "--dir", dir, "--json"),
+				"wa-cli help volume confirm --json")
+		}
 		return blockers, commands
 	}
 	for _, b := range w.Blockers(dir, u) {
@@ -435,10 +530,15 @@ func progress(dir string, w *work.Work, u *work.Unit) ([]blockerView, []string) 
 			v.Decision = &b.Decision
 		}
 		blockers = append(blockers, v)
+		if u.Stage == catalog.StageDone {
+			// 已完成单元的阻塞项只有验收失效，错误码与 review 阶段相同，下一步按阶段而不是错误码选择（reopen-stage）。
+			commands = []string{shellCommand("wa-cli", "reopen", u.Ref, "--dir", dir, "--json")}
+			continue
+		}
 		// 被缺失产物阻塞时只能列出为该产物登记的生成命令（见 artifactNext）。
 		cmds := blockerNext(dir, b.Code, b.Path)
 		if b.Code == work.CodeMissingArtifact {
-			cmds = artifactNext(dir, b.Artifact, b.Path)
+			cmds = artifactNext(dir, u, b.Artifact, b.Path)
 		}
 		for _, c := range cmds {
 			if !slices.Contains(commands, c) {
@@ -452,7 +552,7 @@ func progress(dir string, w *work.Work, u *work.Unit) ([]blockerView, []string) 
 	return blockers, commands
 }
 
-// blockerNext 返回解除一个阻塞项的下一步命令（brief-gate、decision-blocking）；缺失产物没有登记的命令。advance 的诊断
+// blockerNext 返回解除一个阻塞项的下一步命令（brief-gate、decision-blocking）；缺失产物的命令由 artifactNext 登记。advance 的诊断
 // （经 next）与 next、status 的 commands 都由它给出；path 为阻塞项的路径。
 func blockerNext(dir, code, path string) []string {
 	switch code {
@@ -484,17 +584,60 @@ func blockerNext(dir, code, path string) []string {
 	return nil
 }
 
-// artifactNext 返回为必需产物登记的生成命令：营销要素（marketing）、审稿（review）与验收（acceptance）；其他产物还没有登记命令。
-func artifactNext(dir, artifact, unitDir string) []string {
+// artifactNext 返回为缺失的必需产物（Required Artifact）登记的命令：每个登记的产物至少有一条不是 wa-cli help 的可执行命令
+// （查看现状或起草所需的上下文），写入命令需要作者或 Agent 给出取值，以 help 给出用法（cli-contract/runnable-next）。
+// 场景（scene）单元的大纲以场景契约（Scene Contract）写入。没有登记的产物返回 nil。
+func artifactNext(dir string, u *work.Unit, artifact, unitDir string) []string {
+	ref := work.RefOf(unitDir)
 	switch artifact {
+	case "brief":
+		return []string{shellCommand("wa-cli", "brief", "show", ref, "--dir", dir, "--json"), "wa-cli help brief set --json"}
+	case "outline":
+		if u.Type == outline.SceneType {
+			return []string{shellCommand("wa-cli", "outline", "show", ref, "--dir", dir, "--json"), "wa-cli help scene contract --json"}
+		}
+		return []string{shellCommand("wa-cli", "outline", "show", ref, "--dir", dir, "--json"), "wa-cli help outline set --json"}
+	case "draft":
+		return []string{shellCommand("wa-cli", "context", ref, "--dir", dir, "--json"), "wa-cli help draft write --json"}
 	case "marketing":
-		return []string{"wa-cli help marketing set --json"}
+		return []string{shellCommand("wa-cli", "marketing", "show", ref, "--dir", dir, "--json"), "wa-cli help marketing set --json"}
 	case "review":
-		return []string{"wa-cli help review record --json", shellCommand("wa-cli", "provenance", work.RefOf(unitDir), "--dir", dir, "--json")}
+		return []string{"wa-cli help review record --json", shellCommand("wa-cli", "provenance", ref, "--dir", dir, "--json")}
 	case "acceptance":
-		return []string{shellCommand("wa-cli", "review", "show", work.RefOf(unitDir), "--dir", dir, "--json"), "wa-cli help accept --json"}
+		return []string{shellCommand("wa-cli", "review", "show", ref, "--dir", dir, "--json"), "wa-cli help accept --json"}
 	}
 	return nil
+}
+
+// artifactWriter 返回产出必需产物的 wa-cli 写入命令与产物文件名，供 action 说明；没有登记时 ok 为 false。
+func artifactWriter(u *work.Unit, artifact string) (command, file string, ok bool) {
+	switch artifact {
+	case "brief":
+		return "wa-cli brief set", "brief.yaml", true
+	case "outline":
+		if u.Type == outline.SceneType {
+			return "wa-cli scene contract", "outline.yaml", true
+		}
+		return "wa-cli outline set", "outline.yaml", true
+	case "draft":
+		return "wa-cli draft write", "draft.md", true
+	case "marketing":
+		return "wa-cli marketing set", "marketing.yaml", true
+	case "review":
+		return "wa-cli review record", "review.yaml", true
+	case "acceptance":
+		return "wa-cli accept", "acceptance.yaml", true
+	}
+	return "", "", false
+}
+
+// pendingCheckpoint 报告部（卷）单元 u 是否有通过校验而未经作者确认的卷末检查点。
+func pendingCheckpoint(dir string, w *work.Work, u *work.Unit) bool {
+	if !volume.IsVolume(w, u) {
+		return false
+	}
+	v, ps := volume.Load(dir, w, u)
+	return v != nil && len(ps) == 0 && !v.ConfirmedByAuthor
 }
 
 // latestHandoff 返回工作区最近一条交接记录的摘要（没有记录或文件不合法时为 nil，问题由命令层报告）。
@@ -503,23 +646,43 @@ func latestHandoff(dir string) *handoffRef {
 	if note == nil || len(ps) > 0 {
 		return nil
 	}
-	return &handoffRef{ID: note.ID, Todo: note.Todo}
+	return &handoffRef{ID: note.ID, Todo: note.Todo, Instructions: note.Instructions, WrittenAt: note.WrittenAt}
+}
+
+// handoffText 以人读文字输出 next 顶部的最近交接记录：id、写入时间、未完成事项与作者新指示。
+func handoffText(h *handoffRef) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "最近交接记录（Handoff Note）%s（%s）\n", h.ID, h.WrittenAt)
+	for _, t := range h.Todo {
+		fmt.Fprintf(&b, "  未完成：%s\n", t)
+	}
+	for _, i := range h.Instructions {
+		fmt.Fprintf(&b, "  作者新指示：%s\n", i)
+	}
+	return b.String()
 }
 
 // action 以人读文字说明单元的下一步。
 func action(dir string, w *work.Work, u *work.Unit, blockers []blockerView) string {
 	if w.Aggregated(u) {
 		done, total := w.Progress(u)
+		var text string
 		switch {
 		case total == 0:
-			return "汇总单元（Aggregated Unit）：下面还没有场景，先用 wa-cli unit add 添加场景"
+			text = "汇总单元（Aggregated Unit）：下面还没有场景，先用 wa-cli unit add 添加场景"
 		case done < total:
-			return fmt.Sprintf("汇总单元（Aggregated Unit）：已完成 %d/%d 个场景，还有 %d 个未完成；先推进未完成的场景", done, total, total-done)
+			text = fmt.Sprintf("汇总单元（Aggregated Unit）：已完成 %d/%d 个场景，还有 %d 个未完成；先推进未完成的场景", done, total, total-done)
 		default:
-			return fmt.Sprintf("汇总单元（Aggregated Unit）：全部 %d 个场景已完成", total)
+			text = fmt.Sprintf("汇总单元（Aggregated Unit）：全部 %d 个场景已完成", total)
 		}
+		if pendingCheckpoint(dir, w, u) {
+			text += "；本部的卷末检查点（Volume Checkpoint）已生成、尚未经作者确认：请作者核对后用 wa-cli volume confirm 确认"
+		}
+		return text
 	}
 	switch {
+	case u.Stage == catalog.StageDone && len(blockers) > 0:
+		return fmt.Sprintf("已走完全部阶段，但验收（Acceptance）已失效（%s），不能导出；用 wa-cli reopen %s 退回后，按当前正文重新审稿（Review）并请作者确认重新验收", blockers[0].Message, u.Ref)
 	case u.Stage == catalog.StageDone:
 		return "已走完全部阶段"
 	case len(blockers) > 0:
@@ -545,7 +708,11 @@ func action(dir string, w *work.Work, u *work.Unit, blockers []blockerView) stri
 			case strings.HasPrefix(b.Code, "marketing."):
 				elements = append(elements, strings.TrimSuffix(b.Message, "。"))
 			default:
-				missing = append(missing, fmt.Sprintf("%s（在 %s/ 下写入 %s.yaml 或 %s.md）", b.Artifact, b.Path, b.Artifact, b.Artifact))
+				if cmd, file, ok := artifactWriter(u, b.Artifact); ok {
+					missing = append(missing, fmt.Sprintf("%s（用 %s 写入 %s/%s）", b.Artifact, cmd, b.Path, file))
+				} else {
+					missing = append(missing, fmt.Sprintf("%s（在 %s/ 下写入 %s.yaml 或 %s.md）", b.Artifact, b.Path, b.Artifact, b.Artifact))
+				}
 			}
 		}
 		var todo []string
@@ -571,18 +738,6 @@ func action(dir string, w *work.Work, u *work.Unit, blockers []blockerView) stri
 			todo = append(todo, "修复无法加载的决策队列（Decision Queue）")
 		}
 		return "先" + strings.Join(todo, "，并") + "，再推进"
-	}
-	if marks := impact.OpenMarks(dir, w.ID); len(marks) > 0 {
-		var mine []string
-		for _, m := range marks {
-			if m.Scene == u.Ref {
-				mine = append(mine, m.Target)
-			}
-		}
-		if len(mine) > 0 {
-			return fmt.Sprintf("阶段 %s 的必需产物已齐备，可以推进到 %s；注意：本场景有 %d 个 open 复查标记（Recheck Mark，目标 %s），复查通过后 wa-cli impact clear 解除（组稿前必须清零）",
-				u.Stage, w.NextStage(u), len(mine), strings.Join(mine, "、"))
-		}
 	}
 	return fmt.Sprintf("阶段 %s 的必需产物已齐备，可以推进到 %s", u.Stage, w.NextStage(u))
 }

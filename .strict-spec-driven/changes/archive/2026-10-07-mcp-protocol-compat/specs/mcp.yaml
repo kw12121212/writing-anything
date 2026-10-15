@@ -1,0 +1,49 @@
+schema: strict-spec-driven/delta-spec/v1
+schema_version: 1
+artifact_type: delta_spec
+schema_file: templates/strict-spec-driven/schemas/delta-spec.yaml
+target_spec: mcp
+operations:
+  ADDED:
+    mcp-legacy-session:
+      strength: MUST
+      statement: wa-cli mcp 必须为只发送 initialize 的旧版客户端提供旧版会话（Legacy Session），作用域为该 stdio 进程：initialize 的 params.protocolVersion 为 2025-11-25 或 2025-06-18 时结果的 protocolVersion 为所请求的版本，为其他字符串时为 2025-11-25；结果含 capabilities（tools、resources.subscribe 为 true、prompts）、serverInfo（name 为 wa-cli，version 为 wa-cli 的版本）与 instructions，不含 resultType。params.protocolVersion 缺失或不是字符串时返回错误 -32602，该进程已有旧版会话时再次 initialize 返回错误 -32600；两者的 message 列出支持的协议版本，data.supported 为 [2026-07-28, 2025-11-25, 2025-06-18]。收到 notifications/initialized 之前，旧版会话中除 ping 外的请求返回错误 -32600；之后接受 tools/list、tools/call、resources/list、resources/read、prompts/list、prompts/get、ping、resources/subscribe 与 resources/unsubscribe，不要求 params._meta，tool、资源与 prompt 的结果与错误与 2026-07-28 相同（mcp-tools、mcp-resources、mcp-prompts），但成功结果不含 resultType 与 _meta.io.modelcontextprotocol/serverInfo；其他方法返回 -32601。ping 返回空结果。resources/subscribe 的 params.uri 必须是 resources/read 能读取的资源，否则返回 -32602（message 为 Resource not found）；订阅后每隔 --interval 毫秒读取，内容与上次不同时发送 params 为 {uri} 的 notifications/resources/updated；重复订阅同一 URI 不重复通知，至多订阅 64 个 URI，超过时返回 -32602；resources/unsubscribe 后不再通知该 URI。旧版会话中 params._meta 含 io.modelcontextprotocol/protocolVersion 的请求仍按 2026-07-28 处理（mcp-serve）。不支持 2025-03-26 及更早版本的语义。
+      scenarios:
+        legacy-handshake:
+          - GIVEN: 已初始化的工作区 D 中有作品 my-post，wa-cli mcp --dir D 正在运行
+          - WHEN: 分别在两个进程中发送 protocolVersion 为 2025-11-25 与 2025-06-18 的 initialize，再发送 notifications/initialized、tools/list 与 tools/call feedback_list（都不带 _meta）
+          - THEN: initialize 结果的 protocolVersion 分别为所请求的版本，serverInfo.name 为 wa-cli，capabilities.resources.subscribe 为 true；tools/list 含 feedback_add，tools/call 结果的 isError 为 false、structuredContent 为命令的输出信封
+        legacy-subscribe:
+          - GIVEN: 旧版会话已完成 initialized，客户端用 resources/subscribe 订阅了 wa://feedback
+          - WHEN: 作者用 wa-cli feedback add 提交一条新反馈
+          - THEN: 客户端收到 params.uri 为 wa://feedback 的 notifications/resources/updated
+        legacy-negotiate-latest:
+          - GIVEN: wa-cli mcp --dir D 正在运行
+          - WHEN: 发送 protocolVersion 为 2024-11-05 的 initialize
+          - THEN: 结果的 protocolVersion 为 2025-11-25
+        legacy-gate:
+          - GIVEN: wa-cli mcp --dir D 正在运行
+          - WHEN: 未 initialize 时发送不带 _meta 的 tools/list；initialize 之后、notifications/initialized 之前发送 tools/list 与 ping；再发送一次 initialize
+          - THEN: 第一个返回错误 -32602；initialized 之前的 tools/list 返回错误 -32600、ping 返回空结果；第二次 initialize 返回错误 -32600，data.supported 为 [2026-07-28, 2025-11-25, 2025-06-18]
+        legacy-keeps-modern:
+          - GIVEN: 旧版会话已完成 initialized
+          - WHEN: 发送带 _meta（protocolVersion 2026-07-28 与 clientCapabilities）的 tools/list 与 ping
+          - THEN: 'tools/list 的结果含 resultType: complete 与 _meta 中的 serverInfo；ping 返回错误 -32601'
+  MODIFIED:
+    mcp-serve:
+      strength: MUST
+      statement: 'wa-cli mcp --dir <dir> 必须以 stdio 方式运行 MCP 服务：从标准输入逐行读取 JSON-RPC 2.0 消息（每条一行，至多 8 MiB），把响应与通知逐行写到标准输出，标准输出不写其他内容；标准输入结束时以退出码 0 结束。没有给出 --dir 时报告 mcp.missing-dir（next 为 wa-cli help mcp --json），未找到工作区时报告 workspace.not-found，都以退出码 1 退出、不读取标准输入。服务是双代服务端（Dual-era Server），支持协议版本 2026-07-28、2025-11-25 与 2025-06-18：params._meta 含 io.modelcontextprotocol/protocolVersion 的请求按 2026-07-28 无状态语义处理，此时 params._meta 还必须含 io.modelcontextprotocol/clientCapabilities，缺少时返回错误 -32602；版本不是 2026-07-28 时返回错误 -32022（message 为 Unsupported protocol version，data 含 supported 为 [2026-07-28, 2025-11-25, 2025-06-18] 与 requested）。method 为 initialize 的请求与旧版会话中的请求按 mcp-legacy-session 处理；没有建立旧版会话时，params._meta 不含 io.modelcontextprotocol/protocolVersion 的其他请求返回错误 -32602。每个 2026-07-28 成功结果含 resultType: complete 与 _meta.io.modelcontextprotocol/serverInfo（name 为 wa-cli，version 为 wa-cli 的版本）。server/discover 返回 supportedVersions [2026-07-28, 2025-11-25, 2025-06-18]、capabilities（tools、resources.subscribe 为 true、prompts）与 instructions。无法解析的行返回 -32700（id 为 null）；不是 JSON-RPC 2.0 对象的消息（如批量数组、数字、缺少 method 或 jsonrpc 不是 2.0）与 id 不是字符串或数字的请求返回 -32600；2026-07-28 请求的未知方法（包括已移除的 ping）返回 -32601；客户端发来的响应与未知的通知忽略。加 --json 时，在标准输入结束、退出之前多写一行输出信封，mcp 字段含 requests（处理的请求数）；--interval（毫秒，不超过 86400000 的正整数，默认 1000）为订阅轮询间隔，不合法时报告 input.invalid-value。'
+      scenarios:
+        discover:
+          - GIVEN: 已初始化的工作区 D
+          - WHEN: 向 wa-cli mcp --dir D 发送带 _meta（protocolVersion 2026-07-28 与 clientCapabilities）的 server/discover 请求
+          - THEN: 响应的 result.resultType 为 complete，supportedVersions 为 [2026-07-28, 2025-11-25, 2025-06-18]，capabilities.resources.subscribe 为 true，_meta 中 serverInfo.name 为 wa-cli
+        version-errors:
+          - GIVEN: wa-cli mcp --dir D 正在运行，尚未收到 initialize
+          - WHEN: 发送 _meta 中 protocolVersion 为 2025-11-25 的 tools/list 请求，以及没有 _meta 的 tools/list 请求
+          - THEN: 前者返回错误 -32022，data.supported 为 [2026-07-28, 2025-11-25, 2025-06-18]、requested 为 2025-11-25；后者返回错误 -32602
+        missing-dir:
+          - GIVEN: 当前目录有工作区
+          - WHEN: 运行 wa-cli mcp --json
+          - THEN: diagnostics 中有一条错误码为 mcp.missing-dir 的诊断，退出码为 1
+  REMOVED: {}

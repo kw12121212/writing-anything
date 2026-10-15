@@ -15,7 +15,7 @@ import (
 )
 
 const planHelp = "method（id 与 source）、path（没有 plan.yaml 时为 null）与 steps（每个步骤含 id、title、product、" +
-	"status（pending、drafted 或 confirmed）、text、sources、links、confirmedByAuthor、confirmation 与 confirmedAt）"
+	"status（pending、drafted 或 confirmed）、text、sources、links、confirmedByAuthor、confirmation、channel（确认渠道（Confirmation Channel），未确认为 null）与 confirmedAt）"
 
 var planShowCommand = &command{
 	name:    "plan show",
@@ -85,6 +85,7 @@ type planStepView struct {
 	Links             []string `json:"links"`
 	ConfirmedByAuthor bool     `json:"confirmedByAuthor"`
 	Confirmation      *string  `json:"confirmation"`
+	Channel           *string  `json:"channel"` // 确认渠道（Confirmation Channel）；未确认为 null
 	ConfirmedAt       *string  `json:"confirmedAt"`
 }
 
@@ -129,6 +130,7 @@ func buildPlanView(m *catalog.Method, source, rel string, f *plan.File) *plannin
 			r := f.Steps[i]
 			sv.Status, sv.Text, sv.ConfirmedByAuthor = "drafted", r.Text, r.ConfirmedByAuthor
 			sv.Sources, sv.Links, sv.Confirmation, sv.ConfirmedAt = r.Sources, r.Links, r.Confirmation, r.ConfirmedAt
+			sv.Channel = channelView(r.ConfirmedByAuthor, r.Channel)
 			if r.ConfirmedByAuthor {
 				sv.Status = "confirmed"
 			}

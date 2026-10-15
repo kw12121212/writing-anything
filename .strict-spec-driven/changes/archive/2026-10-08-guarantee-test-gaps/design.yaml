@@ -1,0 +1,22 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: guarantee-test-gaps
+approach:
+  - 只加测试与测试夹具，不改产品代码。因果冲突在 CLI 层用 continuityFixture 构造（场景起因引用后续场景声明的事件），断言 continuity 报告与 accept 阻塞、修正后通过；包内测试直接调用 Run/AcceptanceBlockers/EnsureWaivers/Blockers。语料设定冲突注入用 state propose + state confirm 登记韩江死亡（绑定 ch2-s3），ch3-s3 出场即 continuity.dead-acting，state reject 撤销后全绿。findings 辅助函数返回错误码到 severity 的映射，各注入直接断言 error。MCP 一致性测试复用 sampleArgs：样例 CLI 调用前后工作区快照不变即为只读命令，再在同一目录分别以新版请求与旧版会话调用对应 tool，content 文本逐字节等于 CLI 标准输出；断言只读命令数量下限与一组已知只读命令被识别。矩阵 structure 锚点改为从 novel_corpus_*_test.go 源码机械推导真实存在的测试函数。
+decisions:
+  dead-acting-injection:
+    decision: 设定冲突注入改用已死人物出场（continuity.dead-acting）
+    rationale: 里程碑完成标准要求设定冲突注入由 wa-cli continuity 报告；dead-acting 经 state propose/confirm/reject 全程只用 CLI，可完全撤销且不产生待决决策；canon.author-pinned 已由 canon 自身测试覆盖
+  readonly-by-snapshot:
+    decision: 只读命令按样例调用前后工作区快照不变机械识别，并以已知只读命令清单防止空转
+    rationale: 注册表没有只读标记，新增标记属于产品代码变更、超出本变更范围；快照判定随注册表自动扩展，已知清单保证判定不会因样例变化而静默丢失覆盖
+  structure-anchor-from-source:
+    decision: 矩阵 structure 锚点从测试源码推导函数名而不是硬编码清单
+    rationale: 与 negative 锚点从源码推导断言码的做法一致，让预算、遮蔽等专项测试可被矩阵引用且改名时立即失败
+  no-delta-spec:
+    decision: 不生成规格增量：本变更只加测试与测试夹具
+    rationale: 所有被测行为（连续性因果阻塞、dead-acting、提议确认语义、AIDA 写作法缺口、MCP 薄封装一致性、矩阵对账）已在 continuity、preferences、methods、mcp 等主规格中描述，本变更不改变任何可观察行为
+alternatives: []
+risks: []

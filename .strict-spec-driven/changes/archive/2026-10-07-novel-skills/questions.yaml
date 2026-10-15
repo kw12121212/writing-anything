@@ -1,0 +1,49 @@
+schema: strict-spec-driven/question-list/v1
+schema_version: 1
+artifact_type: question_list
+schema_file: templates/strict-spec-driven/schemas/question-list.yaml
+change: novel-skills
+open: []
+resolved:
+  - id: requirement-problem
+    question: 今天具体出了什么问题，对谁？
+    context: 证据：里程碑 core-gate-hardening details「internal/skills/skills 下 9 个 wa-* 技能未引用任何长篇连续性命令」。影响 proposal 范围。
+    answer: 接入的 Agent 只靠内置技能无法完成长篇的写后收口、状态与知情确认、连续性审查、任务包调度、影响传播、卷末检查点、交接与组稿，也不知道这些节点何时必须停下来请作者确认
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-outcome
+    question: 什么可观察的变化证明问题解决了？
+    context: 证据：里程碑 done_criteria 第三条。影响测试与 spec delta。
+    answer: 测试校验 novel 生命周期十二条关键命令都至少被一个内置技能引用，且引用的命令与参数都存在于 wa-cli help --json；完整回归通过
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-skill-split
+    question: 新增哪些技能、还是扩展现有技能？
+    context: 证据：planned change novel-skills details「新增 wa-scene、wa-continuity、wa-assemble 等技能，或扩展现有技能；wa-auto 按文体分流」。影响实现文件与测试中的技能数量。
+    answer: 按 details 首选方案新增 wa-scene、wa-continuity、wa-assemble 三个技能并扩展 wa-auto 的 novel 路径，内置技能由九个变为十二个
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-non-goals
+    question: 哪些明确不做？
+    context: 证据：里程碑 scope.out 与 planned change details「MCP prompts 随技能自动更新」。影响 proposal 范围。
+    answer: 不改任何 wa-cli 命令行为；不做 novel-guarantee-hardening 与 usability-polish 的内容；不改 MCP 实现
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-trigger
+    question: Why now — what forced this?
+    context: 'Why this is asked: work that nothing forced is the work most often thrown away later. This question catches a request that sounds reasonable but has no real driver behind it. What a sufficient answer contains: the concrete event, deadline, incident, or cost that made this surface now, or an honest statement that nothing did. Worked example: "the report was missed last month and it was raised with the team". What it changes: a change with no trigger is a candidate for deferral, and the answer is weighed at review before archive.'
+    answer: 2026-10-07 里程碑审计把它列为核心门禁加固里程碑的 P0 缺口；同里程碑的 next-stage-commands、volume-checkpoint-gate、series-accept-gate、confirmation-channel 已全部归档，按里程碑 details「长篇技能最后落地以描述最终行为」现在落地（证据：里程碑 details 与 planned change depends_on）
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-interpretation
+    question: Which reading of the request is intended, where more than one is possible?
+    context: 'Why this is asked: a short request usually admits several readings, and building the wrong one is indistinguishable from building nothing. What a sufficient answer contains: the reading that is meant, stated plainly enough to rule the others out — or a statement that only one reading exists and what it is. Worked example: "export means the version sent to the manager, not the one I read myself". What it changes: this fixes the scope boundary before any code is written, and settles disputes about what was asked for.'
+    answer: 按 planned change details 的首选读法：新增 wa-scene、wa-continuity、wa-assemble 三个技能并扩展 wa-auto 的 novel 路径；「覆盖」以完成标准为准——十二条关键命令都被至少一个技能引用，且命令与参数都存在于 wa-cli help --json（证据：里程碑 done_criteria 第三条）
+    status: resolved
+    kind: requirement
+    answered_by: roadmap

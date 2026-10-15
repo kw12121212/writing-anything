@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/kw12121212/writing-anything/internal/authorreview"
 	"github.com/kw12121212/writing-anything/internal/brief"
 	"github.com/kw12121212/writing-anything/internal/canon"
 	"github.com/kw12121212/writing-anything/internal/catalog"
@@ -95,7 +96,7 @@ var configResolvedCommand = &command{
 	name:       "config resolved",
 	summary:    "按 文体（Genre）→ 规范包（Pack）→ 项目配置 合并生效的设置，并列出每项的来源",
 	flags:      []flagSpec{dirFlag},
-	outputKeys: []outputKey{{"resolved", "解析后配置（Resolved Config），含 genre、packs、unitTypes、stages、rules、glossary、bannedTerms、style、rubric，每项带 source；有 error 级诊断时为 null"}},
+	outputKeys: []outputKey{{"resolved", "解析后配置（Resolved Config），含 genre（文体声明类别时带 category）、packs、unitTypes、stages、rules、glossary、bannedTerms、style、excludedStyle（按文体类别排除的文风条目及原因）、rubric，每项带 source；有 error 级诊断时为 null"}},
 	exitCodes:  standardExitCodes,
 	run:        runConfigResolved,
 }
@@ -358,7 +359,11 @@ func resolvedText(r *resolve.Resolved) string {
 	if r.Genre == nil {
 		b.WriteString("文体（Genre）：未设置\n")
 	} else {
-		fmt.Fprintf(&b, "文体（Genre）：%s（%s）\n", r.Genre.ID, r.Genre.Origin)
+		category := ""
+		if r.Genre.Category != "" {
+			category = "，文体类别（Genre Category）" + r.Genre.Category
+		}
+		fmt.Fprintf(&b, "文体（Genre）：%s（%s%s）\n", r.Genre.ID, r.Genre.Origin, category)
 	}
 	b.WriteString("规范包（Pack），按应用顺序：\n")
 	for _, p := range r.Packs {
@@ -445,6 +450,12 @@ func resolvedText(r *resolve.Resolved) string {
 			fmt.Fprintf(&b, "  %s%s\n", s.Text, from(s.Source))
 		}
 	}
+	if len(r.ExcludedStyle) > 0 {
+		b.WriteString("未生效的文风（按文体类别排除）：\n")
+		for _, s := range r.ExcludedStyle {
+			fmt.Fprintf(&b, "  %s%s：%s\n", s.Text, from(s.Source), s.Reason)
+		}
+	}
 	if section("评分标准（Rubric）", len(r.Rubric)) {
 		for _, it := range r.Rubric {
 			desc := ""
@@ -512,8 +523,9 @@ func checkWorkspace(dir string) (checked []string, works []*work.Work, problems 
 	rpchecked, rpps := reviewpacket.CheckWorks(dir, works)
 	imchecked, imps := impact.CheckWorks(dir, works)
 	plchecked, plps := plan.CheckUnitArtifacts(dir, works, catalog.LoadMethods(dir), unitDefaultMethod)
-	checked = slices.Concat(checked, more, wchecked, schecked, uchecked, bchecked, ochecked, fchecked, rchecked, mchecked, dchecked, lchecked, xchecked, cchecked, pchecked, echecked, tchecked, ychecked, kchecked, thchecked, stchecked, knchecked, cochecked, vpchecked, rpchecked, imchecked, plchecked)
-	return checked, works, slices.Concat(problems, ps, wps, sps, ups, bps, ops, fps, rps, mps, dps, lps, xps, cps, pps, eps, tps, yps, kps, thps, stps, knps, cops, vpps, rpps, imps, plps)
+	archecked, arps := authorreview.Check(dir)
+	checked = slices.Concat(checked, more, wchecked, schecked, uchecked, bchecked, ochecked, fchecked, rchecked, mchecked, dchecked, lchecked, xchecked, cchecked, pchecked, echecked, tchecked, ychecked, kchecked, thchecked, stchecked, knchecked, cochecked, vpchecked, rpchecked, imchecked, plchecked, archecked)
+	return checked, works, slices.Concat(problems, ps, wps, sps, ups, bps, ops, fps, rps, mps, dps, lps, xps, cps, pps, eps, tps, yps, kps, thps, stps, knps, cops, vpps, rpps, imps, plps, arps)
 }
 
 // defaultMethodOf 返回单元产物 rel 适用的文体默认写作法：只有作品的根单元适用，子单元不继承；
@@ -662,7 +674,7 @@ func next(p workspace.Problem, dir string) []string {
 			// 作品目录中缺少 work.yaml：init 不会补齐它，作品只能用 wa-cli new 创建。
 			return []string{"wa-cli help new --json", validateAll}
 		}
-		if k := schema.KindFor(p.Path); k != nil && (k.Name == "brief" || k.Name == "outline" || k.Name == "review" || k.Name == "acceptance" || k.Name == "marketing") {
+		if k := schema.KindFor(p.Path); k != nil && (k.Name == "brief" || k.Name == "outline" || k.Name == "review" || k.Name == "acceptance" || k.Name == "marketing" || k.Name == "author-reviews") {
 			// brief.yaml 途经符号链接或不是普通文件：需要作者把它换成普通文件，init 不会修复它。
 			return []string{status, validateAll}
 		}
@@ -673,6 +685,12 @@ func next(p workspace.Problem, dir string) []string {
 		return []string{initCmd}
 	case source.CodeModified:
 		return []string{validateAll}
+	case knowledge.CodeMissingTerms:
+		// 揭示词只能由作者决定，不给出带占位符的 knowledge set：给出用法与该作品的全部知情事件。
+		if parts := strings.Split(p.Path, "/"); len(parts) >= 4 {
+			return []string{"wa-cli help knowledge set --json", shellCommand("wa-cli", "knowledge", "list", parts[2], "--all", "--dir", dir, "--json")}
+		}
+		return []string{"wa-cli help knowledge set --json", validateAll}
 	case decision.CodeBlocking, brief.CodeMissingField, brief.CodeUnsourcedMessage, brief.CodeUnconfirmedMessage,
 		brief.CodeUnsourcedPremise, brief.CodeUnconfirmedPremise, brief.CodeInvalid,
 		outline.CodeInvalid, outline.CodeUncoveredMessage, outline.CodeMissingReason, marketing.CodeInvalid, marketing.CodeMissingField, marketing.CodeTooManyHeadlines, marketing.CodeHeadlineUnasked, marketing.CodeHeadlineStale:
@@ -683,7 +701,10 @@ func next(p workspace.Problem, dir string) []string {
 			return append(blockerNext(dir, p.Code, p.Path), shellCommand("wa-cli", "method", "list", "--dir", dir, "--json"))
 		}
 	case outline.CodeBeatPosition:
-		return []string{shellCommand("wa-cli", "lint", work.RefOf(strings.TrimSuffix(p.Path, "/"+draft.FileName)), "--dir", dir, "--json")}
+		// 单元自身的节拍指向 draft.md，场景的节拍指向 outline.yaml：都取文件所在的单元目录。
+		if i := strings.LastIndex(p.Path, "/"); i > 0 {
+			return []string{shellCommand("wa-cli", "lint", work.RefOf(p.Path[:i]), "--dir", dir, "--json")}
+		}
 	case brief.CodeUnknownMethod:
 		if p.Path != "" {
 			return []string{shellCommand("wa-cli", "method", "list", "--dir", dir, "--json"), validate}
@@ -726,7 +747,12 @@ func next(p workspace.Problem, dir string) []string {
 	case source.CodeExists:
 		return []string{shellCommand("wa-cli", "source", "list", "--dir", dir, "--json")}
 	case draft.CodeNotFound:
-		return []string{"wa-cli help draft write --json"}
+		// 单元还没有正文：先给出该单元的上下文包，草拟后用 draft write 写入。
+		if strings.HasSuffix(p.Path, "/"+draft.FileName) {
+			return []string{shellCommand("wa-cli", "context", work.RefOf(strings.TrimSuffix(p.Path, "/"+draft.FileName)), "--dir", dir, "--json"),
+				"wa-cli help draft write --json"}
+		}
+		return []string{status, "wa-cli help draft write --json"}
 	case draft.CodeHumanEdited, draft.CodeBaseMismatch:
 		return []string{shellCommand("wa-cli", "diff", work.RefOf(strings.TrimSuffix(p.Path, "/"+draft.FileName)), "--dir", dir, "--json")}
 	case draft.CodeUnknownSource:
@@ -758,11 +784,11 @@ func next(p workspace.Problem, dir string) []string {
 		}
 	case workspace.CodeNotFound, workspace.CodeMissingDirectory:
 		return []string{initCmd}
-	case work.CodeNotFound, work.CodeUnitNotFound, work.CodeExists, work.CodeAlreadyDone, work.CodeDerivedStage:
+	case work.CodeNotFound, work.CodeUnitNotFound, work.CodeExists, work.CodeAlreadyDone, work.CodeDerivedStage, work.CodeNoAcceptanceStage:
 		return []string{status}
 	case work.CodeNotSibling, work.CodeMoveRoot, work.CodeMoveUnderSelf:
-		// 由本次参数引起的问题：unit add 与 unit move 会改写为各自的用法；这里给出两个用法兜底。
-		return []string{"wa-cli help unit add --json", "wa-cli help unit move --json"}
+		// 由本次参数引起的问题：unit add 与 unit move 会改写为各自的用法；这里给出单元树与两个用法兜底。
+		return []string{status, "wa-cli help unit add --json", "wa-cli help unit move --json"}
 	case work.CodeMissingArtifact:
 		return []string{shellCommand("wa-cli", "next", work.RefOf(p.Path), "--dir", dir, "--json")}
 	case review.CodeAcceptanceStale, review.CodeAcceptanceInvalid, review.CodeAcceptanceWeakerGate:
@@ -782,7 +808,8 @@ func next(p workspace.Problem, dir string) []string {
 		}
 		return append(out, validate)
 	case schema.CodeUnknownKind:
-		return []string{"wa-cli help validate --json"}
+		// 给出的路径不是已知产物：整体校验列出工作区中的全部产物问题。
+		return []string{validateAll, "wa-cli help validate --json"}
 	case resolve.CodeUnknownGenre:
 		var out []string
 		for _, g := range catalog.BuiltinGenres() {
@@ -803,7 +830,7 @@ func next(p workspace.Problem, dir string) []string {
 		// 合并问题涉及多个配置层，只有整体校验能重新检出。
 		return []string{validateAll}
 	case workspace.CodeUnknownConfigKey, workspace.CodeConfigKept, workspace.CodeAnchoredValue:
-		return []string{"wa-cli help config set --json"}
+		return []string{shellCommand("wa-cli", "config", "resolved", "--dir", dir, "--json"), "wa-cli help config set --json"}
 	case workspace.CodeWriteFailed, workspace.CodeReadFailed:
 		if strings.HasPrefix(p.Path, workspace.WorksPath+"/") || inSources {
 			return []string{status}

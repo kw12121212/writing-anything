@@ -1,0 +1,8 @@
+schema_version: 1
+reviews:
+  - kind: acceptance
+    work: my-novel
+    ref: my-novel/s1
+    confirmed_at: "2026-10-07T08:00:00Z"
+    channel: cli
+    reviewed_at: "2026-10-07T09:00:00Z"

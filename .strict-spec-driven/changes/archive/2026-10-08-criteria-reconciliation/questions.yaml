@@ -1,0 +1,77 @@
+schema: strict-spec-driven/question-list/v1
+schema_version: 1
+artifact_type: question_list
+schema_file: templates/strict-spec-driven/schemas/question-list.yaml
+change: criteria-reconciliation
+open: []
+resolved:
+  - id: reconciliation-home
+    question: 完成标准对账表放在哪里、由谁强制？
+    context: 影响实现文件与回归范围。证据：里程碑 intake_questions.reconciliation-home 已定；planned change details。
+    answer: 对账表与检查放在 internal/tools/criteria（不进入产品二进制、不计入覆盖率），由 go test ./... 执行，读取 archive/milestones 的 done_criteria；新里程碑归档时同步补表
+    status: resolved
+    kind: technical
+    answered_by: roadmap
+  - id: audit-list
+    question: 审计列出的 14 条部分达标或未达标完成标准是哪些？
+    context: 影响对账表 hardened_by 登记与测试断言。审计清单没有以文件留存；证据为三个加固里程碑的 details 与 notes（60 条中 46 条达标、13 条部分达标、1 条未达标）及各加固变更 proposal.why 中的审计证据。
+    answer: 按加固变更 proposal 的审计证据还原，凡有审计证据且由已归档加固变更修复的完成标准都登记 hardened_by（超集，不少于 14 条）；检查断言这些加固变更已归档
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: weakened-specs
+    question: volume、closeout、impact 三份被写弱的规格是否还需回补？
+    context: 影响 spec delta。证据：specs/volume.yaml volume-auto-checkpoint 与 volume-accept-gate 已要求自动生成并对缺失检查点阻塞；specs/closeout.yaml closeout-body-scan 已扫描正文；specs/impact.yaml 已有 impact-auto-mark；分别由已归档变更 volume-checkpoint-gate、closeout-body-scan、impact-auto-hint 回补。
+    answer: 已由前序加固变更回补，本变更不需要规格增量，只做核对
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: spec-impact
+    question: 本变更是否修改产品规格？
+    context: 影响 spec delta 与 tech delta。对账只存在于仓库测试与 internal/tools 下，不改变 wa-cli 可观察行为。
+    answer: 不修改产品主规格，specs/ 留空；新增工程约束以 go-project-structure 技术规范增量记录
+    status: resolved
+    kind: technical
+    answered_by: roadmap
+  - id: archived-scope
+    question: 对账范围是否包含状态为 complete 但尚未归档的里程碑？
+    context: 影响检查范围与测试结果。证据：planned change details 写明读取 .strict-spec-driven/roadmap/archive/milestones/*.yaml；完成标准原文为「执行时全部已归档里程碑」。
+    answer: 只包含 archive/milestones 下的里程碑；core-gate-hardening 等三个加固里程碑归档时按 release 技能与技术规范写明的流程补表
+    status: resolved
+    kind: technical
+    answered_by: roadmap
+  - id: requirement-problem
+    question: What is concretely going wrong today, and for whom?
+    context: 'Why this is asked: the change is planned against a need, and the need lives only with the requester. A "problem" here means what someone does or suffers today — not a feature that is missing. If the answer names a button, a field, a page, or an endpoint, it is a solution, and the underlying problem is still unstated. What a sufficient answer contains: who is affected, what they do today instead, and how often. Worked example: "every Monday one person spends forty minutes copying order rows into a spreadsheet to send the weekly report". What it changes: this becomes the proposal''s why, and it decides whether the change is worth making.'
+    answer: 证据：里程碑 notes 与 goal。多条完成标准在规格层被写弱后里程碑仍被标为完成，维护者与作者无法从回归结果判断每条完成标准是否真有测试执行；受影响的是依赖里程碑完成状态做决策的作者与后续开发
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-outcome
+    question: What observable difference proves the problem is solved?
+    context: 'Why this is asked: without a success condition, nobody can tell afterwards whether the change worked. "Observable" means someone outside the system can check it without reading the code. What a sufficient answer contains: what a person will see, or no longer have to do, once this is done. Worked example: "the report is in the manager''s inbox on Monday morning without anyone assembling it". What it changes: this becomes the delta spec''s scenarios and the acceptance evidence at review time.'
+    answer: 证据：里程碑 done_criteria 第四条。对账表覆盖全部已归档里程碑的每条完成标准；go test ./... 中的对账检查在缺表项、测试函数不存在或首层无条件 t.Skip 时失败；审计的 14 条标准映射到加固后的测试；完整回归通过
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-trigger
+    question: Why now — what forced this?
+    context: 'Why this is asked: work that nothing forced is the work most often thrown away later. This question catches a request that sounds reasonable but has no real driver behind it. What a sufficient answer contains: the concrete event, deadline, incident, or cost that made this surface now, or an honest statement that nothing did. Worked example: "the report was missed last month and it was raised with the team". What it changes: a change with no trigger is a candidate for deferral, and the answer is weighed at review before archive.'
+    answer: 证据：roadmap-recommend 选中；里程碑 dependencies 要求加固里程碑全部完成后再对账，三个加固里程碑已 complete，本计划变更无依赖
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-non-goals
+    question: What must explicitly not change?
+    context: 'Why this is asked: the requester knows which nearby behavior other people depend on, and the agent does not. A "non-goal" is something the change must leave alone even though it sits close to the work. What a sufficient answer contains: the behavior, setting, or output that must survive untouched, and who relies on it. Worked example: "do not change the saved filters — several people rely on their own". What it changes: these become the proposal''s unchanged_behavior items, which review checks the finished result against.'
+    answer: 证据：planned change details 与里程碑 scope.out。不改变产品二进制与 wa-cli 运行时行为，产品不引用该检查；不扩展产品功能；不对未归档里程碑对账；不引入 CI/CD
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-interpretation
+    question: Which reading of the request is intended, where more than one is possible?
+    context: 'Why this is asked: a short request usually admits several readings, and building the wrong one is indistinguishable from building nothing. What a sufficient answer contains: the reading that is meant, stated plainly enough to rule the others out — or a statement that only one reading exists and what it is. Worked example: "export means the version sent to the manager, not the one I read myself". What it changes: this fixes the scope boundary before any code is written, and settles disputes about what was asked for.'
+    answer: 证据：planned change details。「存在且被执行」按 details 解释为 go/ast 能解析到该测试函数且函数体首层没有无条件 t.Skip；「完成标准文本变化时重新确认映射」按表项保存原文、原文不一致即失败实现
+    status: resolved
+    kind: requirement
+    answered_by: roadmap

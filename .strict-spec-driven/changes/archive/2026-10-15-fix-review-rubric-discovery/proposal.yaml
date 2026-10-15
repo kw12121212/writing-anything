@@ -1,0 +1,27 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: fix-review-rubric-discovery
+  status: proposed
+summary:
+  what:
+    - wa-cli review show <unit> 新增输出 rubric：该单元本次审稿必须逐项给出结论的全部评分项（合并后的评分标准加上所选写作法附带的评分项，与 review record 校验的集合相同），每项含 id、title、description 与 blocking；wa-review 技能改为据此写审稿
+    - wa-cli review record 的评分结论 paragraphs 可以为空数组或省略（如评作者选定标题的 4U 评分项），写出的 review.yaml 与输出中统一为数组；给出的段落编号仍按正文段落校验
+  why:
+    - 真实接入验证 cc-tb-2（docs/dogfood/runs.yaml）：三次运行中 Agent 都无法事先得到完整的评分项清单，首次 review record 都被 review.missing-verdict 拒绝（公众号那次用空审稿试探评分项），并试过不存在的 wa-cli genre show 与 config resolved <work>；评分项由文体、规范包与写作法三处合并，config resolved 不含写作法附带的评分项，method show 又需要先知道写作法 id
+    - 真实接入验证 cc-wm-2：wechat-marketing 的 headline-useful 等 4U 评分项评的是作者选定的标题而非正文段落，但审稿输入要求 paragraphs 至少 1 项（artifact.schema-violation），Agent 只能填与结论无关的段落号凑数，写进审稿的是不真实的依据
+scope:
+  in:
+    - internal/cli/review.go：review show 输出 rubric 及其 outputKeys 说明
+    - internal/schema/schemas/review.schema.json 与 internal/review：paragraphs 允许为空或省略，写出时规范化为数组
+    - 内置技能 wa-review：评分项改从 wa-cli review show 的 rubric 读取
+    - 主规格 review 的 review-record 与 review-show 增量
+  out:
+    - 新增 genre show 等查看文体的命令；config resolved 的输出不变
+    - dogfood 记录中的其他问题（cx-tb-1、cc-tb-1、cx-tb-3、cx-tb-2）
+unchanged_behavior:
+  - review record 仍要求评分标准中的每个评分项恰有一个结论，evidence 仍非空，review.missing-verdict、review.unknown-rubric-item、review.duplicate-verdict、review.unknown-paragraph 的判定不变
+  - review show 仍是只读命令，其他输出字段与诊断不变
+  - 已有 review.yaml（paragraphs 非空）照常通过校验与读取

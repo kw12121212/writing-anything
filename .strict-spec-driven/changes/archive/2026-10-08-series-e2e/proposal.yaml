@@ -1,0 +1,36 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: series-e2e
+  status: proposed
+summary:
+  what:
+    - 新增系列小说端到端（End-to-End，E2E）测试语料 internal/cli/testdata/e2e/series/：系列（Series）《雾港灯火》两部 novel 作品（各一部一章两个场景、真实中文正文），含命令脚本 commands.yaml、测试矩阵 matrix.yaml、inputs/ 文本输入、golden/ 黄金文件与 README.md（语料设计与维护流程）
+    - 复用 novel-e2e 的重放、黄金与矩阵框架：把 replayNovelCorpus、黄金比对与 TestNovelCorpusMatrix 的对账逻辑抽成按语料目录参数化的助手，小说语料行为与断言不变；新增 TestSeriesCorpusScript、TestSeriesCorpusReplay（冻结时间源、两次重放目录树逐字节一致）、TestSeriesCorpusGolden（UPDATE_GOLDEN=1 一键再生成）、TestSeriesCorpusNegativeInjections 与 TestSeriesCorpusMatrix（双向对账），全部纳入 go test 默认执行且无跳过
+    - 矩阵覆盖系列级与作品级设定覆盖（含覆盖原因与作者确认，未确认覆盖被 canon.override-unconfirmed 拒绝）、系列事实与系列素材、前序作品摘要进入上下文包（Context Pack）、全局时间线（跨作品 after）、同一时间两地与跨作品已死人物行动；负向注入断言跨作品设定冲突（continuity.dead-acting、continuity.conflicting-state）与跨作品时间矛盾（timeline.same-time-presence）为 error 级发现并让 wa-cli accept 以非零退出阻塞验收，修回后全绿且验收通过
+    - 修复语料录制中暴露的三个阻碍系列 E2E 的缺陷：wa-cli canon add --scope series 在系列设定集目录 .writing-anything/series/<series>/ 不存在时写入失败（workspace.write-failed）；作品级条目覆盖系列级条目时 override 记录（reason、confirmation、confirmed_at）只出现在命令输出、没有写入 canon.yaml（违反 sources-and-provenance 主规格 canon-add「写入条目的 override 字段」）；override.confirmed_at 直取系统时钟，冻结时间源下两次重放不一致。改为写入前创建目录、把 override 写入条目、经 internal/cli 的包级 now() 注入时钟，并撤销 TestInjectableClock 与 injectable-clock 技术规范中对 canon/canon.go 的登记排除
+    - 审查时补充：系列设定集写入改为逐级创建目录且不跟随符号链接（新增 workspace.Blocked 与 workspace.EnsureDir，途经符号链接时报告 artifact.not-found，系列级读取同样逐级检查）；删除 canon 包内按作品 id 进程级缓存系列成员关系的 seriesMemberCache——它不区分工作区、series add 后不失效，会让进程内 MCP 会话与同进程测试读到过期的成员关系，削弱双跑一致性的证明
+  why:
+    - 里程碑 real-use-and-release 完成标准要求：系列 E2E 纳入 go test 默认执行且无跳过；注入跨作品设定冲突与跨作品时间矛盾时断言 error 级发现项并阻塞验收；UPDATE_GOLDEN=1 可一键再生成黄金文件；同一环境两次重放结果一致
+    - novel-e2e 明确把系列小说留待后续（scope.out 第一条）；系列级设定集、系列时间线与跨作品连续性关卡目前只有零散的单元测试夹具（series_continuity_test.go 用手写 YAML 搭建），没有一条以真实 wa-cli 命令序列走完两部作品生命周期的回归证据，录制时即发现系列设定集首次写入失败与覆盖时间戳不可重放两个缺陷
+scope:
+  in:
+    - internal/cli/testdata/e2e/series/：commands.yaml、matrix.yaml、inputs/（素材、四个场景草稿、收口与审稿载荷、交接记录）、golden/、README.md
+    - internal/cli：series_corpus_test.go（五个系列语料测试）；novel_corpus_replay_test.go、novel_corpus_golden_test.go、novel_corpus_matrix_test.go 抽出按语料目录参数化的重放、黄金比对与矩阵对账助手
+    - internal/canon/canon.go 与 internal/cli/canon.go：系列设定集首次写入前创建目录；AddInput 增加时钟参数，覆盖的 confirmed_at 使用 cli 注入的 now()；internal/canon 与 internal/cli 增加对应回归测试；TestInjectableClock 移除 canon/canon.go 白名单
+    - go-project-structure 技术规范增量：injectable-clock 规则删除 canon 系列覆盖 ConfirmedAt 的例外
+    - internal/cli/testdata/e2e/novel/README.md 补充指向系列语料及其维护流程的说明
+    - internal/workspace/workspace.go：新增 Blocked 与 EnsureDir 及其测试；internal/canon/canon.go 的系列设定集读写改用逐级检查
+  out:
+    - 产品功能扩展：closeout、state、knowledge 只读取作品级设定集（系列级人物登记后在写后收口中仍提示疑似专有名词）、canon set 尚未实现系列覆盖确认参数等录制中观察到的既有限制只记录在语料 README 与交接中，不在本变更修改
+    - 真实 Agent 接入验证（agent-dogfood）、完成标准对账表补表与 v0.2.0 发布
+    - 三部及以上作品、多部多章的系列规模；系列级审查任务包（review plan <series>）与系列组稿导出
+unchanged_behavior:
+  - 小说语料《停在四点十七分》的命令脚本、矩阵、黄金文件与六个 TestNovelCorpus* 测试的断言不变（只做助手抽取）
+  - wa-cli 命令、参数、输出与主规格不变；canon add 的错误码、校验顺序与非系列作品行为不变
+  - 完整回归命令、覆盖率阈值 80% 与覆盖率范围不变
+roadmap:
+  milestone: real-use-and-release
+  planned_change: series-e2e

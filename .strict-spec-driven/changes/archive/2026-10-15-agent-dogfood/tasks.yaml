@@ -1,0 +1,75 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: agent-dogfood
+sections:
+  Implementation:
+    glossary-terms:
+      text: 在 docs/GLOSSARY.md 加入本变更引入的新术语：真实接入验证（Dogfooding）、真实接入记录（Dogfood Record）；docs/dogfood/ 文档首次出现的专有名词按「中文（English）」书写
+      status: complete
+    runbook-and-format:
+      text: 编写 docs/dogfood/README.md 运行手册（构建 wa-cli 并记录 wa-cli version、在仓库外新建独立项目目录、wa-cli init、wa-cli skills install --agent <client>、wa-cli mcp install --client <client>、准备素材、全新客户端会话中按技能推进到 export、全程经 wa-cli preview --serve 阅读页确认、记录与问题分诊方法），并建立 docs/dogfood/runs.yaml 的记录格式与空的 runs 列表
+      status: complete
+    dogfood-checker:
+      text: 实现 internal/tools/dogfood（package main，run(args, stdout, stderr) int）：校验 runs.yaml 覆盖 claude-code、codex × tech-blog、wechat-marketing 四种组合且各恰好一次；client_version、wa_cli_version、date、commands 非空；channels 只含 skill、mcp 且非空；export.format 与文体匹配（tech-blog 为 markdown，wechat-marketing 为 wechat-html）且 export.path 非空；每个问题 id 唯一，fix_change 与 wont_fix_reason 恰好其一，fix_change 为变更名且 .strict-spec-driven/changes/archive/ 下存在 <日期>-<fix_change> 目录；全部问题逐条输出，退出码 0/1/2
+      status: complete
+    checker-fixtures:
+      text: 在 internal/tools/dogfood/testdata/ 下加入夹具与单元测试：合法记录（含一个链接已归档变更的问题与一个不修问题，用临时根目录构造归档目录）、缺少组合、重复组合、缺客户端版本、文体与导出格式不匹配、fix_change 未归档、fix_change 与 wont_fix_reason 同时出现或都缺失、未知 channel、用法错误；每个负向夹具只触发一个问题并断言具体问题文字
+      status: complete
+    wechat-sources:
+      text: 【作者提供】按 wechat-source 结论，作者提供 writing-anything 的产品要点与一段亲历使用笔记，检入 docs/dogfood/sources/，供两次公众号营销文章运行登记为素材（Source）
+      status: complete
+    run-claude-code-tech-blog:
+      text: 【作者执行】在全新 Claude Code 会话中按运行手册完成一篇技术博客（素材使用 internal/cli/testdata/e2e 下的技术博客夹具），走到 wa-cli export --format markdown，并把客户端版本、wa-cli 版本、接入方式、命令序列、导出路径、卡点与问题写入 runs.yaml
+      status: complete
+    run-claude-code-wechat:
+      text: 【作者执行】在全新 Claude Code 会话中按运行手册完成一篇公众号营销文章（素材按 questions.yaml 中 wechat-source 的结论准备），走到 wa-cli export --format wechat-html，并写入 runs.yaml
+      status: complete
+    run-codex-tech-blog:
+      text: 【作者执行】在全新 Codex 会话中按运行手册完成一篇技术博客，走到 wa-cli export --format markdown，并写入 runs.yaml
+      status: complete
+    checker-skipped-runs:
+      text: internal/tools/dogfood 支持未运行组合：Run 增加 skipped_reason；有 skipped_reason 时只允许 id、client、genre，其他字段出现即报问题；新增「每个客户端、每种文体至少一次已运行」检查；补充夹具测试（合法未运行、未运行带多余字段、某客户端或某文体没有任何已运行记录）并更新 README.md 的记录格式说明
+      status: complete
+    record-skipped-run:
+      text: 在 runs.yaml 中把 codex-wechat-marketing 记为未运行，skipped_reason 写明作者因 Codex 额度不足取消；README.md 汇总说明三次运行与一个未运行组合
+      status: complete
+    milestone-criterion:
+      text: 修改里程碑 real-use-and-release 完成标准第一条的措辞，改为三次运行（Claude Code × 两种文体、Codex × 技术博客）都走到导出、未运行的组合写明原因，与 runs.yaml 和检查工具一致；只通过 strict-spec-cli 的路线图命令修改
+      status: complete
+    triage-issues:
+      text: 逐个处理 runs.yaml 中的问题：需要修复的以独立的 strict-spec-bugfix 变更修复并归档后，把变更名写入 fix_change；不修的写明 wont_fix_reason（如属于新需求，注明转入后续里程碑）；在 README.md 汇总问题清单与处理结果
+      status: complete
+    real-records-test:
+      text: 全部问题处理完后，在 internal/tools/dogfood 中加入 TestDogfoodRecords：从仓库根目录读取真实 docs/dogfood/runs.yaml 并断言校验通过，函数体首层不得有无条件 t.Skip，供里程碑归档时写入完成标准对账表
+      status: complete
+  Testing:
+    dogfood-unit-tests:
+      text: 运行 internal/tools/dogfood 的单元测试（夹具测试与 TestDogfoodRecords）
+      status: complete
+      command: go test ./internal/tools/dogfood -count=1
+    dogfood-records-check:
+      text: 用校验工具检查真实接入记录 docs/dogfood/runs.yaml
+      status: complete
+      command: go run ./internal/tools/dogfood
+    full-regression:
+      text: 运行完整回归（含覆盖率阈值与完成标准对账）
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    strict-ready:
+      text: 确认变更可交接：strict-spec-cli ready agent-dogfood 无阻塞项
+      status: complete
+      command: strict-spec-cli ready agent-dogfood
+    strict-verify:
+      text: 确认产物结构与任务状态：strict-spec-cli verify agent-dogfood 通过
+      status: complete
+      command: strict-spec-cli verify agent-dogfood
+    fix-links-archived:
+      text: 归档前确认 runs.yaml 中每个 fix_change 都已在 .strict-spec-driven/changes/archive/ 下，且没有处于活动状态的缺陷变更
+      status: complete
+      command: strict-spec-cli list
+testing_gates:
+  validation_task: dogfood-records-check
+  unit_test_task: dogfood-unit-tests

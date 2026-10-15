@@ -1,0 +1,11 @@
+schema: strict-spec-driven/planned-change/v1
+schema_version: 1
+artifact_type: planned_change
+schema_file: ../../templates/strict-spec-driven/schemas/planned-change.yaml
+planned_change:
+  id: next-text-handoff
+  milestone: usability-polish
+status: complete
+summary: wa-cli next 文本模式显示最近交接记录
+details: next 文本输出在顶部显示最近一条交接记录的 id、未完成事项与作者新指示，与 --json 的 handoff 字段一致；测试在写入交接后断言文本输出内容，并在 novel-e2e 中于 handoff write 之后补一次 next 断言。
+depends_on: []

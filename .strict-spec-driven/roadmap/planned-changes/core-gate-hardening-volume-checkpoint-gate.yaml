@@ -1,0 +1,11 @@
+schema: strict-spec-driven/planned-change/v1
+schema_version: 1
+artifact_type: planned_change
+schema_file: ../../templates/strict-spec-driven/schemas/planned-change.yaml
+planned_change:
+  id: volume-checkpoint-gate
+  milestone: core-gate-hardening
+status: complete
+summary: 卷末检查点在部的最后一个场景验收时自动生成，strict 关卡下缺失或未确认即阻塞下一部验收
+details: accept 在场景是其所属部按单元树先序的最后一个场景且验收成功后，调用 volume checkpoint 的同一逻辑写出 checkpoint.yaml（confirmed_by_author 为 false，只汇总本部新增设定、已确认状态变化、伏笔变化与未处理决策），并在 changedPaths 中列出；next 对该部列出 wa-cli volume confirm 命令。volume.AcceptanceBlockers 对按先序更早的每个部：缺少 checkpoint.yaml 或未确认时 strict 报 error 级 volume.unconfirmed（缺失时可用新码 volume.missing），standard 与 fast 报 warning。删除 specs/volume.yaml volume-accept-gate 中「没有任何更早部的 checkpoint.yaml 时验收行为与引入本规格前完全一致」的豁免并补场景；手动 volume checkpoint 保留用于重新生成。再生成 novel-e2e 命令序列与黄金文件并人工复核差异。测试：自动生成、strict 缺失阻塞、strict 未确认阻塞、standard 仅提示、确认后放行。
+depends_on: []

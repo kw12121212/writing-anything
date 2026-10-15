@@ -1,0 +1,18 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: fix-cli-install-hints
+approach:
+  - skills install：给出 --agent（未给 --target）且安装成功时，launchDir 为 --dir 解析后的绝对路径（与 Install 归一化项目目录拼写的方式一致：filepath.Abs 后 EvalSymlinks），文本输出追加一行启动提示；其他情况 launchDir 为 null。mcp install：official 记录移除同名条目是否成功，成功时才在 message 中写「同名条目重新创建」；claudeCode 的项目级注册与 codex 的用户级注册各在 message 末尾追加启动或切换项目的提示。
+  - unknownCommand：命令组存在而子命令不存在时，另找名称以组名开头、不含空格的独立命令（如 decision → decisions），按名称排序列在 message 的「相关命令」中，next 依次为它们的 wa-cli help <命令> --json 与 wa-cli help --json；没有相关命令时保持原样。
+decisions:
+  hints-not-detection:
+    decision: 只在安装输出中提示启动目录，不尝试检测客户端从哪里启动。
+    rationale: wa-cli 不运行也无法观察客户端；启动目录由作者决定，提示是唯一可靠的介入点。launchDir 让以 --json 调用的 Agent 也能把路径转告作者。
+  prefix-related-commands:
+    decision: 相关命令只按「独立命令名以组名开头」匹配，不做编辑距离等模糊匹配。
+    rationale: 覆盖实际碰到的 decision/decisions 这类单复数关系，规则可预测、易测试；模糊匹配会给出不相关的建议。
+alternatives: []
+risks:
+  - mcp install 的 message 文案变化会影响按全文匹配 message 的调用方；状态字段 status 不变

@@ -1,0 +1,48 @@
+schema: strict-spec-driven/question-list/v1
+schema_version: 1
+artifact_type: question_list
+schema_file: templates/strict-spec-driven/schemas/question-list.yaml
+change: short-story-beat-position
+open: []
+resolved:
+  - id: requirement-problem
+    question: 今天具体出了什么问题，对谁？
+    context: 证据：里程碑 details「outline.go BeatPositions 只看本单元大纲 role 且要求正文有同名标题，短篇节拍挂在根单元而正文在场景单元，正常流程永不触发」。影响 proposal 范围。
+    answer: 写短篇的作者与 Agent 在场景单元上运行 lint、review show 与 accept 时，永远看不到节拍位置提示，节拍放错场景（如高潮放在开头场景）不会被发现
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-outcome
+    question: 什么可观察的变化证明问题解决了？
+    context: 证据：里程碑 done_criteria「短篇测试夹具中某节拍所在场景位置超出写作法范围时，wa-cli lint 或 review show 输出节拍位置提示，且验收不被阻塞」。影响 spec delta 与测试。
+    answer: 短篇夹具中承担 climax 节拍的场景排在开头时，wa-cli lint <场景> 输出 warning 级 outline.beat-position、退出码 0；review show 同样展示且不进入验收阻塞项
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-trigger
+    question: 为什么现在做？
+    context: 证据：里程碑 notes「来源：2026-10-07 路线图里程碑审计 P2 项」；planned change depends_on 为空，roadmap-recommend 选中。影响优先级。
+    answer: 审计 P2 项，没有未满足的依赖，路线图推荐为下一项
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-non-goals
+    question: 哪些明确不做？
+    context: 证据：里程碑 scope.out「新增命令或文体」，planned change summary 只涉及短篇节拍位置检查。影响 proposal 范围。
+    answer: 不新增命令、参数或诊断码，不改内置写作法数据，不做按字数加权的位置计算，不做里程碑其他计划变更
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-interpretation
+    question: Which reading of the request is intended, where more than one is possible?
+    context: 证据：planned change details「按场景在单元树先序中的相对位置判断节拍是否超出写作法范围，只输出提示；不再要求正文存在同名 Markdown 标题」。影响 spec delta 与实现。
+    answer: 场景流程中按场景先序相对位置判断，不依赖标题；单元自身选用结构类写作法的标题核对（单篇作品）保留，见 design 决策 keep-heading-check；相对位置取场景等分区间中点，见 slot-midpoint
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: position-formula
+    question: 场景的相对位置取等分区间的起点还是中点？
+    context: planned change 只说按单元树先序相对位置；three-act 的 resolution 范围为 0.85–1。影响实现与测试。
+    answer: 取中点 (k + 0.5) ÷ n：起点会让最后一个场景在场景数少于 7 时达不到 0.85，误报 resolution；仓库证据为 internal/catalog/builtin/methods/three-act.yaml 的 position 数据
+    status: resolved
+    answered_by: roadmap

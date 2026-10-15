@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"io"
+	"sort"
 	"strings"
 )
 
@@ -78,7 +79,7 @@ type commandSet []*command
 // registry 登记 wa-cli 的全部命令。
 var registry = commandSet{helpCommand, versionCommand, initCommand, validateCommand, statusCommand, configSetCommand, configResolvedCommand,
 	packInstallCommand, packListCommand, packRemoveCommand, packLearnCommand, packPreferCommand, packConfirmCommand, packRejectCommand,
-	newCommand, unitAddCommand, unitMoveCommand, advanceCommand, nextCommand, briefSetCommand, briefShowCommand, marketingSetCommand, marketingShowCommand, marketingAskCommand,
+	newCommand, unitAddCommand, unitMoveCommand, advanceCommand, reopenCommand, nextCommand, briefSetCommand, briefShowCommand, marketingSetCommand, marketingShowCommand, marketingAskCommand,
 	outlineSetCommand, outlineRemoveCommand, outlineShowCommand, sceneContractCommand, sceneCloseOutCommand, planShowCommand, planStepCommand, planConfirmCommand, contextCommand, lintCommand, recallCommand,
 	seriesSetCommand, seriesAddCommand, seriesFactCommand, seriesShowCommand, summarySetCommand, summaryShowCommand,
 	metricsPlanCommand, metricsRecordCommand, metricsShowCommand, metricsCalibrateCommand, metricsComputeCommand, curveCommand,
@@ -131,7 +132,24 @@ func (s commandSet) unknownCommand(words []string) *Diagnostic {
 	if len(words) >= 2 && !strings.HasPrefix(words[1], "-") {
 		name += " " + words[1]
 	}
-	return usageDiagnostic(nil, codeUnknownCommand, fmt.Sprintf("未知命令：%s；%s 命令组可用的命令：%s", name, words[0], strings.Join(members, "、")))
+	d := usageDiagnostic(nil, codeUnknownCommand, fmt.Sprintf("未知命令：%s；%s 命令组可用的命令：%s", name, words[0], strings.Join(members, "、")))
+	// 名称以组名开头的独立命令（如 decision 组与 decisions）常是想要的命令（command-groups）。
+	var related []string
+	for _, c := range s {
+		if !strings.Contains(c.name, " ") && c.name != words[0] && strings.HasPrefix(c.name, words[0]) {
+			related = append(related, c.name)
+		}
+	}
+	if len(related) > 0 {
+		sort.Strings(related)
+		d.Message += "；相关命令：" + strings.Join(related, "、")
+		next := make([]string, 0, len(related)+1)
+		for _, r := range related {
+			next = append(next, "wa-cli help "+r+" --json")
+		}
+		d.Next = append(next, d.Next...)
+	}
+	return d
 }
 
 func (c *command) allFlags() []flagSpec {

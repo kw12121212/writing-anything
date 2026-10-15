@@ -1,0 +1,10 @@
+schema_version: 1
+id: tiny
+title: 极简
+unit_types:
+  - id: article
+    title: 文章
+stages:
+  - id: draft
+    title: 草稿
+category: poetry

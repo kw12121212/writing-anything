@@ -1,0 +1,32 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: diagnostic-next-commands
+  status: proposed
+summary:
+  what:
+    - 新增 go/ast 源码扫描测试：列出 internal/**（不含 internal/tools）非测试源码中元素全部是 wa-cli help 提示的 []string 字面量（即诊断 next 只给查看用法的位置），按「文件:函数」与带理由的白名单比对，新增或残留未登记的位置时测试失败
+    - 为每个被改造的诊断码补一条断言 next 内容的测试；其余只给 help 的位置（用法错误、规格明确规定 next 为用法、非主路径命令）在白名单中逐条写明理由
+    - 把生命周期主路径命令（brief set、outline set、outline remove、scene contract、scene close-out、draft write、review record、review resolve、accept、advance、volume checkpoint、volume confirm，以及默认诊断下一步中的 draft.not-found、unit 参数兜底、artifact.unknown-kind、配置键问题）的 error 级诊断 next 改为先给带单元引用或产物路径的具体命令，wa-cli help 只作补充
+  why:
+    - 审计发现大量诊断的 next 只是 wa-cli help，Agent 拿到诊断后仍要自己推断该查看哪个单元、哪个产物，违背「诊断包含下一步可执行命令」的约定
+    - 没有自动化约束时，新增诊断容易回退为只给 help；源码扫描测试把这类位置固化为显式白名单
+scope:
+  in:
+    - internal/cli/help_next_scan_test.go：go/ast 扫描器、白名单（每条含理由）与扫描器自测
+    - 对应 *_test.go 中断言 next 内容的测试；cli 主规格新增具体下一步要求的增量规格
+    - cli-contract 技术规范增量：invalid-value-code 改为 next 含用法（主路径先给查看命令），新增 help-only-next-allowlist 规则
+    - internal/cli 中 brief.go、outline.go、scene.go、closeout.go、review.go（review record/resolve、accept）、sources.go（draft write）、volume.go、units.go（runAdvance）、workspace.go（默认 next）的只给 help 位置改造
+  out:
+    - 新增命令或文体；修改诊断错误码
+    - 非生命周期主路径命令（decision、export、feedback、handoff、impact、learn、marketing、mcp install、pack、plan、preview、review plan/submit、series、summary、skills install）的只给 help 位置：本变更只登记白名单理由，不改造
+    - 用法错误（usage.*）、wa-cli new 的参数问题，以及 unit add/unit move 的参数问题（units-and-lifecycle 主规格 unit-move 规定 next 为 wa-cli help unit move --json）
+unchanged_behavior:
+  - 所有诊断的错误码、severity、message、path 与 field 不变；退出码不变
+  - 规格中已写明「next 含/包含 wa-cli help ...」的诊断仍包含该 help 命令
+  - 已有的非 help 下一步命令（如 source list、decisions --all、canon list、threads）保留
+roadmap:
+  milestone: usability-polish
+  planned_change: diagnostic-next-commands

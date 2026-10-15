@@ -10,6 +10,7 @@ schema_version: 1
 id: short-story
 title: 短篇小说
 description: 以场景为单元的短篇小说：作者提供前提、人物与关键转折，Agent 按场景草拟、审稿并导出；虚构内容不做论断出处检查。
+category: fiction
 default_method: three-act
 unit_types:
   - id: story

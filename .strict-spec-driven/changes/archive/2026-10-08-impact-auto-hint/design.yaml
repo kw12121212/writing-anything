@@ -1,0 +1,38 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: impact-auto-hint
+approach:
+  - internal/impact 新增 AutoMark(root, w, target, from, budget, now)：复用 Compute 计算受影响场景；from 非空时丢弃单元树先序早于 from 的场景；按 stage 是否为 done 拆为已验收与未验收；已验收者若已有同（场景，目标）的 open 标记归入 existing，否则作为新标记；只为此前没有任何 open 标记的场景生成 causality 任务包；先生成任务包再写 rechecks（沿用 precheck-before-side-effects）。目标不是本作品的可解析引用（如系列级条目）时返回空结果。MarkTarget 与 AutoMark 共用抽取出的 appendMarks 落盘函数，impact mark 行为不变。
+  - internal/impact 新增 SemanticKey：把语义字段规整为比较键——字符串去首尾空白并把连续空白折叠为单个空格，集合型列表排序；CLI 在写入前读取原条目、写入后取返回值，键不同才触发，因此只改注释、排版或非语义字段（sources、protection、decision、标题等）不触发。
+  - internal/cli：canon set（type、name、aliases、text、members；目标为条目 id）、state set（scene、state；目标为绑定条目，from 为新旧场景中先序较早者）、knowledge set（scene、entry、character、terms；目标为新旧绑定条目，from 同上）、threads set（text、planned_recover、status、recovered_in；目标为伏笔 id）、scene contract（被编辑节的 causes 与 state_changes；目标为场景单元引用）在 changedPaths 非空且成功时调用 autoImpact，结果写入新增输出键 impact（数组，永不为 null）并把落盘路径追加到 changedPaths；自动传播失败时追加 impact.auto-mark-failed 的 warning（next 为 wa-cli impact mark <work>/<target> 与 wa-cli validate），不回滚已完成的写入、不改变退出码。
+  - internal/cli next：step 对有 open 复查标记的场景（不论阶段）在 action 追加提示——标记数量、目标、复查路径与作者确认用法 wa-cli impact clear <scene> <target> --confirmed-by-author --confirmation <作者原话摘要>——并在 commands 原有命令之后追加 wa-cli review plan <scene> --dimension causality、每个目标一条不带确认参数的 wa-cli impact clear（重新审查通过后的解除）与 wa-cli help impact clear --json；不带 unit 参数时 done 场景有 open 标记也列出（blockers 仍为空）。
+  - 修改命令在写入前对同一目标调用 impact.Compute 得到修改前结果（preAffected），AutoMark 把它与修改后结果按场景并集、按先序排列后再做已验收拆分；next 每个作品只读一次 open 复查标记；自动传播出错时把已生成的任务包路径并入 changedPaths。
+decisions:
+  accepted-means-done:
+    decision: 「已验收」按场景 stage 为 done 判定
+    rationale: 仓库中 recall、assembly 与 impact 的正文命中都以 stage 为 done 表示已验收场景，组稿关卡也只收 done 场景；沿用同一判定避免出现第二种验收口径
+  dedup-scene-target:
+    decision: 复查标记按（场景，目标）去重，任务包按场景去重：场景已有任何 open 标记时不再生成任务包
+    rationale: rechecks 领域校验要求同（场景，目标）至多一条 open，按（场景，目标）记录能保留每个修改来源以便逐条解除；作者决策要求同一场景已有 open 标记时不重复生成任务包，因此任务包按场景判断
+  state-knowledge-target:
+    decision: state set 与 knowledge set 以台账绑定的设定条目为影响目标，只保留不早于绑定场景的受影响场景
+    rationale: 影响引用图只接受场景、设定条目、事件与伏笔四类目标，状态与知情条目本身不是目标；状态变化只影响发生场景及其之后的场景，先序更早的场景不应被标记
+  warn-on-auto-failure:
+    decision: 自动传播失败只报告 warning，不回滚已完成的修改
+    rationale: 被修改产物已经通过校验写入，回滚会产生第二个失败点；warning 带 wa-cli impact mark 的下一步，Agent 修复后可手动补标，保证不静默丢失
+  next-confirmation-in-action:
+    decision: 作者确认路径的 impact clear --confirmed-by-author --confirmation 用法写在 next 的 action 中，commands 只放可直接运行的命令
+    rationale: 技术标准 cli-contract/runnable-next 要求下一步命令不含 <value> 类占位符，而 --confirmation 必须是作者原话、不能由 Agent 代填；把带确认参数的用法放进 action 文本既满足 planned change「next 给出 impact clear --confirmed-by-author --confirmation 命令」，又不会让 Agent 直接执行一条伪造确认的命令
+  union-pre-post:
+    decision: 受影响场景取修改前与修改后引用图结果的并集
+    rationale: 独立审查发现只用修改后的引用图会漏掉改名（称谓不再匹配场景契约）、改计划回收位置与改绑定场景时恰好应被标记的已验收场景；并集同时覆盖新旧引用，且对只改文本的修改两者相同不增加误报
+alternatives:
+  - option: 提供 --no-impact 跳过参数
+    reason: 作者 2026-10-07 明确决定不提供跳过自动标记的参数
+  - option: 场景已有任何 open 标记就整体跳过，不记录新目标
+    reason: 新目标的修改来源会丢失：解除旧目标的标记后，新修改造成的影响不再有任何记录
+risks:
+  - next 不带参数时列出 done 场景会让输出变长；仅在存在 open 复查标记时出现，且这正是组稿前必须处理的事项
+  - 既有测试若在已验收场景后修改设定，会因新增 impact 输出与 rechecks 写入而需要更新

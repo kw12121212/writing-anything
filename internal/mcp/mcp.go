@@ -1,5 +1,6 @@
-// Package mcp 实现 MCP 服务（MCP Server）的协议层：以 stdio 方式收发 JSON-RPC 2.0 消息，遵循 MCP 2026-07-28 版协议（无状态，
-// 每个请求在 _meta 中带协议版本与客户端能力）。本包不知道 wa-cli 有哪些命令：tool 的规格、执行命令的函数、资源与 prompt 都由
+// Package mcp 实现 MCP 服务（MCP Server）的协议层：以 stdio 方式收发 JSON-RPC 2.0 消息。服务是双代服务端（Dual-era Server）：
+// 在 _meta 中带协议版本的请求遵循 MCP 2026-07-28 版协议（无状态，每个请求带协议版本与客户端能力）；发送 initialize 的旧版客户端
+// 在该进程内得到一个旧版会话（Legacy Session，2025-11-25 或 2025-06-18，见 legacy.go）。本包不知道 wa-cli 有哪些命令：tool 的规格、执行命令的函数、资源与 prompt 都由
 // 命令层传入（cli-contract/mcp-thin-wrapper），本包只负责把 MCP 请求映射为一次命令调用并原样返回结果。
 package mcp
 
@@ -16,8 +17,11 @@ import (
 	"time"
 )
 
-// ProtocolVersion 是服务支持的唯一协议版本。
+// ProtocolVersion 是无状态（2026-07-28）请求的协议版本。
 const ProtocolVersion = "2026-07-28"
+
+// SupportedVersions 是服务支持的全部协议版本：2026-07-28 与旧版会话可协商的版本（legacyVersions）。
+var SupportedVersions = append([]string{ProtocolVersion}, legacyVersions...)
 
 // MaxMessage 是一条消息（一行）的字节数上限（workspace-artifacts/input-limits）。
 const MaxMessage = 8 << 20
@@ -94,6 +98,7 @@ type server struct {
 	subs    map[string]*subscription // 规范化的请求 id → 订阅
 	wg      sync.WaitGroup
 	done    chan struct{}
+	legacy  *legacySession // initialize 之后的旧版会话；只在读取消息的 goroutine 中赋值
 }
 
 type subscription struct {
@@ -195,13 +200,35 @@ func (s *server) handle(line []byte) bool {
 		s.reply(nil, nil, &rpcError{Code: codeInvalidReq, Message: "不是 JSON-RPC 2.0 请求或通知：缺少 method"})
 		return false
 	case !isRequest:
-		if m.Method == "notifications/cancelled" {
+		switch m.Method {
+		case "notifications/cancelled":
 			s.cancel(m.Params)
+		case "notifications/initialized":
+			if s.legacy != nil {
+				s.legacy.ready = true
+			}
 		}
 		return false // 其他通知忽略
+	case m.Method == "initialize":
+		result, rerr := s.initialize(m.Params)
+		s.respond(m.ID, result, rerr)
+		return true
 	}
-	params, perr := s.check(m.Params)
-	if perr != nil {
+	params, perr := parseParams(m.Params)
+	meta, _ := params["_meta"].(map[string]any)
+	_, modern := meta[metaPrefix+"protocolVersion"]
+	switch {
+	case !modern && s.awaitingInitialized(m):
+		s.respond(m.ID, nil, &rpcError{Code: codeInvalidReq, Message: "旧版会话（Legacy Session）尚未完成初始化：请先发送 notifications/initialized"})
+		return true
+	case perr != nil:
+		s.reply(m.ID, nil, perr)
+		return true
+	case !modern && s.legacy != nil:
+		s.handleLegacy(m, params)
+		return true
+	}
+	if perr := check(meta); perr != nil {
 		s.reply(m.ID, nil, perr)
 		return true
 	}
@@ -212,39 +239,62 @@ func (s *server) handle(line []byte) bool {
 	return true
 }
 
-// check 校验请求的 params 与 _meta 中的协议版本与客户端能力。
-func (s *server) check(raw json.RawMessage) (map[string]any, *rpcError) {
+// parseParams 把请求的 params 解析为对象；缺少或为 null 时为空对象。
+func parseParams(raw json.RawMessage) (map[string]any, *rpcError) {
 	params := map[string]any{}
 	if len(raw) > 0 && string(raw) != "null" {
-		if err := json.Unmarshal(raw, &params); err != nil {
+		if err := json.Unmarshal(raw, &params); err != nil || params == nil {
 			return nil, &rpcError{Code: codeInvalidArgs, Message: "params 应为对象"}
 		}
-	}
-	meta, _ := params["_meta"].(map[string]any)
-	version, ok := meta[metaPrefix+"protocolVersion"].(string)
-	_, caps := meta[metaPrefix+"clientCapabilities"].(map[string]any)
-	if !ok || !caps {
-		return nil, &rpcError{Code: codeInvalidArgs, Message: "请求的 params._meta 必须含 " + metaPrefix + "protocolVersion 与 " + metaPrefix + "clientCapabilities"}
-	}
-	if version != ProtocolVersion {
-		return nil, &rpcError{Code: codeVersion, Message: "Unsupported protocol version", Data: map[string]any{"supported": []string{ProtocolVersion}, "requested": version}}
 	}
 	return params, nil
 }
 
-// dispatch 处理一个请求；返回 nil 结果与 nil 错误表示稍后回复（订阅）。
+// check 校验 2026-07-28 请求 _meta 中的协议版本与客户端能力。
+func check(meta map[string]any) *rpcError {
+	version, ok := meta[metaPrefix+"protocolVersion"].(string)
+	_, caps := meta[metaPrefix+"clientCapabilities"].(map[string]any)
+	if !ok || !caps {
+		return &rpcError{Code: codeInvalidArgs, Message: "请求的 params._meta 必须含 " + metaPrefix + "protocolVersion 与 " + metaPrefix +
+			"clientCapabilities；只支持旧版协议的客户端请先发送 initialize（支持的协议版本：" + strings.Join(SupportedVersions, "、") + "）"}
+	}
+	if version != ProtocolVersion {
+		return &rpcError{Code: codeVersion, Message: "Unsupported protocol version", Data: map[string]any{"supported": SupportedVersions, "requested": version}}
+	}
+	return nil
+}
+
+// dispatch 处理一个 2026-07-28 请求；返回 nil 结果与 nil 错误表示稍后回复（订阅）。
 func (s *server) dispatch(m message, params map[string]any) (map[string]any, *rpcError) {
 	switch m.Method {
 	case "server/discover":
 		return map[string]any{
-			"supportedVersions": []string{ProtocolVersion},
-			"capabilities":      map[string]any{"tools": map[string]any{}, "resources": map[string]any{"subscribe": true}, "prompts": map[string]any{}},
+			"supportedVersions": SupportedVersions,
+			"capabilities":      capabilities(),
 			"instructions":      s.cfg.Instructions,
 		}, nil
+	case "subscriptions/listen":
+		return s.listen(m.ID, params)
+	}
+	if result, rerr, ok := s.common(m.Method, params); ok {
+		return result, rerr
+	}
+	return nil, &rpcError{Code: codeNoMethod, Message: "Method not found: " + m.Method}
+}
+
+// capabilities 是服务声明的能力，两代相同。
+func capabilities() map[string]any {
+	return map[string]any{"tools": map[string]any{}, "resources": map[string]any{"subscribe": true}, "prompts": map[string]any{}}
+}
+
+// common 处理两代共用的 tool、资源与 prompt 方法；ok 为 false 表示不是这些方法。
+func (s *server) common(method string, params map[string]any) (result map[string]any, rerr *rpcError, ok bool) {
+	switch method {
 	case "tools/list":
-		return map[string]any{"tools": s.toolList()}, nil
+		return map[string]any{"tools": s.toolList()}, nil, true
 	case "tools/call":
-		return s.call(params)
+		result, rerr = s.call(params)
+		return result, rerr, true
 	case "resources/list":
 		s.runMu.Lock()
 		rs := s.cfg.List()
@@ -252,33 +302,35 @@ func (s *server) dispatch(m message, params map[string]any) (map[string]any, *rp
 		if rs == nil {
 			rs = []Resource{}
 		}
-		return map[string]any{"resources": rs}, nil
+		return map[string]any{"resources": rs}, nil, true
 	case "resources/read":
 		uri, _ := params["uri"].(string)
-		text, mime, ok := s.read(uri)
-		if !ok {
-			return nil, &rpcError{Code: codeInvalidArgs, Message: "Resource not found", Data: map[string]any{"uri": uri}}
+		text, mime, found := s.read(uri)
+		if !found {
+			return nil, notFound(uri), true
 		}
-		return map[string]any{"contents": []map[string]any{{"uri": uri, "mimeType": mime, "text": text}}}, nil
-	case "subscriptions/listen":
-		return s.listen(m.ID, params)
+		return map[string]any{"contents": []map[string]any{{"uri": uri, "mimeType": mime, "text": text}}}, nil, true
 	case "prompts/list":
 		out := []map[string]any{}
 		for _, p := range s.cfg.Prompts {
 			out = append(out, map[string]any{"name": p.Name, "description": p.Description})
 		}
-		return map[string]any{"prompts": out}, nil
+		return map[string]any{"prompts": out}, nil, true
 	case "prompts/get":
 		name, _ := params["name"].(string)
 		for _, p := range s.cfg.Prompts {
 			if p.Name == name {
 				return map[string]any{"description": p.Description, "messages": []map[string]any{
-					{"role": "user", "content": map[string]any{"type": "text", "text": p.Text}}}}, nil
+					{"role": "user", "content": map[string]any{"type": "text", "text": p.Text}}}}, nil, true
 			}
 		}
-		return nil, &rpcError{Code: codeInvalidArgs, Message: "prompt " + name + " 不存在"}
+		return nil, &rpcError{Code: codeInvalidArgs, Message: "prompt " + name + " 不存在"}, true
 	}
-	return nil, &rpcError{Code: codeNoMethod, Message: "Method not found: " + m.Method}
+	return nil, nil, false
+}
+
+func notFound(uri string) *rpcError {
+	return &rpcError{Code: codeInvalidArgs, Message: "Resource not found", Data: map[string]any{"uri": uri}}
 }
 
 func (s *server) read(uri string) (string, string, bool) {
@@ -529,15 +581,9 @@ func (s *server) cancel(raw json.RawMessage) {
 	}
 }
 
-// reply 写出一个响应：成功结果另含 resultType 与服务身份。
+// reply 写出一个 2026-07-28 响应：成功结果另含 resultType 与服务身份。
 func (s *server) reply(id json.RawMessage, result map[string]any, e *rpcError) {
-	if len(id) == 0 {
-		id = json.RawMessage("null")
-	}
-	msg := map[string]any{"jsonrpc": "2.0", "id": id}
-	if e != nil {
-		msg["error"] = e
-	} else {
+	if e == nil {
 		result["resultType"] = "complete"
 		meta, _ := result["_meta"].(map[string]any)
 		if meta == nil {
@@ -545,6 +591,19 @@ func (s *server) reply(id json.RawMessage, result map[string]any, e *rpcError) {
 		}
 		meta[metaPrefix+"serverInfo"] = map[string]any{"name": "wa-cli", "version": s.cfg.Version}
 		result["_meta"] = meta
+	}
+	s.respond(id, result, e)
+}
+
+// respond 原样写出一个响应（旧版会话的结果不加 2026-07-28 的字段）。
+func (s *server) respond(id json.RawMessage, result map[string]any, e *rpcError) {
+	if len(id) == 0 {
+		id = json.RawMessage("null")
+	}
+	msg := map[string]any{"jsonrpc": "2.0", "id": id}
+	if e != nil {
+		msg["error"] = e
+	} else {
 		msg["result"] = result
 	}
 	s.write(msg)

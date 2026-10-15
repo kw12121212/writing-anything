@@ -1,0 +1,246 @@
+# 系列语料测试矩阵（Test Matrix）：系列特性面 → 语料可断言事实。每条带稳定编号（S-<特性>-<序号>）；
+# scene 为单元引用或 series；command 为 wa-cli 命令（示意，参数由 commands.yaml 录制）；expected 为期望结果；
+# assertion 为断言要点；evidence 为对账锚点（见 TestSeriesCorpusMatrix，语义同小说语料）：script=commands.yaml 步骤
+# （token 子串定位，可选 stdout_contains/expect_code 断言值）、golden=golden/ 文件、negative=负向注入断言码、
+# structure=结构校验测试。
+entries:
+- id: S-SETUP-01
+  feature: series-setup
+  scene: series
+  command: wa-cli series set harbor --title 雾港灯火 --sources series-note + series add harbor fog-harbor/homeward
+  expected: 全绿（exit 0）
+  assertion: 系列文件 harbor.yaml 创建，works 依次为 fog-harbor 与 homeward（阅读顺序），系列素材为 series-note。
+  evidence:
+  - kind: script
+    token: series set harbor --title 雾港灯火
+  - kind: script
+    token: series add harbor homeward
+  - kind: golden
+    file: harbor.yaml
+- id: S-SETUP-02
+  feature: series-setup
+  scene: series
+  command: wa-cli series fact harbor fact-lighthouse/fact-ten-years + series show harbor
+  expected: 全绿（exit 0），series show 列出两条系列事实
+  assertion: 系列事实带素材出处写入系列文件，series show 只读输出事实与成员作品摘要。
+  evidence:
+  - kind: script
+    token: series fact harbor fact-ten-years
+  - kind: script
+    token: series show harbor
+    stdout_contains: fact-ten-years
+- id: S-SETUP-03
+  feature: series-setup
+  scene: series
+  command: wa-cli series show harbor（两部作品收口后）
+  expected: summaries 依次为 fog-harbor 与 homeward 的根单元摘要，stale 为 false
+  assertion: 成员作品根单元摘要按 works 顺序出现在系列视图中。
+  evidence:
+  - kind: script
+    token: series show harbor
+    stdout_contains: '"work":"fog-harbor"'
+  - kind: golden
+    file: series-show.json
+- id: S-CANON-01
+  feature: series-canon
+  scene: series
+  command: wa-cli canon add fog-harbor --scope series --type world-rule/item
+  expected: 全绿（exit 0），系列设定集 .writing-anything/series/harbor/canon.yaml 在首次登记时创建
+  assertion: 雾笛规程（rule-fog-horn）与值守日志（item-logbook）写入系列级共享设定集，条目 scope 为 series。
+  evidence:
+  - kind: script
+    token: canon add fog-harbor --scope series --type world-rule --id rule-fog-horn
+  - kind: script
+    token: canon add fog-harbor --scope series --type item --id item-logbook
+  - kind: golden
+    file: series-canon.yaml
+- id: S-CANON-02
+  feature: series-canon
+  scene: homeward
+  command: wa-cli canon list homeward
+  expected: 解析视图含作品级条目（scope work）与未被覆盖的系列级条目（scope series:harbor）
+  assertion: 值守日志以 series:harbor 来源出现在第二部的解析视图中；被覆盖的系列级雾笛规程不出现。
+  evidence:
+  - kind: script
+    token: canon list homeward
+    stdout_contains: '"scope":"series:harbor"'
+  - kind: golden
+    file: canon-list-homeward.json
+- id: S-OVERRIDE-01
+  feature: canon-override
+  scene: homeward
+  command: wa-cli canon add homeward --type world-rule --id rule-fog-horn（不带覆盖原因与作者确认）
+  expected: 被拒绝（canon.override-unconfirmed，exit 1），不写文件
+  assertion: 作品级条目与系列级条目同 id 构成覆盖时，缺少覆盖原因与作者确认的登记被拒绝。
+  evidence:
+  - kind: script
+    token: canon add homeward --type world-rule --id rule-fog-horn
+    expect_code: canon.override-unconfirmed
+- id: S-OVERRIDE-02
+  feature: canon-override
+  scene: homeward
+  command: wa-cli canon add homeward ... --override-reason .. --confirmed-by-author --confirmation ..
+  expected: 全绿（exit 0），作品设定集条目带 override（reason、confirmation、confirmed_at）
+  assertion: 覆盖记录写入第二部 canon.yaml，confirmed_at 取冻结时钟；解析视图中第二部看到二十秒规程，第一部仍为系列级三十秒规程。
+  evidence:
+  - kind: script
+    token: --override-reason 第二部时隔十年
+  - kind: golden
+    file: homeward-canon.yaml
+  - kind: structure
+    test: TestSeriesCorpusReplay
+- id: S-CONTEXT-01
+  feature: series-context
+  scene: homeward/s1
+  command: wa-cli context homeward/s1
+  expected: context.series 含系列事实与第一部根摘要（stale 为 false）
+  assertion: 第二部场景的上下文包读取系列事实与排在它之前的成员作品摘要，起草时不必翻阅第一部正文。
+  evidence:
+  - kind: script
+    token: context homeward/s1
+    stdout_contains: '"work":"fog-harbor","text":"《雾港》'
+  - kind: golden
+    file: context-homeward-s2.json
+- id: S-TIMELINE-01
+  feature: global-timeline
+  scene: fog-harbor
+  command: wa-cli timeline fog-harbor
+  expected: 全绿（exit 0），fog-harbor/s1 早于 fog-harbor/s2
+  assertion: 第一部两场景以 time 与 after 声明故事时间，作品级时间线按声明排序。
+  evidence:
+  - kind: script
+    token: timeline fog-harbor
+    stdout_contains: fog-harbor/s2
+- id: S-TIMELINE-02
+  feature: global-timeline
+  scene: series
+  command: wa-cli timeline harbor（第二部场景契约写入后）
+  expected: 全绿（exit 0），系列时间线含两部作品的四个场景
+  assertion: 第二部场景以 after 跨作品声明晚于第一部末场，系列时间线按 works 顺序拼接后推导全序。
+  evidence:
+  - kind: script
+    token: timeline harbor
+    stdout_contains: '"unit":"homeward/s2"'
+  - kind: script
+    token: timeline harbor
+    stdout_contains: '"unit":"fog-harbor/s1"'
+  - kind: golden
+    file: timeline.json
+- id: S-TIMELINE-03
+  feature: global-timeline
+  scene: series
+  command: 注入 scene contract fog-harbor/s1 sc --after homeward/s2，timeline harbor
+  expected: timeline.cycle 与 timeline.order-conflict（error，exit 1）；连续性审查携带同样的 error 级发现；修回后全绿
+  assertion: 跨作品 after 成环时全局时间线报错并退回默认序。
+  evidence:
+  - kind: negative
+    code: timeline.cycle
+  - kind: negative
+    code: timeline.order-conflict
+- id: S-SAMETIME-01
+  feature: same-time-presence
+  scene: homeward/s2
+  command: 注入 scene contract homeward/s2 sc --time "1998-10-04 黎明" --after ""
+  expected: timeline.same-time-presence（error）；accept homeward/s2 exit 1；修回后全绿
+  assertion: 阿宁在第一部 fog-harbor/s2 与第二部 homeward/s2 同一故事时间出场且无 after 分隔，跨作品发现以 [系列] 开头并列出两部作品的场景，阻塞验收。
+  evidence:
+  - kind: negative
+    code: timeline.same-time-presence
+- id: S-DEAD-01
+  feature: cross-work-dead-acting
+  scene: fog-harbor/s2
+  command: wa-cli scene close-out fog-harbor/s2 + state confirm fog-harbor st-1
+  expected: 全绿（exit 0），陆山的终态「已亡故」经作者确认
+  assertion: 第一部登记并确认陆山的终态，作为第二部跨作品检查的依据；第二部陆山只在回忆中出现，基线无发现。
+  evidence:
+  - kind: script
+    token: state confirm fog-harbor st-1
+  - kind: script
+    token: continuity harbor
+    stdout_contains: '"findings":[]'
+  - kind: golden
+    file: continuity.json
+- id: S-DEAD-02
+  feature: cross-work-dead-acting
+  scene: homeward/s2
+  command: 注入 scene contract homeward/s2 sc --characters 阿宁,陆归帆,陆山
+  expected: continuity.dead-acting（error）；accept homeward/s2 exit 1；修回后全绿
+  assertion: 第一部已确认亡故的人物在第二部场景出场，按称谓跨作品解析后报告并阻塞验收。
+  evidence:
+  - kind: negative
+    code: continuity.dead-acting
+- id: S-STATE-01
+  feature: cross-work-state
+  scene: homeward/s2
+  command: 注入 state propose/confirm homeward --entry char-lu-shan --state 失踪
+  expected: continuity.conflicting-state（error）；accept homeward/s2 exit 1；撤销后全绿
+  assertion: 同一设定条目在两部作品的最后生效已确认状态不同，跨作品设定冲突阻塞提及该场景的验收。
+  evidence:
+  - kind: negative
+    code: continuity.conflicting-state
+- id: S-GATE-01
+  feature: series-gate
+  scene: homeward/s2
+  command: wa-cli review show homeward/s2（基线）+ 注入后 accept homeward/s2
+  expected: 基线 gate.blockers 为空；注入违例时 accept 以 exit 1 列出跨作品错误码，修回后验收成功
+  assertion: 系列成员场景的验收关卡纳入跨作品 error 级发现，修回合规后同一场景验收通过。
+  evidence:
+  - kind: script
+    token: review show homeward/s2
+    stdout_contains: '"blockers":[]'
+  - kind: structure
+    test: TestSeriesCorpusNegativeInjections
+- id: S-LIFECYCLE-01
+  feature: lifecycle
+  scene: fog-harbor/s2
+  command: wa-cli accept fog-harbor/s2（第一部末场）
+  expected: 全绿（exit 0），changedPaths 含 part-1 卷末检查点
+  assertion: 部内最后一个场景验收时自动生成卷末检查点，作者确认后部收口。
+  evidence:
+  - kind: script
+    token: accept fog-harbor/s2
+    stdout_contains: units/part-1/checkpoint.yaml
+  - kind: script
+    token: volume confirm fog-harbor/part-1
+- id: S-LIFECYCLE-02
+  feature: lifecycle
+  scene: homeward/s2
+  command: wa-cli accept homeward/s2（第二部末场）
+  expected: 全绿（exit 0），changedPaths 含 part-1 卷末检查点
+  assertion: 第二部末场在跨作品关卡全绿时验收成功，生成本作品的卷末检查点。
+  evidence:
+  - kind: script
+    token: accept homeward/s2
+    stdout_contains: units/part-1/checkpoint.yaml
+  - kind: script
+    token: volume confirm homeward/part-1
+- id: S-EXPORT-01
+  feature: assemble-export
+  scene: series
+  command: wa-cli assemble fog-harbor/homeward + export homeward --format markdown
+  expected: 全绿（exit 0），书名与部/章标题节进入组稿
+  assertion: 两部作品各自组稿，第二部导出 Markdown；正文与标题由黄金文件逐字节锁定。
+  evidence:
+  - kind: script
+    token: assemble homeward --output homeward.md
+  - kind: golden
+    file: fog-harbor.md
+  - kind: golden
+    file: homeward.md
+  - kind: golden
+    file: homeward-export.md
+- id: S-DETERMINISM-01
+  feature: determinism
+  scene: series
+  command: 冻结时间源下重放两次 + UPDATE_GOLDEN=1 再生成
+  expected: 两棵工作区目录树逐文件 SHA-256 一致；黄金文件逐字节一致
+  assertion: 系列语料重放可重复（含覆盖记录的 confirmed_at）；脚本结构、规模与负向步骤由结构校验锁定。
+  evidence:
+  - kind: structure
+    test: TestSeriesCorpusReplay
+  - kind: structure
+    test: TestSeriesCorpusGolden
+  - kind: structure
+    test: TestSeriesCorpusScript
+  - kind: script
+    token: validate

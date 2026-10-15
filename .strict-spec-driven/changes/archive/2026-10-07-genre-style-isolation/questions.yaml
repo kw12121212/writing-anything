@@ -1,0 +1,54 @@
+schema: strict-spec-driven/question-list/v1
+schema_version: 1
+artifact_type: question_list
+schema_file: templates/strict-spec-driven/schemas/question-list.yaml
+change: genre-style-isolation
+open: []
+resolved:
+  - id: requirement-problem
+    question: 今天具体出了什么问题，对谁？
+    context: 证据：里程碑 notes「语料黄金上下文中 norms.style 出现「结论先行」文章文风」与 planned change summary。影响 proposal 范围。
+    answer: 写小说的作者与接入的 Agent：novel 与 short-story 作品合并内置 default 规范包时继承了「结论先行」等文章类文风，上下文包把它交给起草场景的 Agent，与小说写作相悖
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-outcome
+    question: 什么可观察的变化证明问题解决了？
+    context: 证据：里程碑 done_criteria「novel 作品的 wa-cli config resolved 与 context 输出不含技术博客文风条目，语料黄金文件随之再生成」与 planned change details。影响 spec delta 与测试。
+    answer: novel 作品的 wa-cli config resolved 与 wa-cli context 输出不含技术博客文风条目，config resolved 列出被排除条目及原因；novel-e2e 黄金文件再生成
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-trigger
+    question: 为什么现在做？
+    context: 证据：里程碑 notes「来源：2026-10-07 路线图里程碑审计 P1 项」；planned change depends_on 为空。影响优先级。
+    answer: 2026-10-07 里程碑审计把小说继承文章文风列为 P1 项，本变更没有未满足依赖
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-non-goals
+    question: 哪些明确不做？
+    context: 证据：里程碑 scope.out 与 planned change details 只涉及 style 等文风条目。影响 proposal 范围。
+    answer: 不新增小说专用文风、不调用模型、不扩展到 glossary/bannedTerms/rules/rubric 的类别过滤、不做里程碑其他计划变更
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-interpretation
+    question: 「按文体类别声明适用范围」应如何理解？
+    context: 证据：planned change details「style 等文风条目按文体类别（文章类、小说类）声明适用范围」。影响 spec delta 与实现。
+    answer: 文体声明类别 article 或 fiction；规范包文风条目用 applies_to 列出适用的类别，按作品文体合并时排除类别不符的条目，并在 config resolved 中列出被排除条目与原因
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: uncategorized-behavior
+    question: 文体缺失或未声明类别（minimal）时如何处理带 applies_to 的条目？
+    context: 路线图未直接写明；现有 init 工作区没有 default_genre，config resolved 测试期望 default 规范包文风存在。影响实现与测试。
+    answer: 全部生效、不排除（见 design 决策 unscoped-applies-everywhere），保持既有行为
+    status: resolved
+    answered_by: roadmap
+  - id: second-style-entry
+    question: default 规范包第二条「用具体的事实、数据和例子代替空泛的形容词」是否也属文章类？
+    context: 完成标准要求 novel 输出不含技术博客文风条目；该条面向事实、数据，属于非虚构写作要求。影响内置数据与黄金文件。
+    answer: '属于文章类，与「结论先行」一起声明 applies_to: [article]；default.yaml 注释已写明只放通用规范，文章专用条目以 applies_to 限定'
+    status: resolved
+    answered_by: roadmap

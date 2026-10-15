@@ -485,3 +485,45 @@ func TestBlockSequenceKeepsLineComment(t *testing.T) {
 		t.Fatalf("encoded:\n%s", data)
 	}
 }
+
+// Blocked 与 EnsureDir 逐级检查工作区目录之下的路径段，不跟随符号链接（validated-path-segments）。
+func TestBlockedAndEnsureDir(t *testing.T) {
+	root := t.TempDir()
+	outside := t.TempDir()
+	if err := os.Mkdir(filepath.Join(root, ".writing-anything"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := EnsureDir(root, ".writing-anything/series/guide"); err != nil {
+		t.Fatal(err)
+	}
+	if info, err := os.Lstat(filepath.Join(root, ".writing-anything", "series", "guide")); err != nil || !info.IsDir() {
+		t.Fatalf("EnsureDir 未创建目录: %v", err)
+	}
+	if err := EnsureDir(root, ".writing-anything/series/guide"); err != nil {
+		t.Fatalf("目录已存在时应成功: %v", err)
+	}
+	if Blocked(root, ".writing-anything/series/guide/canon.yaml") {
+		t.Fatal("不存在的文件不应算受阻")
+	}
+	if err := os.Symlink(outside, filepath.Join(root, ".writing-anything", "series", "link")); err != nil {
+		t.Fatal(err)
+	}
+	if err := EnsureDir(root, ".writing-anything/series/link/sub"); err != ErrNotRealDir {
+		t.Fatalf("途经符号链接应返回 ErrNotRealDir，实际 %v", err)
+	}
+	if entries, _ := os.ReadDir(outside); len(entries) != 0 {
+		t.Fatalf("项目目录之外被创建了 %v", entries)
+	}
+	if !Blocked(root, ".writing-anything/series/link/canon.yaml") {
+		t.Fatal("途经符号链接的路径应算受阻")
+	}
+	if err := os.WriteFile(filepath.Join(root, ".writing-anything", "series", "file"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := EnsureDir(root, ".writing-anything/series/file/sub"); err != ErrNotRealDir {
+		t.Fatalf("途经普通文件应返回 ErrNotRealDir，实际 %v", err)
+	}
+	if !Blocked(root, ".writing-anything/series/link") {
+		t.Fatal("本身是符号链接的路径应算受阻")
+	}
+}

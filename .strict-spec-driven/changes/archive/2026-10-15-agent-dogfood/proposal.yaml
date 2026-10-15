@@ -1,0 +1,40 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: agent-dogfood
+  status: proposed
+summary:
+  what:
+    - 在 docs/dogfood/ 下建立真实接入记录：README.md 给出可照做的运行手册，runs.yaml 以结构化形式记录每次运行的客户端版本、wa-cli 版本与提交、接入方式、命令序列、导出产物与问题清单
+    - 由作者在本机把 Claude Code 与 Codex 两个客户端经技能（Skill）与 MCP 服务（MCP Server）接入 wa-cli，完成真实接入验证（Dogfooding）运行：Claude Code 各完成一篇技术博客（tech-blog，导出 markdown）与一篇公众号营销文章（wechat-marketing，导出 wechat-html），Codex 完成一篇技术博客，共三次，全程经阅读页（Reading View）确认；Codex × 公众号营销文章因 Codex 额度不足由作者决定不运行，在记录中写明原因
+    - 新增开发工具 internal/tools/dogfood，校验 runs.yaml 中 2 个客户端 × 2 种文体的每个组合恰好一条记录：已运行的走到导出、记录齐全，未运行的写明原因；两个客户端与两种文体各至少有一次已运行；每个问题都链接到已归档的缺陷变更或写明不修理由，并由 go test 强制
+  why:
+    - 里程碑 real-use-and-release 的目标是用真实 Agent 接入验证加固后的产品：此前全部验证都是进程内重放与夹具测试，没有任何一次由真实客户端经技能与 MCP 走完从写作简报到导出的生命周期，第三方 Agent 实际接入时的卡点无从得知
+    - 里程碑完成标准第一条要求 docs 下有真实接入记录，且每个问题都链接到已归档的缺陷变更或写明不修理由（作者因 Codex 额度不足把四次运行改为三次，未运行的组合写明原因，完成标准措辞同步修改）；release-v0-2-0 依赖本变更，发布前必须完成
+scope:
+  in:
+    - docs/dogfood/README.md：运行手册（构建 wa-cli、在仓库外新建临时项目目录、wa-cli init、wa-cli skills install --agent <client>、wa-cli mcp install --client <client>、素材准备、经 preview 阅读页确认、导出与记录方法、问题分诊流程）
+    - internal/tools/dogfood（package main）：记录校验工具及其 testdata 夹具与单元测试；记录齐备后加入读取真实 docs/dogfood/runs.yaml 的测试函数，供里程碑归档时写入完成标准对账表
+    - 问题分诊：每个问题以独立的 strict-spec-bugfix 缺陷变更修复并归档，或在记录中写明不修理由
+    - docs/GLOSSARY.md 补充本变更引入的新术语（如真实接入验证（Dogfooding）、真实接入记录）
+    - docs/dogfood/runs.yaml：每个组合一条结构化记录（三次运行与一条写明原因的未运行记录）与问题清单
+    - 作者执行三次真实运行（Claude Code × tech-blog、Claude Code × wechat-marketing、Codex × tech-blog）并记录；Codex × wechat-marketing 记为未运行并写明原因
+    - 经 strict-roadmap-transition 或 roadmap-generate 修改里程碑 real-use-and-release 完成标准第一条的措辞，与三次运行一致
+  out:
+    - 在本变更内直接修复真实运行中发现的产品缺陷：缺陷由独立的 strict-spec-bugfix 变更修复，本变更只记录与链接
+    - 产品功能扩展；验证中发现的新需求另立里程碑
+    - 向公众号等外部平台发布文章或调用平台 API
+    - 发布 v0.2.0（由 release-v0-2-0 完成）
+    - 在完成标准对账表 internal/tools/criteria/testdata/criteria.yaml 中登记本里程碑的完成标准：里程碑归档时按 criteria-reconciliation 规则同步补表
+    - 自动化或模拟客户端运行：wa-cli 不调用大语言模型（LLM），真实接入必须由作者操作真实客户端
+    - Codex × wechat-marketing 的真实运行（作者因 Codex 额度不足取消）
+unchanged_behavior:
+  - wa-cli 的命令、参数、输出、诊断与全部主规格不变（缺陷修复在各自的缺陷变更中进行）
+  - 产品二进制不 import internal/tools/**，产品运行时不读取 docs/dogfood/
+  - 仓库根目录不创建 .writing-anything/：真实运行的项目目录位于仓库之外
+  - 既有 E2E 语料、黄金文件、完成标准对账表与覆盖率阈值不变
+roadmap:
+  milestone: real-use-and-release
+  planned_change: agent-dogfood

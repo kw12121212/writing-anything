@@ -374,3 +374,31 @@ requirements:
         - GIVEN: novel 作品 my-novel 的场景 scene-1 处于 brief 阶段，单元目录下无 brief 产物
         - WHEN: 运行 wa-cli advance my-novel/scene-1 --dir D --json（单元引用不写出层级路径，见 unit-reference）
         - THEN: 同现有 advance 语义：缺少必需产物时报告 lifecycle.missing-artifact（path 为 scene-1 的单元目录）；补齐产物后可逐阶段推进到 done；场景推进不改变 part-one 与 chapter-one 的存储 stage（其生效阶段为推导阶段），退出码与诊断同既有行为
+  genre-style-scope:
+    strength: MUST
+    statement: 文体可以用 category 声明文体类别（Genre Category），取值为 article（文章类）或 fiction（小说类）；内置 tech-blog 与 wechat-marketing 为 article，short-story 与 novel 为 fiction，minimal 不声明。规范包的 style 条目可以是字符串（对所有文体生效），也可以是 {text, applies_to} 对象，applies_to 为非空、不重复的文体类别列表。内置 default 规范包的两条文风（结论先行；用具体的事实、数据和例子代替空泛的形容词）只适用于 article。按作品文体合并时（wa-cli config resolved 取 default_genre，上下文包等按作品文体），文体声明了类别而条目的 applies_to 不含该类别的文风条目不进入 resolved.style，也不进入上下文包的 norms.style；改为列入 resolved.excludedStyle，每项含 text、source、appliesTo 与 reason（写明条目适用的类别与当前文体及其类别），按配置层顺序排列，没有被排除的条目时为空数组。没有生效文体或文体未声明类别时所有文风条目都生效。resolved.genre 在文体声明类别时含 category。未加 --json 时人读输出列出被排除的文风条目与原因。
+    scenarios:
+      novel-excludes-article-style:
+        - GIVEN: 用 wa-cli init --dir D 创建的工作区，default_genre 为 novel，packs 为空（隐式应用 default 规范包）
+        - WHEN: 运行 wa-cli config resolved --dir D --json
+        - THEN: resolved.genre.category 为 fiction；resolved.style 为空数组；resolved.excludedStyle 含两项，source 都为 pack:default，appliesTo 为 [article]，reason 提到 novel 与 fiction；退出码为 0
+      tech-blog-keeps-style:
+        - GIVEN: 同上，但 default_genre 为 tech-blog
+        - WHEN: 运行 wa-cli config resolved --dir D --json
+        - THEN: resolved.genre.category 为 article；resolved.style 含「结论先行，先说结果再说过程。」，source 为 pack:default；resolved.excludedStyle 为空数组
+      no-genre-keeps-style:
+        - GIVEN: 刚用 wa-cli init --dir D 创建的工作区，没有 default_genre
+        - WHEN: 运行 wa-cli config resolved --dir D --json
+        - THEN: resolved.style 含 default 规范包的两条文风，resolved.excludedStyle 为空数组
+      string-entry-applies-everywhere:
+        - GIVEN: 'default_genre 为 novel，packs 为 [house]，house 的 style 为 [「短句为主」, {text: 「先给结论」, applies_to: [article]}, {text: 「多用感官细节」, applies_to: [fiction]}]'
+        - WHEN: 运行 wa-cli config resolved --dir D --json
+        - THEN: resolved.style 依次为「短句为主」与「多用感官细节」，source 都为 pack:house；resolved.excludedStyle 只含「先给结论」
+      novel-context-no-article-style:
+        - GIVEN: novel 作品的场景单元，工作区 packs 为空
+        - WHEN: 运行 wa-cli context <场景> --dir D --json
+        - THEN: context.norms.style 不含「结论先行」等 default 规范包的文章类文风
+      unknown-category-rejected:
+        - GIVEN: .writing-anything/packs/house.yaml 的某条 style 条目 applies_to 为 [poetry]
+        - WHEN: 运行 wa-cli validate --dir D --json
+        - THEN: diagnostics 中有一条指向该 applies_to 的 Schema 校验错误，退出码为 1

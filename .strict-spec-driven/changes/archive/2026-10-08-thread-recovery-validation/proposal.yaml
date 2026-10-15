@@ -1,0 +1,29 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: thread-recovery-validation
+  status: proposed
+summary:
+  what:
+    - 伏笔交叉检查（threads-contract-checks）不再依赖伏笔台账（Foreshadowing Ledger）文件是否存在：作品没有 threads.yaml 时把台账视为空集，场景大纲节 recovers 或 plants 引用的任何伏笔都报告 threads.unknown-thread
+    - wa-cli validate 整体校验、wa-cli continuity 与 wa-cli scene contract 写前预检对无台账作品行为一致：validate 以非零退出，scene contract --plant/--recover 拒绝写入并给出 wa-cli threads add 的下一步
+  why:
+    - 2026-10-07 里程碑审计发现 threads.go ContractProblems 无台账时直接返回 nil：作者从未登记伏笔时，场景契约可以回收或埋设任意不存在的伏笔而不被发现，伏笔回收保证形同虚设
+scope:
+  in:
+    - internal/threads：ContractProblems 在台账缺失时按空台账检查；CheckWorks 对无台账作品同样做交叉检查（不计入 checked）
+    - internal/cli scene contract 写前预检与 internal/continuity 随之对无台账作品报告伏笔交叉问题；更新相关注释
+    - 单元与 CLI 测试覆盖无台账与有台账两种情况；修正依赖旧行为的测试夹具
+    - threads 主规格增量：修改 threads-artifact 与 threads-contract-checks 中「无台账不检查」的写法
+  out:
+    - 台账 Schema 与领域检查的规则本身；台账不通过 Schema 校验或途经符号链接时仍不做交叉检查（其问题由台账校验报告）
+    - 新的伏笔特性、收口（Close-out）规则改动或里程碑中的其他计划变更
+unchanged_behavior:
+  - 有台账作品的交叉检查规则、错误码、path 与 field 不变
+  - 大纲没有 plants 或 recovers 的作品（含 tech-blog、wechat-marketing 等文章类作品）不产生任何伏笔诊断，validate 的 checked 不变
+  - wa-cli threads <work> 在台账不存在时仍输出空列表、退出码为 0；台账 Schema 失败时交叉检查仍跳过
+roadmap:
+  milestone: novel-guarantee-hardening
+  planned_change: thread-recovery-validation

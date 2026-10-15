@@ -1,0 +1,45 @@
+schema: strict-spec-driven/delta-spec/v1
+schema_version: 1
+artifact_type: delta_spec
+schema_file: templates/strict-spec-driven/schemas/delta-spec.yaml
+target_spec: cli
+operations:
+  ADDED:
+    diagnostic-next-concrete:
+      strength: MUST
+      statement: 生命周期主路径命令的 error 级诊断，其 next 必须至少含一条不是 wa-cli help 的可直接运行的只读命令，并带上该诊断涉及的单元引用（Unit Reference）或作品；wa-cli help <command> --json 只作补充、排在具体命令之后：brief set 由参数引起的问题（没有 path）与 brief.anchored-value 的 next 第一条为 wa-cli brief show <unit> --dir <dir> --json；outline set、outline remove 与 scene contract 由参数引起的问题与 outline.anchored-value 的第一条为 wa-cli outline show <unit> --dir <dir> --json（子单元的节拍不存在时另给出根单元的 outline show）；scene close-out 由收口输入引起、没有 path 的问题中，契约缺口、收口状态、输入不合法与引用不存在的事件或伏笔的第一条为 wa-cli outline show <unit> --dir <dir> --json，引用不存在的设定条目或人物为 wa-cli canon list <work> --dir <dir> --json，单元不是场景或参数取值不合法为 wa-cli status --dir <dir> --json，warning 级 closeout.suspected-name 同样先给出 wa-cli canon list <work> --dir <dir> --json；draft write 的输入问题（input.read-failed、draft.empty、draft.too-large、draft.edits-anchored）的第一条为 wa-cli context <unit> --dir <dir> --json；review record 的 input.read-failed、review resolve 由参数引起的问题与 review.anchored-value、accept.incomplete-confirmation 的第一条为 wa-cli review show <unit> --dir <dir> --json；advance 的 work.anchored-value 为 wa-cli next <unit> --dir <dir> --json；volume.not-volume 为 wa-cli status --dir <dir> --json，volume.incomplete-confirmation 为 wa-cli next <unit> --dir <dir> --json；默认 next 中 draft.not-found 为 wa-cli context <unit> --dir <dir> --json，artifact.unknown-kind 为整体校验 wa-cli validate --dir <dir> --json，config.unknown-key 与 config.anchored-value 为 wa-cli config resolved --dir <dir> --json。用法错误（usage.*）、wa-cli new 的参数问题、unit add 与 unit move 的参数问题，以及其他主规格明确规定 next 为 wa-cli help 的诊断不受此约束；主规格已写明 next 含某条 wa-cli help 命令的诊断仍包含该命令。
+      scenarios:
+        brief-param-next:
+          - GIVEN: 作品 my-post 已有 brief.yaml
+          - WHEN: 运行 wa-cli brief set my-post --length 3000-1500 --dir D --json
+          - THEN: diagnostics 中有一条错误码为 input.invalid-value、没有 path 的诊断，next 的第一条为 wa-cli brief show my-post --dir D --json，且 next 含 wa-cli help brief set --json；brief.yaml 不变，退出码为 1
+        closeout-gap-next:
+          - GIVEN: 场景 my-novel/scene-1 的场景契约声明了必须发生的状态变化 sc-1，收口输入没有对应的状态变化
+          - WHEN: 运行 wa-cli scene close-out my-novel/scene-1 --file gap-input.yaml --dir D --json
+          - THEN: diagnostics 中有一条错误码为 closeout.missing-state-change 的诊断，next 的第一条为 wa-cli outline show my-novel/scene-1 --dir D --json，且 next 含 wa-cli help scene close-out --json 与 wa-cli help scene contract --json
+        closeout-unknown-entry-next:
+          - GIVEN: 收口输入的状态变化引用了设定集中不存在的条目 canon-9
+          - WHEN: 运行 wa-cli scene close-out my-novel/scene-1 --file entry-input.yaml --dir D --json
+          - THEN: diagnostics 中有一条错误码为 state.unknown-entry 的诊断，next 的第一条为 wa-cli canon list my-novel --dir D --json，且 next 含 wa-cli help scene close-out --json
+        draft-empty-next:
+          - GIVEN: 作品 my-post 处于草稿阶段
+          - WHEN: 以只含空白的标准输入运行 wa-cli draft write my-post --dir D --json
+          - THEN: diagnostics 中有一条错误码为 draft.empty 的诊断，next 的第一条为 wa-cli context my-post --dir D --json，且 next 含 wa-cli help draft write --json；没有写出 draft.md，退出码为 1
+        accept-confirmation-next:
+          - GIVEN: 作品 my-post 处于需要验收的阶段
+          - WHEN: 运行 wa-cli accept my-post --confirmed-by-author --dir D --json（缺少 --confirmation）
+          - THEN: diagnostics 中有一条错误码为 accept.incomplete-confirmation 的诊断，next 的第一条为 wa-cli review show my-post --dir D --json，且 next 含 wa-cli help accept --json；没有写出 acceptance.yaml，退出码为 1
+        volume-confirmation-next:
+          - GIVEN: 部 my-novel/part-one 已生成卷末检查点
+          - WHEN: 运行 wa-cli volume confirm my-novel/part-one --confirmed-by-author --dir D --json（缺少 --confirmation）
+          - THEN: diagnostics 中有一条错误码为 volume.incomplete-confirmation 的诊断，next 的第一条为 wa-cli next my-novel/part-one --dir D --json，且 next 含 wa-cli help volume confirm --json；退出码为 1
+        draft-not-found-next:
+          - GIVEN: 作品 my-post 还没有 draft.md
+          - WHEN: 运行 wa-cli provenance my-post --dir D --json
+          - THEN: diagnostics 中有一条错误码为 draft.not-found、path 为 .writing-anything/works/my-post/draft.md 的诊断，next 为 wa-cli context my-post --dir D --json 与 wa-cli help draft write --json，退出码为 1
+        config-key-next:
+          - GIVEN: 工作区 D
+          - WHEN: 运行 wa-cli config set schema_version 2 --dir D --json
+          - THEN: diagnostics 中有一条错误码为 config.unknown-key 的诊断，next 的第一条为 wa-cli config resolved --dir D --json，且 next 含 wa-cli help config set --json，退出码为 1
+  MODIFIED: {}
+  REMOVED: {}

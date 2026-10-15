@@ -53,6 +53,25 @@ const (
 // GateLevels 是关卡强度（Gate Level）的全部取值，与 config.schema.json 一致。
 var GateLevels = []string{"strict", "standard", "fast"}
 
+// 确认渠道（Confirmation Channel）：确认记录（Confirmation Record）经由哪条渠道写入。cli 为命令行参数
+// （--confirmed-by-author 与 --confirmation，Agent 也能代填），preview 为作者在本地阅读页（Reading View）上的操作。
+// 缺失 channel 字段的旧记录按 cli 解释。这是可审计的流程约束，不是安全隔离。
+const (
+	ChannelCLI     = "cli"
+	ChannelPreview = "preview"
+)
+
+// Channels 是确认渠道的全部取值，与各产物 Schema 中 channel 的枚举一致。
+var Channels = []string{ChannelCLI, ChannelPreview}
+
+// ChannelOr 返回记录的渠道：缺失（nil 或空）时为 cli。
+func ChannelOr(c *string) string {
+	if c == nil || *c == "" {
+		return ChannelCLI
+	}
+	return *c
+}
+
 // SettableKeys 是 config set 可以设置的配置项，按 config.yaml 中的顺序排列。
 var SettableKeys = []string{"language", "default_genre", "packs", "gate_level", "context_budget", "ai_disclosure"}
 
@@ -324,6 +343,48 @@ func regular(root, rel string) bool {
 		}
 	}
 	return true
+}
+
+// Blocked 报告 rel 在工作区目录之下途经的某一级存在但不是真实目录（如符号链接），或 rel 本身存在但不是普通
+// 文件；不存在的路径不算受阻。读取侧据此区分「不存在」与「途经符号链接，按不存在处理并报告」
+// （workspace-artifacts/validated-path-segments）。
+func Blocked(root, rel string) bool {
+	segs := strings.Split(rel, "/")
+	for i := 2; i <= len(segs); i++ {
+		info, err := os.Lstat(abs(root, strings.Join(segs[:i], "/")))
+		if err != nil {
+			return false
+		}
+		if i < len(segs) && !info.IsDir() || i == len(segs) && !info.Mode().IsRegular() {
+			return true
+		}
+	}
+	return false
+}
+
+// ErrNotRealDir 表示工作区目录之下途经的某一级存在但不是真实目录（如符号链接）。
+var ErrNotRealDir = errors.New("途经符号链接或不是真实目录")
+
+// EnsureDir 逐级创建工作区目录 rel（相对项目目录）之下缺失的各级目录，不跟随符号链接：途经的某一级存在但
+// 不是真实目录时不再创建并返回 ErrNotRealDir（workspace-artifacts/validated-path-segments）。
+func EnsureDir(root, rel string) error {
+	segs := strings.Split(rel, "/")
+	for i := 2; i <= len(segs); i++ {
+		p := abs(root, strings.Join(segs[:i], "/"))
+		info, err := os.Lstat(p)
+		switch {
+		case err == nil && info.IsDir():
+			continue
+		case err == nil:
+			return ErrNotRealDir
+		case !errors.Is(err, fs.ErrNotExist):
+			return err
+		}
+		if err := os.Mkdir(p, 0o755); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // Read 读取并解析 root 下的产物 rel；失败时返回 nil 与问题。

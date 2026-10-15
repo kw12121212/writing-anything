@@ -1,7 +1,8 @@
 // Package volume 管理部单元目录下的卷末检查点（Volume Checkpoint）checkpoint.yaml：本部最后一个场景验收后
 // 汇总本部的新增设定、已确认的状态变化、伏笔变化与未处理决策，并从各场景的写后收口（Close-out）提交中确定性
-// 抽取至多 3 条供作者对照原文核对。strict 关卡强度下检查点未经作者确认时，下一部的场景不能验收（其他关卡强度
-// 只提示）。抽样以部单元引用与子树场景正文串联指纹为种子，同一工作区状态总是得到同一抽取结果。本包不 import
+// 抽取至多 3 条供作者对照原文核对。部的最后一个场景验收成功后由 accept 自动生成（OnAccept），也可用
+// wa-cli volume checkpoint 重新生成。strict 关卡强度下更早的部缺少检查点或未经作者确认时，下一部的场景不能验收
+// （其他关卡强度只提示）。抽样以部单元引用与子树场景正文串联指纹为种子，同一工作区状态总是得到同一抽取结果。本包不 import
 // internal/cli；只返回结构化的问题，由命令层转换为诊断（Diagnostic）。
 package volume
 
@@ -33,6 +34,7 @@ import (
 
 // 卷末检查点的错误码（Error Code）。已发布的错误码不得改名或复用。
 const (
+	CodeMissing                = "volume.missing"
 	CodeNotVolume              = "volume.not-volume"
 	CodeScenesOpen             = "volume.scenes-open"
 	CodeNotFound               = "volume.not-found"
@@ -69,6 +71,7 @@ type fileRecord struct {
 	Sampled           []Sampled `json:"sampled"`
 	ConfirmedByAuthor bool      `json:"confirmed_by_author"`
 	Confirmation      *string   `json:"confirmation"`
+	Channel           *string   `json:"channel"`
 	ConfirmedAt       *string   `json:"confirmed_at"`
 }
 
@@ -84,6 +87,7 @@ type View struct {
 	Sampled           []Sampled `json:"sampled"`
 	ConfirmedByAuthor bool      `json:"confirmedByAuthor"`
 	Confirmation      *string   `json:"confirmation"`
+	Channel           *string   `json:"channel"` // 确认渠道（Confirmation Channel）；未确认为 null，已确认而缺失时为 cli
 	ConfirmedAt       *string   `json:"confirmedAt"`
 }
 
@@ -113,7 +117,7 @@ func subtreeScenes(w *work.Work, u *work.Unit) []*work.Unit {
 			continue
 		}
 		for p := x; p != nil; p = p.Parent {
-			if p == u {
+			if p.Ref == u.Ref {
 				out = append(out, x)
 				break
 			}
@@ -202,6 +206,47 @@ func sample(part string, fingerprint string, candidates []Sampled) []Sampled {
 // Checkpoint 生成部 u 的卷末检查点：子树全部场景 stage 为 done 否则 volume.scenes-open；汇总 canon、states、
 // threads、decisions 与确定性抽样的 sampled；已有检查点且最后场景与指纹一致时不写文件（changedPaths 为空）。
 func Checkpoint(root string, w *work.Work, u *work.Unit, now time.Time) (*View, []string, []workspace.Problem) {
+	return generate(root, w, u, nil)
+}
+
+// PartOf 返回单元 u 最近的部（卷）祖先；没有时返回 nil。
+func PartOf(w *work.Work, u *work.Unit) *work.Unit {
+	for p := u.Parent; p != nil; p = p.Parent {
+		if IsVolume(w, p) {
+			return p
+		}
+	}
+	return nil
+}
+
+// OnAccept 在场景 u 验收成功后调用：u 是其所属部子树按先序最后一个场景时，按 Checkpoint 的同一逻辑生成该部的
+// 卷末检查点（把刚验收的 u 视为已完成，其余场景仍须 stage 为 done），confirmed_by_author 为 false。不是部的
+// 最后一个场景或没有部祖先时返回 nil。生成遇到的问题（本部其他场景未完成为 volume.scenes-open，path 为该部应有的
+// checkpoint.yaml）一律降为 warning：验收已经写入，不因检查点而撤销；下一部验收的 volume.missing 门禁兜底。
+func OnAccept(root string, w *work.Work, u *work.Unit) (*View, []string, []workspace.Problem) {
+	if u.Type != outline.SceneType {
+		return nil, nil, nil
+	}
+	part := PartOf(w, u)
+	if part == nil {
+		return nil, nil, nil
+	}
+	if scenes := subtreeScenes(w, part); len(scenes) == 0 || scenes[len(scenes)-1].Ref != u.Ref {
+		return nil, nil, nil
+	}
+	v, changed, ps := generate(root, w, part, u)
+	for i := range ps {
+		ps[i].Severity = workspace.SeverityWarning
+		if ps[i].Code == CodeScenesOpen {
+			ps[i].Path = Path(w.UnitDir(part))
+			ps[i].Message += "（本次验收已写入，卷末检查点（Volume Checkpoint）未生成）"
+		}
+	}
+	return v, changed, ps
+}
+
+// generate 生成部 u 的卷末检查点；accepted 非 nil 时把该场景视为已完成（验收刚写入、阶段尚未推进）。
+func generate(root string, w *work.Work, u *work.Unit, accepted *work.Unit) (*View, []string, []workspace.Problem) {
 	if !IsVolume(w, u) {
 		return nil, nil, []workspace.Problem{errorAt(CodeNotVolume, "", "part",
 			"单元 "+u.Ref+" 的类型是 "+u.Type+"；卷末检查点（Volume Checkpoint）属于汇总各章的部单元（如 part）")}
@@ -213,7 +258,7 @@ func Checkpoint(root string, w *work.Work, u *work.Unit, now time.Time) (*View, 
 	}
 	var open []string
 	for _, s := range scenes {
-		if s.Stage != "done" {
+		if s.Stage != "done" && (accepted == nil || s.Ref != accepted.Ref) {
 			open = append(open, s.Ref)
 		}
 	}
@@ -345,7 +390,7 @@ func writeRecord(root, rel string, rec *fileRecord) error {
 	}
 	m.Content = append(m.Content, workspace.Str("sampled"), sn,
 		workspace.Str("confirmed_by_author"), &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!bool", Value: "false"})
-	doc := &yaml.Node{Kind: yaml.DocumentNode, HeadComment: "卷末检查点（Volume Checkpoint）；请用 wa-cli volume checkpoint 生成、wa-cli volume confirm 确认。", Content: []*yaml.Node{m}}
+	doc := &yaml.Node{Kind: yaml.DocumentNode, HeadComment: "卷末检查点（Volume Checkpoint）；由 wa-cli accept 在部的最后一个场景验收后生成（wa-cli volume checkpoint 可重新生成），经 wa-cli volume confirm 确认。", Content: []*yaml.Node{m}}
 	data, err := workspace.Encode(doc)
 	if err != nil {
 		return err
@@ -370,7 +415,16 @@ func orEmpty(vs []string) []string {
 func view(u *work.Unit, rel string, f *fileRecord) *View {
 	return &View{Part: f.Part, Path: rel, Scene: f.Scene, Canon: orEmpty(f.Canon), States: orEmpty(f.States),
 		Threads: orEmpty(f.Threads), Decisions: orEmpty(f.Decisions), Sampled: orEmptySampled(f.Sampled),
-		ConfirmedByAuthor: f.ConfirmedByAuthor, Confirmation: f.Confirmation, ConfirmedAt: f.ConfirmedAt}
+		ConfirmedByAuthor: f.ConfirmedByAuthor, Confirmation: f.Confirmation, Channel: channelOf(f), ConfirmedAt: f.ConfirmedAt}
+}
+
+// channelOf 返回已确认检查点的确认渠道（缺失为 cli）；未确认时为 nil。
+func channelOf(f *fileRecord) *string {
+	if !f.ConfirmedByAuthor {
+		return nil
+	}
+	c := workspace.ChannelOr(f.Channel)
+	return &c
 }
 
 func orEmptySampled(ss []Sampled) []Sampled {
@@ -380,8 +434,23 @@ func orEmptySampled(ss []Sampled) []Sampled {
 	return ss
 }
 
-// Confirm 写入部 u 检查点的作者确认记录；已有确认时报告 volume.already-confirmed。
+// Load 读取部 u 的检查点（Schema 校验）；不存在时返回 nil 与 nil。
+func Load(root string, w *work.Work, u *work.Unit) (*View, []workspace.Problem) {
+	dir := w.UnitDir(u)
+	doc, f, ps := load(root, dir)
+	if ps != nil || doc == nil {
+		return nil, ps
+	}
+	return view(u, Path(dir), f), nil
+}
+
+// Confirm 以命令行渠道（cli）确认检查点，见 ConfirmVia。
 func Confirm(root string, w *work.Work, u *work.Unit, confirmation string, now time.Time) (*View, []string, []workspace.Problem) {
+	return ConfirmVia(root, w, u, confirmation, workspace.ChannelCLI, now)
+}
+
+// ConfirmVia 写入部 u 检查点的作者确认记录与确认渠道 channel；已有确认时报告 volume.already-confirmed。
+func ConfirmVia(root string, w *work.Work, u *work.Unit, confirmation, channel string, now time.Time) (*View, []string, []workspace.Problem) {
 	if strings.TrimSpace(confirmation) == "" {
 		return nil, nil, []workspace.Problem{{Code: CodeIncompleteConfirmation, Severity: workspace.SeverityError, Field: "confirmation",
 			Message: "作者确认必须给出 --confirmed-by-author 与非空白的 --confirmation（作者原话摘要）"}}
@@ -403,7 +472,7 @@ func Confirm(root string, w *work.Work, u *work.Unit, confirmation string, now t
 	if f.ConfirmedByAuthor {
 		return nil, nil, []workspace.Problem{errorAt(CodeAlreadyConfirmed, rel, "", "部 "+u.Ref+" 的卷末检查点已经作者确认过")}
 	}
-	// 节点树上只改确认三字段，保留其他内容与注释；目标节点或所在映射带锚点、别名或合并键时拒绝修改
+	// 节点树上只改确认四字段（含确认渠道），保留其他内容与注释；目标节点或所在映射带锚点、别名或合并键时拒绝修改
 	// （workspace-artifacts/structured-edits）。
 	m := doc.Content[0]
 	if workspace.HasAnchor(m) {
@@ -419,7 +488,7 @@ func Confirm(root string, w *work.Work, u *work.Unit, confirmation string, now t
 	keys := []struct {
 		key string
 		val string
-	}{{"confirmation", confirmation}, {"confirmed_at", nowStr}}
+	}{{"confirmation", confirmation}, {"channel", channel}, {"confirmed_at", nowStr}}
 	for _, k := range keys {
 		found := false
 		for i := 0; i+1 < len(m.Content); i += 2 {
@@ -456,9 +525,10 @@ func Confirm(root string, w *work.Work, u *work.Unit, confirmation string, now t
 	return view(u, rel, &f2), []string{rel}, nil
 }
 
-// AcceptanceBlockers 计算场景 u 验收时的卷末检查点阻塞项：按先序早于 u 的部存在 checkpoint.yaml 而
-// confirmed_by_author 不为 true 时——level 为 strict 报 error（阻塞验收），其他关卡强度报 warning（提示）。
-// 检查点不通过校验时报 volume.invalid（保留其诊断信息）。本部检查点与更晚的部不参与。
+// AcceptanceBlockers 计算场景 u 验收时的卷末检查点阻塞项：按先序早于 u、子树含场景的每个部——没有
+// checkpoint.yaml 报 volume.missing，存在而 confirmed_by_author 不为 true 报 volume.unconfirmed，不通过校验报
+// volume.invalid（保留其诊断信息）；level 为 strict 报 error（阻塞验收），其他关卡强度报 warning（提示）。
+// 本部检查点、更晚的部与没有场景的部不参与。
 func AcceptanceBlockers(root string, w *work.Work, u *work.Unit, level string) []workspace.Problem {
 	if u.Type != outline.SceneType {
 		return nil
@@ -466,6 +536,12 @@ func AcceptanceBlockers(root string, w *work.Work, u *work.Unit, level string) [
 	severity := workspace.SeverityWarning
 	if level == "strict" {
 		severity = workspace.SeverityError
+	}
+	hint := func(strict string) string {
+		if severity == workspace.SeverityWarning {
+			return "（关卡强度 " + level + "，仅提示）"
+		}
+		return strict
 	}
 	var problems []workspace.Problem
 	for _, x := range w.Units() {
@@ -478,30 +554,28 @@ func AcceptanceBlockers(root string, w *work.Work, u *work.Unit, level string) [
 		// 本单元所属的部不参与：它收的是本部的尾，不阻塞本部内的场景。
 		own := false
 		for p := u; p != nil; p = p.Parent {
-			if p == x {
+			if p.Ref == x.Ref {
 				own = true
 				break
 			}
 		}
-		if own {
+		// 没有场景的部无法生成检查点，也没有可核对的内容。
+		if own || len(subtreeScenes(w, x)) == 0 {
 			continue
 		}
 		rel := Path(w.UnitDir(x))
-		if _, ok, _ := workspace.ReadRegular(root, rel); !ok {
-			continue
-		}
-		_, f, ps := load(root, w.UnitDir(x))
-		if ps != nil {
+		doc, f, ps := load(root, w.UnitDir(x))
+		switch {
+		case ps != nil:
 			problems = append(problems, workspace.Problem{Code: CodeInvalid, Severity: severity, Path: rel,
-				Message: "部 " + x.Ref + " 的卷末检查点 " + rel + " 不通过校验（" + ps[0].Code + "：" + ps[0].Message + "）；请重新生成"})
-			continue
-		}
-		if !f.ConfirmedByAuthor {
-			msg := "部 " + x.Ref + " 的卷末检查点（Volume Checkpoint）未经作者确认；strict 关卡下确认前下一部的场景不能验收"
-			if severity == workspace.SeverityWarning {
-				msg = "部 " + x.Ref + " 的卷末检查点（Volume Checkpoint）未经作者确认（关卡强度 " + level + "，仅提示）"
-			}
-			problems = append(problems, workspace.Problem{Code: CodeUnconfirmed, Severity: severity, Path: rel, Message: msg})
+				Message: "部 " + x.Ref + " 的卷末检查点 " + rel + " 不通过校验（" + ps[0].Code + "：" + ps[0].Message + "）；请修复或删除该文件后用 wa-cli volume checkpoint 重新生成"})
+		case doc == nil:
+			problems = append(problems, workspace.Problem{Code: CodeMissing, Severity: severity, Path: rel,
+				Message: "部 " + x.Ref + " 还没有卷末检查点（Volume Checkpoint）；部内全部场景验收并推进到 done 后用 wa-cli volume checkpoint 生成，再请作者确认" +
+					hint("；strict 关卡下生成并经作者确认前，下一部的场景不能验收")})
+		case !f.ConfirmedByAuthor:
+			problems = append(problems, workspace.Problem{Code: CodeUnconfirmed, Severity: severity, Path: rel,
+				Message: "部 " + x.Ref + " 的卷末检查点（Volume Checkpoint）未经作者确认" + hint("；strict 关卡下确认前下一部的场景不能验收")})
 		}
 	}
 	return problems

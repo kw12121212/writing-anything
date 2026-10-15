@@ -128,7 +128,8 @@ func TestConfirmPreconditions(t *testing.T) {
 		t.Fatalf("confirm: %v", ps)
 	}
 	step := f.Steps[0]
-	if !step.ConfirmedByAuthor || step.Confirmation == nil || *step.Confirmation != "作者：好" || step.ConfirmedAt == nil || !strings.HasSuffix(*step.ConfirmedAt, "Z") {
+	if !step.ConfirmedByAuthor || step.Confirmation == nil || *step.Confirmation != "作者：好" || step.ConfirmedAt == nil || !strings.HasSuffix(*step.ConfirmedAt, "Z") ||
+		step.Channel == nil || *step.Channel != "cli" {
 		t.Fatalf("confirmed step = %+v", step)
 	}
 	// 下一步没有草稿时确认报告 plan.not-drafted。

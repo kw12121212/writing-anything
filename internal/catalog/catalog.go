@@ -120,6 +120,37 @@ type Genre struct {
 	PacingChecks []PacingCheck
 	// SummaryLength 是已验收单元摘要（Summary）的字数范围；未声明时为 DefaultSummaryLength。
 	SummaryLength Range
+	// Category 是文体类别（Genre Category）：CategoryArticle 或 CategoryFiction；空表示未声明。
+	Category string
+}
+
+// 文体类别（Genre Category）：规范包的文风条目用 applies_to 按类别限定适用范围。
+const (
+	CategoryArticle = "article"
+	CategoryFiction = "fiction"
+)
+
+// StyleEntry 是规范包的一条文风：AppliesTo 为空时对所有文体生效，否则只适用于列出的文体类别。
+// YAML 中可以写成字符串，也可以写成 {text, applies_to} 对象。
+type StyleEntry struct {
+	Text      string   `json:"text"`
+	AppliesTo []string `json:"applies_to"`
+}
+
+// UnmarshalJSON 接受字符串或对象两种写法。
+func (e *StyleEntry) UnmarshalJSON(data []byte) error {
+	var text string
+	if json.Unmarshal(data, &text) == nil {
+		*e = StyleEntry{Text: text}
+		return nil
+	}
+	type plain StyleEntry
+	return json.Unmarshal(data, (*plain)(e))
+}
+
+// AppliesToCategory 报告条目是否适用于文体类别 category；category 为空（没有文体或文体未声明类别）时总是适用。
+func (e StyleEntry) AppliesToCategory(category string) bool {
+	return category == "" || len(e.AppliesTo) == 0 || slices.Contains(e.AppliesTo, category)
 }
 
 // Range 是一个整数范围。
@@ -136,7 +167,7 @@ type Pack struct {
 	ID          string
 	Title       string
 	Description string
-	Style       []string
+	Style       []StyleEntry
 	Glossary    []Term
 	BannedTerms []BannedTerm
 	Rules       map[string]Rule
@@ -186,12 +217,13 @@ type (
 		Metrics     []scoredMetricFile `json:"scored_metrics"`
 		Pacing      []pacingCheckFile  `json:"pacing_checks"`
 		Summary     *Range             `json:"summary_length"`
+		Category    string             `json:"category"`
 	}
 	packFile struct {
 		ID          string             `json:"id"`
 		Title       string             `json:"title"`
 		Description string             `json:"description"`
-		Style       []string           `json:"style"`
+		Style       []StyleEntry       `json:"style"`
 		Glossary    []Term             `json:"glossary"`
 		BannedTerms []BannedTerm       `json:"banned_terms"`
 		Rules       map[string]Rule    `json:"rules"`
@@ -282,7 +314,7 @@ func genreOf(doc *yaml.Node) (g *Genre) {
 	var f genreFile
 	Decode(doc, &f)
 	g = &Genre{ID: f.ID, Title: f.Title, Description: f.Description, Rules: f.Rules, Rubric: f.Rubric, ContextBudget: f.Budget, DefaultMethod: f.Method,
-		ScoredMetrics: scoredMetrics(f.Metrics), PacingChecks: pacingChecks(f.Pacing), SummaryLength: DefaultSummaryLength}
+		ScoredMetrics: scoredMetrics(f.Metrics), PacingChecks: pacingChecks(f.Pacing), SummaryLength: DefaultSummaryLength, Category: f.Category}
 	if f.Summary != nil {
 		g.SummaryLength = *f.Summary
 	}

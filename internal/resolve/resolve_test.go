@@ -390,3 +390,86 @@ func TestDriftThreshold(t *testing.T) {
 		t.Fatalf("declared = %+v", r.DriftThreshold)
 	}
 }
+
+func TestStyleByGenreCategory(t *testing.T) {
+	// novel 属于小说类：default 规范包的两条文章类文风被排除，并说明原因。
+	r := mustResolve(t, setup(t, config("novel", "[]", ""), nil))
+	if r.Genre.Category != "fiction" || len(r.Style) != 0 || len(r.ExcludedStyle) != 2 {
+		t.Fatalf("novel: genre = %+v, style = %+v, excluded = %+v", r.Genre, r.Style, r.ExcludedStyle)
+	}
+	for _, e := range r.ExcludedStyle {
+		if e.Source != "pack:default" || !slices.Equal(e.AppliesTo, []string{"article"}) ||
+			!strings.Contains(e.Reason, "novel") || !strings.Contains(e.Reason, "fiction") || !strings.Contains(e.Reason, "article") {
+			t.Fatalf("excluded = %+v", e)
+		}
+	}
+	if r.ExcludedStyle[0].Text != "结论先行，先说结果再说过程。" {
+		t.Fatalf("excluded[0] = %+v", r.ExcludedStyle[0])
+	}
+	if r := mustResolve(t, setup(t, config("short-story", "[]", ""), nil)); len(r.Style) != 0 || len(r.ExcludedStyle) != 2 {
+		t.Fatalf("short-story: style = %+v", r.Style)
+	}
+
+	// 文章类文体保留，没有文体或文体未声明类别时全部生效。
+	for _, genre := range []string{"tech-blog", "wechat-marketing", "minimal", ""} {
+		r := mustResolve(t, setup(t, config(genre, "[]", ""), nil))
+		if len(r.Style) != 2 || r.Style[0].Text != "结论先行，先说结果再说过程。" || r.Style[0].Source != "pack:default" ||
+			r.ExcludedStyle == nil || len(r.ExcludedStyle) != 0 {
+			t.Fatalf("%q: style = %+v, excluded = %+v", genre, r.Style, r.ExcludedStyle)
+		}
+	}
+	if r := mustResolve(t, setup(t, config("tech-blog", "[]", ""), nil)); r.Genre.Category != "article" {
+		t.Fatalf("tech-blog genre = %+v", r.Genre)
+	}
+	if r := mustResolve(t, setup(t, config("minimal", "[]", ""), nil)); r.Genre.Category != "" {
+		t.Fatalf("minimal genre = %+v", r.Genre)
+	}
+
+	// 字符串条目对所有文体生效；对象条目按 applies_to 过滤，顺序与来源不变。
+	scoped := `schema_version: 1
+id: scoped
+title: 分类文风
+style:
+  - 短句为主
+  - {text: 先给结论, applies_to: [article]}
+  - {text: 多用感官细节, applies_to: [fiction]}
+  - {text: 两类都适用, applies_to: [article, fiction]}
+`
+	r = mustResolve(t, setup(t, config("novel", "[scoped]", ""), map[string]string{"scoped": scoped}))
+	var texts []string
+	for _, s := range r.Style {
+		if s.Source != "pack:scoped" {
+			t.Fatalf("style = %+v", s)
+		}
+		texts = append(texts, s.Text)
+	}
+	if !slices.Equal(texts, []string{"短句为主", "多用感官细节", "两类都适用"}) || len(r.ExcludedStyle) != 1 || r.ExcludedStyle[0].Text != "先给结论" {
+		t.Fatalf("novel scoped: %v %+v", texts, r.ExcludedStyle)
+	}
+	r = mustResolve(t, setup(t, config("tech-blog", "[scoped]", ""), map[string]string{"scoped": scoped}))
+	if len(r.Style) != 3 || r.Style[1].Text != "先给结论" || len(r.ExcludedStyle) != 1 || r.ExcludedStyle[0].Text != "多用感官细节" {
+		t.Fatalf("tech-blog scoped: %+v %+v", r.Style, r.ExcludedStyle)
+	}
+
+	// ForGenre 按作品自己的文体过滤，而不是 default_genre。
+	r, ps := ForGenre(setup(t, config("tech-blog", "[]", ""), nil), "novel")
+	if len(ps) > 0 || len(r.Style) != 0 || len(r.ExcludedStyle) != 2 {
+		t.Fatalf("ForGenre novel: %+v %+v", r, ps)
+	}
+}
+
+func TestStyleAppliesToSchema(t *testing.T) {
+	for name, style := range map[string]string{
+		"unknown category": "[{text: 先给结论, applies_to: [poetry]}]",
+		"empty applies_to": "[{text: 先给结论, applies_to: []}]",
+		"missing text":     "[{applies_to: [article]}]",
+		"extra field":      "[{text: 先给结论, applies_to: [article], genre: novel}]",
+		"empty string":     "[\"\"]",
+	} {
+		pack := "schema_version: 1\nid: bad\ntitle: 坏\nstyle: " + style + "\n"
+		r, ps := Resolve(setup(t, config("novel", "[bad]", ""), map[string]string{"bad": pack}))
+		if r != nil || !slices.Contains(codes(ps), "artifact.schema-violation") {
+			t.Fatalf("%s: resolved = %+v, problems = %+v", name, r, ps)
+		}
+	}
+}

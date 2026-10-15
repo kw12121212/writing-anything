@@ -1,0 +1,33 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: series-accept-gate
+approach:
+  - 在 internal/continuity 增加 seriesSceneFindings(root, w, u)：作品属于系列（series.Of，平铺 .writing-anything/series/<id>.yaml）且成员不少于两部时运行 RunSeries，只保留 error 级、错误码为 timeline.same-time-presence、continuity.conflicting-state 或 continuity.dead-acting、且涉及当前场景的发现，归属改为当前场景后追加到 Run 的结果。Blockers、EnsureWaivers 与 AcceptanceBlockers 共用这一合并结果，因此 review show、accept 的阻塞与豁免决策生成路径一致。
+  - RunSeries 新增跨作品 dead-acting：对排在第二部及以后的作品中带长篇场景契约的场景，按出场称谓在本作品设定集唯一命中 character 条目；本作品在该场景之前已有该条目的已确认状态时由单作品检查负责、跳过；否则按 works 逆序在更早的作品中用同一称谓解析该作品的设定条目，取其按单元树先序最后生效的已确认状态，首个找到的即最新状态，精确等于保留词时报告 [系列] continuity.dead-acting，归属出场场景。
+  - seriesOfForTimeline 改为 series.Of；RunSeries 中同一时间两地的后缀改为「，或经作者决策豁免」以消除重复提示；assembly.Gate 的系列范围发现跳过归属或提及本作品场景的项（已由按场景阻塞项覆盖且尊重豁免）。
+decisions:
+  scene-involvement:
+    decision: 发现涉及当前场景的判定：归属场景等于当前场景，或 message 以完整场景引用（后随非 id 字符）提及当前场景；dead-acting 只按归属场景判定
+    rationale: 同一时间两地与状态矛盾牵涉两部作品的两个场景，任一方验收都应被阻塞，而 RunSeries 只把发现归到先序更早的场景；dead-acting 的过错只在出场场景，若按提及判定会让更早作品的死亡场景反被阻塞；完整引用边界避免 s1 误匹配 s10
+  reattribute-to-current-scene:
+    decision: 纳入验收门禁的系列发现归属改写为当前场景，豁免键为（当前场景， 错误码）
+    rationale: 豁免决策按（场景， 错误码）与作品 units 匹配；保持原归属会让 book-2 的验收依赖 book-1 场景的豁免决策，作者无法在当前场景上直接豁免
+  per-work-name-resolution:
+    decision: 跨作品终态人物按出场称谓在每部更早作品的设定集中分别解析条目 id，而不是假定各作品条目 id 相同
+    rationale: 系列级设定集共享 id，但作品级设定集的同一人物可能使用不同 id；按称谓逐作品解析同时覆盖两种写法，且同名多条目时与 recall 一样不判，避免误报
+  import-series:
+    decision: continuity 直接 import internal/series 判定系列成员，删除自行扫描目录的 seriesOfForTimeline
+    rationale: go list 证实 series 的依赖不包含 continuity，不存在循环；复用 series.Of 与系列文件的唯一真相来源，避免再次出现目录形式与文件形式不一致的缺陷
+  timeline-waiver-channel:
+    decision: accept 阻塞路径把 timeline.* 与 continuity.* 一同视为连续性阻塞项：生成豁免决策，next 给出 wa-cli continuity 与 wa-cli decisions
+    rationale: 跨作品同一时间两地的错误码为 timeline.same-time-presence；不识别它时 accept 被拒却不生成豁免决策，作者无法按规格经决策队列豁免，阻塞项的 next 也只给出无关的 validate 命令
+alternatives:
+  - option: 在 internal/cli 的 collectGate 中调用 RunSeries 并拼接阻塞项
+    reason: 豁免决策由 continuity.EnsureWaivers 生成，命令层拼接会让只读阻塞计算与豁免生成路径分叉，并让 assembly 等其他调用方各自重复实现
+  - option: 把全部系列发现（含跨作品 cycle、order-conflict、unknown-scene）纳入验收
+    reason: 超出 planned change 列明的三类发现，且这些发现常归属其他作品的场景，会让无关场景的验收被阻塞
+risks:
+  - 大系列每次验收与 review show 都会运行一次 RunSeries，成员作品多时变慢；本变更只按系列成员裁剪，未按引用范围裁剪
+  - 跨作品终态人物只读取已确认状态；更早作品状态未确认时不报告，需在长篇技能中提示先确认前作状态（novel-skills 承接）

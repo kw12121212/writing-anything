@@ -2,6 +2,7 @@ package cli
 
 import (
 	"encoding/json"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -255,6 +256,75 @@ func TestMethodBeatsAndRubric(t *testing.T) {
 	in := "rubric:\n  - {item: clarity, verdict: pass, evidence: x, paragraphs: [1]}\n"
 	if code, rr := runReview(t, dir, in, "review", "record", "my-post"); code != 1 || !strings.Contains(diag(t, rr.result, "review.missing-verdict").Message, "conclusion-first") {
 		t.Fatalf("method rubric: %+v", rr.Diagnostics)
+	}
+}
+
+// 短篇场景：根单元结构类写作法的节拍经场景大纲 beats 映射到场景，按场景先序位置核对；只提示，不阻塞验收，不要求正文有同名标题。
+func TestSceneBeatPositions(t *testing.T) {
+	dir := storyWork(t) // 默认写作法 three-act，场景 s1 与 s2
+	for _, s := range []string{"s3", "s4"} {
+		mustRunWS(t, dir, "unit", "add", "lamp", "scene", s)
+	}
+	writeFile(t, wsPath(dir, ".writing-anything/works/lamp/outline.yaml"), "schema_version: 1\nsections:\n"+
+		"  - {id: open, title: 开端, reason: x, role: setup}\n  - {id: fight, title: 对抗, reason: x, role: confrontation}\n"+
+		"  - {id: peak, title: 高潮, reason: x, role: climax}\n  - {id: end, title: 结局, reason: x, role: resolution}\n")
+	scene := func(id, outlineYAML string) {
+		if err := os.MkdirAll(wsPath(dir, ".writing-anything/works/lamp/units/"+id), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		writeFile(t, wsPath(dir, ".writing-anything/works/lamp/units/"+id+"/outline.yaml"), outlineYAML)
+		writeFile(t, wsPath(dir, ".writing-anything/works/lamp/units/"+id+"/draft.md"), "守灯人点亮了灯。\n")
+	}
+	scene("s1", "schema_version: 1\nsections:\n  - {id: a, title: 场景, beats: [open]}\n  - {id: b, title: 场景, beats: [peak]}\n  - {id: c, title: 场景, beats: [peak]}\n")
+	scene("s4", sceneOutline("", "peak, end"))
+	beats := func(ref string) (int, []Diagnostic) {
+		code, res := runWS(t, dir, "lint", ref)
+		var out []Diagnostic
+		for _, d := range res.Diagnostics {
+			if d.Code == "outline.beat-position" {
+				out = append(out, d)
+			}
+		}
+		return code, out
+	}
+	// s1 排第 1 个（相对位置 12.5%）：setup 在范围内，climax 超出范围，两个节引用同一节拍只报一次。
+	code, ds := beats("lamp/s1")
+	if code != 0 || len(ds) != 1 || ds[0].Severity != "warning" || ds[0].Path != ".writing-anything/works/lamp/units/s1/outline.yaml" ||
+		ds[0].Field != "sections[1].beats[0]" || !strings.Contains(ds[0].Message, "climax") || !strings.Contains(ds[0].Message, "peak") ||
+		!strings.Contains(ds[0].Message, "第 1 个") || !hasNext(ds[0], "wa-cli lint lamp/s1") {
+		t.Fatalf("s1: code = %d, %+v", code, ds)
+	}
+	// s4 排第 4 个（87.5%）：climax 与 resolution 都在范围内。
+	if code, ds := beats("lamp/s4"); code != 0 || len(ds) != 0 {
+		t.Fatalf("s4: code = %d, %+v", code, ds)
+	}
+	// review show 展示节拍位置的 warning，它们不是验收的阻塞项。
+	if _, rs := runReview(t, dir, "", "review", "show", "lamp/s1"); !hasNext(diag(t, rs.result, "outline.beat-position"), "wa-cli lint lamp/s1") ||
+		slices.Contains(gateCodes(rs), "outline.beat-position") {
+		t.Fatalf("review show: %+v", rs.Diagnostics)
+	}
+	// 场景自身的写作简报不能读取时照常核对；根单元大纲或写作简报不能读取时不核对。
+	writeFile(t, wsPath(dir, ".writing-anything/works/lamp/units/s1/brief.yaml"), "schema_version: [\n")
+	if _, ds := beats("lamp/s1"); len(ds) != 1 {
+		t.Fatalf("scene brief invalid: %+v", ds)
+	}
+	rootOutline := readFile(t, wsPath(dir, ".writing-anything/works/lamp/outline.yaml"))
+	writeFile(t, wsPath(dir, ".writing-anything/works/lamp/outline.yaml"), "schema_version: 1\nsections: oops\n")
+	if _, ds := beats("lamp/s1"); len(ds) != 0 {
+		t.Fatalf("root outline invalid: %+v", ds)
+	}
+	writeFile(t, wsPath(dir, ".writing-anything/works/lamp/outline.yaml"), rootOutline)
+	writeFile(t, wsPath(dir, ".writing-anything/works/lamp/brief.yaml"), "schema_version: [\n")
+	if _, ds := beats("lamp/s1"); len(ds) != 0 {
+		t.Fatalf("root brief invalid: %+v", ds)
+	}
+	if err := os.Remove(wsPath(dir, ".writing-anything/works/lamp/brief.yaml")); err != nil {
+		t.Fatal(err)
+	}
+	// 根单元不用写作法时不核对。
+	mustRunWS(t, dir, "brief", "set", "lamp", "--method", "none")
+	if code, ds := beats("lamp/s1"); code != 0 || len(ds) != 0 {
+		t.Fatalf("method none: code = %d, %+v", code, ds)
 	}
 }
 

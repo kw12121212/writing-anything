@@ -1,0 +1,30 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: diagnostic-next-commands
+approach:
+  - 先写扫描测试：遍历 internal 下除 tools 与 testdata 外的非测试 .go 文件，对每个函数体找出类型为 []string、元素全部是 wa-cli help 提示（以 "wa-cli help" 开头的字符串字面量、以它开头的拼接、或同一函数内被赋值为这类表达式的局部变量）的复合字面量；作为 append 首参且后面还追加了元素的字面量不计入。结果按「相对 internal 的文件路径:函数名」计数，与白名单 helpOnlyAllowed 比对：未登记、数量超出、数量少于登记值（改造后未下调）、登记了却已无位置、理由为空都失败。
+  - 再按主路径逐个改造：参数引起的问题与锚点值问题给出该单元的只读查看命令（brief show、outline show、review show、next），收口输入问题给出 outline show <unit>（场景契约），单元不是场景或不是部时给出 wa-cli status，draft.not-found 给出 wa-cli context <unit>，schema.unknown-kind 给出整体 validate，配置键问题给出 config resolved；具体命令排在 help 前面，help 作为补充保留，以满足规格中「next 含 wa-cli help ...」的既有场景。
+  - 非主路径命令、用法错误与规格写死 next 为用法的位置写入白名单并逐条写明理由；按 lesson-ccfda7，参数问题与既有产物问题仍按 path 是否为空区分，不改变分流条件。
+decisions:
+  key-by-function:
+    decision: 白名单以「文件:函数」为键并记录位置数，而不是行号
+    rationale: 行号随任何无关编辑漂移，会让测试频繁误报；函数级计数既能在新增位置时失败，又不会因上方插入代码而失效
+  concrete-first:
+    decision: 具体命令排在 wa-cli help 之前，help 只作补充
+    rationale: Agent 通常执行 next 的第一条；brief、outline、marketing 主规格的 next 已按「show 在前、help 在后」书写，保持一致
+  keep-spec-mandated-help:
+    decision: 规格明确规定 next 为 wa-cli help 的诊断（unit move 参数、preview、pack install、skills install、mcp install 等）与用法错误进入白名单，不在本变更修改
+    rationale: 改动这些需要改写对应主规格的完整要求语句，超出本变更「具体化主路径 error 诊断」的范围；用法错误发生在解析出单元之前，没有可引用的单元或产物
+  readonly-concrete:
+    decision: 新增的具体命令只用只读查看命令（show、status、next、context、validate、config resolved）
+    rationale: 诊断的 next 可能被 Agent 直接执行；只读命令不会在作者未确认时改动产物，符合「结构化产物只通过 wa-cli 变更且需作者确认」的约定
+alternatives:
+  - option: 按行号登记白名单
+    reason: 任何无关的上方编辑都会让测试失败，维护成本高且掩盖真正的新增位置
+  - option: 用正则 grep 统计 wa-cli help 字符串
+    reason: 无法区分 help 只作补充与 next 只含 help，也无法识别经局部变量传入的写法
+risks:
+  - 既有测试可能断言 next[0] 为 help，需随改造同步更新
+  - 扫描器只识别字面量写法，经函数返回值间接构造的只含 help 的 next 不会被发现

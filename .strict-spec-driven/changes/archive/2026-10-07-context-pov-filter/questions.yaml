@@ -1,0 +1,54 @@
+schema: strict-spec-driven/question-list/v1
+schema_version: 1
+artifact_type: question_list
+schema_file: templates/strict-spec-driven/schemas/question-list.yaml
+change: context-pov-filter
+open: []
+resolved:
+  - id: requirement-problem
+    question: 今天具体出了什么问题，对谁？
+    context: 证据：里程碑 novel-guarantee-hardening details「ctxpack.go 出场人物卡全文未按知情过滤」与 notes「语料黄金上下文中陈守拙人物卡含溺水真相」。影响 proposal 范围。
+    answer: 写长篇小说的作者与接入的 Agent：场景上下文包把出场人物卡全文交给 Agent，视角人物尚不知情的秘密（如陈守拙人物卡中的溺水真相）会在起草时提前暴露，违背知情表与揭示边界
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-outcome
+    question: 什么可观察的变化证明问题解决了？
+    context: 证据：里程碑 done_criteria 关于陈守拙溺水真相知情前后与揭示词警告的两条，planned change details 测试列表。影响 spec delta 与测试。
+    answer: novel-e2e 中以不知情人物为视角、在知情事件之前的场景，wa-cli context 输出不含溺水真相句，知情之后包含；没有任何获知者已知的受约束句不出现在任何视角；为该知情事件登记揭示词后无需改写人物卡；已确认但未登记揭示词的知情事件使 wa-cli validate 输出警告
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-trigger
+    question: 为什么现在做？
+    context: 证据：里程碑 notes「来源：2026-10-07 路线图里程碑审计 P1 项」；planned change depends_on 为空。影响优先级。
+    answer: 2026-10-07 里程碑审计把上下文包泄露视角人物未知的秘密列为 P1 项，本变更无未满足依赖
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-non-goals
+    question: 哪些明确不做？
+    context: 证据：planned change details「读者已知、人物未知的单列保持不变」「不改写人物卡」，里程碑 scope.out「任何模型调用」。影响 proposal 范围。
+    answer: 不改写人物卡、不把秘密强制拆成独立条目；不遮蔽 readerOnly；不调用模型；不做里程碑其他计划变更
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-interpretation
+    question: 「按句遮蔽」应如何理解？
+    context: 证据：里程碑 intake 问题 secret-model 已定答案（2026-10-07 作者确认）与 planned change details。影响 spec delta 与实现。
+    answer: 取视角人物在场景开始时尚未获知的已确认知情事件的揭示词，人物卡与设定条目文本中含任一揭示词的句子（按中文句末标点切分）替换为「另有未揭示设定」占位，--json 报告被遮蔽的条目与句数；validate 对已确认但未登记揭示词的知情事件警告
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: no-pov-behavior
+    question: 场景没有视角人物时如何遮蔽？
+    context: 路线图未直接写明；完成标准要求没有任何获知者已知的受约束条目不出现在任何视角的上下文中。影响实现与测试。
+    answer: 按已知列表为空处理，所有已确认揭示词都参与遮蔽（见 design 决策 no-pov-masks-all）
+    status: resolved
+    answered_by: roadmap
+  - id: missing-terms-granularity
+    question: 缺揭示词警告按事件还是按条目判定？
+    context: planned change details 写「已确认但 terms 为空的知情事件」；遮蔽与连续性审查按条目对揭示词求并集。影响 knowledge 规格、实现与语料是否出现警告。
+    answer: 按条目判定：已确认事件所在条目没有任何已确认事件登记揭示词时警告；同条目已有揭示词的事件不重复警告（见 design 决策 entry-level-missing-terms）
+    status: resolved
+    answered_by: roadmap

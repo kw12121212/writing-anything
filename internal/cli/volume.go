@@ -12,12 +12,12 @@ import (
 
 var volumeCheckpointCommand = &command{
 	name:    "volume checkpoint",
-	summary: "生成部（如 part）的卷末检查点（Volume Checkpoint）：本部全部场景验收后，汇总本部新增设定、已确认的状态变化、伏笔变化与未处理决策，并确定性抽取收口条目供作者对照原文核对",
+	summary: "生成或重新生成部（如 part）的卷末检查点（Volume Checkpoint；部的最后一个场景经 wa-cli accept 验收后会自动生成）：本部全部场景验收后，汇总本部新增设定、已确认的状态变化、伏笔变化与未处理决策，并确定性抽取收口条目供作者对照原文核对",
 	args: []argSpec{
 		{"part", "部单元（Unit）引用；必须是声明 stage_from_children 的汇总单元（如 part）", true},
 	},
 	flags:      []flagSpec{dirFlag},
-	outputKeys: []outputKey{{"checkpoint", "生成的检查点：part、path、scene、canon、states、threads、decisions、sampled、confirmedByAuthor、confirmation 与 confirmedAt；失败时为 null"}},
+	outputKeys: []outputKey{{"checkpoint", "生成的检查点：part、path、scene、canon、states、threads、decisions、sampled、confirmedByAuthor、confirmation、channel（确认渠道（Confirmation Channel），未确认为 null）与 confirmedAt；失败时为 null"}},
 	exitCodes:  standardExitCodes,
 	run:        runVolumeCheckpoint,
 }
@@ -143,9 +143,9 @@ func volumeNext(ds []Diagnostic, ref, dir string) {
 		case volume.CodeScenesOpen:
 			ds[i].Next = []string{shellCommand("wa-cli", "status", "--dir", dir, "--json"), "wa-cli help volume checkpoint --json"}
 		case volume.CodeNotVolume:
-			ds[i].Next = []string{"wa-cli help volume checkpoint --json"}
+			ds[i].Next = []string{shellCommand("wa-cli", "status", "--dir", dir, "--json"), "wa-cli help volume checkpoint --json"}
 		case volume.CodeIncompleteConfirmation:
-			ds[i].Next = []string{"wa-cli help volume confirm --json"}
+			ds[i].Next = []string{shellCommand("wa-cli", "next", ref, "--dir", dir, "--json"), "wa-cli help volume confirm --json"}
 		case volume.CodeNotFound:
 			ds[i].Next = []string{"wa-cli help volume checkpoint --json",
 				shellCommand("wa-cli", "volume", "checkpoint", ref, "--dir", dir, "--json")}

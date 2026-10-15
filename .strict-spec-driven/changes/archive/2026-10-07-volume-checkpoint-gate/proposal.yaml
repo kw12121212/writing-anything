@@ -1,0 +1,33 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: volume-checkpoint-gate
+  status: proposed
+summary:
+  what:
+    - wa-cli accept 在场景是其所属部（卷）按单元树先序的最后一个场景且验收成功后，用与 wa-cli volume checkpoint 相同的逻辑自动生成该部的卷末检查点（Volume Checkpoint）checkpoint.yaml（confirmed_by_author 为 false，只写汇总、不代作者确认），并在 changedPaths 中列出；本部其他场景尚未 done 时不生成、只给出 warning 级 volume.scenes-open 提示
+    - 卷末检查点验收门禁去掉「检查点存在才检查」的豁免：按先序更早、子树含场景的每个部缺少 checkpoint.yaml 时报告新错误码 volume.missing，未确认时报告 volume.unconfirmed；strict 关卡为 error 级并阻塞验收，standard 与 fast 为 warning 级提示
+    - wa-cli next / status 对部单元：检查点已生成而未确认时 commands 列出 wa-cli volume confirm <part> 与 wa-cli help volume confirm --json；手动 wa-cli volume checkpoint 保留用于重新生成
+    - novel-e2e 语料命令脚本删去被自动生成取代的手动 volume checkpoint 步骤，在各部最后场景的 accept 步骤上断言 changedPaths 含检查点，同步矩阵与黄金文件
+  why:
+    - 2026-10-07 里程碑审计：卷末检查点只能手动生成，volume.AcceptanceBlockers 只在 checkpoint.yaml 存在时检查，从未生成检查点时 strict 门禁完全不生效，与已归档 novel 里程碑完成标准「每部（卷）最后一个场景验收后生成卷末检查点」冲突；缺口源于 specs/volume.yaml volume-accept-gate 被写弱，需要同步修正规格
+scope:
+  in:
+    - internal/volume：抽出可在验收时调用的检查点生成逻辑（把刚验收的场景视为完成），AcceptanceBlockers 增加缺失检查（volume.missing），子树没有场景的部不参与
+    - internal/cli：acceptVia（命令行与阅读页两个渠道共用）在验收写入后自动生成检查点并把路径并入 changedPaths；gateNext 为 volume.missing 给出 wa-cli volume checkpoint；next/status 的部单元 commands 列出 volume confirm
+    - 测试：自动生成、strict 缺失阻塞、strict 未确认阻塞、standard 仅提示、确认后放行、部内场景未完成时不生成；修正受新门禁影响的既有测试夹具
+    - novel-e2e：commands.yaml、matrix.yaml 与 golden/ 再生成并人工复核差异
+    - 规格：volume 主规格新增 checkpoint-on-accept、修改 volume-accept-gate；units-and-lifecycle 主规格修改 derived-stage 的部单元 commands；docs/GLOSSARY.md 卷末检查点释义同步
+  out:
+    - 检查点内容字段、抽样算法、volume confirm 与阅读页确认渠道的既有行为
+    - 组稿（assemble）对未确认检查点的门禁、长篇技能（novel-skills）与诊断体验收尾（usability-polish）
+    - 不带 unit 参数的 next 对推导阶段为 done 的部仍不列出（next-skips-done 不变）
+unchanged_behavior:
+  - 没有部（卷）单元的文体（tech-blog、wechat-marketing、short-story）的 accept 输出、changedPaths 与退出码不变
+  - 本部的检查点不阻塞本部场景的验收；已有未确认检查点的 strict 阻塞（volume.unconfirmed）与 standard/fast 提示语义不变
+  - wa-cli volume checkpoint 与 volume confirm 的参数、输出与错误码不变；同指纹重生成仍不写文件
+roadmap:
+  milestone: core-gate-hardening
+  planned_change: volume-checkpoint-gate

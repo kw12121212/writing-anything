@@ -36,6 +36,18 @@ irm https://raw.githubusercontent.com/kw12121212/writing-anything/main/install.p
 curl -fsSL https://raw.githubusercontent.com/kw12121212/writing-anything/main/install.sh | WA_VERSION=v1.2.3 WA_INSTALL_DIR="$HOME/bin" sh
 ```
 
+## Windows 验证记录
+
+`install.ps1` 由 `internal/tools/release` 的 `TestInstallPs1` 验证：以 `-File`、iex（按 UTF-8 解码后交给 `Invoke-Expression`）与 `irm <url> | iex`（测试服务器按 `text/plain; charset=utf-8` 提供脚本，与 raw.githubusercontent.com 相同）三种方式运行，覆盖 amd64 与 arm64 安装成功，以及哈希不一致、`SHA256SUMS` 中没有记录、下载失败、不支持的架构、非 Windows 系统五类失败（失败时已安装的 `wa-cli.exe` 不变），并检查以 iex 与 `irm | iex` 运行后调用者会话没有残留设置、变量与函数。
+
+没有 PowerShell（pwsh）时该测试跳过；正式发布时 release 技能以 `WA_REQUIRE_PWSH=1 go test ./internal/tools/release -run TestInstallPs1 -count=1 -v` 运行它，缺少 pwsh 时测试失败而不是跳过。
+
+| 日期 | pwsh 版本 | 系统与架构 | 运行方式 | 结果 |
+|---|---|---|---|---|
+| 2026-10-08 | PowerShell 7.6.6 | Linux x64，运行在 Linux 子系统（WSL）2 中；以环境变量模拟 Windows 的 `OS` 与 `PROCESSOR_ARCHITECTURE` | `-File`、iex、`irm <url> \| iex` | `TestInstallPs1` 全部 23 个用例通过，未发现脚本缺陷 |
+
+尚未覆盖：在原生 Windows 上运行、Windows PowerShell 5.1，以及默认安装目录下把目录写入用户级 `PATH`（`HKCU\Environment` 注册表）的分支。`TestInstallPs1` 总是指定 `WA_INSTALL_DIR` 并只用 pwsh 运行，即使在 Windows 本机执行也不覆盖后两项；它们需要在 Windows 上不设置环境变量、分别用 Windows PowerShell 5.1 与 PowerShell 7 手动运行 `irm https://raw.githubusercontent.com/kw12121212/writing-anything/main/install.ps1 | iex`，确认新开的终端中 `wa-cli version` 可用。完成任一项验证后，请在上表追加一行并写明覆盖的部分。
+
 ## 用 go install 安装
 
 已安装 Go 1.27 或更高版本时：
@@ -64,7 +76,7 @@ wa-cli version
 
 ## 安装技能（Skill）
 
-wa-cli 内置一组技能，告诉 Agent 何时调用哪些 wa-cli 命令、何时停下来询问作者：wa-init、wa-brief、wa-outline、wa-draft、wa-review、wa-revise、wa-publish 与 wa-auto。在项目目录中运行：
+wa-cli 内置一组技能，告诉 Agent 何时调用哪些 wa-cli 命令、何时停下来询问作者：文章与通用流程为 wa-init、wa-brief、wa-outline、wa-draft、wa-review、wa-revise、wa-publish 与 wa-auto，长篇（novel）另有 wa-plan（规划）、wa-scene（逐场景推进）、wa-continuity（连续性审查与影响传播）与 wa-assemble（卷末检查点、组稿与交接记录）。在项目目录中运行：
 
 ```sh
 wa-cli skills install --agent claude-code   # 写入 .claude/skills/<技能>/SKILL.md
@@ -72,7 +84,7 @@ wa-cli skills install --agent codex         # 写入 .agents/skills/<技能>/SKI
 wa-cli skills install --target ~/.claude/skills   # 安装到其他目录（如用户级技能目录）
 ```
 
-已有的技能文件与内置版本相同时不改动；有技能文件被改过时不写入任何文件，确认后加 `--force` 覆盖。技能目录的格式与通用的 Agent Skills 兼容，也可以用第三方 skills 工具安装；`wa-cli skills list --json` 列出全部技能及其引用的命令。
+安装后在项目目录中启动客户端（如 `cd <项目目录> && claude`），项目级技能才会被加载，在上级目录或项目之外启动时不会加载；命令输出（`--json` 时为 launchDir）给出这个目录。已有的技能文件与内置版本相同时不改动；升级 wa-cli 后，内容是某个旧版内置技能（没有被改过，换行符为 CRLF 也算）的文件直接更新为当前版本，不需要 `--force`；有技能文件与任何旧版内置内容都不同（被改过）时不写入任何文件，确认后加 `--force` 覆盖。技能目录的格式与通用的 Agent Skills 兼容，也可以用第三方 skills 工具安装；`wa-cli skills list --json` 列出全部技能及其引用的命令。
 
 ## 发布新版本（维护者）
 

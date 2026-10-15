@@ -3,7 +3,9 @@ package canon
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/kw12121212/writing-anything/internal/work"
 	"github.com/kw12121212/writing-anything/internal/workspace"
@@ -186,4 +188,115 @@ func TestSeriesListAndCheck(t *testing.T) {
 		t.Fatalf("missing series: %+v", ps)
 	}
 	_ = w
+}
+
+// 系列设定集目录尚不存在时 --scope series 首次登记创建目录与文件；作品级覆盖把 override（原因、作者确认与
+// 注入时钟给出的 confirmed_at）写入作品设定集，重新读取可得到同一记录。
+func TestAddSeriesFirstWriteAndPersistedOverride(t *testing.T) {
+	root := t.TempDir()
+	if _, ps := workspace.Init(root, nil); len(ps) > 0 {
+		t.Fatal(ps)
+	}
+	writeAt(t, root, ".writing-anything/series/guide.yaml", "schema_version: 1\nid: guide\ntitle: 入门指南\nworks: [part-1, part-2]\npacks: []\nsources: []\nfacts: []\n")
+	var ws []*work.Work
+	for _, id := range []string{"part-1", "part-2"} {
+		w, _, ps := work.Create(root, "short-story", id)
+		if len(ps) > 0 {
+			t.Fatal(ps)
+		}
+		ws = append(ws, w)
+	}
+	if _, err := os.Stat(filepath.Join(root, ".writing-anything", "series", "guide")); !os.IsNotExist(err) {
+		t.Fatalf("系列设定集目录不应预先存在: %v", err)
+	}
+	if _, changed, ps := Add(root, ws[0], AddInput{Type: TypeWorldRule, Text: "雾天每隔三十秒鸣笛一次", ID: "rule-horn", Series: true}); ps != nil || len(changed) != 1 || changed[0] != SeriesPath("guide") {
+		t.Fatalf("首次登记系列级条目: changed = %v, ps = %+v", changed, ps)
+	}
+	at := time.Date(2026, 6, 20, 12, 0, 0, 0, time.FixedZone("CST", 8*3600))
+	e, _, ps := Add(root, ws[1], AddInput{Type: TypeWorldRule, Text: "改为电动雾笛，每隔二十秒鸣笛一次", ID: "rule-horn",
+		OverrideReason: "第二部时隔十年，雾笛已更换", OverrideConfirm: "作者：按十年后的设备写", At: at})
+	if ps != nil {
+		t.Fatal(ps)
+	}
+	want := Override{Reason: "第二部时隔十年，雾笛已更换", Confirmation: "作者：按十年后的设备写", ConfirmedAt: "2026-06-20T04:00:00Z"}
+	if e.Override == nil || *e.Override != want {
+		t.Fatalf("override = %+v", e.Override)
+	}
+	entries, ps := List(root, ws[1])
+	if ps != nil || len(entries) != 1 || entries[0].Override == nil || *entries[0].Override != want {
+		t.Fatalf("重新读取的 override = %+v, ps = %+v", entries, ps)
+	}
+	data, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(Path("part-2"))))
+	if err != nil || !strings.Contains(string(data), `confirmed_at: "2026-06-20T04:00:00Z"`) {
+		t.Fatalf("canon.yaml = %s (%v)", data, err)
+	}
+}
+
+// 系列级设定集途经符号链接（.writing-anything/series 或 .writing-anything/series/<series> 被替换为指向项目目录之外的
+// 符号链接）时，canon add --scope series 按不存在处理并报告 artifact.not-found，不在项目目录之外创建任何文件；
+// 系列级读取同样报告该问题（validated-path-segments）。
+func TestAddSeriesScopeRejectsSymlinkedDirs(t *testing.T) {
+	for _, link := range []string{".writing-anything/series", ".writing-anything/series/guide"} {
+		t.Run(link, func(t *testing.T) {
+			root := t.TempDir()
+			if _, ps := workspace.Init(root, nil); len(ps) > 0 {
+				t.Fatal(ps)
+			}
+			outside := t.TempDir()
+			seriesFile := "schema_version: 1\nid: guide\ntitle: 入门指南\nworks: [part-1]\npacks: []\nsources: []\nfacts: []\n"
+			if link == ".writing-anything/series" {
+				// 系列文件随目录一起位于外部。
+				writeAt(t, outside, "guide.yaml", seriesFile)
+			} else {
+				writeAt(t, root, ".writing-anything/series/guide.yaml", seriesFile)
+			}
+			if err := os.Symlink(outside, filepath.Join(root, filepath.FromSlash(link))); err != nil {
+				t.Fatal(err)
+			}
+			w, _, ps := work.Create(root, "short-story", "part-1")
+			if len(ps) > 0 {
+				t.Fatal(ps)
+			}
+			_, changed, ps := Add(root, w, AddInput{Type: TypeWorldRule, Text: "雾天鸣笛", ID: "rule-horn", Series: true})
+			if len(ps) != 1 || ps[0].Code != "artifact.not-found" || changed != nil {
+				t.Fatalf("changed = %v, ps = %+v", changed, ps)
+			}
+			entries, err := os.ReadDir(outside)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, e := range entries {
+				if e.Name() != "guide.yaml" {
+					t.Fatalf("项目目录之外被写入了 %s", e.Name())
+				}
+			}
+			if _, ps := SeriesList(root, "guide"); len(ps) != 1 || ps[0].Code != "artifact.not-found" {
+				t.Fatalf("SeriesList ps = %+v", ps)
+			}
+		})
+	}
+}
+
+// 系列成员关系不跨工作区缓存：同一进程先在属于系列的工作区解析 part-1，再在另一个 part-1 不属于任何系列的工作区
+// 登记系列级条目，后者报告 canon.not-in-series；把作品加入系列后立即生效。
+func TestSeriesMembershipNotCachedAcrossWorkspaces(t *testing.T) {
+	root1, w1 := scopeProject(t)
+	if scoped, ps := Resolve(root1, w1); ps != nil || len(scoped) == 0 {
+		t.Fatalf("scoped = %+v, ps = %+v", scoped, ps)
+	}
+	root2 := t.TempDir()
+	if _, ps := workspace.Init(root2, nil); len(ps) > 0 {
+		t.Fatal(ps)
+	}
+	w2, _, ps := work.Create(root2, "short-story", "part-1")
+	if len(ps) > 0 {
+		t.Fatal(ps)
+	}
+	if _, _, ps := Add(root2, w2, AddInput{Type: TypeWorldRule, Text: "雾天鸣笛", Series: true}); len(ps) != 1 || ps[0].Code != CodeNotInSeries {
+		t.Fatalf("ps = %+v", ps)
+	}
+	writeAt(t, root2, ".writing-anything/series/solo.yaml", "schema_version: 1\nid: solo\ntitle: 单部\nworks: [part-1]\npacks: []\nsources: []\nfacts: []\n")
+	if _, changed, ps := Add(root2, w2, AddInput{Type: TypeWorldRule, Text: "雾天鸣笛", Series: true}); ps != nil || len(changed) != 1 || changed[0] != SeriesPath("solo") {
+		t.Fatalf("加入系列后: changed = %v, ps = %+v", changed, ps)
+	}
 }

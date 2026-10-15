@@ -9,6 +9,7 @@ schema_version: 1
 id: novel
 title: 长篇小说
 description: 以场景为单元、按部与章组织的长篇小说：场景走完整生命周期，部与章的进度由场景汇总得出；结构调整不改变单元 id 与既有引用。
+category: fiction
 unit_types:
   - id: novel
     title: 小说

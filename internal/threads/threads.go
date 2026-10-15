@@ -752,16 +752,19 @@ func List(root string, w *work.Work, all bool) ([]Item, []workspace.Problem) {
 
 // ContractProblems 检查场景大纲与伏笔台账的交叉一致（threads 主规格 threads-contract-checks）：大纲节 recovers 引用
 // 的伏笔必须在台账中且埋设不晚于本场景，plants 引用的伏笔必须埋设恰在本场景。scenes 必须是同一作品全部场景单元的
-// 单元树先序序列；场景的 Outline 非 nil 时代替磁盘上的大纲（供写前检查）。台账不存在或不通过 Schema 校验时不检查
+// 单元树先序序列；场景的 Outline 非 nil 时代替磁盘上的大纲（供写前检查）。台账不存在时按条目为空的台账检查，
+// recovers 与 plants 的每个引用都报告 threads.unknown-thread；台账不通过 Schema 校验或途经符号链接时不检查
 // （其问题由台账校验报告）；大纲读不出来的场景跳过。
 func ContractProblems(root string, w *work.Work, scenes []outline.Scene) []workspace.Problem {
 	_, f, ps := load(root, Path(w.ID), w)
-	if f == nil || len(ps) > 0 {
+	if len(ps) > 0 {
 		return nil
 	}
-	byID := make(map[string]Entry, len(f.Entries))
-	for _, e := range f.Entries {
-		byID[e.ID] = e
+	byID := map[string]Entry{}
+	if f != nil {
+		for _, e := range f.Entries {
+			byID[e.ID] = e
+		}
 	}
 	pos, _ := units(w)
 	var out []workspace.Problem
@@ -806,7 +809,7 @@ func ContractProblems(root string, w *work.Work, scenes []outline.Scene) []works
 
 // CheckWorks 校验每个可加载作品的伏笔台账并做契约交叉检查（整体校验）：Schema 与领域检查（条目 id 唯一、单元引用
 // 存在与类型、计划回收不早于埋设、decision 引用的决策存在）。threads.yaml 途经符号链接时报告 artifact.not-found。
-// 返回已校验的路径与全部问题；没有台账的作品不做任何伏笔检查。
+// 返回已校验的路径与全部问题；没有台账的作品不计入 checked，但仍按空台账做契约交叉检查。
 func CheckWorks(root string, works []*work.Work) (checked []string, problems []workspace.Problem) {
 	ds, know, _ := decisions(root)
 	for _, w := range works {
@@ -816,6 +819,8 @@ func CheckWorks(root string, works []*work.Work) (checked []string, problems []w
 			if len(ps) > 0 {
 				checked = append(checked, rel)
 				problems = append(problems, ps...)
+			} else {
+				problems = append(problems, ContractProblems(root, w, w.Scenes())...)
 			}
 			continue
 		}

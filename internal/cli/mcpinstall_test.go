@@ -26,7 +26,7 @@ func runInstall(t *testing.T, dir string, args ...string) (int, installOut) {
 }
 
 // fakeClients 在一个临时目录中放入假的 claude 与 codex（把参数与工作目录追加到 log），并把它设为唯一的 PATH。
-// failAdd 为 true 时 mcp add 以退出码 1 结束。
+// failAdd 为 true 时 mcp add 以退出码 1 结束；环境变量 FAKE_NO_ENTRY 非空时 mcp remove 以退出码 1 结束（没有同名条目）。
 func fakeClients(t *testing.T, failAdd bool, names ...string) string {
 	t.Helper()
 	if runtime.GOOS == "windows" {
@@ -39,6 +39,7 @@ func fakeClients(t *testing.T, failAdd bool, names ...string) string {
 		if failAdd {
 			script += "if [ \"$2\" = add ]; then echo '配置写入失败'; exit 1; fi\n" // 错误写在标准输出
 		}
+		script += "if [ -n \"$FAKE_NO_ENTRY\" ] && [ \"$2\" = remove ]; then exit 1; fi\n"
 		if err := os.WriteFile(filepath.Join(bin, name), []byte(script), 0o755); err != nil {
 			t.Fatal(err)
 		}
@@ -190,5 +191,31 @@ func TestMCPInstallGuards(t *testing.T) {
 	// 重复的客户端只注册一次。
 	if _, res := runInstall(t, dir, "--client", "json", "--client", "json", "--config", "mcp.json"); len(res.Installs) != 1 {
 		t.Fatalf("dedupe: %+v", res.Installs)
+	}
+}
+
+// install-launch-hints：首次注册（没有同名条目）不说「重新创建」，并说明在哪个项目目录启动或换项目时如何重新注册。
+func TestMCPInstallLaunchHints(t *testing.T) {
+	dir := t.TempDir()
+	abs, _ := filepath.Abs(dir)
+	fakeClients(t, false, "claude", "codex")
+	t.Setenv("FAKE_NO_ENTRY", "1")
+	code, res := runInstall(t, dir, "--client", "claude-code", "--client", "codex", "--scope", "user", "--name", "my-wa")
+	if code != 0 || len(res.Installs) != 2 {
+		t.Fatalf("user: %d %+v", code, res)
+	}
+	for _, in := range res.Installs {
+		want := "用户级注册指向项目目录 " + abs + "，换到其他项目时需在该项目重新运行 wa-cli mcp install --client " + in.Client + " --scope user --name my-wa"
+		if in.Status != "registered" || strings.Contains(in.Message, "重新创建") || !strings.Contains(in.Message, want) {
+			t.Errorf("%s: %+v", in.Client, in)
+		}
+	}
+	code, res = runInstall(t, dir, "--client", "claude-code")
+	if m := res.Installs[0].Message; code != 0 || strings.Contains(m, "重新创建") || !strings.Contains(m, "在项目目录 "+abs+" 中启动 Claude Code") || strings.Contains(m, "用户级") {
+		t.Errorf("project: %d %+v", code, res.Installs)
+	}
+	t.Setenv("FAKE_NO_ENTRY", "")
+	if code, res = runInstall(t, dir, "--client", "claude-code"); code != 0 || !strings.Contains(res.Installs[0].Message, "（同名条目重新创建）") {
+		t.Errorf("again: %d %+v", code, res.Installs)
 	}
 }

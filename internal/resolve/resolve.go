@@ -55,6 +55,8 @@ type Ref struct {
 	ID     string `json:"id"`
 	Origin string `json:"origin"`
 	Path   string `json:"path,omitempty"`
+	// Category 是文体类别（Genre Category），只在文体声明了类别时出现。
+	Category string `json:"category,omitempty"`
 }
 
 // 以下是带来源层的合并结果条目。
@@ -91,7 +93,25 @@ type (
 		Text   string `json:"text"`
 		Source string `json:"source"`
 	}
+	// ExcludedStyle 是因文体类别不符而未生效的文风条目。
+	ExcludedStyle struct {
+		Text      string   `json:"text"`
+		Source    string   `json:"source"`
+		AppliesTo []string `json:"appliesTo"`
+		Reason    string   `json:"reason"`
+	}
 )
+
+// categoryTitles 是文体类别的中文写法。
+var categoryTitles = map[string]string{catalog.CategoryArticle: "文章类", catalog.CategoryFiction: "小说类"}
+
+func categoryNames(cs []string) string {
+	names := make([]string, len(cs))
+	for i, c := range cs {
+		names[i] = fmt.Sprintf("%s（%s）", categoryTitles[c], c)
+	}
+	return strings.Join(names, "、")
+}
 
 // Resolved 是解析后配置（Resolved Config）。
 type Resolved struct {
@@ -103,6 +123,8 @@ type Resolved struct {
 	Glossary    []Term           `json:"glossary"`
 	BannedTerms []BannedTerm     `json:"bannedTerms"`
 	Style       []Style          `json:"style"`
+	// ExcludedStyle 是按作品文体类别排除的文风条目及原因，按配置层顺序排列；没有时为空数组。
+	ExcludedStyle []ExcludedStyle `json:"excludedStyle"`
 	Rubric      []RubricItem     `json:"rubric"`
 	// ContextBudget 是上下文预算（Context Budget）的最终取值与来源；没有配置层声明时为 DefaultContextBudget，来源为 default。
 	ContextBudget Value `json:"contextBudget"`
@@ -256,7 +278,7 @@ func merge(root string, doc *yaml.Node, genre string, extra *Layer) (*Resolved, 
 		problems = append(problems, workspace.Problem{Code: code, Severity: workspace.SeverityError, Path: l.path, Field: field, Origin: l.origin, Message: msg})
 	}
 	r := &Resolved{Packs: []Ref{}, UnitTypes: []UnitType{}, Stages: []Stage{}, Rules: map[string]*Rule{},
-		Glossary: []Term{}, BannedTerms: []BannedTerm{}, Style: []Style{}, Rubric: []RubricItem{}, ScoredMetrics: []ScoredMetric{},
+		Glossary: []Term{}, BannedTerms: []BannedTerm{}, Style: []Style{}, ExcludedStyle: []ExcludedStyle{}, Rubric: []RubricItem{}, ScoredMetrics: []ScoredMetric{},
 		PacingChecks: []PacingCheck{},
 		ContextBudget: Value{DefaultContextBudget, SourceDefault}, HTMLTheme: map[string]Value{}, DriftThreshold: Value{DefaultDriftThreshold, SourceDefault},
 		AIDisclosure: Disclosure{Placement: Value{DefaultDisclosurePlacement, SourceDefault}, Template: Value{catalog.DefaultDisclosureTemplate, SourceDefault}}}
@@ -269,6 +291,7 @@ func merge(root string, doc *yaml.Node, genre string, extra *Layer) (*Resolved, 
 		}
 	}
 	var layers []layer
+	category := "" // 生效文体的类别；空表示没有文体或文体未声明类别，此时所有文风条目都生效
 	var pacing []catalog.PacingCheck
 	var pacingLayer *layer
 	rubric := map[string]int{}
@@ -303,7 +326,8 @@ func merge(root string, doc *yaml.Node, genre string, extra *Layer) (*Resolved, 
 				fmt.Sprintf("文体 %s 不存在；可用的文体为 %s", cfg.DefaultGenre, list(catalog.BuiltinGenres())))
 		case g != nil:
 			source := "genre:" + g.ID
-			r.Genre = &Ref{ID: g.ID, Origin: catalog.OriginBuiltin}
+			r.Genre = &Ref{ID: g.ID, Origin: catalog.OriginBuiltin, Category: g.Category}
+			category = g.Category
 			for _, u := range g.UnitTypes {
 				r.UnitTypes = append(r.UnitTypes, UnitType{u, source})
 			}
@@ -356,7 +380,12 @@ func merge(root string, doc *yaml.Node, genre string, extra *Layer) (*Resolved, 
 		source := "pack:" + p.ID
 		r.Packs = append(r.Packs, Ref{ID: p.ID, Origin: p.Origin, Path: p.Path})
 		for _, s := range p.Style {
-			r.Style = append(r.Style, Style{s, source})
+			if s.AppliesToCategory(category) {
+				r.Style = append(r.Style, Style{s.Text, source})
+				continue
+			}
+			r.ExcludedStyle = append(r.ExcludedStyle, ExcludedStyle{Text: s.Text, Source: source, AppliesTo: s.AppliesTo,
+				Reason: fmt.Sprintf("只适用于%s文体，当前文体 %s 属于%s", categoryNames(s.AppliesTo), r.Genre.ID, categoryNames([]string{category}))})
 		}
 		for _, t := range p.Glossary {
 			if j, ok := glossary[t.Term]; ok {

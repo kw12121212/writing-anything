@@ -1,0 +1,38 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: reviewpacket-budget-cap
+approach:
+  - 在 internal/reviewpacket 新增按预算装配函数：输入一个已构造的任务包（切片带内部相关度等级）、正文与是否固定正文，输出一个或多个任务包或 packet.over-budget 问题。顺序：(1) 正文取扣除切片与清单后的剩余预算，最少保留 min(100, 正文长度) 字符；(2) 仍超预算时按相关度从低到高逐条省略切片，然后正文重新取剩余预算；(3) 清单与最小正文仍超预算时按清单顺序贪心分组拆包，每组各自执行 (1)(2)；(4) 单个清单项加最小正文超预算时返回错误。Plan 与 PlanSeries 的全部维度都改用该函数，Plan 在任何写入前返回错误（沿用先预检后副作用）。
+  - 相关度为确定性等级：契约类切片（thread、cause、event、reveal、chapter-summary、cross-cause）等级最高；其余切片按其所指场景与审查范围在单元树先序中的距离计算，越远越低、范围之后低于范围之前；无法定位的（系列跨作品状态切片）最低；同等级先省略靠后的。
+  - 重 plan 时 open 包按匹配键原位重建（沿用 id），done 包保留；character 包以 subject 区分人物。
+decisions:
+  exact-chars:
+    decision: chars 按 packetChars 的精确定义（excerpt.text + kind：text + id：question）对齐预算，移除原来预留的 32 字符结构开销
+    rationale: 完成标准以输出的 chars 与 budget 比较；预留开销与 chars 定义不一致，使预算判断无法精确验证
+  min-excerpt-100:
+    decision: 有正文时最小正文片段为 min(100, 正文长度) 字符；占位说明与 style 固定说明文字不可裁
+    rationale: 保留主规格既有的最小可审片段语义，且 Schema 要求 excerpt.text 非空
+  done-key-checklist:
+    decision: 重复运行时 done 包按（dimension, scope, 清单项 id 集合）匹配保留
+    rationale: 拆包后同一（dimension, scope）可能有多个包，只按两者匹配会把不同清单的包互相覆盖；未拆包时清单集合即全部清单，既有 done 包仍命中
+  omitted-field:
+    decision: 任务包文件写入可选 omitted_slices（大于 0 时写出），--json 每项输出 omittedSlices
+    rationale: 审查 Agent 需要知道切片不完整才能判断结论可信度；可选字段不影响既有包文件的校验
+  over-budget-code:
+    decision: 新增错误码 packet.over-budget（error，field 为 context_budget，message 含维度、范围、预算与所需最小预算，next 含 wa-cli config resolved 与 wa-cli help config set）
+    rationale: 规格要求无法满足预算时报告 error 诊断而非静默超预算；next 给出可执行的查看与调整预算的命令
+  subject-key:
+    decision: character 包写入 subject（人物设定条目 id），重 plan 按（dimension, scope, subject, 清单项集合）匹配；open 包沿用既有 id 原位重建，未被重建的同键 open 包删除
+    rationale: 实现时发现同一章的多个人物包 scope 相同，只按（dimension, scope）匹配会让一个 done 包吞掉同章其他人物包，且每次重 plan 都为 open 包另起新 id 留下重复包；旧的超预算 open 包因此残留，破坏每包不超预算的保证
+alternatives:
+  - option: 按切片字符数从大到小省略
+    reason: 与相关度无关，可能先丢掉审查最需要的契约切片
+  - option: 截断单条切片文本而不是整条省略
+    reason: 台账条目被截半会产生误导性的状态或知情记录，整条省略并计数更可审计
+risks:
+  - 相关度等级是启发式，较小预算下可能省略对审查有用的远距离台账条目；以 omittedSlices 告知审查 Agent 缓解
+  - 拆包后同一范围出现多个包，report 的计数随之增加
+  - 旧版本生成的 character done 包没有 subject，重 plan 时不再命中，会在其旁新建该人物的 open 包，report 同时计入两者；需作者重新执行或删除旧包，无法安全推断旧包对应的人物
+  - impact mark 为多个场景逐个生成任务包，后面的场景报告 packet.over-budget 时前面场景的包已写入（复查标记不写）

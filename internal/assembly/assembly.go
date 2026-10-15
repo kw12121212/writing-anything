@@ -7,10 +7,10 @@ package assembly
 import (
 	"bytes"
 	"fmt"
-	"os"
-	"path/filepath"
+	"slices"
 	"strings"
 
+	"github.com/kw12121212/writing-anything/internal/authorreview"
 	"github.com/kw12121212/writing-anything/internal/continuity"
 	"github.com/kw12121212/writing-anything/internal/draft"
 	"github.com/kw12121212/writing-anything/internal/export"
@@ -27,6 +27,7 @@ const (
 	CodeScenesOpen = "assemble.scenes-open"
 	CodeContinuity = "assemble.continuity"
 	CodeRechecks   = "assemble.rechecks"
+	CodeUnreviewed = "assemble.unreviewed"
 )
 
 // Formats。
@@ -154,7 +155,8 @@ func Collect(root string, w *work.Work) *Book {
 	return book
 }
 
-// Gate 检查组稿前置：未完成场景、未豁免连续性发现与 open 复查标记，逐项返回诊断。
+// Gate 检查组稿前置：未完成场景、未豁免连续性发现、open 复查标记，以及 strict 关卡下待作者复核（Pending Author
+// Review）的命令行渠道确认，逐项返回诊断。
 func Gate(root string, w *work.Work) []workspace.Problem {
 	var problems []workspace.Problem
 	var open []string
@@ -173,11 +175,13 @@ func Gate(root string, w *work.Work) []workspace.Problem {
 	}
 	// 连续性：只读阻塞计算（不生成决策），按场景过滤 error 级发现；系列成员作品再算跨作品发现
 	//（series-continuity-review 主规格）。
+	// 涉及本作品场景的跨作品发现由按场景阻塞项承担（含豁免，continuity-series-accept-gate），系列范围发现只算一次。
+	seriesWorks, seriesAll, seriesGate := continuity.SeriesGate(root, w)
 	for _, u := range w.Units() {
 		if u.Type != outline.SceneType {
 			continue
 		}
-		blockers, fatal := continuity.Blockers(root, w, u)
+		blockers, fatal := continuity.BlockersWith(root, w, u, seriesGate)
 		if len(fatal) > 0 {
 			problems = append(problems, errorAt(CodeContinuity, "",
 				"连续性台账无法加载："+fatal[0].Message))
@@ -188,12 +192,13 @@ func Gate(root string, w *work.Work) []workspace.Problem {
 				fmt.Sprintf("场景 %s 的连续性发现 %s：%s", u.Ref, b.Code, b.Message)))
 		}
 	}
-	if seriesWorks := seriesMembers(root, w); len(seriesWorks) > 1 {
-		if findings, _ := continuity.RunSeries(root, seriesWorks); len(findings) > 0 {
-			for _, f := range findings {
-				problems = append(problems, errorAt(CodeContinuity, "",
-					fmt.Sprintf("[系列] 场景 %s 的跨作品连续性发现 %s：%s", f.Scene, f.Code, f.Message)))
+	if len(seriesWorks) > 1 {
+		for _, f := range seriesAll {
+			if slices.ContainsFunc(seriesGate, func(g continuity.Finding) bool { return g.Code == f.Code && g.Message == f.Message }) {
+				continue // 已由本作品场景的阻塞项列出（并尊重作者豁免）
 			}
+			problems = append(problems, errorAt(CodeContinuity, "",
+				fmt.Sprintf("[系列] 场景 %s 的跨作品连续性发现 %s：%s", f.Scene, f.Code, f.Message)))
 		}
 		// 组稿关卡的复查标记扩展到系列内全部作品（message 标明作品）。
 		var items []string
@@ -222,6 +227,17 @@ func Gate(root string, w *work.Work) []workspace.Problem {
 		}
 		problems = append(problems, errorAt(CodeRechecks, impact.Dir+"/"+w.ID+".yaml",
 			"存在 open 复查标记（Recheck Mark）："+strings.Join(shown, "、")+"；复查通过或作者确认后 wa-cli impact clear 解除"))
+	}
+	// strict 关卡：经命令行渠道（cli）写入的验收、钦定设定修改与卷末检查点确认须由作者在阅读页复核后才能组稿；
+	// 复核记录无法加载时报告其问题，全部确认都算未复核。
+	if authorreview.Strict(root) {
+		items, ps := authorreview.Pending(root, w)
+		problems = append(problems, ps...)
+		for _, it := range items {
+			problems = append(problems, errorAt(CodeUnreviewed, it.Path,
+				fmt.Sprintf("strict 关卡下经命令行渠道（cli）写入的确认还没有经作者在阅读页（Reading View）复核：%s；请作者运行 wa-cli preview %s --serve 打开阅读页批量复核后再组稿",
+					authorreview.Describe(it), w.ID)))
+		}
 	}
 	return problems
 }
@@ -378,42 +394,4 @@ func Assemble(root string, w *work.Work, format, output, footer string) (*View, 
 		}
 	}
 	return &View{Work: w.ID, Path: rel, Format: format, Scenes: book.Scenes, Parts: parts, Chars: len([]rune(body))}, changed, nil
-}
-
-// seriesMembers 返回作品所属系列的成员作品（按 works 顺序；不属于系列时只含自身）；系列文件坏时降级为自身。
-func seriesMembers(root string, w *work.Work) []*work.Work {
-	entries, err := os.ReadDir(filepath.Join(root, filepath.FromSlash(".writing-anything/series")))
-	if err != nil {
-		return []*work.Work{w}
-	}
-	for _, e := range entries {
-		if e.IsDir() || strings.HasPrefix(e.Name(), ".") || !strings.HasSuffix(e.Name(), ".yaml") {
-			continue
-		}
-		rel := ".writing-anything/series/" + e.Name()
-		doc, ps := workspace.Read(root, rel)
-		if doc == nil || len(ps) > 0 {
-			continue
-		}
-		var f struct {
-			Works []string `json:"works"`
-		}
-		catalogDecode(doc, &f)
-		for _, id := range f.Works {
-			if id != w.ID {
-				continue
-			}
-			var out []*work.Work
-			for _, wid := range f.Works {
-				if ww, wps := work.Load(root, wid); ww != nil && len(wps) == 0 {
-					out = append(out, ww)
-				}
-			}
-			if len(out) == 0 {
-				return []*work.Work{w}
-			}
-			return out
-		}
-	}
-	return []*work.Work{w}
 }

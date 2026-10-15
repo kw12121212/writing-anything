@@ -1,0 +1,19 @@
+schema: strict-spec-driven/lesson/v1
+schema_version: 1
+artifact_type: lesson
+schema_file: templates/strict-spec-driven/schemas/lesson.yaml
+lesson:
+  id: lesson-28cf23
+  title: 按「场景开始时已知」过滤信息会把本场景要揭示的内容也挡在起草上下文之外
+category: architecture
+status: active
+created_at: '2026-10-07T12:25:04.734Z'
+updated_at: '2026-10-07T12:25:04.734Z'
+context: context-pov-filter 变更按视角人物在场景开始时的已知列表遮蔽人物卡中的秘密句
+observation: 独立审查发现 novel-e2e 的 ch3-s2 正是向林晚揭示溺水真相的场景，但其上下文包把陈守拙人物卡的真相句替换为占位，而技能又要求不要补全被遮蔽的信息；知情事件要到收口才登记，起草时揭示场景总是被遮蔽
+takeaway: 基于时间点的知情过滤要同时考虑「本单元自身要揭示什么」：设计时为揭示场景定义例外或给出明确的作者确认路径，并在规格场景中覆盖揭示场景
+applies_when: 按场景/单元开始时的知情、状态或进度过滤 Agent 可见的上下文内容时
+occurrences:
+  - origin: context-pov-filter
+    date: '2026-10-07'
+    evidence: internal/ctxpack/ctxpack.go sceneItems 的 Hidden(povID)；golden/context-ch3-s2.json masked 含 char-chen-shouzhuo；审查后在 Markdown 说明与 wa-scene 技能中加入先向作者确认的提示

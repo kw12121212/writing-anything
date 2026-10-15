@@ -1,0 +1,70 @@
+schema: strict-spec-driven/question-list/v1
+schema_version: 1
+artifact_type: question_list
+schema_file: templates/strict-spec-driven/schemas/question-list.yaml
+change: series-e2e
+open: []
+resolved:
+  - id: corpus-scale
+    question: 系列语料的规模与作品结构？
+    context: 影响语料文件、测试耗时与矩阵条目。证据：planned change details「两部作品各一章两个场景、真实中文正文」；里程碑 risks「规模控制在两部作品、各一章两个场景，采用进程内重放」；novel 文体单元层级固定为部→章→场景。
+    answer: 两部 novel 作品，各 part-1/ch-1 与两个场景，每场约 1000–1500 字真实中文正文，进程内重放
+    status: resolved
+    kind: technical
+    answered_by: roadmap
+  - id: bug-fixes
+    question: 录制中暴露的 canon add --scope series 首次写入失败与覆盖 confirmed_at 不可重放是否在本变更修复？
+    context: 影响实现文件、技术规范增量与可重复性完成标准。证据：TestInjectableClock 白名单注释「待系列覆盖确定性变更处理」；injectable-clock 规则把该处登记为唯一例外；完成标准要求同一环境两次重放一致，而 canon add --scope series 在新工作区首次运行即报 workspace.write-failed。
+    answer: 在本变更内做最小修复（写入前建目录、注入时钟），撤销技术规范与静态扫描中的例外；其他观察到的既有限制只记录不修改
+    status: resolved
+    kind: technical
+    answered_by: roadmap
+  - id: spec-impact
+    question: 本变更是否修改产品主规格？
+    context: 影响 spec delta。sources-and-provenance 主规格已要求 canon add --scope series 写入系列共享设定集、覆盖时记录 confirmed_at；修复只是让实现符合既有规格，语料与测试不改变可观察行为。
+    answer: 不修改主规格，specs/ 留空；时钟例外的撤销以 go-project-structure 技术规范增量记录
+    status: resolved
+    kind: technical
+    answered_by: roadmap
+  - id: accept-block-evidence
+    question: 「注入违例并阻塞验收」用什么证据？
+    context: 影响负向测试设计。证据：里程碑 done_criteria 第二条；continuity 主规格 continuity-series-accept-gate 规定跨作品 error 级发现纳入 accept 的阻塞项。
+    answer: 重放到第二部最后一个场景验收前，注入后断言 continuity <series> 的 error 级发现与 accept 退出码 1 及诊断码，修回后验收成功
+    status: resolved
+    kind: technical
+    answered_by: roadmap
+  - id: requirement-problem
+    question: What is concretely going wrong today, and for whom?
+    context: 'Why this is asked: the change is planned against a need, and the need lives only with the requester. A "problem" here means what someone does or suffers today — not a feature that is missing. If the answer names a button, a field, a page, or an endpoint, it is a solution, and the underlying problem is still unstated. What a sufficient answer contains: who is affected, what they do today instead, and how often. Worked example: "every Monday one person spends forty minutes copying order rows into a spreadsheet to send the weekly report". What it changes: this becomes the proposal''s why, and it decides whether the change is worth making.'
+    answer: 证据：里程碑 goal 与 planned change summary。系列小说的跨作品设定、全局时间线与跨作品连续性关卡没有一条以真实 wa-cli 命令序列走完两部作品生命周期的回归证据；依赖系列功能写作的作者与后续开发无法从回归结果判断这些保证在真实流程中成立
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-outcome
+    question: What observable difference proves the problem is solved?
+    context: 'Why this is asked: without a success condition, nobody can tell afterwards whether the change worked. "Observable" means someone outside the system can check it without reading the code. What a sufficient answer contains: what a person will see, or no longer have to do, once this is done. Worked example: "the report is in the manager''s inbox on Monday morning without anyone assembling it". What it changes: this becomes the delta spec''s scenarios and the acceptance evidence at review time.'
+    answer: 证据：里程碑 done_criteria 第二条。系列 E2E 纳入 go test 默认执行且无跳过；注入跨作品设定冲突与跨作品时间矛盾时断言 error 级发现项并阻塞验收；UPDATE_GOLDEN=1 可一键再生成黄金文件；同一环境两次重放结果一致；完整回归通过
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-trigger
+    question: Why now — what forced this?
+    context: 'Why this is asked: work that nothing forced is the work most often thrown away later. This question catches a request that sounds reasonable but has no real driver behind it. What a sufficient answer contains: the concrete event, deadline, incident, or cost that made this surface now, or an honest statement that nothing did. Worked example: "the report was missed last month and it was raised with the team". What it changes: a change with no trigger is a candidate for deferral, and the answer is weighed at review before archive.'
+    answer: 证据：roadmap-recommend 选中 series-e2e；里程碑 dependencies 要求加固里程碑完成后再做真实验证，三个加固里程碑已完成，本计划变更无依赖，是 v0.2.0 发布（release-v0-2-0）的前置
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-non-goals
+    question: What must explicitly not change?
+    context: 'Why this is asked: the requester knows which nearby behavior other people depend on, and the agent does not. A "non-goal" is something the change must leave alone even though it sits close to the work. What a sufficient answer contains: the behavior, setting, or output that must survive untouched, and who relies on it. Worked example: "do not change the saved filters — several people rely on their own". What it changes: these become the proposal''s unchanged_behavior items, which review checks the finished result against.'
+    answer: 证据：里程碑 scope.out 与 planned change details。不扩展产品功能（验证中发现的新需求另立里程碑），不向外部平台发布；小说语料与其测试断言不变；wa-cli 命令与主规格不变
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-interpretation
+    question: Which reading of the request is intended, where more than one is possible?
+    context: 'Why this is asked: a short request usually admits several readings, and building the wrong one is indistinguishable from building nothing. What a sufficient answer contains: the reading that is meant, stated plainly enough to rule the others out — or a statement that only one reading exists and what it is. Worked example: "export means the version sent to the manager, not the one I read myself". What it changes: this fixes the scope boundary before any code is written, and settles disputes about what was asked for.'
+    answer: 证据：planned change details。「复用 novel-e2e 框架」解释为共用重放、黄金比对与矩阵对账助手，而不是复制一套；「设定覆盖（含原因与作者确认）」指作品级条目覆盖系列级同 id 条目的 override 记录；「阻塞验收」以 wa-cli accept 的非零退出码为证据
+    status: resolved
+    kind: requirement
+    answered_by: roadmap

@@ -65,6 +65,7 @@ type Step struct {
 	Links             []string `json:"links"`
 	ConfirmedByAuthor bool     `json:"confirmed_by_author"`
 	Confirmation      *string  `json:"confirmation"`
+	Channel           *string  `json:"channel"` // 确认渠道（Confirmation Channel）；已确认而缺失时按 cli 解释
 	ConfirmedAt       *string  `json:"confirmed_at"`
 }
 
@@ -511,7 +512,7 @@ func WriteStep(root string, w *work.Work, unitDir string, m *catalog.Method, in 
 }
 
 // stepFieldOrder 是步骤记录中字段的固定顺序。
-var stepFieldOrder = []string{"id", "title", "text", "sources", "links", "confirmed_by_author", "confirmation", "confirmed_at"}
+var stepFieldOrder = []string{"id", "title", "text", "sources", "links", "confirmed_by_author", "confirmation", "channel", "confirmed_at"}
 
 // editStep 在已有的步骤记录节点上按固定字段顺序只改涉及的字段，保留其他字段与注释（structured-edits）：
 // 空数组删除对应键，未确认的记录删除确认字段。途经锚点、别名或合并键时返回问题。
@@ -536,6 +537,9 @@ func editStep(item *yaml.Node, rel string, s Step) *workspace.Problem {
 		if s.Confirmation != nil {
 			kvs = append(kvs, kv{"confirmation", str(*s.Confirmation)})
 		}
+		if s.Channel != nil {
+			kvs = append(kvs, kv{"channel", str(*s.Channel)})
+		}
 		if s.ConfirmedAt != nil {
 			kvs = append(kvs, kv{"confirmed_at", str(*s.ConfirmedAt)})
 		}
@@ -543,6 +547,7 @@ func editStep(item *yaml.Node, rel string, s Step) *workspace.Problem {
 		kvs = append(kvs,
 			kv{"confirmed_by_author", &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!bool", Value: "false"}},
 			kv{"confirmation", nil},
+			kv{"channel", nil},
 			kv{"confirmed_at", nil})
 	}
 	for _, pair := range kvs {
@@ -569,6 +574,9 @@ func stepNode(s Step) *yaml.Node {
 		if s.Confirmation != nil {
 			content = append(content, str("confirmation"), str(*s.Confirmation))
 		}
+		if s.Channel != nil {
+			content = append(content, str("channel"), str(*s.Channel))
+		}
 		if s.ConfirmedAt != nil {
 			content = append(content, str("confirmed_at"), str(*s.ConfirmedAt))
 		}
@@ -578,9 +586,15 @@ func stepNode(s Step) *yaml.Node {
 	return &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map", Content: content}
 }
 
-// Confirm 记录当前步骤的作者确认（确认记录（Confirmation Record））：只确认第一个未确认的步骤，要求它已有草稿；
-// 声明了规划产物（Planning Product）的步骤必须已有至少一个链接且全部可解析。返回复查后的规划、变更的路径与问题。
+// Confirm 以命令行渠道（cli）记录当前步骤的作者确认，见 ConfirmVia。
 func Confirm(root string, w *work.Work, unitDir string, m *catalog.Method, step, confirmation string, ensure func() ([]string, []workspace.Problem), now time.Time) (*File, []string, []workspace.Problem) {
+	return ConfirmVia(root, w, unitDir, m, step, confirmation, workspace.ChannelCLI, ensure, now)
+}
+
+// ConfirmVia 记录当前步骤的作者确认（确认记录（Confirmation Record））与确认渠道 channel：只确认第一个未确认的步骤，
+// 要求它已有草稿；声明了规划产物（Planning Product）的步骤必须已有至少一个链接且全部可解析。返回复查后的规划、
+// 变更的路径与问题。
+func ConfirmVia(root string, w *work.Work, unitDir string, m *catalog.Method, step, confirmation, channel string, ensure func() ([]string, []workspace.Problem), now time.Time) (*File, []string, []workspace.Problem) {
 	if ps := checkText("confirmation", confirmation); len(ps) > 0 {
 		return nil, nil, ps
 	}
@@ -632,6 +646,7 @@ func Confirm(root string, w *work.Work, unitDir string, m *catalog.Method, step,
 	confirmedAt := now.UTC().Format(TimeFormat)
 	record.ConfirmedByAuthor = true
 	record.Confirmation = &confirmation
+	record.Channel = &channel
 	record.ConfirmedAt = &confirmedAt
 	steps := stepsNode(doc)
 	if steps == nil {

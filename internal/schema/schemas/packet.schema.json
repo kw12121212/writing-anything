@@ -41,6 +41,10 @@
       "pattern": "\\S",
       "description": "审查范围：章或场景单元引用、伏笔 id 等"
     },
+    "subject": {
+      "$ref": "common.schema.json#/$defs/id",
+      "description": "character 维度的审查对象（人物设定条目 id），区分同一范围内不同人物的任务包；其他维度缺省"
+    },
     "excerpt": {
       "type": "object",
       "additionalProperties": false,
@@ -78,6 +82,11 @@
           }
         }
       }
+    },
+    "omitted_slices": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "按上下文预算省略的低相关切片条数；未省略时缺省"
     },
     "checklist": {
       "type": "array",

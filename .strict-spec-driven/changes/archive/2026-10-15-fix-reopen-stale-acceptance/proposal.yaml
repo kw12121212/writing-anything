@@ -1,0 +1,29 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: fix-reopen-stale-acceptance
+  status: proposed
+summary:
+  what:
+    - wa-cli next 与 status 把验收失效的 done 单元列为一步，阻塞项为验收失效，下一步命令为 wa-cli reopen；export 跳过此类单元时 export.unaccepted 的 next 先给出 wa-cli reopen
+    - 新增 wa-cli reopen <unit>：已完成（done）单元的验收失效（正文在验收后被修改、验收记录不通过校验或关卡强度变严）或没有验收记录时，把单元退回文体中最后一个需要验收的阶段（如 review），之后按原有流程重新审稿、经作者确认重新验收、推进与导出
+  why:
+    - 真实接入验证 cc-tb-3（docs/dogfood/runs.yaml）：已验收导出的技术博客按作者反馈修改正文后，export 以 export.unaccepted 拒绝并让作者重新 accept，accept 以 accept.wrong-stage 拒绝，advance 以 lifecycle.already-done 拒绝，next 没有步骤，阅读页也不列出待确认验收；wa-cli 没有任何路径重新验收，诊断给出的下一步无法执行，Agent 最终只能手工编辑 work.yaml 回退阶段，违反「结构化产物只通过 wa-cli 变更」
+scope:
+  in:
+    - internal/work：Reopen 与 done 单元验收失效的阻塞项（经 Work.Blockers 计算）
+    - internal/cli：reopen 命令注册与诊断 next；next、status 列出验收失效的 done 单元并给出 reopen；export.unaccepted 对 done 单元的 next
+    - 内置技能 wa-revise 与 wa-publish 补充：修改已完成作品后用 wa-cli reopen 退回再重新验收
+    - 主规格 units-and-lifecycle（新增 reopen-stage，修改 next-steps）与 export（新增 done 单元的 export.unaccepted 下一步）的增量
+  out:
+    - dogfood 记录的其他问题（cc-tb-1、cc-tb-2、cc-wm-1、cc-wm-2）
+    - 汇总单元（Aggregated Unit）的退回：其阶段由子单元汇总，仍报告 lifecycle.derived-stage
+    - 退回到 review 之前的阶段（如重写写作简报或大纲）
+unchanged_behavior:
+  - 验收仍有效（正文未改、记录合法、关卡强度未变严）的 done 单元不能退回，也不出现在 next 的步骤中
+  - 重新验收走与第一次相同的关卡：审稿不过期、无未豁免的 lint error、阻塞决策已决定、经作者确认；reopen 不写入或删除任何审稿与验收记录
+  - export 继续拒绝验收失效的单元，只改变诊断的下一步
+  - reopen 不删除或修改已导出的文件，只修改该单元在 work.yaml 中的 stage
+  - accept 仍只在当前阶段需要验收时可用，advance 对 done 单元仍报告 lifecycle.already-done

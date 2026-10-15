@@ -1,0 +1,42 @@
+schema: strict-spec-driven/question-list/v1
+schema_version: 1
+artifact_type: question_list
+schema_file: templates/strict-spec-driven/schemas/question-list.yaml
+change: guarantee-test-gaps
+open: []
+resolved:
+  - id: requirement-problem
+    question: 今天具体出了什么问题，对谁？
+    context: 证据：里程碑 details 审计证据（continuity.go 因果冲突分支覆盖计数为 0；E2E 设定冲突注入断言的是 canon.author-pinned）与 planned change details。影响 proposal 范围。
+    answer: 维护者与依赖长篇保证的作者：多项已交付的长篇保证（因果冲突阻塞验收、注入违例 error 级、提议确认前不影响规则、MCP 与 CLI 一致）没有真正执行的回归测试，退化时不会被发现
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-outcome
+    question: 什么可观察的变化证明问题解决了？
+    context: 证据：里程碑 done_criteria 第 4、5 条与 planned change details。影响测试。
+    answer: 四类注入测试都直接断言 severity 为 error，设定冲突注入由 wa-cli continuity 报告；因果冲突分支被测试执行并断言阻塞验收；continuity 与 reviewpacket 包内覆盖率不低于 80%；矩阵 T-REVIEWPK-01、T-CONTRACT-02 有实际断言并新增秘密遮蔽条目；完整回归通过
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-trigger
+    question: 为什么现在做？
+    context: 证据：planned change depends_on 列出的 6 个计划变更均已归档（roadmap-recommend 判定可推荐）。影响优先级。
+    answer: 里程碑其余计划变更都已完成，本变更是里程碑最后一项，用测试锁定前面交付的保证
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-non-goals
+    question: 哪些明确不做？
+    context: 证据：里程碑 scope.out 与 planned change details 只涉及测试。影响 proposal 范围。
+    answer: 不改任何产品代码、CLI 输出、错误码或主规格；不做新特性、远程 MCP 传输、agent-dogfood 与发布
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-interpretation
+    question: 「MCP 与 CLI 一致性测试遍历命令注册表中的只读命令」应如何理解？
+    context: 证据：planned change details「遍历命令注册表中的只读命令逐字节比对（覆盖新版与旧版会话）」；注册表没有只读标记。影响测试设计。
+    answer: 对注册表中每条有 tool 的命令取其登记样例，样例调用前后工作区不变者视为只读命令；在同一工作区以新版请求与旧版会话调用 tool，content 文本逐字节等于 CLI --json 标准输出（见 design 决策 readonly-by-snapshot）
+    status: resolved
+    kind: requirement
+    answered_by: roadmap

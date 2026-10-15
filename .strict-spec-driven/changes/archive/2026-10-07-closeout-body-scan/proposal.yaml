@@ -1,0 +1,32 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: closeout-body-scan
+  status: proposed
+summary:
+  what:
+    - 写后收口（Close-out）在大纲字段扫描之外新增正文扫描：读取场景 draft.md 去掉 HTML 注释后的正文，用确定性规则找出未解析到设定集（Canon）称谓或别名、且不在豁免名单中的疑似专有名词（Suspected Proper Noun），与大纲来源合并去重，沿用 closeout.suspected-name 警告与 canon add、--waive 两条 next 命令，不阻塞收口
+    - 修正 specs/closeout.yaml 只扫大纲的条款，并同步更新 wa-scene 技能收口步骤与术语表中疑似专有名词的说明
+  why:
+    - 里程碑 novel-guarantee-hardening 审计发现 closeout.go scan 只读大纲字段，Agent 在正文中引入但未登记的新人名不会被提示，设定集漏抽会让后续上下文包与连续性审查失去依据
+scope:
+  in:
+    - internal/closeout：正文疑似专有名词扫描（称谓词后缀、命名引入、对话前导三类确定性模式），与大纲扫描合并去重；Submit 与 Waive 共用
+    - internal/cli/closeout.go：人读输出中正文来源的文字（正文）
+    - specs/closeout.yaml 的 closeout-submit 与 closeout-waive 条款与场景：扫描候选包含正文
+    - 测试：正文新人名提示、已登记别名不提示、豁免后不提示、novel-e2e 语料全部场景收口时该警告为零
+    - wa-scene 技能收口步骤与 docs/GLOSSARY.md 疑似专有名词释义同步
+    - 更正 novel-e2e 测试矩阵 T-CLOSEOUT-02 中与现状不符的断言文字（语料大纲地点未登记的提示是既有状态，正文扫描零提示）
+  out:
+    - 调用模型或分词库做命名实体识别
+    - 让疑似专有名词阻塞收口或验收
+    - 里程碑其他计划变更（上下文包按知情遮蔽、审查任务包预算、伏笔回收校验、文风隔离、测试补齐、MCP 双代）
+unchanged_behavior:
+  - closeout.suspected-name 仍为 warning，不改变 scene close-out 的退出码与写入行为
+  - 大纲字段（characters、pov、location）的扫描结果、错误码、next 命令与 closeout.yaml、收口输入 Schema 不变
+  - novel-e2e 语料命令序列与黄金文件不变
+roadmap:
+  milestone: novel-guarantee-hardening
+  planned_change: closeout-body-scan

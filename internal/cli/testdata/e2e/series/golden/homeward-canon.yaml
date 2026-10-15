@@ -1,0 +1,52 @@
+# 设定集（Canon）；请用 wa-cli canon add 追加设定条目。
+
+schema_version: 1
+entries:
+  - id: char-a-ning
+    type: character
+    scope: work
+    name: 阿宁
+    text: 鹰嘴礁灯塔正式看守人，二十六岁，陆山去世后接任；床头摆着拆下来的铜喇叭。
+    sources: [homeward-note]
+    protection: normal
+  - id: char-lu-guifan
+    type: character
+    scope: work
+    name: 陆归帆
+    text: 陆山之子，三十五岁，十八岁随远洋船出海，走前与父亲吵翻，此后再没回来；带着父亲的怀表。
+    sources: [homeward-note]
+    protection: normal
+  - id: char-lu-shan
+    type: character
+    scope: work
+    name: 陆山
+    aliases: [陆师傅, 陆伯]
+    text: 已故的老看守人，第二部只在回忆、日志与怀表中出现，不出场。
+    sources: [series-note]
+    protection: normal
+  - id: loc-lighthouse
+    type: location
+    scope: work
+    name: 鹰嘴礁灯塔
+    aliases: [灯塔, 灯室]
+    text: 鹰嘴礁尽头的白色灯塔；二〇〇五年拆掉压气机，换成电动雾笛与电子钟，楼下气瓶旁留有手动阀。
+    sources: [homeward-note]
+    protection: normal
+  - id: item-pocketwatch
+    type: item
+    scope: work
+    name: 怀表
+    aliases: [旧怀表]
+    text: 陆山的旧怀表，表盖内侧刻着「归帆」二字；陆山去世后镇上的人寄给陆归帆。
+    sources: [homeward-note]
+    protection: normal
+  - id: rule-fog-horn
+    type: world-rule
+    scope: work
+    text: 二〇〇五年起改为电动雾笛，雾天每隔二十秒鸣一次，由电子钟计时；楼下气瓶旁留有手动阀备用。
+    sources: [homeward-note]
+    protection: normal
+    override:
+      reason: 第二部时隔十年，港务局已把铜喇叭换成电动雾笛，规程改为二十秒
+      confirmation: 作者：第二部按换了电动雾笛来写，二十秒是新规程。
+      confirmed_at: "2026-06-20T12:00:00Z"

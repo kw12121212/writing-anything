@@ -1,0 +1,15 @@
+schema: strict-spec-driven/planned-change/v1
+schema_version: 1
+artifact_type: planned_change
+schema_file: ../../templates/strict-spec-driven/schemas/planned-change.yaml
+planned_change:
+  id: novel-skills
+  milestone: core-gate-hardening
+status: complete
+summary: 内置技能覆盖长篇全流程，wa-auto 增加 novel 路径
+details: 新增 wa-scene（场景契约 → draft write → scene close-out → state/knowledge 提议确认）、wa-continuity（continuity、review plan 按维度以全新子 Agent 会话并行执行任务包、review submit、review report、impact 预览与 mark/clear）、wa-assemble（volume checkpoint/confirm、timeline、assemble、handoff write/show）等技能，或扩展现有技能；wa-auto 按文体分流文章与小说路径，并说明会话结束前写交接记录、新会话先读 next 中的交接。新增测试：novel 生命周期关键命令清单中的每条命令都被至少一个技能引用；沿用 TestSkillCommandsExist 校验命令与参数存在。MCP prompts 随技能自动更新。
+depends_on:
+  - next-stage-commands
+  - volume-checkpoint-gate
+  - series-accept-gate
+  - confirmation-channel

@@ -1,0 +1,60 @@
+schema: strict-spec-driven/question-list/v1
+schema_version: 1
+artifact_type: question_list
+schema_file: templates/strict-spec-driven/schemas/question-list.yaml
+change: release-v0-2-0
+open: []
+resolved:
+  - id: spec-impact
+    question: 本变更是否修改产品主规格或技术标准？
+    context: 影响 spec delta 与 delta tech。发布只执行既有 release 技能与 internal/tools/release，不改变 wa-cli 可观察行为或工程规则。
+    answer: 不修改主规格与技术标准，specs/ 留空、不创建 tech/；design 记录 no-delta-spec 决策
+    status: resolved
+    answered_by: roadmap
+  - id: release-notes-scope
+    question: 发布说明需要包含什么、放在哪里？
+    context: 影响实施任务 write-release-notes 与 create-github-release。planned change details 要求发布说明汇总四个加固与验证里程碑的变化；release 技能现用 --generate-notes。
+    answer: 四段里程碑摘要写入仓库外临时文件，经 --notes-file 前置到 --generate-notes 自动生成的提交清单之前；不在仓库内提交发布说明文件
+    status: resolved
+    answered_by: roadmap
+  - id: requirement-problem
+    question: What is concretely going wrong today, and for whom?
+    context: 'Why this is asked: the change is planned against a need, and the need lives only with the requester. A "problem" here means what someone does or suffers today — not a feature that is missing. If the answer names a button, a field, a page, or an endpoint, it is a solution, and the underlying problem is still unstated. What a sufficient answer contains: who is affected, what they do today instead, and how often. Worked example: "every Monday one person spends forty minutes copying order rows into a spreadsheet to send the weekly report". What it changes: this becomes the proposal''s why, and it decides whether the change is worth making.'
+    answer: 证据：里程碑 goal 与 planned change summary。v0.1.0 之后完成了 core-gate-hardening、novel-guarantee-hardening、usability-polish 三个加固里程碑及系列 E2E、完成标准对账、真实接入验证，但 main 与已发布二进制仍是 v0.1.0；通过 install.sh / install.ps1 安装的用户拿不到加固后的门禁与可用性修复
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-outcome
+    question: What observable difference proves the problem is solved?
+    context: 'Why this is asked: without a success condition, nobody can tell afterwards whether the change worked. "Observable" means someone outside the system can check it without reading the code. What a sufficient answer contains: what a person will see, or no longer have to do, once this is done. Worked example: "the report is in the manager''s inbox on Monday morning without anyone assembling it". What it changes: this becomes the delta spec''s scenarios and the acceptance evidence at review time.'
+    answer: 证据：里程碑 done_criteria 第三条。main 分支上存在 v0.2.0 标签，GitHub Release 产物含 linux、macOS、Windows 的 amd64 与 arm64 二进制及 SHA256SUMS；安装脚本安装到的是 v0.2.0
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-trigger
+    question: Why now — what forced this?
+    context: 'Why this is asked: work that nothing forced is the work most often thrown away later. This question catches a request that sounds reasonable but has no real driver behind it. What a sufficient answer contains: the concrete event, deadline, incident, or cost that made this surface now, or an honest statement that nothing did. Worked example: "the report was missed last month and it was raised with the team". What it changes: a change with no trigger is a candidate for deferral, and the answer is weighed at review before archive.'
+    answer: 证据：planned change depends_on。criteria-reconciliation、series-e2e、agent-dogfood 三个依赖均已归档，本变更是里程碑 real-use-and-release 的最后一项，完成后里程碑才能结束
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-non-goals
+    question: What must explicitly not change?
+    context: 'Why this is asked: the requester knows which nearby behavior other people depend on, and the agent does not. A "non-goal" is something the change must leave alone even though it sits close to the work. What a sufficient answer contains: the behavior, setting, or output that must survive untouched, and who relies on it. Worked example: "do not change the saved filters — several people rely on their own". What it changes: these become the proposal''s unchanged_behavior items, which review checks the finished result against.'
+    answer: 证据：里程碑 scope.out、risks 与 release 技能。不扩展产品功能、不改代码与规格（发布中发现缺陷则停止发布另走缺陷变更）；不向外部平台发布文章；不新增 CI/CD 工作流文件；不改 v0.1.0 标签与 Release；未经作者明确确认不执行对外推送
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-interpretation
+    question: Which reading of the request is intended, where more than one is possible?
+    context: 'Why this is asked: a short request usually admits several readings, and building the wrong one is indistinguishable from building nothing. What a sufficient answer contains: the reading that is meant, stated plainly enough to rule the others out — or a statement that only one reading exists and what it is. Worked example: "export means the version sent to the manager, not the one I read myself". What it changes: this fixes the scope boundary before any code is written, and settles disputes about what was asked for.'
+    answer: 证据：planned change details。「发布」指按 .agents/skills/release 本地完成全部 10 步，包括推送与 gh release create，而非只打本地标签；「含 pwsh 安装校验」指以 WA_REQUIRE_PWSH=1 运行 TestInstallPs1 且必须 PASS；「发布说明汇总四个加固与验证里程碑」指 GitHub Release 说明中有四段里程碑摘要，并保留自动生成的提交清单
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: release-authorization
+    question: 是否授权以 v0.2.0（正式版，非预发布）发布，并在回归、pwsh 校验与构建通过后推送 main、dev、v0.2.0 标签并创建 GitHub Release？
+    context: 影响：实施文件与对外操作（合并 main、打标签、推送、GitHub Release），不影响主规格与技术标准。planned change 要求执行前征得作者明确确认，release 技能也规定版本号与第 8 步推送前的对外发布确认必须由发布者做出；推送标签与 Release 后撤回困难。当前状态：最新标签 v0.1.0；本地 main 落后 origin/main 35 个提交（将仅快进同步）；dev 领先 origin/dev 4 个提交，会随本次推送一起推送。建议：版本号 v0.2.0（自 v0.1.0 起新增 reopen 命令与多项门禁加固，按语义化版本升次版本号），不加 --prerelease；作者可选择改号、改为预发布版，或只做到本地构建暂不推送。
+    answer: 作者于 2026-10-15 明确授权：版本号 v0.2.0，正式版不加 --prerelease，回归、pwsh 校验与构建通过后完整执行 release 技能全部 10 步，包括推送 main、dev、v0.2.0 标签与创建 GitHub Release
+    status: resolved
+    answered_by: human

@@ -16,7 +16,7 @@ var contextCommand = &command{
 	summary:    "输出单元（Unit）的有界上下文包（Context Pack）：不加 --json 时为 Markdown；超出上下文预算（Context Budget）时按优先级裁剪",
 	args:       []argSpec{{"unit", unitRefHelp, true}},
 	flags:      []flagSpec{dirFlag},
-	outputKeys: []outputKey{{"context", "上下文包：unit、type、stage、genre、budget（value、source）、used、brief、outline、section、characters（场景级：出场人物在设定集中的当前设定 id、name、text、protection；非 scene 单元为空数组）、knowledge（场景级：视角人物已知的设定条目 entry、name、text、event、scene；非 scene 单元为空数组）、readerOnly（场景级：读者已知、视角人物未知的设定条目，字段同 knowledge；非 scene 单元为空数组）、priorScenes（前序场景的已验收摘要 unit、text、stale）、reveal（揭示边界 section、text）、threads（场景级：与本场景契约相关的未回收伏笔 id、text、planted_in、planned_recover、overdue；非 scene 单元或作品没有伏笔台账时为空数组）、feedback、decisions、norms、sources、neighbors、series（所属系列的 id、title、facts 与前序作品的 summaries：work、text、stale；不属于系列时为 null）与 trimmed；失败时为 null；scene 单元另含 states（出场人物状态快照）、priorEndings（前序场景结尾）与 summaries（分层摘要）"}},
+	outputKeys: []outputKey{{"context", "上下文包：unit、type、stage、genre、budget（value、source）、used、brief、outline、section、characters（场景级：出场人物在设定集中的当前设定 id、name、text、protection；非 scene 单元为空数组）、knowledge（场景级：视角人物已知的设定条目 entry、name、text、event、scene；非 scene 单元为空数组）、readerOnly（场景级：读者已知、视角人物未知的设定条目，字段同 knowledge；非 scene 单元为空数组）、priorScenes（前序场景的已验收摘要 unit、text、stale）、reveal（揭示边界 section、text）、threads（场景级：与本场景契约相关的未回收伏笔 id、text、planted_in、planned_recover、overdue；非 scene 单元或作品没有伏笔台账时为空数组）、feedback、decisions、norms、sources、neighbors、series（所属系列的 id、title、facts 与前序作品的 summaries：work、text、stale；不属于系列时为 null）、trimmed 与 masked（场景级：文本被秘密遮蔽（Secret Masking）的内容项 part（character 或 knowledge）、id 与 sentences；characters 与 knowledge 的 text 中含视角人物尚未获知的揭示词的句子替换为「（另有未揭示设定）」；非 scene 单元为空数组）；失败时为 null；scene 单元另含 states（出场人物状态快照）、priorEndings（前序场景结尾）与 summaries（分层摘要）"}},
 	exitCodes:  standardExitCodes,
 	run:        runContext,
 }
@@ -147,6 +147,12 @@ type ctxTrim struct {
 	KeptChars int     `json:"keptChars"`
 }
 
+type ctxMasked struct {
+	Part      string `json:"part"`
+	ID        string `json:"id"`
+	Sentences int    `json:"sentences"`
+}
+
 type ctxView struct {
 	Unit         string              `json:"unit"`
 	Type         string              `json:"type"`
@@ -173,6 +179,7 @@ type ctxView struct {
 	Neighbors    []ctxNeighbor       `json:"neighbors"`
 	Series       *ctxSeries          `json:"series"`
 	Trimmed      []ctxTrim           `json:"trimmed"`
+	Masked       []ctxMasked         `json:"masked"`
 }
 
 type ctxSeries struct {
@@ -226,7 +233,7 @@ func messagesView(ms []ctxpack.Message) []ctxMessage {
 func viewContext(p *ctxpack.Pack) *ctxView {
 	v := &ctxView{Unit: p.Unit, Type: p.Type, Stage: p.Stage, Genre: p.Genre, Budget: p.Budget, Used: p.Used,
 		Characters: []ctxCharacter{}, States: []ctxState{}, PriorEndings: []ctxPriorEnding{}, Summaries: []ctxLayeredSummary{}, Knowledge: []ctxKnowledge{}, ReaderOnly: []ctxKnowledge{}, PriorScenes: []ctxSceneSummary{}, Reveal: []ctxReveal{}, Threads: []ctxThread{},
-		Feedback: []feedbackView{}, Decisions: []ctxDecision{}, Sources: []ctxSource{}, Neighbors: []ctxNeighbor{}, Trimmed: []ctxTrim{},
+		Feedback: []feedbackView{}, Decisions: []ctxDecision{}, Sources: []ctxSource{}, Neighbors: []ctxNeighbor{}, Trimmed: []ctxTrim{}, Masked: []ctxMasked{},
 		Norms: ctxNorms{Rules: []ctxRule{}, Glossary: []ctxTerm{}, BannedTerms: []ctxBannedTerm{}, Style: nonNilStrings(p.Norms.Style)}}
 	if b := p.Brief; b != nil {
 		v.Brief = &ctxBrief{Unit: b.Unit, Audience: optional(b.Audience), Purpose: optional(b.Purpose), Length: b.Length,
@@ -301,6 +308,9 @@ func viewContext(p *ctxpack.Pack) *ctxView {
 	}
 	for _, t := range p.Trimmed {
 		v.Trimmed = append(v.Trimmed, ctxTrim{Part: t.Part, ID: optional(t.ID), Chars: t.Chars, KeptChars: t.KeptChars})
+	}
+	for _, m := range p.Masked {
+		v.Masked = append(v.Masked, ctxMasked{Part: m.Part, ID: m.ID, Sentences: m.Sentences})
 	}
 	return v
 }

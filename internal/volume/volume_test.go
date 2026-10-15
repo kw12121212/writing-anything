@@ -223,7 +223,7 @@ func TestConfirm(t *testing.T) {
 	if v == nil {
 		t.Fatalf("problems = %+v", ps)
 	}
-	if !v.ConfirmedByAuthor || v.Confirmation == nil || *v.Confirmation != "作者：本部核对无误" || v.ConfirmedAt == nil {
+	if !v.ConfirmedByAuthor || v.Confirmation == nil || *v.Confirmation != "作者：本部核对无误" || v.ConfirmedAt == nil || v.Channel == nil || *v.Channel != "cli" {
 		t.Fatalf("view = %+v", v)
 	}
 	if len(changed) != 1 {
@@ -238,9 +238,16 @@ func TestAcceptanceBlockers(t *testing.T) {
 	root, w := newTwoParts(t)
 	p1 := part(t, w, "my-novel/part-one")
 	scene9 := part(t, w, "my-novel/scene-9")
-	// 没有任何检查点：零阻塞。
-	if ps := AcceptanceBlockers(root, w, scene9, "strict"); len(ps) != 0 {
-		t.Fatalf("problems = %+v, want none", ps)
+	// 更早的部没有检查点：strict 报 error 级 volume.missing，fast 只提示；本部场景不受影响。
+	if ps := AcceptanceBlockers(root, w, scene9, "strict"); len(ps) != 1 || ps[0].Code != CodeMissing || ps[0].Severity != workspace.SeverityError ||
+		ps[0].Path != ".writing-anything/works/my-novel/units/part-one/checkpoint.yaml" || !strings.Contains(ps[0].Message, "my-novel/part-one") {
+		t.Fatalf("missing problems = %+v", ps)
+	}
+	if ps := AcceptanceBlockers(root, w, scene9, "fast"); len(ps) != 1 || ps[0].Code != CodeMissing || ps[0].Severity != workspace.SeverityWarning {
+		t.Fatalf("fast missing problems = %+v", ps)
+	}
+	if ps := AcceptanceBlockers(root, w, part(t, w, "my-novel/scene-2"), "strict"); len(ps) != 0 {
+		t.Fatalf("same-part missing problems = %+v, want none", ps)
 	}
 	if _, _, ps := Checkpoint(root, w, p1, time.Now()); ps != nil {
 		t.Fatal(ps)
@@ -295,5 +302,71 @@ confirmed_by_author: true
 	}
 	if ps := CheckArtifact(root, ".writing-anything/works/my-novel/units/part-one/checkpoint.yaml"); !has(ps, CodeUnknownEntry) {
 		t.Fatalf("artifact problems = %+v", ps)
+	}
+}
+
+// 部的最后一个场景验收后自动生成检查点；不是最后场景、没有部祖先或部内其他场景未完成时不生成。
+func TestOnAccept(t *testing.T) {
+	root, w := newTwoParts(t)
+	// scene-1 不是 part-one 的最后场景。
+	if v, changed, ps := OnAccept(root, w, part(t, w, "my-novel/scene-1")); v != nil || changed != nil || ps != nil {
+		t.Fatalf("scene-1: %+v %v %+v", v, changed, ps)
+	}
+	// 部单元本身不是场景。
+	if v, _, _ := OnAccept(root, w, part(t, w, "my-novel/part-one")); v != nil {
+		t.Fatalf("part: %+v", v)
+	}
+	v, changed, ps := OnAccept(root, w, part(t, w, "my-novel/scene-2"))
+	if v == nil || ps != nil || v.ConfirmedByAuthor || v.Part != "my-novel/part-one" || v.Scene != "my-novel/scene-2" {
+		t.Fatalf("scene-2: %+v %+v", v, ps)
+	}
+	if want := ".writing-anything/works/my-novel/units/part-one/checkpoint.yaml"; len(changed) != 1 || changed[0] != want {
+		t.Fatalf("changed = %v", changed)
+	}
+	// 同指纹再次验收不写文件。
+	if v, changed, ps := OnAccept(root, w, part(t, w, "my-novel/scene-2")); v == nil || len(changed) != 0 || ps != nil {
+		t.Fatalf("again: %+v %v %+v", v, changed, ps)
+	}
+}
+
+// 最后场景刚验收（阶段仍为 review）视为完成；部内其他场景未完成时只给出 warning、不生成。
+func TestOnAcceptOthersOpen(t *testing.T) {
+	root, w := newTwoParts(t, "scene-1")
+	// scene-2 处于 done；把它视为刚验收的场景，scene-1 仍在 brief 阶段。
+	v, changed, ps := OnAccept(root, w, part(t, w, "my-novel/scene-2"))
+	if v != nil || changed != nil || len(ps) != 1 || ps[0].Code != CodeScenesOpen || ps[0].Severity != workspace.SeverityWarning ||
+		ps[0].Path != ".writing-anything/works/my-novel/units/part-one/checkpoint.yaml" || !strings.Contains(ps[0].Message, "my-novel/scene-1") {
+		t.Fatalf("others open: %+v %v %+v", v, changed, ps)
+	}
+	if _, err := os.Stat(filepath.Join(root, ".writing-anything", "works", "my-novel", "units", "part-one", FileName)); err == nil {
+		t.Fatal("checkpoint must not be written")
+	}
+}
+
+// 没有场景的部不参与缺失检查；没有部祖先的场景验收不生成检查点。
+func TestEmptyPartAndNoPart(t *testing.T) {
+	root := t.TempDir()
+	if _, ps := workspace.Init(root, nil); len(ps) > 0 {
+		t.Fatal(ps)
+	}
+	if _, _, ps := work.Create(root, "novel", "my-novel"); len(ps) > 0 {
+		t.Fatal(ps)
+	}
+	for _, add := range []struct{ parent, typ, id string }{
+		{"my-novel", "part", "part-zero"},
+		{"my-novel", "part", "part-one"},
+		{"my-novel/part-one", "chapter", "chapter-one"},
+		{"my-novel/chapter-one", "scene", "scene-1"},
+	} {
+		if _, _, ps := work.AddUnit(root, add.parent, add.typ, add.id, work.Anchor{}); len(ps) > 0 {
+			t.Fatal(ps)
+		}
+	}
+	w, _ := work.Load(root, "my-novel")
+	if ps := AcceptanceBlockers(root, w, part(t, w, "my-novel/scene-1"), "strict"); len(ps) != 0 {
+		t.Fatalf("empty part problems = %+v, want none", ps)
+	}
+	if p := PartOf(w, part(t, w, "my-novel/part-one")); p != nil {
+		t.Fatalf("PartOf(part) = %+v", p)
 	}
 }

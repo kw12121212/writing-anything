@@ -7,6 +7,7 @@ import (
 
 	"github.com/kw12121212/writing-anything/internal/impact"
 	"github.com/kw12121212/writing-anything/internal/resolve"
+	"github.com/kw12121212/writing-anything/internal/reviewpacket"
 	"github.com/kw12121212/writing-anything/internal/series"
 	"github.com/kw12121212/writing-anything/internal/work"
 	"github.com/kw12121212/writing-anything/internal/workspace"
@@ -252,6 +253,110 @@ func impactNext(ds []Diagnostic, dir string) {
 			ds[i].Next = []string{"wa-cli help impact clear --json"}
 		case impact.CodeNotFound:
 			ds[i].Next = []string{"wa-cli help impact mark --json", shellCommand("wa-cli", "impact", "list", "--dir", dir, "--json")}
+		case reviewpacket.CodeOverBudget:
+			ds[i].Next = overBudgetNext(dir)
 		}
 	}
+}
+
+// impactTarget 是修改命令自动影响传播的一个目标：target 为 impact 接受的目标（场景单元引用或作品内的条目、
+// 事件、伏笔 id），from 非空时只计先序不早于该场景的受影响场景。
+type impactTarget struct {
+	target, from string
+	pre          []impact.Affected // 修改前对同一目标的引用图结果（见 preAffected）
+}
+
+// preAffected 在修改写入前计算目标的受影响场景，供 autoImpact 与修改后的结果合并：改名、改回收位置或改绑定后，
+// 只在修改前引用目标的场景同样受影响。目标解析不了或计算出错时为 nil。
+func preAffected(dir string, w *work.Work, target string) []impact.Affected {
+	if target == "" {
+		return nil
+	}
+	affected, _ := impact.Compute(dir, w, target)
+	return affected
+}
+
+// autoImpact 在修改命令写入成功且语义字段变化后对每个目标自动传播影响（impact 主规格 impact-auto-mark）：
+// 已验收场景落盘复查标记，未验收场景只提示。返回有受影响场景的结果（数组永不为 nil）、追加的变更路径与
+// 自动传播失败时的 warning 诊断（修改本身已经写入，不回滚、不改变退出码）。
+func autoImpact(dir string, w *work.Work, targets []impactTarget) ([]impact.Ripple, []string, []Diagnostic) {
+	ripples, changed, ds := []impact.Ripple{}, []string{}, []Diagnostic{}
+	seen := map[string]bool{}
+	for _, t := range targets {
+		if t.target == "" || seen[t.target] {
+			continue
+		}
+		seen[t.target] = true
+		r, pk, ps := impact.AutoMark(dir, w, t.target, t.from, t.pre, budgetOf(dir, w), now())
+		changed = append(changed, pk...)
+		if len(ps) > 0 {
+			var msgs []string
+			for _, p := range ps {
+				m := p.Message
+				if p.Path != "" {
+					m = p.Path + "：" + m
+				}
+				msgs = append(msgs, strings.TrimSuffix(m, "。"))
+			}
+			ref := t.target
+			if !strings.Contains(ref, "/") {
+				ref = w.ID + "/" + ref
+			}
+			partial := ""
+			if len(pk) > 0 {
+				partial = "（出错前已生成的审查任务包列在 changedPaths 中）"
+			}
+			ds = append(ds, Diagnostic{Code: impact.CodeAutoMarkFailed, Severity: severityWarning,
+				Message: fmt.Sprintf("修改已写入，但对目标 %s 的自动影响传播（Ripple Analysis）失败，复查标记（Recheck Mark）未写入%s：%s；修复后运行 wa-cli impact mark 补写",
+					t.target, partial, strings.Join(msgs, "；")),
+				Next: []string{
+					shellCommand("wa-cli", "validate", "--dir", dir, "--json"),
+					shellCommand("wa-cli", "impact", "mark", ref, "--dir", dir, "--json"),
+				}})
+			continue
+		}
+		if !r.Empty() {
+			ripples = append(ripples, r)
+		}
+	}
+	return ripples, changed, ds
+}
+
+// impactOutputKey 是修改命令新增的 impact 输出键说明。
+var impactOutputKey = outputKey{"impact", "语义字段变化触发的自动影响传播（Ripple Analysis），每个目标一项：target、marked（为已验收场景新落盘的复查标记）、existing（已有 open 标记而跳过的已验收场景）与 unaccepted（只提示的未验收场景）；未触发或没有受影响场景时为空数组"}
+
+// impactText 返回自动影响传播的人读文本；没有结果时为空。
+func impactText(ripples []impact.Ripple) string {
+	var b strings.Builder
+	for _, r := range ripples {
+		for _, m := range r.Marked {
+			fmt.Fprintf(&b, "影响传播（Ripple Analysis）：已验收场景 %s 受目标 %s 影响，已落盘复查标记（Recheck Mark）：%s\n", m.Scene, r.Target, m.Reason)
+		}
+		for _, a := range r.Existing {
+			fmt.Fprintf(&b, "影响传播：已验收场景 %s 已有针对 %s 的 open 复查标记，未重复标记\n", a.Scene, r.Target)
+		}
+		for _, a := range r.Unaccepted {
+			fmt.Fprintf(&b, "影响传播：未验收场景 %s 受目标 %s 影响（只提示，未标记）：%s\n", a.Scene, r.Target, a.Reason)
+		}
+	}
+	return b.String()
+}
+
+// earlierScene 返回 a 与 b 中单元树先序较早者；任一为空时返回另一个。
+func earlierScene(w *work.Work, a, b string) string {
+	if a == "" || a == b {
+		return b
+	}
+	if b == "" {
+		return a
+	}
+	for _, u := range w.Units() {
+		if u.Ref == a {
+			return a
+		}
+		if u.Ref == b {
+			return b
+		}
+	}
+	return a
 }

@@ -1,0 +1,29 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: next-stage-commands
+  status: proposed
+summary:
+  what:
+    - wa-cli next 与 status 在 brief、outline、draft 阶段为缺失的必需产物（Required Artifact）登记可执行的读取命令与写入命令用法：brief 为 wa-cli brief show <unit> 与 wa-cli help brief set --json；outline 为 wa-cli outline show <unit> 与 wa-cli help outline set --json（场景单元为 wa-cli help scene contract --json）；draft 为 wa-cli context <unit> 与 wa-cli help draft write --json；marketing 补登 wa-cli marketing show <unit>
+    - 缺失产物的 action 文字改为指向对应的 wa-cli 写入命令（brief set、outline set 或 scene contract、draft write、marketing set、review record、accept）与产物路径，不再提示直接写入结构化产物
+  why:
+    - 2026-10-07 里程碑审计发现 artifactNext 只为 marketing、review、acceptance 登记命令，新建作品在前三个阶段 next 给出空 commands，且 action 要求在单元目录下直接写入 brief.yaml，违反「结构化产物只通过 wa-cli 变更」的约定
+scope:
+  in:
+    - internal/cli/units.go 的 artifactNext 与 action：按产物与单元类型登记命令、改写缺失产物的 action 文字
+    - units_test.go 中「缺失产物无命令」的断言改为逐阶段断言存在非 help 的可执行 wa-cli 命令（tech-blog 文章与 novel 场景的 brief、outline、draft 阶段），并补 advance 诊断 next 指向的 wa-cli next 输出含这些命令的测试
+    - units-and-lifecycle 主规格 next-steps 要求同步登记命令与场景
+  out:
+    - 诊断下一步命令全面具体化（usability-polish 的 diagnostic-next-commands）
+    - advance 的 lifecycle.missing-artifact 诊断 next 本身的内容（仍为 wa-cli next <unit>）
+    - 卷末检查点、跨作品门禁、确认渠道与长篇技能（同里程碑其他计划变更）
+unchanged_behavior:
+  - 阻塞项（blockers）的 code、artifact、path、message 与顺序不变；commands 的去重并集规则不变
+  - review 与 acceptance 已登记的命令不变；没有阻塞项时 commands 仍只含 wa-cli advance
+  - 汇总单元（Aggregated Unit）的 commands 仍为空数组；next 仍只读
+roadmap:
+  milestone: core-gate-hardening
+  planned_change: next-stage-commands

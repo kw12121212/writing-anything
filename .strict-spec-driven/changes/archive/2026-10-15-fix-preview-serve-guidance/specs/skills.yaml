@@ -1,0 +1,17 @@
+schema: strict-spec-driven/delta-spec/v1
+schema_version: 1
+artifact_type: delta_spec
+schema_file: templates/strict-spec-driven/schemas/delta-spec.yaml
+target_spec: skills
+operations:
+  ADDED:
+    preview-serve-guidance:
+      strength: MUST
+      statement: 使用本地阅读页（wa-cli preview <作品> --serve）的内置技能必须说明：该命令是作者确认期间持续运行的本地服务，要用客户端的后台任务运行、在作者确认完成前不得停止；读取首行输出的 preview.url 后，先确认该地址可以访问再交给作者；作者说打不开时，重新运行该命令并交出新的地址。
+      scenarios:
+        serve-guidance-present:
+          - GIVEN: 内置技能中正文含 preview --serve 的技能（wa-assemble、wa-publish、wa-revise）
+          - WHEN: 检查它们的正文
+          - THEN: 每个都说明持续运行、后台运行、确认该地址可以访问与作者打不开时重新运行
+  MODIFIED: {}
+  REMOVED: {}

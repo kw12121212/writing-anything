@@ -1,0 +1,32 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: reviewpacket-budget-cap
+  status: proposed
+summary:
+  what:
+    - wa-cli review plan 生成的每个审查任务包（Review Task Packet）的 chars（正文切片、台账切片与检查清单之和）严格不超过上下文预算（Context Budget）：先裁正文，再按相关度省略台账切片，检查清单仍放不下时按清单项拆分为多个任务包，单个清单项也放不下时报告 error 级 packet.over-budget 而不写任何文件
+    - 任务包记录被省略的切片条数（omitted_slices；--json 为 omittedSlices），系列级任务包同样遵守预算
+  why:
+    - 里程碑审计发现 reviewpacket.go 的 budgetExcerpt 只裁正文、最少保留 100 字且不裁台账切片，台账很大时任务包静默超预算，违背 packet-plan 主规格与里程碑完成标准「每个任务包 chars 不超过上下文预算」
+    - reviewpacket 包内覆盖率只有约 60%，低于里程碑要求的 80%
+scope:
+  in:
+    - internal/reviewpacket：按预算装配任务包（裁正文、按相关度省略切片、按清单项拆包、over-budget 诊断），done 包保留按（dimension, scope, 清单项集合）匹配；Plan 与 PlanSeries 共用
+    - packet.schema.json 增加可选 omitted_slices；review plan 的 --json 每项增加 omittedSlices，人读输出标注省略条数；packet.over-budget 诊断给出下一步命令
+    - 测试：大台账夹具断言每包 chars 不超过 budget、拆包与 over-budget；novel-e2e 断言每个任务包 chars 不超过 budget；补测试把 reviewpacket 包内覆盖率提升到 80% 以上
+    - reviewpacket 主规格 packet-plan 增量、wa-continuity 技能与术语表同步
+    - 重 plan 的匹配键加入 subject（character 包的人物设定条目 id）区分同一章的不同人物包，open 包沿用 id 原位重建，不再留下同键的重复包（否则旧的超预算 open 包会残留）；novel-e2e 语料脚本随之提交 pov-reveal-1 并再生成 review-report 黄金文件
+    - 范围与系列一致性：给出 unit 时只清理该子树内的过期 open 包（impact mark 为多个受影响场景逐个生成包时不再互相删除，novel-e2e review-report 黄金文件随之再生成）；系列级任务包复用同一落盘匹配；impact mark 在任务包全部生成后才写复查标记
+  out:
+    - 改变五个维度的生成范围、切片内容来源与检查清单文字
+    - 里程碑其他计划变更（收口专名扫描、伏笔校验、测试补齐等）
+    - 调用模型或按语义判断相关度
+unchanged_behavior:
+  - 预算充足时任务包内容与既有输出一致（只是不再预留 32 字符结构开销）；review submit、review report 与 validate 对任务包的行为不变
+  - 既有 done 任务包在清单未拆分时仍按原（dimension, scope）命中保留，不被重写
+roadmap:
+  milestone: novel-guarantee-hardening
+  planned_change: reviewpacket-budget-cap

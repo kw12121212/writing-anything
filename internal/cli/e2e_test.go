@@ -224,6 +224,25 @@ func TestShortStoryEndToEnd(t *testing.T) {
 	if d := fail("outline.unknown-beat", "outline", "set", "lamp/scene-1", "scene-1", "--beats", "nope"); d.Field != "beats[0]" {
 		t.Fatalf("unknown beat: %+v", d)
 	}
+	// 每条节拍问题都先给出场景自己的大纲，再给出用法与声明节拍的根单元大纲；前一条诊断不影响后一条的单元引用。
+	if code, res := runWS(t, dir, "outline", "set", "lamp/scene-1", "scene-1", "--beats", "nope,nada"); code != 1 {
+		t.Fatalf("unknown beats: exit code = %d", code)
+	} else {
+		want := []string{shellCommand("wa-cli", "outline", "show", "lamp/scene-1", "--dir", dir, "--json"), "wa-cli help outline set --json",
+			shellCommand("wa-cli", "outline", "show", "lamp", "--dir", dir, "--json")}
+		n := 0
+		for _, d := range res.Diagnostics {
+			if d.Code == "outline.unknown-beat" {
+				n++
+				if !slices.Equal(d.Next, want) {
+					t.Fatalf("unknown beat next = %v, want %v", d.Next, want)
+				}
+			}
+		}
+		if n != 2 {
+			t.Fatalf("unknown beats: %+v", res.Diagnostics)
+		}
+	}
 	if code, res := runWS(t, dir, "validate"); code != 0 {
 		t.Fatalf("validate with contract: %+v", res.Diagnostics)
 	}

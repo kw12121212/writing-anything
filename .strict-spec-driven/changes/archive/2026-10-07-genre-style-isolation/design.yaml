@@ -1,0 +1,30 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: genre-style-isolation
+approach:
+  - 文体声明可选的 category（article 或 fiction）；规范包 style 条目可以是字符串（对所有文体生效）或 {text, applies_to} 对象（applies_to 为文体类别列表）。catalog 把两种形式解码为同一个 StyleEntry 结构。
+  - 过滤只在 internal/resolve 的 merge 中进行：merge 已知作品文体（ForWork/ForGenre）或 default_genre（Resolve），所有消费 style 的应用点（config resolved、上下文包 norms、审查任务包经上下文包）都从 Resolved.Style 读取，因此不新增分散的应用点（遵循 lesson-8f8885 与 unit-aware-defaults 的教训）。被排除条目写入 Resolved.ExcludedStyle（text、source、appliesTo、reason）。
+  - '内置 default 规范包两条文风加 applies_to: [article]；tech-blog、wechat-marketing 声明 category: article，short-story、novel 声明 category: fiction，minimal 不声明。再生成 novel-e2e 黄金文件并人工复核只少了文风条目。'
+decisions:
+  category-on-genre:
+    decision: 文体类别由文体在数据中声明（genre.category），而不是在代码里硬编码文体 id 到类别的映射
+    rationale: 规范包与文体都是纯数据，后续新增文体（如系列小说）只需在 YAML 中声明类别，过滤逻辑无需改动；与 default_method 等文体字段的声明方式一致
+  unscoped-applies-everywhere:
+    decision: 没有 applies_to 的条目，以及文体缺失或未声明类别时的所有条目都生效
+    rationale: 保持现有工作区与第三方规范包的行为不变；没有类别信息时排除任何条目都没有依据
+  single-merge-entry:
+    decision: 按类别过滤只在 resolve.merge 中实现，不在 ctxpack、reviewpacket 或 CLI 中重复判断
+    rationale: 所有 style 消费点都经过 Resolved，单一入口避免 lesson-8f8885 描述的应用点遗漏
+  excluded-style-field:
+    decision: config resolved 用独立的 excludedStyle 数组报告被排除条目，每项含 text、source、appliesTo 与 reason；resolved.genre 在声明时带 category
+    rationale: planned change 要求列出被排除条目及原因；单列不改变 style 数组的既有结构，现有消费方不受影响
+alternatives:
+  - option: '按文体 id 列表声明文风适用范围（applies_to: [tech-blog, wechat-marketing]）'
+    reason: 每新增一个文体都要修改所有规范包，第三方规范包无法预知未来的文体 id；planned change 明确要求按文体类别声明
+  - option: 把文章类文风从 default 规范包移到 tech-blog 等文体中
+    reason: 文体目前不能声明 style，需要扩大文体结构与合并规则；且作者自有规范包同样需要声明类别适用范围，单靠移动内置数据解决不了
+risks:
+  - novel-e2e 黄金文件变化需人工复核，确认只移除了文章类文风条目
+  - pack learn 写入的文风仍为字符串形式（对所有文体生效），作者需要手动改为对象形式才能限定类别

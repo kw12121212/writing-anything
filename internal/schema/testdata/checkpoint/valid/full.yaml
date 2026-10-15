@@ -9,4 +9,5 @@ sampled:
   - {scene: my-novel/scene-1, kind: state, id: state-1, text: 灯芯易主给精灵}
 confirmed_by_author: true
 confirmation: 作者：本部核对无误
+channel: preview
 confirmed_at: "2026-10-04T08:00:00Z"

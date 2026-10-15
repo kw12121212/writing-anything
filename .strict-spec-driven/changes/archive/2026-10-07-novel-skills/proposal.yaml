@@ -1,0 +1,29 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: novel-skills
+  status: proposed
+summary:
+  what:
+    - 新增三个内置技能（Skill）：wa-scene（场景契约（Scene Contract）→ 写作简报与大纲 → wa-cli draft write → 写后收口（Close-out）→ 状态变更提议与知情事件交作者确认）、wa-continuity（连续性审查（Continuity Review）、审查任务包（Review Task Packet）按维度以全新子 Agent（Subagent）会话并行执行与 review submit / review report、影响传播（Ripple Analysis）预览与 impact mark / list / clear）、wa-assemble（卷末检查点（Volume Checkpoint）生成与作者确认、时间线（Timeline）、组稿（Assembly）与导出、交接记录（Handoff Note）写入与查看）
+    - wa-auto 按文体（Genre）分流文章路径与小说路径：novel 先用 wa-plan 规划，再逐场景走 wa-scene → wa-review/wa-continuity → wa-publish 验收，部末与成书走 wa-assemble；说明会话结束前写交接记录、新会话先读 wa-cli next 输出中的 handoff
+    - 新增测试：novel 生命周期关键命令清单（scene contract、scene close-out、state confirm、knowledge confirm、continuity、review plan、review submit、impact mark、volume checkpoint、volume confirm、assemble、handoff write）中的每条命令都被至少一个内置技能引用，且都存在于 wa-cli help --json；沿用 TestSkillCommandsExist 校验命令与参数存在
+  why:
+    - 2026-10-07 里程碑审计发现 internal/skills/skills 下 9 个 wa-* 技能没有引用任何长篇连续性命令：接入的 Agent 只靠技能无法完成长篇写后收口、状态与知情确认、连续性审查、卷末检查点与组稿，长篇保证只停留在 CLI 层，Agent 也无从知道何时必须停下来请作者确认
+scope:
+  in:
+    - internal/skills/skills/ 下新增 wa-scene、wa-continuity、wa-assemble 三个技能目录（SKILL.md），扩展 wa-auto 的 novel 路径与交接说明；必要时在 wa-plan、wa-publish 中补充指向新技能的衔接句
+    - internal/skills 与 internal/cli 的技能测试：技能数量与安装产物数随之更新，新增 novel 关键命令覆盖测试
+    - skills 主规格 builtin-skills 与 skills-install 同步为十二个技能（修正现有规格漏列 wa-plan 的八个技能写法），新增长篇命令覆盖要求；docs/INSTALL.md 的技能列表同步
+  out:
+    - 任何 wa-cli 命令行为、参数或输出的改动（技能只做薄封装）
+    - 上下文视角过滤、收口正文扫描、审查任务包预算上限等保证类加固（novel-guarantee-hardening）与诊断下一步命令具体化（usability-polish）
+    - MCP 服务实现改动：prompts 随内置技能自动更新
+unchanged_behavior:
+  - 既有九个技能的文章路径步骤与「必须停下来问作者」约束不变；技能文件格式、skills list 输出结构与 skills install 的检查与写入规则不变
+  - MCP prompts/list 仍为每个内置技能返回一个 prompt，规则不变
+roadmap:
+  milestone: core-gate-hardening
+  planned_change: novel-skills

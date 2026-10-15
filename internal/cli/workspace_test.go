@@ -291,7 +291,8 @@ func TestValidateSingleArtifact(t *testing.T) {
 	}
 	writeFile(t, filepath.Join(dir, "notes.yaml"), "a: 1\n")
 	code, res = runWS(t, dir, "validate", "notes.yaml")
-	if d := diag(t, res, "artifact.unknown-kind"); code != 1 || res.Valid || d.Path != "notes.yaml" || !hasNext(d, "wa-cli help validate") {
+	if d := diag(t, res, "artifact.unknown-kind"); code != 1 || res.Valid || d.Path != "notes.yaml" ||
+		!concreteFirst(d, shellCommand("wa-cli", "validate", "--dir", dir, "--json"), "wa-cli help validate --json") {
 		t.Fatalf("unknown-kind: exit code = %d, result = %+v", code, res)
 	}
 	outside := filepath.Join(filepath.Dir(dir), "outside.yaml")
@@ -376,7 +377,8 @@ func TestConfigSetRejects(t *testing.T) {
 		t.Fatalf("set-invalid-value: exit code = %d, result = %+v", code, res)
 	}
 	code, res = runWS(t, dir, "config", "set", "schema_version", "2")
-	if d := diag(t, res, "config.unknown-key"); code != 1 || !slices.Contains(d.Next, "wa-cli help config set --json") {
+	if d := diag(t, res, "config.unknown-key"); code != 1 ||
+		!concreteFirst(d, shellCommand("wa-cli", "config", "resolved", "--dir", dir, "--json"), "wa-cli help config set --json") {
 		t.Fatalf("set-unknown-key: exit code = %d, result = %+v", code, res)
 	}
 	if readFile(t, configPath(dir)) != before {
@@ -389,7 +391,8 @@ func TestConfigSetAnchored(t *testing.T) {
 	content := "schema_version: 1\nlanguage: zh-CN\ndefault_genre: &genre tech-blog\npacks: [*genre]\ngate_level: fast\n"
 	writeFile(t, configPath(dir), content)
 	code, res := runWS(t, dir, "config", "set", "default_genre", "")
-	if d := diag(t, res, "config.anchored-value"); code != 1 || d.Field != "default_genre" || !strings.Contains(d.Message, "第 3 行") {
+	if d := diag(t, res, "config.anchored-value"); code != 1 || d.Field != "default_genre" || !strings.Contains(d.Message, "第 3 行") ||
+		!concreteFirst(d, shellCommand("wa-cli", "config", "resolved", "--dir", dir, "--json"), "wa-cli help config set --json") {
 		t.Fatalf("exit code = %d, diagnostic = %+v", code, d)
 	}
 	if readFile(t, configPath(dir)) != content {

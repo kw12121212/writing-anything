@@ -1,0 +1,11 @@
+schema: strict-spec-driven/planned-change/v1
+schema_version: 1
+artifact_type: planned_change
+schema_file: ../../templates/strict-spec-driven/schemas/planned-change.yaml
+planned_change:
+  id: series-accept-gate
+  milestone: core-gate-hardening
+status: complete
+summary: 系列成员作品的场景验收纳入跨作品连续性审查（含跨作品已死人物仍行动），error 级发现项阻塞验收
+details: continuity.AcceptanceBlockers 在作品属于系列时追加系列范围检查，只保留涉及当前场景的 error 级发现项：同一时间两地、conflicting-state，以及新增的跨作品终态人物出场（按 works 顺序读取更早成员作品已确认的状态台账，人物最新终态为死亡、失踪等保留词时报告 continuity.dead-acting）。修复时间线 seriesOfForTimeline 用 IsDir 判断而系列文件为 <id>.yaml 导致 SeriesID 未生效；修正跨作品提示语重复；修正 seriesFixture 用不检查退出码的 run、book-1 实际停在 draft/review 的测试卫生问题。同步 continuity 与 series 规格。测试：跨作品同时两地阻塞 accept、跨作品已死人物出场阻塞 accept、修正后放行、单作品行为不变。
+depends_on: []

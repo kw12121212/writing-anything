@@ -1,0 +1,21 @@
+schema: strict-spec-driven/delta-tech/v1
+schema_version: 1
+artifact_type: delta_tech
+schema_file: templates/strict-spec-driven/schemas/delta-tech.yaml
+target_standard: cli-contract
+operations:
+  ADDED:
+    text-json-parity:
+      strength: SHOULD
+      statement: 命令不加 --json 时的人读文本输出不应给出 JSON 输出中没有的可执行信息（如待办、作者指示、阻塞项、下一步命令）：文本模式新增这类信息时，在同一变更中为 JSON 输出新增对应字段（向后兼容的增量）；只用于人读的展示元数据（如与 JSON 中 id 并列的写入时间）可以只出现在文本中，但须在变更的 design.yaml 写明理由。
+      rationale: Agent 读取 JSON 输出、作者读取文本输出，两者承载的信息漂移会让一方看不到另一方据以行动的内容；next-text-handoff 为在文本中显示作者新指示而同步给 JSON handoff 增加 instructions，正是这一约定。
+      enforcement:
+        method: review
+        detail: 审查新增或修改文本输出的变更时，核对文本中每一项可执行信息在 JSON 输出中都有对应字段
+      examples:
+        good:
+          - next 文本顶部显示交接记录的 todo 与 instructions，JSON 的 handoff 字段同样含 todo 与 instructions
+        bad:
+          - 只在文本输出中列出作者指示，JSON 输出没有对应字段
+  MODIFIED: {}
+  REMOVED: {}

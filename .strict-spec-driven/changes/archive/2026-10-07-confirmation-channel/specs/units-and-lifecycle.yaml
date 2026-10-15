@@ -1,0 +1,17 @@
+schema: strict-spec-driven/delta-spec/v1
+schema_version: 1
+artifact_type: delta_spec
+schema_file: templates/strict-spec-driven/schemas/delta-spec.yaml
+target_spec: units-and-lifecycle
+operations:
+  ADDED:
+    next-author-review:
+      strength: MUST
+      statement: wa-cli next 的 --json 输出必须含 pendingAuthorReviews 数组（给出单元时为其所在作品、省略时为全部作品），取值与形态同 review 主规格的 review-show-author-review：gate_level 为 strict 时列出待作者复核的命令行渠道确认，每项的 command 为打开该作品阅读页的 wa-cli preview <work> --serve --dir <dir> --json；其他关卡强度为空数组。steps 的取值不因此改变。不加 --json 时在下一步之后列出待复核项与打开阅读页的命令；没有需要推进的单元但有待复核项时不输出「没有需要推进的单元」。
+      scenarios:
+        next-lists-pending:
+          - GIVEN: gate_level 为 strict，作品 my-novel 全部场景 done，部 part-one 的卷末检查点经 wa-cli volume confirm 确认、尚未复核
+          - WHEN: 运行 wa-cli next --dir D --json
+          - THEN: pendingAuthorReviews 有一项 kind 为 volume-checkpoint、ref 为 my-novel/part-one 的待复核项，command 为 wa-cli preview my-novel --serve --dir D --json
+  MODIFIED: {}
+  REMOVED: {}

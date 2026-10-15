@@ -1,0 +1,19 @@
+schema: strict-spec-driven/lesson/v1
+schema_version: 1
+artifact_type: lesson
+schema_file: templates/strict-spec-driven/schemas/lesson.yaml
+lesson:
+  id: roadmap-generate-91c10a
+  title: roadmap-generate 同一次调用里先追加后删除，删掉再写回同一条目会把它删光
+category: documentation
+status: active
+created_at: '2026-10-15T06:28:42.060Z'
+updated_at: '2026-10-15T06:28:42.060Z'
+context: agent-dogfood 因作者取消一次运行，要修改里程碑 real-use-and-release 完成标准第一条，并想通过「全部 --remove-done 再按原顺序 --done」保持顺序。
+observation: strict-spec-cli roadmap-generate milestone 在同一次调用中先追加 --done、再执行 --remove-done：写回的三条与被删的三条文本相同，追加时去重为无变化，随后又被删除，结果只剩新改写的一条；命令仍返回 valid true。
+takeaway: 修改路线图条目时，删除与写回分两次调用：先在一次调用中 --remove-* 并追加改写后的条目，再在第二次调用中按需写回其余条目；每次调用后用 git diff 核对条目数量与顺序，不能只看 valid。
+applies_when: 用 strict-spec-cli roadmap-generate（或其他「追加去重 + 按子串删除」的生成命令）在同一次调用里既删除又重新写入同一文本的条目时
+occurrences:
+  - origin: agent-dogfood
+    date: '2026-10-15'
+    evidence: real-use-and-release.yaml 的 done_criteria 一度只剩 1 条，第二次调用按原顺序补回后经 git diff 与 roadmap-status 核对

@@ -1,0 +1,33 @@
+schema: strict-spec-driven/delta-tech/v1
+schema_version: 1
+artifact_type: delta_tech
+schema_file: templates/strict-spec-driven/schemas/delta-tech.yaml
+target_standard: cli-contract
+operations:
+  ADDED:
+    help-only-next-allowlist:
+      strength: MUST
+      statement: internal/**（不含 internal/tools）非测试源码中，元素全部是 wa-cli help 提示的 []string 字面量与不带 extra 的 helpNext 调用（诊断 next 只给查看用法）必须登记在 internal/cli 的 helpOnlyAllowed 白名单中，按「相对 internal 的文件路径:函数名」记录位置数并写明理由；新增此类位置时要么改为先给带单元引用或产物路径的具体命令（如 concreteHelpNext），要么同一变更中登记理由；改造后必须同步下调或删除白名单条目。
+      rationale: 只给 help 的 next 让 Agent 自行推断该查看哪个单元与产物；白名单把这类位置显式化，避免新增诊断静默回退。按函数计数而非行号，避免无关编辑造成误报；helpNext 以 extra... 追加，字面量本身看不出是否只含 help，所以按调用处计数。
+      enforcement:
+        method: test
+        detail: internal/cli 的 TestHelpOnlyNextAllowlist 用 go/ast 扫描并与白名单逐个函数比对（未登记、超出、少于登记值、过期条目、理由为空都失败）；TestHelpOnlyScannerDetects 覆盖字面量、拼接、局部变量、函数内 const/var、只追加 help 的 append、不带 extra 的 helpNext，以及 append 追加具体命令或 extra... 的豁免。
+      examples:
+        good:
+          - res.Diagnostics[i].Next = []string{shellCommand("wa-cli", "brief", "show", ref, "--dir", dir, "--json"), "wa-cli help brief set --json"}
+        bad:
+          - res.Diagnostics[i].Next = []string{"wa-cli help brief set --json"} 或 helpNext(res.Diagnostics, "draft write", codes) 且未登记白名单
+  MODIFIED:
+    invalid-value-code:
+      strength: SHOULD
+      statement: 参数取值不合法（如应为正整数、应为枚举取值）且不对应任何产物字段时，统一报告错误码 input.invalid-value，诊断不填 path，message 说明参数名、给出的取值与期望，next 含 wa-cli help <command> --json；生命周期主路径命令（见 cli 主规格 diagnostic-next-concrete）在其前先给出带单元引用的只读查看命令；取值写入产物字段时仍由 Schema 校验报告 artifact.schema-violation。
+      rationale: Agent 依据错误码分支处理，同一类参数错误各命令各自造错误码会让分支逻辑膨胀；与写入产物的字段错误区分开，Agent 才知道该改参数还是改产物；主路径命令先给出该单元的查看命令，Agent 不必自行推断要看哪个产物。
+      enforcement:
+        method: review
+      examples:
+        good:
+          - feedback watch --interval 0 报告 input.invalid-value，next 为 wa-cli help feedback watch --json
+          - brief set my-post --length 3000-1500 报告 input.invalid-value，next 为 wa-cli brief show my-post --dir D --json 与 wa-cli help brief set --json
+        bad:
+          - feedback watch --interval 0 报告 feedback.bad-interval
+  REMOVED: {}

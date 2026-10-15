@@ -298,27 +298,26 @@ func methodWarning(ms outline.Messages) []workspace.Problem {
 	return []workspace.Problem{p}
 }
 
-// outlineParamNext 为参数引起的问题（不填 path）给出用法与相关的查看命令；已有产物中的问题保留默认的复查命令。
+// outlineParamNext 为参数引起的问题（不填 path）先给出该单元的大纲，再给出用法与相关的查看命令；已有产物中的问题保留默认的复查命令。
 func outlineParamNext(res *outlineResult, dir, ref string) {
+	show := shellCommand("wa-cli", "outline", "show", ref, "--dir", dir, "--json")
 	for i, d := range res.Diagnostics {
 		if d.Path != "" {
 			continue
 		}
-		next := []string{"wa-cli help outline set --json"}
+		next := []string{show, "wa-cli help outline set --json"}
 		switch d.Code {
 		case outline.CodeUnknownMessage:
 			next = append(next, shellCommand("wa-cli", "brief", "show", ref, "--dir", dir, "--json"))
 		case outline.CodeUnknownSource:
 			next = append(next, shellCommand("wa-cli", "source", "list", "--dir", dir, "--json"))
 		case outline.CodeUnknownBeat:
+			// 节拍由根单元的写作法声明：子单元的问题再给出根单元的大纲。
 			if work, _, found := strings.Cut(ref, "/"); found {
-				ref = work
+				next = append(next, shellCommand("wa-cli", "outline", "show", work, "--dir", dir, "--json"))
 			}
-			next = append(next, shellCommand("wa-cli", "outline", "show", ref, "--dir", dir, "--json"))
 		case outline.CodeUnknownTarget, outline.CodeTargetOutOfRange:
 			next = append(next, shellCommand("wa-cli", "config", "resolved", "--dir", dir, "--json"))
-		case outline.CodeSectionNotFound:
-			next = append(next, shellCommand("wa-cli", "outline", "show", ref, "--dir", dir, "--json"))
 		}
 		res.Diagnostics[i].Next = next
 	}
@@ -359,7 +358,8 @@ func runOutlineSet(inv *invocation) int {
 		outlineParamNext(res, dir, inv.args[0])
 		for i, d := range res.Diagnostics {
 			if d.Code == outline.CodeAnchoredValue {
-				res.Diagnostics[i].Next = []string{"wa-cli help outline set --json"}
+				res.Diagnostics[i].Next = []string{shellCommand("wa-cli", "outline", "show", inv.args[0], "--dir", dir, "--json"),
+					"wa-cli help outline set --json"}
 			}
 		}
 	}
@@ -402,7 +402,8 @@ func runOutlineRemove(inv *invocation) int {
 		case outline.CodeSectionNotFound:
 			res.Diagnostics[i].Next = []string{shellCommand("wa-cli", "outline", "show", inv.args[0], "--dir", dir, "--json")}
 		case outline.CodeAnchoredValue:
-			res.Diagnostics[i].Next = []string{"wa-cli help outline remove --json"}
+			res.Diagnostics[i].Next = []string{shellCommand("wa-cli", "outline", "show", inv.args[0], "--dir", dir, "--json"),
+				"wa-cli help outline remove --json"}
 		}
 	}
 	return finish(inv, res, func(out io.Writer) error {

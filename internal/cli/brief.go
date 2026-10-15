@@ -340,21 +340,20 @@ func runBriefSet(inv *invocation) int {
 	}
 	res.Diagnostics = diagnostics(problems, dir)
 	if edit {
-		// 参数引起的问题（字段为参数名或为空）给出用法；已有 brief.yaml 中的问题保留默认的复查命令。
+		// 参数引起的问题（字段为参数名或为空）先给出该单元的写作简报，再给出用法；已有 brief.yaml 中的问题保留默认的复查命令。
+		show := shellCommand("wa-cli", "brief", "show", inv.args[0], "--dir", dir, "--json")
 		for i, d := range res.Diagnostics {
 			if d.Path == "" {
-				res.Diagnostics[i].Next = []string{"wa-cli help brief set --json"}
+				res.Diagnostics[i].Next = []string{show, "wa-cli help brief set --json"}
 				switch d.Code {
 				case brief.CodeUnknownSource:
 					res.Diagnostics[i].Next = append(res.Diagnostics[i].Next, shellCommand("wa-cli", "source", "list", "--dir", dir, "--json"))
 				case brief.CodeUnknownDecision, brief.CodeUnrelatedDecision:
 					res.Diagnostics[i].Next = append(res.Diagnostics[i].Next, shellCommand("wa-cli", "decisions", "--all", "--dir", dir, "--json"))
-				case brief.CodeMessageNotFound:
-					res.Diagnostics[i].Next = append(res.Diagnostics[i].Next, shellCommand("wa-cli", "brief", "show", inv.args[0], "--dir", dir, "--json"))
 				}
 			}
 			if d.Code == brief.CodeAnchoredValue {
-				res.Diagnostics[i].Next = []string{"wa-cli help brief set --json"}
+				res.Diagnostics[i].Next = []string{show, "wa-cli help brief set --json"}
 			}
 		}
 	}

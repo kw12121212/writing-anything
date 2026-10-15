@@ -1,0 +1,49 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: series-accept-gate
+sections:
+  Implementation:
+    series-membership:
+      text: continuity 改用 series.Of 判定系列成员（替换以 IsDir 扫描目录、从未赋值 SeriesID 的 seriesOfForTimeline；无可观察行为变化），并修正跨作品同一时间两地提示语重复；firstMentionedScene 改用完整场景引用匹配
+      status: complete
+    series-dead-acting:
+      text: RunSeries 新增跨作品终态人物出场检查（continuity.dead-acting，按 works 顺序读取更早作品已确认状态，逐作品按称谓解析条目）
+      status: complete
+    accept-gate:
+      text: 新增 seriesSceneFindings，并在 Blockers、EnsureWaivers 与 AcceptanceBlockers 中追加涉及当前场景的 error 级系列发现（同一时间两地、conflicting-state、dead-acting），归属改为当前场景
+      status: complete
+    timeline-waiver:
+      text: internal/cli/review.go：accept 的豁免决策生成与阻塞项 next 同时识别 timeline.* 连续性发现
+      status: complete
+    assembly-dedupe:
+      text: assembly.Gate 改用 continuity.SeriesGate（系列成员经 series.Of 判定、RunSeries 只算一次），系列范围发现跳过已由本作品场景阻塞项覆盖的项
+      status: complete
+    spec-sync:
+      text: 同步 continuity 与 series 主规格的 delta：新增跨作品终态人物检查、系列成员场景验收门禁要求与场景；更新命令 summary 如有需要
+      status: complete
+  Testing:
+    fixture-hygiene:
+      text: 修正 internal/cli seriesFixture：每步检查退出码，book-1/s1 真正推进到 done；continuity 包系列夹具改用平铺 <id>.yaml 系列文件
+      status: complete
+      command: go test ./internal/cli/ ./internal/continuity/
+    accept-gate-tests:
+      text: 测试：跨作品同时两地阻塞 accept book-2/s1 并列出发现、修正后验收成功；跨作品已死人物出场使 continuity <series> 报 dead-acting 且阻塞 accept；review show 只读；单作品行为不变；豁免后放行
+      status: complete
+      command: go test ./internal/cli/ ./internal/continuity/ ./internal/assembly/
+    full-regression:
+      text: 运行完整回归（含覆盖率阈值 80%）
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    verify-change:
+      text: strict-spec-cli verify series-accept-gate 通过，任务全部完成
+      status: complete
+      command: strict-spec-cli verify series-accept-gate
+    archive-ready:
+      text: 审查通过后归档，确认 delta spec 合并进 continuity 与 series 主规格，路线图 planned change 标记完成
+      status: complete
+testing_gates:
+  validation_task: full-regression
+  unit_test_task: accept-gate-tests

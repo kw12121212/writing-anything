@@ -13,6 +13,7 @@ import (
 	"github.com/kw12121212/writing-anything/internal/decision"
 	"github.com/kw12121212/writing-anything/internal/draft"
 	"github.com/kw12121212/writing-anything/internal/feedback"
+	"github.com/kw12121212/writing-anything/internal/outline"
 	"github.com/kw12121212/writing-anything/internal/resolve"
 	"github.com/kw12121212/writing-anything/internal/review"
 	"github.com/kw12121212/writing-anything/internal/schema"
@@ -32,7 +33,7 @@ var reviewRecordCommand = &command{
 	summary: "记录单元（Unit）的审稿（Review）：Agent 的 AI 预审（Pre-review）按评分标准（Rubric）逐项给出结论、证据与段落，" +
 		"并列出发现项（Finding）；整体替换已有的 review.yaml",
 	args:       []argSpec{{"unit", unitRefHelp, true}},
-	flags:      []flagSpec{dirFlag, {"file", flagString, "审稿输入（YAML）：rubric 为结论数组（item、verdict: pass|fail、evidence、paragraphs），findings 为发现项数组（paragraph、message，可选 id、rubric、quote、suggestion）；相对 --dir 或为绝对路径，省略时从标准输入读取"}},
+	flags:      []flagSpec{dirFlag, {"file", flagString, "审稿输入（YAML）：rubric 为结论数组（item、verdict: pass|fail、evidence、可选的 paragraphs；评分项清单见 wa-cli review show 的 rubric），findings 为发现项数组（paragraph、message，可选 id、rubric、quote、suggestion）；相对 --dir 或为绝对路径，省略时从标准输入读取"}},
 	outputKeys: []outputKey{{"review", "记录的审稿：" + reviewViewHelp + "；失败时为 null"}},
 	exitCodes:  standardExitCodes,
 	run:        runReviewRecord,
@@ -50,7 +51,9 @@ var reviewShowCommand = &command{
 		{"revisions", "修订任务数组：未处理的审稿发现项（source 为 review）与作者反馈（source 为 feedback），每项含 source、id、status、paragraph 与 message"},
 		{"decisions", "关联该单元、尚未决定的决策数组，每项含 id、question 与 blocking"},
 		{"gate", "验收关卡：level、ready（除作者确认外没有阻塞项）、confirmationRequired（strict 下为 true）与 blockers（每项含 code、path、ref 与 message）"},
-		{"acceptance", "已有的验收记录：gateLevel、draftSha256、confirmedByAuthor、confirmation、acceptedAt 与 stale；没有时为 null"},
+		{"acceptance", "已有的验收记录：gateLevel、draftSha256、confirmedByAuthor、confirmation、channel（确认渠道（Confirmation Channel），未经作者确认为 null）、acceptedAt 与 stale；没有时为 null"},
+		{"rubric", "审稿必须逐项给出结论的评分项数组（评分标准（Rubric）中的条目）：合并后的评分标准加上单元选用的写作法附带的评分项，与 review record 校验的集合相同；每项含 id、title、description 与 blocking；没有正文或合并失败时为空数组"},
+		{"pendingAuthorReviews", "单元所在作品的" + pendingAuthorReviewsHelp},
 	},
 	exitCodes: standardExitCodes,
 	run:       runReviewShow,
@@ -71,12 +74,12 @@ var reviewResolveCommand = &command{
 var acceptCommand = &command{
 	name: "accept",
 	summary: "验收（Acceptance）单元（Unit）：按工作区的关卡强度（Gate Level）检查文本检查、审稿（Review）、修订任务（Revision Task）、" +
-		"阻塞决策与作者确认，没有阻塞项时写入 acceptance.yaml；之后用 wa-cli advance 推进",
+		"阻塞决策与作者确认，没有阻塞项时写入 acceptance.yaml；部的最后一个场景验收后自动生成该部的卷末检查点（Volume Checkpoint）；之后用 wa-cli advance 推进",
 	args: []argSpec{{"unit", unitRefHelp, true}},
 	flags: []flagSpec{dirFlag,
 		{"confirmed-by-author", flagBool, "作者已确认验收；必须同时给出 --confirmation"},
 		{"confirmation", flagString, "作者确认的原话摘要（确认记录（Confirmation Record））；必须同时给出 --confirmed-by-author"}},
-	outputKeys: []outputKey{{"acceptance", "写入的验收记录：unit、path、gateLevel、draftSha256、confirmedByAuthor、confirmation 与 acceptedAt；失败时为 null"}},
+	outputKeys: []outputKey{{"acceptance", "写入的验收记录：unit、path、gateLevel、draftSha256、confirmedByAuthor、confirmation、channel（确认渠道（Confirmation Channel），未经作者确认为 null）与 acceptedAt；失败时为 null"}},
 	exitCodes:  standardExitCodes,
 	run:        runAccept,
 }
@@ -171,12 +174,14 @@ func runReviewRecord(inv *invocation) int {
 		// 审稿输入中的问题：输入尚未写入，整体校验检不出，给出用法与段落编号。
 		for i, d := range res.Diagnostics {
 			if d.Path == "" {
-				res.Diagnostics[i].Next = []string{"wa-cli help review record --json", shellCommand("wa-cli", "provenance", inv.args[0], "--dir", dir, "--json"),
+				// review show 的 rubric 是必须逐项给结论的评分项清单（含写作法附带的评分项）。
+				res.Diagnostics[i].Next = []string{"wa-cli help review record --json", shellCommand("wa-cli", "review", "show", inv.args[0], "--dir", dir, "--json"),
+					shellCommand("wa-cli", "provenance", inv.args[0], "--dir", dir, "--json"),
 					shellCommand("wa-cli", "config", "resolved", "--dir", dir, "--json"), shellCommand("wa-cli", "brief", "show", inv.args[0], "--dir", dir, "--json")}
 			}
 		}
 	}
-	helpNext(res.Diagnostics, "review record", []string{codeInputReadFailed})
+	concreteHelpNext(res.Diagnostics, shellCommand("wa-cli", "review", "show", inv.args[0], "--dir", dir, "--json"), "review record", []string{codeInputReadFailed})
 	return finish(inv, res, func(w io.Writer) error {
 		if res.Review == nil {
 			return nil
@@ -261,6 +266,7 @@ type acceptanceView struct {
 	DraftSHA256       string  `json:"draftSha256"`
 	ConfirmedByAuthor bool    `json:"confirmedByAuthor"`
 	Confirmation      *string `json:"confirmation"`
+	Channel           *string `json:"channel"`
 	AcceptedAt        string  `json:"acceptedAt"`
 	Stale             *bool   `json:"stale,omitempty"`
 }
@@ -273,6 +279,18 @@ type reviewShowResult struct {
 	Decisions  []decisionItemView `json:"decisions"`
 	Gate       gateView           `json:"gate"`
 	Acceptance *acceptanceView    `json:"acceptance"`
+	// Rubric 是审稿必须逐项给出结论的评分项，与 review record 校验 review.missing-verdict 的集合相同（review-show）。
+	Rubric []rubricItemView `json:"rubric"`
+	// PendingAuthorReviews 是单元所在作品待作者复核（Pending Author Review）的确认（strict 关卡下）。
+	PendingAuthorReviews []pendingReviewView `json:"pendingAuthorReviews"`
+}
+
+// rubricItemView 是一个评分项（Rubric Item）。
+type rubricItemView struct {
+	ID          string `json:"id"`
+	Title       string `json:"title"`
+	Description string `json:"description"`
+	Blocking    bool   `json:"blocking"`
 }
 
 // gateState 是一次命令中为验收关卡收集的全部输入与展示用的数据。
@@ -283,8 +301,9 @@ type gateState struct {
 	lint      lintSummary
 	feedback  []feedbackView
 	decisions []decision.Decision
-	problems  []workspace.Problem // 无法收集关卡输入的问题（如没有正文、合并失败）以及不影响关卡的 warning
-	changed   []string            // 收集关卡时产生的副作用路径（如连续性豁免决策的决策队列）
+	problems  []workspace.Problem  // 无法收集关卡输入的问题（如没有正文、合并失败）以及不影响关卡的 warning
+	changed   []string             // 收集关卡时产生的副作用路径（如连续性豁免决策的决策队列）
+	series    []continuity.Finding // 系列范围的门禁发现（只算一次，accept 生成豁免决策时复用）
 }
 
 // collectGate 为单元 u 收集验收关卡的输入：文本检查、审稿、未处理的作者反馈、关联的决策与评分标准。
@@ -347,17 +366,25 @@ func collectGate(dir string, w *work.Work, u *work.Unit) *gateState {
 	// 连续性审查（Continuity Review）：只读计算 error 级阻塞项（review show 同用此路径，不产生副作用）；
 	// 豁免决策只在 accept 的阻塞路径上生成（见 accept 函数），只读命令不得写入决策队列。
 	var cps []workspace.Problem
-	if g.in.Continuity, cps = continuity.Blockers(dir, w, u); len(cps) > 0 {
+	if u.Type == outline.SceneType {
+		g.series = continuity.SeriesGateFindings(dir, w)
+	}
+	if g.in.Continuity, cps = continuity.BlockersWith(dir, w, u, g.series); len(cps) > 0 {
 		g.problems = append(g.problems, cps...)
 	}
 	return g
+}
+
+// continuityCode 报告阻塞项是否来自连续性审查：continuity.* 与时间线检查的 timeline.*（同走（场景， 错误码）豁免通道）。
+func continuityCode(code string) bool {
+	return strings.HasPrefix(code, "continuity.") || strings.HasPrefix(code, "timeline.")
 }
 
 // gateNext 返回验收阻塞项的下一步命令：解除它的命令，以及能复查它的 wa-cli review show。
 func gateNext(dir, ref string, b review.Blocker) []string {
 	show := shellCommand("wa-cli", "review", "show", ref, "--dir", dir, "--json")
 	lintCmd := shellCommand("wa-cli", "lint", ref, "--dir", dir, "--json")
-	if strings.HasPrefix(b.Code, "continuity.") {
+	if continuityCode(b.Code) {
 		return []string{shellCommand("wa-cli", "continuity", ref, "--dir", dir, "--json"),
 			shellCommand("wa-cli", "decisions", "--dir", dir, "--json"), show}
 	}
@@ -367,7 +394,7 @@ func gateNext(dir, ref string, b review.Blocker) []string {
 	case decision.CodeBlocking, decision.CodeInvalidQueue:
 		return []string{shellCommand("wa-cli", "decisions", "--dir", dir, "--json"), show}
 	case review.CodeReviewMissing, review.CodeReviewStale, review.CodeMissingVerdict:
-		// 评分标准来自合并后的配置与单元选用的写作法（见 brief show 的 method 与 method show）。
+		// 必须逐项给结论的评分项见 review show 的 rubric（合并后的配置加上单元选用的写作法附带的评分项）。
 		return []string{"wa-cli help review record --json", shellCommand("wa-cli", "provenance", ref, "--dir", dir, "--json"),
 			shellCommand("wa-cli", "brief", "show", ref, "--dir", dir, "--json"), show}
 	case review.CodeOpenFinding, review.CodeBlockingRubric:
@@ -380,7 +407,19 @@ func gateNext(dir, ref string, b review.Blocker) []string {
 		closeout.CodeMissingStateChange, closeout.CodeMissingRecovery, closeout.CodeMissingPlant, closeout.CodeMissingEvent:
 		return []string{shellCommand("wa-cli", "scene", "close-out", ref, "--dir", dir, "--json"),
 			"wa-cli help scene close-out --json", show}
-	case volume.CodeUnconfirmed, volume.CodeInvalid:
+	case volume.CodeMissing, volume.CodeScenesOpen:
+		next := []string{"wa-cli help volume checkpoint --json", show}
+		if b.Path != "" {
+			next = append([]string{shellCommand("wa-cli", "volume", "checkpoint", volumePartRef(ref, b.Path), "--dir", dir, "--json")}, next...)
+		}
+		return next
+	case volume.CodeInvalid:
+		// 不通过校验的检查点既不能确认也不能被重新生成覆盖：先校验定位问题，修复或删除后再生成。
+		if b.Path != "" {
+			return []string{shellCommand("wa-cli", "validate", b.Path, "--dir", dir, "--json"), "wa-cli help volume checkpoint --json", show}
+		}
+		return []string{"wa-cli help volume checkpoint --json", show}
+	case volume.CodeUnconfirmed:
 		next := []string{"wa-cli help volume confirm --json", show}
 		if b.Path != "" {
 			next = append([]string{shellCommand("wa-cli", "volume", "confirm", volumePartRef(ref, b.Path), "--dir", dir, "--json")}, next...)
@@ -404,7 +443,8 @@ func gateNext(dir, ref string, b review.Blocker) []string {
 
 func runReviewShow(inv *invocation) int {
 	dir := projectDir(inv)
-	res := &reviewShowResult{Revisions: []revisionView{}, Decisions: []decisionItemView{}, Gate: gateView{Blockers: []gateBlockerView{}}}
+	res := &reviewShowResult{Revisions: []revisionView{}, Decisions: []decisionItemView{}, Gate: gateView{Blockers: []gateBlockerView{}},
+		Rubric: []rubricItemView{}, PendingAuthorReviews: []pendingReviewView{}}
 	problems := workspace.Require(dir)
 	if problems == nil {
 		var w *work.Work
@@ -413,6 +453,9 @@ func runReviewShow(inv *invocation) int {
 			g := collectGate(dir, w, u)
 			unitDir := w.UnitDir(u)
 			res.Lint = g.lint
+			for _, it := range g.rubric {
+				res.Rubric = append(res.Rubric, rubricItemView{ID: it.ID, Title: it.Title, Description: it.Description, Blocking: it.Blocking})
+			}
 			problems = append(problems, g.problems...)
 			// review.yaml 不通过校验时如实报告：审稿无法展示，也是验收的阻塞项。
 			problems = append(problems, g.in.ReviewBad...)
@@ -448,8 +491,11 @@ func runReviewShow(inv *invocation) int {
 			if a != nil {
 				stale := a.DraftSHA256 != g.in.DraftSHA
 				res.Acceptance = &acceptanceView{GateLevel: a.GateLevel, DraftSHA256: a.DraftSHA256, ConfirmedByAuthor: a.ConfirmedByAuthor,
-					Confirmation: a.Confirmation, AcceptedAt: a.AcceptedAt, Stale: &stale}
+					Confirmation: a.Confirmation, Channel: channelView(a.ConfirmedByAuthor, a.Channel), AcceptedAt: a.AcceptedAt, Stale: &stale}
 			}
+			var rps []workspace.Problem
+			res.PendingAuthorReviews, rps = pendingReviews(dir, []*work.Work{w})
+			problems = append(problems, rps...)
 		}
 	}
 	res.Diagnostics = diagnostics(problems, dir)
@@ -488,6 +534,7 @@ func runReviewShow(inv *invocation) int {
 		for _, bl := range res.Gate.Blockers {
 			fmt.Fprintf(&b, "  阻塞项：%s\n", bl.Message)
 		}
+		b.WriteString(pendingReviewsText(res.PendingAuthorReviews))
 		_, err := io.WriteString(w, b.String())
 		return err
 	})
@@ -529,7 +576,7 @@ func runReviewResolve(inv *invocation) int {
 		case d.Code == review.CodeFindingNotFound:
 			res.Diagnostics[i].Next = []string{show, "wa-cli help review record --json"}
 		case d.Path == "" || d.Code == review.CodeAnchoredValue:
-			res.Diagnostics[i].Next = []string{"wa-cli help review resolve --json"}
+			res.Diagnostics[i].Next = []string{show, "wa-cli help review resolve --json"}
 		}
 	}
 	return finish(inv, res, func(w io.Writer) error {
@@ -587,7 +634,7 @@ func runAccept(inv *invocation) int {
 		case review.CodeWrongStage:
 			res.Diagnostics[i].Next = []string{shellCommand("wa-cli", "next", ref, "--dir", dir, "--json")}
 		case review.CodeIncompleteConfirmation:
-			res.Diagnostics[i].Next = []string{"wa-cli help accept --json"}
+			res.Diagnostics[i].Next = []string{shellCommand("wa-cli", "review", "show", ref, "--dir", dir, "--json"), "wa-cli help accept --json"}
 		}
 	}
 	return finish(inv, res, func(w io.Writer) error {
@@ -604,12 +651,11 @@ func runAccept(inv *invocation) int {
 	})
 }
 
-// accept 检查并写入验收。problems 为关卡之外的问题，gate 为关卡的阻塞项（error）与 warning，由调用方给出各自的下一步。
+// accept 按命令行参数检查并写入验收（确认渠道为 cli）。problems 为关卡之外的问题，gate 为关卡的阻塞项（error）与
+// warning，由调用方给出各自的下一步。
 func accept(inv *invocation, dir string, w *work.Work, u *work.Unit, res *acceptResult) (problems, gate []workspace.Problem) {
-	unitDir := w.UnitDir(u)
 	if !acceptsHere(w, u) {
-		return []workspace.Problem{{Code: review.CodeWrongStage, Severity: workspace.SeverityError, Path: w.Path,
-			Message: fmt.Sprintf("单元 %s 的当前阶段 %s 不需要验收（Acceptance）；推进到必需产物含 acceptance 的阶段后再验收", u.Ref, u.Stage)}}, nil
+		return []workspace.Problem{wrongStage(w, u)}, nil
 	}
 	_, confirmed := inv.values["confirmed-by-author"]
 	confirmation, given := inv.values["confirmation"]
@@ -617,13 +663,26 @@ func accept(inv *invocation, dir string, w *work.Work, u *work.Unit, res *accept
 		return []workspace.Problem{{Code: review.CodeIncompleteConfirmation, Severity: workspace.SeverityError, Field: "confirmation",
 			Message: "--confirmed-by-author 与 --confirmation <作者原话摘要> 必须同时给出，且原话摘要不能为空"}}, nil
 	}
+	return acceptVia(dir, w, u, confirmed, confirmation, workspace.ChannelCLI, res)
+}
+
+// wrongStage 是单元当前阶段不需要验收时的问题。
+func wrongStage(w *work.Work, u *work.Unit) workspace.Problem {
+	return workspace.Problem{Code: review.CodeWrongStage, Severity: workspace.SeverityError, Path: w.Path,
+		Message: fmt.Sprintf("单元 %s 的当前阶段 %s 不需要验收（Acceptance）；推进到必需产物含 acceptance 的阶段后再验收", u.Ref, u.Stage)}
+}
+
+// acceptVia 按关卡检查并写入验收，确认记录的渠道为 channel（命令行为 cli，阅读页为 preview）；调用方已检查阶段与
+// 确认参数。返回值同 accept。
+func acceptVia(dir string, w *work.Work, u *work.Unit, confirmed bool, confirmation, channel string, res *acceptResult) (problems, gate []workspace.Problem) {
+	unitDir := w.UnitDir(u)
 	g := collectGate(dir, w, u)
 	g.in.Confirmed = confirmed
 	blockers, warnings := review.Gate(g.in)
 	// 阻塞项里有连续性发现时，为未豁免的（场景， 错误码）幂等生成豁免决策（阻塞路径的副作用，如实计入
 	// changedPaths；只读的 review show 不走这里）。
-	if slices.ContainsFunc(blockers, func(b review.Blocker) bool { return strings.HasPrefix(b.Code, "continuity.") }) {
-		changed, cps := continuity.EnsureWaivers(dir, w, u)
+	if slices.ContainsFunc(blockers, func(b review.Blocker) bool { return continuityCode(b.Code) }) {
+		changed, cps := continuity.EnsureWaiversWith(dir, w, u, g.series)
 		if len(cps) > 0 {
 			problems = append(problems, cps...)
 		}
@@ -641,13 +700,18 @@ func accept(inv *invocation, dir string, w *work.Work, u *work.Unit, res *accept
 	for _, b := range warnings {
 		gate = append(gate, workspace.Problem{Code: b.Code, Severity: workspace.SeverityWarning, Path: b.Path, Message: b.Message})
 	}
-	a, changed, ps := review.Accept(dir, unitDir, g.in.Level, g.in.DraftSHA, confirmed, confirmation, now())
+	a, changed, ps := review.AcceptVia(dir, unitDir, g.in.Level, g.in.DraftSHA, confirmed, confirmation, channel, now())
 	if a == nil {
 		return append(problems, ps...), gate
 	}
 	res.Acceptance = &acceptanceView{Unit: u.Ref, Path: review.AcceptancePath(unitDir), GateLevel: a.GateLevel, DraftSHA256: a.DraftSHA256,
-		ConfirmedByAuthor: a.ConfirmedByAuthor, Confirmation: a.Confirmation, AcceptedAt: a.AcceptedAt}
+		ConfirmedByAuthor: a.ConfirmedByAuthor, Confirmation: a.Confirmation, Channel: channelView(a.ConfirmedByAuthor, a.Channel), AcceptedAt: a.AcceptedAt}
 	res.ChangedPaths = changed
+	// 部的最后一个场景验收后自动生成卷末检查点（volume 主规格的 checkpoint-on-accept）：只写汇总、不代作者确认；
+	// 生成问题为 warning，不撤销验收。
+	_, vchanged, vps := volume.OnAccept(dir, w, u)
+	res.ChangedPaths = append(res.ChangedPaths, vchanged...)
+	gate = append(gate, vps...)
 	return problems, gate
 }
 

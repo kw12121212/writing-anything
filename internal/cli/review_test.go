@@ -153,7 +153,8 @@ func TestReviewRecord(t *testing.T) {
 	if code, _ := runReview(t, dir, goodReview, "review", "record", "my-post"); code != 0 {
 		t.Fatal("re-record failed")
 	}
-	if code, res := runReview(t, dir, "", "review", "record", "my-post", "--file", "nope.yaml"); code != 1 || !hasNext(diag(t, res.result, "input.read-failed"), "wa-cli help review record") {
+	if code, res := runReview(t, dir, "", "review", "record", "my-post", "--file", "nope.yaml"); code != 1 ||
+		!concreteFirst(diag(t, res.result, "input.read-failed"), shellCommand("wa-cli", "review", "show", "my-post", "--dir", dir, "--json"), "wa-cli help review record --json") {
 		t.Errorf("missing file: %+v", res.Diagnostics)
 	}
 	// 没有正文时不能审稿。
@@ -197,7 +198,8 @@ func TestReviewShowResolveAccept(t *testing.T) {
 	// review resolve：waived 须写明理由；取值未变时不写文件；找不到发现项。
 	rel := ".writing-anything/works/my-post/review.yaml"
 	writeFile(t, wsPath(dir, rel), strings.Replace(readFile(t, wsPath(dir, rel)), "findings:", "# 作者的注释\nfindings:", 1))
-	if code, res := runReview(t, dir, "", "review", "resolve", "my-post", "rf-2", "--status", "waived"); code != 1 || diag(t, res.result, "review.missing-note").Next[0] != "wa-cli help review resolve --json" {
+	if code, res := runReview(t, dir, "", "review", "resolve", "my-post", "rf-2", "--status", "waived"); code != 1 || !slices.Equal(diag(t, res.result, "review.missing-note").Next,
+		[]string{"wa-cli review show my-post --dir " + dir + " --json", "wa-cli help review resolve --json"}) {
 		t.Fatalf("waive without note: %+v", res.Diagnostics)
 	}
 	code, rs := runReview(t, dir, "", "review", "resolve", "my-post", "rf-2", "--status", "waived", "--note", "作者说保留")
@@ -220,6 +222,14 @@ func TestReviewShowResolveAccept(t *testing.T) {
 	if _, res := runReview(t, dir, "", "review", "resolve", "my-post", "rf-9"); !hasNext(diag(t, res.result, "review.finding-not-found"), "wa-cli review show my-post") {
 		t.Errorf("not found next: %+v", res.Diagnostics)
 	}
+	// 锚点值无法只改一处：先给出审稿汇总，再给出用法（cli/diagnostic-next-concrete）。
+	reviewed := readFile(t, wsPath(dir, rel))
+	writeFile(t, wsPath(dir, rel), strings.Replace(reviewed, "status: resolved", "status: &st resolved", 1))
+	if code, res := runReview(t, dir, "", "review", "resolve", "my-post", "rf-1", "--status", "open"); code != 1 ||
+		!concreteFirst(diag(t, res.result, "review.anchored-value"), shellCommand("wa-cli", "review", "show", "my-post", "--dir", dir, "--json"), "wa-cli help review resolve --json") {
+		t.Errorf("anchored: code = %d, %+v\n%s", code, res.Diagnostics, readFile(t, wsPath(dir, rel)))
+	}
+	writeFile(t, wsPath(dir, rel), reviewed)
 	mustRunWS(t, dir, "feedback", "resolve", "my-post", "fb-1")
 	if s := show(); !s.Gate.Ready || len(s.Revisions) != 0 {
 		t.Fatalf("ready: %+v", s)
@@ -227,8 +237,12 @@ func TestReviewShowResolveAccept(t *testing.T) {
 	// --confirmed-by-author 与 --confirmation 必须同时给出。
 	for _, args := range [][]string{{"--confirmed-by-author"}, {"--confirmation", "可以"}, {"--confirmed-by-author", "--confirmation", " "}} {
 		code, res := runReview(t, dir, "", append([]string{"accept", "my-post"}, args...)...)
-		if code != 1 || diag(t, res.result, "accept.incomplete-confirmation").Next[0] != "wa-cli help accept --json" {
+		if code != 1 || !slices.Equal(diag(t, res.result, "accept.incomplete-confirmation").Next,
+			[]string{"wa-cli review show my-post --dir " + dir + " --json", "wa-cli help accept --json"}) {
 			t.Errorf("%v: code = %d, %+v", args, code, res.Diagnostics)
+		}
+		if _, err := os.Stat(wsPath(dir, ".writing-anything/works/my-post/acceptance.yaml")); err == nil {
+			t.Errorf("%v: acceptance.yaml written without complete confirmation", args)
 		}
 	}
 	// standard 下未经作者确认也可以验收，以 warning 报告。

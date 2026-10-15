@@ -7,6 +7,7 @@ import (
 
 	"github.com/kw12121212/writing-anything/internal/canon"
 	"github.com/kw12121212/writing-anything/internal/catalog"
+	"github.com/kw12121212/writing-anything/internal/impact"
 	"github.com/kw12121212/writing-anything/internal/schema"
 	"github.com/kw12121212/writing-anything/internal/work"
 	"github.com/kw12121212/writing-anything/internal/workspace"
@@ -54,7 +55,7 @@ var canonSetCommand = &command{
 		{"unpin", flagBool, "把 protection 降为 normal；属于修改钦定条目，需要 --decision"},
 		{"decision", flagString, "作者钦定条目的授权：指向 wa-cli decide 已决定且选择为允许的决策 id"},
 	},
-	outputKeys: []outputKey{{"canon", "修改后的条目：work、id、type、name、aliases、text、sources、protection、members 与 decision；失败时为 null"}},
+	outputKeys: []outputKey{{"canon", "修改后的条目：work、id、type、name、aliases、text、sources、protection、members 与 decision；失败时为 null"}, impactOutputKey},
 	exitCodes:  standardExitCodes,
 	run:        runCanonSet,
 }
@@ -88,6 +89,25 @@ type canonEntryView struct {
 type canonAddResult struct {
 	Result
 	Canon *canonEntryView `json:"canon"`
+}
+
+type canonSetResult struct {
+	Result
+	Canon  *canonEntryView `json:"canon"`
+	Impact []impact.Ripple `json:"impact"`
+}
+
+// canonSemantic 返回设定条目的语义比较键（type、name、aliases、text 与 members；sources、protection 与 decision
+// 不是语义字段）。e 为 nil 时为空串。
+func canonSemantic(e *canon.Entry) string {
+	if e == nil {
+		return ""
+	}
+	name := ""
+	if e.Name != nil {
+		name = *e.Name
+	}
+	return impact.SemanticKey(e.Type, name, impact.SortedKey(e.Aliases), e.Text, impact.SortedKey(e.Members))
 }
 
 type canonListResult struct {
@@ -124,6 +144,7 @@ func runCanonAdd(inv *invocation) int {
 					Series:          inv.values["scope"] == "series",
 					OverrideReason:  inv.values["override-reason"],
 					OverrideConfirm: inv.values["confirmation"],
+					At:              now(),
 				}
 				if inv.values["scope"] != "" && inv.values["scope"] != "series" && inv.values["scope"] != "work" {
 					problems = []workspace.Problem{{Code: "input.invalid-value", Severity: workspace.SeverityError, Field: "scope",
@@ -157,7 +178,8 @@ func runCanonAdd(inv *invocation) int {
 
 func runCanonSet(inv *invocation) int {
 	dir := projectDir(inv)
-	res := &canonAddResult{}
+	res := &canonSetResult{Impact: []impact.Ripple{}}
+	var auto []Diagnostic
 	problems := workspace.Require(dir)
 	if problems == nil {
 		var w *work.Work
@@ -206,8 +228,22 @@ func runCanonSet(inv *invocation) int {
 			var e *canon.Entry
 			var changed []string
 			if problems == nil {
+				var before *canon.Entry
+				if entries, _ := canon.List(dir, w); entries != nil {
+					for i := range entries {
+						if entries[i].ID == inv.args[1] {
+							before = &entries[i]
+						}
+					}
+				}
+				pre := preAffected(dir, w, inv.args[1])
 				if e, changed, problems = canon.Set(dir, w, inv.args[1], in); e != nil {
 					res.Canon, res.ChangedPaths = &canonEntryView{Work: w.ID, Entry: *e}, changed
+					if len(changed) > 0 && canonSemantic(before) != canonSemantic(e) {
+						var more []string
+						res.Impact, more, auto = autoImpact(dir, w, []impactTarget{{target: e.ID, pre: pre}})
+						res.ChangedPaths = append(res.ChangedPaths, more...)
+					}
 				} else if changed != nil {
 					// 拒绝修改钦定条目时 changed 为追加的决策队列路径，canon 为 null。
 					res.ChangedPaths = changed
@@ -219,6 +255,7 @@ func runCanonSet(inv *invocation) int {
 	canonParamNext(res.Diagnostics, "canon set", dir)
 	canonPinnedNext(res.Diagnostics, dir)
 	canonNotFoundNext(res.Diagnostics, inv.args[0], dir)
+	res.Diagnostics = append(res.Diagnostics, auto...)
 	return finish(inv, res, func(w io.Writer) error {
 		if res.Canon == nil {
 			return nil
@@ -227,8 +264,8 @@ func runCanonSet(inv *invocation) int {
 		if len(res.ChangedPaths) == 0 {
 			verb = "取值未变，未修改"
 		}
-		_, err := fmt.Fprintf(w, "%s作品 %s 的设定条目（Canon Entry）%s（%s%s）：%s\n",
-			verb, res.Canon.Work, res.Canon.ID, res.Canon.Type, canonNameText(res.Canon.Name), res.Canon.Text)
+		_, err := fmt.Fprintf(w, "%s作品 %s 的设定条目（Canon Entry）%s（%s%s）：%s\n%s",
+			verb, res.Canon.Work, res.Canon.ID, res.Canon.Type, canonNameText(res.Canon.Name), res.Canon.Text, impactText(res.Impact))
 		return err
 	})
 }

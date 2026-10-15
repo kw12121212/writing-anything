@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kw12121212/writing-anything/internal/impact"
 	"github.com/kw12121212/writing-anything/internal/outline"
 	"github.com/kw12121212/writing-anything/internal/state"
 	"github.com/kw12121212/writing-anything/internal/work"
@@ -25,7 +26,7 @@ var stateProposeCommand = &command{
 		{"state", flagString, "变化后的状态描述"},
 		{"id", flagString, "条目 id；省略时为 state-<n>"},
 	},
-	outputKeys: []outputKey{{"event", "新条目：id、scene、entry、state、status、confirmation 与 decided_at；失败时为 null"}},
+	outputKeys: []outputKey{{"event", "新条目：id、scene、entry、state、status、confirmation、channel（确认渠道（Confirmation Channel）：cli 或 preview，待确认为 null）与 decided_at；失败时为 null"}},
 	exitCodes:  standardExitCodes,
 	run:        runStatePropose,
 }
@@ -38,7 +39,7 @@ var stateListCommand = &command{
 		dirFlag,
 		{"all", flagBool, "列出全部条目，不只列待确认（proposed）的"},
 	},
-	outputKeys: []outputKey{{"events", "按绑定场景的单元树先序排列的条目数组，每项含 id、scene、entry、state、status、confirmation 与 decided_at"}},
+	outputKeys: []outputKey{{"events", "按绑定场景的单元树先序排列的条目数组，每项含 id、scene、entry、state、status、confirmation、channel（确认渠道（Confirmation Channel）：cli 或 preview，待确认为 null）与 decided_at"}},
 	exitCodes:  standardExitCodes,
 	run:        runStateList,
 }
@@ -55,7 +56,7 @@ var stateConfirmCommand = &command{
 		{"confirmed-by-author", flagBool, "作者确认本条提议"},
 		{"confirmation", flagString, "作者确认原话摘要"},
 	},
-	outputKeys: []outputKey{{"event", "确认后的条目：id、scene、entry、state、status、confirmation 与 decided_at；失败时为 null"}},
+	outputKeys: []outputKey{{"event", "确认后的条目：id、scene、entry、state、status、confirmation、channel（确认渠道（Confirmation Channel）：cli 或 preview，待确认为 null）与 decided_at；失败时为 null"}},
 	exitCodes:  standardExitCodes,
 	run:        runStateConfirm,
 }
@@ -72,7 +73,7 @@ var stateRejectCommand = &command{
 		{"confirmed-by-author", flagBool, "作者拒绝本条提议（或撤销已确认的条目）"},
 		{"confirmation", flagString, "作者拒绝或撤销的原话摘要"},
 	},
-	outputKeys: []outputKey{{"event", "拒绝或撤销后的条目：id、scene、entry、state、status、confirmation 与 decided_at；失败时为 null"}},
+	outputKeys: []outputKey{{"event", "拒绝或撤销后的条目：id、scene、entry、state、status、confirmation、channel（确认渠道（Confirmation Channel）：cli 或 preview，待确认为 null）与 decided_at；失败时为 null"}},
 	exitCodes:  standardExitCodes,
 	run:        runStateReject,
 }
@@ -91,7 +92,7 @@ var stateSetCommand = &command{
 		{"confirmed-by-author", flagBool, "作者重新确认本条已确认条目的修改"},
 		{"confirmation", flagString, "作者重新确认的原话摘要；修改已确认（confirmed）条目时必填"},
 	},
-	outputKeys: []outputKey{{"event", "修改后的条目：id、scene、entry、state、status、confirmation 与 decided_at；失败时为 null"}},
+	outputKeys: []outputKey{{"event", "修改后的条目：id、scene、entry、state、status、confirmation、channel（确认渠道（Confirmation Channel）：cli 或 preview，待确认为 null）与 decided_at；失败时为 null"}, impactOutputKey},
 	exitCodes:  standardExitCodes,
 	run:        runStateSet,
 }
@@ -113,9 +114,21 @@ type stateEventView struct {
 	state.Event
 }
 
+// stateViewOf 返回条目的输出形态：已决定的条目 channel 缺失时输出 cli，待确认的条目为 null。
+func stateViewOf(work string, e state.Event) *stateEventView {
+	e.Channel = channelView(e.Status != state.StatusProposed, e.Channel)
+	return &stateEventView{Work: work, Event: e}
+}
+
 type stateEventResult struct {
 	Result
 	Event *stateEventView `json:"event"`
+}
+
+type stateSetResult struct {
+	Result
+	Event  *stateEventView `json:"event"`
+	Impact []impact.Ripple `json:"impact"`
 }
 
 type stateListResult struct {
@@ -157,7 +170,7 @@ func runStatePropose(inv *invocation) int {
 			var changed []string
 			in := state.ProposeInput{Scene: inv.values["scene"], Entry: inv.values["entry"], State: inv.values["state"], ID: inv.values["id"]}
 			if e, changed, problems = state.Propose(dir, w, in); e != nil {
-				res.Event, res.ChangedPaths = &stateEventView{Work: w.ID, Event: *e}, changed
+				res.Event, res.ChangedPaths = stateViewOf(w.ID, *e), changed
 			}
 		}
 	}
@@ -183,7 +196,7 @@ func runStateList(inv *invocation) int {
 			var events []state.Event
 			if events, problems = state.List(dir, w, inv.flag("all")); events != nil {
 				for _, e := range events {
-					res.Events = append(res.Events, stateEventView{Work: w.ID, Event: e})
+					res.Events = append(res.Events, *stateViewOf(w.ID, e))
 				}
 			}
 		}
@@ -234,7 +247,7 @@ func runStateDecide(inv *invocation, name, verb string, decide func(root string,
 				var e *state.Event
 				var changed []string
 				if e, changed, problems = decide(dir, w, inv.args[1], inv.values["confirmation"], now()); e != nil {
-					res.Event, res.ChangedPaths = &stateEventView{Work: w.ID, Event: *e}, changed
+					res.Event, res.ChangedPaths = stateViewOf(w.ID, *e), changed
 				}
 			}
 		}
@@ -262,7 +275,8 @@ func runStateReject(inv *invocation) int {
 
 func runStateSet(inv *invocation) int {
 	dir := projectDir(inv)
-	res := &stateEventResult{}
+	res := &stateSetResult{Impact: []impact.Ripple{}}
+	var auto []Diagnostic
 	problems := workspace.Require(dir)
 	if problems == nil {
 		var w *work.Work
@@ -276,16 +290,40 @@ func runStateSet(inv *invocation) int {
 			}
 			in.ConfirmedByAuthor = inv.flag("confirmed-by-author")
 			in.Confirmation = inv.values["confirmation"]
+			var before *state.Event
+			if events, _ := state.List(dir, w, true); events != nil {
+				for i := range events {
+					if events[i].ID == inv.args[1] {
+						before = &events[i]
+					}
+				}
+			}
+			var pre []impact.Affected
+			if before != nil {
+				pre = preAffected(dir, w, before.Entry)
+			}
 			var e *state.Event
 			var changed []string
 			if e, changed, problems = state.Set(dir, w, inv.args[1], in, now()); e != nil {
-				res.Event, res.ChangedPaths = &stateEventView{Work: w.ID, Event: *e}, changed
+				res.Event, res.ChangedPaths = stateViewOf(w.ID, *e), changed
+				// 语义字段：绑定场景与状态描述；影响目标为绑定的设定条目，只计不早于新旧绑定场景的场景。修改前读不到
+				// 原条目（台账有问题）时无从比较，按有变化处理。
+				if len(changed) > 0 && (before == nil || impact.SemanticKey(before.Scene, before.State) != impact.SemanticKey(e.Scene, e.State)) {
+					from := e.Scene
+					if before != nil {
+						from = earlierScene(w, before.Scene, e.Scene)
+					}
+					var more []string
+					res.Impact, more, auto = autoImpact(dir, w, []impactTarget{{target: e.Entry, from: from, pre: pre}})
+					res.ChangedPaths = append(res.ChangedPaths, more...)
+				}
 			}
 		}
 	}
 	res.Diagnostics = diagnostics(problems, dir)
 	stateParamNext(res.Diagnostics, dir, inv.args[0], "state set")
 	stateNotFoundNext(res.Diagnostics, inv.args[0], dir)
+	res.Diagnostics = append(res.Diagnostics, auto...)
 	return finish(inv, res, func(w io.Writer) error {
 		if res.Event == nil {
 			return nil
@@ -294,8 +332,8 @@ func runStateSet(inv *invocation) int {
 		if len(res.ChangedPaths) == 0 {
 			verb = "取值未变，未修改"
 		}
-		_, err := fmt.Fprintf(w, "%s作品 %s 的状态变更提议（State Change Proposal）%s（%s → %s）%s：%s\n",
-			verb, res.Event.Work, res.Event.ID, res.Event.Scene, res.Event.Entry, stateStatusText(res.Event.Status), res.Event.State)
+		_, err := fmt.Fprintf(w, "%s作品 %s 的状态变更提议（State Change Proposal）%s（%s → %s）%s：%s\n%s",
+			verb, res.Event.Work, res.Event.ID, res.Event.Scene, res.Event.Entry, stateStatusText(res.Event.Status), res.Event.State, impactText(res.Impact))
 		return err
 	})
 }

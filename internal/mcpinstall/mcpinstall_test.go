@@ -168,3 +168,35 @@ func TestSystemEnv(t *testing.T) {
 		t.Fatalf("Run returned after %v", d)
 	}
 }
+
+// cc-tb-1：注册结果说明要在哪个项目目录启动客户端；只有确实移除了同名条目时才说「重新创建」。
+func TestInstallLaunchHints(t *testing.T) {
+	f := &fakeEnv{fail: "mcp remove"} // 首次注册：没有同名条目
+	res, _ := Install(f.env(), req(ClientClaudeCode, ScopeProject))
+	if !strings.Contains(res.Message, "在项目目录 /proj 中启动 Claude Code") || strings.Contains(res.Message, "重新创建") {
+		t.Errorf("claude-code first: %q", res.Message)
+	}
+	f = &fakeEnv{} // 已有同名条目
+	if res, _ := Install(f.env(), req(ClientClaudeCode, ScopeProject)); !strings.Contains(res.Message, "同名条目重新创建") {
+		t.Errorf("claude-code again: %q", res.Message)
+	}
+	f = &fakeEnv{}
+	if res, _ := Install(f.env(), req(ClientCodex, ScopeUser)); !strings.Contains(res.Message, "指向项目目录 /proj") || !strings.Contains(res.Message, "换到其他项目") {
+		t.Errorf("codex: %q", res.Message)
+	}
+}
+
+// 首次注册的 codex 不说「重新创建」；add 失败时不追加启动或换项目的提示。
+func TestInstallLaunchHintsNegative(t *testing.T) {
+	f := &fakeEnv{fail: "mcp remove"}
+	if res, _ := Install(f.env(), req(ClientCodex, ScopeUser)); strings.Contains(res.Message, "重新创建") || !strings.Contains(res.Message, "--client codex --scope user --name writing-anything") {
+		t.Errorf("codex first: %q", res.Message)
+	}
+	for _, c := range []struct{ client, scope string }{{ClientClaudeCode, ScopeProject}, {ClientClaudeCode, ScopeUser}, {ClientCodex, ScopeUser}} {
+		f := &fakeEnv{fail: "mcp add"}
+		res, _ := Install(f.env(), req(c.client, c.scope))
+		if res.Status != StatusFailed || strings.Contains(res.Message, "启动") || strings.Contains(res.Message, "用户级注册指向") {
+			t.Errorf("%s %s failed add: %q", c.client, c.scope, res.Message)
+		}
+	}
+}

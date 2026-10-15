@@ -14,6 +14,16 @@ categories:
       status: active
       occurrences: 1
       path: .strict-spec-driven/lessons/architecture/lesson-e43bdb.yaml
+    lesson-28cf23:
+      title: 按「场景开始时已知」过滤信息会把本场景要揭示的内容也挡在起草上下文之外
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/architecture/lesson-28cf23.yaml
+    lesson-fd99d0:
+      title: 终态产物会因后续修改失效时，必须同时提供退回终态的命令，并逐一核对每条拒绝诊断的下一步在该状态下可执行
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/architecture/lesson-fd99d0.yaml
   coding:
     go-flag-bd930f:
       title: Go flag 包的默认报错不符合中文术语约定
@@ -83,12 +93,12 @@ categories:
     lesson-65573d:
       title: 启发式检查的「已登记」判断必须按触发区间覆盖，不能按句子包含子串
       status: active
-      occurrences: 1
+      occurrences: 2
       path: .strict-spec-driven/lessons/coding/lesson-65573d.yaml
     lesson-660304:
       title: 按错误码挑选下一步命令，会漏掉保留原错误码的阻塞项
       status: active
-      occurrences: 2
+      occurrences: 3
       path: .strict-spec-driven/lessons/coding/lesson-660304.yaml
     lesson-65fb6a:
       title: 记录关卡结论的产物要记下关卡强度，强度提高后旧结论不再有效
@@ -143,7 +153,7 @@ categories:
     lesson-792658:
       title: 查看命令依赖只有写入命令保证的不变量，合法的手写产物会让它崩溃
       status: active
-      occurrences: 1
+      occurrences: 2
       path: .strict-spec-driven/lessons/coding/lesson-792658.yaml
     filepath-glob-8c2d1f:
       title: filepath.Glob 拼接项目目录，目录名含 [ ] 时整体校验静默跳过文件
@@ -233,7 +243,7 @@ categories:
     id-id-9e45ba:
       title: 重建式生成命令的 id 分配要避开全部既有 id，保留项匹配要看文件自身
       status: active
-      occurrences: 1
+      occurrences: 2
       path: .strict-spec-driven/lessons/coding/id-id-9e45ba.yaml
     schema-f67fa7:
       title: 新产物的写入路径必须与注册的 Schema 路径模式当场对上
@@ -260,6 +270,26 @@ categories:
       status: active
       occurrences: 1
       path: .strict-spec-driven/lessons/coding/shell-var-shell-9b16fa.yaml
+    lesson-0e4b1a:
+      title: 作品与单元来自不同加载时，按指针比较祖先会静默判错
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/coding/lesson-0e4b1a.yaml
+    cli-9e5084:
+      title: 技能正文里对 CLI 输出字段与阻塞码的陈述，测试只校验命令与参数存在，不会发现陈述错误
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/coding/cli-9e5084.yaml
+    lesson-235a26:
+      title: 修改后才计算影响范围，会漏掉只在修改前引用目标的对象
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/coding/lesson-235a26.yaml
+    lesson-7392eb:
+      title: 按内容哈希识别文件版本时，换行符转换会让未改过的文件哈希不同
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/coding/lesson-7392eb.yaml
   documentation:
     must-must-6af326:
       title: 修改一条 MUST 需求时，要检查同一规格里相邻的 MUST 是否因此冲突
@@ -274,8 +304,13 @@ categories:
     spec-next-7d39fd:
       title: spec 语句里的 next 命令必须写成可执行形态
       status: active
-      occurrences: 1
+      occurrences: 2
       path: .strict-spec-driven/lessons/documentation/spec-next-7d39fd.yaml
+    roadmap-generate-91c10a:
+      title: roadmap-generate 同一次调用里先追加后删除，删掉再写回同一条目会把它删光
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/documentation/roadmap-generate-91c10a.yaml
   performance:
     lesson-d20dc5:
       title: 按词表计数复用已有匹配器
@@ -313,3 +348,33 @@ categories:
       status: active
       occurrences: 1
       path: .strict-spec-driven/lessons/testing/lesson-ee8ae5.yaml
+    internal-cli-null-1ddaed:
+      title: 新增可空输出字段要同时登记 internal/cli 测试里的两份 null 白名单
+      status: active
+      occurrences: 2
+      path: .strict-spec-driven/lessons/testing/internal-cli-null-1ddaed.yaml
+    lesson-b17b72:
+      title: 零提示类完成标准要先实测现状，矩阵断言文字不会被测试强制
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/testing/lesson-b17b72.yaml
+    io-pipe-mcp-a460e7:
+      title: 用 io.Pipe 驱动进程内 MCP 服务时，连发两条请求再读取会死锁
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/testing/io-pipe-mcp-a460e7.yaml
+    events-2ef336:
+      title: 场景大纲一旦声明 events 等扩展契约字段，验收就要求收口记录
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/testing/events-2ef336.yaml
+    lesson-2a8b24:
+      title: 源码扫描只认字面量，会漏掉经辅助函数展开构造的同类位置
+      status: active
+      occurrences: 2
+      path: .strict-spec-driven/lessons/testing/lesson-2a8b24.yaml
+    yaml-0dfb79:
+      title: 只用手写 YAML 夹具测试的写入路径，真实命令序列第一次跑就会暴露缺陷
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/testing/yaml-0dfb79.yaml

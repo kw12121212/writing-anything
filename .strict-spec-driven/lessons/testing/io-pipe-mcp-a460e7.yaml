@@ -1,0 +1,19 @@
+schema: strict-spec-driven/lesson/v1
+schema_version: 1
+artifact_type: lesson
+schema_file: templates/strict-spec-driven/schemas/lesson.yaml
+lesson:
+  id: io-pipe-mcp-a460e7
+  title: 用 io.Pipe 驱动进程内 MCP 服务时，连发两条请求再读取会死锁
+category: testing
+status: active
+created_at: '2026-10-07T12:55:03.263Z'
+updated_at: '2026-10-07T12:55:03.263Z'
+context: internal/mcp 与 internal/cli 的 MCP 测试用 io.Pipe 连接 Serve 的标准输入输出，逐行发送请求并读取响应
+observation: mcp-protocol-compat 的 TestLegacySubscribe 连续 send 两条请求后才 next()：服务处理第一条时写响应阻塞在无人读取的输出管道上，不再读取输入，测试的第二次写入随之阻塞，go test 一直挂起到超时，没有任何失败信息
+takeaway: io.Pipe 的读写是同步的：每发送一条会产生输出的请求就先读完它的响应（或像 cli 的 mcpSession 那样用后台 goroutine 持续读取到带缓冲的 channel）；只有不产生输出的通知可以连续发送；运行这类测试时带 -timeout
+applies_when: 编写用 io.Pipe 或其他无缓冲管道驱动 wa-cli mcp、feedback watch 等进程内服务的测试，并在读取输出之前发送多条请求时
+occurrences:
+  - origin: mcp-protocol-compat
+    date: '2026-10-07'
+    evidence: internal/mcp/legacy_test.go TestLegacySubscribe 的 id 3 与 id 4 订阅请求最初连续发送导致 go test ./internal/mcp/ 挂起超过 120 秒；改为每条请求后立即 next() 后 0.1 秒通过

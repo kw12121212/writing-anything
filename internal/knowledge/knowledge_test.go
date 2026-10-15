@@ -207,11 +207,11 @@ func TestConfirmRejectTransitions(t *testing.T) {
 		t.Fatalf("want already-decided, got %v", ps)
 	}
 	// 撤销已确认条目。
-	e, _, ps = Reject(root, w, "know-1", "作者撤销该知情", time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC))
+	e, _, ps = RejectVia(root, w, "know-1", "作者撤销该知情", "preview", time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC))
 	if len(ps) > 0 {
 		t.Fatal(ps)
 	}
-	if e.Status != StatusRejected {
+	if e.Status != StatusRejected || e.Channel == nil || *e.Channel != "preview" {
 		t.Fatalf("rejected event = %+v", e)
 	}
 	// rejected 是终态。
@@ -713,5 +713,82 @@ func writeAtKnowledge(t *testing.T, root, content string) {
 	path := filepath.Join(root, ".writing-anything", "works", "my-novel", "knowledge.yaml")
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// 缺揭示词提示（knowledge.missing-terms）：已确认事件所在条目没有任何已确认事件登记揭示词时以 warning 报告；同条目
+// 已有揭示词、proposed 与 rejected 事件不提示；不影响重放与列表（不进入阻塞判断）。
+func TestMissingTerms(t *testing.T) {
+	root, w := newNovel(t)
+	rel := Path("my-novel")
+	writeAtKnowledge(t, root, `schema_version: 1
+events:
+  - {id: kn-1, scene: my-novel/scene-1, entry: canon-2, character: canon-1, status: confirmed, confirmation: 作者确认, decided_at: 2026-10-03T08:00:00Z}
+  - {id: kn-2, scene: my-novel/scene-1, entry: canon-1, character: reader, status: proposed}
+  - {id: kn-3, scene: my-novel/scene-2, entry: canon-1, character: reader, status: rejected, confirmation: 作者否定, decided_at: 2026-10-03T08:00:00Z}
+`)
+	checked, ps := CheckWorks(root, []*work.Work{w})
+	if len(checked) != 1 || len(ps) != 1 || ps[0].Code != CodeMissingTerms || ps[0].Severity != workspace.SeverityWarning ||
+		ps[0].Path != rel || ps[0].Field != "events[0]" || !strings.Contains(ps[0].Message, "wa-cli knowledge set my-novel kn-1 --terms") {
+		t.Fatalf("missing terms: %+v", ps)
+	}
+	if ps := CheckArtifact(root, rel); !has(ps, CodeMissingTerms, "events[0]") {
+		t.Fatalf("artifact: %+v", ps)
+	}
+	// 重放与列表不受影响。
+	if items, ps := KnownAt(root, w, unitByRef(t, w, "my-novel/scene-2"), "canon-1"); len(ps) != 0 || len(items) != 1 {
+		t.Fatalf("known at: %+v %+v", items, ps)
+	}
+	if _, ps := List(root, w, true); len(ps) != 0 {
+		t.Fatalf("list: %+v", ps)
+	}
+
+	// 同条目另一条已确认事件登记了揭示词：两条都不提示。
+	writeAtKnowledge(t, root, `schema_version: 1
+events:
+  - {id: kn-1, scene: my-novel/scene-1, entry: canon-2, character: canon-1, status: confirmed, confirmation: 作者确认, decided_at: 2026-10-03T08:00:00Z}
+  - {id: kn-2, scene: my-novel/scene-2, entry: canon-2, character: reader, terms: [黎明], status: confirmed, confirmation: 作者确认, decided_at: 2026-10-03T08:00:00Z}
+`)
+	if _, ps := CheckWorks(root, []*work.Work{w}); len(ps) != 0 {
+		t.Fatalf("covered entry: %+v", ps)
+	}
+	// 揭示词只在 proposed 事件上：不算登记。
+	writeAtKnowledge(t, root, `schema_version: 1
+events:
+  - {id: kn-1, scene: my-novel/scene-1, entry: canon-2, character: canon-1, status: confirmed, confirmation: 作者确认, decided_at: 2026-10-03T08:00:00Z}
+  - {id: kn-2, scene: my-novel/scene-2, entry: canon-2, character: reader, terms: [黎明], status: proposed}
+`)
+	if _, ps := CheckWorks(root, []*work.Work{w}); !has(ps, CodeMissingTerms, "events[0]") {
+		t.Fatalf("proposed terms: %+v", ps)
+	}
+}
+
+// Hidden：获知者在单元开始时未获知、且登记了揭示词的条目；揭示词取全部已确认事件（不论场景先后）的并集。
+func TestReplayHidden(t *testing.T) {
+	root, w := newNovel(t)
+	writeAtKnowledge(t, root, `schema_version: 1
+events:
+  - {id: kn-1, scene: my-novel/scene-1, entry: canon-2, character: canon-1, terms: [黎明], status: confirmed, confirmation: 作者确认, decided_at: 2026-10-03T08:00:00Z}
+  - {id: kn-2, scene: my-novel/scene-3, entry: canon-2, character: reader, terms: [燃烧, 黎明], status: confirmed, confirmation: 作者确认, decided_at: 2026-10-03T08:00:00Z}
+  - {id: kn-3, scene: my-novel/scene-3, entry: canon-1, character: reader, terms: [旧伤], status: proposed}
+`)
+	rep, ps := For(root, w, unitByRef(t, w, "my-novel/scene-2"), nil)
+	if ps != nil {
+		t.Fatal(ps)
+	}
+	if h := rep.Hidden("canon-1"); len(h) != 0 {
+		t.Fatalf("canon-1 knows canon-2: %v", h)
+	}
+	if h := rep.Hidden(Reader); !slices.Equal(h["canon-2"], []string{"燃烧", "黎明"}) || len(h) != 1 {
+		t.Fatalf("reader hidden: %v", h)
+	}
+	if h := rep.Hidden(""); len(h) != 1 {
+		t.Fatalf("no character: %v", h)
+	}
+	// 没有台账：没有隐藏条目。
+	root2, w2 := newNovel(t)
+	rep, _ = For(root2, w2, unitByRef(t, w2, "my-novel/scene-2"), nil)
+	if h := rep.Hidden(""); len(h) != 0 {
+		t.Fatalf("no ledger: %v", h)
 	}
 }

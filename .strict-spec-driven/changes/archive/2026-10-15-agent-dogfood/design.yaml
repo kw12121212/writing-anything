@@ -1,0 +1,41 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: agent-dogfood
+approach:
+  - 问题分诊在本变更活动期间进行：每个需要修复的问题以独立的 strict-spec-bugfix 变更修复并归档（项目同时最多两个活动变更，本变更占一个，缺陷变更逐个进行），记录中以归档目录名链接；不修的问题写明理由。全部问题处理完后，才在 internal/tools/dogfood 中加入读取真实 docs/dogfood/runs.yaml 的测试函数，使完整回归从此强制记录齐备。
+  - 分两段推进：先由 Agent 实现可验证的记录基础设施——docs/dogfood/README.md 运行手册、runs.yaml 的记录格式，以及 internal/tools/dogfood 校验工具与夹具测试；再由作者按手册在仓库外的临时项目目录中操作真实客户端完成三次运行（Codex × 公众号营销文章因额度不足取消，记为未运行），Agent 协助把客户端版本、命令序列、卡点与问题写入 runs.yaml。
+decisions:
+  no-delta-spec:
+    decision: 本变更不修改任何主规格，specs/ 留空；也不编写场景（Scene），scenes/ 不创建。
+    rationale: 变更产物只有文档、开发工具与真实运行记录，wa-cli 的可观察行为不变（spec INDEX 中没有覆盖开发工具或仓库文档的规格）；真实运行中发现的行为缺陷由各自的缺陷变更修改规格或实现。真实运行虽然有作者与 Agent 参与，但那是验证活动而非产品新增的行为流程，没有需要由需求覆盖的新场景步骤。
+  structured-run-records:
+    decision: 真实接入记录以 docs/dogfood/runs.yaml 为结构化唯一来源：每次运行记录 id、client（claude-code 或 codex）、client_version、wa_cli_version（wa-cli version 的输出，含提交）、genre（tech-blog 或 wechat-marketing）、channels（实际使用的 skill 与 mcp）、date、commands（按顺序的命令序列）、export（format 与输出路径）、notes 与 issues；每个问题含 id、summary，以及 fix_change（缺陷变更名，不含日期前缀，如 fix-export-path；须已归档）与 wont_fix_reason 二者恰好其一。README.md 只写运行手册与汇总，不重复记录内容。
+    rationale: 完成标准要求「每个问题都链接到已归档的缺陷变更或写明不修理由」并最终映射到测试函数；只有结构化记录才能被测试机械校验，Markdown 表格的解析脆弱且无法可靠区分字段。按 testdata-design-artifact-validation 的思路，跨变更契约性质的记录配同包结构校验。
+  dev-tool-placement:
+    decision: 校验工具放在 internal/tools/dogfood，写成 package main，main 只调用 run(args, stdout, stderr) int；可用 go run ./internal/tools/dogfood [-root .] [-records docs/dogfood/runs.yaml] 手动运行。
+    rationale: 遵循 go-project-structure 的 dev-tools-isolation（MUST：开发工具放在 internal/tools/<name>/、package main、不计入覆盖率、产品包不得 import）与 injectable-io（SHOULD）；与已有的 internal/tools/criteria 保持同一形态，YAML 解析沿用 go.yaml.in/yaml/v3，不引入新依赖（stdlib-first）。
+  real-records-test-last:
+    decision: 读取真实 docs/dogfood/runs.yaml 的测试函数（TestDogfoodRecords）放在全部问题处理完之后的最后一个实现任务中加入，此前只有基于 testdata 夹具的单元测试。该测试函数体首层不得有无条件 t.Skip。
+    rationale: 缺陷变更归档前必须通过完整回归；如果先加入读取真实记录的测试，记录未齐时完整回归一直失败，缺陷变更无法归档，而记录又要求链接已归档的缺陷变更，形成死锁。最后加入既避免死锁，又让本变更归档后完整回归强制记录齐备，并可被 criteria-reconciliation 对账表引用。
+  issue-link-resolution:
+    decision: fix_change 填缺陷变更名，按 .strict-spec-driven/changes/archive/ 下存在 <YYYY-MM-DD>-<fix_change> 目录判定为已归档；目录不存在、fix_change 与 wont_fix_reason 同时出现或都缺失，均为校验失败，并在输出中逐条列出问题。
+    rationale: 与 internal/tools/criteria 中 hardened_by 引用已归档变更的判定方式（变更名 + 日期前缀目录）一致，记录者只需写变更名，不必关心归档日期。
+  client-execution:
+    decision: 真实运行由作者在本机用执行时的当前客户端版本完成（当前环境为 Claude Code 2.1.280、codex-cli 0.157.1），每次在仓库外新开的独立目录与全新客户端会话中进行，客户端只经安装的技能与 MCP 服务了解 wa-cli；wa-cli 由 dev 分支当前提交构建（go build -o <path> ./cmd/wa-cli），以 wa-cli version 的输出记录版本与提交。
+    rationale: 来自里程碑 intake dogfood-clients 的已定结论；开发本仓库的 Claude Code 会话带有仓库上下文，不能代表第三方 Agent 的真实接入，因此必须使用全新会话与仓库外目录；仓库根目录也不得创建 .writing-anything/（testdata-fixtures 规则）。
+  skipped-combination:
+    decision: 作者因 Codex 额度不足取消 Codex × 公众号营销文章运行。runs.yaml 中每个 客户端 × 文体 组合仍恰好一条记录；未运行的组合只含 id、client、genre 与非空的 skipped_reason，不得出现版本、命令、导出或问题字段；检查工具额外要求 claude-code、codex 两个客户端与 tech-blog、wechat-marketing 两种文体各至少有一次已运行的记录。里程碑完成标准第一条同步改为三次运行、未运行组合写明原因。
+    rationale: 作者选定（questions.yaml run-scope）。保留未运行组合的显式记录，使覆盖缺口可审计而不是被静默删除；「每个客户端、每种文体至少跑过一次」保留了里程碑验证两个客户端与两种文体的本意；完成标准与检查工具同步修改，避免对账表引用一条无法满足的标准。
+alternatives:
+  - option: 以 Markdown 表格记录运行与问题，由测试解析表格
+    reason: 表格列顺序与转义（如命令中的 |）容易破坏解析，字段缺失只能靠约定识别，无法稳定区分 fix_change 与 wont_fix_reason
+  - option: 把记录校验并入 internal/tools/criteria
+    reason: criteria 只负责完成标准与测试函数的对账，混入真实接入记录的字段校验会让两个职责耦合，对账表引用的测试函数也应能独立定位到记录校验
+  - option: 让本开发会话的 Claude Code 直接充当被验证的客户端
+    reason: 本会话已加载仓库 AGENTS.md 与源码上下文，会绕过技能与 MCP 的真实接入路径，得到的结论不能代表第三方 Agent
+risks:
+  - 真实运行依赖作者时间与客户端可用性，strict-spec-auto 会在人工任务处停下等待作者；本变更活动期间占用一个活动变更名额，缺陷变更只能逐个进行
+  - 客户端版本变化导致结果不能完全复现；以记录客户端版本、wa-cli 提交与命令序列缓解
+  - 运行中发现的问题较多时，缺陷变更串行处理会拉长本变更周期；可把明确属于新需求的问题写明不修理由并转入后续里程碑

@@ -23,8 +23,24 @@
     },
     "style": {
       "type": "array",
+      "description": "文风条目：字符串对所有文体生效；对象形式用 applies_to 限定适用的文体类别（Genre Category）",
       "items": {
-        "$ref": "common.schema.json#/$defs/text"
+        "if": {"type": "string"},
+        "then": {"$ref": "common.schema.json#/$defs/text"},
+        "else": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["text", "applies_to"],
+          "properties": {
+            "text": {"$ref": "common.schema.json#/$defs/text"},
+            "applies_to": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {"$ref": "common.schema.json#/$defs/genreCategory"}
+            }
+          }
+        }
       }
     },
     "glossary": {

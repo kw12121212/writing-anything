@@ -992,3 +992,136 @@ units:
 		t.Fatalf("advance aggregated with stored done: %+v", ps)
 	}
 }
+
+// reopen-stage：只有验收失效或没有验收记录的 done 单元可以退回最后一个需要验收的阶段，只改 stage。
+func TestReopen(t *testing.T) {
+	root := project(t, "my-post")
+	g := genres(t)
+	body := ".writing-anything/works/my-post/units/body/"
+	accepted := "schema_version: 1\ngate_level: standard\ndraft_sha256: %s\nconfirmed_by_author: false\naccepted_at: \"2026-10-01T00:00:00Z\"\n"
+	put(t, root, body+"review.md", "ok\n")
+	put(t, root, body+"draft.md", "正文\n")
+	put(t, root, body+"acceptance.yaml", fmt.Sprintf(accepted, review.SHA256([]byte("正文\n"))))
+	if _, _, _, ps := Reopen(root, "my-post/body"); !slices.Equal(codes(ps), []string{"lifecycle.not-done"}) || !strings.Contains(ps[0].Message, "review") {
+		t.Fatalf("not done: %+v", ps)
+	}
+	if _, u, _, ps := Advance(root, "my-post/body"); len(ps) > 0 || u.Stage != "done" {
+		t.Fatalf("to done: %+v", ps)
+	}
+	before := string(read(t, abs(root, Path("my-post"))))
+	w, _, _ := resolve(root, "my-post/body", g)
+	if bs := w.Blockers(root, w.find("body")); len(bs) != 0 {
+		t.Fatalf("valid acceptance blockers = %+v", bs)
+	}
+	if _, _, _, ps := Reopen(root, "my-post/body"); !slices.Equal(codes(ps), []string{"lifecycle.acceptance-current"}) || ps[0].Path != body+"acceptance.yaml" {
+		t.Fatalf("acceptance current: %+v", ps)
+	}
+	if string(read(t, abs(root, Path("my-post")))) != before {
+		t.Fatal("work.yaml changed although reopen was refused")
+	}
+	// 正文改过：done 单元的阻塞项为 acceptance.stale，reopen 退回 review 且只改该单元的 stage。
+	put(t, root, body+"draft.md", "改过的正文\n")
+	w, _, _ = resolve(root, "my-post/body", g)
+	if bs := w.Blockers(root, w.find("body")); len(bs) != 1 || bs[0].Code != "acceptance.stale" || bs[0].Artifact != "acceptance" || bs[0].Path != body+"acceptance.yaml" {
+		t.Fatalf("stale blockers = %+v", bs)
+	}
+	w, u, prev, ps := Reopen(root, "my-post/body")
+	if len(ps) > 0 || prev != "done" || u.Stage != "review" || u.Ref != "my-post/body" || w.Path != Path("my-post") {
+		t.Fatalf("reopen: %+v %s %+v", u, prev, ps)
+	}
+	want := strings.Replace(before, "  - id: body\n    type: section\n    stage: done", "  - id: body\n    type: section\n    stage: review", 1)
+	if got := string(read(t, abs(root, Path("my-post")))); got != want || got == before {
+		t.Fatalf("work.yaml =\n%s\nwant only body's stage changed:\n%s", got, want)
+	}
+	// 没有验收记录的 done 单元不是阻塞项，但可以退回。
+	put(t, root, Path("my-post"), strings.Replace(before, "stage: brief # 作者的行尾注释", "stage: done # 作者的行尾注释", 1))
+	w, _, _ = resolve(root, "my-post", g)
+	if bs := w.Blockers(root, w.Root); len(bs) != 0 {
+		t.Fatalf("done without acceptance blockers = %+v", bs)
+	}
+	if _, u, prev, ps := Reopen(root, "my-post"); len(ps) > 0 || prev != "done" || u.Stage != "review" {
+		t.Fatalf("reopen without acceptance: %+v %+v", u, ps)
+	}
+	if _, _, _, ps := Reopen(root, "my-post/nope"); !slices.Equal(codes(ps), []string{"unit.not-found"}) {
+		t.Fatalf("unknown unit: %+v", ps)
+	}
+}
+
+func TestReopenRejected(t *testing.T) {
+	g := genres(t)
+	// 汇总单元的阶段由子单元汇总，不能退回。
+	root := project(t, "saga")
+	if _, _, _, ps := reopen(root, "saga/ch-2", g); !slices.Equal(codes(ps), []string{"lifecycle.derived-stage"}) || !strings.Contains(ps[0].Message, "不能退回") {
+		t.Fatalf("aggregated: %+v", ps)
+	}
+	// 文体没有需要验收的阶段：done 单元没有阻塞项，reopen 报告 lifecycle.no-acceptance-stage。
+	put(t, root, Path("note"), "schema_version: 1\nid: note\ngenre: essay\ntype: essay\nstage: done\n")
+	w, _, _ := resolve(root, "note", g)
+	if bs := w.Blockers(root, w.Root); len(bs) != 0 {
+		t.Fatalf("essay done blockers = %+v", bs)
+	}
+	if _, _, _, ps := reopen(root, "note", g); !slices.Equal(codes(ps), []string{"lifecycle.no-acceptance-stage"}) {
+		t.Fatalf("no acceptance stage: %+v", ps)
+	}
+	// stage 经由锚点得到时不修改（structured-edits）。
+	src := "schema_version: 1\nid: my-post\ngenre: minimal\ntype: article\nstage: &s done\nunits:\n  - {id: a, type: section, stage: *s}\n"
+	put(t, root, Path("my-post"), src)
+	if _, _, _, ps := Reopen(root, "my-post"); !slices.Equal(codes(ps), []string{"work.anchored-value"}) {
+		t.Fatalf("anchored: %+v", ps)
+	}
+	if got := string(read(t, abs(root, Path("my-post")))); got != src {
+		t.Fatalf("work.yaml changed:\n%s", got)
+	}
+}
+
+// done 单元验收失效的三种其余情况：关卡强度变严、只有手写的 acceptance.md、acceptance.yaml 不通过校验；
+// 都是阻塞项、都可以退回（reopen-stage）。
+func TestReopenInvalidAcceptance(t *testing.T) {
+	g := genres(t)
+	body := ".writing-anything/works/my-post/units/body/"
+	fast := "schema_version: 1\ngate_level: fast\ndraft_sha256: " + review.SHA256([]byte("正文\n")) + "\nconfirmed_by_author: false\naccepted_at: \"2026-10-01T00:00:00Z\"\n"
+	for name, tc := range map[string]struct {
+		files map[string]string
+		code  string
+	}{
+		"weaker-gate": {map[string]string{"acceptance.yaml": fast}, "acceptance.weaker-gate"},
+		"markdown":    {map[string]string{"acceptance.md": "ok\n"}, "acceptance.invalid"},
+		"invalid":     {map[string]string{"acceptance.yaml": "schema_version: 1\n"}, "acceptance.invalid"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			root := project(t, "my-post")
+			put(t, root, Path("my-post"), strings.Replace(string(read(t, filepath.Join("testdata", "works", "my-post", FileName))), "    stage: review", "    stage: done", 1))
+			put(t, root, body+"draft.md", "正文\n")
+			for f, c := range tc.files {
+				put(t, root, body+f, c)
+			}
+			w, _, _ := resolve(root, "my-post/body", g)
+			u := w.find("body")
+			if bs := w.Blockers(root, u); len(bs) != 1 || bs[0].Code != tc.code || bs[0].Artifact != "acceptance" || !w.Reopenable(root, u) {
+				t.Fatalf("blockers = %+v, reopenable = %v", bs, w.Reopenable(root, u))
+			}
+			if _, u, prev, ps := Reopen(root, "my-post/body"); len(ps) > 0 || prev != "done" || u.Stage != "review" {
+				t.Fatalf("reopen: %+v %+v", u, ps)
+			}
+		})
+	}
+}
+
+func TestReopenable(t *testing.T) {
+	g := genres(t)
+	root := project(t, "my-post", "saga")
+	w, _, _ := resolve(root, "my-post", g)
+	// 未完成的单元与没有验收记录的 done 单元。
+	if w.Reopenable(root, w.find("body")) {
+		t.Error("review-stage unit is reopenable")
+	}
+	put(t, root, Path("my-post"), strings.Replace(string(read(t, abs(root, Path("my-post")))), "    stage: review", "    stage: done", 1))
+	w, _, _ = resolve(root, "my-post", g)
+	if !w.Reopenable(root, w.find("body")) {
+		t.Error("done unit without acceptance is not reopenable")
+	}
+	s, _, _ := resolve(root, "saga", g)
+	if s.Reopenable(root, s.find("ch-2")) {
+		t.Error("aggregated unit is reopenable")
+	}
+}

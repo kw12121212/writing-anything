@@ -1,0 +1,39 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: thread-recovery-validation
+sections:
+  Implementation:
+    contract-empty-ledger:
+      text: internal/threads：ContractProblems 在 threads.yaml 不存在时按空台账检查（Schema 失败或符号链接仍跳过）；CheckWorks 对无台账作品也做交叉检查且不计入 checked；更新注释
+      status: complete
+    callers-comments:
+      text: internal/cli scene contract 写前预检与 internal/continuity：确认经 ContractProblems 获得一致行为，更新描述旧行为的注释
+      status: complete
+    fixtures:
+      text: 修正依赖「无台账不检查」的既有测试与夹具（如 scene_test 的 --plant 用例先 threads add 登记），E2E 语料保持通过
+      status: complete
+    spec-deltas:
+      text: 生成 threads 主规格增量：MODIFIED threads-artifact 与 threads-contract-checks，反映实际实现
+      status: complete
+  Testing:
+    unit-tests:
+      text: threads 与 cli 测试：无台账时 recovers/plants 引用报告 threads.unknown-thread，validate 非零退出、scene contract 拒绝写入、continuity 报告；有台账行为不变；台账 Schema 失败时仍跳过；无 plants/recovers 的作品零诊断
+      status: complete
+      command: go test ./internal/threads/ ./internal/cli/ ./internal/continuity/
+    full-regression:
+      text: 完整回归（含覆盖率阈值 80%）
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    verify-change:
+      text: strict-spec-cli verify thread-recovery-validation 通过，任务全部完成
+      status: complete
+      command: strict-spec-cli verify thread-recovery-validation
+    archive-ready:
+      text: 审查通过后归档，规格增量合并入 threads 主规格，路线图计划变更标记完成
+      status: complete
+testing_gates:
+  validation_task: full-regression
+  unit_test_task: unit-tests

@@ -1,0 +1,7 @@
+schema_version: 1
+gate_level: strict
+draft_sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+confirmed_by_author: true
+confirmation: 作者说可以发了
+channel: agent
+accepted_at: "2026-10-01T08:00:00Z"

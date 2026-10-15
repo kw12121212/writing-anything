@@ -1,0 +1,48 @@
+schema: strict-spec-driven/question-list/v1
+schema_version: 1
+artifact_type: question_list
+schema_file: templates/strict-spec-driven/schemas/question-list.yaml
+change: thread-recovery-validation
+open: []
+resolved:
+  - id: requirement-problem
+    question: 今天具体出了什么问题，对谁？
+    context: 证据：里程碑 details「threads.go ContractProblems 无台账时直接返回 nil」与 planned change summary。影响 proposal 范围。
+    answer: 写长篇的作者与接入的 Agent：作品没有 threads.yaml 时，场景契约 recovers 或 plants 可以引用不存在的伏笔而 validate、continuity 与 scene contract 都不报告，伏笔回收保证失效
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-outcome
+    question: 什么可观察的变化证明问题解决了？
+    context: 证据：里程碑 done_criteria「作品没有 threads.yaml 时，场景契约 recovers 引用不存在的伏笔使 wa-cli validate 以非零退出并报告 threads.unknown-thread」与 planned change details。影响 spec delta 与测试。
+    answer: 无台账作品的场景契约 recovers 或 plants 引用不存在的伏笔时 wa-cli validate 以非零退出并报告 threads.unknown-thread，scene contract 写入路径同样拒绝；测试覆盖无台账与有台账两种情况
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-trigger
+    question: 为什么现在做？
+    context: 证据：里程碑 notes「来源：2026-10-07 路线图里程碑审计 P1 项」；planned change depends_on 为空。影响优先级。
+    answer: 2026-10-07 里程碑审计把无台账跳过伏笔校验列为 P1 项，本变更没有未满足依赖
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-non-goals
+    question: 哪些明确不做？
+    context: 证据：里程碑 scope.out 与 planned change details 只涉及 ContractProblems 的无台账语义。影响 proposal 范围。
+    answer: 不新增伏笔特性、不改台账 Schema 与领域规则、不改收口规则、不调用模型、不做里程碑其他计划变更
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-interpretation
+    question: 「把台账视为空集」应如何理解？
+    context: 证据：planned change details「threads.ContractProblems 在作品没有 threads.yaml 时把台账视为空集，场景契约 recovers 或 plants 引用不存在的伏笔报告 threads.unknown-thread；validate 与 scene contract 写入路径行为一致」。影响 spec delta 与实现。
+    answer: 台账文件不存在时与条目为空的台账等价：recovers 与 plants 的每个引用都报告 threads.unknown-thread；validate 整体校验与 scene contract 写前预检都按此检查
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: broken-ledger
+    question: 台账存在但不通过 Schema 校验时是否也按空集检查？
+    context: 路线图只说到台账不存在的情况；现有规格写明台账不通过 Schema 校验时由台账校验报告。影响实现与测试。
+    answer: 不按空集检查，继续跳过交叉检查，避免在台账 Schema 诊断之外重复报告每个引用（见 design 决策 broken-ledger-still-skips）；这是对既有规格行为的保持而非新决定
+    status: resolved
+    answered_by: roadmap

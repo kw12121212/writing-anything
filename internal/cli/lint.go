@@ -163,7 +163,43 @@ func lintPOV(dir string, w *work.Work, u *work.Unit) string {
 // 调用方不必再合并一次。out 为 nil 时文本检查没有运行（没有正文、合并失败等），problems 为其原因；否则 problems 含段落出处、
 // 论断与规则引擎的问题。
 func runUnitLint(dir string, w *work.Work, u *work.Unit) (out *lint.Result, r *resolve.Resolved, content []byte, problems []workspace.Problem) {
-	return runUnitLintWith(dir, w, u, workResolver(dir, w))
+	return runUnitLintWith(dir, w, u, workLintDeps(dir, w))
+}
+
+// lintDeps 是对同一作品的多个单元运行文本检查时按作品只计算一次的结果（workspace-artifacts/load-once-per-command）。
+type lintDeps struct {
+	resolved func() (*resolve.Resolved, []workspace.Problem)
+	story    func() *storyBeats
+}
+
+// workLintDeps 返回作品 w 的 lintDeps：生效设置与根单元节拍都在第一次使用时计算。
+func workLintDeps(dir string, w *work.Work) lintDeps {
+	return lintDeps{resolved: workResolver(dir, w), story: workStoryBeats(dir, w)}
+}
+
+// storyBeats 是场景节拍位置核对所需的作品级数据：根单元选用的结构类写作法与根单元大纲，以及按单元树先序排列的场景引用。
+// 根单元不用结构类写作法、写作简报或大纲不能读取时 method 为 nil，不做场景核对。
+type storyBeats struct {
+	method *catalog.Method
+	root   *outline.Outline
+	scenes []string
+}
+
+// workStoryBeats 返回按作品 w 加载根单元节拍数据的函数，结果只计算一次。
+func workStoryBeats(dir string, w *work.Work) func() *storyBeats {
+	var s *storyBeats
+	return func() *storyBeats {
+		if s != nil {
+			return s
+		}
+		s = &storyBeats{}
+		if s.method, s.root = rootStructure(dir, w); s.method != nil {
+			for _, sc := range w.Scenes() {
+				s.scenes = append(s.scenes, sc.Ref)
+			}
+		}
+		return s
+	}
 }
 
 // workResolver 返回按作品 w 合并生效设置的函数，结果只计算一次：对同一作品的多个单元运行文本检查（如阅读页）时，系列文件与
@@ -181,8 +217,8 @@ func workResolver(dir string, w *work.Work) func() (*resolve.Resolved, []workspa
 	}
 }
 
-// runUnitLintWith 与 runUnitLint 相同，合并结果由 resolved 给出。
-func runUnitLintWith(dir string, w *work.Work, u *work.Unit, resolved func() (*resolve.Resolved, []workspace.Problem)) (out *lint.Result, r *resolve.Resolved, content []byte, problems []workspace.Problem) {
+// runUnitLintWith 与 runUnitLint 相同，按作品只计算一次的结果由 deps 给出。
+func runUnitLintWith(dir string, w *work.Work, u *work.Unit, deps lintDeps) (out *lint.Result, r *resolve.Resolved, content []byte, problems []workspace.Problem) {
 	rel := w.UnitDir(u) + "/" + draft.FileName
 	content, ok, ps := draft.Read(dir, w, u)
 	switch {
@@ -192,7 +228,7 @@ func runUnitLintWith(dir string, w *work.Work, u *work.Unit, resolved func() (*r
 		return nil, nil, nil, []workspace.Problem{{Code: draft.CodeNotFound, Severity: workspace.SeverityError, Path: rel,
 			Message: "单元 " + u.Ref + " 没有可读取的正文 draft.md（不存在、途经符号链接或不是普通文件）；请用 wa-cli draft write 写入"}}
 	}
-	r, problems = resolved()
+	r, problems = deps.resolved()
 	if r == nil {
 		return nil, nil, content, problems
 	}
@@ -206,18 +242,32 @@ func runUnitLintWith(dir string, w *work.Work, u *work.Unit, resolved func() (*r
 		in.POVPerson = lintPOV(dir, w, u)
 	}
 	out, ps = lint.Run(string(content), r, rel, in)
-	return out, r, content, slices.Concat(problems, warnings, cps, ps, beatPositions(dir, w, u, content, rel))
+	return out, r, content, slices.Concat(problems, warnings, cps, ps, beatPositions(dir, w, u, content, rel, deps.story))
 }
 
-// beatPositions 按单元选用的结构类写作法核对成稿中节拍的位置，超出范围时给出 warning（只提示，不阻塞）。
-func beatPositions(dir string, w *work.Work, u *work.Unit, content []byte, rel string) []workspace.Problem {
+// beatPositions 核对成稿中节拍的位置，超出范围时给出 warning（只提示，不阻塞）：单元自身选用结构类写作法时按正文同名标题核对；
+// 场景单元另按场景的单元树先序位置核对它以 beats 引用的、根单元结构类写作法的节拍。
+func beatPositions(dir string, w *work.Work, u *work.Unit, content []byte, rel string, story func() *storyBeats) []workspace.Problem {
 	unitDir := w.UnitDir(u)
 	ms := outline.LoadMessages(dir, unitDir, brief.LoadQueue(dir), outline.Picker{Methods: catalog.LoadMethods(dir), Default: unitDefaultMethod(w, u)})
-	if ms.Method == nil || len(ms.Problems) > 0 {
-		return nil
+	var out []workspace.Problem
+	var o *outline.Outline
+	loaded := false
+	if ms.Method != nil && len(ms.Problems) == 0 {
+		o, _, _ = outline.LoadLenient(dir, unitDir, ms)
+		out, loaded = outline.BeatPositions(content, rel, o, ms.Method), true
 	}
-	o, _, _ := outline.LoadLenient(dir, unitDir, ms)
-	return outline.BeatPositions(content, rel, o, ms.Method)
+	if u.Type != outline.SceneType {
+		return out
+	}
+	if s := story(); s.method != nil {
+		if !loaded {
+			// 场景核对只需要大纲节的 beats：以空 Messages 宽松加载，场景写作简报的问题不影响它。
+			o, _, _ = outline.LoadLenient(dir, unitDir, outline.Messages{})
+		}
+		out = append(out, outline.SceneBeatPositions(outline.Path(unitDir), u.Ref, o, s.root, s.method, slices.Index(s.scenes, u.Ref), len(s.scenes))...)
+	}
+	return out
 }
 
 func runLint(inv *invocation) int {

@@ -1,0 +1,40 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: closeout-body-scan
+sections:
+  Implementation:
+    body-scan:
+      text: 在 internal/closeout 实现正文疑似专有名词扫描（去注释、三类模式、虚词排除、已解析判定、与大纲来源合并去重、source 为 draft），Submit 与 Waive 共用
+      status: complete
+    cli-text:
+      text: internal/cli/closeout.go 人读输出与 closeout 包把 draft 来源显示为「正文」，warning message 注明来自正文
+      status: complete
+    docs-skill:
+      text: 更新 wa-scene 技能收口步骤（suspected 含正文来源）与 docs/GLOSSARY.md 疑似专有名词释义
+      status: complete
+  Testing:
+    unit-tests:
+      text: closeout 包与 cli 包新增测试：正文新人名提示、已登记名与别名及称谓不提示、豁免后不提示、批注内不提示、大纲与正文去重、常见短语不提示
+      status: complete
+      command: go test ./internal/closeout/ ./internal/cli/ -run 'Closeout|CloseOut|Suspect|BodyScan'
+    corpus-zero:
+      text: novel-e2e 语料重放断言九个场景收口输出均无正文来源（source 为 draft）的疑似专有名词
+      status: complete
+      command: go test ./internal/cli/ -run TestNovelCorpus
+    full-regression:
+      text: 运行完整回归（含覆盖率阈值 80%）
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    verify-change:
+      text: 运行 strict-spec-cli verify closeout-body-scan 确认任务与 delta spec 一致
+      status: complete
+      command: strict-spec-cli verify closeout-body-scan
+    archive-ready:
+      text: 确认 delta spec 与实际实现一致，归档时 closeout 主规格合并 closeout-submit 修改与 closeout-body-scan 新增条款
+      status: complete
+testing_gates:
+  validation_task: full-regression
+  unit_test_task: unit-tests

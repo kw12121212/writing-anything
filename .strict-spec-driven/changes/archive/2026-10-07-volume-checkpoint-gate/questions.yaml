@@ -1,0 +1,48 @@
+schema: strict-spec-driven/question-list/v1
+schema_version: 1
+artifact_type: question_list
+schema_file: templates/strict-spec-driven/schemas/question-list.yaml
+change: volume-checkpoint-gate
+open: []
+resolved:
+  - id: requirement-problem
+    question: 今天具体出了什么问题，对谁？
+    context: 证据：里程碑 core-gate-hardening details「internal/volume/volume.go AcceptanceBlockers 只在 checkpoint.yaml 存在时检查」与 notes「卷末检查点缺口源于规格本身被写弱」。影响 proposal 范围。
+    answer: 写长篇小说的作者与接入的 Agent：卷末检查点只能手动 wa-cli volume checkpoint 生成，Agent 不生成时 strict 关卡下前一部未经作者核对也能验收下一部场景，作者对每部的核对点被静默绕过
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-outcome
+    question: 什么可观察的变化证明问题解决了？
+    context: 证据：里程碑 done_criteria 第五条与 planned change details 的测试列表。影响 spec delta 与测试。
+    answer: 部的最后一个场景 wa-cli accept 成功后该部目录下自动出现 checkpoint.yaml 且 confirmed_by_author 为 false、changedPaths 列出该文件；strict 关卡下 part-one 检查点缺失或未确认时 part-two 场景的 wa-cli accept 以非零退出并报告卷末检查点阻塞，作者确认后验收成功；standard 与 fast 只提示
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-trigger
+    question: 为什么现在做？
+    context: 证据：里程碑 notes「60 条完成标准中 1 条未达标（novel 卷末检查点）；本里程碑承接 P0 项」。影响优先级。
+    answer: 2026-10-07 里程碑审计把卷末检查点可被绕过列为唯一未达标的已交付完成标准（P0），本变更无未满足依赖
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-non-goals
+    question: 哪些明确不做？
+    context: 证据：里程碑 scope.out 与 planned change details「手动 volume checkpoint 保留用于重新生成」。影响 proposal 范围。
+    answer: 不改检查点内容字段、抽样算法与确认渠道；不做组稿对未确认检查点的门禁、长篇技能（novel-skills）与诊断体验收尾；手动 volume checkpoint 保留
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-interpretation
+    question: 「自动生成」与「缺失即阻塞」应如何理解？
+    context: 证据：里程碑 intake_questions volume-checkpoint-trigger 已定「部的最后一个场景验收时自动生成检查点（只写汇总、不代作者确认）；strict 下更早的部缺失或未确认检查点都阻塞下一部验收」，planned change details「accept 在场景是其所属部按单元树先序的最后一个场景且验收成功后，调用 volume checkpoint 的同一逻辑写出 checkpoint.yaml」「缺失时可用新码 volume.missing」。影响 spec delta 与实现。
+    answer: 自动生成：部子树按先序最后一个场景验收成功后，按 volume checkpoint 的同一逻辑写出检查点（把刚验收的场景视为完成），confirmed_by_author 为 false；缺失即阻塞：按先序更早的部缺少检查点报告 volume.missing、未确认报告 volume.unconfirmed，strict 为 error、standard 与 fast 为 warning
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: accept-before-others-done
+    question: 最后场景验收时本部其他场景还没推进到 done，怎么办？
+    context: 证据：volume 主规格 checkpoint-commands 要求子树全部场景 done 否则 volume.scenes-open；planned change 要求复用同一逻辑。影响实现与测试。
+    answer: 不生成检查点、验收照常成功，给出 warning 级 volume.scenes-open 与 wa-cli volume checkpoint 下一步；下一部验收的 volume.missing 门禁保证 strict 下不被绕过（见 design skip-with-warning）
+    status: resolved
+    answered_by: roadmap

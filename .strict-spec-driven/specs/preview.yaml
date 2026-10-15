@@ -32,7 +32,7 @@ requirements:
         - THEN: 文件中该段落显示为 &lt;b&gt;粗体&lt;/b&gt; &amp; 引号，不含未转义的 <b>
   preview-serve:
     strength: MUST
-    statement: 'wa-cli preview <unit> --serve 必须启动一个只监听 127.0.0.1 的本地 HTTP 服务（--port 指定端口，省略时由系统分配），并生成至少 128 位的随机令牌（Token），不写阅读页文件。--json 时先输出一行输出信封：preview 含 unit、units、path（null）与 url（http://127.0.0.1:<port>/?token=<令牌>，地址取自实际监听的地址），feedback 为 null，changedPaths 为空数组；之后每保存一条反馈输出一行信封，feedback 为该反馈（字段见 feedback 主规格的 feedback-list），changedPaths 为这次保存变更的路径，preview 同首行。服务对每个请求都校验 Host 头（只接受 127.0.0.1:<port> 与 localhost:<port>；端口为 80 时也接受不带端口的写法）与令牌（GET 用查询参数 token，POST 用请求头 X-WA-Token），不符合时返回 403，不读取也不修改任何产物。GET / 返回按当前工作区状态重新生成的阅读页（内容同 preview-content，另含选中文字后提交意见的脚本）；POST /feedback 见 preview-feedback；其他路径返回 404，其他方法返回 405。响应带 Cache-Control: no-store、Referrer-Policy: no-referrer、X-Frame-Options: DENY 与 Content-Security-Policy（只放行哈希与页面内联脚本一致的脚本）。给出 --max <n> 时保存 n 条反馈后关闭服务并以退出码 0 结束，否则一直运行到命令被中断；命令结束即关闭服务。--port 不是 1 到 65535 的整数，--max 不是不超过 86400000 的正整数，未给出 --serve 却给出 --port 或 --max，或给出 --serve 又给出 --output 时报告 input.invalid-value（next 为 wa-cli help preview --json），退出码为 1；端口无法监听时报告 preview.listen-failed，退出码为 1。不加 --json 时首行输出阅读页地址，之后每条反馈输出一行人读文本。'
+    statement: 'wa-cli preview <unit> --serve 必须启动一个只监听 127.0.0.1 的本地 HTTP 服务（--port 指定端口，省略时由系统分配），并生成至少 128 位的随机令牌（Token），不写阅读页文件。--json 时先输出一行输出信封：preview 含 unit、units、path（null）与 url（http://127.0.0.1:<port>/?token=<令牌>，地址取自实际监听的地址），feedback 为 null，changedPaths 为空数组；之后每保存一条反馈输出一行信封，feedback 为该反馈（字段见 feedback 主规格的 feedback-list），changedPaths 为这次保存变更的路径，preview 同首行；作者每记录一次确认或批量复核也输出一行信封（confirmation 或 authorReview 非 null，见 preview-confirm 与 preview-author-review）；各行信封的 feedback、confirmation 与 authorReview 中不对应的字段为 null。服务对每个请求都校验 Host 头（只接受 127.0.0.1:<port> 与 localhost:<port>；端口为 80 时也接受不带端口的写法）与令牌（GET 用查询参数 token，POST 用请求头 X-WA-Token），不符合时返回 403，不读取也不修改任何产物。GET / 返回按当前工作区状态重新生成的阅读页（内容同 preview-content，另含选中文字后提交意见、作者确认与复核的脚本，以及 preview-confirm-queue 的待作者确认区与待作者复核区）；POST /feedback 见 preview-feedback，POST /confirm 见 preview-confirm，POST /author-review 见 preview-author-review；其他路径返回 404，其他方法返回 405。响应带 Cache-Control: no-store、Referrer-Policy: no-referrer、X-Frame-Options: DENY 与 Content-Security-Policy（只放行哈希与页面内联脚本一致的脚本）。给出 --max <n> 时保存 n 条反馈（确认与复核不计数）后关闭服务并以退出码 0 结束，否则一直运行到命令被中断；命令结束即关闭服务。--port 不是 1 到 65535 的整数，--max 不是不超过 86400000 的正整数，未给出 --serve 却给出 --port 或 --max，或给出 --serve 又给出 --output 时报告 input.invalid-value（next 为 wa-cli help preview --json），退出码为 1；端口无法监听时报告 preview.listen-failed，退出码为 1。不加 --json 时首行输出阅读页地址，之后每条反馈输出一行人读文本。 这是可审计的流程约束而非安全隔离：同机同账户的 Agent 能读到令牌，确认渠道（Confirmation Channel）只把经阅读页写入的确认如实记为 preview。'
     scenarios:
       serve-url:
         - GIVEN: 作品 my-post 有正文
@@ -40,8 +40,8 @@ requirements:
         - THEN: '首行信封的 preview.url 以 http://127.0.0.1: 开头并含 token=，path 为 null；用该地址 GET 得到 200 与含正文的页面，响应带 Cache-Control: no-store 与 Referrer-Policy: no-referrer'
       serve-reject-no-token:
         - GIVEN: preview --serve 正在运行
-        - WHEN: GET / 不带 token，或 POST /feedback 不带 X-WA-Token 或令牌错误，或 Host 头为 evil.example:<port>
-        - THEN: 都返回 403，feedback.yaml 不被创建或修改
+        - WHEN: GET / 不带 token，或 POST /feedback、/confirm 或 /author-review 不带 X-WA-Token 或令牌错误，或 Host 头为 evil.example:<port>
+        - THEN: 都返回 403，feedback.yaml、确认记录与 author-reviews.yaml 都不被创建或修改
       serve-bad-flags:
         - GIVEN: 已初始化的工作区与作品 my-post
         - WHEN: 运行 wa-cli preview my-post --port 70000 --serve --dir D --json，或 wa-cli preview my-post --max 1 --dir D --json
@@ -74,3 +74,47 @@ requirements:
         - GIVEN: preview --serve --max 1 已保存 1 条反馈、正在关闭
         - WHEN: 又有一个带令牌的 POST /feedback 到达
         - THEN: 返回 503，diagnostics 中有一条错误码为 preview.closing 的诊断，不保存反馈
+  preview-confirm-queue:
+    strength: MUST
+    statement: wa-cli preview <unit> --serve 的阅读页（GET /）必须按当前工作区状态列出单元所在作品的待作者确认区：当前阶段的必需产物含 acceptance 且没有有效验收（没有 acceptance.yaml，或其不通过校验、过期或关卡强度更宽松）的单元（kind 为 acceptance）、units 为空或含该作品单元的 open 决策（kind 为 decision，带选项、推荐与理由，没有选项时需要作者答复）、规划类写作法当前步已起草未确认的单元（kind 为 plan）、状态台账与知情表中 status 为 proposed 的条目（kind 为 state 与 knowledge，可以确认或拒绝）以及已生成未确认的卷末检查点（kind 为 volume）；每项带作者填写原话摘要的输入框与确认按钮，没有事项时显示「没有待作者确认的事项」。工作区 gate_level 为 strict 时另列出待作者复核区：该作品的待作者复核项（见 review 主规格的 review-show-author-review），每项带默认勾选的复选框（值为 key）与「复核所选」按钮，没有时显示「没有待作者复核的确认」；其他关卡强度不显示待作者复核区。静态阅读页（不加 --serve）不含这两个区。
+    scenarios:
+      page-lists-queue:
+        - GIVEN: gate_level 为 strict，作品 my-novel 的 scene-9 处于审稿阶段，scene-1 经 wa-cli accept 验收未复核
+        - WHEN: 带令牌 GET /（wa-cli preview my-novel --serve 正在运行）
+        - THEN: 页面含「待作者确认」区与 my-novel/scene-9 的验收项，含「待作者复核」区与 key 以 acceptance:my-novel/scene-1@ 开头的复选框
+      standard-no-review-section:
+        - GIVEN: 同上，但 gate_level 为 standard
+        - WHEN: 带令牌 GET /
+        - THEN: 页面不含待作者复核区
+  preview-confirm:
+    strength: MUST
+    statement: POST /confirm 的请求体必须是不超过 64 KiB 的单个 JSON 对象：kind（acceptance、decision、plan、state、knowledge 或 volume）、unit（acceptance、plan 与 volume 的单元引用）、id（decision 的决策 id、plan 的步骤 id、state 与 knowledge 的条目 id）、action（confirm 或 reject，缺省为 confirm；reject 只用于 state 与 knowledge）、option、answer 与 confirmation（作者原话摘要）。目标必须是按当前工作区计算的待作者确认区（preview-confirm-queue）中的一项，原话摘要不能为空白，否则返回 400（input.invalid-value），不修改任何文件。通过后按与对应命令完全相同的规则写入，确认渠道（Confirmation Channel）为 preview：acceptance 同 wa-cli accept <unit> --confirmed-by-author --confirmation（关卡阻塞项以各自的错误码返回 400，诊断带同样的下一步命令，不写 acceptance.yaml）；decision 同 wa-cli decide <id> --option --answer --confirmation；plan 同 wa-cli plan confirm；state 与 knowledge 同 confirm 或 reject；volume 同 wa-cli volume confirm。成功时返回 200 与 JSON 输出信封：confirmation 含 kind、unit、id、action 与 channel（preview），changedPaths 为这次写入的路径，命令输出一行同样的信封；对应命令的失败诊断以 400 返回（读写文件失败为 500），已保存 --max 条反馈、服务正在关闭时返回 503（preview.closing）；失败时 confirmation 为 null。 请求本身的问题（input.invalid-value、author-review.unknown-key 与 preview.closing）的诊断 next 为 wa-cli help preview --json；对应命令与产物的诊断保留各自能复查问题的下一步命令。
+    scenarios:
+      confirm-acceptance-on-page:
+        - GIVEN: gate_level 为 strict，preview my-novel --serve 正在运行，scene-9 已审稿且没有其他阻塞项
+        - WHEN: '带令牌 POST /confirm：{kind: acceptance, unit: my-novel/scene-9, confirmation: 作者：可以}'
+        - THEN: '返回 200，confirmation.channel 为 preview；scene-9 的 acceptance.yaml 含 channel: preview，且不列为待作者复核'
+      confirm-blocked:
+        - GIVEN: 同上，但 scene-9 没有审稿
+        - WHEN: '带令牌 POST /confirm：{kind: acceptance, unit: my-novel/scene-9, confirmation: 作者：可以}'
+        - THEN: 返回 400，diagnostics 含 accept.review-missing，没有写出 acceptance.yaml
+      confirm-not-in-queue:
+        - GIVEN: preview --serve 正在运行，dec-1 已经决定
+        - WHEN: '带令牌 POST /confirm：{kind: decision, id: dec-1, option: a, confirmation: 作者}'
+        - THEN: 返回 400，错误码为 input.invalid-value，decisions.yaml 不变
+  preview-author-review:
+    strength: MUST
+    statement: POST /author-review 的请求体必须是不超过 64 KiB 的单个 JSON 对象：keys（待复核项的 key 数组）。工作区 gate_level 不是 strict 时返回 400（input.invalid-value）。keys 为空或有重复时返回 400（input.invalid-value，field 为 keys 或 keys[i]）；任一 key 不是该作品当前的待作者复核项时返回 400（author-review.unknown-key，field 为 keys[i]）；这些情况不修改任何文件。全部合法时为每一项向 .writing-anything/author-reviews.yaml 追加一条复核记录（kind、work、ref、confirmed_at、channel 为 preview、reviewed_at 为当前 UTC 时间；文件不存在时创建），返回 200 与 JSON 输出信封：authorReview 含 reviewed（被复核的待复核项，字段同 pendingAuthorReviews 去掉 command）与 channel（preview），changedPaths 为 [.writing-anything/author-reviews.yaml]，命令输出一行同样的信封；之后这些确认不再列为待作者复核，wa-cli assemble 不再因它们报告 assemble.unreviewed。 请求本身的问题（input.invalid-value、author-review.unknown-key 与 preview.closing）的诊断 next 为 wa-cli help preview --json；对应命令与产物的诊断保留各自能复查问题的下一步命令。
+    scenarios:
+      batch-review:
+        - GIVEN: gate_level 为 strict，preview my-novel --serve 正在运行，review show 列出 scene-1 验收的待复核项 key K
+        - WHEN: '带令牌 POST /author-review：{keys: [K]}'
+        - THEN: '返回 200，authorReview.channel 为 preview、reviewed 有一项；author-reviews.yaml 含 ref: my-novel/scene-1 与 channel: preview；review show 的 pendingAuthorReviews 为空数组'
+      unknown-key:
+        - GIVEN: 同上
+        - WHEN: '带令牌 POST /author-review：{keys: [acceptance:my-novel/scene-9@x]}'
+        - THEN: 返回 400，错误码为 author-review.unknown-key，没有创建 author-reviews.yaml
+      no-token:
+        - GIVEN: 同上
+        - WHEN: POST /author-review 不带 X-WA-Token 或令牌错误
+        - THEN: 返回 403，没有创建 author-reviews.yaml

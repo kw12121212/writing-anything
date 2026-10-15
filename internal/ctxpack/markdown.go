@@ -264,6 +264,12 @@ func (p *Pack) Markdown() string {
 		}
 		s.WriteString(it.body)
 	}
+	if len(p.Masked) > 0 {
+		s.WriteString("\n## 被遮蔽的设定\n\n以下内容中含视角人物（POV）尚未获知的揭示词（Reveal Terms）的句子已替换为「" + Placeholder + "」：不要写出、暗示或补全这些信息；本场景契约要求揭示的内容正好被遮蔽时，先向作者确认要揭示到什么程度\n\n")
+		for _, m := range p.Masked {
+			fmt.Fprintf(&s, "- %s %s：遮蔽 %d 句\n", m.Part, m.ID, m.Sentences)
+		}
+	}
 	if len(p.Trimmed) > 0 {
 		s.WriteString("\n## 被裁剪的内容\n\n")
 		for _, t := range p.Trimmed {

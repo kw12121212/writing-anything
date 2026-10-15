@@ -1,0 +1,21 @@
+schema: strict-spec-driven/delta-spec/v1
+schema_version: 1
+artifact_type: delta_spec
+schema_file: templates/strict-spec-driven/schemas/delta-spec.yaml
+target_spec: series
+operations:
+  ADDED:
+    series-member-continuity-gate:
+      strength: MUST
+      statement: 系列成员作品的场景验收必须受跨作品连续性约束：成员关系以平铺的系列文件 .writing-anything/series/<id>.yaml 的 works 判定（时间线的系列识别同样以此为准）；成员作品场景与系列内其他作品存在涉及该场景的 error 级跨作品发现（同一时间两地、跨作品状态矛盾、更早作品已确认终态的人物仍出场）时，wa-cli accept 该场景以非零退出并列出发现，语义见 continuity 主规格的 continuity-series-accept-gate；系列文件无法加载时作品按不属于该系列处理（同 series-inheritance）。
+      scenarios:
+        member-accept-blocked:
+          - GIVEN: 系列 guide 的 works 为 [book-1, book-2]，book-2/s1 与 book-1/s1 同一时间两地
+          - WHEN: 运行 wa-cli accept book-2/s1 --confirmed-by-author --confirmation 作者：可以 --dir D --json
+          - THEN: 退出码为 1，诊断含 timeline.same-time-presence
+        broken-series-file-ignored:
+          - GIVEN: 系列文件 guide.yaml 不通过 Schema 校验
+          - WHEN: 运行 wa-cli review show book-2/s1 --dir D --json
+          - THEN: 不追加系列范围的连续性阻塞项，按不属于系列处理
+  MODIFIED: {}
+  REMOVED: {}

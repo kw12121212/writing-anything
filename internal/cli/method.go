@@ -7,6 +7,7 @@ import (
 
 	"github.com/kw12121212/writing-anything/internal/brief"
 	"github.com/kw12121212/writing-anything/internal/catalog"
+	"github.com/kw12121212/writing-anything/internal/outline"
 	"github.com/kw12121212/writing-anything/internal/work"
 	"github.com/kw12121212/writing-anything/internal/workspace"
 )
@@ -147,6 +148,21 @@ func unitDefaultMethod(w *work.Work, u *work.Unit) string {
 		return w.Genre.DefaultMethod
 	}
 	return ""
+}
+
+// rootStructure 返回作品 w 根单元选用的结构类写作法与宽松加载的根单元大纲：场景以 beats 引用根单元大纲的节（情节节拍），
+// 节拍的位置与目标张力都由这里给出（lint 的场景节拍位置与 curve 的目标张力共用）。根单元不用结构类写作法、写作简报不能读取、
+// 大纲缺失或有致命问题时都为 nil。
+func rootStructure(dir string, w *work.Work) (*catalog.Method, *outline.Outline) {
+	rootDir := w.UnitDir(w.Root)
+	ms := outline.LoadMessages(dir, rootDir, brief.LoadQueue(dir), outline.Picker{Methods: catalog.LoadMethods(dir), Default: unitDefaultMethod(w, w.Root)})
+	if ms.Method == nil || ms.Method.Kind != catalog.MethodStructure {
+		return nil, nil
+	}
+	if o, fatal, _ := outline.LoadLenient(dir, rootDir, ms); len(fatal) == 0 && o != nil {
+		return ms.Method, o
+	}
+	return nil, nil
 }
 
 // unitMethod 返回单元选用的写作法：与大纲关卡相同，取写作简报 method 字段的原始取值（写作简报的其他问题不影响它），为空时

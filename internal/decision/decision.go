@@ -62,6 +62,7 @@ type Decision struct {
 	Choice         *string  `json:"choice"`
 	Answer         *string  `json:"answer"`
 	Confirmation   *string  `json:"confirmation"`
+	Channel        *string  `json:"channel"` // 确认渠道（Confirmation Channel）；缺失按 cli 解释
 	DecidedAt      *string  `json:"decided_at"`
 }
 
@@ -337,9 +338,14 @@ func optionIDs(n int) []string {
 	return out
 }
 
-// Decide 记录作者对决策 id 的决定：option 为选择的选项 id（决策有选项时必填），answer 为答复（没有选项时必填），
-// confirmation 为作者确认原话的摘要，now 为确认时间。
+// Decide 以命令行渠道（cli）记录作者的决定，见 DecideVia。
 func Decide(root, id, option, answer, confirmation string, now time.Time) (*Decision, []workspace.Problem) {
+	return DecideVia(root, id, option, answer, confirmation, workspace.ChannelCLI, now)
+}
+
+// DecideVia 记录作者对决策 id 的决定：option 为选择的选项 id（决策有选项时必填），answer 为答复（没有选项时必填），
+// confirmation 为作者确认原话的摘要，channel 为确认渠道（Confirmation Channel），now 为确认时间。
+func DecideVia(root, id, option, answer, confirmation, channel string, now time.Time) (*Decision, []workspace.Problem) {
 	doc, ds, ps := load(root)
 	if len(ps) > 0 {
 		return nil, ps
@@ -387,7 +393,7 @@ func Decide(root, id, option, answer, confirmation string, now time.Time) (*Deci
 	if strings.TrimSpace(answer) != "" {
 		updates = append(updates, [2]any{"answer", str(answer)})
 	}
-	updates = append(updates, [2]any{"confirmation", str(confirmation)},
+	updates = append(updates, [2]any{"confirmation", str(confirmation)}, [2]any{"channel", str(channel)},
 		[2]any{"decided_at", str(now.UTC().Format("2006-01-02T15:04:05Z"))})
 	for _, u := range updates {
 		if p := set(u[0].(string), u[1].(*yaml.Node)); p != nil {

@@ -1,0 +1,34 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: context-pov-filter
+  status: proposed
+summary:
+  what:
+    - wa-cli validate 对已确认、但其设定条目没有任何已确认知情事件登记揭示词的知情事件（Knowledge Event）报告 warning 级 knowledge.missing-terms，提示补登揭示词
+    - 场景上下文包（Context Pack）复用知情揭示词（Reveal Terms）按句遮蔽视角人物（POV）尚未获知的秘密：出场人物卡（characters）与视角人物已知条目（knowledge）的文本中，含视角人物在本场景开始时尚未获知的设定条目的已确认揭示词的句子，替换为「（另有未揭示设定）」占位；--json 新增 masked 数组报告被遮蔽的内容项、条目与句数
+    - 补上场景上下文包排序表遗漏的 character 内容项（按 context-trim 在本节大纲条目之后、状态快照之前；同时更正 context-trim 非 scene 单元优先级中误列的 canon 人物设定项）；novel-e2e 语料为沈望舒溺水真相补登揭示词（不改写人物卡）并再生成黄金文件；同步 context 与 knowledge 主规格、wa-scene 技能与术语表
+  why:
+    - 里程碑 novel-guarantee-hardening 审计发现 ctxpack.go 把出场人物卡全文放进上下文包、未按知情过滤：语料黄金上下文中陈守拙人物卡含溺水真相，以尚不知情的林晚为视角起草时 Agent 会提前看到秘密，违背揭示边界与知情表的保证
+scope:
+  in:
+    - internal/knowledge：知情重放额外给出每个设定条目的已确认揭示词并集与按获知者计算的未获知条目揭示词；CheckWorks 与 CheckArtifact 报告 knowledge.missing-terms（warning）
+    - internal/ctxpack：按中文句末标点切句的遮蔽函数；characters 与 knowledge 文本遮蔽；Pack.Masked 与 Markdown 的「被遮蔽的设定」报告；排序表补 PartCharacter
+    - internal/cli：context --json 的 masked 字段与 outputKeys 说明；validate 对 knowledge.missing-terms 的 next 命令
+    - novel-e2e 语料命令脚本为 kn-05/kn-07 补登揭示词并再生成黄金文件；新增知情前后、无人知晓与缺揭示词警告的测试
+    - specs/context.yaml 与 specs/knowledge.yaml 的规格增量；wa-scene 技能与 docs/GLOSSARY.md 同步
+  out:
+    - 改写语料人物卡文本或把秘密拆成独立设定条目
+    - 遮蔽 readerOnly（读者已知、人物未知）、状态快照、伏笔、揭示边界等其他内容项
+    - 里程碑其他计划变更（审查任务包预算、伏笔回收校验、文风隔离、测试补齐、MCP 双代）
+    - 调用模型或分词库判断秘密语义
+unchanged_behavior:
+  - 非 scene 单元的上下文包内容与顺序不变，masked 为空数组
+  - 没有登记任何揭示词的作品，场景上下文包的 characters 与 knowledge 文本逐字不变
+  - readerOnly 条目文本不遮蔽；knowledge at、knowledge list 与连续性审查（continuity）的揭示词检查语义不变
+  - knowledge.missing-terms 只是 warning，不改变 validate 的退出码与其他命令的阻塞行为
+roadmap:
+  milestone: novel-guarantee-hardening
+  planned_change: context-pov-filter

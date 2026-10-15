@@ -1,0 +1,48 @@
+schema: strict-spec-driven/question-list/v1
+schema_version: 1
+artifact_type: question_list
+schema_file: templates/strict-spec-driven/schemas/question-list.yaml
+change: next-text-handoff
+open: []
+resolved:
+  - id: requirement-problem
+    question: 今天具体出了什么问题，对谁？
+    context: 证据：里程碑 details「next 文本模式不显示 handoff（仅 --json 有 handoff 字段）」。影响 proposal 范围。
+    answer: 以文本方式运行 wa-cli next 的作者与 Agent 在新会话中看不到上一次会话的交接记录（未完成事项与作者指示），只能另外运行 handoff show 或改用 JSON 输出
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-outcome
+    question: 什么可观察的变化证明问题解决了？
+    context: 证据：里程碑 done_criteria「写入交接记录后，wa-cli next 的文本输出包含最近交接记录的未完成事项」与 planned change details。影响 spec delta 与测试。
+    answer: 写入交接记录后，wa-cli next 文本输出顶部显示最近一条交接记录的 id、未完成事项与作者新指示，与 JSON handoff 字段一致；测试断言文本输出，novel-e2e 在 handoff write 之后补一次 next 断言
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-trigger
+    question: 为什么现在做？
+    context: 证据：里程碑 notes「来源：2026-10-07 路线图里程碑审计 P2 项」；planned change depends_on 为空，roadmap-recommend 选中。影响优先级。
+    answer: 审计 P2 项，没有未满足的依赖，路线图推荐为下一项
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-non-goals
+    question: 哪些明确不做？
+    context: 证据：里程碑 scope.out「新增命令或文体」与 planned change summary 只涉及 next 文本模式。影响 proposal 范围。
+    answer: 不新增命令或参数，不改 handoff show/write 行为，不改 next 其余字段的计算，不做里程碑其他计划变更
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-interpretation
+    question: Which reading of the request is intended, where more than one is possible?
+    context: 证据：planned change details「next 文本输出在顶部显示最近一条交接记录的 id、未完成事项与作者新指示，与 --json 的 handoff 字段一致」。影响 spec delta 与实现。
+    answer: 文本顶部显示一次最近交接的 id、todo 与 instructions；为了与 JSON handoff 字段一致，JSON handoff 同步新增 instructions 数组（向后兼容的增量），见 design 决策 json-adds-instructions
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: json-consistency
+    question: 作者新指示只出现在文本中，还是 JSON handoff 字段也要包含？
+    context: 现有 JSON handoff 只含 id 与 todo；planned change details 要求文本显示作者新指示且「与 --json 的 handoff 字段一致」。影响 spec delta、实现与技能说明。
+    answer: JSON handoff 新增 instructions 数组，使两种输出一致；同步 wa-auto、wa-scene、wa-assemble 技能中「只含 id 与 todo」的说明
+    status: resolved
+    answered_by: roadmap

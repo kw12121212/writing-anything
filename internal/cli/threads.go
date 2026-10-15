@@ -5,6 +5,7 @@ import (
 	"io"
 	"strings"
 
+	"github.com/kw12121212/writing-anything/internal/impact"
 	"github.com/kw12121212/writing-anything/internal/threads"
 	"github.com/kw12121212/writing-anything/internal/work"
 	"github.com/kw12121212/writing-anything/internal/workspace"
@@ -51,7 +52,7 @@ var threadsSetCommand = &command{
 		{"recovered-in", flagString, "回收发生的场景；--status paid 必填，指向 scene 单元；给出空值时清除"},
 		{"decision", flagString, "放弃条目的授权：指向 wa-cli decide 已决定且选择为允许的决策 id"},
 	},
-	outputKeys: []outputKey{{"thread", "修改后的条目：work、id、text、planted_in、planned_recover、status、recovered_in 与 decision；失败时为 null"}},
+	outputKeys: []outputKey{{"thread", "修改后的条目：work、id、text、planted_in、planned_recover、status、recovered_in 与 decision；失败时为 null"}, impactOutputKey},
 	exitCodes:  standardExitCodes,
 	run:        runThreadsSet,
 }
@@ -158,9 +159,28 @@ func runThreadsAdd(inv *invocation) int {
 	})
 }
 
+type threadsSetResult struct {
+	Result
+	Thread *threadEntryView `json:"thread"`
+	Impact []impact.Ripple  `json:"impact"`
+}
+
+// threadSemantic 返回伏笔条目的语义比较键（伏笔计划与回收位置：text、planned_recover、status 与 recovered_in）。
+func threadSemantic(e *threads.Entry) string {
+	if e == nil {
+		return ""
+	}
+	recovered := ""
+	if e.RecoveredIn != nil {
+		recovered = *e.RecoveredIn
+	}
+	return impact.SemanticKey(e.Text, e.PlannedRecover, e.Status, recovered)
+}
+
 func runThreadsSet(inv *invocation) int {
 	dir := projectDir(inv)
-	res := &threadsAddResult{}
+	res := &threadsSetResult{Impact: []impact.Ripple{}}
+	var auto []Diagnostic
 	problems := workspace.Require(dir)
 	if problems == nil {
 		var w *work.Work
@@ -179,10 +199,24 @@ func runThreadsSet(inv *invocation) int {
 				in.RecoveredIn = &v
 			}
 			in.Decision = inv.values["decision"]
+			var before *threads.Entry
+			if items, _ := threads.List(dir, w, true); items != nil {
+				for i := range items {
+					if items[i].ID == inv.args[1] {
+						before = &items[i].Entry
+					}
+				}
+			}
 			var e *threads.Entry
 			var changed []string
+			pre := preAffected(dir, w, inv.args[1])
 			if e, changed, problems = threads.Set(dir, w, inv.args[1], in); e != nil {
 				res.Thread, res.ChangedPaths = &threadEntryView{Work: w.ID, Item: threads.Item{Entry: *e}}, changed
+				if len(changed) > 0 && threadSemantic(before) != threadSemantic(e) {
+					var more []string
+					res.Impact, more, auto = autoImpact(dir, w, []impactTarget{{target: e.ID, pre: pre}})
+					res.ChangedPaths = append(res.ChangedPaths, more...)
+				}
 			} else if changed != nil {
 				// 拒绝放弃条目时 changed 为追加的决策队列路径，thread 为 null。
 				res.ChangedPaths = changed
@@ -193,6 +227,7 @@ func runThreadsSet(inv *invocation) int {
 	threadsParamNext(res.Diagnostics, dir, inv.args[0], "threads set")
 	threadsAuthorNext(res.Diagnostics, dir)
 	threadsNotFoundNext(res.Diagnostics, inv.args[0], dir)
+	res.Diagnostics = append(res.Diagnostics, auto...)
 	return finish(inv, res, func(w io.Writer) error {
 		if res.Thread == nil {
 			return nil
@@ -201,8 +236,8 @@ func runThreadsSet(inv *invocation) int {
 		if len(res.ChangedPaths) == 0 {
 			verb = "取值未变，未修改"
 		}
-		_, err := fmt.Fprintf(w, "%s作品 %s 的伏笔条目（Thread Entry）%s（%s → %s%s）：%s\n",
-			verb, res.Thread.Work, res.Thread.ID, res.Thread.PlantedIn, res.Thread.PlannedRecover, statusText(res.Thread.Status), res.Thread.Text)
+		_, err := fmt.Fprintf(w, "%s作品 %s 的伏笔条目（Thread Entry）%s（%s → %s%s）：%s\n%s",
+			verb, res.Thread.Work, res.Thread.ID, res.Thread.PlantedIn, res.Thread.PlannedRecover, statusText(res.Thread.Status), res.Thread.Text, impactText(res.Impact))
 		return err
 	})
 }

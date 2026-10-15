@@ -2,9 +2,14 @@ package cli
 
 import (
 	"crypto/sha256"
+	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -40,12 +45,30 @@ func snapshotTree(t *testing.T, dir string) map[string]string {
 	return out
 }
 
-// replayNovelCorpus 在 dir 中按序重放小说语料全部步骤并做逐步断言（退出码、诊断码、
-// stdout 片段、变异命令 changedPaths、死键自检）。调用方负责冻结 now 时间源。
-// 黄金比对（TestNovelCorpusGolden）与负向注入（TestNovelCorpusNegativeInjections）复用本助手。
+// replayNovelCorpus 在 dir 中按序重放小说语料全部步骤并做逐步断言（见 replayCorpus），另加小说语料的规模下限。
+// 调用方负责冻结 now 时间源。黄金比对（TestNovelCorpusGolden）与负向注入（TestNovelCorpusNegativeInjections）复用本助手。
 func replayNovelCorpus(t *testing.T, dir string) {
+	t.Helper()
+	stats := replayCorpus(t, dir, filepath.Join("testdata", "e2e", "novel"), "")
+	if stats.closeouts < 9 {
+		t.Fatalf("成功的写后收口步数 = %d，语料九个场景都应收口", stats.closeouts)
+	}
+	if stats.steps < 200 {
+		t.Fatalf("重放步数 = %d，语料应不少于 200 步（与 TestNovelCorpusScript 的下限互指）", stats.steps)
+	}
+}
+
+// corpusReplayStats 是一次语料重放的计数：执行的步数与成功的写后收口步数。
+type corpusReplayStats struct{ steps, closeouts int }
+
+// replayCorpus 在 dir 中按序重放 corpusDir 下 commands.yaml 的步骤并做逐步断言（退出码、诊断码、stdout 片段、
+// 变异命令 changedPaths、写后收口正文零疑似专有名词、死键自检）。stopBefore 非空时在命令串以它开头的第一步之前
+// 停下（不执行该步，供负向注入在真实场景验收前介入；此时跳过死键自检）。调用方负责冻结 now 时间源。
+// 小说语料（novel-e2e）与系列语料（series-e2e）共用本助手。
+func replayCorpus(t *testing.T, dir, corpusDir, stopBefore string) corpusReplayStats {
+	t.Helper()
 	var script corpusScript
-	raw, err := os.ReadFile(filepath.Join("testdata", "e2e", "novel", "commands.yaml"))
+	raw, err := os.ReadFile(filepath.Join(corpusDir, "commands.yaml"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -78,6 +101,7 @@ func replayNovelCorpus(t *testing.T, dir string) {
 		{"impact", "mark"}: true, {"impact", "clear"}: true,
 		{"handoff", "write"}: true,
 		{"assemble", ""}:     true, {"export", ""}: true,
+		{"series", "set"}: true, {"series", "add"}: true, {"series", "fact"}: true,
 	}
 	// 键控：先按 (verb, subverb) 查，未命中再回退 (verb, "")——顶层动词（第二个 token 是位置
 	// 参数或旗标，如 init/new/accept/advance/decide/assemble/export）只有 verb 形态的键。
@@ -92,16 +116,28 @@ func replayNovelCorpus(t *testing.T, dir string) {
 	}
 
 	keyHits := map[[2]string]int{}
-	total := 0
+	total, closeouts := 0, 0
+	stopped := false
 	for _, st := range script.Stages {
+		if stopped {
+			break
+		}
 		for _, step := range st.Steps {
-			total++
 			label := strings.Join(step.Command, " ")
+			if stopBefore != "" && strings.HasPrefix(label, stopBefore) {
+				stopped = true
+				break
+			}
+			total++
+			if wk := step.AuthorReview; wk != nil {
+				replayAuthorReview(t, dir, *wk, st.Stage)
+				continue
+			}
 			if wf := step.WriteFile; wf != nil {
 				if step.InputRef == nil {
 					t.Fatalf("[%s] write_file 步骤缺少 input_ref", st.Stage)
 				}
-				data, err := os.ReadFile(filepath.Join("testdata", "e2e", "novel", *step.InputRef))
+				data, err := os.ReadFile(filepath.Join(corpusDir, *step.InputRef))
 				if err != nil {
 					t.Fatalf("[%s] 读取 %s: %v", st.Stage, *step.InputRef, err)
 				}
@@ -116,7 +152,7 @@ func replayNovelCorpus(t *testing.T, dir string) {
 			}
 			input := ""
 			if step.InputRef != nil {
-				data, err := os.ReadFile(filepath.Join("testdata", "e2e", "novel", *step.InputRef))
+				data, err := os.ReadFile(filepath.Join(corpusDir, *step.InputRef))
 				if err != nil {
 					t.Fatalf("[%s] 读取 %s: %v", st.Stage, *step.InputRef, err)
 				}
@@ -144,6 +180,24 @@ func replayNovelCorpus(t *testing.T, dir string) {
 			if step.StdoutContains != nil && !strings.Contains(res.stdout, *step.StdoutContains) {
 				t.Fatalf("[%s] %s: stdout 缺少 %q", st.Stage, label, *step.StdoutContains)
 			}
+			// 写后收口的正文疑似专有名词扫描在语料全部场景上零误报（closeout/closeout-body-scan）。大纲 location
+			// 取值（如守拙钟表行）未登记进设定集产生的大纲来源提示是语料既有状态，不在此断言。
+			if len(step.Command) > 1 && step.Command[0] == "scene" && step.Command[1] == "close-out" && code == 0 {
+				closeouts++
+				var out struct {
+					Closeout struct {
+						Suspected []struct{ Name, Source string } `json:"suspected"`
+					} `json:"closeout"`
+				}
+				if err := json.Unmarshal([]byte(res.stdout), &out); err != nil {
+					t.Fatalf("[%s] %s: 解析收口输出: %v", st.Stage, label, err)
+				}
+				for _, sp := range out.Closeout.Suspected {
+					if sp.Source == "draft" {
+						t.Fatalf("[%s] %s: 语料正文不应有疑似专有名词提示: %+v", st.Stage, label, sp)
+					}
+				}
+			}
 			if code == 0 && isMutating(step.Command) {
 				key := [2]string{step.Command[0], ""}
 				if len(step.Command) > 1 && mutating[[2]string{step.Command[0], step.Command[1]}] {
@@ -156,8 +210,11 @@ func replayNovelCorpus(t *testing.T, dir string) {
 			}
 		}
 	}
-	if total < 200 {
-		t.Fatalf("重放步数 = %d，语料应不少于 200 步（与 TestNovelCorpusScript 的下限互指）", total)
+	if stopBefore != "" {
+		if !stopped {
+			t.Fatalf("脚本中没有命令串以 %q 开头的步骤，无法在它之前停下", stopBefore)
+		}
+		return corpusReplayStats{total, closeouts}
 	}
 
 	// 死键自检：清单中登记的键若被语料的命令形态覆盖（verb 相同且 subverb 相同或为回退形态），
@@ -180,6 +237,48 @@ func replayNovelCorpus(t *testing.T, dir string) {
 			t.Errorf("变异清单键 %v 被语料命令形态覆盖但从未命中（键控或语料漂移）", key)
 		}
 	}
+	return corpusReplayStats{total, closeouts}
+}
+
+// replayAuthorReview 重放作者在本地阅读页（preview --serve）上的批量复核：取 wa-cli next 列出的待作者复核
+// （Pending Author Review）项，带令牌与回环 Host 经 POST /author-review 全部提交，断言写入复核记录、next 不再列出。
+func replayAuthorReview(t *testing.T, dir, workID, stage string) {
+	t.Helper()
+	pending := func() []string {
+		_, res := runWSIn(t, dir, "", "next", workID)
+		var out struct {
+			Pending []struct {
+				Key string `json:"key"`
+			} `json:"pendingAuthorReviews"`
+		}
+		if err := json.Unmarshal([]byte(res.stdout), &out); err != nil {
+			t.Fatal(err)
+		}
+		var keys []string
+		for _, p := range out.Pending {
+			keys = append(keys, p.Key)
+		}
+		return keys
+	}
+	keys := pending()
+	if len(keys) == 0 {
+		t.Fatalf("[%s] author_review %s: next 没有列出待作者复核项", stage, workID)
+	}
+	const host = "127.0.0.1:4170"
+	s := &previewServer{inv: &invocation{stdout: io.Discard}, dir: dir, ref: workID, token: "corpus-token", hosts: []string{host},
+		view: &previewView{Unit: workID, Units: []string{}}, done: make(chan struct{})}
+	body, _ := json.Marshal(map[string][]string{"keys": keys})
+	req := httptest.NewRequest(http.MethodPost, "http://"+host+"/author-review", strings.NewReader(string(body)))
+	req.Header.Set("X-WA-Token", "corpus-token")
+	rec := httptest.NewRecorder()
+	s.ServeHTTP(rec, req)
+	var res result
+	if err := json.Unmarshal(rec.Body.Bytes(), &res); err != nil || rec.Code != http.StatusOK || !slices.Contains(res.ChangedPaths, ".writing-anything/author-reviews.yaml") {
+		t.Fatalf("[%s] author_review %s: %d %s", stage, workID, rec.Code, rec.Body.String())
+	}
+	if left := pending(); len(left) != 0 {
+		t.Fatalf("[%s] author_review %s: 复核后仍有待复核项 %v", stage, workID, left)
+	}
 }
 
 // 小说语料重放：冻结时间源，连续重放两次，两棵工作区目录树逐文件 SHA-256 比对完全一致
@@ -194,6 +293,18 @@ func TestNovelCorpusReplay(t *testing.T) {
 	dir2 := t.TempDir()
 	replayNovelCorpus(t, dir2)
 
+	assertSameTree(t, dir1, dir2)
+	if _, err := os.Stat(filepath.Join(dir1, "book.md")); err != nil {
+		t.Fatalf("组稿产物缺失: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir1, "novel-export.md")); err != nil {
+		t.Fatalf("整书导出产物缺失: %v", err)
+	}
+}
+
+// assertSameTree 断言两棵重放工作区目录树的文件集合相同、逐文件 SHA-256 一致，失配时给出首个差异文件的两份开头。
+func assertSameTree(t *testing.T, dir1, dir2 string) {
+	t.Helper()
 	tree1 := snapshotTree(t, dir1)
 	tree2 := snapshotTree(t, dir2)
 	if len(tree1) != len(tree2) {
@@ -215,11 +326,5 @@ func TestNovelCorpusReplay(t *testing.T) {
 			}
 			t.Fatalf("两次重放产物不一致: %s\n--- 第一次 ---\n%s\n--- 第二次 ---\n%s", rel, head(a), head(b))
 		}
-	}
-	if _, err := os.Stat(filepath.Join(dir1, "book.md")); err != nil {
-		t.Fatalf("组稿产物缺失: %v", err)
-	}
-	if _, err := os.Stat(filepath.Join(dir1, "novel-export.md")); err != nil {
-		t.Fatalf("整书导出产物缺失: %v", err)
 	}
 }

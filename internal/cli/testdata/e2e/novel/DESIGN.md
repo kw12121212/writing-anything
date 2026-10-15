@@ -166,12 +166,12 @@
 
 ## 负向断言（golden-assertions 已落地）
 
-语料内生负向（命令脚本中真实发生并录制）：人工编辑保护（draft.human-edited）、卷末未确认阻塞（volume.unconfirmed）、复查标记组稿阻塞（assemble.scenes-open + assemble.rechecks）、悬空伏笔组稿阻塞（assemble.continuity，经 threads.author-confirmation → decide → dropped 收束）。
+语料内生负向（命令脚本中真实发生并录制）：人工编辑保护（draft.human-edited）、卷末未确认阻塞（volume.unconfirmed）、复查标记组稿阻塞（assemble.scenes-open + assemble.rechecks）、悬空伏笔组稿阻塞（assemble.continuity，经 threads.author-confirmation → decide → dropped 收束）、待作者复核组稿阻塞（assemble.unreviewed：strict 下经命令行渠道（cli）写入的验收与卷末确认，作者在本地阅读页批量复核后放行）。
 
 重放副本上的注入负向（TestNovelCorpusNegativeInjections）：
 
 - 设定冲突：修改作者钦定 rule-clock-freeze 被拒（canon.author-pinned，error）并生成阻塞决策，设定集不变。
-- 知情违例（两条断言）：正文注入——把含揭示词「为了救人」的句子写进 ch1-s3（kn-05/kn-07 的获知点在 ch3-s2），continuity 报 error 级 continuity.knowledge-early（reader 与出场人物林晚双通道），恢复原文后全绿；台账注入——提前登记获知事件，knowledge at 暴露（空→非空）后撤销回基线。揭示词（Reveal Terms）机制由 knowledge-reveal-terms 变更补齐，语料在 kn-05/07（为了救人）与 kn-08/09（出生的时刻）上声明揭示词。
+- 知情违例（两条断言）：正文注入——把含揭示词「为了救人」的句子写进 ch1-s3（kn-05/kn-07 的获知点在 ch3-s2），continuity 报 error 级 continuity.knowledge-early（reader 与出场人物林晚双通道），恢复原文后全绿；台账注入——提前登记获知事件，knowledge at 暴露（空→非空）后撤销回基线。揭示词（Reveal Terms）机制由 knowledge-reveal-terms 变更补齐，语料在 kn-05/07（为了救人、潮生溺水、救溺水的潮生）与 kn-08/09（出生的时刻）上声明揭示词；context-pov-filter 变更起，后两个揭示词还让上下文包（Context Pack）在林晚获知前遮蔽陈守拙与沈望舒人物卡中的溺水真相句。
 - 伏笔悬空：th-a 回退 open 后连续性审查报 continuity.thread-anomaly（error），恢复 paid 后全绿。
 - 时间线倒置：场景契约互指 after 成环，timeline 与连续性审查报 timeline.cycle 与 timeline.order-conflict（error），删除声明后全绿。
 

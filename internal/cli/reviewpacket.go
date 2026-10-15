@@ -22,7 +22,7 @@ var reviewPlanCommand = &command{
 		dirFlag,
 		{"dimension", flagString, "只生成该维度（character、thread、causality、pov-reveal、style）；省略时生成全部"},
 	},
-	outputKeys: []outputKey{{"packets", "生成的任务包数组，每项含 id、dimension、scope、chars 与 truncated；按维度与范围顺序"}},
+	outputKeys: []outputKey{{"packets", "生成的任务包数组，每项含 id、dimension、scope、chars、truncated 与 omittedSlices；按维度与范围顺序；chars 不超过上下文预算，放不下时省略低相关切片或按清单项拆包"}},
 	exitCodes:  standardExitCodes,
 	run:        runReviewPlan,
 }
@@ -100,9 +100,10 @@ func runReviewPlan(inv *invocation) int {
 				}
 				problems = warnings
 			}
+			var pk []reviewpacket.Packet
 			var changed []string
-			if res.Packets, changed, problems = reviewpacket.Plan(dir, w, u, inv.values["dimension"], budget, now()); res.Packets != nil {
-				res.ChangedPaths = changed
+			if pk, changed, problems = reviewpacket.Plan(dir, w, u, inv.values["dimension"], budget, now()); pk != nil {
+				res.Packets, res.ChangedPaths = pk, changed
 			}
 		}
 	}
@@ -110,7 +111,9 @@ func runReviewPlan(inv *invocation) int {
 	packetsNext(res.Diagnostics, inv.args[0], dir)
 	return finish(inv, res, func(w io.Writer) error {
 		if len(res.Packets) == 0 {
-			fmt.Fprintf(w, "没有生成任何任务包（没有可审查的内容或维度为空）\n")
+			if len(problems) == 0 {
+				fmt.Fprintf(w, "没有生成任何任务包（没有可审查的内容或维度为空）\n")
+			}
 			return nil
 		}
 		var b strings.Builder
@@ -123,6 +126,9 @@ func runReviewPlan(inv *invocation) int {
 			trunc := ""
 			if p.Truncated {
 				trunc = "（正文已截断）"
+			}
+			if p.OmittedSlices > 0 {
+				trunc += fmt.Sprintf("（按预算省略 %d 条切片）", p.OmittedSlices)
 			}
 			fmt.Fprintf(&b, "  %s：范围 %s，%d 字符%s\n", p.ID, p.Scope, p.Chars, trunc)
 		}
@@ -249,6 +255,13 @@ func packetsNext(ds []Diagnostic, ref, dir string) {
 			ds[i].Next = []string{"wa-cli help review submit --json"}
 		case "input.invalid-value":
 			ds[i].Next = []string{"wa-cli help review plan --json"}
+		case reviewpacket.CodeOverBudget:
+			ds[i].Next = overBudgetNext(dir)
 		}
 	}
+}
+
+// overBudgetNext 是 packet.over-budget 的下一步命令：查看当前上下文预算，再按 message 给出的最小预算调整。
+func overBudgetNext(dir string) []string {
+	return []string{shellCommand("wa-cli", "config", "resolved", "--dir", dir, "--json"), "wa-cli help config set --json"}
 }

@@ -1,0 +1,11 @@
+schema: strict-spec-driven/planned-change/v1
+schema_version: 1
+artifact_type: planned_change
+schema_file: ../../templates/strict-spec-driven/schemas/planned-change.yaml
+planned_change:
+  id: mcp-protocol-compat
+  milestone: novel-guarantee-hardening
+status: complete
+summary: MCP 双代服务端：兼容 2025-11-25 与 2025-06-18 的 initialize 握手
+details: 依据 MCP 2026-07-28 规范 basic/versioning（Backward Compatibility、Compatibility Matrix）与 transports/stdio：服务端按客户端开启方式选择语义——带 _meta 的请求按 2026-07-28 无状态处理（现有行为不变）；initialize 请求在该 stdio 进程内选择旧版语义：请求 2025-11-25 或 2025-06-18 时按所请求版本回复，其他版本回复 2025-11-25，收到 notifications/initialized 后接受 tools/list、tools/call、resources/list、resources/read、resources/subscribe、prompts/list、prompts/get，订阅更新沿用现有通知。server/discover 的 supportedVersions 列出三个版本；旧版会话中不要求 _meta。不支持 2025-03-26 及更早版本，initialize 失败时错误信息列出支持版本。握手与会话状态代码按版本隔离，工具、资源、提示的业务映射共用。实施前用 Context7 查询 2025-06-18 与 2025-11-25 规范中 initialize 结果字段与能力声明的差异。测试：每个版本握手、列出并调用 tool、订阅通知；未知版本协商；旧版会话未 initialize 即调用被拒。
+depends_on: []

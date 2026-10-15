@@ -11,6 +11,7 @@ events:
     character: reader
     status: confirmed
     confirmation: 作者确认读者在灯室对峙时得知灯芯来历
+    channel: preview
     decided_at: 2026-10-03T08:00:00Z
   - id: know-3
     scene: my-novel/c2/s1

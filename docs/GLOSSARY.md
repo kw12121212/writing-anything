@@ -32,6 +32,7 @@
 | 内置 | Built-in | 内置 | 随 `wa-cli` 二进制提供的文体与规范包，如 `default` 规范包 |
 | 配置层 | Config Layer | 配置层 | 参与合并的一层设置：文体默认、规范包、项目配置，后者覆盖前者；来源写作 `genre:<id>`、`pack:<id>`、`project` |
 | 解析后配置 | Resolved Config | 解析后配置 | 各配置层合并后的生效设置，每项注明来源层，由 `wa-cli config resolved` 输出 |
+| 文体类别 | Genre Category | 文体类别 | 文体用 `category` 声明的类别：`article`（文章类）或 `fiction`（小说类）；规范包的文风条目用 `applies_to` 限定适用的类别，类别不符的条目不生效，列在 `wa-cli config resolved` 的 `excludedStyle` 中 |
 
 ## 写作流程
 
@@ -100,11 +101,11 @@
 | 场景契约 | Scene Contract | 场景契约 | 动笔前声明场景的出场人物、承担的情节节拍（Story Beat）与揭示边界（Reveal Boundary）；长篇在此基础上扩展视角（POV）、地点、状态变化、伏笔与因果链，由 `wa-cli scene contract` 写入 |
 | 写后收口 | Close-out | 收口 | 场景写完后提交抽取结果，使台账与正文同步；由 `wa-cli scene close-out` 一次提交，收口产物 closeout.yaml 记录正文 SHA-256、提交的台账条目 id、确认的事件与豁免名单，收口未完成或提议未经作者处理时场景不能验收 |
 | 分层摘要 | Layered Summary | 分层摘要 | 已验收场景的摘要逐层汇总为章、部与全书摘要：由 Agent 撰写，`wa-cli summary set` 校验子层齐全（缺失报 summary.children-missing）与过期状态（子场景正文变化的串联指纹） |
-| 卷末检查点 | Volume Checkpoint | 卷末检查点 | 每部最后一个场景验收后由 `wa-cli volume checkpoint` 生成的作者核对产物：汇总本部新增设定、已确认状态变化、伏笔变化与未处理决策，并确定性抽取收口条目；strict 关卡下未经 `wa-cli volume confirm` 确认，下一部的场景不能验收 |
+| 卷末检查点 | Volume Checkpoint | 卷末检查点 | 每部最后一个场景经 `wa-cli accept` 验收成功后自动生成的作者核对产物（只写汇总、不代作者确认；`wa-cli volume checkpoint` 可重新生成）：汇总本部新增设定、已确认状态变化、伏笔变化与未处理决策，并确定性抽取收口条目；strict 关卡下更早的部缺少检查点（`volume.missing`）或未经 `wa-cli volume confirm` 确认（`volume.unconfirmed`）时，下一部的场景不能验收 |
 | 组稿 | Assembly | 组稿 | `wa-cli assemble` 按单元树先序把已验收场景组成整书（书名、目录、部/章标题、去注释正文与按出处的 AI 参与说明），导出 Markdown 或纯文本；存在未完成场景、连续性阻塞或 open 复查标记时拒绝组稿 |
-| 影响传播 | Ripple Analysis | 影响传播 | 按磁盘引用图（场景契约、事件、知情表、伏笔台账、recall 索引）确定性计算修改的受影响后续场景：`wa-cli impact` 预览，`wa-cli impact mark` 标记复查并生成审查任务包，复查通过或作者确认后解除 |
+| 影响传播 | Ripple Analysis | 影响传播 | 按磁盘引用图（场景契约、事件、知情表、伏笔台账、recall 索引）确定性计算修改的受影响后续场景：`wa-cli impact` 预览，`wa-cli impact mark` 标记复查并生成审查任务包；canon set、state set、knowledge set、threads set 与 scene contract 修改语义字段后自动为已验收场景标记复查、对未验收场景只提示；复查通过或作者确认后解除 |
 | 复查标记 | Recheck Mark | 复查标记 | 影响传播落盘的受影响场景标记（rechecks/<work>.yaml，只能追加）：open 时阻塞组稿，经 `wa-cli impact clear`（作者确认或重新审查通过）解除 |
-| 疑似专有名词 | Suspected Proper Noun | 疑似专有名词 | 写后收口扫描中以场景大纲声明（characters、pov、location）为候选、未能解析到设定集条目 name 或别名的取值，以 warning 提示补录或豁免 |
+| 疑似专有名词 | Suspected Proper Noun | 疑似专有名词 | 写后收口扫描中以场景大纲声明（characters、pov、location）及正文中的人名上下文（命名引入、对话前导、称谓）为候选、未能解析到设定集条目 name 或别名的取值，以 warning 提示补录或豁免 |
 | 别名 | Alias | 别名 | 同一人物、地点、物品的其他称呼 |
 
 ## 质量与规则
@@ -133,7 +134,7 @@
 | 覆盖追踪 | Coverage Tracing | 覆盖追踪 | 检查每个核心观点都被大纲的某一节覆盖 |
 | 覆盖缺口 | Coverage Gap | 覆盖缺口 | 没有被任何大纲节覆盖的核心观点，或既不覆盖也没写理由的大纲节；选用写作法时，还包括没有大纲节承担的写作法章节或节拍、顺序颠倒的章节与不属于写作法的 `role` |
 | 连续性审查 | Continuity Review | 连续性审查 | 检查新正文与设定集、前文是否矛盾 |
-| 审查任务包 | Review Task Packet | 任务包 | `wa-cli review plan` 按维度（人物一致性、伏笔回收质量、因果与动机、视角与揭示边界、文风与情绪节奏）生成的不超过上下文预算的语义审查任务（一段正文切片、台账切片与检查清单），由接入的 Agent 调度执行，结论经 `wa-cli review submit` 校验齐全后写回并汇总为作品级报告 |
+| 审查任务包 | Review Task Packet | 任务包 | `wa-cli review plan` 按维度（人物一致性、伏笔回收质量、因果与动机、视角与揭示边界、文风与情绪节奏）生成的不超过上下文预算的语义审查任务（一段正文切片、台账切片与检查清单；放不下时截断正文、按相关度省略切片或按清单项拆包），由接入的 Agent 调度执行，结论经 `wa-cli review submit` 校验齐全后写回并汇总为作品级报告 |
 | 影响传播 | Ripple Analysis | 影响传播 | 修改早期内容后，找出受影响、需复查的后续内容 |
 | 预审 | Pre-review | 预审 | 由 AI 完成的第一遍审稿，默认不阻塞，作者做最终判断 |
 | 指标 | Metric | 指标 | 可计算或可打分的量化数据，如平均句长、紧张度 |
@@ -166,12 +167,15 @@
 | 阻塞 | Blocking | 阻塞 | 未解决前禁止继续推进 |
 | 阻塞项 | Blocker | 阻塞项 | 阻止单元推进的具体原因，如缺失的必需产物、未决定的阻塞决策，由 `wa-cli next` 与 `wa-cli status` 列出 |
 | 确认记录 | Confirmation Record | 确认记录 | 作者确认的时间与原话摘要 |
+| 确认渠道 | Confirmation Channel | 渠道 | 确认记录经由哪条渠道写入：`cli` 为命令行参数（`--confirmed-by-author` 与 `--confirmation`，Agent 也能代填），`preview` 为作者在本地阅读页上的操作；缺失时按 `cli` 解释。这是可审计的流程约束，不是安全隔离 |
+| 待作者复核 | Pending Author Review | 待复核 | strict 关卡下经 `cli` 渠道写入、还没有由作者在阅读页复核的验收、钦定设定修改与卷末检查点确认；由 `wa-cli review show` 与 `wa-cli next` 列出，存在时 `wa-cli assemble` 拒绝组稿 |
+| 复核记录 | Author Review Record | 复核记录 | 作者在阅读页批量复核待作者复核项时写入 `.writing-anything/author-reviews.yaml` 的记录，渠道固定为 `preview`；按被复核那一次确认的时间对应，确认重写后需要重新复核 |
 | 批注 | Comment | 批注 | 作者写在正文里的修改意见，如 `<!-- @me: ... -->` |
 | 作者反馈 | Feedback | 反馈 | 作者对正文的结构化意见，来自对话、正文批注或阅读页 |
 | 锚点 | Anchor | 锚点 | 反馈指向的原文片段及其前后文，正文修改后用于重新定位 |
 | 失去锚点 | Orphaned Anchor | 失去锚点 | 正文修改后无法重新定位的反馈，需要作者处理 |
 | 阅读卡点 | Sticking Point | 阅读卡点 | 作者阅读时标记的"读不下去"的位置 |
-| 阅读页 | Reading View | 阅读页 | `wa-cli preview` 生成的逐段阅读页面：默认为可离线打开的静态 HTML；加 `--serve` 时为本地服务提供、可以选中文字提交反馈的页面 |
+| 阅读页 | Reading View | 阅读页 | `wa-cli preview` 生成的逐段阅读页面：默认为可离线打开的静态 HTML；加 `--serve` 时为本地服务提供、可以选中文字提交反馈、确认待作者确认的事项与复核待作者复核项的页面 |
 | 令牌 | Token | 令牌 | `wa-cli preview --serve` 每次运行生成的随机字符串，访问本地阅读页必须携带，防止本机其他网页或程序冒用 |
 | 人工编辑保护 | Human Edit Protection | 人工编辑保护 | 人改过的正文不被 Agent 覆盖 |
 | 上下文包 | Context Pack | 上下文包 | 只包含当前单元所需信息的输入集合 |
@@ -310,7 +314,8 @@
 | 展示而非告知 | Show, Don't Tell | 展示而非告知 | 用动作与细节呈现，而不是直接陈述 |
 | 节奏 | Pacing | 节奏 | 情节推进的快慢 |
 | 揭示边界 | Reveal Boundary | 揭示边界 | 本单元不能提前透露的信息 |
-| 揭示词 | Reveal Terms | 揭示词 | 知情事件上声明的词表：该条目被获知后才允许出现在正文中，由连续性审查机械匹配「正文早于获知点揭示」的违例 |
+| 揭示词 | Reveal Terms | 揭示词 | 知情事件上声明的词表：该条目被获知后才允许出现在正文中，由连续性审查机械匹配「正文早于获知点揭示」的违例；上下文包也用它遮蔽视角人物尚未获知的秘密句 |
+| 秘密遮蔽 | Secret Masking | 遮蔽 | 场景上下文包把人物卡与设定条目中含视角人物（POV）尚未获知的揭示词的句子替换为「（另有未揭示设定）」占位，并在 masked 中报告被遮蔽的条目与句数 |
 | 连载 | Serialization | 连载 | 分章节持续发布 |
 | 番外 | Side Story / Extra | 番外 | 正文之外的补充故事 |
 | 前传 | Prequel | 前传 | |
@@ -356,7 +361,9 @@
 | 技能 | Skill | 技能 | Agent Skills 格式的操作说明包；wa-cli 内置的技能用 wa-cli skills install 安装 |
 | 模型上下文协议 | Model Context Protocol | MCP | Agent 调用外部工具的开放协议 |
 | 大语言模型 | Large Language Model | LLM | Agent 背后的 AI 模型；`wa-cli` 本身不调用 |
-| MCP 服务 | MCP Server | MCP 服务 | 由 `wa-cli mcp --dir <项目目录>` 以 stdio 方式提供（MCP 2026-07-28 版协议）：tools 对应命令，resources 暴露工作区产物、生效配置与作者反馈，prompts 对应技能 |
+| MCP 服务 | MCP Server | MCP 服务 | 由 `wa-cli mcp --dir <项目目录>` 以 stdio 方式提供（双代服务端，支持 MCP 2026-07-28、2025-11-25 与 2025-06-18 版协议）：tools 对应命令，resources 暴露工作区产物、生效配置与作者反馈，prompts 对应技能 |
+| 双代服务端 | Dual-era Server | 双代服务端 | 同时服务两代 MCP 客户端的 MCP 服务：`_meta` 中带协议版本的请求按 2026-07-28 无状态语义处理，发送 `initialize` 的客户端得到旧版会话 |
+| 旧版会话 | Legacy Session | 旧版会话 | 旧版 MCP 客户端（2025-11-25、2025-06-18）以 `initialize` 握手、`notifications/initialized` 确认后在该 stdio 进程内使用的会话；请求不需要 `_meta`，用 `resources/subscribe` 订阅资源 |
 | 工具 | Tool | tool | MCP 服务提供的可调用操作；wa-cli 的每个 tool 对应一条命令（命令名的空格换成下划线） |
 | 资源 | Resource | 资源 | MCP 服务提供的只读内容，如工作区产物、生效配置与作者反馈，以 URI 标识 |
 | 提示模板 | Prompt | prompt | MCP 服务提供的流程说明；wa-cli 的每个 prompt 对应一个技能 |
@@ -386,6 +393,8 @@
 | 发布产物 | Release Asset | 发布产物 | 随版本发布的文件：各平台的 `wa-cli-<os>-<arch>` 二进制与 `SHA256SUMS` |
 | 校验文件 | Checksum File | 校验文件 | 记录每个发布产物 SHA-256 的 `SHA256SUMS`，格式与 `sha256sum` 兼容 |
 | 安装脚本 | Install Script | 安装脚本 | `install.sh`（Linux、macOS）与 `install.ps1`（Windows）：下载、校验并把 `wa-cli` 安装到用户级目录 |
+| PowerShell | PowerShell | PowerShell | Windows 的命令行外壳与脚本语言，`install.ps1` 在其中运行；PowerShell 7 跨平台，可执行文件为 `pwsh`，Windows 自带的 Windows PowerShell 5.1 为 `powershell.exe` |
+| Linux 子系统 | WSL（Windows Subsystem for Linux） | WSL | 在 Windows 上运行 Linux 环境的子系统；本项目的开发环境之一，`install.ps1` 的测试可在其中用 Linux 版 pwsh 运行 |
 | 锁定文件 | Lock File | 锁定文件 | 记录已安装规范包来源、git 提交与内容 SHA-256 的文件 `.writing-anything/packs.lock.yaml`，由 `wa-cli pack install` 与 `wa-cli pack remove` 维护 |
 | 规范包仓库 | Registry | 规范包仓库 | 中心化发布与查找规范包的服务；尚未支持，`<owner>/<name>` 写法为它保留 |
 | 全文检索 | Full-text Search | 全文检索 | 按关键词查找正文中的出现位置 |
@@ -400,6 +409,11 @@
 | 路线图 | Roadmap | 路线图 | |
 | 里程碑 | Milestone | 里程碑 | |
 | 计划变更 | Planned Change | 计划变更 | 路线图中尚未开始的工作项 |
+| 完成标准 | Done Criteria | 完成标准 | 里程碑 `done_criteria` 中逐条列出、判定里程碑完成的可验证条件 |
+| 完成标准对账 | Criteria Reconciliation | 对账 | 核对每个已归档里程碑的每条完成标准都映射到存在且会执行的测试函数；由 `internal/tools/criteria` 在 `go test ./...` 中强制 |
+| 对账表 | Reconciliation Table | 对账表 | 完成标准原文到测试函数（`包目录.测试函数名`）的映射：`internal/tools/criteria/testdata/criteria.yaml`；里程碑归档时在同一变更中同步补表 |
 | 变更 | Change | 变更 | 一次提案到归档的开发单位 |
+| 真实接入验证 | Dogfooding | 真实接入验证 | 由作者在本机操作真实 Agent 客户端（如 Claude Code、Codex），经技能与 MCP 服务接入 `wa-cli`，走完一篇文章从写作简报到导出的生命周期，以发现夹具测试覆盖不到的卡点；步骤见 `docs/dogfood/README.md` |
+| 真实接入记录 | Dogfood Record | 真实接入记录 | 一次真实接入验证运行的结构化记录：客户端与 `wa-cli` 版本、接入方式、命令序列、导出结果与问题清单，保存在 `docs/dogfood/runs.yaml`，由 `internal/tools/dogfood` 校验 |
 | 规格 | Spec | 规格 | 可观察行为的要求 |
 | 用户场景 | Scene | 用户场景 | strict-spec-driven 中描述用户操作流程的产物；为与小说"场景"区分，统一称"用户场景" |

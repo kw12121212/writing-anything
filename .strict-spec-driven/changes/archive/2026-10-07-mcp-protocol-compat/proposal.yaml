@@ -1,0 +1,31 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: mcp-protocol-compat
+  status: proposed
+summary:
+  what:
+    - MCP 服务（MCP Server）成为双代服务端（Dual-era Server）：带 _meta 协议版本的请求仍按 2026-07-28 无状态语义处理（行为不变）；收到 initialize 时该 stdio 进程进入旧版会话（Legacy Session），请求 2025-11-25 或 2025-06-18 时按所请求版本回复，其他版本回复 2025-11-25；initialize 结果含 protocolVersion、capabilities（tools、resources.subscribe 为 true、prompts）、serverInfo 与 instructions
+    - 旧版会话收到 notifications/initialized 后接受 tools/list、tools/call、resources/list、resources/read、resources/subscribe、resources/unsubscribe、prompts/list、prompts/get 与 ping，不要求 _meta；业务映射（tool、资源、prompt）与 2026-07-28 共用；resources/subscribe 订阅的资源变化时发送 notifications/resources/updated（params.uri）
+    - server/discover 的 supportedVersions 与 -32022 错误的 data.supported 列出 2026-07-28、2025-11-25、2025-06-18 三个版本；initialize 失败（参数不合法、重复 initialize）时错误的 message 与 data.supported 列出支持的版本；未 initialize 且不带 _meta 的请求照旧以 -32602 拒绝，initialize 之后、initialized 之前的请求（ping 除外）被拒绝
+  why:
+    - 里程碑 novel-guarantee-hardening 审计：internal/mcp/mcp.go check() 要求每个请求带 _meta，只发送 initialize 的现有客户端（2025-11-25 与 2025-06-18）以 -32602 被拒且错误未列出支持版本，无法接入 wa-cli；MCP 2026-07-28 规范 basic/versioning 允许服务端同时实现两代行为，作者已确认实现双代服务端
+scope:
+  in:
+    - internal/mcp：按版本隔离的旧版握手与会话状态（新文件 legacy.go），请求路由（initialize 进入旧版握手、带 _meta 协议版本的按 2026-07-28、旧版会话中不带的按旧版），tool、资源、prompt 业务映射抽为两代共用；旧版资源订阅（resources/subscribe、resources/unsubscribe）复用资源读取与轮询间隔，订阅资源数上限沿用 64
+    - internal/cli：wa-cli mcp 命令摘要中的协议版本说明改为列出支持的版本
+    - 测试：internal/mcp 单元测试覆盖两个旧版本的握手、列出并调用 tool、读取并订阅资源收到更新通知、未知版本协商到 2025-11-25、旧版会话未 initialize 或未 initialized 即调用被拒、重复 initialize 与参数不合法的错误列出支持版本、带 _meta 的 2026-07-28 请求在旧版会话中行为不变；internal/cli 以真实工作区按每个旧版本完成握手、调用 tool、订阅 wa://feedback 收到更新通知
+    - 规格与文档：mcp 主规格修改 mcp-serve、新增 mcp-legacy-session（mcp-subscriptions 描述的 2026-07-28 订阅不变）；docs/GLOSSARY.md 中 MCP 服务释义同步，新增双代服务端与旧版会话术语
+  out:
+    - 2025-03-26 及更早的协议版本、HTTP 与 SSE 等远程传输
+    - 旧版的 logging、completion、sampling、elicitation、roots、tasks、listChanged 通知等本服务未声明的能力
+    - claude-code 与 codex 实际使用版本的真实接入验证（由 agent-dogfood 记录）
+unchanged_behavior:
+  - tools/list 的 tool 集合与 inputSchema、tools/call 的命令转换与输出、资源列表与读取、prompt 内容不变；MCP 与 CLI 输出一致
+  - subscriptions/listen 的确认、更新通知与取消语义，消息大小上限，wa-cli mcp 的参数、--json 汇总与诊断不变
+  - 带 _meta（protocolVersion 2026-07-28 与 clientCapabilities）的请求的结果、错误码、resultType 与 serverInfo 元数据不变，例外只有 initialize（无论是否带 _meta 都进入旧版握手，原先返回 -32601）以及 supportedVersions 与 -32022 的 data.supported 改为列出三个版本；2026-07-28 中 ping 与带 _meta 的未知方法仍返回 -32601
+roadmap:
+  milestone: novel-guarantee-hardening
+  planned_change: mcp-protocol-compat

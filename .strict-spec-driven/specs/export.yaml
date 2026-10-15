@@ -130,3 +130,15 @@ requirements:
         - GIVEN: 作品 post 的正文全部由 Agent 起草且已验收，config.yaml 的 ai_disclosure 为 footer
         - WHEN: 运行 wa-cli export post --format text --dir D --json
         - THEN: 导出文件末尾为空行、一行 ---、空行与 AI 参与说明文字；export.disclosure 的 placement 为 footer，退出码为 0
+  export-reopen-next:
+    strength: MUST
+    statement: wa-cli export 的各种导出格式（markdown、wechat-html、text）跳过某个单元时，若该单元可以被 wa-cli reopen 退回（stage 为 done 的非汇总单元，文体有需要验收的阶段，且验收失效或没有验收记录，见 units-and-lifecycle 主规格的 reopen-stage），其 warning 级 export.unaccepted 诊断的 next 必须依次为 wa-cli reopen <unit> --dir <dir> --json 与 wa-cli review show <unit> --dir <dir> --json；其他被跳过的单元（包括验收仍有效、只因其他原因被跳过的 done 单元）仍只给出 wa-cli review show <unit> --dir <dir> --json。导出对验收失效单元的拒绝不变。
+    scenarios:
+      export-done-stale-next:
+        - GIVEN: 作品 my-post（minimal）已验收并推进到 done，之后用 wa-cli draft write 修改了正文
+        - WHEN: 运行 wa-cli export my-post --format wechat-html --dir D --json
+        - THEN: diagnostics 中有一条 warning 级 export.unaccepted（path 为 .writing-anything/works/my-post），其 next 依次为 wa-cli reopen my-post --dir D --json 与 wa-cli review show my-post --dir D --json；另有 export.nothing-accepted，不写导出文件，退出码为 1
+      export-done-oversized-next:
+        - GIVEN: 作品 my-post（minimal）已验收并推进到 done，验收有效，但正文超过导出的字节上限
+        - WHEN: 运行 wa-cli export my-post --dir D --json
+        - THEN: export.unaccepted 的 next 只含 wa-cli review show my-post --dir D --json，不含 wa-cli reopen

@@ -1,0 +1,44 @@
+schema: strict-spec-driven/roadmap-milestone/v2
+schema_version: 2
+artifact_type: roadmap_milestone
+schema_file: ../schemas/roadmap-milestone.yaml
+milestone:
+  usability-polish:
+    title: 体验收尾（Usability Polish）
+order: 300
+goal: 收齐审计中不破坏核心保证、但影响 Agent 与作者使用体验的问题：短篇节拍位置提示在正常流程中生效；修改被引用的目标时给出或落盘影响传播（Ripple Analysis）；next 文本模式显示交接记录；诊断的下一步命令具体可执行；Windows 安装脚本经过实际运行验证。
+scope:
+  in:
+    - 短篇节拍位置检查：按场景的 beats 声明映射到根单元结构类写作法的节拍，成稿后位置超出范围只提示不阻塞
+    - wa-cli next 文本模式显示最近一条交接记录
+    - 诊断下一步命令具体化：error 级诊断的 next 至少一条带单元引用的具体修复命令，wa-cli help 只作补充
+    - install.ps1 实跑：开发环境安装 pwsh 后 TestInstallPs1 不再跳过，release 技能增加 Windows 安装校验步骤
+    - 影响传播自动标记：canon set、state set、knowledge set、threads set 与 scene contract 修改被后续场景引用目标的语义字段时，被已验收场景引用则自动落盘复查标记（Recheck Mark），只被未验收场景引用则只提示；仅改注释或排版不触发；同一场景已有 open 标记时不重复标记、不重复生成任务包；不提供跳过参数
+  out:
+    - 新增命令或文体
+    - 持续集成与持续交付（CI/CD）：本项目不使用
+done_criteria:
+  - 短篇测试夹具中某节拍所在场景位置超出写作法范围时，wa-cli lint 或 review show 输出节拍位置提示，且验收不被阻塞
+  - 写入交接记录后，wa-cli next 的文本输出包含最近交接记录的未完成事项
+  - TestInstallPs1 在装有 pwsh 的开发环境中执行通过，release 技能列出 Windows 安装校验步骤
+  - 完整回归命令 go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out 通过
+  - 新增源码扫描测试（go/ast）列出 internal/** 中 next 只含 wa-cli help 字面量的诊断构造位置并与白名单比对：基线为 33 个文件中 110 处 wa-cli help 提示；生命周期主路径包（cli、brief、outline、draft、lint、review、closeout、continuity、assembly、volume）的 error 级诊断不再只给 help，剩余位置逐条写明理由；新增只给 help 的位置时测试失败
+  - 修改被两个后续已验收场景与一个未验收场景引用的设定条目文本后，wa-cli canon set --json 的 changedPaths 含 rechecks 文件，wa-cli impact list 列出两条 open 复查标记，未验收场景只出现在输出提示中；再次修改不新增标记与任务包；只改 YAML 注释时不触发；next 对 open 标记给出 wa-cli impact clear --confirmed-by-author 命令
+intake_questions:
+  - id: impact-auto-mark
+    question: 修改被引用的目标时，是否自动落盘复查标记？
+    context: 当前 impact mark 需 Agent 手动执行，忘记时后续场景不会被标为需复查；impact mark 还会为每个场景生成 causality 维度审查任务包
+    impact: 决定作者额外确认的频率与组稿被阻塞的频率
+    recommendation: 已定（2026-10-07 作者确认）：被已验收场景引用时自动落盘复查标记，只被未验收场景引用时只提示；只有语义字段变化（设定文本、状态描述、伏笔计划、契约起因与状态变化）触发，注释与排版不触发；open 标记去重且不重复生成任务包；作者确认无影响用 impact clear --confirmed-by-author 解除；不提供跳过自动标记的参数
+planned_changes: {}
+dependencies:
+  - core-gate-hardening：next 与诊断命令的改动在其 next-stage-commands 之后统一处理
+  - novel-guarantee-hardening：按路线图顺序在其后执行，使其新增的诊断（如审查任务包超预算）一并纳入诊断盘点
+risks:
+  - 诊断码数量多，具体化需分批并保持错误码稳定
+  - 自动落盘复查标记可能使组稿被频繁阻塞，需在 next 中给出 impact clear 路径
+  - windows-install-verify 需要在开发环境（WSL）安装 PowerShell（pwsh）；无法安装时须由作者在 Windows 本机执行并记录结果
+status: complete
+notes:
+  - 来源：2026-10-07 路线图里程碑审计 P2 项
+details: 审计证据：outline.go BeatPositions 只看本单元大纲 role 且要求正文有同名标题，短篇节拍挂在根单元而正文在场景单元，正常流程永不触发；impact mark 需 Agent 手动执行，canon set 不提示；next 文本模式不显示 handoff（仅 --json 有 handoff 字段）；大量诊断 next 只是 wa-cli help；TestInstallPs1 因本机无 pwsh 跳过，Windows 安装链路从未运行。

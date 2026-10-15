@@ -1,0 +1,33 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: criteria-reconciliation
+  status: proposed
+summary:
+  what:
+    - 新增开发工具 internal/tools/criteria（package main，不进入产品二进制、不计入覆盖率）与对账表（Reconciliation Table）internal/tools/criteria/testdata/criteria.yaml：逐条登记 .strict-spec-driven/roadmap/archive/milestones/*.yaml 中全部已归档里程碑的完成标准（Done Criteria）原文，每条映射到一个或多个测试函数（包目录 + 函数名）
+    - 对账检查由 go test ./... 中的 TestCriteriaReconciliation 执行，也可用 go run ./internal/tools/criteria 单独运行：已归档完成标准缺少表项、表项的完成标准原文在归档里程碑中找不到（文本变化或删除，要求重新确认映射）、引用的测试函数用 go/ast 解析不到、或函数体首层有无条件 t.Skip、t.Skipf、t.SkipNow 时失败并逐条列出
+    - 对账表以 hardened_by 字段登记 2026-10-07 里程碑审计中部分达标或未达标、经加固里程碑修复的完成标准及对应的已归档加固变更，检查断言这些变更确实已归档且至少有 14 条此类表项，表项映射到加固后新增或修正的测试
+    - release 技能与 docs/GLOSSARY.md 写明：新里程碑归档时在同一变更中同步补对账表；术语表新增完成标准、完成标准对账（Criteria Reconciliation）与对账表
+  why:
+    - 2026-10-07 路线图里程碑审计发现多条完成标准在规格层被写弱（卷末检查点、收口扫描、影响传播），实现与规格一致、验证通过后里程碑仍被标为完成；需要一个由回归测试强制的机制，让每条完成标准都能追溯到真实存在且会执行的测试
+    - 里程碑 real-use-and-release 完成标准要求：对账表覆盖执行时全部已归档里程碑的每条完成标准，go test ./... 中的对账检查在条目缺失、测试函数不存在（go/ast 解析）或首层无条件 t.Skip 时失败；审计列出的 14 条标准都映射到加固后的测试
+scope:
+  in:
+    - .agents/skills/release/SKILL.md 增加对账说明（新里程碑归档时补表、回归失败时如何处理），internal/skills/project_skills_test.go 登记 internal/tools/criteria 引用
+    - docs/GLOSSARY.md 新增完成标准（Done Criteria）、完成标准对账（Criteria Reconciliation）与对账表（Reconciliation Table）
+    - go-project-structure 技术规范增量：新增 criteria-reconciliation 规则，固化新里程碑归档时同步补对账表的工程约束
+    - internal/tools/criteria：main.go（run 函数与检查逻辑）、main_test.go（以真实仓库运行的对账测试，以及在临时目录搭建最小夹具仓库覆盖各失败分支的测试）与 testdata/criteria.yaml（对账表）
+  out:
+    - 产品功能、wa-cli 命令、MCP 服务与内置技能的行为变化；产品二进制不引用该检查
+    - 对尚未归档（status 为 complete 但仍在 roadmap/milestones/ 下）或未完成的里程碑做对账：按计划变更 details 只读取 archive/milestones，它们归档时按本变更写明的流程补表
+    - 回补被写弱的规格：volume、closeout、impact 主规格已由前序加固变更（volume-checkpoint-gate、closeout-body-scan、impact-auto-hint）回补，本变更只核对不修改
+    - 持续集成与持续交付（CI/CD）
+unchanged_behavior:
+  - wa-cli 全部命令、规格与产物格式不变；完整回归命令与覆盖率阈值、范围不变（internal/tools/** 仍不计入覆盖率）
+  - novel-e2e 的测试矩阵与 TestNovelCorpusMatrix 不变；release 技能原有步骤与必须停下来问发布者的事项不变
+roadmap:
+  milestone: real-use-and-release
+  planned_change: criteria-reconciliation

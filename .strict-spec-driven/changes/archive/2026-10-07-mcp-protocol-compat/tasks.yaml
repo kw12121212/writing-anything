@@ -1,0 +1,46 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: mcp-protocol-compat
+sections:
+  Implementation:
+    legacy-session:
+      text: 新增 internal/mcp/legacy.go：SupportedVersions、旧版握手（版本协商、initialize 错误列出支持版本、重复 initialize 拒绝）、initialized 门禁、ping、resources/subscribe 与 resources/unsubscribe 及其轮询通知
+      status: complete
+    era-routing:
+      text: internal/mcp/mcp.go：按 initialize、_meta 协议版本键与旧版会话路由请求，把 tool、资源、prompt 业务映射抽为两代共用的 common；server/discover 与 -32022 列出三个版本；包注释说明双代
+      status: complete
+    cli-summary:
+      text: internal/cli/mcp.go：wa-cli mcp 命令摘要列出支持的协议版本
+      status: complete
+    docs-glossary:
+      text: docs/GLOSSARY.md：同步 MCP 服务释义，新增双代服务端（Dual-era Server）与旧版会话（Legacy Session）术语
+      status: complete
+    delta-spec-sync:
+      text: mcp 主规格的 delta：修改 mcp-serve，新增 mcp-legacy-session，按实际实现核对
+      status: complete
+  Testing:
+    unit-tests:
+      text: internal/mcp 单元测试：两个旧版本握手、列出并调用 tool、读取与订阅资源收到更新通知、未知版本协商到 2025-11-25、未 initialize 与未 initialized 即调用被拒、initialize 错误列出支持版本、旧版会话中带 _meta 的请求行为不变；更新既有 supportedVersions 断言
+      status: complete
+      command: go test ./internal/mcp/
+    cli-tests:
+      text: internal/cli 集成测试：真实工作区中按 2025-11-25 与 2025-06-18 握手，列出并调用 tool，订阅 wa://feedback 后 wa-cli feedback add 触发更新通知；2026-07-28 既有测试保持通过
+      status: complete
+      command: go test ./internal/cli/ -run MCP
+    full-regression:
+      text: 完整回归与覆盖率门槛
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    verify-change:
+      text: strict-spec-cli verify mcp-protocol-compat 通过，delta spec 与实现一致
+      status: complete
+      command: strict-spec-cli verify mcp-protocol-compat
+    archive-ready:
+      text: 归档并合并 mcp 主规格，路线图中 mcp-protocol-compat 标记完成
+      status: complete
+testing_gates:
+  validation_task: full-regression
+  unit_test_task: unit-tests

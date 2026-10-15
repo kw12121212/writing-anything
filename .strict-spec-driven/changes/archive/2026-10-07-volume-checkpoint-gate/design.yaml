@@ -1,0 +1,38 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: volume-checkpoint-gate
+approach:
+  - internal/volume 把 Checkpoint 的生成主体抽为内部函数 generate(root, w, u, accepted)：accepted 非 nil 时把该场景视为已完成（验收写入后其 stage 仍为 review，advance 才到 done），其余场景仍须 stage 为 done；新增导出函数 OnAccept(root, w, scene, now)：场景的最近部祖先存在且该场景是部子树先序最后一个场景时调用 generate，否则返回空。其余场景未完成时返回 warning 级 volume.scenes-open（message 列出未完成场景并说明全部 done 后用 wa-cli volume checkpoint 生成），生成失败的其他问题同样降为 warning，不撤销已写入的验收。
+  - internal/cli acceptVia 在 review.AcceptVia 成功后调用 volume.OnAccept，把检查点路径追加到 changedPaths、warning 并入关卡 warning（gateNext 给出 wa-cli volume checkpoint、help 与 review show）；命令行与阅读页两种确认渠道共用 acceptVia，行为一致。
+  - volume.AcceptanceBlockers 对按先序早于该场景、不是其所属部、且子树含场景的每个部：checkpoint.yaml 不存在报告 volume.missing（path 为应在的 checkpoint.yaml），存在未确认报告 volume.unconfirmed，不通过校验报告 volume.invalid；strict 为 error，standard 与 fast 为 warning。gateNext 为 volume.missing 给出 wa-cli volume checkpoint <part>、wa-cli help volume checkpoint --json 与 review show。
+  - units.go progress 对部单元（volume.IsVolume）读取检查点：已存在且未确认时 commands 为 [wa-cli volume confirm <part> --dir <dir> --json, wa-cli help volume confirm --json]，action 追加请作者核对并确认的提示；其他汇总单元 commands 仍为空数组。novel-e2e 语料删去三处手动 volume checkpoint 步骤（自动生成后重跑为不写文件，违反重放器对变异命令 changedPaths 的断言），在 ch1-s3、ch2-s3、ch3-s3 的 accept 步骤加 stdout_contains 断言检查点路径，并把 T-VOLUME-01 的证据锚点改到这三步。
+  - 审查修正：volume.invalid（含途经符号链接的检查点）的 next 改为 wa-cli validate <path> 与 wa-cli help volume checkpoint，不再给出无法成功的 volume confirm；subtreeScenes 与祖先判定一律按单元引用比较，不依赖作品与单元来自同一次加载。
+decisions:
+  treat-accepted-as-complete:
+    decision: 自动生成时把刚验收的场景视为完成，其余场景仍要求 stage 为 done
+    rationale: accept 不改变阶段（review 主规格 accept-record），验收写入时最后场景的 stage 还是 review；若仍要求全部 done，自动生成永远不会发生。其余场景要求 done 与手动生成的 volume.scenes-open 语义一致，避免为未完成的部写出汇总
+  skip-with-warning:
+    decision: 部内其他场景未完成或生成失败时不生成检查点、不撤销验收，以 warning 级诊断提示并给出 wa-cli volume checkpoint
+    rationale: 验收本身已通过全部关卡，检查点是验收的后续产物；把生成失败升级为验收失败会让作者因为别的场景未推进而无法验收当前场景，而下一部验收的 volume.missing 门禁已经保证 strict 下不会被绕过
+  empty-part-exempt:
+    decision: 子树中没有任何场景的部不参与 volume.missing 检查
+    rationale: 没有场景的部无法生成检查点（volume checkpoint 报告 volume.scenes-open），若参与检查会让后面所有部在 strict 下永久无法验收；它也没有可核对的内容
+  missing-code:
+    decision: 缺失检查点使用新错误码 volume.missing，与未确认的 volume.unconfirmed 区分
+    rationale: 两者的解除命令不同（缺失需 wa-cli volume checkpoint 生成，未确认需 wa-cli volume confirm），独立错误码让 Agent 按码选择下一步；planned change details 也明确提出可用新码 volume.missing
+  next-confirm-commands:
+    decision: 部单元的 next/status commands 只在检查点已生成且未确认时列出 volume confirm；推导阶段为 done 的部在不带参数的 next 中仍不列出
+    rationale: planned change 要求 next 对该部列出 volume confirm；保持 next-skips-done 不变可避免 fast/standard 下永不确认的部长期占据 next 输出，作者仍可经 next <part>、阅读页待确认队列与下一部验收的阻塞诊断看到它
+  ref-not-pointer:
+    decision: 卷末检查点的祖先与子树判定按单元引用（Ref）比较，阅读页验收改用与单元同一次解析得到的作品
+    rationale: 阅读页验收曾把外层加载的作品与另一次 work.Resolve 得到的单元一起传入，指针比较会静默判错所属部（本部检查点被当成更早的部、自动生成被跳过）；按引用比较对任意调用方都成立
+alternatives:
+  - option: accept 时若其余场景未 done 仍强行生成检查点
+    reason: 与 volume checkpoint 的 volume.scenes-open 语义冲突，会为未完成的部写出不完整的汇总，之后再生成又因指纹变化整体替换
+  - option: 在 advance 推进最后一个场景到 done 时生成检查点
+    reason: planned change 与已归档 novel 完成标准都规定在最后一个场景验收后生成；advance 生成还会让 advance 产生新的产物类型，扩大其规格面
+risks:
+  - novel-e2e 命令序列与黄金文件变化需要人工复核差异；既有多部 novel 测试夹具在 strict 下可能因 volume.missing 而失败，需要逐个修正夹具而不是放宽门禁
+  - standard 关卡下更早的部未完成时，下一部每次验收都会带 volume.missing warning

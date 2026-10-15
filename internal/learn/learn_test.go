@@ -110,7 +110,7 @@ func TestLearnLifecycle(t *testing.T) {
 		t.Fatalf("confirm: %+v %v %+v", pr, changed, ps)
 	}
 	pack, ps := catalog.LoadPackFile(root, ".writing-anything/packs/mine.yaml")
-	if ps != nil || pack.Title != "mine 的文风" || !slices.Equal(pack.Style, []string{"多用短句"}) || len(pack.BannedTerms) != 0 || pack.StyleProfile["chars"] != float64(pr.Stats.Chars) {
+	if ps != nil || pack.Title != "mine 的文风" || len(pack.Style) != 1 || pack.Style[0].Text != "多用短句" || pack.Style[0].AppliesTo != nil || len(pack.BannedTerms) != 0 || pack.StyleProfile["chars"] != float64(pr.Stats.Chars) {
 		t.Fatalf("pack = %+v %+v", pack, ps)
 	}
 	if sources, _ := pack.StyleProfile["sources"].([]any); len(sources) != 2 {
@@ -367,6 +367,24 @@ func TestConfirmDeduplicatesAgainstPack(t *testing.T) {
 	pack, _ := catalog.LoadPackFile(root, ".writing-anything/packs/mine.yaml")
 	if len(pack.Style) != 1 || len(pack.BannedTerms) != 1 || pack.BannedTerms[0].Reason != "空泛" {
 		t.Fatalf("pack = %+v", pack)
+	}
+}
+
+// 规范包中已有同文的对象形式文风条目（{text, applies_to}）时，确认不再追加字符串条目，保留其适用范围。
+func TestConfirmDeduplicatesScopedStyle(t *testing.T) {
+	root := newRoot(t)
+	addSource(t, root, "a1", "past-article", "今天下雨。")
+	Learn(root, Request{ID: "me", Pack: "mine", Sources: []string{"a1"}, Styles: []string{"多用短句", "少用形容词"}})
+	packFile := filepath.Join(root, ".writing-anything/packs/mine.yaml")
+	os.MkdirAll(filepath.Dir(packFile), 0o755)
+	os.WriteFile(packFile, []byte("schema_version: 1\nid: mine\ntitle: 我的\nstyle:\n  - {text: 多用短句, applies_to: [fiction]}\n"), 0o644)
+	if _, _, ps := Confirm(root, "me", []string{"style-1", "style-2"}, "作者确认", now); ps != nil {
+		t.Fatal(ps)
+	}
+	pack, ps := catalog.LoadPackFile(root, ".writing-anything/packs/mine.yaml")
+	if ps != nil || len(pack.Style) != 2 || pack.Style[0].Text != "多用短句" || !slices.Equal(pack.Style[0].AppliesTo, []string{"fiction"}) ||
+		pack.Style[1].Text != "少用形容词" || pack.Style[1].AppliesTo != nil {
+		t.Fatalf("pack = %+v %+v", pack, ps)
 	}
 }
 

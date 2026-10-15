@@ -1,8 +1,8 @@
 // Package closeout 管理场景单元目录下的写后收口（Close-out）产物 closeout.yaml：场景草拟后 Agent 经
 // wa-cli scene close-out 一次提交抽取结果——新增设定、状态变化、知情变化、伏笔埋设与回收、确认产生的事件——
 // 把记忆台账与正文同步。提交按写入后状态对照场景契约（Scene Contract）：契约要求的状态变化、伏笔回收与事件
-// 必须齐备才写入，任一预检失败时不写任何文件；同时以场景大纲声明的人物与地点为候选扫描疑似专有名词
-// （Suspected Proper Noun），未解析到设定集（Canon）条目 name 或别名的取值以 warning 提示补录或豁免。
+// 必须齐备才写入，任一预检失败时不写任何文件；同时以场景大纲声明的人物与地点及正文中的人名上下文为候选扫描
+// 疑似专有名词（Suspected Proper Noun），未解析到设定集（Canon）条目 name 或别名的取值以 warning 提示补录或豁免。
 // 收口记录各台账写入的条目 id 与正文指纹；收口未完成、产物失效或记录的提议仍未经作者处理时场景不能验收。
 // 台账写入全部复用 canon、state、knowledge、threads 包的导出函数（各包自带领域校验与追加语义）；本包不
 // import internal/cli，只返回结构化的问题，由命令层转换为诊断（Diagnostic）。
@@ -755,10 +755,10 @@ func Submit(root string, w *work.Work, u *work.Unit, in Input, replace bool) (*V
 		}
 	}
 
-	// 疑似专有名词扫描（warning，不阻塞）：候选为大纲声明的人物与地点，词典为写入后设定集的 name 与别名。
+	// 疑似专有名词扫描（warning，不阻塞）：候选为大纲声明的人物与地点及正文扫描的候选，词典为写入后设定集的 name 与别名。
 	rec := &fileRecord{SchemaVersion: 1, DraftSHA256: sha, Events: orEmpty(in.Events), Canon: canonIDs,
 		State: stateRefs, Knowledge: knowIDs, Plants: plantIDs, Recovers: orEmpty(in.Recovers), Waived: orEmpty(in.Waived)}
-	suspected := scan(ol, canonAfter, rec.Waived)
+	suspected := scan(ol, content, canonAfter, rec.Waived)
 	if ps := writeRecord(root, rel, rec); ps != nil {
 		return nil, nil, ps
 	}
@@ -773,12 +773,17 @@ func Submit(root string, w *work.Work, u *work.Unit, in Input, replace bool) (*V
 	return view(u, rel, rec, suspected), changed, warns
 }
 
-// scan 返回大纲声明中未解析到设定集 name 或别名、且未豁免的疑似专有名词（按取值去重，保留首个来源）。
-func scan(ol *outline.Outline, canonAfter map[string]canon.Entry, waived []string) []Suspected {
+// scan 返回大纲声明与正文中未解析到设定集 name 或别名、且未豁免的疑似专有名词（按取值去重，保留首个来源）：
+// 先是大纲声明的人物、视角人物与地点（完全相等匹配），再是正文扫描的候选（closeout-body-scan，按首次出现顺序）。
+func scan(ol *outline.Outline, body []byte, canonAfter map[string]canon.Entry, waived []string) []Suspected {
 	names := map[string]bool{}
+	var charNames []string
 	for _, e := range canonAfter {
 		for _, n := range e.Names() {
 			names[n] = true
+		}
+		if e.Type == canon.TypeCharacter && e.Name != nil {
+			charNames = append(charNames, *e.Name)
 		}
 	}
 	waivedSet := map[string]bool{}
@@ -803,6 +808,12 @@ func scan(ol *outline.Outline, canonAfter map[string]canon.Entry, waived []strin
 			add(s.Location, "location")
 		}
 	}
+	initials := characterInitials(charNames)
+	for _, c := range bodyCandidates(string(body)) {
+		if !resolvedBody(c, names, initials) {
+			add(c.name, SourceDraft)
+		}
+	}
 	return out
 }
 
@@ -812,6 +823,8 @@ func sourceText(source string) string {
 		return "视角人物"
 	case "location":
 		return "地点"
+	case SourceDraft:
+		return "正文"
 	}
 	return "出场人物"
 }
@@ -912,6 +925,8 @@ func Waive(root string, w *work.Work, u *work.Unit, names []string) (*View, []st
 		return nil, nil, []workspace.Problem{errorAt(CodeNotClosed, "", "",
 			"场景 "+u.Ref+" 还没有收口记录；先运行 wa-cli scene close-out 提交收口，再豁免疑似专有名词")}
 	}
+	// 正文扫描按当前正文重算；正文缺失或无法读取时只按大纲扫描。
+	body, _, _ := draft.Read(root, w, u)
 	// waived 名单在节点树上追加，保留其他内容与注释（workspace-artifacts/structured-edits）。
 	m := doc.Content[0]
 	var seq *yaml.Node
@@ -940,7 +955,7 @@ func Waive(root string, w *work.Work, u *work.Unit, names []string) (*View, []st
 		if snap != nil {
 			canonAfter = snap.canon
 		}
-		return view(u, rel, f, scan(ol, canonAfter, f.Waived)), []string{}, nil
+		return view(u, rel, f, scan(ol, body, canonAfter, f.Waived)), []string{}, nil
 	}
 	if seq == nil {
 		m.Content = append(m.Content, workspace.Str("waived"), seqOf(nil))
@@ -982,7 +997,7 @@ func Waive(root string, w *work.Work, u *work.Unit, names []string) (*View, []st
 	if snap != nil {
 		canonAfter = snap.canon
 	}
-	return view(u, rel, &checked, scan(ol, canonAfter, checked.Waived)), []string{rel}, nil
+	return view(u, rel, &checked, scan(ol, body, canonAfter, checked.Waived)), []string{rel}, nil
 }
 
 // AcceptanceBlockers 计算场景 u 的收口阻塞项（accept 的所有关卡强度共用）：大纲声明了要求收口的契约字段

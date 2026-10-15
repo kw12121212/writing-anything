@@ -1,0 +1,22 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: next-text-handoff
+approach:
+  - 在 internal/cli/units.go 的 handoffRef 增加 Instructions（json instructions，复用 handoff.View 中已保证非 nil 的数组），latestHandoff 一并填充。runNext 的文本渲染在 res.Steps 非空且首个步骤的 Handoff 不为 nil 时，先输出一段交接摘要：首行「最近交接记录（Handoff Note）<id>（<writtenAt>）」，随后逐条输出「  未完成：<todo>」与「  作者新指示：<instruction>」，再输出原有的逐单元步骤。所有步骤共享同一条最近交接，所以只在顶部输出一次。
+decisions:
+  json-adds-instructions:
+    decision: JSON 输出的 handoff 字段新增 instructions 数组，而不是只在文本中显示作者新指示
+    rationale: planned change 要求文本显示作者新指示且与 JSON 的 handoff 字段一致；只扩展文本会让两种输出承载不同信息，新增字段是向后兼容的增量
+  text-once-at-top:
+    decision: 交接摘要只在文本顶部输出一次，且只在至少有一个步骤时输出
+    rationale: JSON 中 handoff 挂在每个步骤上且取值相同，文本逐条重复会淹没步骤信息；没有步骤时 JSON 也不携带 handoff，保持两种输出一致
+  handoff-writtenat-in-text:
+    decision: 文本首行附写入时间（writtenAt），JSON handoff 不新增 writtenAt
+    rationale: 时间帮助人判断交接是否过期；planned change 只要求 id、未完成事项与作者新指示进入 JSON 一致性范围，不扩大 JSON 字段
+alternatives:
+  - option: 在每个步骤下逐条输出交接记录
+    reason: 多单元工作区会重复同一段交接文本，淹没阻塞项与下一步命令
+risks:
+  - next 文本输出顶部新增内容，可能影响依赖文本首行的脚本；文本输出不是稳定接口，JSON 输出才是
