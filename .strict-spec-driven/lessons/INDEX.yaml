@@ -384,3 +384,8 @@ categories:
       status: active
       occurrences: 1
       path: .strict-spec-driven/lessons/testing/yaml-0dfb79.yaml
+    lf-windows-autocrlf-4e756d:
+      title: 黄金语料按字节比较的仓库，回归必须在 LF 检出里跑，Windows autocrlf 检出会假失败
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/testing/lf-windows-autocrlf-4e756d.yaml

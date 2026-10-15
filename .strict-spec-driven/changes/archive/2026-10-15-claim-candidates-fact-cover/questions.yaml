@@ -1,0 +1,49 @@
+schema: strict-spec-driven/question-list/v1
+schema_version: 1
+artifact_type: question_list
+schema_file: templates/strict-spec-driven/schemas/question-list.yaml
+change: claim-candidates-fact-cover
+open: []
+resolved:
+  - id: fact-cover-design
+    question: 上游建议第 2 点选哪个方向：把 fact 加进默认 cover_kinds，还是只在文档说明数据候选用 data 类型登记？
+    context: fact 不受 claim-sources 的素材约束：若 fact 无条件参与覆盖，Agent 可登记无素材的 fact 论断消掉亲历与数据提醒，绕过作者素材门禁；但「fact 加素材」正是外部数据陈述的标准登记。影响范围：lint 默认行为、lint 主规格 claim-rule-types、wa-draft 技能指引。
+    answer: 用户选定第三方案：fact（关联至少一份素材）只覆盖数据候选，不覆盖亲历候选；同时实现第 1 点诊断与技能说明。
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-problem
+    question: What is concretely going wrong today, and for whom?
+    context: 'Why this is asked: the change is planned against a need, and the need lives only with the requester. A "problem" here means what someone does or suffers today — not a feature that is missing. If the answer names a button, a field, a page, or an endpoint, it is a solution, and the underlying problem is still unstated. What a sufficient answer contains: who is affected, what they do today instead, and how often. Worked example: "every Monday one person spends forty minutes copying order rows into a spreadsheet to send the weekly report". What it changes: this becomes the proposal''s why, and it decides whether the change is worth making.'
+    answer: Agent 按最标准的方式登记了外部数据陈述（kind 为 fact 并关联素材）后，wa-cli lint 仍把该数据句子报成「疑似论断尚未登记」，且发现项不解释已登记论断为何未生效；Agent 要跨 cover_kinds 默认取值、论断 kind、素材关联三层排查，才发 fact 不在 cover_kinds 默认取值里（用户原话：「一行诊断省掉整个排查」）。
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-outcome
+    question: What observable difference proves the problem is solved?
+    context: 'Why this is asked: without a success condition, nobody can tell afterwards whether the change worked. "Observable" means someone outside the system can check it without reading the code. What a sufficient answer contains: what a person will see, or no longer have to do, once this is done. Worked example: "the report is in the manager''s inbox on Monday morning without anyone assembling it". What it changes: this becomes the delta spec''s scenarios and the acceptance evidence at review time.'
+    answer: 关联了素材的 fact 论断文字覆盖数据区间时，该数据候选不再被报告；仍报告的发现项 message 会指名是哪条论断、因何未参与覆盖（类型不在 cover_kinds 内，或 fact 未关联素材），无需再查默认值。
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-trigger
+    question: Why now — what forced this?
+    context: 'Why this is asked: work that nothing forced is the work most often thrown away later. This question catches a request that sounds reasonable but has no real driver behind it. What a sufficient answer contains: the concrete event, deadline, incident, or cost that made this surface now, or an honest statement that nothing did. Worked example: "the report was missed last month and it was raised with the team". What it changes: a change with no trigger is a candidate for deferral, and the answer is weighed at review before archive.'
+    answer: 用户在 dogfood 审查后提出三条按价值排序的上游建议，本次变更是其中第 1 条（诊断增强，高价值低成本）与第 2 条（fact 覆盖语义再权衡）的落实；第 3 条（SCQA 顺序诊断）明确不需要修。
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-non-goals
+    question: What must explicitly not change?
+    context: 'Why this is asked: the requester knows which nearby behavior other people depend on, and the agent does not. A "non-goal" is something the change must leave alone even though it sits close to the work. What a sufficient answer contains: the behavior, setting, or output that must survive untouched, and who relies on it. Worked example: "do not change the saved filters — several people rely on their own". What it changes: these become the proposal''s unchanged_behavior items, which review checks the finished result against.'
+    answer: SCQA 大纲节顺序约束的诊断不改；claim-sources 规则、cover_kinds 的参数名与默认取值、亲历候选的检测与覆盖判定都不改。
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-interpretation
+    question: Which reading of the request is intended, where more than one is possible?
+    context: 'Why this is asked: a short request usually admits several readings, and building the wrong one is indistinguishable from building nothing. What a sufficient answer contains: the reading that is meant, stated plainly enough to rule the others out — or a statement that only one reading exists and what it is. Worked example: "export means the version sent to the manager, not the one I read myself". What it changes: this fixes the scope boundary before any code is written, and settles disputes about what was asked for.'
+    answer: 第 2 点在「把 fact 加进默认 cover_kinds」与「文档说明数据候选用 data 类型登记」两个选项之间，用户在追问中选定第三方案：fact（关联至少一份素材）只覆盖数据候选、不覆盖亲历候选，同时实现第 1 点诊断与 wa-draft 技能说明。
+    status: resolved
+    kind: requirement
+    answered_by: human

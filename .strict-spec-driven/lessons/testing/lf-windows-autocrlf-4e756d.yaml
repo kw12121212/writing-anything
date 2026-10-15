@@ -1,0 +1,19 @@
+schema: strict-spec-driven/lesson/v1
+schema_version: 1
+artifact_type: lesson
+schema_file: templates/strict-spec-driven/schemas/lesson.yaml
+lesson:
+  id: lf-windows-autocrlf-4e756d
+  title: 黄金语料按字节比较的仓库，回归必须在 LF 检出里跑，Windows autocrlf 检出会假失败
+category: testing
+status: active
+created_at: '2026-10-15T14:40:12.246Z'
+updated_at: '2026-10-15T14:40:12.246Z'
+context: claim-candidates-fact-cover 变更在本机 C:\zw\Code\writing-anything（Windows git autocrlf 检出）运行 go test ./internal/cli/，tech-blog e2e 与 novel/series 黄金语料测试全红，而改动只可能减少发现项。
+observation: 失败断言是 got != want 而两边人眼看完全一致：黄金夹具（internal/cli/testdata/**）被 autocrlf 检出为 CRLF，wa-cli 生成的产物是 LF。同一 HEAD 在 WSL 的 LF 克隆（~/Code/writing-anything）全绿。用 WSL git stash 做「干净树对照」还会把整个工作区按 LF 重写，两个 git 的 status 互相不可比。
+takeaway: 跑完整回归或解读黄金语料失败前，先确认检出形态：以 WSL 的 LF 克隆（可用 file testdata/** 无 CRLF 验证）为回归环境；不要在 CRLF 检出上解读黄金语料失败，也不要跨 WSL/Windows git 做 stash/checkout 验证。
+applies_when: 在本机对 writing-anything 运行或解读 go test 的黄金语料（corpus/e2e）结果，或想验证「失败是否与我的改动无关」时
+occurrences:
+  - origin: claim-candidates-fact-cover
+    date: '2026-10-15'
+    evidence: 'internal/cli/testdata/e2e/export.md 在 C: 检出为 CRLF（45 对 CR），WSL 克隆同文件为 LF；TestTechBlogEndToEnd 在 C: 失败、同样内容在 WSL 通过（覆盖率 88.44%）。'

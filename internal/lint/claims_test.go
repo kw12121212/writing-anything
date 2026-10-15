@@ -119,6 +119,8 @@ func TestCandidateCoverage(t *testing.T) {
 		// 论断只覆盖了句子中无关的部分，或是 fact 类型：不算已登记。
 		{[]Claim{{Kind: "experience", Text: "迁移"}}, "亲历、数据"},
 		{[]Claim{{Kind: "fact", Text: "我曾经负责迁移，延迟降低了 90%"}}, "亲历、数据"},
+		// 关联了素材的 fact 论断覆盖数据候选；亲历候选仍只认 cover_kinds。
+		{[]Claim{{Kind: "fact", Text: "我曾经负责迁移，延迟降低了 90%", Sources: []ClaimSource{{"src-r", "reference"}}}}, "亲历"},
 	}
 	// 亲历区间从标记词之前最近的代词开始：前面泛指的「我们」不要求论断一并覆盖。
 	if res, _ := Run("我们知道，我曾经踩过这个坑。", r, "draft.md", Input{Claims: []Claim{{Kind: "experience", Text: "我曾经踩过这个坑"}}}); len(res.Findings) != 0 {
@@ -151,6 +153,48 @@ func TestCandidateCoverage(t *testing.T) {
 	r = rules(map[string]string{"cc": "claim-candidates"}, map[string]map[string]any{"cc": {"cover_kinds": []any{"fact"}}})
 	if res, _ := Run(content, r, "draft.md", Input{Claims: []Claim{{Kind: "fact", Text: "我曾经负责迁移，延迟降低了 90%"}}}); len(res.Findings) != 0 {
 		t.Errorf("cover_kinds: %+v", res.Findings)
+	}
+}
+
+// 关联了素材的 fact 论断覆盖数据候选；未参与覆盖的论断在发现项 message 末尾按 claims.yaml 顺序说明原因。
+func TestCandidateFactCoverAndNotes(t *testing.T) {
+	r := rules(map[string]string{"cc": "claim-candidates"}, nil)
+	sourced := []Claim{{ID: "claim-1", Kind: "fact", Text: "我曾经负责迁移，延迟降低了 90%", Sources: []ClaimSource{{"src-r", "reference"}}}}
+	// 关联了素材的 fact 论断：数据候选被覆盖，亲历候选仍报告，说明其类型不在 cover_kinds 内。
+	res, _ := Run("我曾经负责迁移，延迟降低了 90%。", r, "draft.md", Input{Claims: sourced})
+	if len(res.Findings) != 1 || !strings.Contains(res.Findings[0].Message, "亲历") || strings.Contains(res.Findings[0].Message, "数据") {
+		t.Fatalf("sourced fact: %+v", res.Findings)
+	}
+	if msg := res.Findings[0].Message; !strings.Contains(msg, "论断 claim-1（fact）的类型不在 claim-candidates 的 cover_kinds（默认 experience、opinion、case、data）内，未参与覆盖") ||
+		strings.Contains(msg, "未关联素材") {
+		t.Fatalf("sourced fact note: %s", msg)
+	}
+	// 数据句子被关联了素材的 fact 论断整段覆盖：不再报告。
+	sourcedData := []Claim{{ID: "claim-1b", Kind: "fact", Text: "延迟降低了 90%", Sources: []ClaimSource{{"src-r", "reference"}}}}
+	if res, _ = Run("延迟降低了 90%。", r, "draft.md", Input{Claims: sourcedData}); len(res.Findings) != 0 {
+		t.Fatalf("sourced fact data: %+v", res.Findings)
+	}
+	// 未关联素材的 fact 论断不覆盖数据候选，说明原因是未关联素材而不是类型。
+	res, _ = Run("延迟降低了 90%。", r, "draft.md", Input{Claims: []Claim{{ID: "claim-2", Kind: "fact", Text: "延迟降低了 90%"}}})
+	if len(res.Findings) != 1 || !strings.Contains(res.Findings[0].Message, "论断 claim-2（fact）未关联素材，不能覆盖数据候选") ||
+		strings.Contains(res.Findings[0].Message, "未参与覆盖") {
+		t.Fatalf("unsourced fact data: %+v", res.Findings)
+	}
+	// 同一论断未覆盖亲历与数据两种区间时，两句说明都追加。
+	res, _ = Run("我曾经负责迁移，延迟降低了 90%。", r, "draft.md", Input{Claims: []Claim{{ID: "claim-3", Kind: "fact", Text: "我曾经负责迁移，延迟降低了 90%"}}})
+	if len(res.Findings) != 1 {
+		t.Fatalf("unsourced fact both: %+v", res.Findings)
+	}
+	msg := res.Findings[0].Message
+	if !strings.Contains(msg, "论断 claim-3（fact）的类型不在 claim-candidates 的 cover_kinds（默认 experience、opinion、case、data）内，未参与覆盖") ||
+		!strings.Contains(msg, "论断 claim-3（fact）未关联素材，不能覆盖数据候选") {
+		t.Fatalf("unsourced fact notes: %s", msg)
+	}
+	// cover_kinds 配置为 [fact] 时，experience 论断不参与覆盖，说明列出实际取值。
+	r2 := rules(map[string]string{"cc": "claim-candidates"}, map[string]map[string]any{"cc": {"cover_kinds": []any{"fact"}}})
+	res, _ = Run("我曾经踩过坑。", r2, "draft.md", Input{Claims: []Claim{{ID: "claim-4", Kind: "experience", Text: "我曾经踩过坑"}}})
+	if len(res.Findings) != 1 || !strings.Contains(res.Findings[0].Message, "论断 claim-4（experience）的类型不在 claim-candidates 的 cover_kinds（fact）内，未参与覆盖") {
+		t.Fatalf("custom cover_kinds: %+v", res.Findings)
 	}
 }
 

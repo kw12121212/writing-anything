@@ -1,0 +1,58 @@
+schema: strict-spec-driven/scene/v1
+schema_version: 1
+artifact_type: scene
+schema_file: templates/strict-spec-driven/schemas/scene.yaml
+scene:
+  id: claim-candidates-coverage
+  title: 疑似论断（Claim Candidate）的登记与覆盖检查
+area: lint
+status: draft
+actors:
+  - name: Agent
+    role: 起草正文、登记论断（Claim）并运行 wa-cli lint
+  - name: 作者
+    role: 提供作者素材（Author Source）与 reference 素材，确属泛指时单处豁免
+preconditions:
+  - 单元有 draft.md，文体的 claim-candidates 规则生效
+  - 正文含数据句子（如「延迟降低了 90%。」）
+main_flow:
+  write-data:
+    action: Agent 在正文写入外部数据句子（如「延迟降低了 90%。」）
+    covered_by:
+      - spec_id: lint
+        requirement_id: claim-rule-types
+  register-claim:
+    action: Agent 运行 wa-cli claim add 登记论断：kind 为 fact、text 覆盖该数据、--sources 关联 reference 素材
+    covered_by:
+      - spec_id: sources-and-provenance
+        requirement_id: claim-add
+  lint-clean:
+    action: Agent 运行 wa-cli lint <unit> --json：数据候选被该 fact 论断覆盖，findings 没有 claim-candidates 发现项
+    covered_by:
+      - spec_id: lint
+        requirement_id: claim-rule-types
+exception_flows:
+  no-source:
+    trigger: 论断未关联素材（--sources 缺省）
+    steps:
+      report:
+        action: 数据候选仍报告，message 末尾说明该论断未关联素材、不能覆盖数据候选
+        covered_by:
+          - spec_id: lint
+            requirement_id: claim-rule-types
+  experience-sentence:
+    trigger: 正文是亲历句子，登记的是 fact 论断（即使已关联素材）
+    steps:
+      report:
+        action: 亲历候选仍报告，message 末尾追加该论断类型不在 claim-candidates 的 cover_kinds 内、未参与覆盖的说明
+        covered_by:
+          - spec_id: lint
+            requirement_id: claim-rule-types
+  custom-cover-kinds:
+    trigger: cover_kinds 被配置为不含某论断类型的取值
+    steps:
+      report:
+        action: 该类型论断不参与覆盖，发现项 message 末尾追加其类型不在 cover_kinds（实际取值）内的说明
+        covered_by:
+          - spec_id: lint
+            requirement_id: claim-rule-types
