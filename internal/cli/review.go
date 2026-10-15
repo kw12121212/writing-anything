@@ -33,7 +33,7 @@ var reviewRecordCommand = &command{
 	summary: "记录单元（Unit）的审稿（Review）：Agent 的 AI 预审（Pre-review）按评分标准（Rubric）逐项给出结论、证据与段落，" +
 		"并列出发现项（Finding）；整体替换已有的 review.yaml",
 	args:       []argSpec{{"unit", unitRefHelp, true}},
-	flags:      []flagSpec{dirFlag, {"file", flagString, "审稿输入（YAML）：rubric 为结论数组（item、verdict: pass|fail、evidence、paragraphs），findings 为发现项数组（paragraph、message，可选 id、rubric、quote、suggestion）；相对 --dir 或为绝对路径，省略时从标准输入读取"}},
+	flags:      []flagSpec{dirFlag, {"file", flagString, "审稿输入（YAML）：rubric 为结论数组（item、verdict: pass|fail、evidence、可选的 paragraphs；评分项清单见 wa-cli review show 的 rubric），findings 为发现项数组（paragraph、message，可选 id、rubric、quote、suggestion）；相对 --dir 或为绝对路径，省略时从标准输入读取"}},
 	outputKeys: []outputKey{{"review", "记录的审稿：" + reviewViewHelp + "；失败时为 null"}},
 	exitCodes:  standardExitCodes,
 	run:        runReviewRecord,
@@ -52,6 +52,7 @@ var reviewShowCommand = &command{
 		{"decisions", "关联该单元、尚未决定的决策数组，每项含 id、question 与 blocking"},
 		{"gate", "验收关卡：level、ready（除作者确认外没有阻塞项）、confirmationRequired（strict 下为 true）与 blockers（每项含 code、path、ref 与 message）"},
 		{"acceptance", "已有的验收记录：gateLevel、draftSha256、confirmedByAuthor、confirmation、channel（确认渠道（Confirmation Channel），未经作者确认为 null）、acceptedAt 与 stale；没有时为 null"},
+		{"rubric", "审稿必须逐项给出结论的评分项数组（评分标准（Rubric）中的条目）：合并后的评分标准加上单元选用的写作法附带的评分项，与 review record 校验的集合相同；每项含 id、title、description 与 blocking；没有正文或合并失败时为空数组"},
 		{"pendingAuthorReviews", "单元所在作品的" + pendingAuthorReviewsHelp},
 	},
 	exitCodes: standardExitCodes,
@@ -173,7 +174,9 @@ func runReviewRecord(inv *invocation) int {
 		// 审稿输入中的问题：输入尚未写入，整体校验检不出，给出用法与段落编号。
 		for i, d := range res.Diagnostics {
 			if d.Path == "" {
-				res.Diagnostics[i].Next = []string{"wa-cli help review record --json", shellCommand("wa-cli", "provenance", inv.args[0], "--dir", dir, "--json"),
+				// review show 的 rubric 是必须逐项给结论的评分项清单（含写作法附带的评分项）。
+				res.Diagnostics[i].Next = []string{"wa-cli help review record --json", shellCommand("wa-cli", "review", "show", inv.args[0], "--dir", dir, "--json"),
+					shellCommand("wa-cli", "provenance", inv.args[0], "--dir", dir, "--json"),
 					shellCommand("wa-cli", "config", "resolved", "--dir", dir, "--json"), shellCommand("wa-cli", "brief", "show", inv.args[0], "--dir", dir, "--json")}
 			}
 		}
@@ -276,8 +279,18 @@ type reviewShowResult struct {
 	Decisions  []decisionItemView `json:"decisions"`
 	Gate       gateView           `json:"gate"`
 	Acceptance *acceptanceView    `json:"acceptance"`
+	// Rubric 是审稿必须逐项给出结论的评分项，与 review record 校验 review.missing-verdict 的集合相同（review-show）。
+	Rubric []rubricItemView `json:"rubric"`
 	// PendingAuthorReviews 是单元所在作品待作者复核（Pending Author Review）的确认（strict 关卡下）。
 	PendingAuthorReviews []pendingReviewView `json:"pendingAuthorReviews"`
+}
+
+// rubricItemView 是一个评分项（Rubric Item）。
+type rubricItemView struct {
+	ID          string `json:"id"`
+	Title       string `json:"title"`
+	Description string `json:"description"`
+	Blocking    bool   `json:"blocking"`
 }
 
 // gateState 是一次命令中为验收关卡收集的全部输入与展示用的数据。
@@ -381,7 +394,7 @@ func gateNext(dir, ref string, b review.Blocker) []string {
 	case decision.CodeBlocking, decision.CodeInvalidQueue:
 		return []string{shellCommand("wa-cli", "decisions", "--dir", dir, "--json"), show}
 	case review.CodeReviewMissing, review.CodeReviewStale, review.CodeMissingVerdict:
-		// 评分标准来自合并后的配置与单元选用的写作法（见 brief show 的 method 与 method show）。
+		// 必须逐项给结论的评分项见 review show 的 rubric（合并后的配置加上单元选用的写作法附带的评分项）。
 		return []string{"wa-cli help review record --json", shellCommand("wa-cli", "provenance", ref, "--dir", dir, "--json"),
 			shellCommand("wa-cli", "brief", "show", ref, "--dir", dir, "--json"), show}
 	case review.CodeOpenFinding, review.CodeBlockingRubric:
@@ -431,7 +444,7 @@ func gateNext(dir, ref string, b review.Blocker) []string {
 func runReviewShow(inv *invocation) int {
 	dir := projectDir(inv)
 	res := &reviewShowResult{Revisions: []revisionView{}, Decisions: []decisionItemView{}, Gate: gateView{Blockers: []gateBlockerView{}},
-		PendingAuthorReviews: []pendingReviewView{}}
+		Rubric: []rubricItemView{}, PendingAuthorReviews: []pendingReviewView{}}
 	problems := workspace.Require(dir)
 	if problems == nil {
 		var w *work.Work
@@ -440,6 +453,9 @@ func runReviewShow(inv *invocation) int {
 			g := collectGate(dir, w, u)
 			unitDir := w.UnitDir(u)
 			res.Lint = g.lint
+			for _, it := range g.rubric {
+				res.Rubric = append(res.Rubric, rubricItemView{ID: it.ID, Title: it.Title, Description: it.Description, Blocking: it.Blocking})
+			}
 			problems = append(problems, g.problems...)
 			// review.yaml 不通过校验时如实报告：审稿无法展示，也是验收的阻塞项。
 			problems = append(problems, g.in.ReviewBad...)

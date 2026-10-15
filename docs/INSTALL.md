@@ -84,7 +84,7 @@ wa-cli skills install --agent codex         # 写入 .agents/skills/<技能>/SKI
 wa-cli skills install --target ~/.claude/skills   # 安装到其他目录（如用户级技能目录）
 ```
 
-已有的技能文件与内置版本相同时不改动；有技能文件被改过时不写入任何文件，确认后加 `--force` 覆盖。技能目录的格式与通用的 Agent Skills 兼容，也可以用第三方 skills 工具安装；`wa-cli skills list --json` 列出全部技能及其引用的命令。
+安装后在项目目录中启动客户端（如 `cd <项目目录> && claude`），项目级技能才会被加载，在上级目录或项目之外启动时不会加载；命令输出（`--json` 时为 launchDir）给出这个目录。已有的技能文件与内置版本相同时不改动；升级 wa-cli 后，内容是某个旧版内置技能（没有被改过，换行符为 CRLF 也算）的文件直接更新为当前版本，不需要 `--force`；有技能文件与任何旧版内置内容都不同（被改过）时不写入任何文件，确认后加 `--force` 覆盖。技能目录的格式与通用的 Agent Skills 兼容，也可以用第三方 skills 工具安装；`wa-cli skills list --json` 列出全部技能及其引用的命令。
 
 ## 发布新版本（维护者）
 

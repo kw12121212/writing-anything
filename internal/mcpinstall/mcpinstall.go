@@ -147,7 +147,11 @@ func official(env Env, r Request, bin string, remove, add []string) (Result, []w
 		}
 		return Result{Status: StatusFailed, Message: msg}, []workspace.Problem{problem(CodeClientFailed, workspace.SeverityError, "", msg)}
 	}
-	return Result{Status: StatusRegistered, Message: "已用 " + bin + " 注册 " + r.Name + "（同名条目重新创建）"}, nil
+	msg := "已用 " + bin + " 注册 " + r.Name
+	if removeErr == nil {
+		msg += "（同名条目重新创建）"
+	}
+	return Result{Status: StatusRegistered, Message: msg}, nil
 }
 
 // claudeCode 用 claude mcp add 注册；project 作用域写入项目目录下的 .mcp.json，user 作用域写入用户配置。
@@ -158,8 +162,10 @@ func claudeCode(env Env, r Request) (Result, []workspace.Problem) {
 	if r.Scope == ScopeProject {
 		res.Path = filepath.Join(r.Dir, ".mcp.json")
 		if res.Status == StatusRegistered {
-			res.Message += "；项目级配置 .mcp.json 中的路径是本机的绝对路径，其他人使用前需要按自己的环境重新注册"
+			res.Message += "；在项目目录 " + r.Dir + " 中启动 Claude Code 才会加载；项目级配置 .mcp.json 中的路径是本机的绝对路径，其他人使用前需要按自己的环境重新注册"
 		}
+	} else if res.Status == StatusRegistered {
+		res.Message += userScopeHint(r)
 	}
 	return res, ps
 }
@@ -170,7 +176,16 @@ func codex(env Env, r Request) (Result, []workspace.Problem) {
 		msg := "codex 的官方 CLI 只能注册到用户级配置；请用 --scope user"
 		return Result{Status: StatusFailed, Message: msg}, []workspace.Problem{problem(CodeUnsupportedScope, workspace.SeverityError, "", msg)}
 	}
-	return official(env, r, "codex", []string{"mcp", "remove", r.Name}, append([]string{"mcp", "add", r.Name, "--", r.Command}, r.Args()...))
+	res, ps := official(env, r, "codex", []string{"mcp", "remove", r.Name}, append([]string{"mcp", "add", r.Name, "--", r.Command}, r.Args()...))
+	if res.Status == StatusRegistered {
+		res.Message += userScopeHint(r)
+	}
+	return res, ps
+}
+
+// userScopeHint 说明用户级注册固定指向一个项目目录：换到其他项目时需要在该项目中用同一名称重新注册（mcp-install）。
+func userScopeHint(r Request) string {
+	return "；用户级注册指向项目目录 " + r.Dir + "，换到其他项目时需在该项目重新运行 wa-cli mcp install --client " + r.Client + " --scope user --name " + r.Name
 }
 
 // jsonConfig 把 mcpServers.<name> 写入 r.Config：保留其他键与条目，取值未变时不写；先写临时文件再重命名。

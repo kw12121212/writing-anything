@@ -1,0 +1,24 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: fix-preview-serve-guidance
+  status: proposed
+summary:
+  what:
+    - 使用阅读页的内置技能（wa-publish、wa-revise、wa-assemble）说明：wa-cli preview <作品> --serve 是作者确认期间持续运行的本地服务，用客户端的后台任务运行并在作者确认完成前保持运行；交出 preview.url 前先确认该地址可以访问；作者说打不开时重新运行并交出新地址
+    - wa-auto 第 7 步补一句：能运行 shell 的 Agent 直接运行 wa-cli，与经 MCP 调用结果相同，MCP 服务面向只能调用 MCP tool 的 Agent（cc-wm-1 的不修理由中约定并入此处）
+  why:
+    - 真实接入验证 cx-tb-2（docs/dogfood/runs.yaml）：Codex 中第一次启动的阅读页在作者打开时已退出（作者回复「打不开」），nohup 后台启动也没有存活，第三次才保持运行；Claude Code 中会话结束同样停掉服务。技能只说「运行 preview --serve 并把 url 交给作者」，没有说明服务要持续运行，也没有确认服务仍在运行的方法
+scope:
+  in:
+    - internal/skills/skills 下 wa-publish、wa-revise、wa-assemble、wa-auto 的 SKILL.md 与 internal/skills/history.txt
+    - internal/skills 的结构测试 TestPreviewServeGuidance
+    - 主规格 skills 新增 preview-serve-guidance
+  out:
+    - 修改 wa-cli preview 的行为（如守护进程模式、健康检查命令）
+    - 客户端如何管理后台进程：各客户端机制不同，技能只给出要求与确认方法
+unchanged_behavior:
+  - wa-cli 的全部命令行为不变；技能引用的命令与参数仍全部存在
+  - 阅读页上的确认只能由作者本人操作的约定不变

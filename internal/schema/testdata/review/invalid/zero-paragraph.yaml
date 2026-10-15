@@ -1,0 +1,5 @@
+schema_version: 1
+draft_sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+rubric:
+  - {item: clarity, verdict: pass, evidence: 清楚, paragraphs: [0]}
+findings: []

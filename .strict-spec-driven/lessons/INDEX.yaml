@@ -153,7 +153,7 @@ categories:
     lesson-792658:
       title: 查看命令依赖只有写入命令保证的不变量，合法的手写产物会让它崩溃
       status: active
-      occurrences: 1
+      occurrences: 2
       path: .strict-spec-driven/lessons/coding/lesson-792658.yaml
     filepath-glob-8c2d1f:
       title: filepath.Glob 拼接项目目录，目录名含 [ ] 时整体校验静默跳过文件
@@ -285,6 +285,11 @@ categories:
       status: active
       occurrences: 1
       path: .strict-spec-driven/lessons/coding/lesson-235a26.yaml
+    lesson-7392eb:
+      title: 按内容哈希识别文件版本时，换行符转换会让未改过的文件哈希不同
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/coding/lesson-7392eb.yaml
   documentation:
     must-must-6af326:
       title: 修改一条 MUST 需求时，要检查同一规格里相邻的 MUST 是否因此冲突
@@ -301,6 +306,11 @@ categories:
       status: active
       occurrences: 2
       path: .strict-spec-driven/lessons/documentation/spec-next-7d39fd.yaml
+    roadmap-generate-91c10a:
+      title: roadmap-generate 同一次调用里先追加后删除，删掉再写回同一条目会把它删光
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/documentation/roadmap-generate-91c10a.yaml
   performance:
     lesson-d20dc5:
       title: 按词表计数复用已有匹配器
@@ -341,7 +351,7 @@ categories:
     internal-cli-null-1ddaed:
       title: 新增可空输出字段要同时登记 internal/cli 测试里的两份 null 白名单
       status: active
-      occurrences: 1
+      occurrences: 2
       path: .strict-spec-driven/lessons/testing/internal-cli-null-1ddaed.yaml
     lesson-b17b72:
       title: 零提示类完成标准要先实测现状，矩阵断言文字不会被测试强制
@@ -361,7 +371,7 @@ categories:
     lesson-2a8b24:
       title: 源码扫描只认字面量，会漏掉经辅助函数展开构造的同类位置
       status: active
-      occurrences: 1
+      occurrences: 2
       path: .strict-spec-driven/lessons/testing/lesson-2a8b24.yaml
     yaml-0dfb79:
       title: 只用手写 YAML 夹具测试的写入路径，真实命令序列第一次跑就会暴露缺陷

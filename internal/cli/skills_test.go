@@ -149,3 +149,71 @@ func TestNovelSkillCoverage(t *testing.T) {
 		}
 	}
 }
+
+// cc-tb-1：按 --agent 安装时说明要在项目目录启动客户端（launchDir 与文本提示）；--target 时为 null。
+func TestSkillsInstallLaunchDir(t *testing.T) {
+	dir := t.TempDir()
+	abs, _ := filepath.EvalSymlinks(dir)
+	code, stdout, _ := run(t, "skills", "install", "--agent", "codex", "--dir", dir, "--json")
+	var out struct {
+		LaunchDir *string `json:"launchDir"`
+	}
+	json.Unmarshal([]byte(stdout), &out)
+	if code != 0 || out.LaunchDir == nil || *out.LaunchDir != abs {
+		t.Errorf("json: %d %s", code, stdout)
+	}
+	if code, stdout, _ := run(t, "skills", "install", "--agent", "claude-code", "--dir", dir); code != 0 || !strings.Contains(stdout, "在项目目录 "+abs+" 中启动 claude-code") {
+		t.Errorf("text: %d %q", code, stdout)
+	}
+	code, stdout, _ = run(t, "skills", "install", "--target", "custom", "--dir", dir, "--json")
+	out.LaunchDir = nil
+	if json.Unmarshal([]byte(stdout), &out); code != 0 || out.LaunchDir != nil || !strings.Contains(stdout, `"launchDir":null`) {
+		t.Errorf("target: %d %s", code, stdout)
+	}
+	// --agent 与 --target 同时给出时技能不在客户端扫描的位置，不给 launchDir。
+	if code, stdout, _ := run(t, "skills", "install", "--agent", "codex", "--target", "custom", "--dir", dir, "--json"); code != 0 || !strings.Contains(stdout, `"launchDir":null`) {
+		t.Errorf("agent+target: %d %s", code, stdout)
+	}
+	if code, stdout, _ := run(t, "skills", "install", "--agent", "codex", "--target", "custom", "--dir", dir); code != 0 || strings.Contains(stdout, "在项目目录") {
+		t.Errorf("agent+target text: %d %q", code, stdout)
+	}
+	// 安装失败（技能被改过）时同样为 null，也不提示。
+	writeFile(t, filepath.Join(dir, ".agents", "skills", "wa-init", "SKILL.md"), "作者改过\n")
+	if code, stdout, _ := run(t, "skills", "install", "--agent", "codex", "--dir", dir, "--json"); code != 1 || !strings.Contains(stdout, `"launchDir":null`) {
+		t.Errorf("failed: %d %s", code, stdout)
+	}
+	if code, stdout, _ := run(t, "skills", "install", "--agent", "codex", "--dir", dir); code != 1 || strings.Contains(stdout, "在项目目录") {
+		t.Errorf("failed text: %d %q", code, stdout)
+	}
+}
+
+// cx-tb-3：命令组下不存在的子命令同时提示同名前缀的独立命令（如 decision show → decisions）。
+func TestUnknownSubcommandRelated(t *testing.T) {
+	code, out := runJSON(t, "decision", "show", "dec-1", "--json")
+	diags, _ := out["diagnostics"].([]any)
+	if code != 2 || len(diags) != 1 {
+		t.Fatalf("code %d, %v", code, out)
+	}
+	d := diags[0].(map[string]any)
+	next, _ := d["next"].([]any)
+	if !strings.Contains(d["message"].(string), "相关命令：decisions") || len(next) != 2 || next[0] != "wa-cli help decisions --json" || next[1] != "wa-cli help --json" {
+		t.Errorf("diagnostic = %v", d)
+	}
+	// 只给组名与 help 的写法同样提示；没有相关命令的组保持原样。
+	for _, tc := range []struct {
+		args    []string
+		related bool
+	}{
+		{[]string{"decision", "--json"}, true},
+		{[]string{"help", "decision", "show", "--json"}, true},
+		{[]string{"config", "nope", "--json"}, false},
+	} {
+		code, out := runJSON(t, tc.args...)
+		d := out["diagnostics"].([]any)[0].(map[string]any)
+		next, _ := d["next"].([]any)
+		got := strings.Contains(d["message"].(string), "相关命令：")
+		if code != 2 || d["code"] != "usage.unknown-command" || got != tc.related || (tc.related && next[0] != "wa-cli help decisions --json") || (!tc.related && (len(next) != 1 || next[0] != "wa-cli help --json")) {
+			t.Errorf("%v: %d %v", tc.args, code, d)
+		}
+	}
+}

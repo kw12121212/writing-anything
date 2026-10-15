@@ -1,0 +1,28 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: fix-cli-install-hints
+  status: proposed
+summary:
+  what:
+    - wa-cli skills install 按 --agent 安装时，--json 输出新增 launchDir（项目目录的绝对路径，给出 --target 时为 null），文本输出提示「在项目目录 <dir> 中启动 <agent>，技能才会被加载」
+    - wa-cli mcp install 的注册结果说明：claude-code 项目级注册提示在项目目录中启动 Claude Code；codex 用户级注册说明它指向哪个项目目录、换到其他项目时需在该项目重新运行；只有确实移除了已有同名条目时才说「同名条目重新创建」
+    - 命令组下不存在的子命令（如 wa-cli decision show）的 usage.unknown-command 诊断，额外列出以该组名为前缀的独立命令（如 decisions），next 先给出它们的 wa-cli help <命令> --json
+  why:
+    - 真实接入验证 cc-tb-1：Claude Code 在项目目录的上级启动，项目级技能与 .mcp.json 都没有加载，skills install 与 mcp install 的输出没有任何在哪里启动客户端的提示；mcp install 首次注册也报告「同名条目重新创建」，让作者误以为覆盖了已有注册
+    - 真实接入验证 cx-tb-3：Agent 运行 wa-cli decision show 查看决策，诊断只列出 decision add，next 只有 wa-cli help --json，没有指向实际用于查看决策的 wa-cli decisions
+scope:
+  in:
+    - internal/cli/skills.go：skills install 的 launchDir 输出与文本提示
+    - internal/mcpinstall：注册结果 message 的启动提示与「重新创建」条件
+    - internal/cli/registry.go：未知子命令诊断的相关命令与 next
+    - 主规格 skills（skills-install）、mcp（mcp-install）、cli（command-groups）的增量
+    - 内置技能 wa-init 第 7 步：把 mcp install 的 message 与 skills install 的 launchDir 转告作者（同步 internal/skills/history.txt）；docs/INSTALL.md 说明在项目目录中启动客户端
+  out:
+    - 改变技能或 MCP 的安装位置与作用域；在客户端启动目录不对时由 wa-cli 主动检测
+    - dogfood 记录中的 cx-tb-2（阅读页服务生命周期，D 组）
+unchanged_behavior:
+  - skills install 与 mcp install 的安装行为、写入文件、状态取值、其他输出字段与诊断不变
+  - usage.unknown-command 的错误码与退出码 2 不变；没有相关独立命令时诊断与 next 与原来相同

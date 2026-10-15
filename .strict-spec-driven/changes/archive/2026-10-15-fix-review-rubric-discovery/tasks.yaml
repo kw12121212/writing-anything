@@ -1,0 +1,40 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: fix-review-rubric-discovery
+sections:
+  Implementation:
+    reproduce:
+      text: 【复现】新增回归测试：review show 输出含 rubric 且与 review record 的必需评分项一致（tech-blog + 写作法），按 rubric 逐项给结论后 review record 成功；review record 中某结论 paragraphs 为 [] 或省略时成功并写出空数组。修复前前者因缺少 rubric 键失败、后者报 artifact.schema-violation，记录失败输出
+      status: complete
+    review-show-rubric:
+      text: internal/cli/review.go：review show 输出 rubric（复用 rubricOf 的结果，id、title、description、blocking），在 outputKeys 声明
+      status: complete
+    optional-paragraphs:
+      text: review.schema.json 去掉 paragraphs 的 required 与 minItems；internal/review.Record 把省略的 paragraphs 规范化为空数组；review record 的 --file 参数说明与 reviewViewHelp 同步
+      status: complete
+    skill-wa-review:
+      text: 内置技能 wa-review 第 1 步改为从 wa-cli review show <单元> --json 的 rubric 读取评分项，并说明不针对段落的评分项（如标题 4U）paragraphs 可以为空、依据写在 evidence
+      status: complete
+  Testing:
+    targeted-regression:
+      text: 运行定向回归测试（修复前失败、修复后通过）
+      status: complete
+      command: go test ./internal/review ./internal/schema ./internal/skills -count=1 && go test ./internal/cli -count=1 -run 'Review|Rubric|Marketing'
+    full-regression:
+      text: 运行完整回归（含覆盖率阈值与完成标准对账）
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    strict-ready:
+      text: strict-spec-cli ready 无阻塞项
+      status: complete
+      command: strict-spec-cli ready fix-review-rubric-discovery
+    strict-verify:
+      text: strict-spec-cli verify 通过
+      status: complete
+      command: strict-spec-cli verify fix-review-rubric-discovery
+testing_gates:
+  validation_task: targeted-regression
+  unit_test_task: full-regression

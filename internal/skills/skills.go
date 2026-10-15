@@ -5,7 +5,9 @@ package skills
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"embed"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -30,6 +32,39 @@ const FileName = "SKILL.md"
 
 //go:embed skills
 var embedded embed.FS
+
+// historyText 是内置技能全部已提交版本（含开发构建）的 SHA-256 清单：每行「<技能名> <SHA-256>」，# 开头为注释，含当前版本，只追加不删除。
+//
+//go:embed history.txt
+var historyText string
+
+// history 把 historyText 解析为技能名到历史内容哈希集合的映射；格式不对的行由 TestSkillHistoryCoversCurrent 报告，这里跳过。
+func history() map[string]map[string]bool {
+	out := map[string]map[string]bool{}
+	for _, line := range strings.Split(historyText, "\n") {
+		f := strings.Fields(line)
+		if len(f) != 2 || strings.HasPrefix(f[0], "#") {
+			continue
+		}
+		if out[f[0]] == nil {
+			out[f[0]] = map[string]bool{}
+		}
+		out[f[0]][f[1]] = true
+	}
+	return out
+}
+
+// contentHash 返回内容的 SHA-256（小写十六进制）。
+func contentHash(b []byte) string {
+	sum := sha256.Sum256(b)
+	return hex.EncodeToString(sum[:])
+}
+
+// released 报告 content 是否为技能 name 某个已提交的内置版本：先把 CRLF 规范为 LF（如 Windows 上 git 的 autocrlf 检出），
+// 再在该技能自己的历史清单中查找哈希。
+func released(hist map[string]map[string]bool, name string, content []byte) bool {
+	return hist[name][contentHash(bytes.ReplaceAll(content, []byte("\r\n"), []byte("\n")))]
+}
 
 // Agents 是支持的 Agent 与它们在项目目录中的技能目录。
 var Agents = map[string]string{
@@ -180,8 +215,9 @@ type plan struct {
 
 // Install 把全部内置技能写入技能目录 target 下的 <name>/SKILL.md：target 为相对项目目录 root 的路径或绝对路径。先完成全部
 // 检查，任何一项不通过都不写任何文件（workspace-artifacts/precheck-before-side-effects）：从技能目录向上第一个已存在的路径、
-// 已存在的技能目录都必须是真实目录，已存在的技能文件必须是普通文件（不跟随符号链接）；技能文件与内置内容不同（可能被改过）时
-// 只有 force 为 true 才覆盖，否则报告 skills.modified。然后创建缺少的目录并原子写入。
+// 已存在的技能目录都必须是真实目录，已存在的技能文件必须是普通文件（不跟随符号链接）；技能文件是某个已提交的内置版本时直接
+// 更新，与任何已提交的内置版本都不同（可能被改过）时只有 force 为 true 才覆盖，否则报告 skills.modified。然后创建缺少的目录
+// 并原子写入。
 func Install(root, target string, force bool) (*Result, []workspace.Problem) {
 	rootAbs, err := filepath.Abs(root)
 	if err != nil {
@@ -234,6 +270,7 @@ func Install(root, target string, force bool) (*Result, []workspace.Problem) {
 		}
 	}
 	var plans []plan
+	hist := history()
 	for _, s := range All() {
 		pl := plan{skill: s, dir: filepath.Join(base, s.Name)}
 		pl.file = filepath.Join(pl.dir, FileName)
@@ -261,10 +298,11 @@ func Install(root, target string, force bool) (*Result, []workspace.Problem) {
 				problems = append(problems, l.problem(workspace.CodeReadFailed, pl.file, "读取失败："+err.Error()))
 				continue
 			case bytes.Equal(cur, s.Content):
-			case force:
+			case force, released(hist, s.Name, cur):
+				// 内容等于某个已提交的内置版本：升级前安装、没有被改过，直接更新（skills-install）。
 				pl.write = true
 			default:
-				problems = append(problems, l.problem(CodeModified, pl.file, "技能 "+s.Name+" 已存在且内容与内置版本不同（可能被改过）；确认后加 --force 覆盖"))
+				problems = append(problems, l.problem(CodeModified, pl.file, "技能 "+s.Name+" 已存在且内容与任何已提交的内置版本都不同（可能被改过）；确认后加 --force 覆盖"))
 				continue
 			}
 		}

@@ -132,7 +132,7 @@ requirements:
         - THEN: valid 为 false，诊断错误码为 usage.unknown-command，退出码为 2
   command-groups:
     strength: MUST
-    statement: 命令名可以由命令组与子命令两个词组成（如 config set）。wa-cli <group> <subcommand>、wa-cli <group> <subcommand> --help 与 wa-cli help <group> <subcommand> 必须按完整命令名识别该命令；help 列表与 help --json 中的 name 为完整命令名。只给出命令组名，或命令组下不存在该子命令时，必须按用法错误处理，错误码为 usage.unknown-command，message 列出该命令组可用的子命令。help --json 中 args 的每一项必须包含 required 字段；用法说明中必需的位置参数写作 <name>，可选的写作 [<name>]。
+    statement: 命令名可以由命令组与子命令两个词组成（如 config set）。wa-cli <group> <subcommand>、wa-cli <group> <subcommand> --help 与 wa-cli help <group> <subcommand> 必须按完整命令名识别该命令；help 列表与 help --json 中的 name 为完整命令名。只给出命令组名，或命令组下不存在该子命令时，必须按用法错误处理，错误码为 usage.unknown-command，message 列出该命令组可用的子命令；存在名称以该组名开头的独立命令（如 decision 组与 decisions 命令）时，message 另以「相关命令：」列出它们（按名称排序），next 依次为它们的 wa-cli help <命令> --json 与 wa-cli help --json。help --json 中 args 的每一项必须包含 required 字段；用法说明中必需的位置参数写作 <name>，可选的写作 [<name>]。
     scenarios:
       group-command-runs:
         - GIVEN: 已构建的 wa-cli 二进制与一个已初始化的工作区 D
@@ -154,6 +154,10 @@ requirements:
         - GIVEN: 已构建的 wa-cli 二进制
         - WHEN: 运行 wa-cli help config nope --json
         - THEN: valid 为 false，诊断错误码为 usage.unknown-command，退出码为 2
+      unknown-subcommand-related:
+        - GIVEN: decision 命令组只有 decision add，另有独立命令 decisions
+        - WHEN: 运行 wa-cli decision show dec-1 --json
+        - THEN: 诊断错误码为 usage.unknown-command，message 含「相关命令：decisions」，next 依次为 wa-cli help decisions --json 与 wa-cli help --json，退出码为 2
   release-artifacts:
     strength: MUST
     statement: 发布工具 go run ./internal/tools/release -version <version> 必须在输出目录（默认 dist）为 linux、darwin、windows 各自的 amd64 与 arm64 生成 wa-cli 二进制，命名为 wa-cli-<os>-<arch>，windows 的加 .exe 后缀，并生成 SHA256SUMS 校验文件：每个本次生成的二进制一行，格式为 '<小写 SHA-256 十六进制>  <文件名>'，可被 sha256sum -c 校验。构建前先删除输出目录中旧的 SHA256SUMS 与全部目标的旧发布产物，输出目录中的其他文件保留。每个二进制的 wa-cli version 报告 -version 给出的版本与 -commit 给出的提交（未给 -commit 时为仓库当前的 git 提交）；-version 与 -commit 只允许字母、数字与 ._+-。-targets 可用逗号分隔的 <os>/<arch> 限定目标。缺少 -version、取值含不允许的字符、目标不受支持或构建失败时以非零退出，并且不写出 SHA256SUMS。

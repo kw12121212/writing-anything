@@ -1,0 +1,19 @@
+schema: strict-spec-driven/lesson/v1
+schema_version: 1
+artifact_type: lesson
+schema_file: templates/strict-spec-driven/schemas/lesson.yaml
+lesson:
+  id: lesson-7392eb
+  title: 按内容哈希识别文件版本时，换行符转换会让未改过的文件哈希不同
+category: coding
+status: active
+created_at: '2026-10-15T06:04:34.502Z'
+updated_at: '2026-10-15T06:04:34.502Z'
+context: fix-skills-install-upgrade 用内置技能历史版本的 SHA-256 判断已安装的 SKILL.md 是否只是旧版本、可以直接更新。
+observation: 独立审查指出：用户把 .agents/skills 提交进自己的仓库且开启 git core.autocrlf 时，未改过的文件检出为 CRLF，哈希不在清单里，又会被当作作者改过；仓库没有 .gitattributes 时，Windows 检出本仓库还会让内嵌文件与哈希清单本身对不上。
+takeaway: 按字节哈希判定「是否被改过」前，先把只由工具链引入的差异（CRLF）规范掉，并用 .gitattributes 让被哈希的内嵌文件与夹具在任何平台检出都按字节一致；其余格式差异按改过处理并在风险中写明。
+applies_when: 用 SHA-256 等内容哈希比对用户磁盘上的文件与内嵌或登记的版本（判断是否过期、是否被修改、是否为已知版本）时
+occurrences:
+  - origin: fix-skills-install-upgrade
+    date: '2026-10-15'
+    evidence: internal/skills 的 released 先规范 CRLF 再查 history.txt；TestInstallOutdatedEdgeCases 的「CRLF 的旧版本」用例；新增 .gitattributes（internal/skills/** -text）

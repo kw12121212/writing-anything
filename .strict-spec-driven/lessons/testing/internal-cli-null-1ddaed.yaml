@@ -8,7 +8,7 @@ lesson:
 category: testing
 status: active
 created_at: '2026-10-07T07:23:26.897Z'
-updated_at: '2026-10-07T07:23:26.897Z'
+updated_at: '2026-10-15T06:15:06.715Z'
 context: internal/cli 的共享输出信封测试有两份独立的「允许为 null 的字段名」清单：cli_test.go 的 nullableFields（TestRegistryConsistency 用）与 units_test.go 的 noNulls 内联切片（runUnits/runDec 等助手用）
 observation: confirmation-channel 给决策、规划步骤等视图新增可空的 channel 与 preview 的 authorReview 输出键后，完整回归分别在 TestRegistryConsistency 与 decisions_test 的多处断言上失败，两份清单都要补登记才能通过
 takeaway: 给任何命令的 --json 输出新增合法可空字段时，同一变更中同时在 cli_test.go 的 nullableFields 与 units_test.go 的 noNulls 清单里登记该字段名，并先跑 go test ./internal/cli/ -run 'Registry|Decision' 确认
@@ -17,3 +17,6 @@ occurrences:
   - origin: confirmation-channel
     date: '2026-10-07'
     evidence: internal/cli/cli_test.go nullableFields 新增 channel 与 authorReview；internal/cli/units_test.go noNulls 新增 channel
+  - origin: fix-cli-install-hints
+    date: '2026-10-15'
+    evidence: skills install 新增可空输出 launchDir 时又漏登记 cli_test.go 的 nullableFields 与 units_test.go 的 noNulls；样例调用用 --agent，launchDir 不为 null，测试照常通过，由独立审查发现后补登记。

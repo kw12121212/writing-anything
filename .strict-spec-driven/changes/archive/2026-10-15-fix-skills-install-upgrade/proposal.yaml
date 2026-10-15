@@ -1,0 +1,25 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: fix-skills-install-upgrade
+  status: proposed
+summary:
+  what:
+    - wa-cli skills install 能识别「旧版本的内置技能」：已有技能文件的内容等于某个历史发布版本的内置内容时，视为未被作者修改的旧版本，直接更新为当前内置内容，不再报告 skills.modified；只有与任何历史内置版本都不同的文件才视为作者改过、需要 --force
+    - 内置技能的历史版本以 SHA-256 清单（internal/skills/history.txt）打包进二进制；由测试强制每个当前内置技能的哈希都已登记，改动技能时同步追加
+  why:
+    - 真实接入验证 cx-tb-1（docs/dogfood/runs.yaml）：wa-cli 升级后在 Codex 项目中重新运行 skills install，作者从未改过的 wa-auto、wa-publish、wa-revise 被报成 skills.modified（可能被改过），必须加 --force；而 --force 会一并覆盖作者真正改过的技能。升级是每个用户都会走到的路径
+scope:
+  in:
+    - internal/skills：历史哈希清单、Install 的判定与诊断文字
+    - internal/skills/history.txt：由 git 历史中每个内置技能的全部已提交版本生成的初始清单
+    - 主规格 skills 的 skills-install 增量
+    - .gitattributes：internal/skills/** 不做换行转换；docs/INSTALL.md 与 skills install 的 --force 说明同步新行为
+  out:
+    - 在技能目录中写入额外的清单或版本标记文件；修改 SKILL.md 的 frontmatter 格式
+    - dogfood 记录中的其他问题（cc-tb-1、cx-tb-3、cx-tb-2）
+unchanged_behavior:
+  - 与所有历史内置版本都不同（作者改过）的技能文件仍报告 skills.modified，给出 --force 才覆盖，且任何一项不通过都不写任何文件
+  - 内容与当前内置版本相同的技能文件不写；路径检查、符号链接拒绝、输出字段与其他诊断不变

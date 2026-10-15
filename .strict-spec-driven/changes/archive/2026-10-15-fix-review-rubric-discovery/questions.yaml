@@ -1,0 +1,49 @@
+schema: strict-spec-driven/question-list/v1
+schema_version: 1
+artifact_type: question_list
+schema_file: templates/strict-spec-driven/schemas/question-list.yaml
+change: fix-review-rubric-discovery
+open: []
+resolved:
+  - id: reproduction
+    question: 两个缺陷能否确定性复现？
+    context: 影响复现任务。证据：docs/dogfood/runs.yaml 三条已运行记录都记录了 review.missing-verdict；claude-code-wechat-marketing 记录了 rubric[5].paragraphs 的 artifact.schema-violation；review.schema.json 的 paragraphs 为 minItems 1。
+    answer: '能：测试中 review show 的输出没有 rubric 键；review record 输入 paragraphs: [] 报 artifact.schema-violation'
+    status: resolved
+    kind: technical
+    answered_by: human
+  - id: requirement-problem
+    question: What is concretely going wrong today, and for whom?
+    context: 'Why this is asked: the change is planned against a need, and the need lives only with the requester. A "problem" here means what someone does or suffers today — not a feature that is missing. If the answer names a button, a field, a page, or an endpoint, it is a solution, and the underlying problem is still unstated. What a sufficient answer contains: who is affected, what they do today instead, and how often. Worked example: "every Monday one person spends forty minutes copying order rows into a spreadsheet to send the weekly report". What it changes: this becomes the proposal''s why, and it decides whether the change is worth making.'
+    answer: 作者接受的分诊（2026-10-15）：三次真实运行中 Agent 都拿不到完整评分项清单，首次审稿都被拒；评标题的评分项被迫填无关段落号
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-outcome
+    question: What observable difference proves the problem is solved?
+    context: 'Why this is asked: without a success condition, nobody can tell afterwards whether the change worked. "Observable" means someone outside the system can check it without reading the code. What a sufficient answer contains: what a person will see, or no longer have to do, once this is done. Worked example: "the report is in the manager''s inbox on Monday morning without anyone assembling it". What it changes: this becomes the delta spec''s scenarios and the acceptance evidence at review time.'
+    answer: 作者接受的修复方向：review show 直接列出本次审稿必须给结论的全部评分项（含写作法附带的）；paragraphs 可以为空或省略
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-trigger
+    question: Why now — what forced this?
+    context: 'Why this is asked: work that nothing forced is the work most often thrown away later. This question catches a request that sounds reasonable but has no real driver behind it. What a sufficient answer contains: the concrete event, deadline, incident, or cost that made this surface now, or an honest statement that nothing did. Worked example: "the report was missed last month and it was raised with the team". What it changes: a change with no trigger is a candidate for deferral, and the answer is weighed at review before archive.'
+    answer: 作者在 agent-dogfood 分诊中把 cc-tb-2 与 cc-wm-2 定为 A 组要修，v0.2.0 发布前完成
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-non-goals
+    question: What must explicitly not change?
+    context: 'Why this is asked: the requester knows which nearby behavior other people depend on, and the agent does not. A "non-goal" is something the change must leave alone even though it sits close to the work. What a sufficient answer contains: the behavior, setting, or output that must survive untouched, and who relies on it. Worked example: "do not change the saved filters — several people rely on their own". What it changes: these become the proposal''s unchanged_behavior items, which review checks the finished result against.'
+    answer: 作者接受的建议中不新增查看文体的命令；评分项每项恰有一个结论、证据非空等审稿校验不变
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-interpretation
+    question: Which reading of the request is intended, where more than one is possible?
+    context: 'Why this is asked: a short request usually admits several readings, and building the wrong one is indistinguishable from building nothing. What a sufficient answer contains: the reading that is meant, stated plainly enough to rule the others out — or a statement that only one reading exists and what it is. Worked example: "export means the version sent to the manager, not the one I read myself". What it changes: this fixes the scope boundary before any code is written, and settles disputes about what was asked for.'
+    answer: 作者接受的建议：「review show 直接列出这次要评的全部评分项；标题类评分项可以不填段落」，即放宽为对所有评分项可选，而非按评分项 id 特判
+    status: resolved
+    kind: requirement
+    answered_by: human

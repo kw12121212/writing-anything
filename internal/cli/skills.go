@@ -26,10 +26,11 @@ var skillsInstallCommand = &command{
 	flags: []flagSpec{dirFlag,
 		{"agent", flagString, "Agent：" + strings.Join(skills.AgentNames(), "、") + "；分别安装到项目目录下的 .claude/skills 与 .agents/skills"},
 		{"target", flagString, "技能目录，相对 --dir 或为绝对路径（如 ~/.claude/skills 的绝对路径）；给出时不需要 --agent"},
-		{"force", flagBool, "覆盖内容与内置版本不同（可能被改过）的已有技能文件"}},
-	outputKeys: []outputKey{{"skills", "安装结果数组，每项含 name、path（在项目目录之内时相对项目目录，否则为绝对路径）与 changed；检查不通过时为空数组、不写任何文件，写入中途失败时只列出已写入的技能"}},
-	exitCodes:  standardExitCodes,
-	run:        runSkillsInstall,
+		{"force", flagBool, "覆盖与任何已提交的内置版本都不同（可能被改过）的已有技能文件；旧版内置内容不需要 --force 也会更新"}},
+	outputKeys: []outputKey{{"skills", "安装结果数组，每项含 name、path（在项目目录之内时相对项目目录，否则为绝对路径）与 changed；检查不通过时为空数组、不写任何文件，写入中途失败时只列出已写入的技能"},
+		{"launchDir", "按 --agent 安装成功时为项目目录的绝对路径：在这个目录中启动客户端，项目级技能才会被加载；给出 --target 或安装失败时为 null"}},
+	exitCodes: standardExitCodes,
+	run:       runSkillsInstall,
 }
 
 type skillView struct {
@@ -52,6 +53,8 @@ type installedView struct {
 type skillsInstallResult struct {
 	Result
 	Skills []installedView `json:"skills"`
+	// LaunchDir 是按 --agent 安装时要在其中启动客户端的项目目录（绝对路径）；给出 --target 或安装失败时为 nil。
+	LaunchDir *string `json:"launchDir"`
 }
 
 func runSkillsList(inv *invocation) int {
@@ -89,7 +92,10 @@ func runSkillsInstall(inv *invocation) int {
 	}
 	if problems == nil {
 		var r *skills.Result
-		if r, problems = skills.Install(dir, target, inv.flag("force")); r != nil {
+		if r, problems = skills.Install(dir, target, inv.flag("force")); r != nil && agentGiven && inv.values["target"] == "" && len(problems) == 0 {
+			res.LaunchDir = launchDir(dir)
+		}
+		if r != nil {
 			res.ChangedPaths = append(res.ChangedPaths, r.Created...)
 			for _, s := range r.Skills {
 				res.Skills = append(res.Skills, installedView(s))
@@ -112,8 +118,23 @@ func runSkillsInstall(inv *invocation) int {
 			}
 		}
 		_, err := fmt.Fprintf(w, "已安装 %d 个技能（Skill），%d 个有变化\n", len(res.Skills), changed)
+		if err == nil && res.LaunchDir != nil {
+			_, err = fmt.Fprintf(w, "在项目目录 %s 中启动 %s，技能才会被加载；在上级目录或项目之外启动时不会加载\n", *res.LaunchDir, agent)
+		}
 		return err
 	})
+}
+
+// launchDir 返回项目目录的绝对路径，按 OS 报告的真实路径拼写（与 skills.Install 归一项目目录的方式一致）。
+func launchDir(dir string) *string {
+	abs, err := filepath.Abs(dir)
+	if err != nil {
+		return nil
+	}
+	if resolved, err := filepath.EvalSymlinks(abs); err == nil {
+		abs = resolved
+	}
+	return &abs
 }
 
 // skillCommands 返回技能引用的命令，按命令注册表规范化：两个词组成已登记的命令时取两个词，否则取第一个词（之后是实参）。

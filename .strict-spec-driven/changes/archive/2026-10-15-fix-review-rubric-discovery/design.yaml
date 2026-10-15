@@ -1,0 +1,20 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: fix-review-rubric-discovery
+approach:
+  - review show 在已加载合并结果与单元写作法（collectGate 已计算 g.rubric = rubricOf(...)）的基础上，把这份评分标准原样输出为 rubric 数组（id、title、description、blocking），与 review record 校验 missing-verdict 使用的是同一个 rubricOf 结果，保证两者一致；评分标准无法计算（合并失败）时为空数组。
+  - 审稿 Schema 的 verdicts 去掉 paragraphs 的 required 与 minItems；review.Record 把省略的 paragraphs 规范化为空数组再写出，读取与视图同样保证不输出 null（shared-envelope）。wa-review 技能第 1 步改为：评分项见 wa-cli review show <单元> --json 的 rubric，评标题等不针对段落的评分项 paragraphs 可以为空，在 evidence 中说明依据。
+decisions:
+  same-rubric-source:
+    decision: review show 的 rubric 直接复用 rubricOf（合并结果 + 写作法评分项），不另行计算。
+    rationale: 评分项清单必须与 review record 校验 missing-verdict 的集合完全一致，否则 Agent 按清单写审稿仍会被拒；复用同一函数是唯一不漂移的做法（同 single-blocker-source 的思路）。
+  optional-paragraphs:
+    decision: paragraphs 改为可选、可空，而不是为标题类评分项引入特殊标记或按评分项 id 白名单放宽。
+    rationale: 评分项是否针对段落由评分项的含义决定，规范包与写作法也可能声明不针对段落的评分项；按 id 白名单会把内置文体写死在校验里。证据 evidence 仍必填，审稿依据不会缺失。
+alternatives:
+  - option: 新增 wa-cli genre show 或 rubric show 命令
+    reason: 多一个命令仍要 Agent 自己合并文体、规范包与写作法三处来源，且与 review record 的校验集合可能不一致；review show 已是审稿流程中必经的命令
+risks:
+  - 依赖 review show 输出键集合的调用方会看到新键 rubric；按 shared-envelope 规则新增键并在 outputKeys 声明

@@ -181,7 +181,18 @@ func Load(root, dir string) (*Review, []workspace.Problem) {
 	if ps := checkReview(rel, &r); len(ps) > 0 {
 		return nil, ps
 	}
+	normalizeParagraphs(r.Rubric)
 	return &r, nil
+}
+
+// normalizeParagraphs 把省略的 paragraphs 规范化为空数组：不针对段落的评分项（如评作者选定的标题）可以不给段落，
+// 写出与输出中仍是数组而不是 null（review-record）。
+func normalizeParagraphs(vs []Verdict) {
+	for i := range vs {
+		if vs[i].Paragraphs == nil {
+			vs[i].Paragraphs = []int{}
+		}
+	}
 }
 
 // LoadAcceptance 读取并校验单元目录 dir 下的 acceptance.yaml；不存在时返回 nil 与 nil。
@@ -284,7 +295,7 @@ func Record(root, dir string, data []byte, paragraphs []string, draftSHA string,
 	}
 	for _, it := range rubric {
 		if !seen[it.ID] {
-			out = append(out, errorAt(CodeMissingVerdict, "", "rubric", fmt.Sprintf("评分项 %s（%s）没有结论；每个评分项都要给出 pass 或 fail、证据与段落", it.ID, it.Title)))
+			out = append(out, errorAt(CodeMissingVerdict, "", "rubric", fmt.Sprintf("评分项 %s（%s）没有结论；每个评分项都要给出 pass 或 fail 与证据（依据的段落写在 paragraphs，不针对段落时可以省略）；评分项清单见 wa-cli review show 的 rubric", it.ID, it.Title)))
 		}
 	}
 	ids := map[string]bool{}
@@ -299,6 +310,7 @@ func Record(root, dir string, data []byte, paragraphs []string, draftSHA string,
 	}
 	used := map[string]bool{}
 	next := 1
+	normalizeParagraphs(in.Rubric)
 	r := &Review{DraftSHA256: draftSHA, Rubric: in.Rubric, Findings: []Finding{}}
 	for i, f := range in.Findings {
 		field := fmt.Sprintf("findings[%d]", i)

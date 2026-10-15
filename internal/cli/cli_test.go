@@ -253,6 +253,7 @@ func TestHelpJSON(t *testing.T) {
 // nullableFields 是命令样例 --json 输出中允许为 null 的字段名清单（对象字段）；数组字段一律不得为 null，
 // 没有元素时必须是空数组（cli-contract/shared-envelope）。新增合法可空的字段时在此登记。
 var nullableFields = map[string]bool{
+	"launchDir":        true,
 	"handoff":          true,
 	"time":             true,
 	"acceptance":       true,

@@ -8,7 +8,7 @@ spec:
 requirements:
   review-record:
     strength: MUST
-    statement: wa-cli review record <unit> 必须从 --file（相对 --dir 或为绝对路径）或标准输入读取审稿（Review）输入并整体替换单元目录下的 review.yaml。输入为 YAML：rubric 为评分结论数组，每项含 item（评分项 id）、verdict（pass 或 fail）、evidence（非空）与 paragraphs（至少一个段落编号）；findings 为发现项（Finding）数组，每项含 paragraph 与 message，可选 id、rubric、quote 与 suggestion。段落编号从 1 开始，与 wa-cli provenance 的段落一致。单元的评分标准（Rubric）为合并后的评分标准（见 wa-cli config resolved），加上单元选用的写作法附带的评分项（见 methods 主规格的 method-rubric）；其中每个评分项都必须恰有一个结论：缺少时报告 review.missing-verdict（field 为 rubric，message 含评分项 id 与标题），item 或 rubric 不是单元的评分项时报告 review.unknown-rubric-item，同一评分项有多个结论时报告 review.duplicate-verdict；段落编号大于正文段落数时报告 review.unknown-paragraph；quote 不出现在所引段落的原文中时报告 review.quote-not-found；发现项 id 重复时报告 artifact.duplicate-id；输入不符合审稿输入的 Schema 时报告 artifact.schema-violation 或 artifact.parse-error。这些诊断的 path 为空、field 为输入中的位置（如 findings[0].quote），next 包含 wa-cli help review record --json、wa-cli provenance <unit> --dir <dir> --json 、wa-cli config resolved --dir <dir> --json 与 wa-cli brief show <unit> --dir <dir> --json；单元没有正文时报告 draft.not-found；都不修改文件，退出码为 1。成功时写出的 review.yaml 含 schema_version 1、draft_sha256（当前 draft.md 原始字节的 SHA-256）、rubric 与 findings，省略的发现项 id 取 rf-<n>（n 从 1 递增，跳过输入中已用的 id），每个发现项的 status 为 open；changedPaths 为 [review.yaml]，--json 输出的 review 字段含 unit、path、stale、draftSha256、rubric（每项另含评分项的 title 与 blocking）与 findings，退出码为 0。
+    statement: wa-cli review record <unit> 必须从 --file（相对 --dir 或为绝对路径）或标准输入读取审稿（Review）输入并整体替换单元目录下的 review.yaml。输入为 YAML：rubric 为评分结论数组，每项含 item（评分项 id）、verdict（pass 或 fail）、evidence（非空）与可选的 paragraphs（段落编号数组，可以为空或省略，如评作者选定标题的评分项；写出时规范化为数组）；findings 为发现项（Finding）数组，每项含 paragraph 与 message，可选 id、rubric、quote 与 suggestion。段落编号从 1 开始，与 wa-cli provenance 的段落一致。单元的评分标准（Rubric）为合并后的评分标准（见 wa-cli config resolved），加上单元选用的写作法附带的评分项（见 methods 主规格的 method-rubric）；其中每个评分项都必须恰有一个结论：缺少时报告 review.missing-verdict（field 为 rubric，message 含评分项 id 与标题），item 或 rubric 不是单元的评分项时报告 review.unknown-rubric-item，同一评分项有多个结论时报告 review.duplicate-verdict；段落编号大于正文段落数时报告 review.unknown-paragraph；quote 不出现在所引段落的原文中时报告 review.quote-not-found；发现项 id 重复时报告 artifact.duplicate-id；输入不符合审稿输入的 Schema 时报告 artifact.schema-violation 或 artifact.parse-error。这些诊断的 path 为空、field 为输入中的位置（如 findings[0].quote），next 依次包含 wa-cli help review record --json、wa-cli review show <unit> --dir <dir> --json（其 rubric 为必须逐项给结论的评分项清单）、wa-cli provenance <unit> --dir <dir> --json 、wa-cli config resolved --dir <dir> --json 与 wa-cli brief show <unit> --dir <dir> --json；单元没有正文时报告 draft.not-found；都不修改文件，退出码为 1。成功时写出的 review.yaml 含 schema_version 1、draft_sha256（当前 draft.md 原始字节的 SHA-256）、rubric 与 findings，省略的发现项 id 取 rf-<n>（n 从 1 递增，跳过输入中已用的 id），每个发现项的 status 为 open；changedPaths 为 [review.yaml]，--json 输出的 review 字段含 unit、path、stale、draftSha256、rubric（每项另含评分项的 title 与 blocking）与 findings，退出码为 0。
     scenarios:
       record-review:
         - GIVEN: 作品 my-post（minimal，评分标准为 clarity）处于审稿阶段，正文有两个段落，第二段含「可能」
@@ -26,9 +26,13 @@ requirements:
         - GIVEN: 同上，第一段不含「例子」
         - WHEN: 标准输入的发现项引用第 1 段、quote 为「例子」
         - THEN: diagnostics 中有一条错误码为 review.quote-not-found、field 为 findings[0].quote 的诊断，退出码为 1
+      verdict-without-paragraphs:
+        - GIVEN: wechat-marketing 作品 my-post 处于 review 阶段，评分标准含 headline-useful
+        - WHEN: '审稿输入中 headline-useful 的结论为 {item: headline-useful, verdict: pass, evidence: 作者选定的标题说明了读者收益}，没有 paragraphs，其余评分项各有结论，运行 wa-cli review record my-post --dir D --json'
+        - THEN: 退出码为 0，写出的 review.yaml 与输出中该结论的 paragraphs 为空数组
   review-show:
     strength: MUST
-    statement: wa-cli review show <unit> 必须只读地汇总单元的审稿与验收（Acceptance）情况，changedPaths 为空数组：review 为 review.yaml 的内容（字段同 review record 的输出，stale 为 draft_sha256 是否与当前正文不同；没有审稿或不通过校验时为 null，不通过校验时报告其诊断、退出码为 1）；lint 为本单元文本检查（Lint）的 ran、errors 与 warnings（未被豁免的 error 级与 warning 级发现项数）；revisions 为修订任务（Revision Task）数组：review.yaml 中 status 为 open 的发现项（source 为 review），以及该单元未处理（open 或 accepted）的作者反馈（source 为 feedback），每项含 source、id、status、paragraph 与 message；decisions 为关联该单元、status 为 open 的决策，每项含 id、question 与 blocking；gate 含 level（工作区配置的 gate_level）、blockers（按 accept-gate 在已给出作者确认时的阻塞项，每项含 code、path、ref 与 message）、ready（blockers 为空）与 confirmationRequired（level 为 strict 时为 true）；acceptance 为已有的 acceptance.yaml（gateLevel、draftSha256、confirmedByAuthor、confirmation、acceptedAt 与 stale），没有时为 null。
+    statement: wa-cli review show <unit> 必须只读地汇总单元的审稿与验收（Acceptance）情况，changedPaths 为空数组：review 为 review.yaml 的内容（字段同 review record 的输出，stale 为 draft_sha256 是否与当前正文不同；没有审稿或不通过校验时为 null，不通过校验时报告其诊断、退出码为 1）；lint 为本单元文本检查（Lint）的 ran、errors 与 warnings（未被豁免的 error 级与 warning 级发现项数）；revisions 为修订任务（Revision Task）数组：review.yaml 中 status 为 open 的发现项（source 为 review），以及该单元未处理（open 或 accepted）的作者反馈（source 为 feedback），每项含 source、id、status、paragraph 与 message；decisions 为关联该单元、status 为 open 的决策，每项含 id、question 与 blocking；gate 含 level（工作区配置的 gate_level）、blockers（按 accept-gate 在已给出作者确认时的阻塞项，每项含 code、path、ref 与 message）、ready（blockers 为空）与 confirmationRequired（level 为 strict 时为 true）；acceptance 为已有的 acceptance.yaml（gateLevel、draftSha256、confirmedByAuthor、confirmation、acceptedAt 与 stale），没有时为 null；rubric 为该单元审稿必须逐项给出结论的评分项数组，与 review record 校验 review.missing-verdict 使用的评分标准相同（合并后的评分标准加上单元选用的写作法附带的评分项），每项含 id、title、description（没有时为空字符串）与 blocking，单元没有可读取的正文或配置合并失败时为空数组。
     scenarios:
       show-revisions:
         - GIVEN: 作品 my-post 的审稿有两个 open 的发现项，另有一条 open 的作者反馈 fb-1，工作区的 gate_level 为 standard
@@ -38,6 +42,10 @@ requirements:
         - GIVEN: 作品 my-post 处于审稿阶段、没有 review.yaml，gate_level 为 standard
         - WHEN: 运行 wa-cli review show my-post --dir D --json
         - THEN: review 为 null，gate.blockers 只有一项 code 为 accept.review-missing，退出码为 0
+      show-rubric:
+        - GIVEN: tech-blog 作品 my-post 选用写作法 pyramid-scqa，处于 review 阶段，还没有审稿
+        - WHEN: 运行 wa-cli review show my-post --dir D --json
+        - THEN: rubric 依次列出 tech-blog 合并后的全部评分项与 pyramid-scqa 附带的评分项，每项含 id、title、description 与 blocking；按这些 id 各给一个结论运行 wa-cli review record 不报告 review.missing-verdict
   review-resolve:
     strength: MUST
     statement: wa-cli review resolve <unit> <finding> 必须把 review.yaml 中发现项的 status 改为 --status（resolved、waived 或 open，省略时为 resolved），给出 --note 时把处理说明设为该值；只改动这两个字段，保留其他内容与 YAML 注释。status 为 waived 时必须有处理说明（本次给出或已有），否则报告 review.missing-note。成功时 --json 输出的 finding 字段含修改后的发现项，changedPaths 为 [review.yaml]，取值未变时不写文件、changedPaths 为空数组，退出码为 0。单元没有审稿或其中没有该发现项时报告 review.finding-not-found（next 包含 wa-cli review show <unit> --dir <dir> --json）；--status 不在取值范围内或 --note 为空白时报告 artifact.schema-violation；发现项经由 YAML 锚点、别名或合并键得到时报告 review.anchored-value；这些情况都不修改文件，退出码为 1。

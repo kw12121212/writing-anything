@@ -1,0 +1,17 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: fix-preview-serve-guidance
+approach:
+  - 在三个使用 preview --serve 的技能中，把原来「运行 wa-cli preview <作品> --serve --json，把首行输出中的 preview.url 交给作者」的句子扩写为同一段要求：用客户端的后台任务运行（不要放在会结束或被回收的前台命令里），作者确认完成前不要停止；读取首行的 preview.url 后先确认该地址可以访问（如请求它得到 200）再交给作者；作者说打不开时重新运行该命令并交出新地址（令牌会变化）。wa-auto 第 7 步补充 shell 与 MCP 的关系。修改后按 TestSkillHistoryCoversCurrent 追加新哈希。
+decisions:
+  skill-text-only:
+    decision: 只改技能文字并以结构测试锁定，不改 wa-cli preview 的行为。
+    rationale: 作者接受的分诊（D 组：只改技能文字）。服务被停掉的原因在客户端的进程管理，wa-cli 无法替客户端保活；技能给出要求与可执行的确认方法，任何客户端都能照做。
+  no-delta-tech:
+    decision: 不新增技术规范，由 skills 主规格的新需求与同包测试约束。
+    rationale: 这是技能内容的要求，属于产品可观察行为（Agent 读到的说明），放在 skills 规格即可。
+alternatives: []
+risks:
+  - 关键词测试只能保证说明存在，不能保证每个客户端都能照做；由后续真实接入验证检验
