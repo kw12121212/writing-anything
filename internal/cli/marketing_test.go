@@ -272,7 +272,7 @@ func TestWechatMarketingEndToEnd(t *testing.T) {
 	step("", "init", "--genre", "wechat-marketing", "--gate-level", "strict")
 	step("", "new", "wechat-marketing", "post")
 	step("会员日每月第一个周六。老顾客说希望提前知道活动内容，好安排时间。报名在公众号回复即可。", "source", "add", "--type", "author-note", "--id", "note")
-	step("", "brief", "set", "post", "--audience", "常来店里的老顾客", "--purpose", "让读者报名本月的会员日", "--sources", "note")
+	step("", "brief", "set", "post", "--audience", "常来店里的老顾客", "--audience-sources", "note", "--purpose", "让读者报名本月的会员日", "--purpose-sources", "note", "--sources", "note")
 	step("", "brief", "set", "post", "--message", "early", "--message-text", "会员日的活动提前一周公布", "--message-sources", "note")
 	step("", "advance", "post")
 	// 大纲按 AIDA 的四个章节组织，覆盖核心观点。

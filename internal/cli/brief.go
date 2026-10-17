@@ -39,6 +39,16 @@ var briefSetCommand = &command{
 		{"message-text", flagString, "核心观点的内容，与 --message 一起使用"},
 		{"message-sources", flagString, "核心观点出自的素材 id，用逗号分隔，与 --message 一起使用；整体替换"},
 		{"message-decision", flagString, "记录作者确认该观点的决策 id，与 --message 一起使用；决策决定后即为作者的确认记录（Confirmation Record）"},
+		{"audience-sources", flagString, "受众字段的出处素材 id（逗号分隔，整体替换）；与 --audience-decision 同为字段出处（Field Provenance）"},
+		{"audience-decision", flagString, "记录作者确认受众的决策 id（作者一轮回答多个问题时可多个字段共用一个决策）"},
+		{"purpose-sources", flagString, "写作目的字段的出处素材 id（逗号分隔，整体替换）"},
+		{"purpose-decision", flagString, "记录作者确认写作目的的决策 id"},
+		{"theme-sources", flagString, "主题字段的出处素材 id（逗号分隔，整体替换）"},
+		{"theme-decision", flagString, "记录作者确认主题的决策 id"},
+		{"pov-sources", flagString, "视角字段的出处素材 id（逗号分隔，整体替换）"},
+		{"pov-decision", flagString, "记录作者确认视角的决策 id"},
+		{"length-sources", flagString, "字数范围字段的出处素材 id（逗号分隔，整体替换）"},
+		{"length-decision", flagString, "记录作者确认字数范围的决策 id"},
 		{"remove-message", flagList, "要删除的核心观点 id；可重复，先于 --message 执行"},
 		{"method", flagString, "选用的写作法模板（Method Template）id（见 wa-cli method list）；none 表示不用写作法；空字符串时删除，改用文体的默认写作法"},
 	},
@@ -82,18 +92,25 @@ type povView struct {
 }
 
 type briefView struct {
-	Unit        string        `json:"unit"`
-	Path        string        `json:"path"`
-	Audience    *string       `json:"audience"`
-	Purpose     *string       `json:"purpose"`
-	Premise     *premiseView  `json:"premise"`
-	Theme       *string       `json:"theme"`
-	Pov         *povView      `json:"pov"`
-	KeyMessages []messageView `json:"keyMessages"`
-	Length      *brief.Length `json:"length"`
-	Avoid       []string      `json:"avoid"`
-	Sources     []string      `json:"sources"`
-	Method      *string       `json:"method"`
+	Unit        string                    `json:"unit"`
+	Path        string                    `json:"path"`
+	Audience    *string                   `json:"audience"`
+	Purpose     *string                   `json:"purpose"`
+	Premise     *premiseView              `json:"premise"`
+	Theme       *string                   `json:"theme"`
+	Pov         *povView                  `json:"pov"`
+	KeyMessages []messageView             `json:"keyMessages"`
+	Length      *brief.Length             `json:"length"`
+	Avoid       []string                  `json:"avoid"`
+	Sources     []string                  `json:"sources"`
+	Method      *string                   `json:"method"`
+	Provenance  map[string]fieldProvenanceView `json:"provenance"`
+}
+
+// fieldProvenanceView 是一个标量字段的出处视图。
+type fieldProvenanceView struct {
+	Sources  []string `json:"sources"`
+	Decision *string  `json:"decision"`
 }
 
 type questionView struct {
@@ -133,7 +150,15 @@ func nonNilInts(m map[string]int) map[string]int {
 
 func viewBrief(ref string, b *brief.Brief) *briefView {
 	v := &briefView{Unit: ref, Path: b.Path, Audience: optional(b.Audience), Purpose: optional(b.Purpose), KeyMessages: []messageView{},
-		Length: b.Length, Avoid: nonNilStrings(b.Avoid), Sources: nonNilStrings(b.Sources), Method: optional(b.Method)}
+		Length: b.Length, Avoid: nonNilStrings(b.Avoid), Sources: nonNilStrings(b.Sources), Method: optional(b.Method), Provenance: map[string]fieldProvenanceView{}}
+	for f, pv := range b.Provenance {
+		pvv := fieldProvenanceView{Sources: nonNilStrings(pv.Sources)}
+		if pv.Decision != "" {
+			d := pv.Decision
+			pvv.Decision = &d
+		}
+		v.Provenance[f] = pvv
+	}
 	if b.Premise != nil {
 		v.Premise = &premiseView{Text: b.Premise.Text, Sources: nonNilStrings(b.Premise.Sources), Decision: optional(b.Premise.Decision)}
 	}
@@ -206,7 +231,7 @@ func briefEdit(inv *invocation, existing *brief.Brief) (brief.Edit, []workspace.
 			}
 		}
 	}
-	for _, name := range []string{"sources", "message-sources", "premise-sources"} {
+	for _, name := range []string{"sources", "message-sources", "premise-sources", "audience-sources", "purpose-sources", "theme-sources", "pov-sources", "length-sources"} {
 		if v, ok := inv.values[name]; ok {
 			list := splitIDs(v)
 			for i, id := range list {
@@ -273,6 +298,22 @@ func briefEdit(inv *invocation, existing *brief.Brief) (brief.Edit, []workspace.
 	if v, ok := inv.values["method"]; ok {
 		e.Method = &v
 	}
+	// 字段出处（Field Provenance）：--<字段>-sources 与 --<字段>-decision 修改 provenance 映射。
+	for _, f := range brief.ProvenanceFields {
+		src, dec := str(f+"-sources"), str(f+"-decision")
+		if src == nil && dec == nil {
+			continue
+		}
+		pe := &brief.ProvenanceEdit{Decision: dec}
+		if src != nil {
+			ids := splitIDs(*src)
+			pe.Sources = &ids
+		}
+		if e.Provenance == nil {
+			e.Provenance = map[string]*brief.ProvenanceEdit{}
+		}
+		e.Provenance[f] = pe
+	}
 	e.Remove = inv.lists["remove-message"]
 	id, selected := inv.values["message"]
 	text, sources, decision := str("message-text"), str("message-sources"), str("message-decision")
@@ -303,7 +344,7 @@ func briefEdit(inv *invocation, existing *brief.Brief) (brief.Edit, []workspace.
 		e.Message = me
 	}
 	if e.Audience == nil && e.Purpose == nil && e.Premise == nil && e.Theme == nil && e.PovPerson == nil && e.PovCharacter == nil &&
-		!e.SetLength && !e.SetAvoid && !e.SetSources && e.Message == nil && len(e.Remove) == 0 && e.Method == nil {
+		!e.SetLength && !e.SetAvoid && !e.SetSources && e.Message == nil && len(e.Remove) == 0 && e.Method == nil && e.Provenance == nil {
 		return e, []workspace.Problem{{Code: codeInvalidValue, Severity: workspace.SeverityError,
 			Message: "没有给出要修改的字段；至少给出 --audience、--purpose、--premise、--theme、--pov-person、--pov-character、--length、--avoid、--sources、--message、--remove-message 或 --method 之一"}}
 	}

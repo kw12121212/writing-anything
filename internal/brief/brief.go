@@ -22,19 +22,21 @@ import (
 
 // 写作简报的错误码（Error Code）。已发布的错误码不得改名或复用。
 const (
-	CodeMissingField        = "brief.missing-field"
-	CodeUnsourcedMessage    = "brief.unsourced-message"
-	CodeUnconfirmedMessage  = "brief.unconfirmed-message"
-	CodeUnsourcedPremise    = "brief.unsourced-premise"
-	CodeUnconfirmedPremise  = "brief.unconfirmed-premise"
-	CodeInvalid             = "brief.invalid"
-	CodeUnknownSource       = "brief.unknown-source"
-	CodeUnknownDecision     = "brief.unknown-decision"
-	CodeUnrelatedDecision   = "brief.unrelated-decision"
-	CodeInvalidLength       = "brief.invalid-length"
-	CodeMessageNotFound     = "brief.message-not-found"
-	CodeAnchoredValue       = "brief.anchored-value"
-	CodeUnknownMethod       = "brief.unknown-method"
+	CodeMissingField       = "brief.missing-field"
+	CodeUnsourcedMessage   = "brief.unsourced-message"
+	CodeUnconfirmedMessage = "brief.unconfirmed-message"
+	CodeUnsourcedPremise   = "brief.unsourced-premise"
+	CodeUnconfirmedPremise = "brief.unconfirmed-premise"
+	CodeInvalid            = "brief.invalid"
+	CodeUnknownSource      = "brief.unknown-source"
+	CodeUnknownDecision    = "brief.unknown-decision"
+	CodeUnsourcedField     = "brief.unsourced-field"
+	CodeUnconfirmedField   = "brief.unconfirmed-field"
+	CodeUnrelatedDecision  = "brief.unrelated-decision"
+	CodeInvalidLength      = "brief.invalid-length"
+	CodeMessageNotFound    = "brief.message-not-found"
+	CodeAnchoredValue      = "brief.anchored-value"
+	CodeUnknownMethod      = "brief.unknown-method"
 )
 
 // 单元目录中写作简报的文件名：brief.yaml 是结构化的写作简报，brief.md 是自由文本，不含可检查的字段。
@@ -127,7 +129,19 @@ type Brief struct {
 	Avoid       []string  `json:"avoid"`
 	Sources     []string  `json:"sources"`
 	Method      string    `json:"method"` // 写作法模板 id；none 表示不用写作法；空表示用文体的默认写作法
+	// Provenance 是标量字段（audience、purpose、theme、pov、length）的出处映射，与 premise、key_messages
+	// 的出处语义同构；nil 表示没有 provenance 节。
+	Provenance map[string]Provenance `json:"provenance"`
 }
+
+// Provenance 是一个标量字段的出处：素材 id 与/或记录作者确认的决策 id。
+type Provenance struct {
+	Sources  []string `json:"sources"`
+	Decision string   `json:"decision"`
+}
+
+// ProvenanceFields 是可以有出处映射的标量字段。
+var ProvenanceFields = []string{FieldAudience, FieldPurpose, FieldTheme, FieldPov, FieldLength}
 
 // Queue 是计算出处时使用的决策队列；Invalid 为 true 时队列无法加载，不检查决策是否存在，也不把任何决策视为已决定。
 type Queue struct {
@@ -246,6 +260,26 @@ func check(root, rel string, b *Brief, q Queue) []workspace.Problem {
 				out = append(out, errorAt(CodeUnknownDecision, rel, field, unknownDecision(m.Decision)))
 			case !slices.Contains(d.Units, ref):
 				out = append(out, errorAt(CodeUnrelatedDecision, rel, field, unrelatedDecision(m.Decision, ref)))
+			}
+		}
+	}
+	for _, f := range ProvenanceFields {
+		pv, ok := b.Provenance[f]
+		if !ok {
+			continue
+		}
+		for j, id := range pv.Sources {
+			if !source.Registered(root, id) {
+				out = append(out, errorAt(CodeUnknownSource, rel, fmt.Sprintf("provenance.%s.sources[%d]", f, j), unknownSource(id)))
+			}
+		}
+		if pv.Decision != "" && !q.Invalid {
+			field := "provenance." + f + ".decision"
+			switch d := q.find(pv.Decision); {
+			case d == nil:
+				out = append(out, errorAt(CodeUnknownDecision, rel, field, unknownDecision(pv.Decision)))
+			case !slices.Contains(d.Units, ref):
+				out = append(out, errorAt(CodeUnrelatedDecision, rel, field, unrelatedDecision(pv.Decision, ref)))
 			}
 		}
 	}
@@ -392,10 +426,49 @@ func Questions(b *Brief, required []string, q Queue) []Question {
 				Message: fmt.Sprintf("核心观点（Key Message）%s 只关联了尚未决定的决策 %s，还没有作者的确认记录；请向作者提问：%s", m.ID, m.Decision, question)})
 		}
 	}
+	for _, f := range ProvenanceFields {
+		if !slices.Contains(required, f) || !filled(b, f) {
+			continue // 只检查必填且已填写的标量字段（缺失由 missing-field 报告）
+		}
+		pv := b.Provenance[f]
+		switch {
+		case len(pv.Sources) == 0 && pv.Decision == "":
+			question := fmt.Sprintf("%s「%s」是你定的吗？请确认这个选择，或提供包含你原话的素材。", fieldTitles[f], fieldText(b, f))
+			out = append(out, Question{Code: CodeUnsourcedField, Field: f, Question: question,
+				Message: fmt.Sprintf("%s（%s）没有出处：既没有关联素材，也没有作者的确认记录；请向作者提问：%s", fieldTitles[f], f, question)})
+		case len(pv.Sources) == 0:
+			if d := q.find(pv.Decision); q.Invalid || d == nil || d.Status != decision.StatusDecided {
+				question := fmt.Sprintf("%s「%s」是你定的吗？请确认决策 %s。", fieldTitles[f], fieldText(b, f), pv.Decision)
+				out = append(out, Question{Code: CodeUnconfirmedField, Field: f, Question: question,
+					Message: fmt.Sprintf("%s（%s）只关联了尚未决定的决策 %s，还没有作者的确认记录；请向作者提问：%s", fieldTitles[f], f, pv.Decision, question)})
+			}
+		}
+	}
 	return out
 }
 
 // filled 报告字段 f 是否已填写；数组字段为空视为未填写。
+// fieldText 返回字段当前取值的简短展示（问题文本用）；未知字段返回空。
+func fieldText(b *Brief, f string) string {
+	switch f {
+	case FieldAudience:
+		return b.Audience
+	case FieldPurpose:
+		return b.Purpose
+	case FieldTheme:
+		return b.Theme
+	case FieldPov:
+		if b.Pov != nil {
+			return b.Pov.Person
+		}
+	case FieldLength:
+		if b.Length != nil {
+			return fmt.Sprintf("%d-%d 字", b.Length.Min, b.Length.Max)
+		}
+	}
+	return ""
+}
+
 func filled(b *Brief, f string) bool {
 	switch f {
 	case FieldAudience:

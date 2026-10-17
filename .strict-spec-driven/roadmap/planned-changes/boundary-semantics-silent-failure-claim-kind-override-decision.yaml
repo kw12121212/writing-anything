@@ -5,7 +5,7 @@ schema_file: ../../templates/strict-spec-driven/schemas/planned-change.yaml
 planned_change:
   id: claim-kind-override-decision
   milestone: boundary-semantics-silent-failure
-status: planned
+status: complete
 summary: claim add/set 的留痕例外通道：拒绝路径按 canon 保护模式幂等生成阻塞决策，作者允许后经 --decision 授权登记并把决策 id 记在论断上
 details: P0-2 拆分出的后续特性。claim-add-source-kind-check 落地 L1 拒绝后，极少数作者确实要以非常规类型登记时的通道：仿 internal/canon 的 gate 模式（拒绝 + 幂等阻塞决策 + --decision 授权 + 产物记录决策 id）——claims.yaml 增加可选 decision 字段，claim set --kind 同样把关，固定问题文本逐字测试，遵循 tech 标准 refusal-side-decision-gating。
 depends_on: []

@@ -17,6 +17,8 @@ func newWork(t *testing.T) string {
 	if code, stdout, stderr := run(t, "new", "minimal", "my-post", "--dir", dir); code != 0 {
 		t.Fatalf("new: exit code = %d; stdout: %s; stderr: %s", code, stdout, stderr)
 	}
+	// completeBrief 的字段出处（Field Provenance）指向这份标准素材。
+	runWSIn(t, dir, "作者的原话：受众与目的都由作者确认。", "source", "add", "--type", "author-note", "--id", "brief-note")
 	return dir
 }
 
@@ -42,7 +44,7 @@ func artifact(t *testing.T, dir, work, unit, name string) {
 }
 
 // completeBrief 是 minimal 文体中填齐必填项（audience 与 purpose）的写作简报。
-const completeBrief = "schema_version: 1\naudience: 后端工程师\npurpose: 讲清楚为什么要做连接池\n"
+const completeBrief = "schema_version: 1\naudience: 后端工程师\npurpose: 讲清楚为什么要做连接池\nprovenance:\n  audience: {sources: [brief-note]}\n  purpose: {sources: [brief-note]}\n"
 
 // unitResult 是单元命令 --json 输出中测试关心的部分。
 type unitResult struct {

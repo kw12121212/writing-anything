@@ -1,0 +1,19 @@
+schema: strict-spec-driven/lesson/v1
+schema_version: 1
+artifact_type: lesson
+schema_file: templates/strict-spec-driven/schemas/lesson.yaml
+lesson:
+  id: lookup-ok-plain-9eb5d0
+  title: 布尔返回值语义看名字猜会写反：Lookup 的 ok 是 plain 判定而非键存在
+category: coding
+status: active
+created_at: '2026-10-17T15:00:00.763Z'
+updated_at: '2026-10-17T15:00:00.763Z'
+context: brief 字段出处（Field Provenance）在字段删除时清理 pov 的出处
+observation: apply 里 if _, ok := workspace.Lookup(m, FieldPov); !ok 以为 ok 是键存在，实际返回的 bool 是值节点是否 plain（键不存在时返回 nil, true），条件恰好写反：dropProvenance 永不执行。复审实测：删除 pov 后旧出处残留，重设新值继承旧已决定决策，新输入借旧确认过关——正是本变更要堵的审计链断裂
+takeaway: 使用返回 (node, bool) 的查找助手前读它的语义注释；键存在性判定用返回的 node 是否为 nil，不用布尔；同构路径（四条字段删除）各自补一条删除清理的回归测试，别只测第一条
+applies_when: 任何使用 internal/workspace Lookup 或类似 (值, 布尔) 助手做存在性判定的代码
+occurrences:
+  - origin: brief-field-provenance
+    date: '2026-10-17'
+    evidence: 复审 B1：set.go pov 分支 Lookup 布尔语义写反；audience/purpose/theme/length 四条同构路径正确，唯 pov 反向；修复为判 node==nil 并补 TestSetProvenanceCleanup

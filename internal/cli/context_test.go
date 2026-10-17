@@ -77,7 +77,7 @@ func TestContext(t *testing.T) {
 	c := res.Context
 	if code != 0 || !res.Valid || len(res.ChangedPaths) != 0 || c["unit"] != "my-post" || c["genre"] != "minimal" ||
 		get(c, "budget.value") != 12000.0 || get(c, "budget.source") != "genre:minimal" || readFile(t, wsPath(dir, briefRel)) != before {
-		t.Fatalf("context-json: exit code = %d, context = %v", code, c)
+		t.Fatalf("context-json: exit code = %d, context = %v, diag = %+v, stdout = %s", code, c, res.Diagnostics, res.stdout)
 	}
 	// root-sources：写作简报的 sources，然后是核心观点的 sources，再是本单元大纲各节的 uses（去重）。
 	// 非 scene 单元没有场景级内容：characters、priorScenes 与 reveal 为空数组（scene-context 的 non-scene-empty）。

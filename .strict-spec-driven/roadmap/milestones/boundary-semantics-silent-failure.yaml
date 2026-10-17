@@ -30,7 +30,7 @@ dependencies:
   - 真实使用验证与发布（real-use-and-release）已完成的下游真实反馈
 risks:
   - 写入时校验与 lint 规则若不共用规则表会语义漂移；--override 例外通道若无留痕要求会变成新的偷懒捷径；brief 出处强制可能打断存量进行中作品
-status: proposed
+status: complete
 notes:
   - 反馈来源：docs/proposal-2026-10-16/（IMPROVEMENTS.md、DESIGN-discipline-as-mechanism.md、wa-fixture-tesla-flying-car.tar.gz 回归样例）；36c4585（claim-candidates-fact-cover）尚未发版，下次发布说明需写明
 details: 按反馈优先级分三批：①窄 bugfix 批（P0-2、P2-2、P3）走 strict-spec-bugfix；②中批（P2-1、P2-3、P1-3）走提案+实现；③设计先行批（P0-1、P1-1、P1-2）走 strict-spec-brainstorm，停在作者确认。fixture 先查来源与体积再决定是否抽最小语料进 testdata。

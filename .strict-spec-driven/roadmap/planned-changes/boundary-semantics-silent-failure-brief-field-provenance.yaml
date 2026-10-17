@@ -5,7 +5,7 @@ schema_file: ../../templates/strict-spec-driven/schemas/planned-change.yaml
 planned_change:
   id: brief-field-provenance
   milestone: boundary-semantics-silent-failure
-status: planned
+status: complete
 summary: 设计提案→实现：brief 必填字段携带出处（decision id 或 source id，与 --message-decision 同构），缺出处不能 advance；粒度建议每轮简报一个 decision
 details: 反馈 P1-1（设计先行）。现象：brief 的 audience/purpose/length 不携带出处，作者经 harness 提问工具给的答案无法回溯为 decision，审计链断裂（已归档的 skill-session-protocol-scripts 已补提问→decision 回写指引，本项补产物侧强制）。上游取舍意见：①粒度按「每轮简报一个 decision」而非每字段一个，避免 decision 刷屏；②迁移——存量进行中作品会被打断，建议仅对新建作品启用或提供存量 brief 补 decision 的迁移命令，二选一需作者确认；③验收草案：GIVEN 必填字段缺出处，WHEN advance，THEN 被阻塞并给出补录命令（decision add + brief set --<字段>-decision 的同构参数）。注意：活跃变更上限为二（当前被 audit-log-next-recovery 与 source-conflict-registry 两个设计提案占用），本项排队；两提案落定后即可按上述材料立变更。
 depends_on: []

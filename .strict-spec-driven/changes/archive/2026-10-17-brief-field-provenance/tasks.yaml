@@ -1,0 +1,27 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: brief-field-provenance
+sections:
+  Implementation:
+    implement-field-provenance:
+      text: brief.schema.json 的 provenance 映射；internal/brief 的结构、Questions（brief.unsourced-field / brief.unconfirmed-field）、字段元数据与校验（unknown-source/unknown-decision/unrelated-decision 扩展到 provenance）；internal/cli/brief.go 的 --<字段>-sources/--<字段>-decision 参数与视图
+      status: complete
+  Testing:
+    targeted-green:
+      text: 定向包回归通过（含新参数写入/未知决策拒绝/关卡阻塞与解除/show 问题与视图用例）
+      status: complete
+      command: go test ./internal/cli ./internal/brief ./internal/schema -count=1
+    full-regression:
+      text: 完整项目回归（vet、build、test、covercheck ≥80）
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    strict-verify:
+      text: strict-spec-cli verify brief-field-provenance 通过
+      status: complete
+      command: strict-spec-cli verify brief-field-provenance
+testing_gates:
+  validation_task: full-regression
+  unit_test_task: targeted-green

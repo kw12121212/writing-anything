@@ -452,7 +452,7 @@ func TestClaimAdd(t *testing.T) {
 	code, res = runSrc(t, dir, "", "claim", "add", "my-post", "--kind", "data", "--text", "性能提升了 30%", "--sources", "news")
 	d := diag(t, res.result, "claim.needs-author-source")
 	if code != 1 || d.Field != "kind" || !strings.Contains(d.Message, "news（reference）") || !strings.Contains(d.Message, "--kind fact") ||
-		!slices.Contains(d.Next, "wa-cli help claim add --json") {
+		!strings.Contains(d.Message, "已生成阻塞决策") || !slices.Contains(d.Next, "wa-cli help claim add --json") {
 		t.Errorf("reference-only data: code = %d, %+v", code, d)
 	}
 	if readFile(t, wsPath(dir, rel)) != before {
@@ -476,7 +476,7 @@ func TestClaimAdd(t *testing.T) {
 	code, res = runSrc(t, dir, "", "claim", "set", "my-post", "claim-2", "--kind", "data")
 	if d := diag(t, res.result, "claim.needs-author-source"); code != 1 || d.Field != "kind" ||
 		!strings.Contains(d.Message, "news（reference）") || !strings.Contains(d.Message, "--kind fact") ||
-		readFile(t, wsPath(dir, rel)) != beforeSet {
+		!strings.Contains(d.Message, "已生成阻塞决策") || readFile(t, wsPath(dir, rel)) != beforeSet {
 		t.Errorf("set kind to data: code = %d, diag = %+v", code, d)
 	}
 	// 项目层覆盖 claim-sources 参数后写入校验随之放行（与 lint 同判）：source_types 含 reference 时不拒；
@@ -654,7 +654,8 @@ func TestClaimEditDanglingSource(t *testing.T) {
 }
 
 func TestSourceCommandsText(t *testing.T) {
-	dir := newWork(t)
+	dir := newWorkspace(t)
+	runIn(t, "", "new", "minimal", "my-post", "--dir", dir)
 	for _, tc := range []struct {
 		input string
 		args  []string
@@ -691,4 +692,103 @@ func TestSourceCommandsText(t *testing.T) {
 func currentBase(t *testing.T, dir string) string {
 	t.Helper()
 	return sha(readFile(t, wsPath(dir, ".writing-anything/works/my-post/draft.md")))
+}
+
+// 留痕例外通道：写入校验拒绝时幂等生成阻塞决策；作者允许后 --decision 授权并把决策 id 记在论断上；
+// 作者保持不变后不再追加；--decision 指向不匹配/未决定的决策时拒绝并说明原因。
+func TestClaimKindOverrideDecision(t *testing.T) {
+	dir := briefWork(t)
+	runSrc(t, dir, "报道", "source", "add", "--type", "reference", "--id", "news")
+	rel := ".writing-anything/works/my-post/claims.yaml"
+	// 第一次拒绝：生成阻塞决策；第二次同输入：不重复追加。
+	code, res := runSrc(t, dir, "", "claim", "add", "my-post", "--kind", "data", "--text", "外部数据", "--sources", "news")
+	d := diag(t, res.result, "claim.needs-author-source")
+	if code != 1 || !strings.Contains(d.Message, "已生成阻塞决策 dec-1") || !strings.Contains(d.Message, "--decision dec-1") {
+		t.Fatalf("first reject: code = %d, diag = %+v", code, d)
+	}
+	if !slices.Contains(res.ChangedPaths, ".writing-anything/decisions.yaml") {
+		t.Fatalf("changedPaths = %v", res.ChangedPaths)
+	}
+	if _, err := os.Stat(wsPath(dir, rel)); err == nil {
+		t.Fatal("rejected claim wrote claims.yaml")
+	}
+	code, res = runSrc(t, dir, "", "claim", "add", "my-post", "--kind", "data", "--text", "外部数据", "--sources", "news")
+	if d := diag(t, res.result, "claim.needs-author-source"); code != 1 || !strings.Contains(d.Message, "等待作者决定") ||
+		len(res.ChangedPaths) != 0 {
+		t.Fatalf("second reject: code = %d, changed = %v, diag = %+v", code, res.ChangedPaths, d)
+	}
+	// 队列中的决策是阻塞的且选项为 允许/保持不变；问题为规格固定的文本（逐字断言）。
+	_, res2 := runDec(t, dir, "decisions", "--all")
+	wantQ := "论断（Claim）my-post 以 data 登记「外部数据」只关联了非作者亲历素材，允许吗？"
+	if len(res2.Blocking) != 1 || res2.Blocking[0].ID != "dec-1" || res2.Blocking[0].Question != wantQ {
+		t.Fatalf("blocking decision: %+v, want question %q", res2.Blocking, wantQ)
+	}
+	// --decision 指向未决定的决策：拒绝。
+	code, res = runSrc(t, dir, "", "claim", "add", "my-post", "--kind", "data", "--text", "外部数据", "--sources", "news", "--decision", "dec-1")
+	if d := diag(t, res.result, "claim.needs-author-source"); code != 1 || !strings.Contains(d.Message, "尚未由作者决定") {
+		t.Fatalf("undecided decision: code = %d, diag = %+v", code, d)
+	}
+	// 作者允许后 --decision 成功：决策 id 记在论断上。
+	runDec(t, dir, "decide", "dec-1", "--option", "a", "--confirmation", "作者：允许这条外部数据")
+	code, res = runSrc(t, dir, "", "claim", "add", "my-post", "--kind", "data", "--text", "外部数据", "--sources", "news", "--decision", "dec-1")
+	if code != 0 || res.Claim["decision"] != "dec-1" {
+		t.Fatalf("authorized: code = %d, claim = %v, %v", code, res.Claim, res.Diagnostics)
+	}
+	if got := readFile(t, wsPath(dir, rel)); !strings.Contains(got, "decision: dec-1") {
+		t.Fatalf("claims.yaml:\n%s", got)
+	}
+	// 已授权的论断 lint 仍按 claim-sources 报告（例外只解除写入门槛，不静音文本检查）。
+	writeFile(t, wsPath(dir, ".writing-anything/works/my-post/brief.yaml"), completeBrief)
+	runWS(t, dir, "advance", "my-post")
+	if code, _, _ := runIn(t, "外部数据提升 30%。", "draft", "write", "my-post", "--dir", dir); code != 0 {
+		t.Fatal("draft write failed")
+	}
+	if code, lres := runWS(t, dir, "lint", "my-post"); code != 1 || !strings.Contains(lres.stdout, "claim-1") {
+		t.Fatalf("lint after authorize: code = %d, stdout = %s", code, lres.stdout)
+	}
+	// 已授权后再来一条不同论断：问题文本不同，生成新的阻塞决策。
+	code, res = runSrc(t, dir, "", "claim", "add", "my-post", "--kind", "data", "--text", "另一条外部数据", "--sources", "news")
+	if d := diag(t, res.result, "claim.needs-author-source"); code != 1 || !strings.Contains(d.Message, "dec-2") {
+		t.Fatalf("new question: code = %d, diag = %+v", code, d)
+	}
+	// 作者保持不变后：不带 --decision 再试不追加新决策；带该 id 的 --decision 被拒。
+	runDec(t, dir, "decide", "dec-2", "--option", "b", "--confirmation", "作者：这条改用 fact")
+	code, res = runSrc(t, dir, "", "claim", "add", "my-post", "--kind", "data", "--text", "另一条外部数据", "--sources", "news")
+	if d := diag(t, res.result, "claim.needs-author-source"); code != 1 || !strings.Contains(d.Message, "保持不变") || len(res.ChangedPaths) != 0 {
+		t.Fatalf("kept: code = %d, changed = %v, diag = %+v", code, res.ChangedPaths, d)
+	}
+	code, res = runSrc(t, dir, "", "claim", "add", "my-post", "--kind", "data", "--text", "另一条外部数据", "--sources", "news", "--decision", "dec-2")
+	if d := diag(t, res.result, "claim.needs-author-source"); code != 1 || !strings.Contains(d.Message, "保持不变") {
+		t.Fatalf("kept with decision: code = %d, diag = %+v", code, d)
+	}
+	// claim set --kind 的同构通道：fact 论断改为 data 被拒并生成决策（changedPaths 如实列出决策队列）；
+	// 问题文本以「<单元>/<论断 id> 改为 <kind>」标识。允许后 --decision 成功。
+	code, res = runSrc(t, dir, "", "claim", "set", "my-post", "claim-1", "--kind", "case")
+	if d := diag(t, res.result, "claim.needs-author-source"); code != 1 || !strings.Contains(d.Message, "dec-3") {
+		t.Fatalf("set kind reject: code = %d, diag = %+v", code, d)
+	}
+	if !slices.Contains(res.ChangedPaths, ".writing-anything/decisions.yaml") {
+		t.Fatalf("set reject changedPaths = %v（应含决策队列）", res.ChangedPaths)
+	}
+	_, res2b := runDec(t, dir, "decisions", "--all")
+	wantSetQ := "论断（Claim）my-post/claim-1 改为 case 且只关联了非作者亲历素材，允许吗？"
+	found := false
+	for _, b := range res2b.Blocking {
+		if b.ID == "dec-3" && b.Question == wantSetQ {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("set question text: want %q, blocking = %+v", wantSetQ, res2b.Blocking)
+	}
+	// --decision 用在未触发拒绝的输入上是参数错误，不写入。
+	code, res = runSrc(t, dir, "", "claim", "set", "my-post", "claim-1", "--text", "外部数据（改写）", "--decision", "dec-1")
+	if d := diag(t, res.result, "input.invalid-value"); code != 1 || d.Field != "decision" {
+		t.Fatalf("decision without reject: code = %d, diag = %+v", code, d)
+	}
+	runDec(t, dir, "decide", "dec-3", "--option", "a", "--confirmation", "作者：允许改为 case")
+	code, res = runSrc(t, dir, "", "claim", "set", "my-post", "claim-1", "--kind", "case", "--decision", "dec-3")
+	if code != 0 || res.Claim["kind"] != "case" || res.Claim["decision"] != "dec-3" {
+		t.Fatalf("set authorized: code = %d, claim = %v, %v", code, res.Claim, res.Diagnostics)
+	}
 }

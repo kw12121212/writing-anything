@@ -22,4 +22,4 @@ milestones:
   boundary-semantics-silent-failure:
     title: 边界语义与静默失败加固（Boundary Semantics & Silent Failure Hardening）
     path: roadmap/milestones/boundary-semantics-silent-failure.yaml
-    status: proposed
+    status: complete

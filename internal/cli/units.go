@@ -570,7 +570,7 @@ func blockerNext(dir, code, path string) []string {
 	switch code {
 	case brief.CodeInvalid:
 		return []string{shellCommand("wa-cli", "validate", path, "--dir", dir, "--json")}
-	case brief.CodeMissingField, brief.CodeUnsourcedMessage, brief.CodeUnsourcedPremise:
+	case brief.CodeMissingField, brief.CodeUnsourcedMessage, brief.CodeUnsourcedPremise, brief.CodeUnsourcedField:
 		ref := work.RefOf(path[:strings.LastIndex(path, "/")])
 		return []string{shellCommand("wa-cli", "brief", "show", ref, "--dir", dir, "--json"), "wa-cli help brief set --json"}
 	case outline.CodeInvalid:
@@ -586,7 +586,7 @@ func blockerNext(dir, code, path string) []string {
 	case marketing.CodeHeadlineUnasked, marketing.CodeHeadlineStale:
 		ref := work.RefOf(path[:strings.LastIndex(path, "/")])
 		return []string{shellCommand("wa-cli", "marketing", "show", ref, "--dir", dir, "--json"), "wa-cli help marketing ask --json"}
-	case brief.CodeUnconfirmedMessage, brief.CodeUnconfirmedPremise, decision.CodeBlocking, decision.CodeInvalidQueue:
+	case brief.CodeUnconfirmedMessage, brief.CodeUnconfirmedPremise, brief.CodeUnconfirmedField, decision.CodeBlocking, decision.CodeInvalidQueue:
 		return []string{shellCommand("wa-cli", "decisions", "--dir", dir, "--json")}
 	case review.CodeAcceptanceStale, review.CodeAcceptanceInvalid, review.CodeAcceptanceWeakerGate:
 		// 验收记录在单元目录下；重新审稿与验收后，review show 与 advance 能复查它。

@@ -1,0 +1,23 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: claim-kind-override-decision
+  status: proposed
+summary:
+  what:
+    - claim add / claim set --kind 的留痕例外通道（canon 保护模式）：写入校验拒绝时按固定问题文本幂等生成阻塞决策（选项 允许 / 保持不变），作者允许后经 --decision <决策 id> 授权以该类型登记，并把决策 id 记在论断上（claims.yaml 可选 decision 字段）
+    - 补：--decision 给出时不追加新决策；决策不存在/非为该论断生成/尚未决定/作者选了保持不变时拒绝并说明原因
+  why:
+    - claim-add-source-kind-check 落地了 L1 拒绝（claim.needs-author-source）；极少数作者确实要以非常规类型登记纯外部素材时没有通道，只能改用 fact 绕过。例外必须强制留痕（决策 id 写在论断上），遵循技术标准 refusal-side-decision-gating（canon 的 author-pinned gate 同模式）
+scope:
+  in:
+    - internal/schema/schemas/claims 的 claim 条目可选 decision；internal/draft 的 Claim 结构与写入；internal/cli/sources.go 的 --decision 参数与拒绝路径的决策生成（复用 canon gate 的幂等与 ChoiceAllow 语义）；sources-and-provenance 主规格 claim-add 与 claim-edit
+  out:
+    - 无 --decision 时放行（默认仍拒绝）；批量豁免；lint 侧改动（claim-sources 规则照常报告，例外只作用于写入门槛）
+unchanged_behavior:
+  - 不带 --decision 且不触发拒绝路径的行为；claim.needs-author-source 的默认拒绝与 message；fact 关联 reference 的合法性；lint 的 claim-sources 规则
+roadmap:
+  milestone: boundary-semantics-silent-failure
+  planned_change: claim-kind-override-decision

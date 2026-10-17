@@ -300,6 +300,16 @@ categories:
       status: active
       occurrences: 1
       path: .strict-spec-driven/lessons/coding/lint-aecef8.yaml
+    lookup-ok-plain-9eb5d0:
+      title: 布尔返回值语义看名字猜会写反：Lookup 的 ok 是 plain 判定而非键存在
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/coding/lookup-ok-plain-9eb5d0.yaml
+    lesson-eaf147:
+      title: 授权参数必须只在触发保护路径时可写：未触发时给出是参数错误
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/coding/lesson-eaf147.yaml
   documentation:
     must-must-6af326:
       title: 修改一条 MUST 需求时，要检查同一规格里相邻的 MUST 是否因此冲突

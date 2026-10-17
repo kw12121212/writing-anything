@@ -164,7 +164,7 @@ requirements:
         - THEN: diagnostics 中有一条错误码为 draft.not-found、path 为 .writing-anything/works/my-post/draft.md 的诊断，provenance 为 null，退出码为 1
   claim-add:
     strength: MUST
-    statement: wa-cli claim add <unit> --kind <kind> --text <text> 必须在单元目录下的 claims.yaml 的 claims 末尾追加一个论断（Claim）：kind 取值为 experience、opinion、case、data、fact 之一；--sources 为逗号分隔的素材 id（省略时为空数组，表示尚未关联素材）；id 由 --id 指定，省略时为 claim-<n>，n 从已有论断数加一开始递增到不与已有论断重复。claims.yaml 不存在时创建（含 schema_version 1），子单元目录不存在时先创建；已有 claims.yaml 时只追加该项，保留其他内容与 YAML 注释。成功时退出码为 0，changedPaths 列出新建的单元目录与 claims.yaml，--json 输出的 claim 字段含 unit、id、kind、text 与 sources。sources 中的素材 id 未登记时报告 claim.unknown-source（field 为 sources[i]）；kind 不在取值范围内、--id 不符合 id 格式或 text 为空时报告 artifact.schema-violation（field 为 kind、id 或 text）；id 与该单元已有论断相同时报告 artifact.duplicate-id（field 为 id）；这些由参数引起的诊断的 next 包含 wa-cli help claim add --json 与 wa-cli source list。kind 为按合并结果生效的 claim-sources 规则需要作者亲历素材的类型（默认 experience、opinion、case、data，以规则 kinds 参数为准），且 --sources 给出了素材而这些素材的类型全部不在该规则 source_types（默认 author-note、interview、transcript）中时报告 claim.needs-author-source（field 为 kind，message 列出所关联素材及其类型，建议改用 --kind fact 登记外部报道的事实或先以 wa-cli source add 登记作者亲历素材再关联）；--sources 省略（尚未关联素材，稍后用 claim set 补齐）或至少一份素材类型在 source_types 中时不报告；claim-sources 规则未生效（被豁免或未配置）时不报告；已有 claims.yaml 不通过校验时报告其诊断（field 以 claims 开头，next 保留能复查它的校验命令）；claims 经由 YAML 锚点、别名或合并键得到时报告 claim.anchored-value；这些情况都不修改文件，退出码为 1。
+    statement: wa-cli claim add <unit> --kind <kind> --text <text> 必须在单元目录下的 claims.yaml 的 claims 末尾追加一个论断（Claim）：kind 取值为 experience、opinion、case、data、fact 之一；--sources 为逗号分隔的素材 id（省略时为空数组，表示尚未关联素材）；id 由 --id 指定，省略时为 claim-<n>，n 从已有论断数加一开始递增到不与已有论断重复。claims.yaml 不存在时创建（含 schema_version 1），子单元目录不存在时先创建；已有 claims.yaml 时只追加该项，保留其他内容与 YAML 注释。成功时退出码为 0，changedPaths 列出新建的单元目录与 claims.yaml，--json 输出的 claim 字段含 unit、id、kind、text 与 sources。sources 中的素材 id 未登记时报告 claim.unknown-source（field 为 sources[i]）；kind 不在取值范围内、--id 不符合 id 格式或 text 为空时报告 artifact.schema-violation（field 为 kind、id 或 text）；id 与该单元已有论断相同时报告 artifact.duplicate-id（field 为 id）；这些由参数引起的诊断的 next 包含 wa-cli help claim add --json 与 wa-cli source list。kind 为按合并结果生效的 claim-sources 规则需要作者亲历素材的类型（默认 experience、opinion、case、data，以规则 kinds 参数为准），且 --sources 给出了素材而这些素材的类型全部不在该规则 source_types（默认 author-note、interview、transcript）中时报告 claim.needs-author-source（field 为 kind，message 列出所关联素材及其类型，建议改用 --kind fact 登记外部报道的事实或先以 wa-cli source add 登记作者亲历素材再关联）；--sources 省略（尚未关联素材，稍后用 claim set 补齐）或至少一份素材类型在 source_types 中时不报告；claim-sources 规则未生效（被豁免或未配置）时不报告；--decision <决策 id> 只用于该拒绝路径：给出时核对决策存在、其问题为 wa-cli 为该论断生成的固定文本、status 为 decided 且作者选择「允许」，全部满足才通过拒绝并把决策 id 记在该论断上（claims.yaml 的可选 decision 字段，视图透出）；任一不满足时拒绝并说明原因（决策不存在、不是为该论断生成、尚未决定、作者选择了保持不变）；输入未触发该拒绝却给出 --decision 时报告 input.invalid-value（field 为 decision，message 说明 --decision 只在触发拒绝时使用），不得把未核对的决策 id 写进论断。未给出 --decision 时在拒绝路径上幂等生成阻塞决策（固定问题文本「论断（Claim）<单元> 以 <kind> 登记「<论断文字>」只关联了非作者亲历素材，允许吗？」，选项 允许 与 保持不变，推荐 保持不变，关联该单元）：同问题文本且同单元的 open 决策已存在时不重复追加，作者已选「保持不变」的已决定决策同样抑制追加，作者允许后的再次未授权尝试追加新的阻塞决策；追加时 changedPaths 如实列出决策队列，message 提示已生成阻塞决策、作者允许后用 --decision 重试。已有 claims.yaml 不通过校验时报告其诊断（field 以 claims 开头，next 保留能复查它的校验命令）；claims 经由 YAML 锚点、别名或合并键得到时报告 claim.anchored-value；这些情况都不修改文件，退出码为 1。
     scenarios:
       add-claim:
         - GIVEN: 已创建作品 my-post，已登记素材 interview-ceo
@@ -186,6 +186,22 @@ requirements:
         - GIVEN: 作品 my-post 的 claims.yaml 中 claim-1 引用的素材 interview-ceo 已被删除
         - WHEN: 运行 wa-cli claim add my-post --kind fact --text 无关 --dir D --json
         - THEN: diagnostics 中有一条错误码为 claim.unknown-source、field 为 claims[0].sources[0] 的诊断，其 next 包含 wa-cli validate --dir D --json；claims.yaml 不变，退出码为 1
+      add-override-decision:
+        - GIVEN: 已创建作品 my-post，已登记 reference 素材 src-r；决策队列无相关决策
+        - WHEN: 运行 wa-cli claim add my-post --kind data --text 外部数据 --sources src-r --dir D --json（第一次），再次运行同一命令（第二次）
+        - THEN: 两次都退出码 1、claims.yaml 未创建、message 含 claim.needs-author-source 并提示已生成阻塞决策；决策队列只追加一条 open 的阻塞决策（问题为固定文本，选项 允许 与 保持不变），两次的 changedPaths 第一次含决策队列、第二次为空
+      add-override-authorized:
+        - GIVEN: 同上，作者对生成的决策 decide 选择了 允许
+        - WHEN: 运行 wa-cli claim add my-post --kind data --text 外部数据 --sources src-r --decision <该决策 id> --dir D --json
+        - THEN: 'claims.yaml 创建该论断且含 decision: <该决策 id>，视图透出，退出码 0；wa-cli lint 仍按 claim-sources 报告该论断'
+      add-override-kept:
+        - GIVEN: 同上，但作者 decide 选择了 保持不变
+        - WHEN: 再次不带 --decision 运行 claim add（同输入），与带 --decision 运行
+        - THEN: 不带 --decision：拒绝且不追加新的阻塞决策；带该决策 id 的 --decision：拒绝并说明作者已选择保持不变
+      decision-without-reject:
+        - GIVEN: 已创建作品 my-post，已登记 reference 素材 src-r
+        - WHEN: 运行 wa-cli claim add my-post --kind fact --text 事实 --sources src-r --decision dec-9 --dir D --json
+        - THEN: 报告 input.invalid-value（field 为 decision，message 说明 --decision 只在触发写入校验拒绝时使用），claims.yaml 未创建，退出码为 1
   unit-artifact-validation:
     strength: MUST
     statement: wa-cli validate 整体校验时，必须对每个可加载作品的每个单元目录中存在的 provenance.yaml 与 claims.yaml 做 Schema 校验并计入 checked；claims.yaml 另须满足论断 id 在文件内唯一（否则 artifact.duplicate-id）且 sources 中的每个素材 id 都已登记（否则 claim.unknown-source，field 为 claims[i].sources[j]），这两类诊断的 next 包含 wa-cli validate --dir <dir> --json。wa-cli validate <path> 按产物所在位置识别 source.yaml、provenance.yaml 与 claims.yaml，并执行与整体校验相同的检查。
@@ -240,7 +256,7 @@ requirements:
         - THEN: changes 只含 {added, at 2, text X}，退出码为 0
   claim-edit:
     strength: MUST
-    statement: wa-cli claim set <unit> <claim> 必须修改单元 claims.yaml 中 id 为 <claim> 的论断（Claim）：--kind 与 --text 替换对应字段，--sources（逗号分隔的素材 id，给出空值时为空数组）整体替换所关联的素材，省略的参数不修改；只改动这些字段，保留其他内容与 YAML 注释。成功时退出码为 0，--json 输出的 claim 字段含修改后论断的 unit、id、kind、text 与 sources，changedPaths 为 [claims.yaml]；取值与原有取值相同时不写文件，changedPaths 为空数组。wa-cli claim remove <unit> <claim> 必须删除该论断并保留其他内容与注释，成功时 removed 为论断 id，changedPaths 为 [claims.yaml]。两个命令在单元没有 claims.yaml 或其中没有该 id 时报告 claim.not-found（next 包含 wa-cli claim list <unit> --dir <dir> --json）；sources 中的素材未登记时报告 claim.unknown-source（field 为 sources[i]），kind 不在取值范围内或 text 为空时报告 artifact.schema-violation（field 为 kind 或 text），这些由参数引起的诊断的 next 包含 wa-cli help claim set --json 与 wa-cli source list；--kind 替换后的类型与该论断当前所关联素材触发与 claim add 相同的 claim.needs-author-source 校验（kind 为 claim-sources 规则需要亲历素材的类型且已有素材全部非 source_types 类型，--sources 与 --kind 同给时按替换后的素材判断；省略 --kind 只改 --sources 使论断落入该状态时同样报告）时拒绝且不修改文件；已有 claims.yaml 不通过 Schema 校验或论断 id 重复时报告其诊断；修改或删除后仍有其他论断引用未登记的素材时照常写入，这些引用以 warning 级 claim.unknown-source 报告（field 为 claims[i].sources[j]，message 提示用 wa-cli claim set 修复）；要修改或删除的论断经由 YAML 锚点、别名或合并键得到时报告 claim.anchored-value（next 包含对应命令的 help）；这些情况都不修改文件，退出码为 1。
+    statement: wa-cli claim set <unit> <claim> 必须修改单元 claims.yaml 中 id 为 <claim> 的论断（Claim）：--kind 与 --text 替换对应字段，--sources（逗号分隔的素材 id，给出空值时为空数组）整体替换所关联的素材，省略的参数不修改；只改动这些字段，保留其他内容与 YAML 注释。成功时退出码为 0，--json 输出的 claim 字段含修改后论断的 unit、id、kind、text 与 sources，changedPaths 为 [claims.yaml]；取值与原有取值相同时不写文件，changedPaths 为空数组。wa-cli claim remove <unit> <claim> 必须删除该论断并保留其他内容与注释，成功时 removed 为论断 id，changedPaths 为 [claims.yaml]。两个命令在单元没有 claims.yaml 或其中没有该 id 时报告 claim.not-found（next 包含 wa-cli claim list <unit> --dir <dir> --json）；sources 中的素材未登记时报告 claim.unknown-source（field 为 sources[i]），kind 不在取值范围内或 text 为空时报告 artifact.schema-violation（field 为 kind 或 text），这些由参数引起的诊断的 next 包含 wa-cli help claim set --json 与 wa-cli source list；--kind 替换后的类型与该论断当前所关联素材触发与 claim add 相同的 claim.needs-author-source 校验（kind 为 claim-sources 规则需要亲历素材的类型且已有素材全部非 source_types 类型，--sources 与 --kind 同给时按替换后的素材判断；省略 --kind 只改 --sources 使论断落入该状态时同样报告）时拒绝且不修改文件；该拒绝同样支持 --decision 授权通道与拒绝路径的幂等阻塞决策，语义与 claim add 相同（含未触发拒绝却给出 --decision 的参数错误），但固定问题文本不同：「论断（Claim）<单元>/<论断 id> 改为 <kind> 且只关联了非作者亲历素材，允许吗？」（与 add 的文本形态不同，add 生成的决策不能授权 set）；通过的 --decision 写在该论断上。已有 claims.yaml 不通过 Schema 校验或论断 id 重复时报告其诊断；修改或删除后仍有其他论断引用未登记的素材时照常写入，这些引用以 warning 级 claim.unknown-source 报告（field 为 claims[i].sources[j]，message 提示用 wa-cli claim set 修复）；要修改或删除的论断经由 YAML 锚点、别名或合并键得到时报告 claim.anchored-value（next 包含对应命令的 help）；这些情况都不修改文件，退出码为 1。
     scenarios:
       set-sources:
         - GIVEN: 作品 my-post 的 claims.yaml 有论断 claim-1（experience，只关联 reference 素材 doc），claims 上方有作者的注释；已登记 interview 素材 talk
@@ -266,6 +282,10 @@ requirements:
         - GIVEN: 作品 my-post 的 claims.yaml 有 claim-1 与 claim-2，claims 上方有作者的注释
         - WHEN: 运行 wa-cli claim remove my-post claim-1 --dir D --json
         - THEN: removed 为 claim-1，claims.yaml 只剩 claim-2 且注释保留，changedPaths 为 [.writing-anything/works/my-post/claims.yaml]，退出码为 0
+      set-override-authorized:
+        - GIVEN: 作品 my-post 有 claim-1（fact，只关联 reference 素材 src-r）；作者已对「改为 data」的阻塞决策选择 允许
+        - WHEN: 运行 wa-cli claim set my-post claim-1 --kind data --decision <该决策 id> --dir D --json
+        - THEN: 'claim-1 的 kind 变为 data 且含 decision: <该决策 id>，退出码 0'
   claim-list:
     strength: MUST
     statement: wa-cli claim list <unit> 必须按 claims.yaml 中的顺序输出单元的论断（Claim）：--json 输出的 claims 为数组，每项含 unit、id、kind、text 与 sources；单元没有 claims.yaml 时为空数组；claims.yaml 不通过 Schema 校验或论断 id 重复时报告其诊断，claims 为空数组，退出码为 1；论断引用未登记的素材时照常列出全部论断，这些引用以 warning 级 claim.unknown-source 报告。该命令只读，changedPaths 为空数组。

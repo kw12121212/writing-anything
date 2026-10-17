@@ -1,0 +1,22 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: brief-field-provenance
+  status: proposed
+summary:
+  what:
+    - brief 的标量必填字段（audience、purpose、theme、pov、length）获得与前提/核心观点同构的出处：brief.yaml 新增可选 provenance 映射（字段 → {sources, decision}），brief set 增加 --<字段>-decision 与 --<字段>-sources 参数；brief 关卡对已填写而无出处的必填标量字段报 brief.unsourced-field（只关联未决定决策时报 brief.unconfirmed-field），缺出处不能从 brief 阶段推进
+  why:
+    - 下游实测作者经 harness 提问工具给出的简报答案无法回溯为决策，审计链断裂（反馈 P1-1）：前提与核心观点已有出处机制，标量必填字段是唯一的缺口。写作简报的每个作者输入都应可回溯
+scope:
+  in:
+    - internal/schema/schemas/brief.schema.json（provenance 映射）；internal/brief 的 Brief 结构、Questions 关卡、字段元数据；internal/cli/brief.go 的 set 参数与视图校验；brief 主规格 brief-artifact、brief-set、brief-gate、brief-show
+  out:
+    - 每字段独立产物的重型重构（保持标量字段形态不变，出处放侧映射）；写作法/大纲等其他产物的出处；对已推进过 brief 阶段的作品追溯（关卡只在 brief 阶段生效，过站作品天然豁免——迁移答案）
+unchanged_behavior:
+  - 不带新参数的 brief set 行为与产物字节序（provenance 省略时）；premise 与 key_messages 的既有出处机制；brief show 的 questions 既有项；brief.md 兜底逻辑
+roadmap:
+  milestone: boundary-semantics-silent-failure
+  planned_change: brief-field-provenance

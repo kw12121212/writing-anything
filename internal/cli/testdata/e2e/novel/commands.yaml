@@ -78,8 +78,12 @@ stages:
     - premise-note,setting-note
     - --pov-person
     - third
+    - --pov-sources
+    - premise-note
     - --length
     - 14000-17000
+    - --length-sources
+    - premise-note
     - --message
     - theme
     - --message-text

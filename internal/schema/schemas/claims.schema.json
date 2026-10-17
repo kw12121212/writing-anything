@@ -4,20 +4,49 @@
   "description": "单元中需要出处支撑的论断（Claim），每项关联作者提供的素材（Source）id。",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "claims"],
+  "required": [
+    "schema_version",
+    "claims"
+  ],
   "properties": {
-    "schema_version": {"const": 1},
+    "schema_version": {
+      "const": 1
+    },
     "claims": {
       "type": "array",
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["id", "kind", "text", "sources"],
+        "required": [
+          "id",
+          "kind",
+          "text",
+          "sources"
+        ],
         "properties": {
-          "id": {"$ref": "common.schema.json#/$defs/id"},
-          "kind": {"enum": ["experience", "opinion", "case", "data", "fact"]},
-          "text": {"type": "string", "pattern": "\\S"},
-          "sources": {"$ref": "common.schema.json#/$defs/ids"}
+          "id": {
+            "$ref": "common.schema.json#/$defs/id"
+          },
+          "kind": {
+            "enum": [
+              "experience",
+              "opinion",
+              "case",
+              "data",
+              "fact"
+            ]
+          },
+          "text": {
+            "type": "string",
+            "pattern": "\\S"
+          },
+          "sources": {
+            "$ref": "common.schema.json#/$defs/ids"
+          },
+          "decision": {
+            "$ref": "common.schema.json#/$defs/id",
+            "description": "授权以该类型登记的决策 id：写入校验拒绝时作者经阻塞决策允许后，由 --decision 记录在此"
+          }
         }
       }
     }

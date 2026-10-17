@@ -25,6 +25,9 @@ func project(t *testing.T, works ...string) string {
 	for _, w := range works {
 		put(t, root, Path(w), string(read(t, filepath.Join("testdata", "works", w, FileName))))
 	}
+	// completeBrief 的字段出处（Field Provenance）指向这份标准素材。
+	put(t, root, ".writing-anything/sources/note/source.yaml", "schema_version: 1\nid: note\ntype: author-note\nfile: original.txt\nsha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nbytes: 1\n")
+	put(t, root, ".writing-anything/sources/note/original.txt", "作者原话\n")
 	return root
 }
 
@@ -523,7 +526,7 @@ func TestBriefBlockers(t *testing.T) {
 		return out
 	}
 	briefPath := Dir("my-post") + "/brief.yaml"
-	put(t, root, briefPath, "schema_version: 1\naudience: 读者\nkey_messages:\n  - {id: km-1, text: 没有出处}\n  - {id: km-2, text: 待确认, decision: dec-1}\n")
+	put(t, root, briefPath, "schema_version: 1\naudience: 读者\nprovenance:\n  audience: {sources: [note]}\nkey_messages:\n  - {id: km-1, text: 没有出处}\n  - {id: km-2, text: 待确认, decision: dec-1}\n")
 	put(t, root, decision.Path, "schema_version: 1\ndecisions:\n  - {id: dec-1, question: 观点, options: [], blocking: true, units: [my-post], status: open}\n")
 	w, u, _ = Resolve(root, "my-post")
 	want := []string{"brief.missing-field brief " + briefPath, "brief.unsourced-message brief " + briefPath, "brief.unconfirmed-message brief " + briefPath, "decision.blocking decisions .writing-anything/decisions.yaml"}
@@ -648,7 +651,7 @@ func TestOutlineBlockers(t *testing.T) {
 }
 
 // completeBrief 是 minimal 文体中填齐必填项（audience 与 purpose）的写作简报。
-const completeBrief = "schema_version: 1\naudience: 后端工程师\npurpose: 讲清楚为什么要做连接池\n"
+const completeBrief = "schema_version: 1\naudience: 后端工程师\npurpose: 讲清楚为什么要做连接池\nprovenance:\n  audience: {sources: [note]}\n  purpose: {sources: [note]}\n"
 
 // 汇总单元（Aggregated Unit）：部与章的推导阶段取子场景中最落后者（最短板），空章为第一个阶段，
 // 全部 done 时为 done；推进汇总单元被拒绝且不修改文件。
