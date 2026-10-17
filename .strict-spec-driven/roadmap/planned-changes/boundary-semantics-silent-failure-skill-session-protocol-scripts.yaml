@@ -1,0 +1,11 @@
+schema: strict-spec-driven/planned-change/v1
+schema_version: 1
+artifact_type: planned_change
+schema_file: ../../templates/strict-spec-driven/schemas/planned-change.yaml
+planned_change:
+  id: skill-session-protocol-scripts
+  milestone: boundary-semantics-silent-failure
+status: complete
+summary: wa-* 技能的会话协议段从 prose 改为可执行模板：set -euo pipefail、禁 || true、逐条检查 exit code 的 wrapper 样例
+details: 反馈 P1-3（L3 脚本层）。方法论：提示词是劝告，机制是约束；会话协议若只是 prose，agent 仍可能 || true 吞错。参照 java-* 技能 scripts/*.cjs --json 模式，把会话纪律落成技能内可直接复制的可执行 wrapper 模板与「harness 提问工具 ↔ decision 记录」映射指引。技能随 wa-cli 分发，需同步更新 embed 与 skills 测试（skills-reference-commands 等）。
+depends_on: []

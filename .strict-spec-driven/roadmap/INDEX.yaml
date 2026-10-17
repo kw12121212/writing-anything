@@ -19,3 +19,7 @@ milestones:
     title: 真实使用验证与发布（Real-use Validation & Release）
     path: roadmap/milestones/real-use-and-release.yaml
     status: complete
+  boundary-semantics-silent-failure:
+    title: 边界语义与静默失败加固（Boundary Semantics & Silent Failure Hardening）
+    path: roadmap/milestones/boundary-semantics-silent-failure.yaml
+    status: proposed

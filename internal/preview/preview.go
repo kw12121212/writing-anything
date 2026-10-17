@@ -65,6 +65,15 @@ type Page struct {
 	Confirms []Confirm
 	Strict   bool
 	Reviews  []Review
+	// Failures 是最近失败的命令摘要（审计日志（Audit Log）的最近 5 条 exit 非 0 记录），只读展示（preview-audit-summary）。
+	Failures []AuditFailure
+}
+
+// AuditFailure 是阅读页最近失败区块中的一项。
+type AuditFailure struct {
+	At      string
+	Command string
+	Exit    int
 }
 
 // Option 是待确认决策的一个选项。

@@ -14,6 +14,18 @@ description: 按大纲撰写草稿，登记论断并关联作者素材，通过�
 5. 草稿阶段的必需产物含 marketing 时（如 wechat-marketing 文体），写齐营销要素（Marketing Elements）：用 `wa-cli marketing set <单元> --headline <id> --headline-text <标题> --json` 写入至少两个标题候选（Headline Candidates），用 `--digest`、`--opening` 与 `--cta` 写入文章摘要（Digest）、开头钩子（Hook）与行动号召（CTA）；`wa-cli marketing show <单元> --json` 列出仍缺的要素。然后运行 `wa-cli marketing ask <单元> --recommend <候选 id> --rationale <理由> --json` 把候选登记为标题决策，请作者选定。
 6. 运行 `wa-cli advance <单元> --json` 进入审稿。
 
+## 会话协议（可执行模板）
+
+把下面的模板复制进会话的 shell，之后按步骤逐条运行：失败即停，读诊断（Diagnostic）的 next 修复后重试；绝不 `|| true`、管道或输出重定向吞掉失败（shell 层吞错对状态机不可见，只能事后靠 stale 暴露）。
+
+```bash
+set -euo pipefail
+wa() { local out; out=$(wa-cli "$@") || { printf '%s\n' "$out" >&2; return 1; }; printf '%s\n' "$out"; }
+wa next --json   # 示例：每步先看下一步；把 wa 后面换成当前步骤的 wa-cli 命令与参数
+```
+
+经 harness 提问工具得到作者的决定后，同步回写决策队列（Decision Queue）保住审计链：先用 `wa-cli decision add --question <问题> --unit <单元> --json` 登记问题，作者答复后用 `wa-cli decide <决策 id> --option <选项> --answer <答复> --confirmation <作者原话摘要> --json` 记录决定；不要只在对话里问完就往下走。
+
 ## 必须停下来问作者
 
 - 正文需要作者的亲历、数据或观点而素材里没有时，向作者要素材，不要编造。

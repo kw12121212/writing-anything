@@ -1,0 +1,57 @@
+schema: strict-spec-driven/delta-spec/v1
+schema_version: 1
+artifact_type: delta_spec
+schema_file: templates/strict-spec-driven/schemas/delta-spec.yaml
+target_spec: sources-and-provenance
+operations:
+  ADDED: {}
+  MODIFIED:
+    source-add:
+      strength: MUST
+      statement: wa-cli source add --type <type> 必须把读取到的内容登记为素材（Source）：type 取值为 author-note、interview、transcript、reference、past-article 之一；内容逐字节存档到 .writing-anything/sources/<id>/，文件名为 original 加 --file 的扩展名（没有扩展名时为 original，来自标准输入时为 original.txt），并写出 .writing-anything/sources/<id>/source.yaml，含 schema_version（1）、id、type、file（存档文件名）、sha256（内容的 SHA-256 十六进制）、bytes（字节数），给出 --title 时含 title，来自文件时含 original_name（输入文件的文件名）。--url <URL>（可选）记录素材的一手网页地址（http 或 https，长度不超过 2048），--tier <primary|secondary>（可选）记录信源等级（Source Tier）：primary 为一手（作者亲历或原始出处），secondary 为二手转述（引用二手转述的引语时须向作者明示）。id 由 --id 指定，省略时为 src- 加 sha256 的前 12 个字符。成功时退出码为 0，changedPaths 为素材目录、存档文件与 source.yaml，--json 输出的 source 字段含 id、type、title（未给出时为 null）、path（存档文件路径）与 sha256，给出时另含 url 与 tier；type 不在取值范围内或 --id 不符合 id 格式时报告 artifact.schema-violation（field 为 type 或 id）；--url 不匹配 http(s) 地址、超过长度上限或 --tier 不在取值范围内时同样报告 artifact.schema-violation（field 为 url 或 tier）；内容为空时报告 source.empty；素材目录已存在时报告 source.exists（path 为该素材目录）；这些情况都不创建或修改任何文件，退出码为 1。未找到工作区时报告 workspace.not-found。
+      scenarios:
+        add-note:
+          - GIVEN: 刚初始化的工作区 D，D/idea.md 的内容为「我在 2023 年迁移过一次数据库」
+          - WHEN: 运行 wa-cli source add --type author-note --file idea.md --title 迁移笔记 --dir D --json
+          - THEN: source.id 为 src- 加该内容 SHA-256 的前 12 个字符，source.type 为 author-note，source.title 为 迁移笔记；D/.writing-anything/sources/<id>/original.md 与 idea.md 逐字节相同，source.yaml 中 original_name 为 idea.md；changedPaths 含素材目录、original.md 与 source.yaml，退出码为 0
+        explicit-id:
+          - GIVEN: 刚初始化的工作区 D
+          - WHEN: 通过标准输入传入访谈稿运行 wa-cli source add --type interview --id interview-ceo --dir D --json
+          - THEN: 素材目录为 .writing-anything/sources/interview-ceo，source.id 为 interview-ceo，退出码为 0
+        url-tier:
+          - GIVEN: 刚初始化的工作区 D，D/idea.md 有内容
+          - WHEN: 运行 wa-cli source add --type reference --file idea.md --url https://example.com/post --tier secondary --dir D --json
+          - THEN: 'source.yaml 含 url: https://example.com/post 与 tier: secondary，--json 的 source 字段同含两者，退出码为 0；wa-cli source list --dir D --json 的该项含 url 与 tier'
+        bad-url-tier:
+          - GIVEN: 刚初始化的工作区 D，D/idea.md 有内容
+          - WHEN: 运行 wa-cli source add --type reference --file idea.md --url ftp://example.com/x --dir D --json，再以 --tier rumour 运行
+          - THEN: 两次都报告 artifact.schema-violation（field 分别为 url 与 tier），sources/ 下没有新建目录，退出码为 1
+        duplicate-content:
+          - GIVEN: 已用 wa-cli source add --type author-note --file idea.md --dir D 登记过素材
+          - WHEN: 再次运行同一命令
+          - THEN: diagnostics 中有一条错误码为 source.exists、path 为该素材目录的诊断；存档与 source.yaml 与运行前逐字节相同，退出码为 1
+        unknown-type:
+          - GIVEN: 刚初始化的工作区 D
+          - WHEN: 运行 wa-cli source add --type diary --file idea.md --dir D --json
+          - THEN: diagnostics 中有一条错误码为 artifact.schema-violation、field 为 type 的诊断，sources/ 下没有新建目录，退出码为 1
+        empty-content:
+          - GIVEN: 刚初始化的工作区 D，D/empty.md 为空文件
+          - WHEN: 运行 wa-cli source add --type author-note --file empty.md --dir D --json
+          - THEN: diagnostics 中有一条错误码为 source.empty 的诊断，sources/ 下没有新建目录，退出码为 1
+    source-list:
+      strength: MUST
+      statement: wa-cli source list 必须只读地列出工作区中已登记的素材：--json 输出 sources 数组，按 id 排序，每项含 id、type、title（未设置时为 null）、path（存档文件路径）与 sha256，给出时另含 url 与 tier（信源等级（Source Tier））；只列出 sources/ 下不以 . 开头、通过素材校验（见 archive-integrity）的子目录。changedPaths 为空数组；有素材目录不通过素材校验时报告其诊断、valid 为 false、退出码为 1，其他素材照常列出；否则退出码为 0。
+      scenarios:
+        list-sources:
+          - GIVEN: 已登记素材 interview-ceo 与 src-0123456789ab
+          - WHEN: 运行 wa-cli source list --dir D --json
+          - THEN: sources 依次为 interview-ceo 与 src-0123456789ab，changedPaths 为空数组，退出码为 0
+        list-empty:
+          - GIVEN: 刚初始化的工作区 D
+          - WHEN: 运行 wa-cli source list --dir D --json
+          - THEN: sources 为空数组，valid 为 true，退出码为 0
+        list-skips-tampered:
+          - GIVEN: 已登记素材 interview-ceo 与 tampered，tampered 的存档文件被改动
+          - WHEN: 运行 wa-cli source list --dir D --json
+          - THEN: sources 只含 interview-ceo；diagnostics 中有一条错误码为 source.modified 的诊断，valid 为 false，退出码为 1
+  REMOVED: {}

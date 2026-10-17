@@ -80,7 +80,7 @@ func TestCurveContractTarget(t *testing.T) {
 	dir := metricsWork(t, "") // house 规范包声明 tension（1 到 5 分、tolerance 1）
 	writeFile(t, wsPath(dir, outlineRel), "schema_version: 1\nsections:\n  - {id: why, title: t, reason: r, targets: {tension: 4}}\n")
 	recordAll(t, dir, "my-post", storySession("sX", [3]any{"tension", 1, 2}, [3]any{"tension", 2, 2}, [3]any{"tension", 3, 2}))
-	code, res := runCurveCmd(t, dir, "curve", "my-post", "--json")
+	code, res := runCurveCmd(t, dir, "curve", "my-post")
 	if code != 0 || !res.Valid || len(res.ChangedPaths) != 0 || len(res.Curves) != 1 {
 		t.Fatalf("curve: exit code = %d, result = %+v", code, res)
 	}
@@ -122,7 +122,7 @@ func TestCurveMethodDefault(t *testing.T) {
 	writeFile(t, wsPath(dir, ".writing-anything/works/lamp/units/s2/draft.md"), "第一段，接近目标。\n")
 	recordAll(t, dir, "lamp/s1", storySession("sX", [3]any{"tension", 1, 4}))
 	recordAll(t, dir, "lamp/s2", storySession("sX", [3]any{"tension", 1, 4}))
-	code, res := runCurveCmd(t, dir, "curve", "lamp", "--json")
+	code, res := runCurveCmd(t, dir, "curve", "lamp")
 	if code != 0 {
 		t.Fatalf("curve: exit code = %d, diagnostics = %+v", code, res.Diagnostics)
 	}
@@ -163,7 +163,7 @@ func TestCurveUnscoredAndStale(t *testing.T) {
 	for _, id := range []string{"s1", "s2"} {
 		runWSIn(t, dir, storySession(id, [3]any{"tension", 1, 2}, [3]any{"tension", 2, 2}, [3]any{"tension", 3, 2}), "metrics", "record", "my-post")
 	}
-	code, res := runCurveCmd(t, dir, "curve", "my-post", "--json")
+	code, res := runCurveCmd(t, dir, "curve", "my-post")
 	if code != 0 {
 		t.Fatalf("curve: exit code = %d", code)
 	}
@@ -174,7 +174,7 @@ func TestCurveUnscoredAndStale(t *testing.T) {
 	// 记录第三次会话后作者修改正文：metrics.yaml 过期，点值仍为 null。
 	recordAll(t, dir, "my-post", storySession("sX", [3]any{"tension", 1, 2}, [3]any{"tension", 2, 2}, [3]any{"tension", 3, 2}))
 	writeFile(t, wsPath(dir, ".writing-anything/works/my-post/draft.md"), "第一段改了。\n\n第二段。\n\n第三段。\n")
-	if code, res = runCurveCmd(t, dir, "curve", "my-post", "--json"); code != 0 {
+	if code, res = runCurveCmd(t, dir, "curve", "my-post"); code != 0 {
 		t.Fatalf("curve after edit: exit code = %d", code)
 	}
 	if p = res.Curves[0]["points"].([]any)[0].(map[string]any); p["value"] != nil {
@@ -192,7 +192,7 @@ func TestCurvePacing(t *testing.T) {
 	recordAll(t, dir, "lamp", storySession("sX",
 		[3]any{"emotion", 1, 4}, [3]any{"emotion", 2, 1}, [3]any{"emotion", 3, 1}, [3]any{"emotion", 4, 5},
 		[3]any{"tension", 1, 2}, [3]any{"tension", 2, 2}, [3]any{"tension", 3, 2}, [3]any{"tension", 4, 2}))
-	code, res := runCurveCmd(t, dir, "curve", "lamp", "--json")
+	code, res := runCurveCmd(t, dir, "curve", "lamp")
 	if code != 0 || !res.Valid {
 		t.Fatalf("curve: exit code = %d, diagnostics = %+v", code, res.Diagnostics)
 	}
@@ -213,7 +213,7 @@ func TestCurvePacing(t *testing.T) {
 // TestCurveNoMetrics 覆盖没有声明任何 AI 评分指标的作品：报告 metrics.none-declared，退出码为 1。
 func TestCurveNoMetrics(t *testing.T) {
 	dir := newWork(t) // minimal 文体不声明 AI 评分指标
-	code, res := runCurveCmd(t, dir, "curve", "my-post", "--json")
+	code, res := runCurveCmd(t, dir, "curve", "my-post")
 	if code != 1 || len(res.Curves) != 0 || len(res.Pacing) != 0 {
 		t.Fatalf("curve: exit code = %d, result = %+v", code, res)
 	}
@@ -237,7 +237,7 @@ func TestPacingInvalidParams(t *testing.T) {
 		"schema_version: 1\nid: override\ntitle: 覆盖指标\nscored_metrics:\n  - id: emotion\n    title: 情绪\n    scale: {min: 1, max: 2}\n"+
 			"    anchors:\n      - {score: 1, description: 平静, example: 她喝茶。}\n      - {score: 2, description: 起伏, example: 她放下茶杯。}\n")
 	runWS(t, dir, "config", "set", "packs", "override")
-	code, res := runWS(t, dir, "config", "resolved", "--json")
+	code, res := runWS(t, dir, "config", "resolved")
 	if code != 1 {
 		t.Fatalf("config resolved: exit code = %d, diagnostics = %+v", code, res.Diagnostics)
 	}

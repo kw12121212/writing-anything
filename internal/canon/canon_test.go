@@ -33,7 +33,7 @@ func newWork(t *testing.T) (string, *work.Work) {
 
 func addSource(t *testing.T, root, id string) {
 	t.Helper()
-	if _, _, ps := source.Add(root, []byte("原文 "+id), "interview", "", id, ""); len(ps) > 0 {
+	if _, _, ps := source.Add(root, []byte("原文 "+id), "interview", "", id, "", "", ""); len(ps) > 0 {
 		t.Fatal(ps)
 	}
 }

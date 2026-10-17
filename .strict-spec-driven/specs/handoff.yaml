@@ -36,7 +36,7 @@ requirements:
         - THEN: 文本输出不含交接记录段，只列出各单元的阶段与下一步，退出码为 0
   handoff-write:
     strength: MUST
-    statement: wa-cli handoff write 必须从 --file（相对 --dir 或为绝对路径）或标准输入读取交接记录输入并整体追加到工作区（Workspace）的 .writing-anything/handoffs.yaml：输入为 YAML，含非空的 done（完成了什么，字符串数组）与 todo（未完成事项，字符串数组）及可选的 instructions（作者的新指示，字符串数组）与 risks（需要注意的风险，字符串数组），元素为非空文本。产物含 schema_version（1）与 notes 数组，每条含 id（handoff-<n>，n 从条目数加一递增到不重复）、written_at（UTC，YYYY-MM-DDTHH:MM:SSZ）、done、todo、instructions 与 risks（省略的可选节为空数组）。输入不符合 Schema 或无法解析时报告 artifact.schema-violation 或 artifact.parse-error（field 为输入中的位置，path 为空）；条目数已达到上限 200 时报告 handoff.too-many（message 提示作者归档清理旧记录），不写文件；这些失败退出码为 1。成功时在 notes 末尾追加一条（节点树追加，保留其他内容与 YAML 注释；途经符号链接按 artifact.not-found 处理；notes 经由 YAML 锚点、别名或合并键得到时报告 handoff.anchored-value），changedPaths 为 [handoffs.yaml]，--json 输出的 note 字段含 id、writtenAt、done、todo、instructions 与 risks，退出码为 0。没有 handoff write 之外的写入命令：交接记录只能追加（没有编辑或删除命令）。
+    statement: wa-cli handoff write 必须从 --file（相对 --dir 或为绝对路径）或标准输入读取交接记录输入并整体追加到工作区（Workspace）的 .writing-anything/handoffs.yaml：输入为 YAML，含非空的 done（完成了什么，字符串数组）、可省略或为空数组的 todo（未完成事项，字符串数组，干净收尾时可为空）及可选的 instructions（作者的新指示，字符串数组）与 risks（需要注意的风险，字符串数组），元素为非空文本。产物含 schema_version（1）与 notes 数组，每条含 id（handoff-<n>，n 从条目数加一递增到不重复）、written_at（UTC，YYYY-MM-DDTHH:MM:SSZ）、done、todo、instructions 与 risks（省略的可选节为空数组）。输入不符合 Schema 或无法解析时报告 artifact.schema-violation 或 artifact.parse-error（field 为输入中的位置，path 为空）；条目数已达到上限 200 时报告 handoff.too-many（message 提示作者归档清理旧记录），不写文件；这些失败退出码为 1。成功时在 notes 末尾追加一条（节点树追加，保留其他内容与 YAML 注释；途经符号链接按 artifact.not-found 处理；notes 经由 YAML 锚点、别名或合并键得到时报告 handoff.anchored-value），changedPaths 为 [handoffs.yaml]，--json 输出的 note 字段含 id、writtenAt、done、todo、instructions 与 risks，退出码为 0。没有 handoff write 之外的写入命令：交接记录只能追加（没有编辑或删除命令）。
     scenarios:
       write-first:
         - GIVEN: 刚初始化的工作区 D，输入含 done [完成场景一] 与 todo [场景二待收口]
@@ -46,8 +46,12 @@ requirements:
         - GIVEN: handoffs.yaml 已有一条 handoff-1，文件中有作者注释
         - WHEN: 运行 wa-cli handoff write --dir D --json（标准输入为第二条输入）
         - THEN: 追加 id 为 handoff-2 的条目，注释保留，退出码为 0
+      write-no-todo:
+        - GIVEN: 刚初始化的工作区 D，输入只含 done [全部场景已收口]（省略 todo）
+        - WHEN: 运行 wa-cli handoff write --dir D --json
+        - THEN: 成功创建首条 handoff-1，该条 todo 为空数组，退出码为 0；wa-cli validate --dir D --json 通过；handoff show 与 next 对该条不列未完成事项
       write-invalid-input:
-        - GIVEN: 输入缺少 todo 节
+        - GIVEN: 输入缺少 done 节
         - WHEN: 运行 wa-cli handoff write --dir D --json
         - THEN: 报告 artifact.schema-violation，handoffs.yaml 未被创建或修改，退出码为 1
       write-cap:

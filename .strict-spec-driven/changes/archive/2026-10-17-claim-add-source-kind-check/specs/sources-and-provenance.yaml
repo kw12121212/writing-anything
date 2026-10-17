@@ -1,0 +1,61 @@
+schema: strict-spec-driven/delta-spec/v1
+schema_version: 1
+artifact_type: delta_spec
+schema_file: templates/strict-spec-driven/schemas/delta-spec.yaml
+target_spec: sources-and-provenance
+operations:
+  ADDED: {}
+  MODIFIED:
+    claim-add:
+      strength: MUST
+      statement: wa-cli claim add <unit> --kind <kind> --text <text> 必须在单元目录下的 claims.yaml 的 claims 末尾追加一个论断（Claim）：kind 取值为 experience、opinion、case、data、fact 之一；--sources 为逗号分隔的素材 id（省略时为空数组，表示尚未关联素材）；id 由 --id 指定，省略时为 claim-<n>，n 从已有论断数加一开始递增到不与已有论断重复。claims.yaml 不存在时创建（含 schema_version 1），子单元目录不存在时先创建；已有 claims.yaml 时只追加该项，保留其他内容与 YAML 注释。成功时退出码为 0，changedPaths 列出新建的单元目录与 claims.yaml，--json 输出的 claim 字段含 unit、id、kind、text 与 sources。sources 中的素材 id 未登记时报告 claim.unknown-source（field 为 sources[i]）；kind 不在取值范围内、--id 不符合 id 格式或 text 为空时报告 artifact.schema-violation（field 为 kind、id 或 text）；id 与该单元已有论断相同时报告 artifact.duplicate-id（field 为 id）；这些由参数引起的诊断的 next 包含 wa-cli help claim add --json 与 wa-cli source list。kind 为按合并结果生效的 claim-sources 规则需要作者亲历素材的类型（默认 experience、opinion、case、data，以规则 kinds 参数为准），且 --sources 给出了素材而这些素材的类型全部不在该规则 source_types（默认 author-note、interview、transcript）中时报告 claim.needs-author-source（field 为 kind，message 列出所关联素材及其类型，建议改用 --kind fact 登记外部报道的事实或先以 wa-cli source add 登记作者亲历素材再关联）；--sources 省略（尚未关联素材，稍后用 claim set 补齐）或至少一份素材类型在 source_types 中时不报告；claim-sources 规则未生效（被豁免或未配置）时不报告；已有 claims.yaml 不通过校验时报告其诊断（field 以 claims 开头，next 保留能复查它的校验命令）；claims 经由 YAML 锚点、别名或合并键得到时报告 claim.anchored-value；这些情况都不修改文件，退出码为 1。
+      scenarios:
+        add-claim:
+          - GIVEN: 已创建作品 my-post，已登记素材 interview-ceo
+          - WHEN: 运行 wa-cli claim add my-post --kind experience --text 我们在一周内完成了迁移 --sources interview-ceo --dir D --json
+          - THEN: D/.writing-anything/works/my-post/claims.yaml 的 claims 为一项：id 为 claim-1、kind 为 experience、sources 为 [interview-ceo]；claim.id 为 claim-1；changedPaths 为 [.writing-anything/works/my-post/claims.yaml]，退出码为 0
+        unknown-source:
+          - GIVEN: 已创建作品 my-post，没有登记素材 nope
+          - WHEN: 运行 wa-cli claim add my-post --kind data --text 性能提升了 30% --sources nope --dir D --json
+          - THEN: diagnostics 中有一条错误码为 claim.unknown-source、field 为 sources[0] 的诊断，单元目录下没有 claims.yaml，退出码为 1
+        add-reference-only-kind:
+          - GIVEN: 已创建作品 my-post，已登记 reference 类型素材 src-r
+          - WHEN: 运行 wa-cli claim add my-post --kind data --text 性能提升了 30% --sources src-r --dir D --json
+          - THEN: diagnostics 中有一条错误码为 claim.needs-author-source 的诊断，message 列出 src-r（reference）并建议改用 --kind fact；单元目录下没有 claims.yaml，退出码为 1；同样输入改用 --kind fact 时退出码为 0
+        claim-without-source:
+          - GIVEN: 已创建作品 my-post
+          - WHEN: 运行 wa-cli claim add my-post --kind opinion --text 微服务不适合小团队 --dir D --json
+          - THEN: claims.yaml 中该论断的 sources 为空数组，退出码为 0
+        existing-problem-kept:
+          - GIVEN: 作品 my-post 的 claims.yaml 中 claim-1 引用的素材 interview-ceo 已被删除
+          - WHEN: 运行 wa-cli claim add my-post --kind fact --text 无关 --dir D --json
+          - THEN: diagnostics 中有一条错误码为 claim.unknown-source、field 为 claims[0].sources[0] 的诊断，其 next 包含 wa-cli validate --dir D --json；claims.yaml 不变，退出码为 1
+    claim-edit:
+      strength: MUST
+      statement: wa-cli claim set <unit> <claim> 必须修改单元 claims.yaml 中 id 为 <claim> 的论断（Claim）：--kind 与 --text 替换对应字段，--sources（逗号分隔的素材 id，给出空值时为空数组）整体替换所关联的素材，省略的参数不修改；只改动这些字段，保留其他内容与 YAML 注释。成功时退出码为 0，--json 输出的 claim 字段含修改后论断的 unit、id、kind、text 与 sources，changedPaths 为 [claims.yaml]；取值与原有取值相同时不写文件，changedPaths 为空数组。wa-cli claim remove <unit> <claim> 必须删除该论断并保留其他内容与注释，成功时 removed 为论断 id，changedPaths 为 [claims.yaml]。两个命令在单元没有 claims.yaml 或其中没有该 id 时报告 claim.not-found（next 包含 wa-cli claim list <unit> --dir <dir> --json）；sources 中的素材未登记时报告 claim.unknown-source（field 为 sources[i]），kind 不在取值范围内或 text 为空时报告 artifact.schema-violation（field 为 kind 或 text），这些由参数引起的诊断的 next 包含 wa-cli help claim set --json 与 wa-cli source list；--kind 替换后的类型与该论断当前所关联素材触发与 claim add 相同的 claim.needs-author-source 校验（kind 为 claim-sources 规则需要亲历素材的类型且已有素材全部非 source_types 类型，--sources 与 --kind 同给时按替换后的素材判断；省略 --kind 只改 --sources 使论断落入该状态时同样报告）时拒绝且不修改文件；已有 claims.yaml 不通过 Schema 校验或论断 id 重复时报告其诊断；修改或删除后仍有其他论断引用未登记的素材时照常写入，这些引用以 warning 级 claim.unknown-source 报告（field 为 claims[i].sources[j]，message 提示用 wa-cli claim set 修复）；要修改或删除的论断经由 YAML 锚点、别名或合并键得到时报告 claim.anchored-value（next 包含对应命令的 help）；这些情况都不修改文件，退出码为 1。
+      scenarios:
+        set-sources:
+          - GIVEN: 作品 my-post 的 claims.yaml 有论断 claim-1（experience，只关联 reference 素材 doc），claims 上方有作者的注释；已登记 interview 素材 talk
+          - WHEN: 运行 wa-cli claim set my-post claim-1 --sources talk,doc --dir D --json
+          - THEN: claim.sources 为 [talk, doc]，kind 与 text 不变；changedPaths 为 [.writing-anything/works/my-post/claims.yaml]，作者的注释保留，退出码为 0
+        set-kind-reference-only:
+          - GIVEN: 作品 my-post 的 claims.yaml 有论断 claim-1（fact，只关联 reference 素材 doc）
+          - WHEN: 运行 wa-cli claim set my-post claim-1 --kind data --dir D --json
+          - THEN: diagnostics 中有一条错误码为 claim.needs-author-source 的诊断，message 建议改用 fact 或登记作者亲历素材；claims.yaml 不变，退出码为 1
+        set-unchanged:
+          - GIVEN: 同上
+          - WHEN: 再次运行 wa-cli claim set my-post claim-1 --sources talk,doc --dir D --json
+          - THEN: changedPaths 为空数组，退出码为 0
+        claim-not-found:
+          - GIVEN: 作品 my-post 的 claims.yaml 中没有 claim-9
+          - WHEN: 运行 wa-cli claim set my-post claim-9 --kind data --dir D --json 或 wa-cli claim remove my-post claim-9 --dir D --json
+          - THEN: diagnostics 中有一条错误码为 claim.not-found 的诊断，其 next 为 wa-cli claim list my-post --dir D --json；claims.yaml 不变，退出码为 1
+        set-unknown-source:
+          - GIVEN: 没有登记素材 nope
+          - WHEN: 运行 wa-cli claim set my-post claim-1 --sources nope --dir D --json
+          - THEN: diagnostics 中有一条错误码为 claim.unknown-source、field 为 sources[0] 的诊断，其 next 包含 wa-cli help claim set --json；claims.yaml 不变，退出码为 1
+        remove-claim:
+          - GIVEN: 作品 my-post 的 claims.yaml 有 claim-1 与 claim-2，claims 上方有作者的注释
+          - WHEN: 运行 wa-cli claim remove my-post claim-1 --dir D --json
+          - THEN: removed 为 claim-1，claims.yaml 只剩 claim-2 且注释保留，changedPaths 为 [.writing-anything/works/my-post/claims.yaml]，退出码为 0
+  REMOVED: {}

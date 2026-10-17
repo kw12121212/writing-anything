@@ -1,0 +1,7 @@
+schema_version: 1
+id: src-bad-url
+type: reference
+url: ftp://example.com/x
+file: original.md
+sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+bytes: 12

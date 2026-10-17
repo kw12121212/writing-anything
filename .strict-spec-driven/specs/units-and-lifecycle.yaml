@@ -350,3 +350,15 @@ requirements:
         - GIVEN: 作品 my-post 的 stage 为 done，单元目录下没有 acceptance.yaml 与 acceptance.md
         - WHEN: 运行 wa-cli reopen my-post --dir D --json
         - THEN: work.yaml 的 stage 为 review，退出码为 0
+  next-recovery:
+    strength: SHOULD
+    statement: wa-cli next 应读取 .writing-anything/audit.log（存在时，每次 next 只解析一次）：对每个关键命令（draft write、review record、accept、export）×单元对，若该对的最后一次调用退出码非 0 且其后没有退出码为 0 的同对调用，则在该单元条目的 action 末尾追加提示（说明该关键命令在本单元失败后尚未成功重试、请读当时的诊断修复后重跑），并在该单元条目的 commands 末尾追加查看该命令用法的 wa-cli help <命令> --json。回捞提示不是阻塞项（不进入 blockers，不阻塞 advance），不影响既有 steps 的内容与顺序（只追加）；audit.log 不存在或没有符合条件的对时不追加。单元归属按调用时记录的单元引用：条目单元等于该引用或在其子树中。
+    scenarios:
+      retry-step-appears:
+        - GIVEN: 工作区 D 中 my-post 的 review record 失败（exit 1）且未重试
+        - WHEN: 运行 wa-cli next my-post --dir D --json
+        - THEN: 该单元条目的 action 含「review record 在本单元失败后尚未成功重试」的提示，commands 末尾含 wa-cli help review record --json，blockers 不含回捞项
+      retry-step-clears:
+        - GIVEN: 同上，但失败后同命令对单元重试成功（exit 0）
+        - WHEN: 运行 wa-cli next my-post --dir D --json
+        - THEN: 该单元条目不含回捞提示与回捞命令

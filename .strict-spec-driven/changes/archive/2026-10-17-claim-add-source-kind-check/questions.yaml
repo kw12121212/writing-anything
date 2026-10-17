@@ -1,0 +1,42 @@
+schema: strict-spec-driven/question-list/v1
+schema_version: 1
+artifact_type: question_list
+schema_file: templates/strict-spec-driven/schemas/question-list.yaml
+change: claim-add-source-kind-check
+open: []
+resolved:
+  - id: requirement-problem
+    question: 现状具体错在哪，影响谁？
+    context: 反馈 P0-2
+    answer: 两处：①需要亲历素材的论断类型（默认 experience/opinion/case/data）只关联 reference 素材时写入静默成功，直到 lint 才暴露，下游 7 条返工；②标题行被 claim-candidates 标为数据候选但无法被论断逐字认领，warning 不可消（下游 fixture 实测 v0.2.0 三条、HEAD 一条）
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-interpretation
+    question: 请求方意图如何解读？
+    context: 反馈与批准的处置
+    answer: 写入时即校验并建议正确类型（提案原文）；标题候选要么跳过要么可显式认领——本变更取跳过（标题是电报式标签，数字应在正文句子中登记）；无素材不拦（保留增量工作流）
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-outcome
+    question: 什么可观察差异证明修好？
+    context: 验收可测
+    answer: ①claim add --kind data --sources <纯 reference> 退出码 1、claim.needs-author-source、message 建议 --kind fact、claims.yaml 不变；②同输入 --kind fact 成功；③claim set --kind data 对纯 reference 论断同样拒绝；④规范包覆盖 source_types 含 reference 时不拒；⑤含数字标题行不再产生候选（fixture 回归 0 条）；⑥无素材时照常写入
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-non-goals
+    question: 明确不变什么？
+    context: 防扩权
+    answer: 留痕例外通道留给后续变更（claim-kind-override-decision）；无素材放行；引用块行只检测数据；正文候选与覆盖逻辑；fact 加 reference 合法；既有错误码语义
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-trigger
+    question: 为什么是现在？
+    context: 时机来源
+    answer: 下游 v0.2.0 全流程复盘（docs/proposal-2026-10-16 P0-2），用户批准先修确定性缺陷
+    status: resolved
+    kind: requirement
+    answered_by: human

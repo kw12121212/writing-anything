@@ -892,6 +892,7 @@ func finish(inv *invocation, v enveloped, text func(io.Writer) error) int {
 	if err != nil {
 		return writeFailed(inv.stderr, err)
 	}
+	auditRememberCodes(r.Diagnostics)
 	if hasError(r.Diagnostics) {
 		return exitError
 	}

@@ -24,7 +24,7 @@ requirements:
         - THEN: diagnostics 中有一条错误码为 input.read-failed 的诊断，message 含 nope.md；工作区内没有新建或修改的文件，退出码为 1
   source-add:
     strength: MUST
-    statement: wa-cli source add --type <type> 必须把读取到的内容登记为素材（Source）：type 取值为 author-note、interview、transcript、reference、past-article 之一；内容逐字节存档到 .writing-anything/sources/<id>/，文件名为 original 加 --file 的扩展名（没有扩展名时为 original，来自标准输入时为 original.txt），并写出 .writing-anything/sources/<id>/source.yaml，含 schema_version（1）、id、type、file（存档文件名）、sha256（内容的 SHA-256 十六进制）、bytes（字节数），给出 --title 时含 title，来自文件时含 original_name（输入文件的文件名）。id 由 --id 指定，省略时为 src- 加 sha256 的前 12 个字符。成功时退出码为 0，changedPaths 为素材目录、存档文件与 source.yaml，--json 输出的 source 字段含 id、type、title（未给出时为 null）、path（存档文件路径）与 sha256。type 不在取值范围内或 --id 不符合 id 格式时报告 artifact.schema-violation（field 为 type 或 id）；内容为空时报告 source.empty；素材目录已存在时报告 source.exists（path 为该素材目录）；这些情况都不创建或修改任何文件，退出码为 1。未找到工作区时报告 workspace.not-found。
+    statement: wa-cli source add --type <type> 必须把读取到的内容登记为素材（Source）：type 取值为 author-note、interview、transcript、reference、past-article 之一；内容逐字节存档到 .writing-anything/sources/<id>/，文件名为 original 加 --file 的扩展名（没有扩展名时为 original，来自标准输入时为 original.txt），并写出 .writing-anything/sources/<id>/source.yaml，含 schema_version（1）、id、type、file（存档文件名）、sha256（内容的 SHA-256 十六进制）、bytes（字节数），给出 --title 时含 title，来自文件时含 original_name（输入文件的文件名）。--url <URL>（可选）记录素材的一手网页地址（http 或 https，长度不超过 2048），--tier <primary|secondary>（可选）记录信源等级（Source Tier）：primary 为一手（作者亲历或原始出处），secondary 为二手转述（引用二手转述的引语时须向作者明示）。id 由 --id 指定，省略时为 src- 加 sha256 的前 12 个字符。成功时退出码为 0，changedPaths 为素材目录、存档文件与 source.yaml，--json 输出的 source 字段含 id、type、title（未给出时为 null）、path（存档文件路径）与 sha256，给出时另含 url 与 tier；type 不在取值范围内或 --id 不符合 id 格式时报告 artifact.schema-violation（field 为 type 或 id）；--url 不匹配 http(s) 地址、超过长度上限或 --tier 不在取值范围内时同样报告 artifact.schema-violation（field 为 url 或 tier）；内容为空时报告 source.empty；素材目录已存在时报告 source.exists（path 为该素材目录）；这些情况都不创建或修改任何文件，退出码为 1。未找到工作区时报告 workspace.not-found。
     scenarios:
       add-note:
         - GIVEN: 刚初始化的工作区 D，D/idea.md 的内容为「我在 2023 年迁移过一次数据库」
@@ -34,6 +34,14 @@ requirements:
         - GIVEN: 刚初始化的工作区 D
         - WHEN: 通过标准输入传入访谈稿运行 wa-cli source add --type interview --id interview-ceo --dir D --json
         - THEN: 素材目录为 .writing-anything/sources/interview-ceo，source.id 为 interview-ceo，退出码为 0
+      url-tier:
+        - GIVEN: 刚初始化的工作区 D，D/idea.md 有内容
+        - WHEN: 运行 wa-cli source add --type reference --file idea.md --url https://example.com/post --tier secondary --dir D --json
+        - THEN: 'source.yaml 含 url: https://example.com/post 与 tier: secondary，--json 的 source 字段同含两者，退出码为 0；wa-cli source list --dir D --json 的该项含 url 与 tier'
+      bad-url-tier:
+        - GIVEN: 刚初始化的工作区 D，D/idea.md 有内容
+        - WHEN: 运行 wa-cli source add --type reference --file idea.md --url ftp://example.com/x --dir D --json，再以 --tier rumour 运行
+        - THEN: 两次都报告 artifact.schema-violation（field 分别为 url 与 tier），sources/ 下没有新建目录，退出码为 1
       duplicate-content:
         - GIVEN: 已用 wa-cli source add --type author-note --file idea.md --dir D 登记过素材
         - WHEN: 再次运行同一命令
@@ -48,7 +56,7 @@ requirements:
         - THEN: diagnostics 中有一条错误码为 source.empty 的诊断，sources/ 下没有新建目录，退出码为 1
   source-list:
     strength: MUST
-    statement: wa-cli source list 必须只读地列出工作区中已登记的素材：--json 输出 sources 数组，按 id 排序，每项含 id、type、title（未设置时为 null）、path（存档文件路径）与 sha256；只列出 sources/ 下不以 . 开头、通过素材校验（见 archive-integrity）的子目录。changedPaths 为空数组；有素材目录不通过素材校验时报告其诊断、valid 为 false、退出码为 1，其他素材照常列出；否则退出码为 0。
+    statement: wa-cli source list 必须只读地列出工作区中已登记的素材：--json 输出 sources 数组，按 id 排序，每项含 id、type、title（未设置时为 null）、path（存档文件路径）与 sha256，给出时另含 url 与 tier（信源等级（Source Tier））；只列出 sources/ 下不以 . 开头、通过素材校验（见 archive-integrity）的子目录。changedPaths 为空数组；有素材目录不通过素材校验时报告其诊断、valid 为 false、退出码为 1，其他素材照常列出；否则退出码为 0。
     scenarios:
       list-sources:
         - GIVEN: 已登记素材 interview-ceo 与 src-0123456789ab
@@ -156,7 +164,7 @@ requirements:
         - THEN: diagnostics 中有一条错误码为 draft.not-found、path 为 .writing-anything/works/my-post/draft.md 的诊断，provenance 为 null，退出码为 1
   claim-add:
     strength: MUST
-    statement: wa-cli claim add <unit> --kind <kind> --text <text> 必须在单元目录下的 claims.yaml 的 claims 末尾追加一个论断（Claim）：kind 取值为 experience、opinion、case、data、fact 之一；--sources 为逗号分隔的素材 id（省略时为空数组，表示尚未关联素材）；id 由 --id 指定，省略时为 claim-<n>，n 从已有论断数加一开始递增到不与已有论断重复。claims.yaml 不存在时创建（含 schema_version 1），子单元目录不存在时先创建；已有 claims.yaml 时只追加该项，保留其他内容与 YAML 注释。成功时退出码为 0，changedPaths 列出新建的单元目录与 claims.yaml，--json 输出的 claim 字段含 unit、id、kind、text 与 sources。sources 中的素材 id 未登记时报告 claim.unknown-source（field 为 sources[i]）；kind 不在取值范围内、--id 不符合 id 格式或 text 为空时报告 artifact.schema-violation（field 为 kind、id 或 text）；id 与该单元已有论断相同时报告 artifact.duplicate-id（field 为 id）；这些由参数引起的诊断的 next 包含 wa-cli help claim add --json 与 wa-cli source list。已有 claims.yaml 不通过校验时报告其诊断（field 以 claims 开头，next 保留能复查它的校验命令）；claims 经由 YAML 锚点、别名或合并键得到时报告 claim.anchored-value；这些情况都不修改文件，退出码为 1。
+    statement: wa-cli claim add <unit> --kind <kind> --text <text> 必须在单元目录下的 claims.yaml 的 claims 末尾追加一个论断（Claim）：kind 取值为 experience、opinion、case、data、fact 之一；--sources 为逗号分隔的素材 id（省略时为空数组，表示尚未关联素材）；id 由 --id 指定，省略时为 claim-<n>，n 从已有论断数加一开始递增到不与已有论断重复。claims.yaml 不存在时创建（含 schema_version 1），子单元目录不存在时先创建；已有 claims.yaml 时只追加该项，保留其他内容与 YAML 注释。成功时退出码为 0，changedPaths 列出新建的单元目录与 claims.yaml，--json 输出的 claim 字段含 unit、id、kind、text 与 sources。sources 中的素材 id 未登记时报告 claim.unknown-source（field 为 sources[i]）；kind 不在取值范围内、--id 不符合 id 格式或 text 为空时报告 artifact.schema-violation（field 为 kind、id 或 text）；id 与该单元已有论断相同时报告 artifact.duplicate-id（field 为 id）；这些由参数引起的诊断的 next 包含 wa-cli help claim add --json 与 wa-cli source list。kind 为按合并结果生效的 claim-sources 规则需要作者亲历素材的类型（默认 experience、opinion、case、data，以规则 kinds 参数为准），且 --sources 给出了素材而这些素材的类型全部不在该规则 source_types（默认 author-note、interview、transcript）中时报告 claim.needs-author-source（field 为 kind，message 列出所关联素材及其类型，建议改用 --kind fact 登记外部报道的事实或先以 wa-cli source add 登记作者亲历素材再关联）；--sources 省略（尚未关联素材，稍后用 claim set 补齐）或至少一份素材类型在 source_types 中时不报告；claim-sources 规则未生效（被豁免或未配置）时不报告；已有 claims.yaml 不通过校验时报告其诊断（field 以 claims 开头，next 保留能复查它的校验命令）；claims 经由 YAML 锚点、别名或合并键得到时报告 claim.anchored-value；这些情况都不修改文件，退出码为 1。
     scenarios:
       add-claim:
         - GIVEN: 已创建作品 my-post，已登记素材 interview-ceo
@@ -166,6 +174,10 @@ requirements:
         - GIVEN: 已创建作品 my-post，没有登记素材 nope
         - WHEN: 运行 wa-cli claim add my-post --kind data --text 性能提升了 30% --sources nope --dir D --json
         - THEN: diagnostics 中有一条错误码为 claim.unknown-source、field 为 sources[0] 的诊断，单元目录下没有 claims.yaml，退出码为 1
+      add-reference-only-kind:
+        - GIVEN: 已创建作品 my-post，已登记 reference 类型素材 src-r
+        - WHEN: 运行 wa-cli claim add my-post --kind data --text 性能提升了 30% --sources src-r --dir D --json
+        - THEN: diagnostics 中有一条错误码为 claim.needs-author-source 的诊断，message 列出 src-r（reference）并建议改用 --kind fact；单元目录下没有 claims.yaml，退出码为 1；同样输入改用 --kind fact 时退出码为 0
       claim-without-source:
         - GIVEN: 已创建作品 my-post
         - WHEN: 运行 wa-cli claim add my-post --kind opinion --text 微服务不适合小团队 --dir D --json
@@ -228,12 +240,16 @@ requirements:
         - THEN: changes 只含 {added, at 2, text X}，退出码为 0
   claim-edit:
     strength: MUST
-    statement: wa-cli claim set <unit> <claim> 必须修改单元 claims.yaml 中 id 为 <claim> 的论断（Claim）：--kind 与 --text 替换对应字段，--sources（逗号分隔的素材 id，给出空值时为空数组）整体替换所关联的素材，省略的参数不修改；只改动这些字段，保留其他内容与 YAML 注释。成功时退出码为 0，--json 输出的 claim 字段含修改后论断的 unit、id、kind、text 与 sources，changedPaths 为 [claims.yaml]；取值与原有取值相同时不写文件，changedPaths 为空数组。wa-cli claim remove <unit> <claim> 必须删除该论断并保留其他内容与注释，成功时 removed 为论断 id，changedPaths 为 [claims.yaml]。两个命令在单元没有 claims.yaml 或其中没有该 id 时报告 claim.not-found（next 包含 wa-cli claim list <unit> --dir <dir> --json）；sources 中的素材未登记时报告 claim.unknown-source（field 为 sources[i]），kind 不在取值范围内或 text 为空时报告 artifact.schema-violation（field 为 kind 或 text），这些由参数引起的诊断的 next 包含 wa-cli help claim set --json 与 wa-cli source list；已有 claims.yaml 不通过 Schema 校验或论断 id 重复时报告其诊断；修改或删除后仍有其他论断引用未登记的素材时照常写入，这些引用以 warning 级 claim.unknown-source 报告（field 为 claims[i].sources[j]，message 提示用 wa-cli claim set 修复）；要修改或删除的论断经由 YAML 锚点、别名或合并键得到时报告 claim.anchored-value（next 包含对应命令的 help）；这些情况都不修改文件，退出码为 1。
+    statement: wa-cli claim set <unit> <claim> 必须修改单元 claims.yaml 中 id 为 <claim> 的论断（Claim）：--kind 与 --text 替换对应字段，--sources（逗号分隔的素材 id，给出空值时为空数组）整体替换所关联的素材，省略的参数不修改；只改动这些字段，保留其他内容与 YAML 注释。成功时退出码为 0，--json 输出的 claim 字段含修改后论断的 unit、id、kind、text 与 sources，changedPaths 为 [claims.yaml]；取值与原有取值相同时不写文件，changedPaths 为空数组。wa-cli claim remove <unit> <claim> 必须删除该论断并保留其他内容与注释，成功时 removed 为论断 id，changedPaths 为 [claims.yaml]。两个命令在单元没有 claims.yaml 或其中没有该 id 时报告 claim.not-found（next 包含 wa-cli claim list <unit> --dir <dir> --json）；sources 中的素材未登记时报告 claim.unknown-source（field 为 sources[i]），kind 不在取值范围内或 text 为空时报告 artifact.schema-violation（field 为 kind 或 text），这些由参数引起的诊断的 next 包含 wa-cli help claim set --json 与 wa-cli source list；--kind 替换后的类型与该论断当前所关联素材触发与 claim add 相同的 claim.needs-author-source 校验（kind 为 claim-sources 规则需要亲历素材的类型且已有素材全部非 source_types 类型，--sources 与 --kind 同给时按替换后的素材判断；省略 --kind 只改 --sources 使论断落入该状态时同样报告）时拒绝且不修改文件；已有 claims.yaml 不通过 Schema 校验或论断 id 重复时报告其诊断；修改或删除后仍有其他论断引用未登记的素材时照常写入，这些引用以 warning 级 claim.unknown-source 报告（field 为 claims[i].sources[j]，message 提示用 wa-cli claim set 修复）；要修改或删除的论断经由 YAML 锚点、别名或合并键得到时报告 claim.anchored-value（next 包含对应命令的 help）；这些情况都不修改文件，退出码为 1。
     scenarios:
       set-sources:
         - GIVEN: 作品 my-post 的 claims.yaml 有论断 claim-1（experience，只关联 reference 素材 doc），claims 上方有作者的注释；已登记 interview 素材 talk
         - WHEN: 运行 wa-cli claim set my-post claim-1 --sources talk,doc --dir D --json
         - THEN: claim.sources 为 [talk, doc]，kind 与 text 不变；changedPaths 为 [.writing-anything/works/my-post/claims.yaml]，作者的注释保留，退出码为 0
+      set-kind-reference-only:
+        - GIVEN: 作品 my-post 的 claims.yaml 有论断 claim-1（fact，只关联 reference 素材 doc）
+        - WHEN: 运行 wa-cli claim set my-post claim-1 --kind data --dir D --json
+        - THEN: diagnostics 中有一条错误码为 claim.needs-author-source 的诊断，message 建议改用 fact 或登记作者亲历素材；claims.yaml 不变，退出码为 1
       set-unchanged:
         - GIVEN: 同上
         - WHEN: 再次运行 wa-cli claim set my-post claim-1 --sources talk,doc --dir D --json

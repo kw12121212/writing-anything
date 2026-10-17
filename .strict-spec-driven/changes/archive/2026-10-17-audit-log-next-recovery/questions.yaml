@@ -1,0 +1,54 @@
+schema: strict-spec-driven/question-list/v1
+schema_version: 1
+artifact_type: question_list
+schema_file: templates/strict-spec-driven/schemas/question-list.yaml
+change: audit-log-next-recovery
+open: []
+resolved:
+  - id: requirement-problem
+    question: 现状具体错在哪？
+    context: 反馈 P0-1
+    answer: agent 在 shell 层吞错（|| true、重定向），review record 失败对状态机不可见，靠事后 stale 暴露（下游实测【已验证】）
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-interpretation
+    question: 意图如何解读？
+    context: 反馈原文与用户批准
+    answer: wa-cli 每次调用（含失败）追加审计日志，next 增加关键命令失败后无成功重试的回捞 step，preview 展示摘要；实现前须先定日志归类与回捞配对两件事
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-outcome
+    question: 什么可观察差异证明解决？
+    context: 验收草案
+    answer: GIVEN review record 失败且未重试，WHEN next，THEN 出现对应 step 且审计日志含该次失败记录（实现变更落地后可测）
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-non-goals
+    question: 明确不变什么？
+    context: 防扩权
+    answer: 命令未启动的失败物理不可见（shell 层由已归档的会话协议兜底）；不改既有命令的输出契约；不引入 LLM
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-trigger
+    question: 为什么是现在？
+    context: 时机
+    answer: 下游 v0.2.0 复盘 P0-1，用户批准分批落地（设计先行）
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: audit-log-artifact-class
+    question: 审计日志（Audit Log）是纳入 validate 的结构化产物，还是排除在校验外的 append-only 运维痕迹？
+    context: 工作区现有产物均为 JSON Schema 约束的 YAML 与 Markdown（workspace-artifacts/embedded-schemas）；反馈提案建议纳入 validate。影响：validate 是否校验其格式、changedPaths 是否列出、作者手工编辑它是否算破坏。上游复审意见倾向运维痕迹（追加式日志与 Schema 校验契合度低、校验成本大于价值），但未与作者确认
+    answer: append-only 运维痕迹：不进 JSON Schema 校验（validate 不检查）、不进 changedPaths（保持信封语义只指产物变更）；只读命令写审计属运维例外，经 delta-tech 修订既有「只读命令不写文件」规则豁免
+    status: resolved
+    answered_by: human
+  - id: recovery-step-pairing
+    question: 「关键命令失败后无成功重试」的回捞 step 如何配对与圈定？
+    context: 候选：关键命令清单（draft write、review record、accept、export，反馈原文）是否扩展到全部写命令；配对键用命令×单元还是命令×单元×关键参数；成功重试的时间窗。影响 next 输出与 Work.Blockers 的实现复杂度与误报率
+    answer: 配对键 = 命令×单元；关键命令清单 = 反馈原文四条（draft write、review record、accept、export），设计注明可按注册表扩展；「成功重试」= 同对之后存在退出码 0 的调用
+    status: resolved
+    answered_by: human

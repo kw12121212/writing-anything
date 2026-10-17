@@ -1,0 +1,16 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: audit-log-next-recovery
+approach:
+  - 初案（待作者确认两点后定稿）：wa-cli 在每次调用结束时（成功与失败都）向 .writing-anything/audit.log 追加一行 JSONL（时间戳、命令、参数、退出码、诊断错误码与 message 摘要）；并发写经文件锁或单进程追加语义评估；轮转按大小上限加轮转文件。next 的回捞 step 定义为「关键命令（draft write、review record、accept、export）以非零退出后，同一命令×同一单元没有成功记录」；preview 页列出最近失败摘要。两点待决：①audit.log 的产物归类（运维痕迹 vs 结构化产物——影响 validate 是否校验、changedPaths 是否列出）；②回捞 step 的配对粒度与关键命令清单。
+decisions:
+  shell-swallowing-out-of-scope:
+    decision: 审计日志只记录已启动的 wa-cli 调用；命令未启动（PATH 错误、打错命令名）物理上不可见，由技能会话协议的 wrapper（已归档的 skill-session-protocol-scripts）在 shell 层兜底
+    rationale: wa-cli 无法记录自己没被运行这件事；两层合起来（shell 层失败即停 + 工具层失败留痕）才完整，各自边界要在提案里写明而不是含糊承诺
+alternatives:
+  - option: 把审计日志做成纳入 JSON Schema 校验的结构化产物（audit.yaml）
+    reason: 待决而非否决：结构化产物可校验但追加式日志与 Schema 校验的契合度存疑（每次追加都要过校验的成本与价值）；这正是留给作者的归类问题
+risks:
+  - 日志膨胀与敏感信息（参数里可能有正文路径外的内容）：轮转上限与参数截断要在实现变更里定

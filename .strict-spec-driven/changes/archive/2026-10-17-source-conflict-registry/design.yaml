@@ -1,0 +1,16 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: source-conflict-registry
+approach:
+  - '比选材料（作者定案后细化）：方案 A 新产物——conflicts.yaml（about、a/b 两说各带素材 id 与引文、status: open/decided/waived、决定记录），conflict add/list/waive 命令，open 冲突阻塞 advance，preview 列出矛盾与作者决定；优点是矛盾作为一等公民可被 lint 引用与统计，缺点是与决策队列平行、两套待作者处理机制。方案 B 决策子类型——decision add 扩展 kind: conflict（结构化 payload：about、两说与素材），复用 decide/waiver/阻塞与复核全套既有机制，配 lint 规则「正文引用未决冲突任一方的关键说法（按素材引文匹配）即 error」；优点是零新机制、审计链与 strict 复核免费获得，缺点是决策队列的通用结构要承载结构化 payload、lint 规则要能定位「引用了哪一方」。共同验收草案：GIVEN 存在未决矛盾，WHEN advance，THEN 被阻塞并列出该矛盾；preview 页向作者展示两说与决定入口。'
+decisions:
+  compare-before-build:
+    decision: 先比选后实现，不在提案里预设方案
+    rationale: 上游与下游对方案分歧真实存在（下游提案 A，上游顾虑与决策队列重复）：两方案在机制复用、lint 联动精度、作者心智负担上各有取舍，属于应当由作者拍板的产品决策
+alternatives:
+  - option: 直接采纳反馈原文的方案 A 开工
+    reason: 跳过比选会在仓库里长出与决策队列平行的第二套作者确认机制，事后合并的成本高于先比选
+risks:
+  - 比选材料若不足，作者难以判断：本提案把两方案的影响面写实（机制复用、lint 精度、心智负担三点）

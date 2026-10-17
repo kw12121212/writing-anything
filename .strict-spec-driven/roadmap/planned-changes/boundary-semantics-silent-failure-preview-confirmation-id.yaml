@@ -1,0 +1,11 @@
+schema: strict-spec-driven/planned-change/v1
+schema_version: 1
+artifact_type: planned_change
+schema_file: ../../templates/strict-spec-driven/schemas/planned-change.yaml
+planned_change:
+  id: preview-confirmation-id
+  milestone: boundary-semantics-silent-failure
+status: complete
+summary: preview --serve confirmation 事件不再输出空串 id：acceptance 类确认填入有意义标识或省略字段
+details: 反馈 P3。现象：--serve 模式 confirmation 事件 {"kind":"acceptance","unit":"...","id":""}；acceptance 分支未使用请求 id。验收：GIVEN 作者在阅读页确认验收，WHEN confirmation 事件输出，THEN id 为有意义的标识或字段不出现，绝不输出空串。注意 skills_reference 与 MCP 侧若引用该字段需同步。
+depends_on: []

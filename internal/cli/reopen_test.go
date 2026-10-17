@@ -55,9 +55,12 @@ func TestReopenStaleDone(t *testing.T) {
 	s := out.Steps[0]
 	blockers, _ := s["blockers"].([]any)
 	commands, _ := s["commands"].([]any)
+	// 审计回捞：本用例里 accept 与 export 失败后未重试，next 在 reopen 命令后追加两条提示（非阻塞）。
 	if s["unit"] != "my-post" || s["stage"] != "done" || len(blockers) != 1 || blockers[0].(map[string]any)["code"] != "acceptance.stale" ||
-		blockers[0].(map[string]any)["artifact"] != "acceptance" || len(commands) != 1 || commands[0] != "wa-cli reopen my-post --dir "+dir+" --json" ||
-		!strings.Contains(s["action"].(string), "wa-cli reopen") {
+		blockers[0].(map[string]any)["artifact"] != "acceptance" || len(commands) != 3 || commands[0] != "wa-cli reopen my-post --dir "+dir+" --json" ||
+		commands[1] != "wa-cli help accept --json" || commands[2] != "wa-cli help export --json" ||
+		!strings.Contains(s["action"].(string), "wa-cli reopen") ||
+		!strings.Contains(s["action"].(string), "accept 在本单元失败后尚未成功重试") {
 		t.Errorf("next step = %v", s)
 	}
 
@@ -187,7 +190,8 @@ func TestReopenNextEverywhere(t *testing.T) {
 	}
 	reopen := "wa-cli reopen my-post --dir " + dir + " --json"
 	code, out := runUnits(t, dir, "next", "my-post")
-	if commands, _ := out.Steps[0]["commands"].([]any); code != 0 || len(out.Steps) != 1 || len(commands) != 1 || commands[0] != reopen {
+	if commands, _ := out.Steps[0]["commands"].([]any); code != 0 || len(out.Steps) != 1 || len(commands) != 2 ||
+		commands[0] != reopen || commands[1] != "wa-cli help export --json" {
 		t.Errorf("next my-post: %v", out.Steps)
 	}
 	code, out = runUnits(t, dir, "status")

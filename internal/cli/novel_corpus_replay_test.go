@@ -32,11 +32,15 @@ func snapshotTree(t *testing.T, dir string) map[string]string {
 		if err != nil {
 			return err
 		}
+		rel = filepath.ToSlash(rel)
+		if rel == ".writing-anything/audit.log" || rel == ".writing-anything/audit.log.1" {
+			return nil // 运维痕迹：两次重放的时间戳必然不同
+		}
 		data, err := os.ReadFile(p)
 		if err != nil {
 			return err
 		}
-		out[filepath.ToSlash(rel)] = fmt.Sprintf("%x", sha256.Sum256(data))
+		out[rel] = fmt.Sprintf("%x", sha256.Sum256(data))
 		return nil
 	})
 	if err != nil {

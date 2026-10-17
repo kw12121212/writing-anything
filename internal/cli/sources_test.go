@@ -197,6 +197,60 @@ func TestSourceList(t *testing.T) {
 	diag(t, res.result, "source.modified")
 }
 
+// --url 与 --tier：合法值写入 source.yaml 并在 add/list 输出透出；非法值报 Schema 校验错误（field 为 url 或 tier）；
+// 不带新参数的行为与产物不变（既有用例覆盖）。
+func TestSourceURLTier(t *testing.T) {
+	dir := newWorkspace(t)
+	code, res := runSrc(t, dir, "报道原文", "source", "add", "--type", "reference", "--id", "news",
+		"--url", "https://example.com/post/1", "--tier", "secondary")
+	if code != 0 || res.Source["url"] != "https://example.com/post/1" || res.Source["tier"] != "secondary" {
+		t.Fatalf("add url/tier: code = %d, source = %v, %v", code, res.Source, res.Diagnostics)
+	}
+	meta := readFile(t, wsPath(dir, ".writing-anything/sources/news/source.yaml"))
+	if !strings.Contains(meta, "url: https://example.com/post/1") || !strings.Contains(meta, "tier: secondary") {
+		t.Fatalf("source.yaml lacks url/tier: %s", meta)
+	}
+	if code, res := runSrc(t, dir, "", "source", "list"); code != 0 {
+		t.Fatalf("list: code = %d, %v", code, res.Diagnostics)
+	} else if res.Sources[0]["url"] != "https://example.com/post/1" || res.Sources[0]["tier"] != "secondary" {
+		t.Fatalf("list url/tier: %v", res.Sources[0])
+	}
+	if code, res := runSrc(t, dir, "", "validate"); code != 0 {
+		t.Fatalf("validate: code = %d, %v", code, res.Diagnostics)
+	}
+	// 不带新参数：产物不含 url/tier 键。
+	runSrc(t, dir, "笔记", "source", "add", "--type", "author-note", "--id", "note")
+	plain := readFile(t, wsPath(dir, ".writing-anything/sources/note/source.yaml"))
+	if strings.Contains(plain, "url:") || strings.Contains(plain, "tier:") {
+		t.Fatalf("plain source.yaml has url/tier: %s", plain)
+	}
+	_, lres := runSrc(t, dir, "", "source", "list")
+	for _, sv := range lres.Sources {
+		if sv["id"] != "note" {
+			continue
+		}
+		if _, has := sv["url"]; has {
+			t.Errorf("plain note view has url key: %v", sv)
+		}
+		if _, has := sv["tier"]; has {
+			t.Errorf("plain note view has tier key: %v", sv)
+		}
+	}
+	// 非法取值：Schema 校验拒绝，field 指向参数，不创建素材目录。
+	for _, tc := range []struct {
+		flag, value, field string
+	}{{"url", "ftp://example.com/x", "url"}, {"tier", "rumour", "tier"}, {"url", "https://example.com/" + strings.Repeat("a", 2048), "url"}} {
+		code, res := runSrc(t, dir, "更多原文", "source", "add", "--type", "reference", "--id", "bad-"+tc.field, "--"+tc.flag, tc.value)
+		d := diag(t, res.result, "artifact.schema-violation")
+		if code != 1 || d.Field != tc.field {
+			t.Errorf("%s=%s: code = %d, diagnostic = %+v", tc.flag, tc.value[:12], code, d)
+		}
+		if _, err := os.Stat(wsPath(dir, ".writing-anything/sources/bad-"+tc.field)); !os.IsNotExist(err) {
+			t.Errorf("%s=%s: directory created", tc.flag, tc.field)
+		}
+	}
+}
+
 func TestArchiveIntegrity(t *testing.T) {
 	dir := newWorkspace(t)
 	runSrc(t, dir, "访谈原文", "source", "add", "--type", "interview", "--id", "interview-ceo")
@@ -383,6 +437,7 @@ func TestDraftRewriteKeepsHuman(t *testing.T) {
 func TestClaimAdd(t *testing.T) {
 	dir := newWork(t)
 	runSrc(t, dir, "访谈", "source", "add", "--type", "interview", "--id", "interview-ceo")
+	runSrc(t, dir, "报道", "source", "add", "--type", "reference", "--id", "news")
 	rel := ".writing-anything/works/my-post/claims.yaml"
 	code, res := runSrc(t, dir, "", "claim", "add", "my-post", "--kind", "experience", "--text", "我们在一周内完成了迁移", "--sources", "interview-ceo")
 	if code != 0 || res.Claim["id"] != "claim-1" || res.Claim["unit"] != "my-post" || res.Claim["kind"] != "experience" ||
@@ -392,13 +447,55 @@ func TestClaimAdd(t *testing.T) {
 	if srcs := res.Claim["sources"].([]any); len(srcs) != 1 || srcs[0] != "interview-ceo" {
 		t.Errorf("sources = %v", srcs)
 	}
+	// 写入时校验 kind×source：需要亲历素材的类型只关联 reference 时拒绝并建议 fact；fact 关联 reference 合法。
+	before := readFile(t, wsPath(dir, rel))
+	code, res = runSrc(t, dir, "", "claim", "add", "my-post", "--kind", "data", "--text", "性能提升了 30%", "--sources", "news")
+	d := diag(t, res.result, "claim.needs-author-source")
+	if code != 1 || d.Field != "kind" || !strings.Contains(d.Message, "news（reference）") || !strings.Contains(d.Message, "--kind fact") ||
+		!slices.Contains(d.Next, "wa-cli help claim add --json") {
+		t.Errorf("reference-only data: code = %d, %+v", code, d)
+	}
+	if readFile(t, wsPath(dir, rel)) != before {
+		t.Error("rejected claim changed claims.yaml")
+	}
+	code, res = runSrc(t, dir, "", "claim", "add", "my-post", "--kind", "fact", "--text", "报道称性能提升了 30%", "--sources", "news")
+	if code != 0 || res.Claim["kind"] != "fact" {
+		t.Errorf("fact with reference: code = %d, claim = %v", code, res.Claim)
+	}
+	// 亲历与 reference 混合：有亲历素材即可。
+	code, res = runSrc(t, dir, "", "claim", "add", "my-post", "--kind", "data", "--text", "我们实测性能提升了 30%", "--sources", "interview-ceo,news")
+	if code != 0 {
+		t.Errorf("mixed sources: code = %d, %v", code, res.Diagnostics)
+	}
 	code, res = runSrc(t, dir, "", "claim", "add", "my-post", "--kind", "opinion", "--text", "微服务不适合小团队")
 	if code != 0 || len(res.Claim["sources"].([]any)) != 0 {
 		t.Errorf("without source: code = %d, claim = %v", code, res.Claim)
 	}
-	before := readFile(t, wsPath(dir, rel))
+	// claim set --kind 把只关联 reference 的论断改入需要亲历素材的类型时同样拒绝（claim-2 为 fact+news）。
+	beforeSet := readFile(t, wsPath(dir, rel))
+	code, res = runSrc(t, dir, "", "claim", "set", "my-post", "claim-2", "--kind", "data")
+	if d := diag(t, res.result, "claim.needs-author-source"); code != 1 || d.Field != "kind" ||
+		!strings.Contains(d.Message, "news（reference）") || !strings.Contains(d.Message, "--kind fact") ||
+		readFile(t, wsPath(dir, rel)) != beforeSet {
+		t.Errorf("set kind to data: code = %d, diag = %+v", code, d)
+	}
+	// 项目层覆盖 claim-sources 参数后写入校验随之放行（与 lint 同判）：source_types 含 reference 时不拒；
+	// kinds 置空表示没有类型需要亲历素材，也不拒。
+	writeFile(t, configPath(dir), readFile(t, configPath(dir))+"rules:\n  claims: {params: {source_types: [reference]}}\n")
+	code, res = runSrc(t, dir, "", "claim", "add", "my-post", "--kind", "data", "--text", "覆盖后的外部数据", "--sources", "news")
+	if code != 0 {
+		t.Errorf("overridden source_types: code = %d, %v", code, res.Diagnostics)
+	}
+	writeFile(t, configPath(dir), strings.Replace(readFile(t, configPath(dir)),
+		"  claims: {params: {source_types: [reference]}}", "  claims: {params: {kinds: []}}", 1))
+	code, res = runSrc(t, dir, "", "claim", "add", "my-post", "--kind", "case", "--text", "空 kinds 后的案例", "--sources", "news")
+	if code != 0 {
+		t.Errorf("empty kinds: code = %d, %v", code, res.Diagnostics)
+	}
+	writeFile(t, configPath(dir), strings.Replace(readFile(t, configPath(dir)), "rules:\n  claims: {params: {kinds: []}}\n", "", 1))
+	before = readFile(t, wsPath(dir, rel))
 	code, res = runSrc(t, dir, "", "claim", "add", "my-post", "--kind", "data", "--text", "性能提升了 30%", "--sources", "nope")
-	d := diag(t, res.result, "claim.unknown-source")
+	d = diag(t, res.result, "claim.unknown-source")
 	if code != 1 || d.Field != "sources[0]" || !slices.Contains(d.Next, shellCommand("wa-cli", "source", "list", "--dir", dir, "--json")) {
 		t.Errorf("unknown source: code = %d, %+v", code, d)
 	}
@@ -452,7 +549,7 @@ func TestClaimSetListRemove(t *testing.T) {
 	if code, res := runSrc(t, dir, "", "claim", "list", "my-post"); code != 0 || res.Claims == nil || len(res.Claims) != 0 {
 		t.Fatalf("empty list: code = %d, %+v", code, res)
 	}
-	mustRunWS(t, dir, "claim", "add", "my-post", "--kind", "experience", "--text", "我负责迁移", "--sources", "doc")
+	mustRunWS(t, dir, "claim", "add", "my-post", "--kind", "experience", "--text", "我负责迁移", "--sources", "talk")
 	mustRunWS(t, dir, "claim", "add", "my-post", "--kind", "opinion", "--text", "观点")
 	// 作者的注释在修改与删除后保留。
 	writeFile(t, wsPath(dir, rel), strings.Replace(readFile(t, wsPath(dir, rel)), "claims:", "# 作者的注释\nclaims:", 1))

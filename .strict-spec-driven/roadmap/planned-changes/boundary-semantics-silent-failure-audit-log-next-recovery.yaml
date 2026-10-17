@@ -1,0 +1,11 @@
+schema: strict-spec-driven/planned-change/v1
+schema_version: 1
+artifact_type: planned_change
+schema_file: ../../templates/strict-spec-driven/schemas/planned-change.yaml
+planned_change:
+  id: audit-log-next-recovery
+  milestone: boundary-semantics-silent-failure
+status: complete
+summary: 设计提案：wa-cli 每次调用（含失败）追加审计日志（Audit Log），next 增加关键命令失败后无成功重试的回捞 step
+details: 反馈 P0-1（设计先行，经作者确认后另立实现变更）。现象：agent 在 shell 层 || true 吞错，状态机不可见（review record 失败靠事后 stale 才暴露）。设计要点：审计日志文件形态（产品 vs 运维痕迹，见里程碑入口问题 audit-log-artifact-class）、并发写与轮转、validate 是否纳入、next 回捞 step 的命令×单元配对定义、preview 页摘要展示。注意：审计日志只能记录已启动的 wa-cli 调用，命令未启动（PATH 错误）不可见。验收草案：GIVEN review record 失败且未重试，WHEN next，THEN 出现对应 step 且日志含该次失败。新术语审计日志（Audit Log）进 GLOSSARY。
+depends_on: []

@@ -34,11 +34,12 @@ const (
 	confirmVolume     = "volume"
 )
 
-// confirmedView 是阅读页记录的一次作者确认。
+// confirmedView 是阅读页记录的一次作者确认。id 只在待确认事项有条目 id 时出现（decision、plan、state、knowledge）；
+// acceptance 与 volume 没有条目 id，省略该键，不输出空串。
 type confirmedView struct {
 	Kind    string `json:"kind"`
 	Unit    string `json:"unit"`
-	ID      string `json:"id"`
+	ID      string `json:"id,omitempty"`
 	Action  string `json:"action"`
 	Channel string `json:"channel"`
 }
@@ -107,6 +108,10 @@ func confirmQueue(dir string, w *work.Work) []preview.Confirm {
 			}
 			c := preview.Confirm{Kind: confirmDecision, ID: d.ID, Label: "决策（Decision）" + d.ID + "：" + d.Question,
 				Detail: deref(d.Rationale), Recommend: deref(d.Recommendation), NeedsAnswer: len(d.Options) == 0}
+			if cf := d.Conflict; cf != nil {
+				c.Detail = "冲突（Conflict）「" + cf.About + "」：" + cf.A.Source + " 说「" + cf.A.Quote + "」；" +
+					cf.B.Source + " 说「" + cf.B.Quote + "」。请作者裁定采信哪一方。" + c.Detail
+			}
 			for _, o := range d.Options {
 				c.Options = append(c.Options, preview.Option{ID: o.ID, Text: o.Text})
 			}

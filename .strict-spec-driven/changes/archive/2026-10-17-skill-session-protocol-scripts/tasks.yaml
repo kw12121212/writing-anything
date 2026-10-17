@@ -1,0 +1,27 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: skill-session-protocol-scripts
+sections:
+  Implementation:
+    add-protocol-sections:
+      text: 十二个 internal/skills/skills/wa-*/SKILL.md 各加「会话协议」一节（wrapper 模板 + 吞错禁止 + decision 映射，内容一致）；internal/skills/history.txt 登记新哈希
+      status: complete
+  Testing:
+    targeted-green:
+      text: 定向包回归通过（含新的会话协议结构断言 TestSessionProtocolSection）
+      status: complete
+      command: go test ./internal/skills ./internal/cli -run 'TestSkill|TestSession|TestBuiltinSkills|TestParse|TestInstall|TestCommands' -count=1
+    full-regression:
+      text: 完整项目回归（vet、build、test、covercheck ≥80）
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    strict-verify:
+      text: strict-spec-cli verify skill-session-protocol-scripts 通过
+      status: complete
+      command: strict-spec-cli verify skill-session-protocol-scripts
+testing_gates:
+  validation_task: full-regression
+  unit_test_task: targeted-green

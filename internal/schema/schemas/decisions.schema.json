@@ -4,44 +4,156 @@
   "description": "决策队列（Decision Queue）：等待作者决定的事项；decided 的决策含确认记录（Confirmation Record）。",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "decisions"],
+  "required": [
+    "schema_version",
+    "decisions"
+  ],
   "properties": {
-    "schema_version": {"const": 1},
+    "schema_version": {
+      "const": 1
+    },
     "decisions": {
       "type": "array",
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["id", "question", "options", "blocking", "units", "status"],
+        "required": [
+          "id",
+          "question",
+          "options",
+          "blocking",
+          "units",
+          "status"
+        ],
         "properties": {
-          "id": {"$ref": "common.schema.json#/$defs/id"},
-          "question": {"type": "string", "pattern": "\\S"},
+          "id": {
+            "$ref": "common.schema.json#/$defs/id"
+          },
+          "question": {
+            "type": "string",
+            "pattern": "\\S"
+          },
           "options": {
             "type": "array",
             "maxItems": 26,
             "items": {
               "type": "object",
               "additionalProperties": false,
-              "required": ["id", "text"],
+              "required": [
+                "id",
+                "text"
+              ],
               "properties": {
-                "id": {"type": "string", "pattern": "^[a-z]$"},
-                "text": {"type": "string", "pattern": "\\S"}
+                "id": {
+                  "type": "string",
+                  "pattern": "^[a-z]$"
+                },
+                "text": {
+                  "type": "string",
+                  "pattern": "\\S"
+                }
               }
             }
           },
-          "recommendation": {"type": "string", "pattern": "^[a-z]$"},
-          "rationale": {"type": "string"},
-          "blocking": {"type": "boolean"},
-          "units": {"type": "array", "items": {"type": "string", "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*(/[a-z][a-z0-9]*(-[a-z0-9]+)*)?$"}},
-          "status": {"enum": ["open", "decided"]},
-          "choice": {"type": "string", "pattern": "^[a-z]$"},
-          "answer": {"type": "string"},
-          "confirmation": {"type": "string", "pattern": "\\S"},
-          "channel": {"$ref": "common.schema.json#/$defs/channel"},
-          "decided_at": {"type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$"}
+          "recommendation": {
+            "type": "string",
+            "pattern": "^[a-z]$"
+          },
+          "rationale": {
+            "type": "string"
+          },
+          "blocking": {
+            "type": "boolean"
+          },
+          "units": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*(/[a-z][a-z0-9]*(-[a-z0-9]+)*)?$"
+            }
+          },
+          "status": {
+            "enum": [
+              "open",
+              "decided"
+            ]
+          },
+          "choice": {
+            "type": "string",
+            "pattern": "^[a-z]$"
+          },
+          "answer": {
+            "type": "string"
+          },
+          "confirmation": {
+            "type": "string",
+            "pattern": "\\S"
+          },
+          "channel": {
+            "$ref": "common.schema.json#/$defs/channel"
+          },
+          "decided_at": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$"
+          },
+          "conflict": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "about",
+              "a",
+              "b"
+            ],
+            "description": "冲突（Conflict）载荷：素材对同一主题的两种矛盾说法，等待作者裁定；登记后复用 decide/豁免/阻塞既有机制",
+            "properties": {
+              "about": {
+                "type": "string",
+                "pattern": "\\S",
+                "description": "矛盾的主题，如 喷嘴数量"
+              },
+              "a": {
+                "$ref": "#/$defs/conflict-side"
+              },
+              "b": {
+                "$ref": "#/$defs/conflict-side"
+              }
+            }
+          }
         },
-        "if": {"properties": {"status": {"const": "decided"}}},
-        "then": {"required": ["confirmation", "decided_at"]}
+        "if": {
+          "properties": {
+            "status": {
+              "const": "decided"
+            }
+          }
+        },
+        "then": {
+          "required": [
+            "confirmation",
+            "decided_at"
+          ]
+        }
+      }
+    }
+  },
+  "$defs": {
+    "conflict-side": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source",
+        "quote"
+      ],
+      "properties": {
+        "source": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$"
+        },
+        "quote": {
+          "type": "string",
+          "pattern": "\\S",
+          "description": "该素材中的原说法（引文），用于 lint 的正文匹配"
+        }
       }
     }
   }

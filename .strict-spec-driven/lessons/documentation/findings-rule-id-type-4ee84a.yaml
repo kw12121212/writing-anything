@@ -1,0 +1,19 @@
+schema: strict-spec-driven/lesson/v1
+schema_version: 1
+artifact_type: lesson
+schema_file: templates/strict-spec-driven/schemas/lesson.yaml
+lesson:
+  id: findings-rule-id-type-4ee84a
+  title: 写 findings 的规格场景时 rule 是规则 id、type 才是规则类型
+category: documentation
+status: active
+created_at: '2026-10-17T03:15:11.860Z'
+updated_at: '2026-10-17T03:15:11.860Z'
+context: 为 conflict-sources 规则写 lint delta 的场景断言
+observation: 场景写「rule 为 conflict-sources」按字面永远无法满足：实现输出 finding.rule=conflicts（文体声明的规则 id）、finding.type=conflict-sources；既有主规格场景的惯例正是「rule 为 claims」指 id、「type 为 pov-consistency」指类型
+takeaway: 涉及 findings 的规格语句先核对主规格的既有用法：rule 字段引用配置声明的规则 id（随文体变化），规则类型写 type；场景断言优先用 type 表述以免依赖具体 id
+applies_when: 任何为 lint 规则写 delta 场景或断言 finding.rule 字段的变更
+occurrences:
+  - origin: source-conflict-registry
+    date: '2026-10-17'
+    evidence: 复审 B1：specs/lint.yaml conflict-open-quoted 的 THEN 按 rule 断言不可满足，改为 type 为 conflict-sources 后归档

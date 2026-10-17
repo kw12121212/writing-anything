@@ -1,0 +1,16 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: source-url-tier
+approach:
+  - Schema 先行：source.schema.json 增加可选 url（string，^https?:// 与长度上限 2048）与 tier（enum primary、secondary），写入与校验都经 internal/schema 统一入口；Source 结构、source add 参数、source add/list 的 JSON 视图同步透出（未给出时省略键，与 title 的 null 语义不同——title 一直输出 null，url/tier 用 omitempty 省略，保持产物最小）。GLOSSARY 加信源等级（Source Tier）词条。二手信源的审查阻塞消费留给设计批（source-conflict-registry 与 review rubric 联动）。
+decisions:
+  omit-when-unset:
+    decision: url 与 tier 未给出时 JSON 视图省略键，产物不写字段
+    rationale: 向后兼容的最小形态：既有素材与既有消费者零影响；title 输出 null 是历史契约，新字段不复制历史包袱
+alternatives:
+  - option: url/tier 恒输出（未给出为 null）
+    reason: 为两个可选项引入恒 null 键会让全部既有输出的信噪比下降，且 nullableFields 白名单又要扩两条
+risks:
+  - tier 语义与素材类型（author-note/interview 为亲历、reference 为外部）部分重叠：tier 描述的是「离一手多远」，type 描述「谁说的」，GLOSSARY 词条须写明二者正交

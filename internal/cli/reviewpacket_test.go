@@ -10,7 +10,7 @@ import (
 // review packet 命令组：plan 生成、submit 校验与写回、report 汇总。
 func TestReviewPacketCommands(t *testing.T) {
 	dir := packetWork(t)
-	code, res := runWS(t, dir, "review", "plan", "my-story/s1", "--dimension", "causality", "--dir", dir)
+	code, res := runWS(t, dir, "review", "plan", "my-story/s1", "--dimension", "causality")
 	if code != 0 {
 		t.Fatalf("plan: exit code = %d, result = %+v", code, res)
 	}

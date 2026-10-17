@@ -1,0 +1,16 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: skill-session-protocol-scripts
+approach:
+  - 会话协议作为每个技能正文的一节（自包含，不引用其他技能），含三要素：①bash wrapper 模板（set -euo pipefail 与 wa() 包装函数——失败原样输出到 stderr 并返回非零，成功才打印 stdout），模板中 wa-cli 仅以参数转发（""）出现，不触发命令引用扫描的伪命令；②失败即停、读诊断 next 修复后重试的一句纪律；③经 harness 提问工具得到作者决定后用 decision add / decide 回写（--confirmation 记作者原话摘要）的映射指引。结构校验测试断言十二个技能都含该节与要素（set -euo pipefail、|| true 的禁止说明、decision add 与 decide），history.txt 按既有机制登记新哈希。
+decisions:
+  inline-section-not-script-file:
+    decision: 模板作为技能正文一节，不分发独立脚本文件
+    rationale: 技能格式由规格钉死为单 SKILL.md（目录含 SKILL.md，正文约束枚举）；独立脚本文件要改技能格式与安装面，而反馈要的是「可执行模板」——复制即用的段落即满足，且 twelve 份自包含避免跨技能引用
+alternatives:
+  - option: 随每个技能分发 scripts/wa-session.sh 由 agent 直接 source
+    reason: 改变「每个技能是一个目录，含 SKILL.md」的格式契约与 skills install 的写入面，收益只是少一次复制
+risks:
+  - 模板被当成必须逐字执行的协议而非样例：正文写明「复制进会话的 shell 后按需替换命令」，保留 agent 的灵活性

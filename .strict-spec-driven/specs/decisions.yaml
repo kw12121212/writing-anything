@@ -8,7 +8,7 @@ spec:
 requirements:
   decision-add:
     strength: MUST
-    statement: wa-cli decision add --question <text> 必须在工作区的决策队列（Decision Queue）.writing-anything/decisions.yaml 的 decisions 末尾追加一个待决事项：每个 --option <文本>（可重复）按出现顺序成为一个选项，id 依次为 a、b、c…（最多 26 个），没有 --option 时表示自由答复；--recommend <选项 id> 与 --rationale <文本> 记录 Agent 的推荐与理由；--blocking 时 blocking 为 true，否则为 false；每个 --unit <单元引用>（可重复，重复的只记录一次）成为一个关联单元；status 为 open；id 由 --id 指定，省略时为 dec-<n>，n 从已有决策数加一开始递增到不重复。decisions.yaml 不存在时创建（含 schema_version 1），已存在时只追加该项，保留其他内容与 YAML 注释。成功时退出码为 0，changedPaths 为 .writing-anything/decisions.yaml，--json 输出的 decision 字段为新决策（字段见 decisions-list）。--recommend 不是已有选项时报告 decision.unknown-option（field 为 recommendation）；--unit 无法解析时按 units-and-lifecycle 主规格的 unit-reference 报告 work.not-found 或 unit.not-found；question 为空、选项超过 26 个或 --id 不符合 id 格式时报告 artifact.schema-violation（field 为 question、options 或 id）；id 与已有决策相同时报告 artifact.duplicate-id（field 为 id）；这些情况的 next 包含 wa-cli help decision add --json；已有 decisions.yaml 不通过校验时报告其诊断（保留能复查它的命令），decisions 经由 YAML 锚点、别名或合并键得到时报告 decision.anchored-value；这些情况都不修改文件，退出码为 1。
+    statement: wa-cli decision add --question <text> 必须在工作区的决策队列（Decision Queue）.writing-anything/decisions.yaml 的 decisions 末尾追加一个待决事项：每个 --option <文本>（可重复）按出现顺序成为一个选项，id 依次为 a、b、c…（最多 26 个），没有 --option 时表示自由答复；--recommend <选项 id> 与 --rationale <文本> 记录 Agent 的推荐与理由；--blocking 时 blocking 为 true，否则为 false；每个 --unit <单元引用>（可重复，重复的只记录一次）成为一个关联单元；status 为 open；id 由 --id 指定，省略时为 dec-<n>，n 从已有决策数加一开始递增到不重复。decisions.yaml 不存在时创建（含 schema_version 1），已存在时只追加该项，保留其他内容与 YAML 注释。成功时退出码为 0，changedPaths 为 .writing-anything/decisions.yaml，--json 输出的 decision 字段为新决策（字段见 decisions-list）。给出 --conflict-about <主题> 与两说（--conflict-a <素材 id> --conflict-a-quote <引文>、--conflict-b <素材 id> --conflict-b-quote <引文>，必须成组给出）时，该决策成为冲突（Conflict）决策：记录结构化载荷 conflict（about 与两说各含 source 与 quote），question 应请作者在两说之间裁定；素材 id 未登记时报告 brief.unknown-source 风格的 decision.unknown-source（field 为 conflict-a 或 conflict-b），引文为空白或载荷不成组时报告 artifact.schema-violation（field 为 conflict-a-quote、conflict-b-quote 或 conflict）；冲突决策的 decide、豁免、阻塞与待作者复核走既有机制，不加新命令；--recommend 不是已有选项时报告 decision.unknown-option（field 为 recommendation）；--unit 无法解析时按 units-and-lifecycle 主规格的 unit-reference 报告 work.not-found 或 unit.not-found；question 为空、选项超过 26 个或 --id 不符合 id 格式时报告 artifact.schema-violation（field 为 question、options 或 id）；id 与已有决策相同时报告 artifact.duplicate-id（field 为 id）；这些情况的 next 包含 wa-cli help decision add --json；已有 decisions.yaml 不通过校验时报告其诊断（保留能复查它的命令），decisions 经由 YAML 锚点、别名或合并键得到时报告 decision.anchored-value；这些情况都不修改文件，退出码为 1。
     scenarios:
       add-blocking:
         - GIVEN: 已用 wa-cli new minimal my-post --dir D 创建作品
@@ -22,9 +22,17 @@ requirements:
         - GIVEN: 刚初始化的工作区 D
         - WHEN: 运行 wa-cli decision add --question q --unit nope --dir D --json
         - THEN: diagnostics 中有一条错误码为 work.not-found 的诊断，退出码为 1
+      add-conflict:
+        - GIVEN: 已创建作品 my-post，登记了素材 src-a 与 src-r
+        - WHEN: 运行 wa-cli decision add --question 喷嘴数量两说矛盾，请作者裁定 --conflict-about 喷嘴数量 --conflict-a src-a --conflict-a-quote 10 个喷嘴 --conflict-b src-r --conflict-b-quote 4 个推进器 --unit my-post --blocking --dir D --json
+        - THEN: 'decisions.yaml 的决策含 conflict 载荷（about 为 喷嘴数量，a 为 {source: src-a, quote: 10 个喷嘴}，b 为 {source: src-r, quote: 4 个推进器}），blocking 为 true，退出码 0；正文含任一方引文时 wa-cli lint 报 conflict-sources 的 error 发现项；作者 decide 后该发现项消失'
+      add-conflict-bad-source:
+        - GIVEN: 已创建作品 my-post，没有素材 nope
+        - WHEN: 运行 wa-cli decision add --question q --conflict-about 主题 --conflict-a nope --conflict-a-quote 甲 --conflict-b src-r --conflict-b-quote 乙 --dir D --json
+        - THEN: 报告 decision.unknown-source（field 为 conflict-a），不创建 decisions.yaml，退出码为 1
   decisions-list:
     strength: MUST
-    statement: wa-cli decisions 必须只读地列出决策队列：--json 输出 blocking 与 nonBlocking 两个数组，分别含 blocking 为 true 与 false 的决策，按文件内顺序；默认只含 status 为 open 的决策，--all 时也含已决定的。每项含 id、question、options（每项含 id 与 text）、recommendation 与 rationale（没有时为 null）、blocking、units、status，以及 choice、answer、confirmation 与 decidedAt（未决定或没有时为 null）。decisions.yaml 不存在时两个数组都为空；不通过校验时报告其诊断，两个数组为空，退出码为 1；否则退出码为 0，changedPaths 为空数组。不加 --json 时先列阻塞的、再列非阻塞的待决事项，每项列出问题、选项与推荐，便于一次性询问作者。
+    statement: wa-cli decisions 必须只读地列出决策队列：--json 输出 blocking 与 nonBlocking 两个数组，分别含 blocking 为 true 与 false 的决策，按文件内顺序；默认只含 status 为 open 的决策，--all 时也含已决定的。每项含 id、question、options（每项含 id 与 text）、recommendation 与 rationale（没有时为 null）、blocking、units、status，以及 choice、answer、confirmation 与 decidedAt（未决定或没有时为 null）；带冲突（Conflict）载荷的决策另含 conflict（about 与两说各含 source、quote；没有时省略该键）。decisions.yaml 不存在时两个数组都为空；不通过校验时报告其诊断，两个数组为空，退出码为 1；否则退出码为 0，changedPaths 为空数组。不加 --json 时先列阻塞的、再列非阻塞的待决事项，每项列出问题、选项与推荐，便于一次性询问作者。
     scenarios:
       list-grouped:
         - GIVEN: 决策队列有阻塞的 dec-1（open）、非阻塞的 dec-2（open）与阻塞的 dec-3（decided）

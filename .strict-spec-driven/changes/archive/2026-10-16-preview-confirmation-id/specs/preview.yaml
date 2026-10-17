@@ -1,0 +1,21 @@
+schema: strict-spec-driven/delta-spec/v1
+schema_version: 1
+artifact_type: delta_spec
+schema_file: templates/strict-spec-driven/schemas/delta-spec.yaml
+target_spec: preview
+operations:
+  ADDED: {}
+  MODIFIED:
+    preview-confirm:
+      strength: MUST
+      statement: POST /confirm 的请求体必须是不超过 64 KiB 的单个 JSON 对象：kind（acceptance、decision、plan、state、knowledge 或 volume）、unit（acceptance、plan 与 volume 的单元引用）、id（decision 的决策 id、plan 的步骤 id、state 与 knowledge 的条目 id）、action（confirm 或 reject，缺省为 confirm；reject 只用于 state 与 knowledge）、option、answer 与 confirmation（作者原话摘要）。目标必须是按当前工作区计算的待作者确认区（preview-confirm-queue）中的一项，原话摘要不能为空白，否则返回 400（input.invalid-value），不修改任何文件。通过后按与对应命令完全相同的规则写入，确认渠道（Confirmation Channel）为 preview：acceptance 同 wa-cli accept <unit> --confirmed-by-author --confirmation（关卡阻塞项以各自的错误码返回 400，诊断带同样的下一步命令，不写 acceptance.yaml）；decision 同 wa-cli decide <id> --option --answer --confirmation；plan 同 wa-cli plan confirm；state 与 knowledge 同 confirm 或 reject；volume 同 wa-cli volume confirm。成功时返回 200 与 JSON 输出信封：confirmation 含 kind、unit、action 与 channel（preview），decision、plan、state 与 knowledge 另含 id（决策 id、规划步骤 id、条目 id），acceptance 与 volume 没有条目 id、不含 id 字段（不输出空串 id），changedPaths 为这次写入的路径，命令输出一行同样的信封；对应命令的失败诊断以 400 返回（读写文件失败为 500），已保存 --max 条反馈、服务正在关闭时返回 503（preview.closing）；失败时 confirmation 为 null。 请求本身的问题（input.invalid-value、author-review.unknown-key 与 preview.closing）的诊断 next 为 wa-cli help preview --json；对应命令与产物的诊断保留各自能复查问题的下一步命令。
+      scenarios:
+        acceptance-id-omitted:
+          - GIVEN: gate_level 为 strict，preview my-novel --serve 正在运行，scene-9 已审稿且没有其他阻塞项
+          - WHEN: '带令牌 POST /confirm：{kind: acceptance, unit: my-novel/scene-9, confirmation: 作者：可以}'
+          - THEN: 返回 200，confirmation 与命令输出的事件行都不含键 id（既非空串也非 null），channel 为 preview
+        decision-id-present:
+          - GIVEN: 作品 my-novel 的决策队列中有 open 决策 dec-1（选项 a、b），preview my-novel --serve 正在运行
+          - WHEN: '带令牌 POST /confirm：{kind: decision, id: dec-1, option: a, confirmation: 作者}'
+          - THEN: 返回 200，confirmation.id 为 dec-1
+  REMOVED: {}

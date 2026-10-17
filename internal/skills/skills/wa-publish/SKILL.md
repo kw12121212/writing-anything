@@ -15,6 +15,18 @@ description: 请作者确认验收，推进单元并导出 Markdown 或公众号
 5. 关卡强度（Gate Level）为 strict 时，经命令行渠道（cli）写入的验收、钦定设定修改与卷末检查点确认会列为待作者复核（Pending Author Review）：`wa-cli review show <单元> --json` 与 `wa-cli next --json` 的 pendingAuthorReviews 列出它们，存在时 `wa-cli assemble` 以 assemble.unreviewed 拒绝组稿。把 pendingAuthorReviews 中的 command（`wa-cli preview <作品> --serve --json`）给出的阅读页地址交给作者，由作者在「待作者复核」区批量复核后再组稿。
 6. 运行 `wa-cli validate --json` 确认工作区没有问题。
 
+## 会话协议（可执行模板）
+
+把下面的模板复制进会话的 shell，之后按步骤逐条运行：失败即停，读诊断（Diagnostic）的 next 修复后重试；绝不 `|| true`、管道或输出重定向吞掉失败（shell 层吞错对状态机不可见，只能事后靠 stale 暴露）。
+
+```bash
+set -euo pipefail
+wa() { local out; out=$(wa-cli "$@") || { printf '%s\n' "$out" >&2; return 1; }; printf '%s\n' "$out"; }
+wa next --json   # 示例：每步先看下一步；把 wa 后面换成当前步骤的 wa-cli 命令与参数
+```
+
+经 harness 提问工具得到作者的决定后，同步回写决策队列（Decision Queue）保住审计链：先用 `wa-cli decision add --question <问题> --unit <单元> --json` 登记问题，作者答复后用 `wa-cli decide <决策 id> --option <选项> --answer <答复> --confirmation <作者原话摘要> --json` 记录决定；不要只在对话里问完就往下走。
+
 ## 必须停下来问作者
 
 - 验收必须由作者确认：没有作者的明确同意，不要运行 accept，也不要编造确认原话。

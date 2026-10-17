@@ -1,0 +1,12 @@
+schema_version: 1
+decisions:
+  - id: dec-1
+    question: 喷嘴数量两说矛盾，请作者裁定
+    options: []
+    blocking: true
+    units: [my-post]
+    status: open
+    conflict:
+      about: 喷嘴数量
+      a: {source: src-note, quote: 10 个喷嘴}
+      b: {source: src-news, quote: 4 个推进器}

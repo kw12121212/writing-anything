@@ -28,7 +28,7 @@ requirements:
         - THEN: 标准输出为一行 'wa-cli dev (commit unknown)'，退出码为 0
   usage-error:
     strength: MUST
-    statement: 未提供命令、命令未知、参数未知、参数缺少取值、不接受取值的参数带了取值、缺少必需的位置参数或位置参数多余时，wa-cli 必须以退出码 2 退出；未加 --json 时必须把用法说明写到标准错误；加 --json 时必须在标准输出写出 valid 为 false、含 usage 领域错误码诊断的 JSON 输出信封。写出用法错误本身失败时按 exit-codes 以退出码 1 退出。
+    statement: 未提供命令、命令未知、参数未知、参数缺少取值、不接受取值的参数带了取值、同一非列表参数（列表参数可重复）重复出现、缺少必需的位置参数或位置参数多余时，wa-cli 必须以退出码 2 退出；未加 --json 时必须把用法说明写到标准错误；加 --json 时必须在标准输出写出 valid 为 false、含 usage 领域错误码诊断的 JSON 输出信封。写出用法错误本身失败时按 exit-codes 以退出码 1 退出。
     scenarios:
       no-command:
         - GIVEN: 已构建的 wa-cli 二进制
@@ -50,6 +50,10 @@ requirements:
         - GIVEN: 已构建的 wa-cli 二进制
         - WHEN: 运行 wa-cli version --help=yes --json
         - THEN: 标准输出的诊断错误码为 usage.flag-takes-no-value，message 指出 --help=yes，退出码为 2
+      duplicate-flag:
+        - GIVEN: 已初始化的工作区与已创建的作品 my-post
+        - WHEN: 同一次调用重复给出同一非列表参数（如 wa-cli brief set my-post --message m1 --message-text 甲 --message m2 --message-text 乙 --json）
+        - THEN: 诊断错误码为 usage.duplicate-flag，message 指明重复的参数名与取值，valid 为 false，退出码为 2，brief.yaml 不变
       unexpected-argument:
         - GIVEN: 已构建的 wa-cli 二进制
         - WHEN: 运行 wa-cli version extra
@@ -258,3 +262,15 @@ requirements:
         - GIVEN: 工作区 D
         - WHEN: 运行 wa-cli config set schema_version 2 --dir D --json
         - THEN: diagnostics 中有一条错误码为 config.unknown-key 的诊断，next 的第一条为 wa-cli config resolved --dir D --json，且 next 含 wa-cli help config set --json，退出码为 1
+  audit-log:
+    strength: MUST
+    statement: wa-cli 的每次调用（成功、失败与用法错误都算，命令已启动为前提）必须在项目的 .writing-anything/audit.log 追加一行 JSON 对象（JSONL）：含 at（UTC，YYYY-MM-DDTHH:MM:SSZ）、command（命令名，如 review record）、args（参数数组，每个参数截断到 200 个字符）、exit（退出码）、codes（诊断错误码数组，没有时为空数组）与 unit（关键命令——draft write、review record、accept、export——已解析的首个位置参数即单元引用，供回捞配对；其他命令省略该键）。audit.log 是 append-only 的运维痕迹（Audit Log）：不进 JSON Schema 校验（wa-cli validate 不检查它）、不出现在 changedPaths；只读命令写审计是「只读不写产物」规则的显式例外（见技术标准 precheck-before-side-effects 与 atomic-writes 的豁免）。MCP 服务为资源订阅轮询而执行的只读命令不记审计（服务自身发起的轮询不是调用方的动作；经 tools/call 执行的命令照常记录）。没有 .writing-anything/ 工作区时不写；写入失败时向标准错误写一行说明、不改变命令的退出码与输出契约；追加用单次写入保证行完整性，文件超过 1 MiB 时轮转为 audit.log.1（替换旧备份）后再追加。命令未启动的失败（PATH 错误、打错的命令名等 shell 层问题）不在记录范围内，由技能会话协议在 shell 层兜底。
+    scenarios:
+      audit-failed-command:
+        - GIVEN: 工作区 D 存在，review record 因缺少评分结论以退出码 1 失败
+        - WHEN: 读取 D/.writing-anything/audit.log 的最后一行
+        - THEN: 该行为 JSON：command 为 review record、exit 为 1、codes 含 review.missing-verdict、unit 为该单元引用；命令的退出码与输出与不记审计时逐字节一致
+      audit-rotate:
+        - GIVEN: 工作区 D 的 audit.log 已为 1 MiB
+        - WHEN: 运行任一命令后读取素材目录
+        - THEN: audit.log.1 存在（轮转前的内容），audit.log 只含新行

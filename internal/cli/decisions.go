@@ -9,11 +9,12 @@ import (
 	"github.com/kw12121212/writing-anything/internal/catalog"
 	"github.com/kw12121212/writing-anything/internal/decision"
 	"github.com/kw12121212/writing-anything/internal/schema"
+	"github.com/kw12121212/writing-anything/internal/source"
 	"github.com/kw12121212/writing-anything/internal/work"
 	"github.com/kw12121212/writing-anything/internal/workspace"
 )
 
-const decisionViewHelp = "id、question、options、recommendation、rationale、blocking、units、status、choice、answer、confirmation、channel（确认渠道（Confirmation Channel）：cli 或 preview，未决定为 null）与 decidedAt"
+const decisionViewHelp = "id、question、options、recommendation、rationale、blocking、units、status、choice、answer、confirmation、channel（确认渠道（Confirmation Channel）：cli 或 preview，未决定为 null）、decidedAt 与 conflict（冲突（Conflict）载荷：about 与两说各含 source、quote；没有时省略）"
 
 var decisionAddCommand = &command{
 	name:    "decision add",
@@ -27,6 +28,11 @@ var decisionAddCommand = &command{
 		{"blocking", flagBool, "阻塞（Blocking）：决定之前关联单元不能推进"},
 		{"unit", flagList, "关联的" + unitRefHelp + "；可重复"},
 		{"id", flagString, "决策 id；省略时为 dec-<n>"},
+		{"conflict-about", flagString, "冲突（Conflict）主题：素材对同一主题的两种矛盾说法；给出时本决策请作者在两说之间裁定"},
+		{"conflict-a", flagString, "冲突一方出自的素材 id；与 --conflict-a-quote、--conflict-b、--conflict-b-quote 成组给出"},
+		{"conflict-a-quote", flagString, "冲突一方在素材中的原说法（引文），用于 lint 的正文匹配"},
+		{"conflict-b", flagString, "冲突另一方出自的素材 id"},
+		{"conflict-b-quote", flagString, "冲突另一方在素材中的原说法（引文）"},
 	},
 	outputKeys: []outputKey{{"decision", "新决策：" + decisionViewHelp + "；失败时为 null"}},
 	exitCodes:  standardExitCodes,
@@ -66,25 +72,36 @@ type optionView struct {
 }
 
 type decisionView struct {
-	ID             string       `json:"id"`
-	Question       string       `json:"question"`
-	Options        []optionView `json:"options"`
-	Recommendation *string      `json:"recommendation"`
-	Rationale      *string      `json:"rationale"`
-	Blocking       bool         `json:"blocking"`
-	Units          []string     `json:"units"`
-	Status         string       `json:"status"`
-	Choice         *string      `json:"choice"`
-	Answer         *string      `json:"answer"`
-	Confirmation   *string      `json:"confirmation"`
-	Channel        *string      `json:"channel"` // 确认渠道（Confirmation Channel）；未决定为 null
-	DecidedAt      *string      `json:"decidedAt"`
+	ID             string        `json:"id"`
+	Question       string        `json:"question"`
+	Options        []optionView  `json:"options"`
+	Recommendation *string       `json:"recommendation"`
+	Rationale      *string       `json:"rationale"`
+	Blocking       bool          `json:"blocking"`
+	Units          []string      `json:"units"`
+	Status         string        `json:"status"`
+	Choice         *string       `json:"choice"`
+	Answer         *string       `json:"answer"`
+	Confirmation   *string       `json:"confirmation"`
+	Channel        *string       `json:"channel"` // 确认渠道（Confirmation Channel）；未决定为 null
+	DecidedAt      *string       `json:"decidedAt"`
+	Conflict       *conflictView `json:"conflict,omitempty"`
+}
+
+// conflictView 是冲突（Conflict）载荷的视图：主题与两说各出自的素材及引文。
+type conflictView struct {
+	About string                `json:"about"`
+	A     decision.ConflictSide `json:"a"`
+	B     decision.ConflictSide `json:"b"`
 }
 
 func decisionOf(d decision.Decision) decisionView {
 	v := decisionView{ID: d.ID, Question: d.Question, Options: []optionView{}, Recommendation: d.Recommendation, Rationale: d.Rationale,
 		Blocking: d.Blocking, Units: append([]string{}, d.Units...), Status: d.Status, Choice: d.Choice, Answer: d.Answer,
 		Confirmation: d.Confirmation, Channel: channelView(d.Status == decision.StatusDecided, d.Channel), DecidedAt: d.DecidedAt}
+	if d.Conflict != nil {
+		v.Conflict = &conflictView{About: d.Conflict.About, A: d.Conflict.A, B: d.Conflict.B}
+	}
 	for _, o := range d.Options {
 		v.Options = append(v.Options, optionView(o))
 	}
@@ -138,21 +155,36 @@ func runDecisionAdd(inv *invocation) int {
 	problems := workspace.Require(dir)
 	if problems == nil {
 		in := decision.Input{ID: inv.values["id"], Question: inv.values["question"], Options: inv.lists["option"],
-			Recommend: inv.values["recommend"], Rationale: inv.values["rationale"], Blocking: inv.flag("blocking"), Units: inv.lists["unit"]}
+			Recommend: inv.values["recommend"], Rationale: inv.values["rationale"], Blocking: inv.flag("blocking"), Units: inv.lists["unit"],
+			Conflict: conflictInput(inv)}
+		if in.Conflict != nil {
+			for _, side := range []struct {
+				field, id string
+			}{{"conflict-a", in.Conflict.A.Source}, {"conflict-b", in.Conflict.B.Source}} {
+				if side.id != "" && !source.Registered(dir, side.id) {
+					problems = []workspace.Problem{{Code: decision.CodeUnknownSource, Severity: workspace.SeverityError, Field: side.field,
+						Message: "冲突（Conflict）所引素材 " + side.id + " 未登记；请先用 wa-cli source add 登记再关联"}}
+					break
+				}
+			}
+		}
 		var d *decision.Decision
-		if d, problems = decision.Add(dir, in, func(ref string) []workspace.Problem {
-			_, _, ps := work.Resolve(dir, ref)
-			return ps
-		}); d != nil {
-			v := decisionOf(*d)
-			res.Decision, res.ChangedPaths = &v, []string{decision.Path}
+		if problems == nil {
+			if d, problems = decision.Add(dir, in, func(ref string) []workspace.Problem {
+				_, _, ps := work.Resolve(dir, ref)
+				return ps
+			}); d != nil {
+				v := decisionOf(*d)
+				res.Decision, res.ChangedPaths = &v, []string{decision.Path}
+			}
 		}
 	}
 	res.Diagnostics = diagnostics(problems, dir)
 	// 由本次参数引起的问题（字段为参数名）指向用法；已有决策队列中的问题保留默认的复查命令。
 	for i, d := range res.Diagnostics {
-		if d.Code == decision.CodeAnchoredValue || paramField(d.Field, "question", "options", "id", "recommendation") &&
-			slices.Contains([]string{decision.CodeUnknownOption, schema.CodeSchemaViolation, catalog.CodeDuplicateID}, d.Code) {
+		if d.Code == decision.CodeAnchoredValue || paramField(d.Field, "question", "options", "id", "recommendation",
+			"conflict", "conflict-a", "conflict-a-quote", "conflict-b", "conflict-b-quote", "conflict-about") &&
+			slices.Contains([]string{decision.CodeUnknownOption, schema.CodeSchemaViolation, catalog.CodeDuplicateID, decision.CodeUnknownSource}, d.Code) {
 			res.Diagnostics[i].Next = []string{"wa-cli help decision add --json"}
 		}
 	}
@@ -163,6 +195,18 @@ func runDecisionAdd(inv *invocation) int {
 		_, err := fmt.Fprintf(w, "已记录待决事项（Decision Queue）%s", decisionText(*res.Decision))
 		return err
 	})
+}
+
+// conflictInput 从参数组装冲突（Conflict）载荷：五个参数要么全给、要么全不给，半组时给出载荷让领域校验拒绝。
+func conflictInput(inv *invocation) *decision.Conflict {
+	given := inv.values["conflict-about"] != "" || inv.values["conflict-a"] != "" || inv.values["conflict-a-quote"] != "" ||
+		inv.values["conflict-b"] != "" || inv.values["conflict-b-quote"] != ""
+	if !given {
+		return nil
+	}
+	return &decision.Conflict{About: inv.values["conflict-about"],
+		A: decision.ConflictSide{Source: inv.values["conflict-a"], Quote: inv.values["conflict-a-quote"]},
+		B: decision.ConflictSide{Source: inv.values["conflict-b"], Quote: inv.values["conflict-b-quote"]}}
 }
 
 func runDecisions(inv *invocation) int {

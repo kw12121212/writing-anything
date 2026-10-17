@@ -24,6 +24,11 @@ categories:
       status: active
       occurrences: 1
       path: .strict-spec-driven/lessons/architecture/lesson-fd99d0.yaml
+    lesson-33acd7:
+      title: 给进程内自动重执行的路径加审计前先盘点：订阅轮询会把失败史淹进噪音
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/architecture/lesson-33acd7.yaml
   coding:
     go-flag-bd930f:
       title: Go flag 包的默认报错不符合中文术语约定
@@ -290,6 +295,11 @@ categories:
       status: active
       occurrences: 1
       path: .strict-spec-driven/lessons/coding/lesson-7392eb.yaml
+    lint-aecef8:
+      title: 共用判定函数不等于共用取参：镜像 lint 规则的写入校验要在空数组与非法参数边界对齐
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/coding/lint-aecef8.yaml
   documentation:
     must-must-6af326:
       title: 修改一条 MUST 需求时，要检查同一规格里相邻的 MUST 是否因此冲突
@@ -311,6 +321,21 @@ categories:
       status: active
       occurrences: 1
       path: .strict-spec-driven/lessons/documentation/roadmap-generate-91c10a.yaml
+    delta-spec-modified-75751e:
+      title: delta-spec 的 MODIFIED 在归档时整需求替换：场景表必须重述全量
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/documentation/delta-spec-modified-75751e.yaml
+    validate-delta-b8016c:
+      title: 给产物加跨字段领域校验时，validate 类需求的 delta 容易漏
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/documentation/validate-delta-b8016c.yaml
+    findings-rule-id-type-4ee84a:
+      title: 写 findings 的规格场景时 rule 是规则 id、type 才是规则类型
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/documentation/findings-rule-id-type-4ee84a.yaml
   operations:
     pr-gh-generate-notes-8e86ae:
       title: 不走 PR 的仓库里 gh --generate-notes 只生成一行比较链接，不是提交清单

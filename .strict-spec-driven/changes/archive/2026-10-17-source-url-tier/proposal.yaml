@@ -1,0 +1,22 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: source-url-tier
+  status: proposed
+summary:
+  what:
+    - source add 增加可选参数 --url（一手网页地址，机器可校验的 http(s) 地址）与 --tier primary|secondary（信源等级（Source Tier）：一手或二手转述），向后兼容；source list 透出；docs/GLOSSARY.md 增加信源等级（Source Tier）词条
+  why:
+    - 下游反馈 P2-1：素材只有文件没有一手 URL；引语出自二手转述（x_search 降级时经媒体报道转述）无等级标记，作者无从知情。等级是后续「引用二手引语须向作者明示」审查项的数据基础
+scope:
+  in:
+    - internal/schema/schemas/source.schema.json（可选 url 与 tier）；internal/source（Source 结构与写入）；internal/cli/sources.go 的 source add 参数与 source add/list 视图；sources-and-provenance 主规格 source-add 与 source-list；docs/GLOSSARY.md
+  out:
+    - review/审查侧对 secondary 的阻塞消费（属设计批联动）；claim 视图的改动（素材等级经 source list 可见即可）；--url 的网络抓取（不访问网络，只登记）
+unchanged_behavior:
+  - 不带 --url/--tier 的 source add 行为逐字节不变；source.yaml 既有字段与顺序；素材校验 archive-integrity；source list 排序与容错
+roadmap:
+  milestone: boundary-semantics-silent-failure
+  planned_change: source-url-tier

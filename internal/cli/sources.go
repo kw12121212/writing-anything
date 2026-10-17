@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -11,6 +12,7 @@ import (
 	"github.com/kw12121212/writing-anything/internal/catalog"
 	"github.com/kw12121212/writing-anything/internal/draft"
 	"github.com/kw12121212/writing-anything/internal/feedback"
+	"github.com/kw12121212/writing-anything/internal/lint"
 	"github.com/kw12121212/writing-anything/internal/schema"
 	"github.com/kw12121212/writing-anything/internal/source"
 	"github.com/kw12121212/writing-anything/internal/work"
@@ -31,8 +33,10 @@ var sourceAddCommand = &command{
 		fileFlag,
 		{"title", flagString, "素材标题"},
 		{"id", flagString, "素材 id；省略时为 src- 加内容 SHA-256 的前 12 个字符"},
+		{"url", flagString, "一手网页地址（http 或 https，长度上限 2048）；可选，只登记不抓取"},
+		{"tier", flagString, "信源等级（Source Tier）：primary（一手，作者亲历或原始出处）或 secondary（二手转述，引用转述引语时须向作者明示）；可选"},
 	},
-	outputKeys: []outputKey{{"source", "新登记的素材：id、type、title、path（存档文件路径）与 sha256；失败时为 null"}},
+	outputKeys: []outputKey{{"source", "新登记的素材：id、type、title、path（存档文件路径）与 sha256，给出时另含 url 与 tier；失败时为 null"}},
 	exitCodes:  standardExitCodes,
 	run:        runSourceAdd,
 }
@@ -41,7 +45,7 @@ var sourceListCommand = &command{
 	name:       "source list",
 	summary:    "列出素材库（Source Library）中已登记的素材（Source）",
 	flags:      []flagSpec{dirFlag},
-	outputKeys: []outputKey{{"sources", "按 id 排序的素材数组，每项含 id、type、title、path 与 sha256"}},
+	outputKeys: []outputKey{{"sources", "按 id 排序的素材数组，每项含 id、type、title、path 与 sha256，给出时另含 url 与 tier（信源等级（Source Tier））"}},
 	exitCodes:  standardExitCodes,
 	run:        runSourceList,
 }
@@ -122,12 +126,14 @@ type sourceView struct {
 	ID     string  `json:"id"`
 	Type   string  `json:"type"`
 	Title  *string `json:"title"`
+	URL    string  `json:"url,omitempty"`
+	Tier   string  `json:"tier,omitempty"`
 	Path   string  `json:"path"`
 	SHA256 string  `json:"sha256"`
 }
 
 func viewOf(s *source.Source) sourceView {
-	v := sourceView{ID: s.ID, Type: s.Type, Path: s.FilePath(), SHA256: s.SHA256}
+	v := sourceView{ID: s.ID, Type: s.Type, Path: s.FilePath(), SHA256: s.SHA256, URL: s.URL, Tier: s.Tier}
 	if s.Title != "" {
 		v.Title = &s.Title
 	}
@@ -250,7 +256,7 @@ func runSourceAdd(inv *invocation) int {
 		if content, name, problems = readInput(inv, dir); problems == nil {
 			var s *source.Source
 			var created []string
-			if s, created, problems = source.Add(dir, content, inv.values["type"], inv.values["title"], inv.values["id"], name); s != nil {
+			if s, created, problems = source.Add(dir, content, inv.values["type"], inv.values["title"], inv.values["id"], name, inv.values["url"], inv.values["tier"]); s != nil {
 				v := viewOf(s)
 				res.Source, res.ChangedPaths = &v, created
 			}
@@ -390,8 +396,10 @@ func runClaimAdd(inv *invocation) int {
 			sources := splitSources(inv.values["sources"])
 			var c *draft.Claim
 			var changed []string
-			if c, changed, problems = draft.AddClaim(dir, w, u, inv.values["kind"], inv.values["text"], inv.values["id"], sources); c != nil {
-				res.Claim, res.ChangedPaths = &claimView{Unit: u.Ref, Claim: *c}, changed
+			if problems = claimAuthorSourceGate(dir, w, inv.values["kind"], sources); problems == nil {
+				if c, changed, problems = draft.AddClaim(dir, w, u, inv.values["kind"], inv.values["text"], inv.values["id"], sources); c != nil {
+					res.Claim, res.ChangedPaths = &claimView{Unit: u.Ref, Claim: *c}, changed
+				}
 			}
 			edit = true
 		}
@@ -407,6 +415,80 @@ func runClaimAdd(inv *invocation) int {
 		_, err := fmt.Fprintf(w, "已在单元（Unit）%s 登记论断（Claim）%s（%s）：%s\n", res.Claim.Unit, res.Claim.ID, res.Claim.Kind, claimSourcesText(res.Claim.Sources))
 		return err
 	})
+}
+
+// claimAuthorSourceGate 是 claim add / claim set --kind 的写入校验：按合并结果生效的 claim-sources 规则（与 lint 共用
+// 同一张规则表），kind 为需要作者亲历素材的类型、给出了素材且全部素材类型都不算亲历时拒绝（claim.needs-author-source），
+// 建议 --kind fact 或先登记亲历素材。未关联素材（显式未完成，由 claim set 补齐）、素材读不到（由存在性检查报告）、
+// 合并失败或没有生效的 claim-sources 规则时不拦。
+func claimAuthorSourceGate(dir string, w *work.Work, kind string, sources []string) []workspace.Problem {
+	if len(sources) == 0 {
+		return nil
+	}
+	r, ps := workResolver(dir, w)()
+	if r == nil || len(ps) > 0 {
+		return nil
+	}
+	srcTypes := make([]string, 0, len(sources))
+	var got []string
+	for _, id := range sources {
+		typ := ""
+		if src, _ := source.Load(dir, id); src != nil {
+			typ = src.Type
+		}
+		if typ == "" {
+			return nil
+		}
+		srcTypes = append(srcTypes, typ)
+		got = append(got, id+"（"+typ+"）")
+	}
+	for _, id := range slices.Sorted(maps.Keys(r.Rules)) {
+		rule := r.Rules[id]
+		if !rule.Enabled || fmt.Sprint(rule.Type.Value) != "claim-sources" {
+			continue
+		}
+		kinds, sourceTypes, valid := lint.ClaimSourceRequirement(rule)
+		if !valid {
+			continue // 参数非法：lint 报 rule.invalid-params 且不执行该规则，写入校验同样跳过
+		}
+		if !lint.LacksAuthorSource(kind, srcTypes, kinds, sourceTypes) {
+			continue
+		}
+		return []workspace.Problem{{Code: draft.CodeNeedsAuthorSource, Severity: workspace.SeverityError, Field: "kind",
+			Message: fmt.Sprintf("论断（Claim）类型 %s 需要关联作者亲历素材（%s 类型的素材（Source）），给出的素材全部为其他类型：%s；外部报道的事实请改用 --kind fact 登记，或先用 wa-cli source add 登记作者亲历素材再关联",
+				kind, strings.Join(sourceTypes, "、"), strings.Join(got, "、"))}}
+	}
+	return nil
+}
+
+// claimSetGate 是 claim set 的写入校验：按替换后的 kind 与素材（--kind 与 --sources 都省略时不触发）复用
+// claimAuthorSourceGate。论断不存在时交由 SetClaim 报告 claim.not-found，不在这里拦。
+func claimSetGate(dir string, w *work.Work, u *work.Unit, id string, kind *string, sources *[]string) []workspace.Problem {
+	if kind == nil && sources == nil {
+		return nil
+	}
+	// LoadClaims 在 claims.yaml 有任何问题（含其他论断的悬空引用）时返回 nil：此时放行，由 SetClaim 自己的加载
+	// 报告问题（悬空引用降为 warning 照常写入），写入校验不叠加一道更严的门槛。
+	cs, _ := draft.LoadClaims(dir, w, u)
+	effectiveKind, effectiveSources := "", []string{}
+	found := false
+	for _, c := range cs {
+		if c.ID != id {
+			continue
+		}
+		found = true
+		effectiveKind, effectiveSources = c.Kind, c.Sources
+	}
+	if !found {
+		return nil
+	}
+	if kind != nil {
+		effectiveKind = *kind
+	}
+	if sources != nil {
+		effectiveSources = *sources
+	}
+	return claimAuthorSourceGate(dir, w, effectiveKind, effectiveSources)
 }
 
 // splitSources 把逗号分隔的素材 id 切开，去掉空白与空项；结果不为 nil。
@@ -437,7 +519,7 @@ func claimParamNext(ds []Diagnostic, name, dir string) {
 			own, idx = append(own, d), append(idx, i)
 		}
 	}
-	helpNext(own, name, []string{schema.CodeSchemaViolation, draft.CodeUnknownSource, catalog.CodeDuplicateID, draft.CodeAnchoredValue},
+	helpNext(own, name, []string{schema.CodeSchemaViolation, draft.CodeUnknownSource, catalog.CodeDuplicateID, draft.CodeAnchoredValue, draft.CodeNeedsAuthorSource},
 		shellCommand("wa-cli", "source", "list", "--dir", dir, "--json"))
 	for k, i := range idx {
 		ds[i] = own[k]
@@ -508,8 +590,10 @@ func runClaimSet(inv *invocation) int {
 			}
 			var c *draft.Claim
 			var changed []string
-			if c, changed, problems = draft.SetClaim(dir, w, u, inv.args[1], kind, text, sources); c != nil {
-				res.Claim, res.ChangedPaths = &claimView{Unit: u.Ref, Claim: *c}, changed
+			if problems = claimSetGate(dir, w, u, inv.args[1], kind, sources); problems == nil {
+				if c, changed, problems = draft.SetClaim(dir, w, u, inv.args[1], kind, text, sources); c != nil {
+					res.Claim, res.ChangedPaths = &claimView{Unit: u.Ref, Claim: *c}, changed
+				}
 			}
 			edit = true
 		}

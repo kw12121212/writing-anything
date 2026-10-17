@@ -112,6 +112,7 @@ var ruleTypes = map[string]ruleType{
 	"ad-compliance":        {params: []param{{"terms", kindStrings, false}, {"builtin", kindBool, false}, {"basis", kindString, false}}, check: checkAdCompliance},
 	"dialogue-punctuation": {check: checkDialogue},
 	"pov-consistency":      {check: checkPOV},
+	"conflict-sources":     {check: checkConflicts},
 }
 
 // Run 对正文 content 执行 r 中的全部生效规则，按行、列、规则 id 排序发现项，并应用单处豁免。problems 为规则参数问题

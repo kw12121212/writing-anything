@@ -98,7 +98,7 @@ func TestSeriesContinuityCLI(t *testing.T) {
 // review plan 的系列级包：跨作品 character 包与 series-causality 维度。
 func TestSeriesReviewPlan(t *testing.T) {
 	dir := seriesFixture(t)
-	code, res := runWS(t, dir, "review", "plan", "guide", "--dimension", "series-causality", "--dir", dir)
+	code, res := runWS(t, dir, "review", "plan", "guide", "--dimension", "series-causality")
 	if code != 0 {
 		t.Fatalf("plan series-causality: exit code = %d, result = %+v", code, res)
 	}
@@ -106,14 +106,14 @@ func TestSeriesReviewPlan(t *testing.T) {
 	b2s1 := filepath.Join(dir, ".writing-anything", "works", "book-2", "units", "s1")
 	writeFile(t, filepath.Join(b2s1, "outline.yaml"),
 		"schema_version: 1\nsections:\n  - {id: sc1, title: 场景, reason: 推进, pov: 守灯人, characters: [守灯人], causes: [ev-1], after: [book-1/s1]}\n")
-	if code, res = runWS(t, dir, "review", "plan", "guide", "--dimension", "series-causality", "--dir", dir); code != 0 {
+	if code, res = runWS(t, dir, "review", "plan", "guide", "--dimension", "series-causality"); code != 0 {
 		t.Fatalf("plan: exit code = %d, result = %+v", code, res)
 	}
 	if !contains(res.stdout, "series-causality-1") || !contains(res.stdout, "book-2/s1") {
 		t.Fatalf("packets = %s", res.stdout)
 	}
 	// 跨作品 character 包：guide 目录下 character 包（两章合并）。
-	if code, res = runWS(t, dir, "review", "plan", "guide", "--dimension", "character", "--dir", dir); code != 0 {
+	if code, res = runWS(t, dir, "review", "plan", "guide", "--dimension", "character"); code != 0 {
 		t.Fatalf("plan character: exit code = %d", code)
 	}
 }

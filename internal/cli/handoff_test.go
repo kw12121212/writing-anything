@@ -15,7 +15,7 @@ func TestHandoffCommands(t *testing.T) {
 		t.Fatalf("write: exit code = %d, result = %+v", code, res)
 	}
 	// stdin 入口。
-	if code, _ := runWSIn(t, dir, "done: [场景二收口]\ntodo: [场景三草拟]\nrisks: [伏笔接近回收]\n", "handoff", "write", "--dir", dir); code != 0 {
+	if code, _ := runWSIn(t, dir, "done: [场景二收口]\ntodo: [场景三草拟]\nrisks: [伏笔接近回收]\n", "handoff", "write"); code != 0 {
 		t.Fatalf("write stdin: exit code = %d", code)
 	}
 	// show 默认最近一条。
@@ -58,6 +58,31 @@ func TestHandoffCommands(t *testing.T) {
 	writeFile(t, filepath.Join(dir2, "h2.yaml"), "done: [x]\ntodo: [y]\n")
 	if code, _ := runWS(t, dir2, "handoff", "write", "--file", "h2.yaml"); code != 0 {
 		t.Fatalf("second write: %d", code)
+	}
+	// 干净收尾：省略 todo（或给空数组）合法，写入该条 todo 为空数组。
+	writeFile(t, filepath.Join(dir2, "h3.yaml"), "done: [全部场景已收口]\n")
+	if code, res := runWS(t, dir2, "handoff", "write", "--file", "h3.yaml"); code != 0 {
+		t.Fatalf("write without todo: exit code = %d, result = %+v", code, res)
+	} else if !strings.Contains(res.stdout, `"todo":[]`) {
+		t.Fatalf("note todo should be empty array: %s", res.stdout)
+	}
+	if code, res := runWS(t, dir2, "handoff", "show"); code != 0 || !strings.Contains(res.stdout, "handoff-3") || strings.Contains(res.stdout, "未完成") {
+		t.Fatalf("show no-todo note: exit code = %d, stdout = %s", code, res.stdout)
+	}
+	if code, res := runWS(t, dir2, "validate", ".writing-anything/handoffs.yaml"); code != 0 {
+		t.Fatalf("validate with empty todo: exit code = %d, result = %+v", code, res)
+	}
+	// 空数组形态同样合法。
+	writeFile(t, filepath.Join(dir2, "h4.yaml"), "done: [再次收口]\ntodo: []\n")
+	if code, _ := runWS(t, dir2, "handoff", "write", "--file", "h4.yaml"); code != 0 {
+		t.Fatalf("write empty todo: exit code = %d", code)
+	}
+	// 最近一条（空 todo）在人读文本里不列未完成事项：show 文本无「待办：」，next 文本有交接段但无「未完成：」。
+	if code, out, _ := run(t, "handoff", "show", "--dir", dir2); code != 0 || strings.Contains(out, "待办：") {
+		t.Fatalf("show text with empty todo: exit code = %d, stdout = %s", code, out)
+	}
+	if code, out, _ := run(t, "next", "--dir", dir2); code != 0 || !strings.Contains(out, "最近交接记录") || strings.Contains(out, "未完成：") {
+		t.Fatalf("next text with empty todo: exit code = %d, stdout = %s", code, out)
 	}
 }
 

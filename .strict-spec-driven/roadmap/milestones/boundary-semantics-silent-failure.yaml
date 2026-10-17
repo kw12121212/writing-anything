@@ -1,0 +1,36 @@
+schema: strict-spec-driven/roadmap-milestone/v2
+schema_version: 2
+artifact_type: roadmap_milestone
+schema_file: ../schemas/roadmap-milestone.yaml
+milestone:
+  boundary-semantics-silent-failure:
+    title: 边界语义与静默失败加固（Boundary Semantics & Silent Failure Hardening）
+order: 500
+goal: 把一次端到端真实写作流程复盘（docs/proposal-2026-10-16）暴露的边界语义与静默失败问题从技能 prose 落进机制：claim 写入时校验 kind×source、CLI 输入严格化、preview 事件不再静默失真、信源等级与审稿增量重记可观测，并为审计日志、简报字段出处、素材矛盾登记三个设计先行项形成经作者确认的方案。
+scope:
+  in:
+    - claim add 写入时 kind×source 校验与留痕例外通道；数据候选扫描跳过标题行；重复 flag 报 usage error；handoff write 允许 todo 为空；preview confirmation 事件 id 不为空串；source --url/--tier；review record --reaffirm；wa 技能会话协议脚本化；audit log、brief 出处、矛盾登记三份设计提案
+  out:
+    - 用户侧运行环境 PATH 根治与 agent-reach 后端安装（属下游本地环境，见反馈文档范围划分）；wa-cli 调用大语言模型；规范包执行代码
+done_criteria:
+  - 每条验收标准（反馈文档 GIVEN/WHEN/THEN）有对应测试；完整回归 go vet/build/test/covercheck（≥80%）通过；引入的新术语在同一变更进入 docs/GLOSSARY.md；三份设计提案停在作者确认点
+intake_questions:
+  - id: conflict-vs-decision
+    question: 素材矛盾（P1-2）应登记为新的冲突产物，还是决策队列的子类型加 lint 规则？
+    context: 下游提案提出 conflicts.yaml 与 add/waive 命令族；上游评审担心与既有决策队列概念平行重复
+    impact: 决定 P1-2 的产物形态、命令面与阻塞器实现
+    recommendation: 设计先行批先做两方案比选，经作者确认后再实现
+  - id: audit-log-artifact-class
+    question: 审计日志（Audit Log）属于纳入 validate 的结构化产物，还是排除在校验外的运维痕迹？
+    context: 工作区现有产物均为 JSON Schema 约束的 YAML 与 Markdown，反馈提案建议纳入 validate
+    impact: 决定 P0-1 的文件形态、轮转与校验策略
+    recommendation: 倾向按 append-only 运维痕迹处理，设计批定案
+planned_changes: {}
+dependencies:
+  - 真实使用验证与发布（real-use-and-release）已完成的下游真实反馈
+risks:
+  - 写入时校验与 lint 规则若不共用规则表会语义漂移；--override 例外通道若无留痕要求会变成新的偷懒捷径；brief 出处强制可能打断存量进行中作品
+status: proposed
+notes:
+  - 反馈来源：docs/proposal-2026-10-16/（IMPROVEMENTS.md、DESIGN-discipline-as-mechanism.md、wa-fixture-tesla-flying-car.tar.gz 回归样例）；36c4585（claim-candidates-fact-cover）尚未发版，下次发布说明需写明
+details: 按反馈优先级分三批：①窄 bugfix 批（P0-2、P2-2、P3）走 strict-spec-bugfix；②中批（P2-1、P2-3、P1-3）走提案+实现；③设计先行批（P0-1、P1-1、P1-2）走 strict-spec-brainstorm，停在作者确认。fixture 先查来源与体积再决定是否抽最小语料进 testdata。

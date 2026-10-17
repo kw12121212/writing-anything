@@ -1,0 +1,9 @@
+schema_version: 1
+id: src-tier-0001
+type: reference
+title: 报道
+url: https://example.com/post/1
+tier: secondary
+file: original.md
+sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+bytes: 12

@@ -560,7 +560,7 @@ func TestShortStoryCurve(t *testing.T) {
 		step(fmt.Sprintf(session, id), "metrics", "record", "lamp/s1")
 	}
 	// curve 列出张力曲线的偏离发现项；changedPaths 为空（只读），发现项不影响退出码。
-	code, out := runWS(t, dir, "curve", "lamp", "--json")
+	code, out := runWS(t, dir, "curve", "lamp")
 	if code != 0 {
 		t.Fatalf("curve: exit code = %d, diagnostics = %+v", code, out.Diagnostics)
 	}

@@ -30,7 +30,7 @@ func codes(ps []workspace.Problem) []string {
 func TestAdd(t *testing.T) {
 	root := newRoot(t)
 	content := []byte("我在 2023 年迁移过一次数据库\r\n")
-	s, created, ps := Add(root, content, "author-note", "迁移笔记", "", "idea.md")
+	s, created, ps := Add(root, content, "author-note", "迁移笔记", "", "idea.md", "", "")
 	if len(ps) > 0 {
 		t.Fatal(ps)
 	}
@@ -69,7 +69,7 @@ func TestAddFileNames(t *testing.T) {
 		{"upper", "Talk.TXT", "original.TXT"},
 		{"dotfile", ".bashrc", "original"},
 	} {
-		s, _, ps := Add(root, []byte("x"), "reference", "", tc.id, tc.name)
+		s, _, ps := Add(root, []byte("x"), "reference", "", tc.id, tc.name, "", "")
 		if len(ps) > 0 || s.File != tc.file {
 			t.Errorf("Add(%q) file = %v, %v; want %s", tc.name, s, ps, tc.file)
 		}
@@ -78,7 +78,7 @@ func TestAddFileNames(t *testing.T) {
 
 func TestAddRejects(t *testing.T) {
 	root := newRoot(t)
-	if _, _, ps := Add(root, []byte("x"), "author-note", "", "dup", ""); len(ps) > 0 {
+	if _, _, ps := Add(root, []byte("x"), "author-note", "", "dup", "", "", ""); len(ps) > 0 {
 		t.Fatal(ps)
 	}
 	before, _ := os.ReadFile(filepath.Join(root, filepath.FromSlash(Path("dup"))))
@@ -93,7 +93,7 @@ func TestAddRejects(t *testing.T) {
 		{"bad id", "author-note", "Bad_ID", "x", "artifact.schema-violation", "id"},
 		{"exists", "author-note", "dup", "y", "source.exists", ""},
 	} {
-		_, created, ps := Add(root, []byte(tc.content), tc.typ, "", tc.id, "")
+		_, created, ps := Add(root, []byte(tc.content), tc.typ, "", tc.id, "", "", "")
 		if len(ps) != 1 || ps[0].Code != tc.code || ps[0].Field != tc.field || created != nil {
 			t.Errorf("%s: problems = %+v, created = %v", tc.name, ps, created)
 		}
@@ -115,7 +115,7 @@ func TestLoadAll(t *testing.T) {
 	root := newRoot(t)
 	sources := filepath.Join(root, ".writing-anything", "sources")
 	for _, id := range []string{"b-ok", "a-ok", "tampered", "renamed", "no-archive"} {
-		if _, _, ps := Add(root, []byte("原文 "+id), "interview", "", id, ""); len(ps) > 0 {
+		if _, _, ps := Add(root, []byte("原文 "+id), "interview", "", id, "", "", ""); len(ps) > 0 {
 			t.Fatal(ps)
 		}
 	}

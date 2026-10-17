@@ -132,6 +132,8 @@ func TestUsageErrorsJSON(t *testing.T) {
 		{[]string{"--json"}, "usage.missing-command", "缺少命令", "wa-cli help --json"},
 		{[]string{"nope", "--json"}, "usage.unknown-command", "未知命令：nope", "wa-cli help --json"},
 		{[]string{"version", "--unknown", "--json"}, "usage.unknown-flag", "未知参数：--unknown", "wa-cli help version --json"},
+		{[]string{"version", "--json", "--json"}, "usage.duplicate-flag", "参数 --json 重复出现：true 与 true（非列表参数只能出现一次）", "wa-cli help version --json"},
+		{[]string{"brief", "set", "my-post", "--message=km-1", "--message=km-2", "--json"}, "usage.duplicate-flag", "参数 --message 重复出现：km-1 与 km-2（非列表参数只能出现一次）", "wa-cli help brief set --json"},
 		{[]string{"version", "--help=yes", "--json"}, "usage.flag-takes-no-value", "参数 --help 不接受取值：--help=yes", "wa-cli help version --json"},
 		{[]string{"version", "extra", "--json"}, "usage.unexpected-argument", "多余的参数：extra", "wa-cli help version --json"},
 		{[]string{"help", "nope", "--json"}, "usage.unknown-command", "未知命令：nope", "wa-cli help --json"},

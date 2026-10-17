@@ -1,0 +1,19 @@
+schema: strict-spec-driven/lesson/v1
+schema_version: 1
+artifact_type: lesson
+schema_file: templates/strict-spec-driven/schemas/lesson.yaml
+lesson:
+  id: validate-delta-b8016c
+  title: 给产物加跨字段领域校验时，validate 类需求的 delta 容易漏
+category: documentation
+status: active
+created_at: '2026-10-16T17:09:57.391Z'
+updated_at: '2026-10-16T17:09:57.391Z'
+context: review-reaffirm 在 checkReview 里加了 reaffirms 引用发现项的跨字段校验（validate/show/resolve/accept 的加载路径都可观察）
+observation: delta 只写了命令行为需求（review-record），复审发现 validate 路径的新可观察行为没有规格覆盖：归档整需求替换后主规格 review-validation 与实现漂移。正常流程写不出这种文件（写入侧已保证），属手工损坏防线，但仍是新的可观察行为
+takeaway: 在领域校验函数（checkXxx）里新增任何检查时，逐个问「这条检查在哪些命令路径上可观察」：命令本身的 delta 之外，validate/整体校验类需求通常也需要一个 MODIFIED delta 把新行为写进去
+applies_when: 任何在产物领域校验（加载路径执行的检查）中新增规则、且变更只带了写入命令 delta 的场景
+occurrences:
+  - origin: review-reaffirm
+    date: '2026-10-16'
+    evidence: 复审 B1：checkReview 的 reaffirms[].resolved/waived 引用校验触发于 validate 与 review show，但 specs/review.yaml 只有 review-record 的 delta；补 review-validation MODIFIED（含 validate-reaffirm-dangling 场景）后归档

@@ -8,7 +8,7 @@ spec:
 requirements:
   builtin-skills:
     strength: MUST
-    statement: wa-cli 必须随二进制提供十二个技能（Skill）：wa-init、wa-brief、wa-outline、wa-draft、wa-review、wa-revise、wa-publish、wa-plan、wa-scene、wa-continuity、wa-assemble 与 wa-auto，不需要网络访问或额外文件。每个技能是一个目录，含 SKILL.md：开头为 --- 包住的 YAML 文件头，只含 name（与目录名相同，小写字母、数字与连字符，不超过 64 个字符）与 description（非空，不超过 1024 个字符），之后为非空的正文；目录结构与通用的 Agent Skills 格式兼容。技能的正文只说明何时调用哪些 wa-cli 命令、何时必须停下来询问作者（含「必须停下来问作者」一节），不实现业务逻辑；正文中 wa-cli 之后的命令名（一个或两个小写词）都必须是 wa-cli help --json 列出的命令，同一处写出的 --参数 都必须是该命令声明的参数。wa-cli skills list 必须只读地输出 skills 数组（按名称排序），每项含 name、description 与 commands（引用的 wa-cli 命令，按命令注册表规范化：两个词组成已登记的命令时取两个词，否则只取命令名；去重、按出现顺序），不需要工作区。
+    statement: wa-cli 必须随二进制提供十二个技能（Skill）：wa-init、wa-brief、wa-outline、wa-draft、wa-review、wa-revise、wa-publish、wa-plan、wa-scene、wa-continuity、wa-assemble 与 wa-auto，不需要网络访问或额外文件。每个技能是一个目录，含 SKILL.md：开头为 --- 包住的 YAML 文件头，只含 name（与目录名相同，小写字母、数字与连字符，不超过 64 个字符）与 description（非空，不超过 1024 个字符），之后为非空的正文；目录结构与通用的 Agent Skills 格式兼容。技能的正文只说明何时调用哪些 wa-cli 命令、何时必须停下来询问作者（含「必须停下来问作者」一节）与逐条检查退出码的会话协议（含「会话协议」一节：可执行的 wrapper 模板——set -euo pipefail、失败即停读诊断、不用 || true 或输出重定向吞错——以及「经 harness 提问工具得到的作者决定用 decision add / decide 回写决策队列」的映射指引；模板与指引不是业务逻辑），不实现业务逻辑；正文中 wa-cli 之后的命令名（一个或两个小写词）都必须是 wa-cli help --json 列出的命令，同一处写出的 --参数 都必须是该命令声明的参数。wa-cli skills list 必须只读地输出 skills 数组（按名称排序），每项含 name、description 与 commands（引用的 wa-cli 命令，按命令注册表规范化：两个词组成已登记的命令时取两个词，否则只取命令名；去重、按出现顺序），不需要工作区。
     scenarios:
       list-skills:
         - GIVEN: 任意目录
@@ -18,6 +18,10 @@ requirements:
         - GIVEN: 内置的十二个技能
         - WHEN: 把每个技能引用的命令与 wa-cli help --json 的 commands 对照
         - THEN: 每个引用的命令都在其中
+      session-protocol-present:
+        - GIVEN: 内置的十二个技能
+        - WHEN: 读取每个技能的 SKILL.md 正文
+        - THEN: 每个技能都含「会话协议」一节，节内有 set -euo pipefail 的 wrapper 模板、吞错（|| true 或输出重定向）的禁止说明与经 harness 提问工具得到作者决定后用 decision add / decide 回写的映射指引
   skills-install:
     strength: MUST
     statement: wa-cli skills install 必须把全部内置技能写入技能目录下的 <name>/SKILL.md：--agent claude-code 的技能目录为 --dir 下的 .claude/skills，--agent codex 为 .agents/skills（Codex 扫描的位置）；给出 --target 时技能目录为它（相对 --dir 或为绝对路径），此时不需要 --agent。不需要工作区。写入之前先完成全部检查，任何一项不通过都不写任何文件：从技能目录向上第一个已存在的路径、已存在的各技能目录都必须是真实目录，已存在的技能文件必须是普通文件，否则报告 skills.invalid-path（不跟随符号链接写入）；已有的技能文件与当前内置内容不同时：内容（把 CRLF 换行规范为 LF 后）等于该技能自己某个已提交版本（含开发构建）的内置内容（wa-cli 升级前安装、未被改过）的视为旧版本，直接更新；与该技能任何已提交的内置版本都不同（可能被作者改过）的报告 skills.modified，给出 --force 时改为覆盖。检查通过后缺少的目录逐级创建，内容不同或不存在的技能文件原子写入（覆盖时保留原有权限），内容相同的不写。诊断的 path 在项目目录之内时为相对项目目录的路径，在项目目录之外时不填 path、把绝对路径写进 message；所有诊断的 next 为 wa-cli help skills install --json。成功时 --json 输出的 skills 为每个技能的 name、path（在项目目录之内时相对项目目录，否则为绝对路径）与 changed，launchDir 在给出 --agent 而没有 --target 时为项目目录的绝对路径（归一为真实路径拼写），否则为 null，changedPaths 为项目目录之内新建的目录与新写入或覆盖的技能文件，退出码为 0；检查不通过时 skills 为空数组、不写任何文件；写入中途发生读写错误（如目录没有写权限）时报告 workspace.write-failed，skills 与 changedPaths 只列出已写入的部分；有问题时退出码为 1，检查不通过或写入失败时 launchDir 为 null。安装成功且 launchDir 不为 null 时，不加 --json 的文本输出另有一行提示：在项目目录 <launchDir> 中启动 <agent>，技能才会被加载，在上级目录或项目之外启动时不会加载。--agent 给出但不是 claude-code 或 codex 时（即使同时给出 --target）、既没有 --agent 也没有 --target 时、--target 落在工作区 .writing-anything/ 中（解析为绝对路径后按不区分大小写比较，并按文件身份确认；绝对路径、经由上级目录的相对路径与大小写变体都算）时报告 input.invalid-value。--dir 与 --target 为相对路径时都相对当前目录解析为绝对路径后再判断是否在项目目录之内。

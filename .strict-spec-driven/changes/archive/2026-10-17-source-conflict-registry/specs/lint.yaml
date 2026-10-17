@@ -1,0 +1,21 @@
+schema: strict-spec-driven/delta-spec/v1
+schema_version: 1
+artifact_type: delta_spec
+schema_file: templates/strict-spec-driven/schemas/delta-spec.yaml
+target_spec: lint
+operations:
+  ADDED:
+    conflict-rule:
+      strength: MUST
+      statement: 合并结果中有生效的 conflict-sources 规则时，wa-cli lint 必须读取决策队列中关联该作品（或不关联任何单元）且带冲突（Conflict）载荷、status 为 open 的决策：任一方引文（按论断文字同样的规范化：去首尾空白、句末标点与右引号）出现在围栏代码块之外的正文原文中时，报告一项 error 发现项（规则类型 type 为 conflict-sources，rule 为声明该类型的规则 id），位置为引文第一次出现处，message 说明正文引用了未决冲突（about）中该方的说法、两说各出自哪个素材 id，并提示请作者经 wa-cli decide 裁定后重跑检查；两说都被引用时各报一条。决策为 decided 或 waived 时不报；决策队列无法加载时不执行本检查并报告一条 warning 诊断（message 说明冲突检查未运行、下一步为整体校验）。规则未生效时不读取冲突决策。发现项计入 lint.findings 的 error 语义（有该发现项时退出码为 1）。
+      scenarios:
+        conflict-open-quoted:
+          - GIVEN: 作品 my-post 的 open 决策带冲突载荷（about 喷嘴数量，两说引文分别为 10 个喷嘴 与 4 个推进器，出自素材 src-a 与 src-r），正文含「10 个喷嘴」
+          - WHEN: 运行 wa-cli lint my-post --dir D --json
+          - THEN: findings 含一项 type 为 conflict-sources、severity 为 error 的发现项，message 含 喷嘴数量、src-a 与 src-r，退出码为 1
+        conflict-decided:
+          - GIVEN: 同上，但该决策已由作者 decide
+          - WHEN: 运行 wa-cli lint my-post --dir D --json
+          - THEN: 没有 conflict-sources 类型的发现项，退出码不因它变为 1
+  MODIFIED: {}
+  REMOVED: {}

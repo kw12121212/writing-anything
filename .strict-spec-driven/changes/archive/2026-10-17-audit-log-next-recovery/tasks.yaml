@@ -1,0 +1,33 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: audit-log-next-recovery
+sections:
+  Implementation:
+    implement-audit-writer:
+      text: internal/cli 审计写入：统一出口（finish 与用法错误路径）追加 JSONL（at、command、args（每参数截断 200 字符）、exit、codes）；无工作区不写；写失败输出 stderr 不改退出码；O_APPEND 原子追加与 1MiB 轮转一份（audit.log.1）
+      status: complete
+    implement-recovery-step:
+      text: next 读 audit.log：关键命令×单元的最后一次调用失败且其后无成功 → 回捞 step（建议重跑，非阻塞）；重试成功后 step 消失
+      status: complete
+    implement-preview-summary:
+      text: 本地阅读页展示最近 5 条失败摘要（时间、命令、退出码）；preview 数据结构与模板同步
+      status: complete
+  Testing:
+    targeted-green:
+      text: 定向包回归通过（含审计写入/轮转/无工作区/回捞出现与消失/参数截断/阅读页失败摘要用例）
+      status: complete
+      command: go test ./internal/cli ./internal/preview ./internal/mcp -count=1
+    full-regression:
+      text: 完整项目回归（vet、build、test、covercheck ≥80）
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    strict-verify:
+      text: strict-spec-cli verify audit-log-next-recovery 通过
+      status: complete
+      command: strict-spec-cli verify audit-log-next-recovery
+testing_gates:
+  validation_task: full-regression
+  unit_test_task: targeted-green

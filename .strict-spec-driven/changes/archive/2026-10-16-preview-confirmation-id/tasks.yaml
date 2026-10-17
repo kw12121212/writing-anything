@@ -1,0 +1,31 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: preview-confirmation-id
+sections:
+  Implementation:
+    repro-failing-test:
+      text: 在 internal/cli/confirmation_channel_test.go 增加回归断言：acceptance 与 volume 页面确认的响应信封与服务输出的事件行都不含空串 id（"id":""），decision 页面确认的 confirmation.id 为 dec-1；运行定向测试确认修复前失败
+      status: complete
+      command: go test ./internal/cli -run TestConfirmationChannelStrict -count=1
+    omit-empty-id:
+      text: internal/cli/preview_confirm.go 的 confirmedView.ID json 标签加 omitempty；internal/cli/preview.go 输出键 confirmation 的说明文字改为 id 只在 decision、plan、state、knowledge 出现
+      status: complete
+  Testing:
+    targeted-green:
+      text: 定向回归通过（含新增断言）
+      status: complete
+      command: go test ./internal/cli -run 'TestConfirmationChannel|TestPreview' -count=1
+    full-regression:
+      text: 完整项目回归（vet、build、test、covercheck ≥80）
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    strict-verify:
+      text: strict-spec-cli verify preview-confirmation-id 通过（含规格 delta 校验）
+      status: complete
+      command: strict-spec-cli verify preview-confirmation-id
+testing_gates:
+  validation_task: full-regression
+  unit_test_task: targeted-green

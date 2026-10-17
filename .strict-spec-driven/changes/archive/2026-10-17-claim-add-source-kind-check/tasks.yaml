@@ -1,0 +1,35 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: claim-add-source-kind-check
+sections:
+  Implementation:
+    repro-failing-test:
+      text: 先写失败回归：internal/cli 的 claim add --kind data --sources <纯 reference> 用例（当前 exit 0）与 lint 含数字标题行候选用例（当前产生 warning）；用 fixture（/tmp 解包的 tesla-flying-car）实测当前 1 条标题行 warning 作为基线
+      status: complete
+      command: go test ./internal/cli -run 'TestClaimAdd|TestSources' -count=1 && go test ./internal/lint -run TestClaimCandidates -count=1
+    implement-gate-and-heading:
+      text: internal/lint 导出共用的 claim-sources 取参与判定并重构 checkClaimSources；runClaimAdd/runClaimSet 写入前校验（claim.needs-author-source）；候选扫描跳过标题行
+      status: complete
+  Testing:
+    fixture-regression:
+      text: 用 docs/proposal-2026-10-16 的 fixture 工作区跑 lint：标题行 warning 消除（0 条 claim-candidates）
+      status: complete
+      command: go run ./cmd/wa-cli lint tesla-flying-car --dir /tmp/wa-fixture --json
+    targeted-green:
+      text: 定向包回归通过
+      status: complete
+      command: go test ./internal/cli ./internal/lint -count=1
+    full-regression:
+      text: 完整项目回归（vet、build、test、covercheck ≥80）
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    strict-verify:
+      text: strict-spec-cli verify claim-add-source-kind-check 通过
+      status: complete
+      command: strict-spec-cli verify claim-add-source-kind-check
+testing_gates:
+  validation_task: full-regression
+  unit_test_task: targeted-green

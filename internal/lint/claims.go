@@ -17,6 +17,8 @@ type Input struct {
 	Claims []Claim // 单元 claims.yaml 中已登记的论断
 	// ClaimsInvalid 为 true 时 claims.yaml 不通过校验：其问题由调用方报告，论断相关的规则不执行。
 	ClaimsInvalid bool
+	// Conflicts 是关联本作品且仍 open 的冲突（Conflict）决策：任一方引文出现在正文时 conflict-sources 规则报告 error。
+	Conflicts []Conflict
 	// POVPerson 是写作简报（本单元或继承的祖先单元）pov 的人称（first、second 或 third）；空表示写作简报不可用
 	// 或没有 pov，pov-consistency 规则不执行。
 	POVPerson string
@@ -28,6 +30,14 @@ type Claim struct {
 	Kind    string
 	Text    string
 	Sources []ClaimSource
+}
+
+// Conflict 是一个仍待作者裁定的素材矛盾（冲突（Conflict）决策的结构化载荷）。
+type Conflict struct {
+	ID         string // 决策 id，用于发现项 message 提示 decide
+	About      string
+	A, B       string // 两说的引文
+	SrcA, SrcB string // 两说出自的素材 id
 }
 
 // ClaimSource 是论断关联的一份素材。
@@ -98,6 +108,59 @@ func firstOccurrences(terms []string, lines [][]rune) [][2]int {
 	return out
 }
 
+// ClaimSourceRequirement 返回一条生效的 claim-sources 规则对论断与素材类型的要求：kinds 为需要作者亲历素材的论断
+// 类型，sourceTypes 为算作亲历的素材类型。参数缺省时用默认值；显式空数组生效（与 lint 的取参一致：空 kinds 表示
+// 没有论断类型需要亲历素材，空 source_types 表示任何素材都不算亲历）；参数取值不是字符串数组时 ok 为 false——
+// lint 对参数非法的规则报告 rule.invalid-params 且不执行，写入校验同样跳过。命令层的写入校验与 checkClaimSources
+// 经它共用同一张规则表，规范包按规则参数覆盖后两层同判。
+func ClaimSourceRequirement(rule *resolve.Rule) (kinds, sourceTypes []string, ok bool) {
+	kinds, sourceTypes = defaultClaimKinds, defaultSourceTypes
+	if rule == nil {
+		return kinds, sourceTypes, true
+	}
+	if v, has := rule.Params["kinds"]; has {
+		list, valid := stringListParam(v.Value)
+		if !valid {
+			return nil, nil, false
+		}
+		kinds = list
+	}
+	if v, has := rule.Params["source_types"]; has {
+		list, valid := stringListParam(v.Value)
+		if !valid {
+			return nil, nil, false
+		}
+		sourceTypes = list
+	}
+	return kinds, sourceTypes, true
+}
+
+// stringListParam 把规则参数取值转为字符串数组；类型不符时报告不可用。
+func stringListParam(v any) ([]string, bool) {
+	switch t := v.(type) {
+	case []string:
+		return t, true
+	case []any:
+		out := make([]string, 0, len(t))
+		for _, x := range t {
+			s, ok := x.(string)
+			if !ok {
+				return nil, false
+			}
+			out = append(out, s)
+		}
+		return out, true
+	}
+	return nil, false
+}
+
+// LacksAuthorSource 报告 kind 是否在 kinds 中且 srcTypes 里没有一个在 sourceTypes 中（含无素材）——claim-sources
+// 规则的判定。命令层写入校验用它时须另要求素材非空：未关联素材是显式未完成（由 claim set 补齐），只关联非亲历
+// 素材才是看起来完整的误分类。
+func LacksAuthorSource(kind string, srcTypes []string, kinds, sourceTypes []string) bool {
+	return slices.Contains(kinds, kind) && !slices.ContainsFunc(srcTypes, func(t string) bool { return slices.Contains(sourceTypes, t) })
+}
+
 func checkClaimSources(t *text, p params, _ *resolve.Resolved, in Input) ([]Finding, bool) {
 	if in.ClaimsInvalid {
 		return nil, false
@@ -112,7 +175,11 @@ func checkClaimSources(t *text, p params, _ *resolve.Resolved, in Input) ([]Find
 	termOf := map[string]int{}
 	var at []int // at[i] 为 out[i] 对应的词下标，论断文字为空时为 -1
 	for _, c := range in.Claims {
-		if !slices.Contains(kinds, c.Kind) || slices.ContainsFunc(c.Sources, func(s ClaimSource) bool { return slices.Contains(types, s.Type) }) {
+		srcTypes := make([]string, 0, len(c.Sources))
+		for _, s := range c.Sources {
+			srcTypes = append(srcTypes, s.Type)
+		}
+		if !LacksAuthorSource(c.Kind, srcTypes, kinds, types) {
 			continue
 		}
 		fix := fmt.Sprintf("请用 wa-cli source add --type <%s> 登记作者的原话，再用 wa-cli claim set %s %s --sources <素材 id> 关联它",
@@ -226,8 +293,11 @@ func checkCandidates(t *text, p params, _ *resolve.Resolved, in Input) ([]Findin
 		if t.paragraphOf(i) < 0 {
 			continue
 		}
-		// 标题与引用块（多为引述他人）不是亲历叙述，只检测数据。
-		narrative := !headingRE.MatchString(strings.TrimLeft(string(t.lines[i]), " ")) && !quoteRE.MatchString(string(t.lines[i]))
+		// 标题行不产生任何候选：标题是电报式标签而非散文论断，其中的数字应出现在正文句子中登记（引用块行只检测数据）。
+		if headingRE.MatchString(strings.TrimLeft(string(t.lines[i]), " ")) {
+			continue
+		}
+		narrative := !quoteRE.MatchString(string(t.lines[i]))
 		// done[c] 与 doneData[c] 为第 i 行前 c 列中被覆盖的列数，用于常数时间判断一段是否整段被覆盖：亲历只看 cover_kinds
 		// 论断的覆盖，数据候选另被关联了素材的 fact 论断覆盖。
 		done := make([]int, len(covered[i])+1)
@@ -290,6 +360,44 @@ func checkCandidates(t *text, p params, _ *resolve.Resolved, in Input) ([]Findin
 			out = append(out, Finding{Line: i + 1, Column: s.from + 1, Text: strings.TrimRightFunc(string(t.lines[i][s.from:s.to]), unicode.IsSpace),
 				Message: msg})
 		}
+	}
+	return out, false
+}
+
+// checkConflicts 是 conflict-sources 规则：open 冲突（Conflict）决策的任一方引文（规范化后）出现在正文时报告
+// error 发现项；decided 或豁免的冲突由调用方不传入。匹配复用论断文字的规范化与一遍多词匹配。
+func checkConflicts(t *text, _ params, _ *resolve.Resolved, in Input) ([]Finding, bool) {
+	type side struct {
+		decision, about, quote, source, other, otherSource string
+	}
+	var sides []side
+	for _, c := range in.Conflicts {
+		sides = append(sides,
+			side{decision: c.ID, about: c.About, quote: normalizeClaim(c.A), source: c.SrcA, other: c.B, otherSource: c.SrcB},
+			side{decision: c.ID, about: c.About, quote: normalizeClaim(c.B), source: c.SrcB, other: c.A, otherSource: c.SrcA})
+	}
+	var out []Finding
+	for _, s := range sides {
+		if s.quote == "" {
+			continue
+		}
+		m := newMatcher([]string{s.quote})
+		found, at := false, [2]int{0, 0}
+		for i, v := range t.prose() {
+			for _, h := range m.spans(v) {
+				found, at = true, [2]int{i, h.column}
+				break
+			}
+			if found {
+				break
+			}
+		}
+		if !found {
+			continue
+		}
+		out = append(out, Finding{Line: at[0] + 1, Column: at[1] + 1, Text: s.quote,
+			Message: fmt.Sprintf("正文引用了未决冲突（Conflict）「%s」中 %s 的说法（%s），另一说为 %s（%s）；请作者用 wa-cli decide %s 裁定后重跑检查",
+				s.about, s.source, s.quote, s.other, s.otherSource, s.decision)})
 	}
 	return out, false
 }

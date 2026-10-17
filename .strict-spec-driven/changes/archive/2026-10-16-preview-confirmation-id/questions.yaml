@@ -1,0 +1,64 @@
+schema: strict-spec-driven/question-list/v1
+schema_version: 1
+artifact_type: question_list
+schema_file: templates/strict-spec-driven/schemas/question-list.yaml
+change: preview-confirmation-id
+open: []
+resolved:
+  - id: what-bug
+    question: 具体缺陷与期望行为是什么？
+    context: 下游反馈 P3 实测事件 {kind:acceptance,id:空串}；需要确认缺陷机理与修复后期望的输出形态
+    answer: 缺陷：confirmQueue 中 acceptance 与 volume 队列项没有条目 id，applyConfirm 仍无条件把 req.ID 回显进 confirmation 视图，输出空串。期望：这两类确认省略 id 字段（不为空串）；decision、plan、state、knowledge 照旧携带条目 id
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: reproduction
+    question: 缺陷能否在本地确定性复现？
+    context: bugfix 要求先复现后修复
+    answer: 能：internal/cli/confirmation_channel_test.go 新增独立测试 TestPreviewConfirmationIdOmitted，用既有夹具覆盖 acceptance、volume（无条目 id）与 decision（有 id）三类页面确认，断言响应信封不含 id 键、--json 事件行不含空串 id——修复前确定性失败
+    status: resolved
+  - id: scope
+    question: 修复范围与不变行为边界？
+    context: 防止顺手扩大范围
+    answer: 只改 confirmation 视图序列化、preview 输出键说明与 preview-confirm 规格；POST /confirm 请求契约、队列匹配、写入行为、authorReview 视图与错误路径全部不变
+    status: resolved
+  - id: regression
+    question: 回归证据如何产生？
+    context: 定向回归须先失败后通过，归档前跑完整回归
+    answer: 定向：go test ./internal/cli -run TestConfirmationChannelStrict -count=1（修复前失败、修复后通过）；完整：go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+    status: resolved
+  - id: requirement-problem
+    question: What is concretely going wrong today, and for whom?
+    context: 'Why this is asked: the change is planned against a need, and the need lives only with the requester. A "problem" here means what someone does or suffers today — not a feature that is missing. If the answer names a button, a field, a page, or an endpoint, it is a solution, and the underlying problem is still unstated. What a sufficient answer contains: who is affected, what they do today instead, and how often. Worked example: "every Monday one person spends forty minutes copying order rows into a spreadsheet to send the weekly report". What it changes: this becomes the proposal''s why, and it decides whether the change is worth making.'
+    answer: 现状：阅读页对 acceptance 与 volume 两类事项的确认，输出的 confirmation 里 id 恒为空串（下游 tesla-flying-car 全流程实测观察到 {kind:acceptance, id:空串}），解析事件流的 Agent 无法区分「没有条目 id」与「id 为空」
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-interpretation
+    question: Which reading of the request is intended, where more than one is possible?
+    context: 'Why this is asked: a short request usually admits several readings, and building the wrong one is indistinguishable from building nothing. What a sufficient answer contains: the reading that is meant, stated plainly enough to rule the others out — or a statement that only one reading exists and what it is. Worked example: "export means the version sent to the manager, not the one I read myself". What it changes: this fixes the scope boundary before any code is written, and settles disputes about what was asked for.'
+    answer: 请求方反馈（docs/proposal-2026-10-16 P3）要求 id 不为空串；用户批准的处置建议明确「要么填有意义的 id，要么干脆省略字段——空串是最差的选项」。本变更取省略字段：acceptance 与 volume 没有条目 id 就不输出该键，其余四类照旧
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-outcome
+    question: What observable difference proves the problem is solved?
+    context: 'Why this is asked: without a success condition, nobody can tell afterwards whether the change worked. "Observable" means someone outside the system can check it without reading the code. What a sufficient answer contains: what a person will see, or no longer have to do, once this is done. Worked example: "the report is in the manager''s inbox on Monday morning without anyone assembling it". What it changes: this becomes the delta spec''s scenarios and the acceptance evidence at review time.'
+    answer: 可观察差异：acceptance/volume 页面确认的 200 响应信封与 --serve 输出的事件行都不含键 id（既非空串也非 null）；decision 页面确认的 confirmation.id 仍为 dec-1。由新增回归断言证明（修复前失败、修复后通过）
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-non-goals
+    question: What must explicitly not change?
+    context: 'Why this is asked: the requester knows which nearby behavior other people depend on, and the agent does not. A "non-goal" is something the change must leave alone even though it sits close to the work. What a sufficient answer contains: the behavior, setting, or output that must survive untouched, and who relies on it. Worked example: "do not change the saved filters — several people rely on their own". What it changes: these become the proposal''s unchanged_behavior items, which review checks the finished result against.'
+    answer: 明确不变：POST /confirm 请求契约（页面仍按队列项提交）、待作者确认队列内容与匹配、acceptance/volume 的写入行为与 changedPaths、authorReview 事件视图、403/400/503 错误路径
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-trigger
+    question: Why now — what forced this?
+    context: 'Why this is asked: work that nothing forced is the work most often thrown away later. This question catches a request that sounds reasonable but has no real driver behind it. What a sufficient answer contains: the concrete event, deadline, incident, or cost that made this surface now, or an honest statement that nothing did. Worked example: "the report was missed last month and it was raised with the team". What it changes: a change with no trigger is a candidate for deferral, and the answer is weighed at review before archive.'
+    answer: 下游用 v0.2.0 真实跑通 tech-blog 全流程后提交复盘（docs/proposal-2026-10-16），P3 列为小 bug；用户阅后批准按建议处置（先修这批便宜确定性缺陷）
+    status: resolved
+    kind: requirement
+    answered_by: human

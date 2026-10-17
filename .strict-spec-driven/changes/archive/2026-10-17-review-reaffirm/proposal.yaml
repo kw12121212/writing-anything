@@ -1,0 +1,22 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: review-reaffirm
+  status: proposed
+summary:
+  what:
+    - review record 增加 --reaffirm --summary <变化摘要> [--resolve <发现项 id>...] [--waive <发现项 id>...]：小改动后沿用既有评分结论的一键重申（Reaffirm）——更新 draft_sha256 使审稿不再过期、标记指定发现项、把变化摘要记入 review.yaml 的重申记录
+  why:
+    - 下游反馈 P2-3：正文小改（15 字措辞修正）后需整份重写 review YAML；旧 YAML 中发现项引文已不在正文时 record 还会失败（该失败诊断当时被 agent 吞掉，正是 P0-1 案例）。设计原则：合规必须是阻力最小的路径；但重申必须留变化摘要，防止退化为橡皮图章
+scope:
+  in:
+    - internal/schema/schemas/review.schema.json（可选 reaffirms 数组：at、summary、draft_sha256、resolved、waived）；internal/review 的重申写入（发现项状态复用 resolve 语义）；internal/cli/review.go 的 review record 参数与视图；review 主规格 review-record；docs/GLOSSARY.md 增加重申（Reaffirm）词条
+  out:
+    - 评分结论本身的修改（仍走整份 record）；既有 review resolve 命令（不变）；验收关卡逻辑（只消费 draft_sha256 与发现项状态，不改）
+unchanged_behavior:
+  - 不带 --reaffirm 的 review record 行为与输入 Schema 不变；review resolve/show 不变；accept 的 stale 判定规则不变（重申后因 draft_sha256 更新自然解除）；发现项编号与 status 取值不变
+roadmap:
+  milestone: boundary-semantics-silent-failure
+  planned_change: review-reaffirm

@@ -451,7 +451,7 @@ func TestNovelSnowflakeE2E(t *testing.T) {
 			ids := canonIDs(t, dir, "my-novel")
 			args = append(args, "--link", ids[len(ids)-1])
 		}
-		mustRunWS(t, dir, append(args, "--dir", dir)...)
+		mustRunWS(t, dir, args...)
 		mustRunWS(t, dir, "plan", "confirm", "my-novel", step, "--confirmed-by-author", "--confirmation", "作者：好")
 	}
 	// 场景列表：部 → 章 → 场景（confirm-scene-list）。

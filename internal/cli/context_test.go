@@ -154,10 +154,10 @@ func TestContextTrim(t *testing.T) {
 	dir := contextWork(t, note)
 	runWS(t, dir, "feedback", "add", "my-post/why", "--text", "多举例")
 	// truncate-source
-	mustRunWS(t, dir, "config", "set", "context_budget", "600")
+	mustRunWS(t, dir, "config", "set", "context_budget", "640")
 	code, res := runContextJSON(t, dir, "my-post/why")
 	c := res.Context
-	if code != 0 || c["used"].(float64) > 600 || get(c, "budget.source") != "project" {
+	if code != 0 || c["used"].(float64) > 640 || get(c, "budget.source") != "project" {
 		t.Fatalf("truncate-source: exit code = %d, context = %v", code, c)
 	}
 	var truncated map[string]any
@@ -299,6 +299,12 @@ func snapshot(t *testing.T, dir string) map[string]string {
 		if err != nil || d.IsDir() {
 			return err
 		}
+		rel, _ := filepath.Rel(dir, p)
+		rel = filepath.ToSlash(rel)
+		if rel == ".writing-anything/audit.log" || rel == ".writing-anything/audit.log.1" {
+			return nil
+		}
+
 		info, _ := d.Info()
 		data, _ := os.ReadFile(p)
 		out[p] = info.ModTime().String() + string(data)

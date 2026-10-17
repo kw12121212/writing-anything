@@ -1,0 +1,42 @@
+schema: strict-spec-driven/question-list/v1
+schema_version: 1
+artifact_type: question_list
+schema_file: templates/strict-spec-driven/schemas/question-list.yaml
+change: source-url-tier
+open: []
+resolved:
+  - id: requirement-problem
+    question: 现状具体错在哪？
+    context: 反馈 P2-1
+    answer: 素材元数据没有一手 URL 与信源等级：下游拿到二手转述的引语时无法标记，作者无从知情「这句话是转述的」
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-interpretation
+    question: 意图如何解读？
+    context: 反馈原文
+    answer: source add 增加可选 --url（一手出处机器可校验）与 --tier（primary、secondary）；claims 关联 URL 级出处的完整诉求留待等级数据落地后的审查侧联动，本变更只做数据层
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-outcome
+    question: 可观察差异？
+    context: 可测
+    answer: ①source add --url https://example.com/a --tier secondary 写入 source.yaml 且 list 可见；②--url ftp://x 或 --tier rumour 报 artifact.schema-violation（field url/tier）；③不带新参数行为与产物逐字节不变；④GLOSSARY 有信源等级（Source Tier）词条
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-non-goals
+    question: 不变什么？
+    context: 防扩权
+    answer: 不访问网络抓取 URL；review/accept 不因 tier 阻塞（后续变更）；claim 视图不改；既有字段与排序不变
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-trigger
+    question: 为什么现在？
+    context: 时机
+    answer: 下游 v0.2.0 复盘（docs/proposal-2026-10-16 P2-1）指出二手引语无法标记，用户批准分批落地，数据层先行
+    status: resolved
+    kind: requirement
+    answered_by: human

@@ -201,13 +201,14 @@ func TestCandidateFactCoverAndNotes(t *testing.T) {
 // 句子切分与数据模式的边界：标题与引用块不检查；全角空白后的列、全角数字、百分之与中文倍数；text 为原文。
 func TestCandidateEdges(t *testing.T) {
 	r := rules(map[string]string{"cc": "claim-candidates"}, nil)
-	content := "## 我曾经踩过的坑\n\n> 我们去年增长了 50%。\n\n\u3000吞吐提升５０％。成本降为百分之十。性能提高三倍。用 `50%` 说明我曾经负责。"
+	content := "## 我曾经踩过的坑\n\n## 0.81 秒、33.2 万、2028\n\n> 我们去年增长了 50%。\n\n\u3000吞吐提升５０％。成本降为百分之十。性能提高三倍。用 `50%` 说明我曾经负责。"
 	res, _ := Run(content, r, "draft.md", Input{})
 	var got []string
 	for _, f := range res.Findings {
 		got = append(got, fmt.Sprintf("%d:%d:%s", f.Line, f.Column, f.Text))
 	}
-	want := []string{"3:1:> 我们去年增长了 50%。", "5:2:吞吐提升５０％。", "5:10:成本降为百分之十。", "5:19:性能提高三倍。", "5:26:用 `50%` 说明我曾经负责。"}
+	// 两个标题行（含数字标题）都不产生任何候选：标题是电报式标签，其中的数字应在正文句子中登记。
+	want := []string{"5:1:> 我们去年增长了 50%。", "7:2:吞吐提升５０％。", "7:10:成本降为百分之十。", "7:19:性能提高三倍。", "7:26:用 `50%` 说明我曾经负责。"}
 	if strings.Join(got, "|") != strings.Join(want, "|") {
 		t.Fatalf("candidates = %q, want %q", got, want)
 	}
@@ -220,5 +221,37 @@ func TestCandidateEdges(t *testing.T) {
 	res, ps := Run(strings.Repeat("提升 50%。", MaxHits+5), r, "draft.md", Input{})
 	if len(res.Findings) != MaxHits || len(ps) != 1 || ps[0].Code != CodeTruncated {
 		t.Fatalf("truncated: %d findings, %+v", len(res.Findings), ps)
+	}
+}
+
+// checkConflicts（conflict-sources）：open 冲突的任一方引文（规范化后）出现在正文报 error，两说都命中各一条；
+// 围栏代码块内不报；句末标点与右引号在匹配前去掉。
+func TestCheckConflicts(t *testing.T) {
+	r := rules(map[string]string{"conflicts": "conflict-sources"}, nil)
+	in := Input{Conflicts: []Conflict{{ID: "dec-1", About: "喷嘴数量",
+		A: "10 个喷嘴。", B: "4 个推进器」", SrcA: "src-a", SrcB: "src-r"}}}
+	res, _ := Run("一段介绍。\n\n官方说法是 10 个喷嘴，另一方坚持 4 个推进器。\n\n```\n10 个喷嘴\n```\n", r, "draft.md", in)
+	var msgs []string
+	for _, f := range res.Findings {
+		msgs = append(msgs, f.Message)
+	}
+	if len(res.Findings) != 2 {
+		t.Fatalf("findings = %d, want 2 (both sides): %+v", len(res.Findings), res.Findings)
+	}
+	for _, m := range msgs {
+		if !strings.Contains(m, "喷嘴数量") || !strings.Contains(m, "src-a") || !strings.Contains(m, "src-r") || !strings.Contains(m, "wa-cli decide dec-1") {
+			t.Fatalf("message lacks about/sources/decide: %s", m)
+		}
+	}
+	// 围栏内的引文不产生发现项：第三段在代码块中。
+	for _, f := range res.Findings {
+		if f.Line == 7 {
+			t.Fatalf("fenced code produced a finding: %+v", f)
+		}
+	}
+	// 无冲突时不报。
+	res, _ = Run("官方说法是 10 个喷嘴。", r, "draft.md", Input{})
+	if len(res.Findings) != 0 {
+		t.Fatalf("no conflicts: %+v", res.Findings)
 	}
 }

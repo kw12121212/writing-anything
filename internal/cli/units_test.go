@@ -76,7 +76,7 @@ func noNulls(t *testing.T, v any, path string) {
 	switch v := v.(type) {
 	case map[string]any:
 		for k, c := range v {
-			if c == nil && !slices.Contains([]string{"parent", "work", "unit", "config", "defaultGenre", "note", "quote", "line", "paragraph", "decision", "recommendation", "rationale", "choice", "answer", "confirmation", "channel", "decidedAt", "text", "recorded", "diff", "brief", "audience", "purpose", "length", "outline", "reason", "keyMessage", "section", "contextBudget", "aiDisclosure", "method", "role", "premise", "theme", "pov", "character", "reveal", "location", "progress", "handoff", "time", "launchDir"}, k) {
+			if c == nil && !slices.Contains([]string{"parent", "work", "unit", "config", "defaultGenre", "note", "quote", "line", "paragraph", "decision", "recommendation", "rationale", "choice", "answer", "confirmation", "channel", "decidedAt", "text", "recorded", "diff", "brief", "audience", "purpose", "length", "outline", "reason", "keyMessage", "section", "contextBudget", "aiDisclosure", "method", "role", "premise", "theme", "pov", "character", "reveal", "location", "progress", "handoff", "time", "launchDir", "column", "suggestion"}, k) {
 				t.Errorf("%s.%s is null", path, k)
 			}
 			noNulls(t, c, path+"."+k)
@@ -377,6 +377,9 @@ func TestNext(t *testing.T) {
 	stat := func() map[string]time.Time {
 		m := map[string]time.Time{}
 		filepath.Walk(filepath.Join(dir, ".writing-anything"), func(p string, info os.FileInfo, err error) error {
+			if base := filepath.Base(p); base == "audit.log" || base == "audit.log.1" {
+				return nil // 运维痕迹（Audit Log）：只读命令也追加
+			}
 			m[p] = info.ModTime()
 			return nil
 		})

@@ -1,0 +1,17 @@
+schema: strict-spec-driven/delta-spec/v1
+schema_version: 1
+artifact_type: delta_spec
+schema_file: templates/strict-spec-driven/schemas/delta-spec.yaml
+target_spec: preview
+operations:
+  ADDED:
+    preview-audit-summary:
+      strength: SHOULD
+      statement: wa-cli preview --serve 的阅读页应在待作者确认区之前展示最近失败的命令摘要（最近 5 条 exit 非 0 的审计记录：时间、命令名与退出码），标题为「最近失败的命令」；audit.log 不存在或没有失败记录时不展示该区块。静态阅读页（不带 --serve）同样包含该区块；该区块只读，不提供任何操作。
+      scenarios:
+        preview-shows-failures:
+          - GIVEN: 工作区 D 的 audit.log 中有 2 条失败记录
+          - WHEN: 带令牌 GET /（wa-cli preview my-post --serve 正在运行）
+          - THEN: 页面含「最近失败的命令」区块，列出 2 条失败的时间与命令名，排在待作者确认区之前
+  MODIFIED: {}
+  REMOVED: {}

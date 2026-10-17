@@ -1,0 +1,21 @@
+schema: strict-spec-driven/delta-tech/v1
+schema_version: 1
+artifact_type: delta_tech
+schema_file: templates/strict-spec-driven/schemas/delta-tech.yaml
+target_standard: go-project-structure
+operations:
+  ADDED:
+    test-helper-appended-flags:
+      strength: SHOULD
+      statement: internal/cli 测试助手（如 runWS、runWSIn）自动附加 --dir 与 --json 时，用例参数不得再显式给出这些参数：新语义下显式重传会变成真实的 usage.duplicate-flag，旧语义下则会掩盖 last-wins 缺陷；新增用例时以助手为准，评审检查测试 diff 时核对没有对助手已附加参数的重复显式给出。
+      rationale: 重复 flag 报错落地时清出了 6 处既有测试的冗余重传（双 --dir、双 --json）：这些用例在旧解析器下静默依赖 last-wins，既掩盖缺陷又与新契约冲突；显式约定避免新用例继续累积
+      enforcement:
+        method: review
+        detail: 评审 internal/cli 测试改动时，凡调用自动附加参数的助手，检查用例参数中没有重复给出同名参数
+      examples:
+        good:
+          - runWS(t, dir, "handoff", "write", "--file", "h1.yaml")（助手已附 --dir 与 --json）
+        bad:
+          - runWSIn(t, dir, input, "handoff", "write", "--dir", dir)（--dir 重传）
+  MODIFIED: {}
+  REMOVED: {}

@@ -18,6 +18,18 @@ description: 用 wa-cli next 驱动整篇文章或整部长篇从写作简报走
 6. 遇到看不懂的诊断时运行 `wa-cli help <命令> --json` 查看用法。
 7. 只能使用 MCP 的 Agent 可以通过 `wa-cli mcp --dir <项目目录>` 接入：每条命令对应一个 tool（命令名的空格换成下划线，如 `feedback_add`），结果与加 `--json` 运行命令相同；订阅资源 wa://feedback 可以即时收到作者的新反馈。能运行 shell 的 Agent 直接运行 wa-cli 即可，结果与经 MCP 调用相同；MCP 服务面向只能调用 MCP tool 的 Agent。
 
+## 会话协议（可执行模板）
+
+把下面的模板复制进会话的 shell，之后按步骤逐条运行：失败即停，读诊断（Diagnostic）的 next 修复后重试；绝不 `|| true`、管道或输出重定向吞掉失败（shell 层吞错对状态机不可见，只能事后靠 stale 暴露）。
+
+```bash
+set -euo pipefail
+wa() { local out; out=$(wa-cli "$@") || { printf '%s\n' "$out" >&2; return 1; }; printf '%s\n' "$out"; }
+wa next --json   # 示例：每步先看下一步；把 wa 后面换成当前步骤的 wa-cli 命令与参数
+```
+
+经 harness 提问工具得到作者的决定后，同步回写决策队列（Decision Queue）保住审计链：先用 `wa-cli decision add --question <问题> --unit <单元> --json` 登记问题，作者答复后用 `wa-cli decide <决策 id> --option <选项> --answer <答复> --confirmation <作者原话摘要> --json` 记录决定；不要只在对话里问完就往下走。
+
 ## 必须停下来问作者
 
 - 各技能列出的作者节点：写作简报的内容、大纲的取舍、缺少的素材、修订的取舍与最终验收；长篇另有每个规划步骤、场景契约、状态与知情的确认、连续性发现的豁免与卷末检查点。不要为了推进而替作者作答。

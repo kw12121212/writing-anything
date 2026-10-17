@@ -35,15 +35,11 @@ rules:
       detail: internal/schema 的测试断言嵌套字段、数组元素、缺少与未定义字段违规时 field 的精确字面量。
   atomic-writes:
     strength: MUST
-    statement: 写入工作区文件必须经过 internal/workspace 的统一写入函数：先写同目录的临时文件再重命名，覆盖已有文件时保留其权限；不得直接用 os.WriteFile 覆盖产物。
+    statement: 写入工作区产物必须经过 internal/workspace 的统一写入函数：先写同目录的临时文件再重命名，覆盖已有文件时保留其权限；不得直接用 os.WriteFile 覆盖产物。唯一例外是审计日志（Audit Log，.writing-anything/audit.log）：追加式运维痕迹用单次 O_APPEND 写入保证行完整（临时文件加重命名无法表达多进程追加），不进 Schema 校验与 changedPaths（见 cli 主规格 audit-log）。
     rationale: 进程中断或磁盘写满时，直接覆盖会留下写了一半的产物，作者的内容随之损坏；统一入口也让权限处理保持一致。
     enforcement:
       method: review
-    examples:
-      good:
-        - writeFile(abs(root, ConfigPath), data)
-      bad:
-        - os.WriteFile(path, data, 0o644) 直接覆盖 config.yaml
+      detail: 审计日志的直写路径（internal/cli/audit.go 的 appendAudit）评审时核对：单次 O_APPEND 写、1 MiB 轮转一份、写失败仅 stderr
   structured-edits:
     strength: MUST
     statement: 修改已有的结构化产物时，必须在 YAML 节点树上只改目标节点，保留其他字段与注释；改变节点风格（如向流式序列 [] 追加元素后改为块式）时，节点上的注释必须迁移到仍会输出的位置（internal/workspace.BlockSequence）；目标节点或到达它途经的任一节点带有 YAML 锚点、是别名或所在映射含合并键时不修改；写出前必须对编码结果重新解析，并执行 Schema 校验与该产物类型的领域校验（如作品的文体检查），无法解析或任一校验失败时不写；取值未变时不写文件，changedPaths 为空。

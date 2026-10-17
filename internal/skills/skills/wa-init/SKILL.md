@@ -17,6 +17,18 @@ writing-anything 帮 Agent 规范地协助作者写作，而不是替作者写�
 6. 运行 `wa-cli next <作品> --json`，按 `commands` 与 `action` 继续，通常转到 wa-brief。
 7. 作者想在只支持 MCP 的客户端中使用时，运行 `wa-cli mcp install --client <claude-code|codex|json> --scope <project|user> --json` 注册 MCP 服务（json 另加 `--config <配置文件>`）；重复运行结果相同，不影响客户端已有的其他服务。把输出中 installs 的 message 转告作者：它说明要在哪个项目目录启动客户端，用户级注册换到其他项目时还要重新运行。安装技能（`wa-cli skills install --agent <客户端> --json`）后同样把 launchDir 告诉作者：在这个目录中启动客户端，技能才会被加载。
 
+## 会话协议（可执行模板）
+
+把下面的模板复制进会话的 shell，之后按步骤逐条运行：失败即停，读诊断（Diagnostic）的 next 修复后重试；绝不 `|| true`、管道或输出重定向吞掉失败（shell 层吞错对状态机不可见，只能事后靠 stale 暴露）。
+
+```bash
+set -euo pipefail
+wa() { local out; out=$(wa-cli "$@") || { printf '%s\n' "$out" >&2; return 1; }; printf '%s\n' "$out"; }
+wa next --json   # 示例：每步先看下一步；把 wa 后面换成当前步骤的 wa-cli 命令与参数
+```
+
+经 harness 提问工具得到作者的决定后，同步回写决策队列（Decision Queue）保住审计链：先用 `wa-cli decision add --question <问题> --unit <单元> --json` 登记问题，作者答复后用 `wa-cli decide <决策 id> --option <选项> --answer <答复> --confirmation <作者原话摘要> --json` 记录决定；不要只在对话里问完就往下走。
+
 ## 必须停下来问作者
 
 - 选择文体、作品短名与关卡强度（Gate Level）。

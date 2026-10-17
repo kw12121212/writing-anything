@@ -29,7 +29,7 @@ func newRoot(t *testing.T) string {
 
 func addSource(t *testing.T, root, id, typ, content string) {
 	t.Helper()
-	if _, _, ps := source.Add(root, []byte(content), typ, "", id, "a.md"); len(ps) > 0 {
+	if _, _, ps := source.Add(root, []byte(content), typ, "", id, "a.md", "", ""); len(ps) > 0 {
 		t.Fatal(ps)
 	}
 }

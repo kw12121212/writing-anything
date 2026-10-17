@@ -52,6 +52,8 @@ type Source struct {
 	ID           string `json:"id"`
 	Type         string `json:"type"`
 	Title        string `json:"title"`
+	URL          string `json:"url,omitempty"`  // 一手网页地址（http 或 https）；可选，只登记不抓取
+	Tier         string `json:"tier,omitempty"` // 信源等级（Source Tier）：primary 一手、secondary 二手转述；与 type 正交
 	OriginalName string `json:"original_name"`
 	File         string `json:"file"` // 存档文件名，位于素材目录中
 	SHA256       string `json:"sha256"`
@@ -74,8 +76,9 @@ func Hash(data []byte) string {
 }
 
 // Add 把 content 登记为类型为 typ 的素材。title 为空时不记录标题；id 为空时取 src- 加内容哈希的前 12 个字符；
-// originalName 为输入文件的文件名，来自标准输入时为空。返回新素材与新建的路径；出错时不创建任何文件。
-func Add(root string, content []byte, typ, title, id, originalName string) (*Source, []string, []workspace.Problem) {
+// originalName 为输入文件的文件名，来自标准输入时为空；url 与 tier 为可选的一手网页地址与信源等级（Source Tier），
+// 为空时不记录。返回新素材与新建的路径；出错时不创建任何文件。
+func Add(root string, content []byte, typ, title, id, originalName, url, tier string) (*Source, []string, []workspace.Problem) {
 	if len(content) == 0 {
 		return nil, nil, []workspace.Problem{errorAt(CodeEmpty, "", "", "素材（Source）内容为空，没有可以存档的原文")}
 	}
@@ -97,6 +100,12 @@ func Add(root string, content []byte, typ, title, id, originalName string) (*Sou
 	add("type", str(typ))
 	if title != "" {
 		add("title", str(title))
+	}
+	if url != "" {
+		add("url", str(url))
+	}
+	if tier != "" {
+		add("tier", str(tier))
 	}
 	if originalName != "" {
 		add("original_name", str(originalName))
@@ -123,7 +132,7 @@ func Add(root string, content []byte, typ, title, id, originalName string) (*Sou
 	if err := os.Mkdir(abs(root, dir), 0o755); err != nil {
 		return nil, nil, []workspace.Problem{errorAt(workspace.CodeWriteFailed, dir, "", "创建素材目录失败："+err.Error())}
 	}
-	s := &Source{ID: id, Type: typ, Title: title, OriginalName: originalName, File: file, SHA256: sum, Bytes: len(content)}
+	s := &Source{ID: id, Type: typ, Title: title, URL: url, Tier: tier, OriginalName: originalName, File: file, SHA256: sum, Bytes: len(content)}
 	for _, w := range []struct {
 		rel  string
 		data []byte

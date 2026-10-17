@@ -41,7 +41,7 @@ var previewCommand = &command{
 	outputKeys: []outputKey{
 		{"preview", "阅读页：unit、units（按单元树先序列出的单元引用）、path（静态阅读页的路径，--serve 时为 null）与 url（--serve 时的页面地址，含令牌；否则为 null）；失败时为 null"},
 		{"feedback", "--serve 时每保存一条反馈输出一行，含 " + feedbackViewHelp + "；其他行为 null"},
-		{"confirmation", "--serve 时作者在阅读页每记录一次确认输出一行，含 kind（acceptance、decision、plan、state、knowledge 或 volume）、unit、id、action（confirm 或 reject）与 channel（preview）；其他行为 null"},
+		{"confirmation", "--serve 时作者在阅读页每记录一次确认输出一行，含 kind（acceptance、decision、plan、state、knowledge 或 volume）、unit、action（confirm 或 reject）与 channel（preview）；id 只在 decision、plan、state 与 knowledge 出现（各自的条目 id），acceptance 与 volume 没有条目 id、不含 id 字段；其他行为 null"},
 		{"authorReview", "--serve 时作者在阅读页每批量复核一次输出一行，含 reviewed（被复核的待作者复核项，每项含 key、kind、work、ref、path、confirmation 与 confirmedAt）与 channel（preview）；其他行为 null"},
 	},
 	exitCodes: standardExitCodes,
@@ -118,7 +118,9 @@ func runPreview(inv *invocation) int {
 			return servePreview(inv, dir, w, u, port, limit)
 		}
 		units := preview.Subtree(u)
-		data, err := preview.Render(preview.Build(dir, w, units, unitLint(dir, w)))
+		sp := preview.Build(dir, w, units, unitLint(dir, w))
+		sp.Failures = auditFailureSummary(dir)
+		data, err := preview.Render(sp)
 		if err != nil {
 			return writeFailed(inv.stderr, err)
 		}
@@ -291,6 +293,7 @@ func (s *previewServer) page(rw http.ResponseWriter) {
 	p.Serve = true
 	p.Confirms = confirmQueue(s.dir, w)
 	p.Strict, p.Reviews = reviewQueue(s.dir, w)
+	p.Failures = auditFailureSummary(s.dir)
 	data, err := preview.Render(p)
 	if err != nil {
 		http.Error(rw, err.Error(), http.StatusInternalServerError)

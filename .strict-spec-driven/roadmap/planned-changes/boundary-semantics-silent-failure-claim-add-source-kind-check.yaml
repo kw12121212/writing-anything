@@ -1,0 +1,11 @@
+schema: strict-spec-driven/planned-change/v1
+schema_version: 1
+artifact_type: planned_change
+schema_file: ../../templates/strict-spec-driven/schemas/planned-change.yaml
+planned_change:
+  id: claim-add-source-kind-check
+  milestone: boundary-semantics-silent-failure
+status: complete
+summary: claim add/set 写入时按 claim-sources 规则校验 kind×source：需要亲历素材的类型只关联 reference（或无素材）时拒绝并建议 --kind fact，与 lint 共用同一张规则表；数据候选扫描跳过标题行
+details: 反馈 P0-2。现象 A：claim add --kind data --sources <纯 reference> 写入成功无警告，直到 lint 才报（下游 7 条返工）；写入校验必须与 lint 的 claim-sources 规则共用同一取参（resolve 合并结果的 kinds 与 source_types，含规范包覆盖），不得另写一张表。现象 B（catch-22）上游 36c4585 已修；遗留：标题行（如「## 0.81 秒、33.2 万、2028」）仍被标为数据候选且无法逐字认领。验收：①GIVEN claim add --kind data 且来源全部为 reference（或无来源），WHEN add，THEN 拒绝（错误码 claim.needs-author-source）、message 建议 --kind fact、claims.yaml 不变；②GIVEN --kind fact 同样来源，THEN 成功；③GIVEN 规范包把该类型的 source_types 覆盖为含 reference，THEN 不拒绝；④GIVEN 标题行含数字，WHEN lint，THEN 不产生该行的数据候选；⑤正文行与引用块行为不变。fixture wa-fixture-tesla-flying-car.tar.gz 实测基线：v0.2.0 三条 warning → 本变更后标题行也消除（0 条）。留痕例外通道（--decision 授权以非常规类型登记）拆至 claim-kind-override-decision。
+depends_on: []

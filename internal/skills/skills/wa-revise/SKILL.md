@@ -13,6 +13,18 @@ description: 处理审稿发现项与作者反馈形成的修订任务，修改�
 4. 正文改动后审稿过期：回到 wa-review 重新记录审稿；用 `wa-cli lint <单元> --json` 确认没有 error 级发现项。单元已经完成（done）时，改动正文会使验收（Acceptance）失效，导出不再包含它：先运行 `wa-cli reopen <单元> --json` 把它退回需要验收的阶段，再重新审稿并按 wa-publish 请作者重新验收；不要手工修改 work.yaml 的 stage。
 5. 一轮修订结束后，运行 `wa-cli pack prefer <提议 id> --pack <作者规范包 id> --json`，从作者的修改与反馈中归纳作者偏好（Author Preference）；把每个条目连同 evidence 交给作者，作者同意的用 `wa-cli pack confirm <提议 id> --item <条目 id> --confirmation <作者原话摘要> --json` 写入规范包，不同意的用 `wa-cli pack reject <提议 id> --item <条目 id> --json` 记下，之后不会再提出。
 
+## 会话协议（可执行模板）
+
+把下面的模板复制进会话的 shell，之后按步骤逐条运行：失败即停，读诊断（Diagnostic）的 next 修复后重试；绝不 `|| true`、管道或输出重定向吞掉失败（shell 层吞错对状态机不可见，只能事后靠 stale 暴露）。
+
+```bash
+set -euo pipefail
+wa() { local out; out=$(wa-cli "$@") || { printf '%s\n' "$out" >&2; return 1; }; printf '%s\n' "$out"; }
+wa next --json   # 示例：每步先看下一步；把 wa 后面换成当前步骤的 wa-cli 命令与参数
+```
+
+经 harness 提问工具得到作者的决定后，同步回写决策队列（Decision Queue）保住审计链：先用 `wa-cli decision add --question <问题> --unit <单元> --json` 登记问题，作者答复后用 `wa-cli decide <决策 id> --option <选项> --answer <答复> --confirmation <作者原话摘要> --json` 记录决定；不要只在对话里问完就往下走。
+
 ## 必须停下来问作者
 
 - 每个修订任务怎么处理、是否豁免，都由作者决定；豁免的理由写作者的原话。

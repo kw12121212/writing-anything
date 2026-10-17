@@ -1,0 +1,22 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: preview-confirmation-id
+  status: proposed
+summary:
+  what:
+    - preview --serve 的确认（confirmation）输出里，acceptance 与 volume 两类确认不再输出空串 id：confirmation 视图的 id 改为有值才输出（omitempty），decision、plan、state、knowledge 四类照旧携带各自条目 id
+  why:
+    - 下游真实使用实测观察到事件 {kind:acceptance, unit:tesla-flying-car, id:空串}（反馈 docs/proposal-2026-10-16 IMPROVEMENTS.md P3）：acceptance 与 volume 的待确认队列项本身没有条目 id，而规格 preview-confirm 与实现都要求 confirmation 含 id，把结构性的空串固化成契约，消费者无法区分「没有 id」与「id 为空」
+scope:
+  in:
+    - internal/cli/preview_confirm.go 的 confirmedView 序列化；internal/cli/preview.go 输出键 confirmation 的说明文字；.strict-spec-driven/specs/preview.yaml 的 preview-confirm 需求；internal/cli/confirmation_channel_test.go 回归断言
+  out:
+    - POST /confirm 的请求契约（页面仍按队列项提交，acceptance/volume 无 id）；authorReview 事件视图；confirmQueue 的队列内容与匹配逻辑；acceptance/volume 的写入行为与 changedPaths
+unchanged_behavior:
+  - decision、plan、state、knowledge 确认的 id 输出；确认渠道 channel 恒为 preview；403/400/503 错误路径与诊断 next；--serve 事件信封的其余字段
+roadmap:
+  milestone: boundary-semantics-silent-failure
+  planned_change: preview-confirmation-id

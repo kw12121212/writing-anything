@@ -237,6 +237,26 @@ func TestBriefSetRejects(t *testing.T) {
 	}
 }
 
+// 同一命令重复给出同一非列表参数是 usage 错误（usage.duplicate-flag，退出码 2），产物逐字节不变；
+// 下游复盘实测两组 --message 静默丢失过一组核心观点。
+func TestBriefSetDuplicateFlagRejected(t *testing.T) {
+	dir := briefWork(t)
+	runBrief(t, dir, "brief", "set", "my-post", "--audience", "读者", "--message", "km-1", "--message-text", "观点")
+	before := readFile(t, wsPath(dir, briefRel))
+	code, stdout, stderr := run(t, "brief", "set", "my-post",
+		"--message", "km-1", "--message-text", "甲", "--message", "km-2", "--message-text", "乙",
+		"--dir", dir, "--json")
+	if code != 2 {
+		t.Fatalf("exit code = %d, stdout = %s, stderr = %s", code, stdout, stderr)
+	}
+	if !strings.Contains(stdout, "usage.duplicate-flag") || !strings.Contains(stdout, "--message") || !strings.Contains(stdout, "km-1 与 km-2") {
+		t.Fatalf("diagnostic missing duplicate-flag detail: %s", stdout)
+	}
+	if readFile(t, wsPath(dir, briefRel)) != before {
+		t.Fatal("brief.yaml changed on duplicate flag")
+	}
+}
+
 func TestBriefShow(t *testing.T) {
 	dir := briefWork(t)
 	// show-empty
