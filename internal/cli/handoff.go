@@ -15,7 +15,7 @@ var handoffWriteCommand = &command{
 	summary: "追加一条交接记录（Handoff Note）：完成了什么、未完成的事项、作者的新指示与风险；会话结束前写入，新会话经 wa-cli next 接续；只能追加（上限 200 条）",
 	flags: []flagSpec{
 		dirFlag,
-		{"file", flagString, "交接记录输入文件（YAML：done 与 todo 必填，instructions 与 risks 可选）；省略时从标准输入读取"},
+		{"file", flagString, "交接记录输入文件（YAML：done 必填，todo 可省略或为空——干净收尾不必硬编待办，instructions 与 risks 可选）；省略时从标准输入读取"},
 	},
 	outputKeys: []outputKey{{"note", "写入的交接记录：id、writtenAt、done、todo、instructions 与 risks；失败时为 null"}},
 	exitCodes:  standardExitCodes,

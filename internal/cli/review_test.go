@@ -17,10 +17,12 @@ import (
 type reviewResult struct {
 	result
 	Review *struct {
-		Path     string `json:"path"`
-		Stale    bool   `json:"stale"`
-		Rubric   []map[string]any
-		Findings []map[string]any
+		Path      string `json:"path"`
+		Stale     bool   `json:"stale"`
+		DraftSHA  string `json:"draftSha256"`
+		Rubric    []map[string]any
+		Findings  []map[string]any
+		Reaffirms []map[string]any `json:"reaffirms"`
 	} `json:"review"`
 	Lint struct {
 		Ran    bool `json:"ran"`
@@ -459,7 +461,105 @@ func TestAcceptGateRechecks(t *testing.T) {
 	}
 	writeFile(t, wsPath(dir, ".writing-anything/decisions.yaml"), "garbage: [\n")
 	_, ar = runReview(t, dir, "", "accept", "my-post", "--confirmed-by-author", "--confirmation", "好")
-	if d := diag(t, ar.result, "decision.invalid-queue"); strings.Contains(d.Message, "文本检查") || !strings.Contains(d.Message, "决策队列") || !hasNext(d, "wa-cli review show my-post") {
-		t.Errorf("invalid queue: %+v", d)
+	// 队列损坏时除 error 级阻塞诊断外，冲突（Conflict）检查未运行的 warning（同码 decision.invalid-queue）也会出现。
+	var queueDiag *Diagnostic
+	for i, d := range ar.Diagnostics {
+		if d.Code == "decision.invalid-queue" && d.Severity == "error" {
+			queueDiag = &ar.Diagnostics[i]
+			break
+		}
+	}
+	if queueDiag == nil || strings.Contains(queueDiag.Message, "文本检查") || !strings.Contains(queueDiag.Message, "决策队列") || !hasNext(*queueDiag, "wa-cli review show my-post") {
+		t.Errorf("invalid queue: %+v", queueDiag)
+	}
+	warned := false
+	for _, d := range ar.Diagnostics {
+		if d.Code == "decision.invalid-queue" && d.Severity == "warning" && strings.Contains(d.Message, "冲突") {
+			warned = true
+		}
+	}
+	if !warned {
+		t.Errorf("conflict-check warning missing: %+v", ar.Diagnostics)
+	}
+}
+
+// review record --reaffirm：小改动后沿用既有结论的一键重申（Reaffirm）——更新 draft_sha256 解除 stale、
+// 标记指定 open 发现项、记录变化摘要；不重校验引文（措辞改后引文移位是重申的常态）。
+func TestReviewReaffirm(t *testing.T) {
+	dir := reviewWork(t)
+	rel := ".writing-anything/works/my-post/review.yaml"
+	// 还没有审稿时不能重申。
+	code, res := runReview(t, dir, "", "review", "record", "my-post", "--reaffirm", "--summary", "首次")
+	if d := diag(t, res.result, "review.reaffirm-no-review"); code != 1 || d.Path != rel ||
+		!hasNext(d, "wa-cli help review record --json") || !hasNext(d, shellCommand("wa-cli", "review", "show", "my-post", "--dir", dir, "--json")) {
+		t.Fatalf("reaffirm without review: code = %d, diag = %+v", code, d)
+	}
+	runReview(t, dir, goodReview, "review", "record", "my-post")
+	// 正文小改（作者直接编辑），引文「可能」被改掉：整份重录会因 quote-not-found 失败，重申不受影响。
+	draftPath := wsPath(dir, ".writing-anything/works/my-post/draft.md")
+	edited := strings.Replace(readFile(t, draftPath), "可能", "大概", 1)
+	writeFile(t, draftPath, edited)
+	if code, rr := runReview(t, dir, "", "review", "show", "my-post"); code != 0 || !rr.Review.Stale {
+		t.Fatalf("show stale: code = %d, stale = %v", code, rr.Review.Stale)
+	}
+	// 变化摘要必填非空白。
+	if code, res = runReview(t, dir, "", "review", "record", "my-post", "--reaffirm", "--summary", " "); code != 1 ||
+		diag(t, res.result, "artifact.schema-violation").Field != "summary" || !hasNext(diag(t, res.result, "artifact.schema-violation"), "wa-cli help review record --json") {
+		t.Fatalf("blank summary: code = %d, %+v", code, res.Diagnostics)
+	}
+	// 发现项必须存在且为 open。
+	if code, res = runReview(t, dir, "", "review", "record", "my-post", "--reaffirm", "--summary", "s", "--resolve", "nope"); code != 1 ||
+		!strings.Contains(diag(t, res.result, "review.finding-not-found").Message, "审稿中没有发现项 nope") ||
+		!hasNext(diag(t, res.result, "review.finding-not-found"), shellCommand("wa-cli", "review", "show", "my-post", "--dir", dir, "--json")) {
+		t.Fatalf("unknown finding: code = %d, %+v", code, res.Diagnostics)
+	}
+	// 重申成功：结论沿用、rf-1 变 resolved、draft_sha256 更新、reaffirms 追加、stale 解除。
+	code, rr := runReview(t, dir, "", "review", "record", "my-post", "--reaffirm", "--summary", "措辞小改：可能改大概，结论不受影响", "--resolve", "rf-1")
+	if code != 0 || rr.Review == nil || !slices.Equal(rr.ChangedPaths, []string{rel}) {
+		t.Fatalf("reaffirm: code = %d, %+v", code, rr)
+	}
+	if rr.Review.Stale || rr.Review.DraftSHA != review.SHA256([]byte(edited)) {
+		t.Fatalf("reaffirm stale/sha: %+v", rr.Review)
+	}
+	if len(rr.Review.Rubric) != 1 || rr.Review.Rubric[0]["verdict"] != "fail" || len(rr.Review.Findings) != 2 {
+		t.Fatalf("reaffirm carried: %+v", rr.Review)
+	}
+	if rr.Review.Findings[0]["status"] != "resolved" || rr.Review.Findings[1]["status"] != "open" {
+		t.Fatalf("reaffirm findings: %+v", rr.Review.Findings)
+	}
+	if len(rr.Review.Reaffirms) != 1 || rr.Review.Reaffirms[0]["summary"] != "措辞小改：可能改大概，结论不受影响" ||
+		!slices.Equal(rr.Review.Reaffirms[0]["resolved"].([]any), []any{"rf-1"}) {
+		t.Fatalf("reaffirm record: %+v", rr.Review.Reaffirms)
+	}
+	// review show 对重申后的审稿不再报 stale（accept 的过期阻塞随之解除）。
+	if code, show := runReview(t, dir, "", "review", "show", "my-post"); code != 0 || show.Review.Stale || strings.Contains(show.stdout, "accept.review-stale") {
+		t.Fatalf("show after reaffirm: code = %d, stale = %v, stdout = %s", code, show.Review.Stale, show.stdout)
+	}
+	saved := readFile(t, wsPath(dir, rel))
+	if !strings.Contains(saved, "summary: 措辞小改：可能改大概，结论不受影响") || !strings.Contains(saved, "draft_sha256: "+review.SHA256([]byte(edited))) {
+		t.Fatalf("review.yaml:\n%s", saved)
+	}
+	if code, res := runWS(t, dir, "validate", rel); code != 0 {
+		t.Fatalf("validate reaffirmed: code = %d, %+v", code, res.Diagnostics)
+	}
+	// 再次重申标记已 resolved 的发现项被拒；再次小改后可再重申（记录追加）。
+	if code, res = runReview(t, dir, "", "review", "record", "my-post", "--reaffirm", "--summary", "s", "--resolve", "rf-1"); code != 1 ||
+		!strings.Contains(diag(t, res.result, "review.finding-not-found").Message, "不是 open") {
+		t.Fatalf("re-resolve: code = %d, %+v", code, res.Diagnostics)
+	}
+	writeFile(t, draftPath, strings.Replace(readFile(t, draftPath), "例子", "示例", 1))
+	if code, rr = runReview(t, dir, "", "review", "record", "my-post", "--reaffirm", "--summary", "又改一词", "--waive", "rf-2"); code != 0 ||
+		len(rr.Review.Reaffirms) != 2 || rr.Review.Findings[1]["status"] != "waived" {
+		t.Fatalf("second reaffirm: code = %d, reaffirms = %+v", code, rr.Review.Reaffirms)
+	}
+	// 不带 --reaffirm 的整份录入不受影响：引文已移位时按 quote-not-found 拒绝（重申避开的正是这一点），
+	// 换成新引文的整份录入成功且清空重申记录（整体替换）。
+	if code, res = runReview(t, dir, goodReview, "review", "record", "my-post"); code != 1 ||
+		diag(t, res.result, "review.quote-not-found").Field != "findings[1].quote" {
+		t.Fatalf("re-record with moved quote: code = %d, %+v", code, res.Diagnostics)
+	}
+	fixedReview := strings.Replace(goodReview, "quote: 可能", "quote: 大概", 1)
+	if code, rr = runReview(t, dir, fixedReview, "review", "record", "my-post"); code != 0 || len(rr.Review.Reaffirms) != 0 {
+		t.Fatalf("re-record: code = %d, reaffirms = %+v", code, rr.Review.Reaffirms)
 	}
 }

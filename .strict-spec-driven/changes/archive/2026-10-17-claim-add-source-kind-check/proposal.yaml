@@ -1,0 +1,22 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: claim-add-source-kind-check
+  status: proposed
+summary:
+  what:
+    - claim add 与 claim set --kind 在写入时按 claim-sources 规则校验 kind×source：需要作者亲历素材的类型在给出了素材且全部非亲历类型时拒绝（claim.needs-author-source，建议改用 fact）；lint 的 claim-candidates 不再对标题行产生任何候选
+  why:
+    - 下游实测 claim add --kind data --sources <纯 reference> 写入成功无警告，直到 lint 才报，7 条返工（反馈 P0-2 现象 A）：误分类在写入时静默通过；又实测标题行（「## 0.81 秒、33.2 万、2028」）被标为数据候选但论断文本无法与之逐字匹配、不可消（现象 B 遗留，v0.2.0 三条 warning、36c4585 后仍剩标题行一条）
+scope:
+  in:
+    - internal/cli/sources.go 的 runClaimAdd 与 runClaimSet 写入前校验；internal/lint/claims.go 导出共用的规则取参与判定（checkClaimSources 重构为同一实现）；internal/lint 候选扫描跳过标题行；sources-and-provenance 主规格 claim-add 与 claim-edit；lint 主规格 claim-rule-types
+  out:
+    - 留痕例外通道（decision 授权，拆至 planned change claim-kind-override-decision）；无来源时的放行（增量工作流：先登记后补素材，既有场景 claim-without-source 钉住）；lint 对无来源论断的既有报告；claim remove
+unchanged_behavior:
+  - claim add --kind fact 关联 reference 素材成功；--sources 省略（空数组）照常写入；引用块行只检测数据不变；正文句子的亲历/数据候选与覆盖逻辑不变；既有诊断错误码与 next 结构
+roadmap:
+  milestone: boundary-semantics-silent-failure
+  planned_change: claim-add-source-kind-check

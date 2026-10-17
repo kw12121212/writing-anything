@@ -1,0 +1,27 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: review-reaffirm
+sections:
+  Implementation:
+    implement-reaffirm:
+      text: review.schema.json 增加可选 reaffirms（at、summary、draft_sha256、resolved、waived）；internal/review 的重申写入；internal/cli/review.go 的 --reaffirm/--summary/--resolve/--waive 参数与视图；GLOSSARY 增加重申（Reaffirm）词条
+      status: complete
+  Testing:
+    targeted-green:
+      text: 定向包回归通过（含重申成功/无 review/空摘要/坏 id/解除 stale 用例）
+      status: complete
+      command: go test ./internal/cli ./internal/review ./internal/schema -count=1
+    full-regression:
+      text: 完整项目回归（vet、build、test、covercheck ≥80）
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    strict-verify:
+      text: strict-spec-cli verify review-reaffirm 通过
+      status: complete
+      command: strict-spec-cli verify review-reaffirm
+testing_gates:
+  validation_task: full-regression
+  unit_test_task: targeted-green

@@ -381,6 +381,9 @@ func workspaceFiles(t *testing.T, dir string) map[string]string {
 		}
 		rel, _ := filepath.Rel(dir, p)
 		rel = filepath.ToSlash(rel)
+		if rel == ".writing-anything/audit.log" || rel == ".writing-anything/audit.log.1" {
+			return nil
+		}
 		if d.IsDir() {
 			out[rel] = ""
 			return nil

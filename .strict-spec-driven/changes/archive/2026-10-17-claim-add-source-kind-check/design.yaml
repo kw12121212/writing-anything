@@ -1,0 +1,21 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: claim-add-source-kind-check
+approach:
+  - 把 lint 的 claim-sources 违规判定提炼为 internal/lint 的导出纯函数（参数取值 + 缺省 + 判定），checkClaimSources 与命令层共用同一实现，两层语义不可能漂移。runClaimAdd/runClaimSet 在写入前用 resolve 合并结果取 claim-sources 规则参数：kind ∈ kinds 且给出了素材且全部素材类型不在 source_types 时拒绝（claim.needs-author-source，message 列出素材与类型并建议 --kind fact 或先登记亲历素材）；规则未生效、resolve 失败或素材为空时不拦（与 lint 行为对齐、保留先登记后补素材的增量工作流）。候选扫描处标题行直接 continue（标题是电报式标签而非散文论断，其中的数字应出现在正文句子中被登记）。
+decisions:
+  reject-only-when-sources-all-non-firsthand:
+    decision: 只在「给出了素材且全部非亲历类型」时拒绝；无素材不拦
+    rationale: 无素材的论断是显式未完成（lint 照常报告、claim set --sources 补齐即可），主规格场景 claim-without-source 钉住了先登记后补素材的增量工作流；全部非亲历才是看起来完整、实为误分类的静默危险态，正是下游 7 条返工的形态
+  shared-rule-table:
+    decision: 取参与判定提炼为 internal/lint 导出函数，checkClaimSources 重构为调用它
+    rationale: 若命令层另写一张 kind×type 表，规范包经规则参数覆盖 kinds/source_types 后两层会漂移；共用实现使写入校验与 lint 对同一输入永远同判
+alternatives:
+  - option: 在 internal/draft 的 AddClaim 内校验
+    reason: AddClaim 无法访问 resolve 合并结果（规则参数随文体与规范包变化），把 resolve 依赖引进 draft 违反领域包分层；命令层已有 resolve 接线
+  - option: 同时拦截无素材的论断
+    reason: 破坏先登记后补素材的既有工作流与主规格钉住的 claim-without-source 场景，且无素材不是下游报告的缺陷形态
+risks:
+  - 极端场景：作者确实要以 data 类型登记纯外部数据——本变更先以改用 fact 引导，留痕例外通道由后续变更提供；规范包若把 source_types 覆盖为含 reference 则自然放行

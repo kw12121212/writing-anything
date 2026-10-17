@@ -11,7 +11,7 @@
       "id": {"type": "string", "pattern": "^handoff-[0-9]+$"},
       "written_at": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"},
       "done": {"type": "array", "minItems": 1, "items": {"type": "string", "pattern": "\\S"}},
-      "todo": {"type": "array", "minItems": 1, "items": {"type": "string", "pattern": "\\S"}},
+      "todo": {"type": "array", "items": {"type": "string", "pattern": "\\S"}},
       "instructions": {"type": "array", "items": {"type": "string", "pattern": "\\S"}},
       "risks": {"type": "array", "items": {"type": "string", "pattern": "\\S"}}
     }}}

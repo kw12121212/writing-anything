@@ -165,7 +165,7 @@ func TestQuestions(t *testing.T) {
 		{ID: "km-3", Text: "未决定", Decision: "dec-1"},
 		{ID: "km-4", Text: "已决定", Decision: "dec-2"},
 		{ID: "km-5", Text: "决策不存在", Decision: "dec-9"},
-	}, Avoid: []string{}}
+	}, Avoid: []string{}, Provenance: map[string]Provenance{FieldAudience: {Sources: []string{"src-a"}}}}
 	got := Questions(b, []string{FieldAudience, FieldPurpose, FieldAvoid}, q)
 	var summary []string
 	for _, qu := range got {
@@ -180,7 +180,7 @@ func TestQuestions(t *testing.T) {
 		t.Fatalf("messages = %q, %q", got[2].Message, got[3].Message)
 	}
 	// 只含全角空格的文本视为未填写。
-	if got := Questions(&Brief{Audience: "\u3000", Purpose: "p"}, []string{FieldAudience, FieldPurpose}, q); len(got) != 1 || got[0].Field != "audience" {
+	if got := Questions(&Brief{Audience: "　", Purpose: "p", Provenance: map[string]Provenance{FieldPurpose: {Sources: []string{"src-a"}}}}, []string{FieldAudience, FieldPurpose}, q); len(got) != 1 || got[0].Field != "audience" {
 		t.Fatalf("full-width blank: %+v", got)
 	}
 	// 决策队列无法加载时，已决定的决策也不算确认记录。
@@ -211,7 +211,8 @@ func TestQuestions(t *testing.T) {
 	}
 	for _, f := range Fields {
 		full := &Brief{Audience: "a", Purpose: "p", Premise: &Premise{Text: "前提", Sources: []string{"s"}}, Theme: "主题",
-			Pov: &Pov{Person: "third", Character: "守灯人"}, KeyMessages: []Message{{ID: "k", Text: "t", Sources: []string{"s"}}}, Length: &Length{1, 2}, Avoid: []string{"x"}, Sources: []string{"s"}}
+			Pov: &Pov{Person: "third", Character: "守灯人"}, KeyMessages: []Message{{ID: "k", Text: "t", Sources: []string{"s"}}}, Length: &Length{1, 2}, Avoid: []string{"x"}, Sources: []string{"s"},
+			Provenance: map[string]Provenance{FieldAudience: {Sources: []string{"s"}}, FieldPurpose: {Sources: []string{"s"}}, FieldTheme: {Sources: []string{"s"}}, FieldPov: {Sources: []string{"s"}}, FieldLength: {Sources: []string{"s"}}}}
 		if got := Questions(full, []string{f}, q); len(got) != 0 {
 			t.Errorf("filled %s: %+v", f, got)
 		}
@@ -232,7 +233,7 @@ func TestCheckGate(t *testing.T) {
 	if g := Check(root, unitDir, true, true, req, Queue{}); g == nil || g.Path != Path(unitDir) || len(g.Invalid) == 0 || g.Questions != nil {
 		t.Fatalf("invalid: %+v", g)
 	}
-	put(t, root, Path(unitDir), "schema_version: 1\naudience: 读者\n")
+	put(t, root, Path(unitDir), "schema_version: 1\naudience: 读者\nprovenance:\n  audience: {sources: [src-a]}\n")
 	if g := Check(root, unitDir, true, false, req, Queue{}); g == nil || len(g.Questions) != 1 || g.Questions[0].Field != "purpose" {
 		t.Fatalf("partial: %+v", g)
 	}
@@ -506,3 +507,36 @@ func TestLoadQueue(t *testing.T) {
 		t.Fatalf("broken queue: %+v", q)
 	}
 }
+
+// 字段出处的删除收尾：字段删除时清理其出处（含 pov 的 Lookup 语义），出处删光时删除 provenance 键，
+// 无操作的删除不写文件（不残留 provenance: {}）。
+func TestSetProvenanceCleanup(t *testing.T) {
+	root := project(t)
+	put(t, root, unitDir+"/brief.yaml", "schema_version: 1\naudience: 读者\npov: {person: third}\nprovenance:\n  audience: {sources: [src-a]}\n  pov: {sources: [src-a]}\n")
+	aud := ""
+	if _, _, ps := Set(root, unitDir, Edit{Audience: &aud}, Queue{}, ensureOK); len(ps) > 0 {
+		t.Fatalf("clear audience: %v", ps)
+	}
+	if got := string(read(t, root, unitDir+"/brief.yaml")); strings.Contains(got, "audience:") || !strings.Contains(got, "provenance") {
+		t.Fatalf("audience cleared but pov provenance wrong:\n%s", got)
+	}
+	// pov 删除：provenance.pov 一并清理，映射删空时整个键删除。
+	person := ""
+	if _, _, ps := Set(root, unitDir, Edit{PovPerson: &person}, Queue{}, ensureOK); len(ps) > 0 {
+		t.Fatalf("clear pov: %v", ps)
+	}
+	if got := string(read(t, root, unitDir+"/brief.yaml")); strings.Contains(got, "provenance") || strings.Contains(got, "dec-3") {
+		t.Fatalf("pov provenance not cleaned:\n%s", got)
+	}
+	// 无操作的删除不写文件：不存在的出处删除为空操作。
+	put(t, root, unitDir+"/brief.yaml", "schema_version: 1\naudience: 读者\n")
+	srcs := []string{}
+	if _, changed, ps := Set(root, unitDir, Edit{Provenance: map[string]*ProvenanceEdit{"theme": {Sources: &srcs}}}, Queue{}, ensureOK); len(ps) > 0 || len(changed) != 0 {
+		t.Fatalf("no-op delete: changed = %v, ps = %v", changed, ps)
+	}
+	if got := string(read(t, root, unitDir+"/brief.yaml")); strings.Contains(got, "provenance") {
+		t.Fatalf("no-op delete wrote provenance:\n%s", got)
+	}
+}
+
+func ensureOK() ([]string, []workspace.Problem) { return nil, nil }

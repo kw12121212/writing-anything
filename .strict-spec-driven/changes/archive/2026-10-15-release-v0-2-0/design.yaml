@@ -6,8 +6,8 @@ change: release-v0-2-0
 approach:
   - 严格按项目技能 .agents/skills/release 的 10 个步骤执行发布，本变更不新增发布机制，只把一次具体发布（v0.2.0）纳入严格流程留痕。产物构建沿用 internal/tools/release，GitHub Release 沿用 gh CLI，全部在本地完成。
   - 发布前先处理仓库前置状态：本地 main 落后 origin/main 时用 git merge --ff-only origin/main 快进；本变更的规划产物先在 dev 上提交，使工作树干净；dev 未推送的提交在作者确认对外发布后随第 8 步一起推送。前置检查中出现 main 上有不是来自 dev 的提交、合并冲突等异常时停止并交给作者。
-  - 发布说明由四段里程碑摘要组成（core-gate-hardening、novel-guarantee-hardening、usability-polish、real-use-and-release），内容取自各里程碑 goal 与已归档计划变更的 summary，写入仓库外的临时文件，经 gh release create --notes-file 前置到 --generate-notes 自动生成的提交摘要之前。
   - 变更归档在发布完成后进行：归档提交只落在 dev，随下一次发布进入 main；里程碑完成标准只要求 main 上有 v0.2.0 标签与产物，不要求归档提交进入 main。
+  - 发布说明由四段里程碑摘要组成（core-gate-hardening、novel-guarantee-hardening、usability-polish、real-use-and-release），内容取自各里程碑 goal 与已归档计划变更的 summary，写入仓库外的临时文件，经 gh release create --notes-file 前置到 --generate-notes 自动生成的部分之前。本仓库直接合并、不走 PR，gh 自动生成的部分实际只有一行 Full Changelog 比较链接（compare/v0.1.0...v0.2.0），完整提交列表经该链接查看。
 decisions:
   no-delta-spec:
     decision: 不创建 delta spec 与 delta tech，specs/ 留空
@@ -17,7 +17,7 @@ decisions:
     rationale: release 技能规定版本号与对外发布确认必须由发布者做出；v0.1.0 之后新增了功能性加固（新命令 reopen、新门禁等），按语义化版本升次版本号，与路线图 planned change 命名一致；推送标签与 Release 撤回困难
   notes-prepended:
     decision: 里程碑摘要用 --notes-file 前置，保留 --generate-notes
-    rationale: gh 支持把 --notes 内容前置到自动生成的说明之前，既满足 planned change 对四个里程碑汇总的要求，又保留技能现有的自动提交清单；说明文件放在仓库外，避免被 dist/* 当作产物上传或在打标签后改动工作树
+    rationale: gh 支持把 --notes 内容前置到自动生成的说明之前，满足 planned change 对四个里程碑汇总的要求；--generate-notes 只按合并的 PR 生成清单，本仓库不走 PR 时只产生 Full Changelog 比较链接，因此四段里程碑摘要是说明的主体，比较链接提供完整提交范围；说明文件放在仓库外，避免被 dist/* 当作产物上传或在打标签后改动工作树
   archive-after-release:
     decision: 先发布、后归档本变更
     rationale: 归档要求全部任务完成，而发布本身就是任务；若先归档再发布，归档会把未完成的发布标记为完成，违背路线图状态的真实性

@@ -71,6 +71,9 @@ func runMCP(inv *invocation) int {
 	run := func(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return set.run(args, stdin, stdout, stderr)
 	}
+	quietRun := func(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
+		return set.runQuiet(args, stdin, stdout, stderr)
+	}
 	v, _ := version.Info()
 	cfg := mcp.Config{
 		Version:      v,
@@ -81,6 +84,8 @@ func runMCP(inv *invocation) int {
 		Run:          run,
 		List:         func() []mcp.Resource { return mcpResources(dir) },
 		Read:         func(uri string) (string, string, bool) { return mcpRead(dir, uri, run) },
+		// 订阅轮询用不写审计日志（Audit Log）的运行变体：服务自身发起的轮询不是调用方的动作。
+		ReadSub:      func(uri string) (string, string, bool) { return mcpRead(dir, uri, quietRun) },
 		Interval:     time.Duration(interval) * time.Millisecond,
 	}
 	n, err := mcp.Serve(cfg, inv.stdin, inv.stdout)

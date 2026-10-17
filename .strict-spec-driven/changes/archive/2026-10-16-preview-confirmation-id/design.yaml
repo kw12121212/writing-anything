@@ -1,0 +1,16 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: preview-confirmation-id
+approach:
+  - confirmedView.ID 的 json 标签加 omitempty：有条目 id 的四类确认（decision、plan、state、knowledge）照常输出，acceptance 与 volume（队列项无 id）省略该键。同步把 preview.go 输出键说明与 preview 主规格 preview-confirm 的 confirmation 字段描述改为「id 只在对应种类有条目 id 时出现」，并补两个场景（acceptance 无 id 键、decision 带 id）。
+decisions:
+  omit-rather-than-fabricate:
+    decision: acceptance 与 volume 不编造标识填入 id（例如复用 unit 引用），而是省略字段
+    rationale: acceptance.yaml 与 checkpoint.yaml 没有独立条目 id，kind+unit 已是这两类事项的唯一标识；把 unit 重复填进 id 会让消费者误以为存在可用 id 查询的条目，比空串更误导
+alternatives:
+  - option: 为 acceptance 与 volume 填入有意义的 id（如单元引用或验收记录标识）
+    reason: 验收与卷末检查点产物没有条目级 id 可填，重复 unit 信息制造可查询条目的假象；省略键在 JSON 语义上就是「无此字段」，最诚实
+risks:
+  - 个别消费者若按「键必存在」解析事件会从读到空串变为读不到键；事件流本身是较新契约且下游反馈正是要求消除空串，风险可接受

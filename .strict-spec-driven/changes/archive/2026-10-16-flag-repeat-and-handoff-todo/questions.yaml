@@ -1,0 +1,42 @@
+schema: strict-spec-driven/question-list/v1
+schema_version: 1
+artifact_type: question_list
+schema_file: templates/strict-spec-driven/schemas/question-list.yaml
+change: flag-repeat-and-handoff-todo
+open: []
+resolved:
+  - id: requirement-problem
+    question: 现状具体错在哪，影响谁？
+    context: 下游反馈 P2-2 的缺陷陈述
+    answer: 非 list 参数重复出现时解析器 last-wins 静默丢弃前值（internal/cli/parse.go:50），下游 brief set 实际丢失一组核心观点且无诊断；handoff-input Schema 强制 todo ≥1，干净收尾的作者被迫硬编待办
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-interpretation
+    question: 请求方的意图如何解读？
+    context: 反馈文档与用户批准的处置建议
+    answer: 重复 flag 应报 usage error（提案原文「重复 flag 组报 usage error」）；handoff write 允许 todo 省略（提案原文「允许 todo 省略（干净收尾不必硬编待办）」）
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-outcome
+    question: 什么可观察差异证明修好？
+    context: 验收标准需可测试
+    answer: '①同一命令重复给同一非 list 参数（如两组 --message/--message-text）退出码 2、诊断含 usage.duplicate-flag；②handoff write 输入省略 todo 或给 [] 成功写入、产物含 todo: []、validate 通过；③定向测试先失败后通过'
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-non-goals
+    question: 明确不变什么？
+    context: 防止顺手扩权
+    answer: list 参数重复合法；bool 参数行为不变；done 仍必填；handoff 只追加；退出码 0/1/2 约定与既有诊断结构不变
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-trigger
+    question: 为什么是现在？
+    context: 时机来源
+    answer: 下游用 v0.2.0 跑通全流程后提交复盘（docs/proposal-2026-10-16 P2-2），用户批准按建议先修这批确定性缺陷
+    status: resolved
+    kind: requirement
+    answered_by: human

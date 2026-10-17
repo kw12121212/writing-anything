@@ -69,6 +69,8 @@
 |---|---|---|---|
 | 素材 | Source | 素材 | 作者笔记、访谈、转写稿、参考资料、过往文章 |
 | 素材库 | Source Library | 素材库 | 原文存档的素材集合 |
+| 信源等级 | Source Tier | 信源等级 | 素材离一手的距离：`primary` 一手（作者亲历或原始出处）、`secondary` 二手转述（引用转述的引语时须向作者明示）；与素材类型（谁说的）正交，见 `source add --tier` |
+| 冲突 | Conflict | 冲突 | 素材对同一主题的两种矛盾说法（素材冲突）：登记为带结构化载荷的决策（两说各含素材 id 与引文），未决时阻塞推进、lint 对引用任一方引文报 error，作者裁定后解除；见 `decision add --conflict-about`。与小说创作中作为叙事张力的「冲突」无关 |
 | 论断 | Claim | 论断 | 需要出处支撑的事实、数据、经历或观点 |
 | 疑似论断 | Claim Candidate | 疑似论断 | 文本检查按启发式规则发现、尚未登记为论断的亲历或数据句子 |
 | 出处 | Provenance | 出处 | 内容来自人、Agent，还是 Agent 起草后经人修改；段落出处取值为 `human`（作者）、`agent`（Agent）、`agent-draft-human-edited`（Agent 起草、作者修改） |
@@ -120,6 +122,7 @@
 | 破折号密度 | Dash Density | 破折号密度 | 每千字中破折号（——）的个数，AI 腔的一种信号 |
 | 散文段落 | Prose Paragraph | 散文段落 | 文本检查中由空行分隔、含屏蔽区域之外文字的连续行；单处豁免以它为作用范围 |
 | 发现项 | Finding | 发现项 | 检查或审稿发现的一个问题 |
+| 重申 | Reaffirm | 重申 | 正文小改后沿用既有审稿结论的一键重申：更新正文哈希解除过期、可顺带标记发现项，必须记录变化摘要；见 `review record --reaffirm` |
 | 豁免 | Waiver | 豁免 | 对某条规则在某处不适用的显式声明，须写明理由 |
 | 单处豁免 | Inline Waiver | 单处豁免 | 正文注释 `<!-- lint-ignore <规则 id>: 理由 -->`，豁免一个散文段落中该规则的发现项；须由作者写入 |
 | 规则类型 | Rule Type | 规则类型 | 规则的检查方式，如 `length-range`、`banned-terms`；只能取已知类型 |
@@ -189,6 +192,7 @@
 | 交接记录 | Handoff Note | 交接记录 | 会话结束时记录的进展与待办，供新会话接续 |
 | 子 Agent | Subagent | 子 Agent | 由主 Agent 派生、拥有独立全新上下文的 Agent 会话 |
 
+| 会话协议 | Session Protocol | 会话协议 | wa-* 技能中的可执行会话纪律模板：wrapper 函数逐条检查退出码、失败即停读诊断、禁止吞错，并把经 harness 提问工具得到的作者决定回写决策队列 |
 ## 文体类型
 
 | 中文 | English | 常用写法 | 说明 |
@@ -283,7 +287,7 @@
 | 主线 | Main Plot | 主线 | |
 | 支线 | Subplot | 支线 | |
 | 情节节拍 | Story Beat | 节拍 | 情节推进中的关键转折点；短篇中作为故事根单元大纲（Outline）的节 |
-| 冲突 | Conflict | 冲突 | 推动故事的对立与阻碍 |
+| 冲突 | Conflict | 冲突 | 推动故事的对立与阻碍（故事冲突，叙事张力）；与素材矛盾登记的「冲突」无关 |
 | 悬念 | Suspense | 悬念 | 让读者想知道后续的未解问题 |
 | 伏笔 | Foreshadowing | 伏笔 | 提前埋下、后文呼应的线索 |
 | 回收伏笔 | Payoff | 回收伏笔 | 后文对伏笔的呼应与揭晓 |
@@ -357,6 +361,7 @@
 
 | 中文 | English | 常用写法 | 说明 |
 |---|---|---|---|
+| 审计日志 | Audit Log | 审计日志 | .writing-anything/audit.log：wa-cli 每次调用（含失败与用法错误）追加一行的运维痕迹（命令、参数、退出码、诊断码），不进 Schema 校验与 changedPaths；next 的回捞提示与阅读页的最近失败摘要取自它 |
 | 命令行工具 | Command-Line Interface | CLI | 本项目为 `wa-cli` |
 | 技能 | Skill | 技能 | Agent Skills 格式的操作说明包；wa-cli 内置的技能用 wa-cli skills install 安装 |
 | 模型上下文协议 | Model Context Protocol | MCP | Agent 调用外部工具的开放协议 |
@@ -392,6 +397,7 @@
 | 持续集成与持续交付 | CI/CD | CI/CD | 推送后由服务端自动构建、测试与发布的机制；本项目不使用，仓库中不放置任何工作流文件 |
 | 发布产物 | Release Asset | 发布产物 | 随版本发布的文件：各平台的 `wa-cli-<os>-<arch>` 二进制与 `SHA256SUMS` |
 | 校验文件 | Checksum File | 校验文件 | 记录每个发布产物 SHA-256 的 `SHA256SUMS`，格式与 `sha256sum` 兼容 |
+| 发布说明 | Release Notes | 发布说明 | GitHub Release 页面上的版本说明：按里程碑汇总的变化摘要，后接 gh 自动生成的比较链接 |
 | 安装脚本 | Install Script | 安装脚本 | `install.sh`（Linux、macOS）与 `install.ps1`（Windows）：下载、校验并把 `wa-cli` 安装到用户级目录 |
 | PowerShell | PowerShell | PowerShell | Windows 的命令行外壳与脚本语言，`install.ps1` 在其中运行；PowerShell 7 跨平台，可执行文件为 `pwsh`，Windows 自带的 Windows PowerShell 5.1 为 `powershell.exe` |
 | Linux 子系统 | WSL（Windows Subsystem for Linux） | WSL | 在 Windows 上运行 Linux 环境的子系统；本项目的开发环境之一，`install.ps1` 的测试可在其中用 Linux 版 pwsh 运行 |

@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"io"
+	"maps"
 	"slices"
 	"strings"
 
@@ -406,11 +407,12 @@ func runNext(inv *invocation) int {
 	problems := workspace.Require(dir)
 	if problems == nil {
 		var works []*work.Work
+		recoveries := auditRecoveries(dir) // 审计回捞只解析一次（workspace-artifacts/load-once-per-command）
 		if len(inv.args) == 1 {
 			var w *work.Work
 			var u *work.Unit
 			if w, u, problems = work.Resolve(dir, inv.args[0]); u != nil {
-				res.Steps = append(res.Steps, step(dir, w, u, impact.OpenMarks(dir, w.ID)))
+				res.Steps = append(res.Steps, step(dir, w, u, impact.OpenMarks(dir, w.ID), recoveries))
 				works = []*work.Work{w}
 			}
 		} else {
@@ -423,7 +425,7 @@ func runNext(inv *invocation) int {
 					// 验收失效的已完成单元同样列出，以给出 wa-cli reopen（reopen-stage）。
 					if w.EffectiveStage(u) != catalog.StageDone || len(openMarkTargets(marks, u)) > 0 ||
 						!w.Aggregated(u) && len(w.Blockers(dir, u)) > 0 {
-						res.Steps = append(res.Steps, step(dir, w, u, marks))
+						res.Steps = append(res.Steps, step(dir, w, u, marks, recoveries))
 					}
 				}
 			}
@@ -465,7 +467,7 @@ func runNext(inv *invocation) int {
 }
 
 // step 返回单元 u 的下一步条目；marks 为作品的 open 复查标记（impact.OpenMarks）。
-func step(dir string, w *work.Work, u *work.Unit, marks []impact.FileMark) stepView {
+func step(dir string, w *work.Work, u *work.Unit, marks []impact.FileMark, recoveries map[string]string) stepView {
 	blockers, commands := progress(dir, w, u)
 	s := stepView{Unit: u.Ref, Stage: w.EffectiveStage(u), Blockers: blockers, Action: action(dir, w, u, blockers), Commands: commands,
 		Handoff:  latestHandoff(dir),
@@ -486,6 +488,16 @@ func step(dir string, w *work.Work, u *work.Unit, marks []impact.FileMark) stepV
 			s.Commands = append(s.Commands, shellCommand("wa-cli", "impact", "clear", u.Ref, t, "--dir", dir, "--json"))
 		}
 		s.Commands = append(s.Commands, "wa-cli help impact clear --json")
+	}
+	// 审计回捞（Audit Log）：关键命令在本单元失败后无成功重试时提示重跑；不是阻塞项（见 cli 主规格 audit-log 与
+	// units 主规格 next-recovery）。
+	for _, key := range slices.Sorted(maps.Keys(recoveries)) {
+		cmd, unit := key[:strings.IndexByte(key, 0)], recoveries[key]
+		if unit != u.Ref && !strings.HasPrefix(u.Ref, unit+"/") {
+			continue
+		}
+		s.Action += "；注意：审计日志（Audit Log）显示 " + cmd + " 在本单元失败后尚未成功重试，请读当时的诊断修复后重跑"
+		s.Commands = append(s.Commands, "wa-cli help "+cmd+" --json")
 	}
 	return s
 }
@@ -558,7 +570,7 @@ func blockerNext(dir, code, path string) []string {
 	switch code {
 	case brief.CodeInvalid:
 		return []string{shellCommand("wa-cli", "validate", path, "--dir", dir, "--json")}
-	case brief.CodeMissingField, brief.CodeUnsourcedMessage, brief.CodeUnsourcedPremise:
+	case brief.CodeMissingField, brief.CodeUnsourcedMessage, brief.CodeUnsourcedPremise, brief.CodeUnsourcedField:
 		ref := work.RefOf(path[:strings.LastIndex(path, "/")])
 		return []string{shellCommand("wa-cli", "brief", "show", ref, "--dir", dir, "--json"), "wa-cli help brief set --json"}
 	case outline.CodeInvalid:
@@ -574,7 +586,7 @@ func blockerNext(dir, code, path string) []string {
 	case marketing.CodeHeadlineUnasked, marketing.CodeHeadlineStale:
 		ref := work.RefOf(path[:strings.LastIndex(path, "/")])
 		return []string{shellCommand("wa-cli", "marketing", "show", ref, "--dir", dir, "--json"), "wa-cli help marketing ask --json"}
-	case brief.CodeUnconfirmedMessage, brief.CodeUnconfirmedPremise, decision.CodeBlocking, decision.CodeInvalidQueue:
+	case brief.CodeUnconfirmedMessage, brief.CodeUnconfirmedPremise, brief.CodeUnconfirmedField, decision.CodeBlocking, decision.CodeInvalidQueue:
 		return []string{shellCommand("wa-cli", "decisions", "--dir", dir, "--json")}
 	case review.CodeAcceptanceStale, review.CodeAcceptanceInvalid, review.CodeAcceptanceWeakerGate:
 		// 验收记录在单元目录下；重新审稿与验收后，review show 与 advance 能复查它。

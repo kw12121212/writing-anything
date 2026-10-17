@@ -1,0 +1,31 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: flag-repeat-and-handoff-todo
+sections:
+  Implementation:
+    repro-failing-test:
+      text: 先写失败回归：internal/cli 新增重复 flag 用例（brief set 两组 --message 退出码 2、usage.duplicate-flag）；internal/handoff 或 cli 测试新增 todo 省略/空数组用例（当前 schema 拒绝）。运行确认失败
+      status: complete
+      command: go test ./internal/cli -run 'TestUsageDuplicateFlag|TestHandoff' -count=1
+    implement-strictness:
+      text: parse.go 非列表参数重复检测（usage.duplicate-flag，退出码 2）；handoff-input.schema.json todo 移出 required 去 minItems；handoffs.schema.json notes[].todo 去 minItems；handoff.go 输入说明文字与 wa-assemble 技能文本同步
+      status: complete
+  Testing:
+    targeted-green:
+      text: 定向回归通过（含新增用例）
+      status: complete
+      command: go test ./internal/cli ./internal/handoff ./internal/schema -count=1
+    full-regression:
+      text: 完整项目回归（vet、build、test、covercheck ≥80）
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    strict-verify:
+      text: strict-spec-cli verify flag-repeat-and-handoff-todo 通过
+      status: complete
+      command: strict-spec-cli verify flag-repeat-and-handoff-todo
+testing_gates:
+  validation_task: full-regression
+  unit_test_task: targeted-green

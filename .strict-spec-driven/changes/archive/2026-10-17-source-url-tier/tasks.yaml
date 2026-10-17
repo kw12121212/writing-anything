@@ -1,0 +1,27 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: source-url-tier
+sections:
+  Implementation:
+    implement-url-tier:
+      text: source.schema.json 增加可选 url（^https?://、maxLength 2048）与 tier（enum primary、secondary）；internal/source 的 Source 结构与写入读取；internal/cli 的 source add 参数（--url、--tier）与 add/list 视图（未给出省略键）；docs/GLOSSARY.md 增加信源等级（Source Tier）词条
+      status: complete
+  Testing:
+    targeted-green:
+      text: 定向包回归通过（含新增 source add url/tier 用例与 schema 夹具）
+      status: complete
+      command: go test ./internal/cli ./internal/source ./internal/schema -count=1
+    full-regression:
+      text: 完整项目回归（vet、build、test、covercheck ≥80）
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    strict-verify:
+      text: strict-spec-cli verify source-url-tier 通过
+      status: complete
+      command: strict-spec-cli verify source-url-tier
+testing_gates:
+  validation_task: full-regression
+  unit_test_task: targeted-green

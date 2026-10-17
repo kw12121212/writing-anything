@@ -4,15 +4,59 @@
   "description": "素材库（Source Library）中一个素材（Source）的元数据；原文逐字节存档在同目录的 file 中。",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "id", "type", "file", "sha256", "bytes"],
+  "required": [
+    "schema_version",
+    "id",
+    "type",
+    "file",
+    "sha256",
+    "bytes"
+  ],
   "properties": {
-    "schema_version": {"const": 1},
-    "id": {"$ref": "common.schema.json#/$defs/id"},
-    "type": {"enum": ["author-note", "interview", "transcript", "reference", "past-article"]},
-    "title": {"$ref": "common.schema.json#/$defs/text"},
-    "original_name": {"$ref": "common.schema.json#/$defs/text"},
-    "file": {"type": "string", "pattern": "^original(\\.[A-Za-z0-9]+)?$"},
-    "sha256": {"$ref": "common.schema.json#/$defs/sha256"},
-    "bytes": {"type": "integer", "minimum": 1}
+    "schema_version": {
+      "const": 1
+    },
+    "id": {
+      "$ref": "common.schema.json#/$defs/id"
+    },
+    "type": {
+      "enum": [
+        "author-note",
+        "interview",
+        "transcript",
+        "reference",
+        "past-article"
+      ]
+    },
+    "title": {
+      "$ref": "common.schema.json#/$defs/text"
+    },
+    "original_name": {
+      "$ref": "common.schema.json#/$defs/text"
+    },
+    "file": {
+      "type": "string",
+      "pattern": "^original(\\.[A-Za-z0-9]+)?$"
+    },
+    "sha256": {
+      "$ref": "common.schema.json#/$defs/sha256"
+    },
+    "bytes": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "url": {
+      "type": "string",
+      "pattern": "^https?://\\S+$",
+      "maxLength": 2048,
+      "description": "素材的一手网页地址（http 或 https）；可选，只登记不抓取"
+    },
+    "tier": {
+      "enum": [
+        "primary",
+        "secondary"
+      ],
+      "description": "信源等级（Source Tier）：primary 一手（作者亲历或原始出处）、secondary 二手转述；可选，与 type 正交"
+    }
   }
 }

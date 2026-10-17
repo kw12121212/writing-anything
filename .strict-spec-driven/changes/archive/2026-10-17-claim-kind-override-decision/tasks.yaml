@@ -1,0 +1,27 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: claim-kind-override-decision
+sections:
+  Implementation:
+    implement-override-gate:
+      text: claims schema 的可选 decision 字段；internal/draft 的 Claim 结构与写入（AddClaim/SetClaim 带 decisionID）；internal/cli/sources.go 的 --decision 参数、拒绝路径的幂等阻塞决策（canon gate 模式）与授权核对
+      status: complete
+  Testing:
+    targeted-green:
+      text: 定向包回归通过（含拒绝生成决策/幂等/授权成功/保持不变/坏 --decision 用例）
+      status: complete
+      command: go test ./internal/cli ./internal/draft ./internal/schema -count=1
+    full-regression:
+      text: 完整项目回归（vet、build、test、covercheck ≥80）
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    strict-verify:
+      text: strict-spec-cli verify claim-kind-override-decision 通过
+      status: complete
+      command: strict-spec-cli verify claim-kind-override-decision
+testing_gates:
+  validation_task: full-regression
+  unit_test_task: targeted-green

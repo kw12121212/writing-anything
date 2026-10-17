@@ -1,0 +1,11 @@
+schema: strict-spec-driven/planned-change/v1
+schema_version: 1
+artifact_type: planned_change
+schema_file: ../../templates/strict-spec-driven/schemas/planned-change.yaml
+planned_change:
+  id: source-url-tier
+  milestone: boundary-semantics-silent-failure
+status: complete
+summary: source add 可选 --url（一手出处机器可校验）与 --tier primary|secondary（信源等级（Source Tier）），向后兼容；source list 透出；GLOSSARY 增词条
+details: 反馈 P2-1。现象：source 只有文件没有一手 URL；引语出自二手转述无等级标记，作者无从知情。验收：①--url 非 http(s) 或 --tier 非法报 artifact.schema-violation（field url/tier）；②合法值写入 source.yaml 且 list 可见；③不带新参数行为与产物逐字节不变。素材等级的消费（claim 视图透出、二手信源 review 阻塞项）留待设计批（source-conflict-registry 与 review rubric 联动）后另立变更。新术语信源等级（Source Tier）进 GLOSSARY。
+depends_on: []

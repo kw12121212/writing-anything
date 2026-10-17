@@ -15,6 +15,30 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 }
 
 func (s commandSet) run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
+	auditMu.Lock()
+	auditCodes, auditUnit = nil, ""
+	auditMu.Unlock()
+	code := s.dispatch(args, stdin, stdout, stderr)
+	appendAudit(stderr, s, args, code, now())
+	return code
+}
+
+// runQuiet 与 run 相同但不写审计日志（Audit Log）：供 MCP 服务为资源订阅轮询执行只读命令时使用——
+// 服务自身发起的轮询不是调用方的动作，记入日志会把失败史淹没在轮询噪音里（见 cli 主规格 audit-log）。
+func (s commandSet) runQuiet(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
+	auditMu.Lock()
+	suppress := auditSuppressed
+	auditSuppressed = true
+	auditMu.Unlock()
+	defer func() {
+		auditMu.Lock()
+		auditSuppressed = suppress
+		auditMu.Unlock()
+	}()
+	return s.run(args, stdin, stdout, stderr)
+}
+
+func (s commandSet) dispatch(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	// 只要出现 --json，用法错误也以 JSON 信封写到标准输出，便于 Agent 解析。
 	asJSON := slices.Contains(args, "--json")
 	if len(args) > 0 && args[0] == "--help" {
@@ -33,6 +57,11 @@ func (s commandSet) run(args []string, stdin io.Reader, stdout, stderr io.Writer
 		return usageError(stdout, stderr, asJSON, d, c.helpText())
 	}
 	inv.all, inv.stdin, inv.stdout, inv.stderr = s, stdin, stdout, stderr
+	if criticalCommands[c.name] && len(inv.args) > 0 {
+		auditMu.Lock()
+		auditUnit = inv.args[0] // 回捞配对用的单元引用取已解析的位置参数，不受 flag 顺序影响
+		auditMu.Unlock()
+	}
 	// help 的位置参数就是要查看的命令，help <command> --help 与 help <command> 相同。
 	if inv.flag("help") && (c != helpCommand || len(inv.args) == 0) {
 		return writeHelp(inv, []*command{c}, false)
@@ -52,6 +81,7 @@ func usageError(stdout, stderr io.Writer, asJSON bool, d *Diagnostic, usage stri
 	if err != nil {
 		return writeFailed(stderr, err)
 	}
+	auditRememberCodes([]Diagnostic{*d})
 	return exitUsage
 }
 

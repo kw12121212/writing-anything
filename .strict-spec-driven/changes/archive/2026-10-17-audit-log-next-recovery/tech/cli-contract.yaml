@@ -1,0 +1,16 @@
+schema: strict-spec-driven/delta-tech/v1
+schema_version: 1
+artifact_type: delta_tech
+schema_file: templates/strict-spec-driven/schemas/delta-tech.yaml
+target_standard: cli-contract
+operations:
+  ADDED: {}
+  MODIFIED:
+    precheck-before-side-effects:
+      strength: MUST
+      statement: 一条命令会写入多个产物时，必须在第一次写入之前完成全部可能失败的检查（包括针对已有产物的检查，如段落上限、写入记录的校验），领域包提供的预检查函数（如 draft.Precheck）与实际写入共用同一套检查；任一检查失败时所有产物逐字节不变，changedPaths 为空。只读命令不得因读到推导出的数据（如正文批注）而写文件，推导出的记录只在显式的变更命令中记入，并出现在该命令的 changedPaths 中；唯一例外是审计日志（Audit Log，.writing-anything/audit.log）：每次调用（含只读命令）都追加运维痕迹，它不是产物，不进 changedPaths，也不受本条约束（见 cli 主规格 audit-log）。
+      rationale: draft write 先记入批注再写正文，若只在写正文时才发现已有正文过大，feedback.yaml 已被修改而命令报告失败，Agent 看到的结果与工作区不一致（fresh-context 审查实测）；读取命令写文件会让 watch 轮询反复写入、changedPaths 失真。
+      enforcement:
+        method: test
+        detail: internal/cli 的 TestRejectedWriteTouchesNothing 断言被拒绝与过大正文的 draft write 不创建 feedback.yaml；TestCommentFeedback 断言 feedback list 不创建 feedback.yaml。
+  REMOVED: {}

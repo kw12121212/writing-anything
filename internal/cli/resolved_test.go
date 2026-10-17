@@ -142,6 +142,12 @@ func TestConfigResolvedReadOnly(t *testing.T) {
 	old := time.Now().Add(-time.Hour)
 	var files []string
 	filepath.Walk(dir, func(p string, info os.FileInfo, err error) error {
+		if info.IsDir() {
+			return nil
+		}
+		if rel, _ := filepath.Rel(dir, p); filepath.ToSlash(rel) == ".writing-anything/audit.log" || filepath.ToSlash(rel) == ".writing-anything/audit.log.1" {
+			return nil // 运维痕迹（Audit Log）：只读命令也追加
+		}
 		files = append(files, p)
 		return os.Chtimes(p, old, old)
 	})

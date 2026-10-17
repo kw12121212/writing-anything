@@ -1,0 +1,19 @@
+schema: strict-spec-driven/lesson/v1
+schema_version: 1
+artifact_type: lesson
+schema_file: templates/strict-spec-driven/schemas/lesson.yaml
+lesson:
+  id: lint-aecef8
+  title: 共用判定函数不等于共用取参：镜像 lint 规则的写入校验要在空数组与非法参数边界对齐
+category: coding
+status: active
+created_at: '2026-10-16T16:30:32.460Z'
+updated_at: '2026-10-16T16:30:32.460Z'
+context: claim add 写入校验镜像 lint 的 claim-sources 规则，判定函数两层共用
+observation: 复审发现取参是两条路径：lint 走引擎 convert 加 orDefault（显式空数组生效、非法参数报 rule.invalid-params 且跳过规则），gate 的导出函数带 len>0 守卫（空数组回落默认、非法参数静默用默认）。kinds 为空数组时 lint 全放行而 gate 仍按默认拒绝，source_types 为空数组时反向更松——「永远同判」的承诺在边界配置下失效，且全部测试都跑默认参数，盲区恰好互相遮蔽
+takeaway: 把既有检查镜像到新入口时，除判定外必须共用取参，并对齐三个边界：缺省用默认、显式空数组生效、非法取值与被镜像者同样跳过；复审要用配置覆盖（含空数组）的用例验证同判承诺，不能只跑默认参数
+applies_when: 任何把 lint/整体校验的规则判定提前到写入路径的新入口，或声明与既有检查「共用同一张表」的实现
+occurrences:
+  - origin: claim-add-source-kind-check
+    date: '2026-10-16'
+    evidence: 复审 S1/S2：internal/lint/claims.go ClaimSourceRequirement 与 checkClaimSources 取参路径分叉的三类边界配置推演；修复后 TestClaimAdd 增加项目层覆盖 source_types 与 kinds 置空两个用例

@@ -14,6 +14,7 @@ const (
 	codeFlagTakesNoValue   = "usage.flag-takes-no-value"
 	codeUnexpectedArgument = "usage.unexpected-argument"
 	codeMissingArgument    = "usage.missing-argument"
+	codeDuplicateFlag      = "usage.duplicate-flag"
 )
 
 // parseArgs 按 c 的声明解析 args（不含命令名）。只接受 --name 与 --name=value 形式的长参数；
@@ -46,6 +47,12 @@ func parseArgs(c *command, args []string) (*invocation, *Diagnostic) {
 			value = args[i]
 		case !hasValue:
 			return nil, usageDiagnostic(c, codeMissingFlagValue, fmt.Sprintf("参数 --%s 缺少取值", name))
+		}
+		if spec.Type != flagList {
+			// 非列表参数只能出现一次：静默保留最后一个取值会丢弃前面的输入（下游实测丢过一组核心观点）。
+			if prev, dup := inv.values[name]; dup {
+				return nil, usageDiagnostic(c, codeDuplicateFlag, fmt.Sprintf("参数 --%s 重复出现：%s 与 %s（非列表参数只能出现一次）", name, prev, value))
+			}
 		}
 		inv.values[name] = value
 		if spec.Type == flagList {

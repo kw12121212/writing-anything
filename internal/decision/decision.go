@@ -24,6 +24,7 @@ const (
 	CodeNotFound       = "decision.not-found"
 	CodeAlreadyDecided = "decision.already-decided"
 	CodeUnknownOption  = "decision.unknown-option"
+	CodeUnknownSource  = "decision.unknown-source"
 	CodeChoiceRequired = "decision.choice-required"
 	CodeUnknownUnit    = "decision.unknown-unit"
 	CodeBlocking       = "decision.blocking"
@@ -51,19 +52,33 @@ type Option struct {
 
 // Decision 是决策队列中的一个决策；可选字段未设置时为 nil。
 type Decision struct {
-	ID             string   `json:"id"`
-	Question       string   `json:"question"`
-	Options        []Option `json:"options"`
-	Recommendation *string  `json:"recommendation"`
-	Rationale      *string  `json:"rationale"`
-	Blocking       bool     `json:"blocking"`
-	Units          []string `json:"units"`
-	Status         string   `json:"status"`
-	Choice         *string  `json:"choice"`
-	Answer         *string  `json:"answer"`
-	Confirmation   *string  `json:"confirmation"`
-	Channel        *string  `json:"channel"` // 确认渠道（Confirmation Channel）；缺失按 cli 解释
-	DecidedAt      *string  `json:"decided_at"`
+	ID             string    `json:"id"`
+	Question       string    `json:"question"`
+	Options        []Option  `json:"options"`
+	Recommendation *string   `json:"recommendation"`
+	Rationale      *string   `json:"rationale"`
+	Blocking       bool      `json:"blocking"`
+	Units          []string  `json:"units"`
+	Status         string    `json:"status"`
+	Choice         *string   `json:"choice"`
+	Answer         *string   `json:"answer"`
+	Confirmation   *string   `json:"confirmation"`
+	Channel        *string   `json:"channel"` // 确认渠道（Confirmation Channel）；缺失按 cli 解释
+	DecidedAt      *string   `json:"decided_at"`
+	Conflict       *Conflict `json:"conflict,omitempty"` // 冲突（Conflict）载荷；有它时本决策请作者在两说之间裁定
+}
+
+// ConflictSide 是冲突（Conflict）中的一方说法：出自哪份素材与该素材中的引文（用于 lint 的正文匹配）。
+type ConflictSide struct {
+	Source string `json:"source"`
+	Quote  string `json:"quote"`
+}
+
+// Conflict 是素材对同一主题的两种矛盾说法的结构化载荷。
+type Conflict struct {
+	About string       `json:"about"`
+	A     ConflictSide `json:"a"`
+	B     ConflictSide `json:"b"`
 }
 
 func (d *Decision) hasOption(id string) bool {
@@ -229,6 +244,7 @@ type Input struct {
 	Rationale string
 	Blocking  bool
 	Units     []string
+	Conflict  *Conflict // 冲突（Conflict）载荷；给出时两说必须齐备且引文非空白
 }
 
 // Add 在决策队列末尾追加一个待决事项。resolve 检查每个关联单元，返回其问题（如 work.not-found）。
@@ -257,6 +273,18 @@ func AddAll(root string, ins []Input, resolve func(ref string) []workspace.Probl
 		for _, ref := range in.Units {
 			if ps := resolve(ref); len(ps) > 0 {
 				return nil, ps
+			}
+		}
+		if c := in.Conflict; c != nil {
+			if strings.TrimSpace(c.About) == "" || c.A.Source == "" || c.B.Source == "" {
+				return nil, []workspace.Problem{errorAt(schema.CodeSchemaViolation, "conflict", "冲突（Conflict）载荷必须成组给出：about 与两说的素材 id、引文都非空")}
+			}
+			for _, q := range []struct {
+				field, text string
+			}{{"conflict-a-quote", c.A.Quote}, {"conflict-b-quote", c.B.Quote}} {
+				if strings.TrimSpace(q.text) == "" {
+					return nil, []workspace.Problem{errorAt(schema.CodeSchemaViolation, q.field, "冲突（Conflict）的引文不能为空：lint 按引文匹配正文，空引文无法检查")}
+				}
 			}
 		}
 	}
@@ -303,6 +331,14 @@ func AddAll(root string, ins []Input, resolve func(ref string) []workspace.Probl
 		}
 		if in.Rationale != "" {
 			item.Content = append(item.Content, str("rationale"), str(in.Rationale))
+		}
+		if in.Conflict != nil {
+			side := func(s ConflictSide) *yaml.Node {
+				return &yaml.Node{Kind: yaml.MappingNode, Style: yaml.FlowStyle, Content: []*yaml.Node{
+					str("source"), str(s.Source), str("quote"), str(s.Quote)}}
+			}
+			item.Content = append(item.Content, str("conflict"), &yaml.Node{Kind: yaml.MappingNode, Content: []*yaml.Node{
+				str("about"), str(in.Conflict.About), str("a"), side(in.Conflict.A), str("b"), side(in.Conflict.B)}})
 		}
 		item.Content = append(item.Content, str("blocking"), &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!bool", Value: fmt.Sprint(in.Blocking)},
 			str("units"), units, str("status"), str(StatusOpen))

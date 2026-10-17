@@ -1,0 +1,19 @@
+schema: strict-spec-driven/lesson/v1
+schema_version: 1
+artifact_type: lesson
+schema_file: templates/strict-spec-driven/schemas/lesson.yaml
+lesson:
+  id: lesson-eaf147
+  title: 授权参数必须只在触发保护路径时可写：未触发时给出是参数错误
+category: coding
+status: active
+created_at: '2026-10-17T15:00:00.942Z'
+updated_at: '2026-10-17T15:00:00.942Z'
+context: claim 的 --decision 留痕例外通道（canon gate 模式）
+observation: 复审 B3：--decision 无条件传给写入函数，校验只在拒绝路径发生——claim add --kind fact --decision dec-999 会把任意 id 形字符串写进 claims.yaml，审计锚点可伪造；canon 对同场景报 input.invalid-value
+takeaway: 凡「授权/豁免参数」只允许在保护路径被消费：入口处判保护是否触发，未触发而给出授权参数时按参数错误拒绝（refusal-side-decision-gating 的 --decision 条款）；实现上让 gate 返回 triggered 布尔区分「授权通过」与「根本没触发」
+applies_when: 任何带 --decision/--override 类授权参数且只在部分路径生效的命令
+occurrences:
+  - origin: claim-kind-override-decision
+    date: '2026-10-17'
+    evidence: 复审 B3：修复为 gate 返回 (triggered, problems)，未触发且给出 --decision 时报 input.invalid-value field=decision；补 decision-without-reject 场景与断言

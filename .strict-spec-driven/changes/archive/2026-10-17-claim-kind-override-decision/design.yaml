@@ -1,0 +1,20 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: claim-kind-override-decision
+approach:
+  - probe
+  - 复刻 internal/canon 的 gate 模式：claimAuthorSourceGate 拒绝时（拒绝路径上，幂等）——同问题文本+同单元已有 open 决策则不重复追加，作者已选「保持不变」的已决定决策同样抑制追加，作者允许后的未授权尝试追加新决策；decision.Add 生成阻塞决策（问题为固定文本，含单元、类型与论断文字，选项 允许/保持不变，推荐保持不变）；changedPaths 如实列出决策队列。--decision 给出时校验：决策存在、问题与该论断匹配、status 为 decided 且作者选择允许，通过则把决策 id 写进该论断并在视图中透出；不满足时按 canon rejectDecision 的分支说明原因。问题文本固定并逐字测试（refusal-side-decision-gating：以固定问题文本识别对象与操作）。
+decisions:
+  canon-gate-pattern:
+    decision: 完全复用 canon 保护的门禁形态而非发明新机制
+    rationale: refusal-side-decision-gating 是既有 MUST 标准，canon 的 gate 已把幂等、保持不变抑制、授权核对与 changedPaths 语义打磨成型；另起炉灶会得到第二套略有差异的例外通道
+  lint-still-reports:
+    decision: 例外只解除写入门槛，lint 的 claim-sources 规则照常报告该论断
+    rationale: 写入时的作者授权与文本检查的常规报告是两层：作者明确允许的例外应留在 lint 视野里可复核，而不是全局静音
+alternatives:
+  - option: 自述理由文本的轻量 override 通道
+    reason: 理由文本是无锚点的自述，不构成审计链：谁允许、何时、看到什么问题都不可回溯，正是上游评审拒绝的形态
+risks:
+  - 决策问题文本含论断全文，长论断使问题冗长：作者在决策队列里看到的正是要裁定的论断内容，冗长是功能而非缺陷；截断会破坏幂等匹配

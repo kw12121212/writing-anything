@@ -134,7 +134,7 @@ func project(t *testing.T) string {
 		}
 	}
 	for id, content := range map[string]string{"src-a": "作者的原话。", "src-b": "\xff\xfe"} {
-		if _, _, ps := source.Add(root, []byte(content), "interview", "", id, ""); len(ps) > 0 {
+		if _, _, ps := source.Add(root, []byte(content), "interview", "", id, "", "", ""); len(ps) > 0 {
 			t.Fatal(ps)
 		}
 	}

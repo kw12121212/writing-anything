@@ -1,0 +1,11 @@
+schema: strict-spec-driven/planned-change/v1
+schema_version: 1
+artifact_type: planned_change
+schema_file: ../../templates/strict-spec-driven/schemas/planned-change.yaml
+planned_change:
+  id: source-conflict-registry
+  milestone: boundary-semantics-silent-failure
+status: complete
+summary: 设计提案：素材矛盾登记与作者知情机制——新冲突产物 vs 决策队列子类型两方案比选后定案
+details: 反馈 P1-2（设计先行，经作者确认后另立实现变更）。现象：两份素材对同一参数矛盾（10 喷嘴 vs 4 推进器），工具无登记处，只能正文回避，作者不知情。上游保留意见：冲突本质是待作者决策，与既有决策队列可能概念重复（见里程碑入口问题 conflict-vs-decision）。提案必须并排比较：A 新建 conflicts.yaml+add/waive 命令族+独立阻塞器；B 决策子类型+「正文引用未决冲突任一方即 lint error」规则。共同验收草案：GIVEN 存在未决矛盾，WHEN advance，THEN 被阻塞并列出该矛盾；preview 页向作者展示矛盾与决定。新术语冲突（Conflict）进 GLOSSARY。
+depends_on: []

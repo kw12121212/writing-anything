@@ -39,6 +39,9 @@ stages:
     title: 审稿与验收
     required_artifacts: [review, acceptance]
 rules:
+  conflicts:
+    type: conflict-sources
+    severity: error
   length:
     type: length-range
     severity: warning

@@ -21,6 +21,7 @@ type decView struct {
 	Answer         *string             `json:"answer"`
 	Confirmation   *string             `json:"confirmation"`
 	DecidedAt      *string             `json:"decidedAt"`
+	Conflict       map[string]any      `json:"conflict"`
 }
 
 type decResult struct {
@@ -275,5 +276,65 @@ func TestDecisionsValidateAndText(t *testing.T) {
 		if code, stdout, _ := run(t, append(args, "--dir", fresh)...); code != 1 || stdout != "" {
 			t.Errorf("%v: code = %d, %q", args, code, stdout)
 		}
+	}
+}
+
+// 冲突（Conflict）决策：结构化载荷登记进既有决策队列，未决时阻塞 advance、lint 对引用任一方引文报 error，
+// 作者 decide 后发现项消失；素材不存在与半组参数被拒。
+func TestDecisionConflict(t *testing.T) {
+	dir := newWork(t)
+	runWSIn(t, dir, "作者笔记", "source", "add", "--type", "author-note", "--id", "src-note")
+	runWSIn(t, dir, "报道", "source", "add", "--type", "reference", "--id", "src-news")
+	// 半组参数被拒（载荷成组校验）。
+	code, res := runDec(t, dir, "decision", "add", "--question", "q", "--conflict-about", "喷嘴数量",
+		"--conflict-a", "src-note", "--conflict-a-quote", "10 个喷嘴")
+	if d := diag(t, res.result, "artifact.schema-violation"); code != 1 || d.Field != "conflict" {
+		t.Fatalf("half conflict: code = %d, diag = %+v", code, d)
+	}
+	// 素材不存在。
+	code, res = runDec(t, dir, "decision", "add", "--question", "q", "--conflict-about", "喷嘴数量",
+		"--conflict-a", "nope", "--conflict-a-quote", "甲", "--conflict-b", "src-news", "--conflict-b-quote", "乙")
+	if d := diag(t, res.result, "decision.unknown-source"); code != 1 || d.Field != "conflict-a" {
+		t.Fatalf("unknown source: code = %d, diag = %+v", code, d)
+	}
+	if _, err := os.Stat(wsPath(dir, decisionsPath)); err == nil {
+		t.Fatal("rejected conflict wrote decisions.yaml")
+	}
+	// 先推进到草稿阶段并写入引用一方引文的正文（冲突登记后再推进会被阻塞，先写稿后登记）。
+	writeFile(t, wsPath(dir, ".writing-anything/works/my-post/brief.yaml"), completeBrief)
+	runDec(t, dir, "advance", "my-post")
+	if code, _, stderr := runIn(t, "官方说法是 10 个喷嘴。", "draft", "write", "my-post", "--dir", dir); code != 0 {
+		t.Fatalf("draft write failed: %s", stderr)
+	}
+	// 登记成功：载荷写入 decisions.yaml 并出现在视图。
+	code, res = runDec(t, dir, "decision", "add", "--question", "喷嘴数量两说矛盾，请作者裁定",
+		"--conflict-about", "喷嘴数量", "--conflict-a", "src-note", "--conflict-a-quote", "10 个喷嘴",
+		"--conflict-b", "src-news", "--conflict-b-quote", "4 个推进器", "--unit", "my-post", "--blocking")
+	d := res.Decision
+	if code != 0 || d == nil || d.Conflict == nil || d.Conflict["about"] != "喷嘴数量" {
+		t.Fatalf("add conflict: code = %d, decision = %+v, %v", code, d, res.Diagnostics)
+	}
+	saved := readFile(t, wsPath(dir, decisionsPath))
+	if !strings.Contains(saved, "about: 喷嘴数量") || !strings.Contains(saved, "quote: 10 个喷嘴") {
+		t.Fatalf("decisions.yaml:\n%s", saved)
+	}
+	// 未决冲突阻塞 advance（既有 blocking 决策机制）。
+	if code, res = runDec(t, dir, "advance", "my-post"); code != 1 || !hasNext(diag(t, res.result, "decision.blocking"), "wa-cli decisions") {
+		t.Fatalf("advance blocked: code = %d, %+v", code, res.Diagnostics)
+	}
+	// lint：正文引用了 open 冲突一方引文 → conflict-sources error。
+	if code, res = runDec(t, dir, "lint", "my-post"); code != 1 || !strings.Contains(res.stdout, "conflict-sources") ||
+		!strings.Contains(res.stdout, "喷嘴数量") || !strings.Contains(res.stdout, "dec-1") ||
+		!strings.Contains(res.stdout, "src-note") || !strings.Contains(res.stdout, "src-news") {
+		t.Fatalf("lint with open conflict: code = %d, stdout = %s", code, res.stdout)
+	}
+	// 作者 decide 后发现项消失。
+	runDec(t, dir, "decide", "dec-1", "--answer", "采信笔记", "--confirmation", "作者：以笔记为准")
+	if code, res = runDec(t, dir, "lint", "my-post"); code != 0 || !res.Valid || len(res.Diagnostics) != 0 {
+		t.Fatalf("lint after decide: code = %d, diagnostics = %+v", code, res.Diagnostics)
+	}
+	// decisions.yaml 通过整体校验。
+	if code, res = runDec(t, dir, "validate"); code != 0 {
+		t.Fatalf("validate: code = %d, %v", code, res.Diagnostics)
 	}
 }

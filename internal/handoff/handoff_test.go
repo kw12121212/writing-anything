@@ -101,15 +101,19 @@ func TestShowEmpty(t *testing.T) {
 }
 
 func TestParseInput(t *testing.T) {
-	if _, ps := ParseInput([]byte("done: [x]\n")); ps == nil {
-		t.Fatal("missing todo accepted")
+	// 干净收尾：省略 todo 或给空数组都合法，todo 归一为空数组；done 仍必填。
+	v, ps := ParseInput([]byte("done: [x]\n"))
+	if ps != nil || len(v.Done) != 1 || v.Todo == nil || len(v.Todo) != 0 {
+		t.Fatalf("no todo: v = %+v ps = %+v", v, ps)
 	}
-	v, ps := ParseInput([]byte("done: [x]\ntodo: [y]\n"))
-	if ps != nil || len(v.Done) != 1 || len(v.Todo) != 1 || v.Instructions == nil {
+	if v, ps = ParseInput([]byte("done: [x]\ntodo: []\n")); ps != nil || v.Todo == nil || len(v.Todo) != 0 {
+		t.Fatalf("empty todo: v = %+v ps = %+v", v, ps)
+	}
+	if v, ps = ParseInput([]byte("done: [x]\ntodo: [y]\n")); ps != nil || len(v.Done) != 1 || len(v.Todo) != 1 || v.Instructions == nil {
 		t.Fatalf("v = %+v ps = %+v", v, ps)
 	}
-	if _, ps = ParseInput([]byte("done: [x]\ntodo: []\n")); ps == nil {
-		t.Fatal("empty todo accepted")
+	if _, ps = ParseInput([]byte("todo: [y]\n")); ps == nil {
+		t.Fatal("missing done accepted")
 	}
 }
 

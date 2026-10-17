@@ -1,0 +1,42 @@
+schema: strict-spec-driven/question-list/v1
+schema_version: 1
+artifact_type: question_list
+schema_file: templates/strict-spec-driven/schemas/question-list.yaml
+change: claim-kind-override-decision
+open: []
+resolved:
+  - id: requirement-problem
+    question: 现状缺什么？
+    context: P0-2 拆分记录
+    answer: claim-add-source-kind-check 落地写入拒绝后，作者确实要以非常规类型登记纯外部素材时没有留痕通道
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-interpretation
+    question: 意图如何解读？
+    context: 上游意见与反馈原文
+    answer: 拒绝路径按 canon 保护模式幂等生成阻塞决策，作者允许后经 --decision 授权并记在论断上（refusal-side-decision-gating 标准）
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-outcome
+    question: 可观察差异？
+    context: 可测
+    answer: ①触发拒绝且无 --decision：不写 claims.yaml，追加一条阻塞决策（固定问题文本、选项 允许/保持不变），changedPaths 含决策队列，退出码 1；②重复尝试不重复追加决策；③作者 decide 允许后 --decision 重试成功：论断记录决策 id，视图透出；④作者选保持不变后再试：不追加新决策、拒绝；⑤--decision 指向不匹配/未决定/保持不变的决策：拒绝并说明原因；⑥lint 对已授权论断照常报告 claim-sources
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-non-goals
+    question: 不变什么？
+    context: 防扩权
+    answer: 默认拒绝与 message；fact 加 reference 合法；lint 规则行为；claim remove 与 set 其他参数
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-trigger
+    question: 为什么是现在？
+    context: 时机
+    answer: P0-2 主变更已归档，本条是其记录的后续；用户要求完成剩余任务
+    status: resolved
+    kind: requirement
+    answered_by: human

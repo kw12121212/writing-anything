@@ -1,0 +1,27 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: audit-log-next-recovery
+  status: proposed
+summary:
+  what:
+    - 设计提案：wa-cli 每次调用（含失败）向工作区追加审计日志（Audit Log，含命令、参数、退出码、诊断摘要与时间戳）；wa-cli next 增加「关键命令失败后无成功重试」的回捞 step；本地阅读页展示审计摘要。本变更只形成提案与待确认问题，实现另立变更
+    - 落地：wa-cli 每次调用（含失败与用法错误）向 .writing-anything/audit.log 追加一行 JSONL（时间、命令、参数（截断）、退出码、诊断错误码）；append-only 运维痕迹（不进 Schema 校验、不进 changedPaths，只读命令写审计经 delta-tech 豁免）；大小上限轮转一份；next 为关键命令（draft write、review record、accept、export）失败后无同对成功重试给出回捞 step（配对键 命令×单元）；本地阅读页展示最近失败摘要
+  why:
+    - '下游实测 agent 在 shell 层用 || true 或输出重定向吞掉命令失败（review record 失败被吞，靠事后 stale: true 才暴露）：这些失败对状态机完全不可见（反馈 P0-1【已验证】）。方法论同反馈全文：提示词是劝告，机制是约束——wa-cli 自己的失败日志不受 shell 层吞错影响'
+    - 下游实测 shell 层吞错使失败对状态机不可见（反馈 P0-1【已验证】）；作者已定案：运维痕迹归类与命令×单元配对
+scope:
+  in:
+    - .strict-spec-driven/changes/audit-log-next-recovery/ 全部规划产物；实现范围（供后续变更）：internal/cli 的调用信封处、internal/work 的 Blockers（回捞 step）、internal/preview（摘要）、审计日志的文件形态与轮转
+    - internal/cli 的调用出口（成功、失败、用法错误都记）与 audit 写入（O_APPEND、轮转）；next 的回捞 step；internal/preview 的失败摘要；cli 与 preview 主规格；docs/GLOSSARY.md 审计日志（Audit Log）词条；delta-tech 修订「只读命令不写文件」的审计豁免
+  out:
+    - 实现代码（本变更不写）；audit.log 对命令未启动（PATH 错误等）情况的可见性（物理不可见，提案须明示）；strict-spec-driven 侧依赖
+    - 命令未启动失败的可见性（shell 层由已归档会话协议兜底）；audit.log 的 Schema 校验与 changedPaths 列出（运维痕迹定位）；.gitignore 的项目级决定；「引用被否定一方」类后续增强
+unchanged_behavior:
+  - 不引入审计日志前的全部行为（本变更零代码）
+  - 不带审计视角的既有命令输出契约（changedPaths、信封字段）；next 既有 steps 的内容与顺序（回捞 step 追加）；preview 既有区块；退出码约定
+roadmap:
+  milestone: boundary-semantics-silent-failure
+  planned_change: audit-log-next-recovery

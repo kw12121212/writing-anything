@@ -17,6 +17,18 @@ description: 长篇（novel）与系列的连续性把关：运行确定性连�
 6. 影响传播：作者要修改已验收的场景、设定条目、事件或伏笔时，先运行 `wa-cli impact <目标> --json` 预览受影响的后续场景与引用依据，交给作者确认修改范围。用 `wa-cli canon set`、`state set`、`knowledge set`、`threads set` 或 `scene contract` 修改语义字段（设定文本与别名、状态描述、知情绑定、伏笔计划与回收位置、契约起因与状态变化）后，命令会自动传播影响：被已验收场景引用时自动落盘复查标记（Recheck Mark）并生成 causality 维度的任务包，只被未验收场景引用时只在输出的 impact 中提示；只改注释或排版不触发，同一场景已有 open 标记时不重复标记、不重复生成任务包，没有跳过自动标记的参数。把输出 impact 中的 marked 与 unaccepted 场景交给作者。直接编辑正文或其他不经上述命令的修改，仍要在落地后运行 `wa-cli impact mark <目标> --json` 手动落盘。命令报告 impact.auto-mark-failed 时修改已写入，按 next 修复后运行 impact mark 补写。
 7. 复查标记：运行 `wa-cli impact list <作品> --json` 列出 open 的标记。对每个受影响场景，先执行生成的 causality 任务包（`wa-cli next` 对有 open 标记的场景也会列出 review plan 与 impact clear 命令）并用 review submit 写回，再按 wa-review 基于当前正文重新记录审稿；wa-cli 只核对审稿记录（基于当前正文且没有 fail 结论），不核对任务包，所以不要在没有重新审查的情况下省略确认解除。重新审查通过后运行 `wa-cli impact clear <场景> <目标> --json` 解除；作者核对后认定无影响的，运行 `wa-cli impact clear <场景> <目标> --confirmed-by-author --confirmation <作者原话摘要> --json`。open 的复查标记会阻塞组稿（Assembly）。
 
+## 会话协议（可执行模板）
+
+把下面的模板复制进会话的 shell，之后按步骤逐条运行：失败即停，读诊断（Diagnostic）的 next 修复后重试；绝不 `|| true`、管道或输出重定向吞掉失败（shell 层吞错对状态机不可见，只能事后靠 stale 暴露）。
+
+```bash
+set -euo pipefail
+wa() { local out; out=$(wa-cli "$@") || { printf '%s\n' "$out" >&2; return 1; }; printf '%s\n' "$out"; }
+wa next --json   # 示例：每步先看下一步；把 wa 后面换成当前步骤的 wa-cli 命令与参数
+```
+
+经 harness 提问工具得到作者的决定后，同步回写决策队列（Decision Queue）保住审计链：先用 `wa-cli decision add --question <问题> --unit <单元> --json` 登记问题，作者答复后用 `wa-cli decide <决策 id> --option <选项> --answer <答复> --confirmation <作者原话摘要> --json` 记录决定；不要只在对话里问完就往下走。
+
 ## 必须停下来问作者
 
 - 连续性发现是改正文、改设定还是豁免，由作者决定；豁免只能经作者在决策中选定，不要替作者 decide。

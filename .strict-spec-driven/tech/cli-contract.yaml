@@ -129,16 +129,11 @@ rules:
         - feedback watch --interval 0 报告 feedback.bad-interval
   precheck-before-side-effects:
     strength: MUST
-    statement: 一条命令会写入多个产物时，必须在第一次写入之前完成全部可能失败的检查（包括针对已有产物的检查，如段落上限、写入记录的校验），领域包提供的预检查函数（如 draft.Precheck）与实际写入共用同一套检查；任一检查失败时所有产物逐字节不变，changedPaths 为空。只读命令不得因读到推导出的数据（如正文批注）而写文件，推导出的记录只在显式的变更命令中记入，并出现在该命令的 changedPaths 中。
+    statement: 一条命令会写入多个产物时，必须在第一次写入之前完成全部可能失败的检查（包括针对已有产物的检查，如段落上限、写入记录的校验），领域包提供的预检查函数（如 draft.Precheck）与实际写入共用同一套检查；任一检查失败时所有产物逐字节不变，changedPaths 为空。只读命令不得因读到推导出的数据（如正文批注）而写文件，推导出的记录只在显式的变更命令中记入，并出现在该命令的 changedPaths 中；唯一例外是审计日志（Audit Log，.writing-anything/audit.log）：每次调用（含只读命令）都追加运维痕迹，它不是产物，不进 changedPaths，也不受本条约束（见 cli 主规格 audit-log）。
     rationale: draft write 先记入批注再写正文，若只在写正文时才发现已有正文过大，feedback.yaml 已被修改而命令报告失败，Agent 看到的结果与工作区不一致（fresh-context 审查实测）；读取命令写文件会让 watch 轮询反复写入、changedPaths 失真。
     enforcement:
       method: test
       detail: internal/cli 的 TestRejectedWriteTouchesNothing 断言被拒绝与过大正文的 draft write 不创建 feedback.yaml；TestCommentFeedback 断言 feedback list 不创建 feedback.yaml。
-    examples:
-      good:
-        - draft.Precheck 通过后才调用 feedback.ImportComments，再调用 draft.Write
-      bad:
-        - 先记入批注，draft.Write 发现现有正文过大后返回 draft.too-large
   loopback-only-server:
     strength: MUST
     statement: 'wa-cli 中监听网络的命令（如 preview --serve）只能监听回环地址 127.0.0.1，不得监听 0.0.0.0 或其他网卡，给出的访问地址必须取自实际监听的套接字；必须为每次运行生成至少 128 位的随机令牌，并对每个请求在读取或修改任何产物之前校验令牌（常量时间比较）与 Host 头（端口为 80 时同时接受不带端口的写法），不符合时返回 403；响应必须带 Cache-Control: no-store 与 Referrer-Policy: no-referrer，服务只在命令运行期间存在，不作为常驻服务；请求体必须限制大小，服务端日志写到命令的标准错误。测试必须断言访问地址是回环地址，并覆盖拒绝无令牌、令牌错误与 Host 不符的请求。'
@@ -213,3 +208,15 @@ rules:
         - res.Diagnostics[i].Next = []string{shellCommand("wa-cli", "brief", "show", ref, "--dir", dir, "--json"), "wa-cli help brief set --json"}
       bad:
         - res.Diagnostics[i].Next = []string{"wa-cli help brief set --json"} 或 helpNext(res.Diagnostics, "draft write", codes) 且未登记白名单
+  enum-scoped-output-fields:
+    strength: SHOULD
+    statement: 命令输出或事件视图中只对部分枚举取值（如 confirmation 的 kind）有意义的字段（如 id 只属于 decision、plan、state、knowledge），注册表的输出键说明必须写明该字段适用与不适用的取值；对不适用的取值省略该键而不是输出空串、零值或 null，测试须断言不适用的取值不出现该键且适用的取值照常输出。
+    rationale: 下游实测发现 confirmation 事件对 acceptance 与 volume 输出空串 id：规格与输出键说明把只对部分 kind 有意义的字段写成无条件字段，把结构性空值固化进契约，消费者无法区分「没有」与「为空」。分类描述加缺省断言使该缺陷在规格评审与测试两层都可检出。
+    enforcement:
+      method: review
+      detail: 评审输出视图与事件视图的输出键说明时核对：字段若按枚举取值才有意义，说明是否分类描述；测试是否覆盖不适用取值键缺省（解析后断言键不存在，不是断言空串）与适用取值照常输出。
+    examples:
+      good:
+        - 「id 只在 decision、plan、state 与 knowledge 出现（各自的条目 id），acceptance 与 volume 没有条目 id、不含 id 字段」+ 测试断言 acceptance 响应解析后无 id 键
+      bad:
+        - 「confirmation 含 kind、unit、id、action 与 channel」而 acceptance 的 id 恒为空串

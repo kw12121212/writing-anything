@@ -1,0 +1,44 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: claim-candidates-fact-cover
+sections:
+  Implementation:
+    impl-coverage:
+      text: internal/lint/claims.go：checkCandidates 为数据候选加入 kind 为 fact 且关联了至少一份素材的论断覆盖（与 cover_kinds 论断并集），亲历覆盖与候选检测不变。
+      status: complete
+    impl-note:
+      text: internal/lint/claims.go：发现项 message 末尾按 claims.yaml 顺序追加未参与覆盖论断的说明（类型不在 cover_kinds 内、含实际取值与「默认」标注；fact 未关联素材且与未覆盖数据区间重叠），只在产生发现项的行上按需定位，不随论断数增加正文扫描次数。
+      status: complete
+    impl-tests:
+      text: internal/lint/claims_test.go：更新 TestCandidateCoverage 的 fact 用例，新增 fact 覆盖数据候选、fact 未关联素材说明、fact 亲历说明与自定义 cover_kinds 说明的用例；受影响的 internal/cli 断言同步。
+      status: complete
+    impl-skill-doc:
+      text: internal/skills/skills/wa-draft/SKILL.md：论断登记指引后补类型选择一句（亲历/观点/案例/数据关联作者素材；外部事实数据用 fact 关联 reference 素材）。
+      status: complete
+  Testing:
+    testing-vet:
+      text: go vet ./... 通过。
+      status: complete
+      command: go vet ./...
+    testing-unit:
+      text: internal/lint 与 internal/cli 测试通过。
+      status: complete
+      command: go test ./internal/lint/ ./internal/cli/ -count=1
+    testing-regression:
+      text: 完整回归（vet、build、test、覆盖率关卡）通过。
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    verify-change:
+      text: strict-spec-cli verify claim-candidates-fact-cover 通过。
+      status: complete
+      command: strict-spec-cli verify claim-candidates-fact-cover
+    verify-ready:
+      text: strict-spec-cli ready claim-candidates-fact-cover 通过。
+      status: complete
+      command: strict-spec-cli ready claim-candidates-fact-cover
+testing_gates:
+  validation_task: testing-vet
+  unit_test_task: testing-unit

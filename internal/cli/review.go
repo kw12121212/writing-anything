@@ -26,14 +26,19 @@ import (
 // now 是验收记录的时间来源；测试可以替换。
 var now = time.Now
 
-const reviewViewHelp = "unit、path、stale（审稿之后正文是否被修改）、draftSha256、rubric（每项含 item、title、verdict、evidence、paragraphs 与 blocking）与 findings（每项含 id、rubric、paragraph、quote、message、suggestion、status 与 note）"
+const reviewViewHelp = "unit、path、stale（审稿之后正文是否被修改）、draftSha256、rubric（每项含 item、title、verdict、evidence、paragraphs 与 blocking）、findings（每项含 id、rubric、paragraph、quote、message、suggestion、status 与 note）与 reaffirms（重申（Reaffirm）记录，每项含 at、summary、draftSha256、resolved 与 waived；没有时为空数组）"
 
 var reviewRecordCommand = &command{
 	name: "review record",
 	summary: "记录单元（Unit）的审稿（Review）：Agent 的 AI 预审（Pre-review）按评分标准（Rubric）逐项给出结论、证据与段落，" +
-		"并列出发现项（Finding）；整体替换已有的 review.yaml",
-	args:       []argSpec{{"unit", unitRefHelp, true}},
-	flags:      []flagSpec{dirFlag, {"file", flagString, "审稿输入（YAML）：rubric 为结论数组（item、verdict: pass|fail、evidence、可选的 paragraphs；评分项清单见 wa-cli review show 的 rubric），findings 为发现项数组（paragraph、message，可选 id、rubric、quote、suggestion）；相对 --dir 或为绝对路径，省略时从标准输入读取"}},
+		"并列出发现项（Finding）；整体替换已有的 review.yaml；--reaffirm 为小改动后沿用既有结论的一键重申（Reaffirm）",
+	args: []argSpec{{"unit", unitRefHelp, true}},
+	flags: []flagSpec{dirFlag,
+		{"file", flagString, "审稿输入（YAML）：rubric 为结论数组（item、verdict: pass|fail、evidence、可选的 paragraphs；评分项清单见 wa-cli review show 的 rubric），findings 为发现项数组（paragraph、message，可选 id、rubric、quote、suggestion）；相对 --dir 或为绝对路径，省略时从标准输入读取；--reaffirm 时不读取"},
+		{"reaffirm", flagBool, "重申（Reaffirm）：正文小改后沿用既有评分结论与发现项的一键重申，不读取审稿输入；更新 draft_sha256 解除过期，需 --summary 写明变化摘要"},
+		{"summary", flagString, "重申的变化摘要（--reaffirm 必填，非空白）：自上次审稿以来正文变了什么、为什么不用重新审"},
+		{"resolve", flagList, "重申时标记为 resolved 的发现项 id；可重复，必须存在且为 open"},
+		{"waive", flagList, "重申时标记为 waived 的发现项 id；可重复，必须存在且为 open"}},
 	outputKeys: []outputKey{{"review", "记录的审稿：" + reviewViewHelp + "；失败时为 null"}},
 	exitCodes:  standardExitCodes,
 	run:        runReviewRecord,
@@ -112,6 +117,16 @@ type reviewView struct {
 	DraftSHA256 string            `json:"draftSha256"`
 	Rubric      []verdictView     `json:"rubric"`
 	Findings    []findingItemView `json:"findings"`
+	Reaffirms   []reaffirmView    `json:"reaffirms"`
+}
+
+// reaffirmView 是一条重申（Reaffirm）记录的视图。
+type reaffirmView struct {
+	At          string   `json:"at"`
+	Summary     string   `json:"summary"`
+	DraftSHA256 string   `json:"draftSha256"`
+	Resolved    []string `json:"resolved"`
+	Waived      []string `json:"waived"`
 }
 
 func findingOf(ref string, f review.Finding) findingItemView {
@@ -121,7 +136,11 @@ func findingOf(ref string, f review.Finding) findingItemView {
 
 func viewReview(ref, dir string, r *review.Review, current string, rubric []catalog.RubricItem) *reviewView {
 	v := &reviewView{Unit: ref, Path: review.Path(dir), Stale: r.DraftSHA256 != current, DraftSHA256: r.DraftSHA256,
-		Rubric: []verdictView{}, Findings: []findingItemView{}}
+		Rubric: []verdictView{}, Findings: []findingItemView{}, Reaffirms: []reaffirmView{}}
+	for _, a := range r.Reaffirms {
+		v.Reaffirms = append(v.Reaffirms, reaffirmView{At: a.At, Summary: a.Summary, DraftSHA256: a.DraftSHA256,
+			Resolved: nonNilStrings(a.Resolved), Waived: nonNilStrings(a.Waived)})
+	}
 	for _, it := range r.Rubric {
 		vv := verdictView{Item: it.Item, Verdict: it.Verdict, Evidence: it.Evidence, Paragraphs: it.Paragraphs}
 		if i := slices.IndexFunc(rubric, func(ri catalog.RubricItem) bool { return ri.ID == it.Item }); i >= 0 {
@@ -181,6 +200,20 @@ func runReviewRecord(inv *invocation) int {
 			}
 		}
 	}
+	if inv.flag("reaffirm") {
+		for i, d := range res.Diagnostics {
+			// 参数错误不落盘：坏 id 与锚点的复查命令是看既有审稿与用法，不是单文件校验（next-rechecks-problem）。
+			if d.Code == review.CodeFindingNotFound || d.Code == review.CodeAnchoredValue {
+				res.Diagnostics[i].Next = []string{shellCommand("wa-cli", "review", "show", inv.args[0], "--dir", dir, "--json"), "wa-cli help review record --json"}
+			}
+			if d.Code == review.CodeReaffirmNoReview {
+				res.Diagnostics[i].Next = []string{"wa-cli help review record --json", shellCommand("wa-cli", "review", "show", inv.args[0], "--dir", dir, "--json")}
+			}
+			if d.Path == "" && d.Field == "summary" {
+				res.Diagnostics[i].Next = []string{shellCommand("wa-cli", "review", "show", inv.args[0], "--dir", dir, "--json"), "wa-cli help review record --json"}
+			}
+		}
+	}
 	concreteHelpNext(res.Diagnostics, shellCommand("wa-cli", "review", "show", inv.args[0], "--dir", dir, "--json"), "review record", []string{codeInputReadFailed})
 	return finish(inv, res, func(w io.Writer) error {
 		if res.Review == nil {
@@ -193,6 +226,10 @@ func runReviewRecord(inv *invocation) int {
 }
 
 func recordReview(inv *invocation, dir string, w *work.Work, u *work.Unit, res *reviewRecordResult, input *bool) []workspace.Problem {
+	unitDir := w.UnitDir(u)
+	if inv.flag("reaffirm") {
+		return reaffirmReview(inv, dir, w, u, unitDir, res)
+	}
 	data, _, ps := readInput(inv, dir)
 	if len(ps) > 0 {
 		return ps
@@ -201,7 +238,6 @@ func recordReview(inv *invocation, dir string, w *work.Work, u *work.Unit, res *
 	if len(ps) > 0 {
 		return ps
 	}
-	unitDir := w.UnitDir(u)
 	if !ok {
 		return []workspace.Problem{{Code: draft.CodeNotFound, Severity: workspace.SeverityError, Path: unitDir + "/" + draft.FileName,
 			Message: "单元 " + u.Ref + " 还没有正文，无法审稿；请先用 wa-cli draft write 写入"}}
@@ -223,6 +259,33 @@ func recordReview(inv *invocation, dir string, w *work.Work, u *work.Unit, res *
 	}
 	res.Review, res.ChangedPaths = viewReview(u.Ref, unitDir, rv, sum, rubric), changed
 	return nil
+}
+
+// reaffirmReview 是 review record --reaffirm：小改动后沿用既有结论的一键重申（Reaffirm）——不读取审稿输入，
+// 更新 draft_sha256、标记指定发现项、记录变化摘要。
+func reaffirmReview(inv *invocation, dir string, w *work.Work, u *work.Unit, unitDir string, res *reviewRecordResult) []workspace.Problem {
+	content, ok, ps := draft.Read(dir, w, u)
+	if len(ps) > 0 {
+		return ps
+	}
+	if !ok {
+		return []workspace.Problem{{Code: draft.CodeNotFound, Severity: workspace.SeverityError, Path: unitDir + "/" + draft.FileName,
+			Message: "单元 " + u.Ref + " 还没有正文，无法重申；请先用 wa-cli draft write 写入并整份录入审稿"}}
+	}
+	r, rps := series.Resolve(dir, w)
+	var rubric []catalog.RubricItem
+	if r != nil {
+		rubric = rubricOf(r, unitMethod(dir, w, u))
+	}
+	rv, changed, ps := review.RecordReaffirm(dir, unitDir, inv.values["summary"], inv.lists["resolve"], inv.lists["waive"], review.SHA256(content), now())
+	if rv == nil {
+		return ps
+	}
+	res.Review, res.ChangedPaths = viewReview(u.Ref, unitDir, rv, review.SHA256(content), rubric), changed
+	if len(rps) > 0 {
+		return rps
+	}
+	return ps
 }
 
 type revisionView struct {

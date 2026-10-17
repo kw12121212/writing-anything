@@ -1,0 +1,19 @@
+schema: strict-spec-driven/lesson/v1
+schema_version: 1
+artifact_type: lesson
+schema_file: templates/strict-spec-driven/schemas/lesson.yaml
+lesson:
+  id: delta-spec-modified-75751e
+  title: delta-spec 的 MODIFIED 在归档时整需求替换：场景表必须重述全量
+category: documentation
+status: active
+created_at: '2026-10-16T15:36:53.369Z'
+updated_at: '2026-10-16T15:36:53.369Z'
+context: 用 strict-spec-cli generate delta-spec 以 MODIFIED 修改既有需求的 statement，只为该需求写了新增场景
+observation: 归档后主规格中该需求原有的 3 个场景消失：generate 阶段同一 delta 内的场景合并是按键 upsert（保留未提及项），archive 阶段对 MODIFIED 是 mainSpec.requirements[id] = {...replacement} 整体替换——两层语义不同，只有归档层说了算
+takeaway: MODIFIED 需求的 delta 必须从当前主规格复制全部既有场景再按需增删；归档后立刻 git diff 主规格，确认变化只有预期内容
+applies_when: 任何为已含场景的既有需求编写 MODIFIED delta-spec 的变更
+occurrences:
+  - origin: preview-confirmation-id
+    date: '2026-10-16'
+    evidence: 归档后 git diff .strict-spec-driven/specs/preview.yaml 显示 confirm-acceptance-on-page、confirm-blocked、confirm-not-in-queue 三场景被删；经 spec-edit 恢复后 diff 只剩预期语句变更与两个新场景

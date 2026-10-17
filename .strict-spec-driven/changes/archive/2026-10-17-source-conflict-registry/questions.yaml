@@ -1,0 +1,54 @@
+schema: strict-spec-driven/question-list/v1
+schema_version: 1
+artifact_type: question_list
+schema_file: templates/strict-spec-driven/schemas/question-list.yaml
+change: source-conflict-registry
+open: []
+resolved:
+  - id: requirement-problem
+    question: 现状具体错在哪？
+    context: 反馈 P1-2
+    answer: 素材矛盾无登记处，agent 只能正文回避，作者不知情（下游实测 10 喷嘴 vs 4 推进器【已验证】）
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-interpretation
+    question: 意图如何解读？
+    context: 反馈原文与上游保留意见
+    answer: 未决矛盾阻塞 advance、preview 向作者展示两说与决定入口；实现形态（新产物 vs 决策子类型）待作者比选拍板
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-outcome
+    question: 什么可观察差异证明解决？
+    context: 验收草案
+    answer: GIVEN 存在未决矛盾，WHEN advance，THEN 被阻塞并列出该矛盾（实现变更落地后可测）
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-non-goals
+    question: 明确不变什么？
+    context: 防扩权
+    answer: 不做素材侧自动语义矛盾检测；不追溯改写已导出内容；不引入 LLM
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-trigger
+    question: 为什么是现在？
+    context: 时机
+    answer: 下游 v0.2.0 复盘 P1-2，用户批准分批落地（设计先行）
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: conflict-vs-decision
+    question: 素材矛盾登记采用方案 A（新冲突产物与命令族）还是方案 B（决策队列子类型 + lint 引用规则）？
+    context: 路线图入口问题 conflict-vs-decision。A：一等公民、可统计，但与决策队列平行生长两套作者确认机制；B：零新机制、复用 strict 复核与审计链，但决策结构要承载结构化 payload（两说与素材引文），且 lint 规则需要「正文引用了未决矛盾任一方」的定位手段。上游倾向 B，下游提案原文为 A
+    answer: 方案 B：决策队列子类型——decision add 增加结构化冲突（Conflict）载荷（about 与两说各带素材 id 与引文），复用 decide/waiver/blocking/strict 复核与 preview 待确认区全套既有机制；不新建 conflicts.yaml 与独立阻塞器
+    status: resolved
+    answered_by: human
+  - id: conflict-lint-granularity
+    question: 「正文引用未决矛盾任一方」的 lint 检测用什么粒度？
+    context: 候选：按素材引文的逐字/规范化匹配（与 claim 覆盖同机制）；按数字/关键参数的模式匹配（矛盾多为数字口径）；只登记不检查（依赖 advance 阻塞与作者复核）。影响误报率与实现复杂度
+    answer: 按素材引文的逐字/规范化匹配（与 claim 覆盖同机制，复用 lint 的论断匹配器）：open 冲突的任一方引文（规范化后）出现在正文即 error；decided/waived 后不再报（作者知情已记录于决策）；「引用被否定一方」的进一步检查留待后续
+    status: resolved
+    answered_by: human

@@ -1,0 +1,11 @@
+schema_version: 1
+decisions:
+  - id: dec-1
+    question: q
+    options: []
+    blocking: false
+    units: []
+    status: open
+    conflict:
+      about: 主题
+      a: {source: src-note, quote: 甲说}

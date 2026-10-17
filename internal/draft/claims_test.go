@@ -15,7 +15,7 @@ import (
 
 func addSource(t *testing.T, root, id string) {
 	t.Helper()
-	if _, _, ps := source.Add(root, []byte("原文 "+id), "interview", "", id, ""); len(ps) > 0 {
+	if _, _, ps := source.Add(root, []byte("原文 "+id), "interview", "", id, "", "", ""); len(ps) > 0 {
 		t.Fatal(ps)
 	}
 }
@@ -25,7 +25,7 @@ func TestAddClaim(t *testing.T) {
 	addSource(t, root, "interview-ceo")
 	w, u := unit(t, root, "my-post")
 	rel := ".writing-anything/works/my-post/claims.yaml"
-	c, changed, ps := AddClaim(root, w, u, "experience", "我们在一周内完成了迁移", "", []string{"interview-ceo"})
+	c, changed, ps := AddClaim(root, w, u, "experience", "我们在一周内完成了迁移", "", []string{"interview-ceo"}, "")
 	if len(ps) > 0 {
 		t.Fatal(ps)
 	}
@@ -34,7 +34,7 @@ func TestAddClaim(t *testing.T) {
 	}
 	// 作者的注释保留；没有素材的论断 sources 为空数组。
 	write(t, root, rel, "# 作者的注释\n"+read(t, root, rel))
-	c, _, ps = AddClaim(root, w, u, "opinion", "微服务不适合小团队", "", nil)
+	c, _, ps = AddClaim(root, w, u, "opinion", "微服务不适合小团队", "", nil, "")
 	if len(ps) > 0 || c.ID != "claim-2" || c.Sources == nil || len(c.Sources) != 0 {
 		t.Fatalf("second claim = %+v, %v", c, ps)
 	}
@@ -43,10 +43,10 @@ func TestAddClaim(t *testing.T) {
 		t.Errorf("claims.yaml:\n%s", text)
 	}
 	// 显式 id；默认 id 跳过已被占用的编号。
-	if c, _, ps = AddClaim(root, w, u, "data", "性能提升了 30%", "claim-4", nil); len(ps) > 0 || c.ID != "claim-4" {
+	if c, _, ps = AddClaim(root, w, u, "data", "性能提升了 30%", "claim-4", nil, ""); len(ps) > 0 || c.ID != "claim-4" {
 		t.Fatalf("explicit id = %+v, %v", c, ps)
 	}
-	if c, _, _ = AddClaim(root, w, u, "fact", "x", "", nil); c.ID != "claim-5" {
+	if c, _, _ = AddClaim(root, w, u, "fact", "x", "", nil, ""); c.ID != "claim-5" {
 		t.Fatalf("next default id = %s, want claim-5", c.ID)
 	}
 	if ps := CheckArtifact(root, rel); len(ps) > 0 {
@@ -58,7 +58,7 @@ func TestAddClaimChildCreatesUnitDir(t *testing.T) {
 	root, _ := newWork(t)
 	w, u := unit(t, root, "my-post/intro")
 	dir := ".writing-anything/works/my-post/units/intro"
-	if _, changed, ps := AddClaim(root, w, u, "case", "某客户", "", nil); len(ps) > 0 || !slices.Equal(changed, []string{dir, dir + "/claims.yaml"}) {
+	if _, changed, ps := AddClaim(root, w, u, "case", "某客户", "", nil, ""); len(ps) > 0 || !slices.Equal(changed, []string{dir, dir + "/claims.yaml"}) {
 		t.Fatalf("changed = %v, %v", changed, ps)
 	}
 }
@@ -67,7 +67,7 @@ func TestAddClaimRejects(t *testing.T) {
 	root, _ := newWork(t)
 	addSource(t, root, "interview-ceo")
 	w, u := unit(t, root, "my-post")
-	if _, _, ps := AddClaim(root, w, u, "fact", "x", "dup", nil); len(ps) > 0 {
+	if _, _, ps := AddClaim(root, w, u, "fact", "x", "dup", nil, ""); len(ps) > 0 {
 		t.Fatal(ps)
 	}
 	rel := ".writing-anything/works/my-post/claims.yaml"
@@ -85,7 +85,7 @@ func TestAddClaimRejects(t *testing.T) {
 		{"duplicate sources", "data", "x", "", []string{"interview-ceo", "interview-ceo"}, "artifact.schema-violation", "sources"},
 		{"duplicate id", "data", "x", "dup", nil, "artifact.duplicate-id", "id"},
 	} {
-		_, changed, ps := AddClaim(root, w, u, tc.kind, tc.text, tc.id, tc.sources)
+		_, changed, ps := AddClaim(root, w, u, tc.kind, tc.text, tc.id, tc.sources, "")
 		if len(ps) != 1 || ps[0].Code != tc.code || ps[0].Field != tc.field || changed != nil {
 			t.Errorf("%s: problems = %+v", tc.name, ps)
 		}
@@ -95,11 +95,11 @@ func TestAddClaimRejects(t *testing.T) {
 	}
 	// 已有的 claims.yaml 不合法或带锚点时不修改。
 	write(t, root, rel, "schema_version: 1\nclaims: {}\n")
-	if _, _, ps := AddClaim(root, w, u, "data", "x", "", nil); len(ps) == 0 || ps[0].Code != "artifact.schema-violation" {
+	if _, _, ps := AddClaim(root, w, u, "data", "x", "", nil, ""); len(ps) == 0 || ps[0].Code != "artifact.schema-violation" {
 		t.Fatalf("invalid claims.yaml: %v", ps)
 	}
 	write(t, root, rel, "schema_version: 1\nclaims: &c []\n")
-	if _, _, ps := AddClaim(root, w, u, "data", "x", "", nil); len(ps) != 1 || ps[0].Code != "claim.anchored-value" {
+	if _, _, ps := AddClaim(root, w, u, "data", "x", "", nil, ""); len(ps) != 1 || ps[0].Code != "claim.anchored-value" {
 		t.Fatalf("anchored claims: %v", ps)
 	}
 }
@@ -112,7 +112,7 @@ func TestCheckUnitArtifacts(t *testing.T) {
 	if _, _, ps := Write(root, w, u, []byte("正文"), "", time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)); len(ps) > 0 {
 		t.Fatal(ps)
 	}
-	if _, _, ps := AddClaim(root, w, child, "experience", "x", "", []string{"interview-ceo"}); len(ps) > 0 {
+	if _, _, ps := AddClaim(root, w, child, "experience", "x", "", []string{"interview-ceo"}, ""); len(ps) > 0 {
 		t.Fatal(ps)
 	}
 	w, _ = unit(t, root, "my-post")
@@ -152,7 +152,7 @@ func TestAddClaimKeepsFlowComment(t *testing.T) {
 	w, u := unit(t, root, "my-post")
 	rel := ".writing-anything/works/my-post/claims.yaml"
 	write(t, root, rel, "schema_version: 1\nclaims: []  # 行尾注释\n")
-	if _, _, ps := AddClaim(root, w, u, "fact", "x", "", nil); len(ps) > 0 || !strings.Contains(read(t, root, rel), "# 行尾注释") {
+	if _, _, ps := AddClaim(root, w, u, "fact", "x", "", nil, ""); len(ps) > 0 || !strings.Contains(read(t, root, rel), "# 行尾注释") {
 		t.Fatalf("%v\n%s", ps, read(t, root, rel))
 	}
 }

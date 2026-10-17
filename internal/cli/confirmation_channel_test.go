@@ -347,3 +347,37 @@ events:
 		t.Fatalf("stdout = %q", out.String())
 	}
 }
+
+// acceptance 与 volume 的待确认事项没有条目 id：页面确认的响应信封与 --json 事件行都不得出现键 id（空串 id 是
+// 下游反馈的缺陷）；decision 等四类确认的条目 id 照旧输出。
+func TestPreviewConfirmationIdOmitted(t *testing.T) {
+	dir := volumeAcceptFixture(t, "strict")
+	var out bytes.Buffer
+	s := newPage(dir, "my-novel", &out)
+	s.inv.values = map[string]string{"json": "true"}
+	// strict 下 part-one 的卷末检查点未确认会阻塞 scene-9（part-two）的验收，先在页面确认它。
+	code, o := pagePost(t, s, "/confirm", s.token, map[string]string{"kind": "volume", "unit": "my-novel/part-one", "confirmation": "作者：上部无误"})
+	if c, _ := o["confirmation"].(map[string]any); code != 200 || c["kind"] != "volume" || c["channel"] != "preview" {
+		t.Fatalf("volume confirm: %d %v", code, o)
+	} else if _, has := c["id"]; has {
+		t.Fatalf("volume confirmation must omit id: %v", c)
+	}
+	run(t, "review", "record", "my-novel/scene-9", "--file", reviewInput(t, dir), "--dir", dir)
+	code, o = pagePost(t, s, "/confirm", s.token, map[string]string{"kind": "acceptance", "unit": "my-novel/scene-9", "confirmation": "作者：可以"})
+	c, _ := o["confirmation"].(map[string]any)
+	if code != 200 || c["kind"] != "acceptance" || c["channel"] != "preview" {
+		t.Fatalf("acceptance confirm: %d %v", code, o)
+	}
+	if _, has := c["id"]; has {
+		t.Fatalf("acceptance confirmation must omit id (no empty string): %v", c)
+	}
+	if strings.Contains(out.String(), `"id":""`) {
+		t.Fatalf("emitted confirmation events contain empty id: %s", out.String())
+	}
+	// decision 类确认照旧携带条目 id。
+	mustRunWS(t, dir, "decision", "add", "--question", "书名用哪个", "--option", "灯塔", "--option", "守灯人", "--unit", "my-novel")
+	code, o = pagePost(t, s, "/confirm", s.token, map[string]string{"kind": "decision", "id": "dec-1", "option": "a", "confirmation": "作者：灯塔"})
+	if c, _ = o["confirmation"].(map[string]any); code != 200 || c["id"] != "dec-1" {
+		t.Fatalf("decision confirm id: %d %v", code, o)
+	}
+}

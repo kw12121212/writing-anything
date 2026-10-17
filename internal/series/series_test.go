@@ -43,7 +43,7 @@ func strs(s ...string) *[]string { return &s }
 
 func TestSeriesLifecycle(t *testing.T) {
 	root := newRoot(t, "part-1", "part-2", "other")
-	if _, _, ps := source.Add(root, []byte("访谈"), "interview", "", "s1", "a.md"); len(ps) > 0 {
+	if _, _, ps := source.Add(root, []byte("访谈"), "interview", "", "s1", "a.md", "", ""); len(ps) > 0 {
 		t.Fatal(ps)
 	}
 	title := "入门指南"

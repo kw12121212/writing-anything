@@ -1,0 +1,23 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: flag-repeat-and-handoff-todo
+  status: proposed
+summary:
+  what:
+    - 同一命令中重复出现非列表参数时报 usage 错误（退出码 2、新错误码 usage.duplicate-flag）；handoff write 允许省略 todo 或给空数组（干净收尾不必硬编待办）
+  why:
+    - 下游实测 brief set 同命令两组 --message 只保留后一组、无任何诊断（实际丢失 msg-not-ppt，补第二条命令才恢复）：解析器对 string 参数 last-wins，静默丢输入属边界语义与静默失败反馈 P2-2；同条反馈里 handoff-input 要求 todo ≥1，干净收尾被迫硬编待办
+scope:
+  in:
+    - internal/cli/parse.go 参数解析（重复检测加在解析器层使全体命令受益）；internal/schema/schemas/handoff-input.schema.json 与 handoffs.schema.json（todo 可空）；internal/cli/handoff.go 输入说明文字；internal/skills/skills/wa-assemble/SKILL.md 交接格式说明；cli 主规格 usage-error 与 handoff 主规格 handoff-write
+  out:
+    - flagList 参数的合法重复（如 decision add --option）；handoff 的 done 仍必填 ≥1；交接记录仍只能追加
+unchanged_behavior:
+  - 既有命令单次给出各参数的行为与输出；list 参数按出现顺序收集；handoff show/next 对 todo 的读取展示（空数组照常）；MCP 经注册表生成不受影响；退出码约定 0/1/2
+  - 单次给出各参数（含 bool 参数）的行为不变；重复给出 bool 参数同样报 usage.duplicate-flag（bool 属非列表参数）
+roadmap:
+  milestone: boundary-semantics-silent-failure
+  planned_change: flag-repeat-and-handoff-todo

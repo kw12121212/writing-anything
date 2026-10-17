@@ -33,6 +33,9 @@ rules:
   claim-candidates:
     type: claim-candidates
     severity: warning
+  conflicts:
+    type: conflict-sources
+    severity: error
   ads:
     type: ad-compliance
     severity: error

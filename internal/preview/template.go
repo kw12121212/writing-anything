@@ -119,6 +119,11 @@ h2 small { font-weight: normal; color: #888; margin-left: .5em; }
 <div class="bar"><label for="color">按出处着色</label><span class="legend"><span class="o-human">作者</span><span class="o-agent">Agent</span><span class="o-agent-draft-human-edited">Agent 起草、作者修改</span></span></div>
 <main>
 <h1>阅读页：{{.Title}}</h1>
+{{if .Failures}}<h2>最近失败的命令（Audit Log）<small>来自审计日志的最近失败，只读展示；请读当时的诊断修复后重跑</small></h2>
+<ul class="findings">
+{{range .Failures}}<li>{{.At}}：{{.Command}}（exit {{.Exit}}）</li>
+{{end}}</ul>
+{{end}}
 {{- if .Serve}}
 <section class="queue" id="confirm-queue">
 <h2>待作者确认（Pending Author Confirmation）<small>确认由作者本人在此填写原话摘要后提交，确认渠道（Confirmation Channel）记为 preview</small></h2>

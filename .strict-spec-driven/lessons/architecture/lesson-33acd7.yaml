@@ -1,0 +1,19 @@
+schema: strict-spec-driven/lesson/v1
+schema_version: 1
+artifact_type: lesson
+schema_file: templates/strict-spec-driven/schemas/lesson.yaml
+lesson:
+  id: lesson-33acd7
+  title: 给进程内自动重执行的路径加审计前先盘点：订阅轮询会把失败史淹进噪音
+category: architecture
+status: active
+created_at: '2026-10-17T03:15:11.651Z'
+updated_at: '2026-10-17T03:15:11.651Z'
+context: 为 wa-cli 全部调用加审计日志（Audit Log）
+observation: 复审实测：MCP 服务的资源订阅每 tick 在进程内重跑只读命令（feedback list、config resolved），默认 1 秒一轮约 12MB/天，1MiB+1MiB 的轮转使失败史窗口缩到几小时——回捞提示随轮转消失，恰好废掉本变更要解决的 MCP 长会话吞错场景
+takeaway: 给长驻进程内的命令执行加审计/留痕时，先枚举进程内自动重执行的路径（订阅轮询、watch、定时器），为它们提供显式的抑制通道（如区分客户端发起与服务器发起的读取钩子）；测试要覆盖「轮询不产生日志」
+applies_when: 任何在命令执行统一出口记录副作用（审计、配额、统计）且进程内有服务端自动重执行路径的变更
+occurrences:
+  - origin: audit-log-next-recovery
+    date: '2026-10-17'
+    evidence: 复审 B4：以 500ms interval 订阅 wa://feedback 四秒产生 8 行审计；修复为 mcp.Config.ReadSub + cli 侧 runQuiet 抑制变体，审计规格写明豁免

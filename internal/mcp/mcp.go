@@ -86,6 +86,9 @@ type Config struct {
 	Run          func(args []string, stdin io.Reader, stdout, stderr io.Writer) int
 	List         func() []Resource
 	Read         func(uri string) (text, mimeType string, ok bool)
+	// ReadSub 为资源订阅轮询读取资源；省略时与 Read 相同。调用方可用它区分轮询与客户端发起的
+	// resources/read（例如只为轮询抑制副作用）。
+	ReadSub      func(uri string) (text, mimeType string, ok bool)
 	Interval     time.Duration
 }
 
@@ -334,9 +337,13 @@ func notFound(uri string) *rpcError {
 }
 
 func (s *server) read(uri string) (string, string, bool) {
+	return s.readWith(s.cfg.Read, uri)
+}
+
+func (s *server) readWith(read func(string) (string, string, bool), uri string) (string, string, bool) {
 	s.runMu.Lock()
 	defer s.runMu.Unlock()
-	return s.cfg.Read(uri)
+	return read(uri)
 }
 
 // toolList 返回 tools/list 的 tool 定义：inputSchema 由参数生成。
@@ -533,8 +540,12 @@ func (s *server) listen(id json.RawMessage, params map[string]any) (map[string]a
 			case <-sub.stop:
 				return // 客户端取消：按取消的规则不再回复该请求
 			case <-ticker.C:
+				read := s.cfg.ReadSub
+				if read == nil {
+					read = s.cfg.Read
+				}
 				for _, uri := range uris {
-					text, _, ok := s.read(uri)
+					text, _, ok := s.readWith(read, uri)
 					if ok && text != last[uri] {
 						last[uri] = text
 						s.notify("notifications/resources/updated", map[string]any{

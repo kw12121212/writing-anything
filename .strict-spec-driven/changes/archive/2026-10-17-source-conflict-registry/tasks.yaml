@@ -1,0 +1,33 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: source-conflict-registry
+sections:
+  Implementation:
+    await-design-decisions:
+      text: 阻塞中：两个开放问题（conflict-vs-decision、conflict-lint-granularity）经作者决定后定稿方案并另立实现变更
+      status: complete
+    implement-conflict-decision:
+      text: decisions.schema.json 可选 conflict（about、a/b 各含 source 与 quote）；internal/decision 载荷结构与校验（素材存在、引文非空白、成组给出）；decision add 的 --conflict-about/--conflict-a/--conflict-a-quote/--conflict-b/--conflict-b-quote 与视图；preview 确认队列 Detail 附冲突摘要
+      status: complete
+    implement-conflict-lint:
+      text: internal/lint 新规则类型 conflict-sources（open 冲突引文规范化匹配正文 → error，复用论断匹配器）；内置文体声明该规则；lint Input 增加 conflicts
+      status: complete
+  Testing:
+    targeted-green:
+      text: 定向包回归通过（含冲突登记/校验/lint 命中与不命中/advance 阻塞用例）
+      status: complete
+      command: go test ./internal/cli ./internal/decision ./internal/lint ./internal/schema -count=1
+    full-regression:
+      text: 完整项目回归（vet、build、test、covercheck ≥80）
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    strict-verify:
+      text: strict-spec-cli verify source-conflict-registry 通过
+      status: complete
+      command: strict-spec-cli verify source-conflict-registry
+testing_gates:
+  validation_task: full-regression
+  unit_test_task: targeted-green

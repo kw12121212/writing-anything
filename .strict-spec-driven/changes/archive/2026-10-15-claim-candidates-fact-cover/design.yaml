@@ -1,0 +1,27 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: claim-candidates-fact-cover
+approach:
+  - internal/lint 的 checkCandidates 为数据候选增加第二组覆盖来源（kind 为 fact 且关联了至少一份素材的论断），与亲历覆盖（cover_kinds）各自用多词匹配器一遍扫描得出覆盖掩码；报告发现项时，对文字与未覆盖候选区间重叠、却未参与该候选覆盖的论断（类型不在 cover_kinds 中，或 fact 未关联素材且与未覆盖数据区间重叠）按 claims.yaml 顺序在 message 末尾各追加一句说明，说明中的 cover_kinds 取值来自实际合并参数、为默认时标注「默认」；排除论断的定位只在产生发现项的行上按需计算，不随论断数增加正文扫描次数。wa-draft 技能论断登记指引补类型选择一句。
+decisions:
+  fact-data-coverage-source-gated:
+    decision: kind 为 fact 且关联了至少一份素材的论断参与数据候选的覆盖，不参与亲历候选的覆盖；数据候选的覆盖集是 cover_kinds 中的论断与关联素材的 fact 论断的并集，不随 cover_kinds 配置收缩。
+    rationale: 外部数据的标准登记是 fact 加 reference 素材（用户选定方案）；fact 不在 claim-sources 的 kinds 中、没有素材关联的强制，若允许无素材的 fact 覆盖数据，Agent 可以无出处地消除数据提醒——AGENTS.md 要求亲历内容、观点、数据必须链接到作者提供的素材，lesson-65573d 也要求只有「类型相符」的登记项才能消除候选。亲历候选保持只认 cover_kinds，防止用 fact 绕过作者素材门禁。
+  excluded-claim-note:
+    decision: 发现项 message 末尾追加未参与覆盖论断的说明：类型不在 cover_kinds 中的论断说明「论断 <id>（<kind>）的类型不在 claim-candidates 的 cover_kinds（<实际取值，为默认时前缀「默认」>）内，未参与覆盖」；kind 为 fact、未关联素材且与未覆盖数据区间重叠的论断说明「论断 <id>（fact）未关联素材，不能覆盖数据候选」；按 claims.yaml 顺序、每条论断每项原因至多一句。
+    rationale: 用户上游建议第 1 条：一行诊断省掉整个排查。覆盖不生效的原因有两层（cover_kinds 取值、fact 的素材关联），不指名具体论断与原因时误报无法自解释；取值写实际值并在为默认时标注「默认」，避免读者误以为来自自己未做的配置。
+  wa-draft-kind-guidance:
+    decision: wa-draft 技能论断登记指引后补充：亲历、观点、案例与作者自己的数据用 experience/opinion/case/data 登记并关联作者素材；外部事实数据用 fact 登记并关联 reference 素材（关联素材的 fact 论断可覆盖文本检查的数据候选，不覆盖亲历候选）。
+    rationale: 用户上游建议第 2 点的文档侧：技能是 Agent 登记论断的第一入口；lesson cli-9e5084 提醒技能陈述要与实现一致，本变更同时更新实现与陈述。
+alternatives:
+  - option: 把 fact 加进默认 cover_kinds（fact 同时覆盖亲历与数据候选）
+    reason: fact 不受 claim-sources 约束，Agent 可登记无素材的 fact 论断消掉亲历提醒，绕过「亲历必须关联作者素材」的门禁。
+  - option: 不改行为，只在术语表与技能文档说明数据候选用 data 类型登记
+    reason: 外部事实数据仍会被误报为未登记，用户排查的原始痛点仍在；且 data 类型登记会被 claim-sources 要求作者素材，对外部数据并不适用。
+  - option: 为数据候选单设覆盖参数（如 data_cover_kinds）
+    reason: 没有现实配置需求，扩大参数面（YAGNI）；fact 覆盖数据候选是语义修正而非可配置策略。
+risks:
+  - 行为变化：此前已登记 fact（关联素材）仍被报告的数据句子将不再报告，依赖旧行为的黄金语料或测试断言需同步更新（完整回归时核对）。
+  - message 变长：断言完整 message 或人读输出的测试可能需要更新；追加说明只在存在未参与覆盖的重叠论断时出现。

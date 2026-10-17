@@ -17,6 +17,8 @@ func newWork(t *testing.T) string {
 	if code, stdout, stderr := run(t, "new", "minimal", "my-post", "--dir", dir); code != 0 {
 		t.Fatalf("new: exit code = %d; stdout: %s; stderr: %s", code, stdout, stderr)
 	}
+	// completeBrief 的字段出处（Field Provenance）指向这份标准素材。
+	runWSIn(t, dir, "作者的原话：受众与目的都由作者确认。", "source", "add", "--type", "author-note", "--id", "brief-note")
 	return dir
 }
 
@@ -42,7 +44,7 @@ func artifact(t *testing.T, dir, work, unit, name string) {
 }
 
 // completeBrief 是 minimal 文体中填齐必填项（audience 与 purpose）的写作简报。
-const completeBrief = "schema_version: 1\naudience: 后端工程师\npurpose: 讲清楚为什么要做连接池\n"
+const completeBrief = "schema_version: 1\naudience: 后端工程师\npurpose: 讲清楚为什么要做连接池\nprovenance:\n  audience: {sources: [brief-note]}\n  purpose: {sources: [brief-note]}\n"
 
 // unitResult 是单元命令 --json 输出中测试关心的部分。
 type unitResult struct {
@@ -76,7 +78,7 @@ func noNulls(t *testing.T, v any, path string) {
 	switch v := v.(type) {
 	case map[string]any:
 		for k, c := range v {
-			if c == nil && !slices.Contains([]string{"parent", "work", "unit", "config", "defaultGenre", "note", "quote", "line", "paragraph", "decision", "recommendation", "rationale", "choice", "answer", "confirmation", "channel", "decidedAt", "text", "recorded", "diff", "brief", "audience", "purpose", "length", "outline", "reason", "keyMessage", "section", "contextBudget", "aiDisclosure", "method", "role", "premise", "theme", "pov", "character", "reveal", "location", "progress", "handoff", "time", "launchDir"}, k) {
+			if c == nil && !slices.Contains([]string{"parent", "work", "unit", "config", "defaultGenre", "note", "quote", "line", "paragraph", "decision", "recommendation", "rationale", "choice", "answer", "confirmation", "channel", "decidedAt", "text", "recorded", "diff", "brief", "audience", "purpose", "length", "outline", "reason", "keyMessage", "section", "contextBudget", "aiDisclosure", "method", "role", "premise", "theme", "pov", "character", "reveal", "location", "progress", "handoff", "time", "launchDir", "column", "suggestion"}, k) {
 				t.Errorf("%s.%s is null", path, k)
 			}
 			noNulls(t, c, path+"."+k)
@@ -377,6 +379,9 @@ func TestNext(t *testing.T) {
 	stat := func() map[string]time.Time {
 		m := map[string]time.Time{}
 		filepath.Walk(filepath.Join(dir, ".writing-anything"), func(p string, info os.FileInfo, err error) error {
+			if base := filepath.Base(p); base == "audit.log" || base == "audit.log.1" {
+				return nil // 运维痕迹（Audit Log）：只读命令也追加
+			}
 			m[p] = info.ModTime()
 			return nil
 		})

@@ -39,6 +39,14 @@ type Edit struct {
 	Method            *string      // 写作法模板 id 或 none；空字符串表示删除（用文体的默认写作法）
 	Message           *MessageEdit // 选中的核心观点；nil 表示不修改核心观点
 	Remove            []string     // 要删除的核心观点 id，先于 Message 执行
+	// Provenance 是字段出处的修改：键为标量字段名；nil 的 ProvenanceEdit 不修改，空值表示删除该字段的出处。
+	Provenance map[string]*ProvenanceEdit
+}
+
+// ProvenanceEdit 修改一个标量字段的出处；nil 的字段不动；空数组/空字符串表示删除。
+type ProvenanceEdit struct {
+	Sources  *[]string
+	Decision *string
 }
 
 // MessageEdit 修改一个核心观点：id 不存在时追加，存在时只修改非 nil 的字段。追加时调用方须给出 Text，
@@ -177,6 +185,29 @@ func checkEdit(root, ref string, e Edit, q Queue) []workspace.Problem {
 			}
 		}
 	}
+	for _, f := range ProvenanceFields {
+		pv, ok := e.Provenance[f]
+		if !ok || pv == nil {
+			continue
+		}
+		if pv.Sources != nil {
+			for i, id := range *pv.Sources {
+				if !source.Registered(root, id) {
+					out = append(out, errorAt(CodeUnknownSource, "", fmt.Sprintf("%s-sources[%d]", f, i), unknownSource(id)))
+				}
+			}
+		}
+		if pv.Decision != nil && *pv.Decision != "" {
+			switch d := q.find(*pv.Decision); {
+			case q.Invalid:
+				out = append(out, errorAt(decision.CodeInvalidQueue, decision.Path, "", "决策队列（Decision Queue）无法加载，无法确认决策 "+*pv.Decision+" 是否存在；请先修复 "+decision.Path))
+			case d == nil:
+				out = append(out, errorAt(CodeUnknownDecision, "", f+"-decision", unknownDecision(*pv.Decision)))
+			case !slices.Contains(d.Units, ref):
+				out = append(out, errorAt(CodeUnrelatedDecision, "", f+"-decision", fmt.Sprintf("决策 %s 关联的单元不含 %s，不能作为该单元字段的出处；请用 wa-cli decision add --question <问题> --unit %s 登记向作者确认的决策", *pv.Decision, ref, ref)))
+			}
+		}
+	}
 	if m := e.Message; m != nil {
 		if m.Sources != nil {
 			for i, id := range *m.Sources {
@@ -219,6 +250,9 @@ func apply(doc *yaml.Node, rel string, e Edit) *workspace.Problem {
 		if p := setField(m, rel, kv.key, n); p != nil {
 			return p
 		}
+		if n == nil {
+			dropProvenance(m, kv.key)
+		}
 	}
 	if e.Theme != nil {
 		var n *yaml.Node
@@ -227,6 +261,9 @@ func apply(doc *yaml.Node, rel string, e Edit) *workspace.Problem {
 		}
 		if p := setField(m, rel, FieldTheme, n); p != nil {
 			return p
+		}
+		if n == nil {
+			dropProvenance(m, FieldTheme)
 		}
 	}
 	if e.Premise != nil {
@@ -237,6 +274,9 @@ func apply(doc *yaml.Node, rel string, e Edit) *workspace.Problem {
 	if e.PovPerson != nil || e.PovCharacter != nil {
 		if p := applyPov(m, rel, e.PovPerson, e.PovCharacter); p != nil {
 			return p
+		}
+		if n, _ := workspace.Lookup(m, FieldPov); n == nil {
+			dropProvenance(m, FieldPov) // pov 已整体删除：出处随之清理（Lookup 的 bool 是 plain 判定，键不存在时节点为 nil）
 		}
 	}
 	if e.Method != nil {
@@ -257,6 +297,9 @@ func apply(doc *yaml.Node, rel string, e Edit) *workspace.Problem {
 		if p := setField(m, rel, FieldLength, n); p != nil {
 			return p
 		}
+		if n == nil {
+			dropProvenance(m, FieldLength)
+		}
 	}
 	for _, kv := range []struct {
 		key string
@@ -270,6 +313,29 @@ func apply(doc *yaml.Node, rel string, e Edit) *workspace.Problem {
 			return p
 		}
 	}
+	// 字段出处（Field Provenance）：修改 provenance 映射中涉及的键；映射按需创建（无实际写入时不产生 provenance 键）。
+	if len(e.Provenance) > 0 {
+		var pm *yaml.Node
+		for _, f := range ProvenanceFields {
+			pv, ok := e.Provenance[f]
+			if !ok || pv == nil {
+				continue
+			}
+			if provenanceNoOp(m, f, *pv) {
+				continue
+			}
+			if pm == nil {
+				var p *workspace.Problem
+				if pm, p = provenanceMap(m, rel); p != nil {
+					return p
+				}
+			}
+			if p := applyProvenanceField(m, pm, rel, f, *pv); p != nil {
+				return p
+			}
+		}
+	}
+
 	if len(e.Remove) == 0 && e.Message == nil {
 		return nil
 	}
@@ -311,10 +377,138 @@ func apply(doc *yaml.Node, rel string, e Edit) *workspace.Problem {
 	return nil
 }
 
+// dropProvenance 删除 provenance 映射中字段 f 的键；provenance 不存在或为空时是空操作。
+func dropProvenance(m *yaml.Node, f string) {
+	for i := 0; i+1 < len(m.Content); i += 2 {
+		if m.Content[i].Value != "provenance" {
+			continue
+		}
+		pm := m.Content[i+1]
+		for j := 0; j+1 < len(pm.Content); j += 2 {
+			if pm.Content[j].Value == f {
+				pm.Content = append(pm.Content[:j:j], pm.Content[j+2:]...)
+				if len(pm.Content) == 0 {
+					m.Content = append(m.Content[:i:i], m.Content[i+2:]...)
+				}
+				return
+			}
+		}
+		return
+	}
+}
+
 // premiseOrder 是前提中子字段的固定顺序。
 var premiseOrder = []string{"text", "sources", "decision"}
 
 // applyPremise 在文档上修改前提：Text 为空字符串时删除前提整体，否则新建或修改前提映射，只改给出的子字段。
+// provenanceMap 返回映射 m 中的 provenance 映射节点；不存在时创建（nil 返回）。provenance 为空映射或全删除时删除该键。
+func provenanceMap(m *yaml.Node, rel string) (*yaml.Node, *workspace.Problem) {
+	for i := 0; i+1 < len(m.Content); i += 2 {
+		if m.Content[i].Value == "provenance" {
+			n := m.Content[i+1]
+			if !workspace.Plain(n) {
+				return nil, anchored(rel, "provenance")
+			}
+			return n, nil
+		}
+	}
+	n := &yaml.Node{Kind: yaml.MappingNode}
+	if f, ok := workspace.SetKey(m, append(append([]string{"schema_version"}, Fields...), FieldMethod, "provenance"), "provenance", n); !ok {
+		return nil, anchored(rel, f)
+	}
+	return n, nil
+}
+
+// provenanceNoOp 报告对字段 f 的出处修改是否为无操作：该字段还没有 provenance 条目，且本次只是删除子字段
+// （删除不存在的出处是空操作）。
+func provenanceNoOp(m *yaml.Node, f string, pv ProvenanceEdit) bool {
+	if pv.Sources != nil && pv.Decision != nil {
+		return false
+	}
+	var item *yaml.Node
+	for i := 0; i+1 < len(m.Content); i += 2 {
+		if m.Content[i].Value != "provenance" {
+			continue
+		}
+		pm := m.Content[i+1]
+		for j := 0; j+1 < len(pm.Content); j += 2 {
+			if pm.Content[j].Value == f {
+				item = pm.Content[j+1]
+			}
+		}
+	}
+	if item != nil {
+		return false
+	}
+	if pv.Sources != nil && len(*pv.Sources) == 0 && pv.Decision == nil {
+		return true
+	}
+	if pv.Decision != nil && *pv.Decision == "" && pv.Sources == nil {
+		return true
+	}
+	return false
+}
+
+// applyProvenanceField 修改 provenance 映射中字段 f 的出处；字段出处删光时删除该键，映射删空时删除 provenance。
+func applyProvenanceField(m, pm *yaml.Node, rel string, f string, pv ProvenanceEdit) *workspace.Problem {
+	var item *yaml.Node
+	for i := 0; i+1 < len(pm.Content); i += 2 {
+		if pm.Content[i].Value == f {
+			item = pm.Content[i+1]
+		}
+	}
+	if pv.Sources == nil && pv.Decision == nil {
+		return nil // 不修改
+	}
+
+	if item == nil {
+		item = &yaml.Node{Kind: yaml.MappingNode}
+		pm.Content = append(pm.Content, workspace.Str(f), item)
+	}
+	if !workspace.Plain(item) {
+		return anchored(rel, "provenance."+f)
+	}
+	if pv.Sources != nil {
+		var n *yaml.Node
+		if len(*pv.Sources) > 0 {
+			n = &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq"}
+			for _, id := range *pv.Sources {
+				n.Content = append(n.Content, workspace.Str(id))
+			}
+		}
+		if f2, ok := workspace.SetKey(item, []string{"sources", "decision"}, "sources", n); !ok {
+			return anchored(rel, "provenance."+f+"."+f2)
+		}
+	}
+	if pv.Decision != nil {
+		var n *yaml.Node
+		if *pv.Decision != "" {
+			n = workspace.Str(*pv.Decision)
+		}
+		if f2, ok := workspace.SetKey(item, []string{"sources", "decision"}, "decision", n); !ok {
+			return anchored(rel, "provenance."+f+"."+f2)
+		}
+	}
+	// 出处全删除时删除该字段的键；映射为空时删除 provenance。
+	if len(item.Content) == 0 {
+		for i := 0; i+1 < len(pm.Content); i += 2 {
+			if pm.Content[i].Value == f {
+				pm.Content = append(pm.Content[:i:i], pm.Content[i+2:]...)
+				break
+			}
+		}
+	}
+	if len(pm.Content) == 0 {
+		for i := 0; i+1 < len(m.Content); i += 2 {
+			if m.Content[i].Value == "provenance" {
+				m.Content = append(m.Content[:i:i], m.Content[i+2:]...)
+				break
+			}
+		}
+	}
+	return nil
+}
+
 func applyPremise(m *yaml.Node, rel string, p PremiseEdit) *workspace.Problem {
 	if p.Text != nil && *p.Text == "" {
 		return setField(m, rel, FieldPremise, nil)

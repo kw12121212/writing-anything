@@ -24,6 +24,18 @@ description: 逐场景推进长篇（novel）：写场景契约、按契约起�
 7. 审稿与验收：转到 wa-review 记录审稿，必要时用 wa-continuity 做连续性审查与审查任务包；验收前运行 `wa-cli review show <场景> --json` 看 `gate.blockers`（连续性发现、未收口、收口过期、收口的提议待确认、更早部的卷末检查点等都会阻塞），再按 wa-publish 请作者验收。验收后用 `wa-cli summary set <场景> --text <摘要> --json` 写场景摘要（Summary），供后续场景的上下文包使用。
 8. 一部的最后一个场景验收后转到 wa-assemble 处理卷末检查点（Volume Checkpoint）。
 
+## 会话协议（可执行模板）
+
+把下面的模板复制进会话的 shell，之后按步骤逐条运行：失败即停，读诊断（Diagnostic）的 next 修复后重试；绝不 `|| true`、管道或输出重定向吞掉失败（shell 层吞错对状态机不可见，只能事后靠 stale 暴露）。
+
+```bash
+set -euo pipefail
+wa() { local out; out=$(wa-cli "$@") || { printf '%s\n' "$out" >&2; return 1; }; printf '%s\n' "$out"; }
+wa next --json   # 示例：每步先看下一步；把 wa 后面换成当前步骤的 wa-cli 命令与参数
+```
+
+经 harness 提问工具得到作者的决定后，同步回写决策队列（Decision Queue）保住审计链：先用 `wa-cli decision add --question <问题> --unit <单元> --json` 登记问题，作者答复后用 `wa-cli decide <决策 id> --option <选项> --answer <答复> --confirmation <作者原话摘要> --json` 记录决定；不要只在对话里问完就往下走。
+
 ## 必须停下来问作者
 
 - 场景契约的取舍（谁出场、承担哪个节拍、揭示到哪里、必须发生什么变化）由作者决定；契约与规划冲突时先问作者。

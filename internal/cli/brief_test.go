@@ -49,7 +49,8 @@ func questionSummary(qs []map[string]any) []string {
 func TestBriefSet(t *testing.T) {
 	dir := briefWork(t)
 	// set-creates
-	code, res := runBrief(t, dir, "brief", "set", "my-post", "--audience", "后端工程师", "--purpose", "讲清楚为什么要做连接池",
+	code, res := runBrief(t, dir, "brief", "set", "my-post", "--audience", "后端工程师", "--audience-sources", "src-a",
+		"--purpose", "讲清楚为什么要做连接池", "--purpose-sources", "src-a",
 		"--message", "km-1", "--message-text", "连接池能显著降低延迟", "--message-sources", "src-a")
 	if code != 0 || !res.Valid || !slices.Equal(res.ChangedPaths, []string{briefRel}) || len(res.Questions) != 0 {
 		t.Fatalf("set-creates: exit code = %d, result = %+v", code, res)
@@ -161,7 +162,8 @@ func TestBriefSetFictionFields(t *testing.T) {
 		}
 	}
 	// 前提没有出处时出现在提问中（brief.unsourced-premise）。
-	runBrief(t, dir, "brief", "set", "my-post", "--audience", "读者", "--purpose", "读一个故事", "--premise", "没有出处的前提")
+	runBrief(t, dir, "brief", "set", "my-post", "--audience", "读者", "--audience-sources", "src-a", "--purpose", "读一个故事", "--purpose-sources", "src-a")
+	runBrief(t, dir, "brief", "set", "my-post", "--premise", "没有出处的前提")
 	if code, res = runBrief(t, dir, "brief", "show", "my-post"); code != 0 ||
 		!slices.Equal(questionSummary(res.Questions), []string{"brief.unsourced-premise premise"}) {
 		t.Fatalf("unsourced premise: exit code = %d, questions = %v", code, res.Questions)
@@ -237,6 +239,26 @@ func TestBriefSetRejects(t *testing.T) {
 	}
 }
 
+// 同一命令重复给出同一非列表参数是 usage 错误（usage.duplicate-flag，退出码 2），产物逐字节不变；
+// 下游复盘实测两组 --message 静默丢失过一组核心观点。
+func TestBriefSetDuplicateFlagRejected(t *testing.T) {
+	dir := briefWork(t)
+	runBrief(t, dir, "brief", "set", "my-post", "--audience", "读者", "--message", "km-1", "--message-text", "观点")
+	before := readFile(t, wsPath(dir, briefRel))
+	code, stdout, stderr := run(t, "brief", "set", "my-post",
+		"--message", "km-1", "--message-text", "甲", "--message", "km-2", "--message-text", "乙",
+		"--dir", dir, "--json")
+	if code != 2 {
+		t.Fatalf("exit code = %d, stdout = %s, stderr = %s", code, stdout, stderr)
+	}
+	if !strings.Contains(stdout, "usage.duplicate-flag") || !strings.Contains(stdout, "--message") || !strings.Contains(stdout, "km-1 与 km-2") {
+		t.Fatalf("diagnostic missing duplicate-flag detail: %s", stdout)
+	}
+	if readFile(t, wsPath(dir, briefRel)) != before {
+		t.Fatal("brief.yaml changed on duplicate flag")
+	}
+}
+
 func TestBriefShow(t *testing.T) {
 	dir := briefWork(t)
 	// show-empty
@@ -250,7 +272,8 @@ func TestBriefShow(t *testing.T) {
 		}
 	}
 	// show-unsourced
-	runBrief(t, dir, "brief", "set", "my-post", "--audience", "读者", "--purpose", "目的", "--message", "km-1", "--message-text", "观点")
+	runBrief(t, dir, "brief", "set", "my-post", "--audience", "读者", "--audience-sources", "src-a", "--purpose", "目的", "--purpose-sources", "src-a")
+	runBrief(t, dir, "brief", "set", "my-post", "--message", "km-1", "--message-text", "观点")
 	_, res = runBrief(t, dir, "brief", "show", "my-post")
 	if !slices.Equal(questionSummary(res.Questions), []string{"brief.unsourced-message key_messages[0]"}) || !strings.Contains(res.Questions[0]["message"].(string), "km-1") {
 		t.Fatalf("show-unsourced: questions = %v", res.Questions)
@@ -293,7 +316,7 @@ func TestBriefGate(t *testing.T) {
 	dir := briefWork(t)
 	before := readFile(t, workFile(dir, "my-post"))
 	// gate-missing-field
-	writeFile(t, wsPath(dir, briefRel), "schema_version: 1\naudience: 读者\n")
+	writeFile(t, wsPath(dir, briefRel), "schema_version: 1\naudience: 读者\nprovenance:\n  audience: {sources: [src-a]}\n")
 	code, res := runUnits(t, dir, "advance", "my-post")
 	d := diag(t, res.result, "brief.missing-field")
 	if code != 1 || res.Valid || d.Path != briefRel || !strings.Contains(d.Message, "purpose") || !strings.Contains(d.Message, "请向作者提问") ||
@@ -349,7 +372,7 @@ func TestBriefGate(t *testing.T) {
 		t.Fatalf("gate-passes: exit code = %d, result = %+v", code, res)
 	}
 	// gate-later-stage
-	writeFile(t, wsPath(dir, briefRel), "schema_version: 1\naudience: 读者\n")
+	writeFile(t, wsPath(dir, briefRel), "schema_version: 1\naudience: 读者\nprovenance:\n  audience: {sources: [src-a]}\n")
 	artifact(t, dir, "my-post", "", "draft.md")
 	if code, res := runUnits(t, dir, "advance", "my-post"); code != 0 || res.Unit["stage"] != "review" {
 		t.Fatalf("gate-later-stage: exit code = %d, result = %+v", code, res)
@@ -431,5 +454,43 @@ func TestBriefSymlink(t *testing.T) {
 	}
 	if entries, _ := os.ReadDir(outDir); len(entries) != 0 {
 		t.Fatalf("wrote into the symlinked unit dir: %v", entries)
+	}
+}
+
+// 字段出处（Field Provenance）：--<字段>-sources/--<字段>-decision 写入与校验、关卡阻塞（brief.unsourced-field
+// 与 brief.unconfirmed-field）与解除、视图与 show 问题。
+func TestBriefFieldProvenance(t *testing.T) {
+	dir := briefWork(t)
+	// 写入：视图与 brief.yaml 都含 provenance。
+	code, res := runBrief(t, dir, "brief", "set", "my-post", "--audience", "后端工程师", "--audience-sources", "src-a",
+		"--purpose", "讲清楚为什么要做连接池", "--purpose-decision", "dec-x")
+	if d := diag(t, res.result, "brief.unknown-decision"); code != 1 || d.Field != "purpose-decision" {
+		t.Fatalf("unknown decision: code = %d, diag = %+v", code, d)
+	}
+	runWS(t, dir, "decision", "add", "--question", "受众与目的是你定的吗", "--unit", "my-post")
+	code, res = runBrief(t, dir, "brief", "set", "my-post", "--audience", "后端工程师", "--audience-sources", "src-a",
+		"--purpose", "讲清楚为什么要做连接池", "--purpose-decision", "dec-1")
+	if code != 0 || res.Brief["provenance"].(map[string]any)["audience"].(map[string]any)["sources"].([]any)[0] != "src-a" {
+		t.Fatalf("set with provenance: code = %d, brief = %v, %v", code, res.Brief, res.Diagnostics)
+	}
+	if got := readFile(t, wsPath(dir, briefRel)); !strings.Contains(got, "provenance:") || !strings.Contains(got, "audience:") || !strings.Contains(got, "decision: dec-1") {
+		t.Fatalf("brief.yaml:\n%s", got)
+	}
+	// 关卡：audience 有关联素材、purpose 只关联 open 决策 → 一条 unconfirmed，decide 后推进通过。
+	if code, res := runUnits(t, dir, "advance", "my-post"); code != 1 {
+		t.Fatalf("advance should block: %d %v", code, res.Diagnostics)
+	} else if d := diag(t, res.result, "brief.unconfirmed-field"); !strings.Contains(d.Message, "purpose") || !strings.Contains(d.Message, "dec-1") || !hasNext(d, "wa-cli decisions") {
+		t.Fatalf("unconfirmed-field: %+v", d)
+	}
+	runWS(t, dir, "decide", "dec-1", "--answer", "是", "--confirmation", "作者：是我定的")
+	if code, res := runUnits(t, dir, "advance", "my-post"); code != 0 {
+		t.Fatalf("advance after decide: %d %v", code, res.Diagnostics)
+	}
+	// show：无 provenance 的已填必填字段报 unsourced-field。
+	dir2 := briefWork(t)
+	runBrief(t, dir2, "brief", "set", "my-post", "--audience", "读者", "--purpose", "目的")
+	if code, res := runBrief(t, dir2, "brief", "show", "my-post"); code != 0 ||
+		!slices.Equal(questionSummary(res.Questions), []string{"brief.unsourced-field audience", "brief.unsourced-field purpose"}) {
+		t.Fatalf("show-unsourced-field: code = %d, questions = %v", code, res.Questions)
 	}
 }

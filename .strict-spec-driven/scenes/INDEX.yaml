@@ -1,0 +1,10 @@
+schema: strict-spec-driven/scenes-index/v1
+schema_version: 1
+artifact_type: scenes_index
+schema_file: templates/strict-spec-driven/schemas/scenes-index.yaml
+areas:
+  lint:
+    claim-candidates-coverage:
+      title: 疑似论断（Claim Candidate）的登记与覆盖检查
+      status: draft
+      path: .strict-spec-driven/scenes/lint/claim-candidates-coverage.yaml

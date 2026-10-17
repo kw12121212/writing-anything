@@ -1,0 +1,16 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: flag-repeat-and-handoff-todo
+approach:
+  - 重复检测加在 internal/cli/parse.go 的共享解析器：非 list 参数第二次出现即报 usage.duplicate-flag（退出码 2，message 指明参数名与两次取值，next 为 wa-cli help <命令> --json），一处修复全体命令受益。handoff 侧改两张 Schema：handoff-input 的 todo 移出 required 并去掉 minItems；handoffs 存量产物的 notes[].todo 去掉 minItems（Write 恒写该键，空数组合法）。ParseInput 的 nonNil 归一化已就绪，消费方（handoff show/next、skills）对空数组天然兼容。同步 wa-assemble 技能文本的「done 与 todo 必填」表述。
+decisions:
+  parser-level-duplicate-check:
+    decision: 重复检测放在共享解析器层而不是 brief 等单命令
+    rationale: 根因在 parse.go:50 对所有 string/bool 参数 last-wins；单命令修只堵住一个入口，其余几十条命令仍会静默丢弃，解析器层一次覆盖全部现在与未来命令
+alternatives:
+  - option: 只在 brief set 命令内检测 --message 组重复
+    reason: 只修下游撞到的那一个命令，其余命令的同型静默丢弃原样保留，下一次还会以别的命令复出
+risks:
+  - 极少数现有用法若故意重复传同一 string 参数（依赖 last-wins）会开始报错——这恰是要暴露的静默丢弃；完整回归含全部命令样例调用可验证无内部依赖

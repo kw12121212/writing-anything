@@ -16,10 +16,11 @@ import (
 
 // Claim 是单元中的一个论断（Claim）。
 type Claim struct {
-	ID      string   `json:"id"`
-	Kind    string   `json:"kind"`
-	Text    string   `json:"text"`
-	Sources []string `json:"sources"`
+	ID       string   `json:"id"`
+	Kind     string   `json:"kind"`
+	Text     string   `json:"text"`
+	Sources  []string `json:"sources"`
+	Decision string   `json:"decision,omitempty"` // 授权以该类型登记的决策 id（写入校验的留痕例外通道）
 }
 
 type claimsFile struct {
@@ -111,7 +112,7 @@ func danglingAsWarnings(ps []workspace.Problem) (errs, warns []workspace.Problem
 // AddClaim 在单元 u 的 claims.yaml 末尾追加论断。id 为空时取 claim-<n>，n 从已有论断数加一开始递增到不重复；
 // sources 中的素材必须已登记。claims.yaml 不存在时创建，已存在时只追加该项，保留其他内容与注释。
 // 返回新论断与变更的路径（新建的单元目录与 claims.yaml）；出错时不修改文件。
-func AddClaim(root string, w *work.Work, u *work.Unit, kind, text, id string, sources []string) (*Claim, []string, []workspace.Problem) {
+func AddClaim(root string, w *work.Work, u *work.Unit, kind, text, id string, sources []string, decisionID string) (*Claim, []string, []workspace.Problem) {
 	rel := w.UnitDir(u) + "/" + ClaimsName
 	for i, s := range sources {
 		if !source.Registered(root, s) {
@@ -155,6 +156,9 @@ func AddClaim(root string, w *work.Work, u *work.Unit, kind, text, id string, so
 		srcs.Content = append(srcs.Content, str(s))
 	}
 	item.Content = append(item.Content, str("sources"), srcs)
+	if decisionID != "" {
+		item.Content = append(item.Content, str("decision"), str(decisionID))
+	}
 	index := len(claims.Content)
 	workspace.BlockSequence(doc.Content[0], "claims")
 	claims.Content = append(claims.Content, item)
@@ -260,7 +264,7 @@ func CheckArtifact(root, rel string) []workspace.Problem {
 const CodeClaimNotFound = "claim.not-found"
 
 // claimOrder 是论断中字段的固定顺序。
-var claimOrder = []string{"id", "kind", "text", "sources"}
+var claimOrder = []string{"id", "kind", "text", "sources", "decision"}
 
 // editClaims 读取单元 u 的 claims.yaml，找到论断 id 并交给 edit 修改，写前复查后写出；修改后的取值与原有取值相同时
 // 不写文件，changed 为空。edit 返回的问题原样返回。参数引起的问题（写前复查中新出现的）不填路径，字段为参数名。
@@ -322,7 +326,7 @@ func editClaims(root string, w *work.Work, u *work.Unit, id string, edit func(cl
 
 // SetClaim 修改单元 u 中论断 id 的 kind、text 与 sources（nil 表示不修改；sources 整体替换），保留其他内容与注释。
 // sources 中的素材必须已登记。返回修改后的论断与变更的路径（取值未变时为空）；出错时不修改文件。
-func SetClaim(root string, w *work.Work, u *work.Unit, id string, kind, text *string, sources *[]string) (*Claim, []string, []workspace.Problem) {
+func SetClaim(root string, w *work.Work, u *work.Unit, id string, kind, text *string, sources *[]string, decisionID string) (*Claim, []string, []workspace.Problem) {
 	if sources != nil {
 		for i, s := range *sources {
 			if !source.Registered(root, s) {
@@ -337,10 +341,14 @@ func SetClaim(root string, w *work.Work, u *work.Unit, id string, kind, text *st
 			return &workspace.Problem{Code: CodeAnchoredValue, Severity: workspace.SeverityError, Path: rel, Field: field,
 				Message: "该论断经由 YAML 锚点、别名或合并键得到，wa-cli 无法只修改它；请先去掉锚点、别名与合并键"}
 		}
+		decisionNode := (*yaml.Node)(nil)
+		if decisionID != "" {
+			decisionNode = str(decisionID)
+		}
 		for _, kv := range []struct {
 			key string
 			n   *yaml.Node
-		}{{"kind", strNode(kind)}, {"text", strNode(text)}, {"sources", seqNode(sources)}} {
+		}{{"kind", strNode(kind)}, {"text", strNode(text)}, {"sources", seqNode(sources)}, {"decision", decisionNode}} {
 			if kv.n == nil {
 				continue
 			}

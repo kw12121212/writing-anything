@@ -1,0 +1,19 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: brief-field-provenance
+approach:
+  - 侧映射而非字段改造：brief.yaml 新增可选 provenance（键限 audience、purpose、theme、pov、length，值为 {sources?, decision?}），与 premise/key_messages 的出处语义同构但不动既有字段形态。brief set 为五个字段各加 --<字段>-decision 与 --<字段>-sources（decision 在写入时校验存在，同 --message-decision）。Questions 关卡在必填项检查之后追加：required 中已填写的标量字段若 provenance 无 sources 且无 decision 报 brief.unsourced-field，只关联未决定决策报 brief.unconfirmed-field（问题文本与 premise 同风格）；brief-gate 的 next 映射同步（unsourced→brief show+help brief set；unconfirmed→decisions）。粒度约定：作者一轮回答多个问题时登记一个决策、多个字段共用（与 roadmap 记录的取舍一致）。迁移：关卡只在 brief 阶段生效（brief-gate 既有语义），已推进过 brief 阶段的作品不受影响；仍在 brief 阶段的作品按诊断 next 逐字段补一条 --<字段>-decision 即可，不需要标记或迁移命令。
+decisions:
+  side-map-not-field-restructure:
+    decision: 出处放可选 provenance 映射，不改标量字段为对象
+    rationale: 字段改对象会破坏全部既有视图、消费者与 brief.md 兜底的兼容；侧映射零破坏且与 avoid/sources 等既有顶层集合的形态一致
+  gate-at-brief-stage-only:
+    decision: 不做仅新建启用的标记或迁移命令，靠关卡既有阶段语义豁免过站作品
+    rationale: brief-gate 只在当前阶段 required_artifacts 含 brief 时生效：过站作品天然不受影响；为少数仍停在 brief 阶段的存量作品引入工作区标记机制，成本大于收益，且诊断 next 已给出逐字段补录命令
+alternatives:
+  - option: 每个标量字段改造为 {text, sources, decision} 对象（与 premise 完全同构）
+    reason: 破坏性 schema 变更波及 brief set/show、advance 关卡、context pack 与全部既有 brief.yaml，收益仅是形态统一
+risks:
+  - provenance 键与 required 列表不同步（文体自定义 BriefRequired）：关卡按字段名通用检查，不依赖文体列表之外的新清单；主题等非必填字段带出处但不设卡（与 missing-field 只查 required 一致）

@@ -190,8 +190,12 @@ stages:
     - fog-note
     - --pov-person
     - third
+    - --pov-sources
+    - fog-note
     - --length
     - 2000-2600
+    - --length-sources
+    - fog-note
     - --message
     - theme
     - --message-text
@@ -679,8 +683,12 @@ stages:
     - homeward-note
     - --pov-person
     - third
+    - --pov-sources
+    - homeward-note
     - --length
     - 2000-2600
+    - --length-sources
+    - homeward-note
     - --message
     - theme
     - --message-text

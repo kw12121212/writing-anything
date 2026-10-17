@@ -32,6 +32,8 @@ const (
 	CodeBaseMismatch  = "draft.base-mismatch"
 	CodeUnknownSource = "claim.unknown-source"
 	CodeAnchoredValue = "claim.anchored-value"
+	// CodeNeedsAuthorSource 由命令层写入校验产生：需要作者亲历素材的论断类型只关联了其他类型的素材。
+	CodeNeedsAuthorSource = "claim.needs-author-source"
 )
 
 // MaxParagraphs 是正文允许的最大段落数；出处推导的内存随段落数平方增长，不可信的正文不能不受限制。

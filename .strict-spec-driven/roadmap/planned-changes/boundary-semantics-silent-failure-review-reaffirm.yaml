@@ -1,0 +1,11 @@
+schema: strict-spec-driven/planned-change/v1
+schema_version: 1
+artifact_type: planned_change
+schema_file: ../../templates/strict-spec-driven/schemas/planned-change.yaml
+planned_change:
+  id: review-reaffirm
+  milestone: boundary-semantics-silent-failure
+status: complete
+summary: review record --reaffirm [--resolve <finding>...]：小改动后沿用评分标准的一键重申，记录自上次审稿以来的变化摘要
+details: 反馈 P2-3。现象：正文小改（15 字措辞修正）后需整份重写 review YAML；旧 YAML 引文已不在正文时 record 失败且诊断被吞（P0-1 案例）。设计原则：合规必须是阻力最小的路径；但 reaffirm 必须记录自上次审稿以来正文变了什么（变化摘要），防止退化为橡皮图章。验收：①GIVEN 已有 review 记录且正文小改，WHEN review record --reaffirm --resolve f1，THEN 生成沿用 rubric 结果、f1 标记 resolved、含变化摘要的新记录；②GIVEN 无既有 review，WHEN --reaffirm，THEN 报错引导正常记录。新术语重申（Reaffirm）进 GLOSSARY。
+depends_on: []

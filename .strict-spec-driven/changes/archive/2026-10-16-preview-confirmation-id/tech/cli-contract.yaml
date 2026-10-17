@@ -1,0 +1,21 @@
+schema: strict-spec-driven/delta-tech/v1
+schema_version: 1
+artifact_type: delta_tech
+schema_file: templates/strict-spec-driven/schemas/delta-tech.yaml
+target_standard: cli-contract
+operations:
+  ADDED:
+    enum-scoped-output-fields:
+      strength: SHOULD
+      statement: 命令输出或事件视图中只对部分枚举取值（如 confirmation 的 kind）有意义的字段（如 id 只属于 decision、plan、state、knowledge），注册表的输出键说明必须写明该字段适用与不适用的取值；对不适用的取值省略该键而不是输出空串、零值或 null，测试须断言不适用的取值不出现该键且适用的取值照常输出。
+      rationale: 下游实测发现 confirmation 事件对 acceptance 与 volume 输出空串 id：规格与输出键说明把只对部分 kind 有意义的字段写成无条件字段，把结构性空值固化进契约，消费者无法区分「没有」与「为空」。分类描述加缺省断言使该缺陷在规格评审与测试两层都可检出。
+      enforcement:
+        method: review
+        detail: 评审输出视图与事件视图的输出键说明时核对：字段若按枚举取值才有意义，说明是否分类描述；测试是否覆盖不适用取值键缺省（解析后断言键不存在，不是断言空串）与适用取值照常输出。
+      examples:
+        good:
+          - 「id 只在 decision、plan、state 与 knowledge 出现（各自的条目 id），acceptance 与 volume 没有条目 id、不含 id 字段」+ 测试断言 acceptance 响应解析后无 id 键
+        bad:
+          - 「confirmation 含 kind、unit、id、action 与 channel」而 acceptance 的 id 恒为空串
+  MODIFIED: {}
+  REMOVED: {}

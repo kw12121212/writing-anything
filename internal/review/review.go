@@ -31,6 +31,7 @@ const (
 	CodeFindingNotFound   = "review.finding-not-found"
 	CodeMissingNote       = "review.missing-note"
 	CodeAnchoredValue     = "review.anchored-value"
+	CodeReaffirmNoReview  = "review.reaffirm-no-review"
 
 	CodeLintErrors             = "accept.lint-errors"
 	CodeReviewMissing          = "accept.review-missing"
@@ -83,9 +84,19 @@ type Finding struct {
 
 // Review 是 review.yaml 的内容。
 type Review struct {
-	DraftSHA256 string    `json:"draft_sha256"`
-	Rubric      []Verdict `json:"rubric"`
-	Findings    []Finding `json:"findings"`
+	DraftSHA256 string     `json:"draft_sha256"`
+	Rubric      []Verdict  `json:"rubric"`
+	Findings    []Finding  `json:"findings"`
+	Reaffirms   []Reaffirm `json:"reaffirms,omitempty"`
+}
+
+// Reaffirm 是一次重申（Reaffirm）：小改动后沿用既有结论，记录变化摘要与本次标记的发现项。
+type Reaffirm struct {
+	At         string   `json:"at"`
+	Summary    string   `json:"summary"`
+	DraftSHA256 string  `json:"draft_sha256"`
+	Resolved   []string `json:"resolved"`
+	Waived     []string `json:"waived"`
 }
 
 // Acceptance 是 acceptance.yaml 的内容。
@@ -166,6 +177,18 @@ func checkReview(rel string, r *Review) []workspace.Problem {
 			out = append(out, errorAt(catalog.CodeDuplicateID, rel, fmt.Sprintf("findings[%d].id", i), "发现项 id "+f.ID+" 重复"))
 		}
 		ids[f.ID] = true
+	}
+	for i, a := range r.Reaffirms {
+		for j, id := range a.Resolved {
+			if !ids[id] {
+				out = append(out, errorAt(CodeFindingNotFound, rel, fmt.Sprintf("reaffirms[%d].resolved[%d]", i, j), "重申标记的发现项 "+id+" 不在审稿的发现项中"))
+			}
+		}
+		for j, id := range a.Waived {
+			if !ids[id] {
+				out = append(out, errorAt(CodeFindingNotFound, rel, fmt.Sprintf("reaffirms[%d].waived[%d]", i, j), "重申标记的发现项 "+id+" 不在审稿的发现项中"))
+			}
+		}
 	}
 	return out
 }
@@ -500,6 +523,125 @@ func Resolve(root, dir, id, status string, note *string) (*Finding, []string, []
 
 func anchored(rel, field string) workspace.Problem {
 	return errorAt(CodeAnchoredValue, rel, field, "该处经由 YAML 锚点、别名或合并键得到，wa-cli 无法只修改这一处；请先去掉锚点、别名与合并键")
+}
+
+// reviewOrder 是 review.yaml 顶层字段的固定顺序。
+var reviewOrder = []string{"schema_version", "draft_sha256", "rubric", "findings", "reaffirms"}
+
+// RecordReaffirm 记录一次重申（Reaffirm）：正文小改后沿用既有评分结论与发现项（不重校验 quote——措辞修改后引文移位是
+// 重申的常态），把 draft_sha256 更新为当前正文哈希（验收关卡据此不再报过期），resolve 与 waive 指定的发现项必须存在
+// 且为 open，summary 为非空白的变化摘要（「这次为什么不用重新审」的留痕）。没有 review.yaml 时报告
+// review.reaffirm-no-review，引导整份录入。
+func RecordReaffirm(root, dir, summary string, resolve, waive []string, draftSHA string, now time.Time) (*Review, []string, []workspace.Problem) {
+	rel := Path(dir)
+	if strings.TrimSpace(summary) == "" {
+		return nil, nil, []workspace.Problem{errorAt(schema.CodeSchemaViolation, "", "summary", "重申必须用 --summary 写明自上次审稿以来的正文变化摘要（非空白）")}
+	}
+	var r Review
+	doc, ps := loadDoc(root, rel, "review", &r)
+	if len(ps) > 0 {
+		return nil, nil, ps
+	}
+	if doc == nil {
+		return nil, nil, []workspace.Problem{errorAt(CodeReaffirmNoReview, rel, "", "单元还没有审稿（Review）；重申（Reaffirm）沿用既有结论，请先用 wa-cli review record 整份录入")}
+	}
+	if ps := checkReview(rel, &r); len(ps) > 0 {
+		return nil, nil, ps
+	}
+	m := doc.Content[0]
+	if !workspace.Plain(m) || workspace.HasMerge(m) {
+		return nil, nil, []workspace.Problem{anchored(rel, "")}
+	}
+	mark := func(ids []string, status, field string) []workspace.Problem {
+		var seq *yaml.Node
+		for i := 0; i+1 < len(m.Content); i += 2 {
+			if m.Content[i].Value == "findings" {
+				seq = m.Content[i+1]
+			}
+		}
+		for _, id := range ids {
+			at := slices.IndexFunc(r.Findings, func(f Finding) bool { return f.ID == id })
+			if at < 0 {
+				return []workspace.Problem{errorAt(CodeFindingNotFound, rel, field, "审稿中没有发现项 "+id)}
+			}
+			if r.Findings[at].Status != "open" {
+				return []workspace.Problem{errorAt(CodeFindingNotFound, rel, field, "发现项 "+id+" 不是 open 状态（当前 "+r.Findings[at].Status+"），重申只能标记 open 的发现项")}
+			}
+			if seq == nil || !workspace.Plain(seq) || workspace.IndexByID(seq, id) != at || !workspace.Plain(seq.Content[at]) {
+				return []workspace.Problem{anchored(rel, fmt.Sprintf("findings[%d]", at))}
+			}
+			if k, ok := workspace.SetKey(seq.Content[at], findingOrder, "status", workspace.Str(status)); !ok {
+				return []workspace.Problem{anchored(rel, fmt.Sprintf("findings[%d].%s", at, k))}
+			}
+			r.Findings[at].Status = status
+		}
+		return nil
+	}
+	if ps := mark(resolve, "resolved", "resolve[0]"); len(ps) > 0 {
+		return nil, nil, ps
+	}
+	if ps := mark(waive, "waived", "waive[0]"); len(ps) > 0 {
+		return nil, nil, ps
+	}
+	if k, ok := workspace.SetKey(m, reviewOrder, "draft_sha256", workspace.Str(draftSHA)); !ok {
+		return nil, nil, []workspace.Problem{anchored(rel, k)}
+	}
+	r.DraftSHA256 = draftSHA
+	// 追加 reaffirms 序列（不存在时创建）与一条重申记录。
+	var re *yaml.Node
+	for i := 0; i+1 < len(m.Content); i += 2 {
+		if m.Content[i].Value == "reaffirms" {
+			re = m.Content[i+1]
+		}
+	}
+	if re == nil {
+		if k, ok := workspace.SetKey(m, reviewOrder, "reaffirms", &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq"}); !ok {
+			return nil, nil, []workspace.Problem{anchored(rel, k)}
+		}
+		for i := 0; i+1 < len(m.Content); i += 2 {
+			if m.Content[i].Value == "reaffirms" {
+				re = m.Content[i+1]
+			}
+		}
+	} else if !workspace.Plain(re) {
+		return nil, nil, []workspace.Problem{anchored(rel, "reaffirms")}
+	}
+	item := &yaml.Node{Kind: yaml.MappingNode, Content: []*yaml.Node{}}
+	seqOf := func(vs []string) *yaml.Node {
+		s := &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq"}
+		for _, v := range vs {
+			s.Content = append(s.Content, workspace.Str(v))
+		}
+		return s
+	}
+	add := func(k string, v *yaml.Node) { item.Content = append(item.Content, workspace.Str(k), v) }
+	add("at", workspace.Str(now.UTC().Format("2006-01-02T15:04:05Z")))
+	add("summary", workspace.Str(summary))
+	add("draft_sha256", workspace.Str(draftSHA))
+	add("resolved", seqOf(nonNilIDs(resolve)))
+	add("waived", seqOf(nonNilIDs(waive)))
+	re.Content = append(re.Content, item)
+	r.Reaffirms = append(r.Reaffirms, Reaffirm{At: now.UTC().Format("2006-01-02T15:04:05Z"), Summary: summary, DraftSHA256: draftSHA,
+		Resolved: nonNilIDs(resolve), Waived: nonNilIDs(waive)})
+	data, ps := encodeChecked("review", rel, doc)
+	if len(ps) > 0 {
+		return nil, nil, ps
+	}
+	if err := workspace.WriteFile(root, rel, data); err != nil {
+		return nil, nil, []workspace.Problem{errorAt(workspace.CodeWriteFailed, rel, "", "写入审稿失败："+err.Error())}
+	}
+	return &r, []string{rel}, nil
+}
+
+// nonNilIDs 返回去空白后的 id 列表；结果不为 nil。
+func nonNilIDs(ids []string) []string {
+	out := []string{}
+	for _, id := range ids {
+		if id = strings.TrimSpace(id); id != "" {
+			out = append(out, id)
+		}
+	}
+	return out
 }
 
 // Accept 以命令行渠道（cli）验收，见 AcceptVia。

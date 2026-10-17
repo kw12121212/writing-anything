@@ -223,8 +223,10 @@ func TestLintClaims(t *testing.T) {
 	if len(findingsOf(res.Findings, "claim-candidates")) != 0 {
 		t.Fatalf("covered candidate: %v", res.Findings)
 	}
-	// claim-with-reference-only
-	mustRunWS(t, dir, "claim", "add", "my-post", "--kind", "data", "--text", "数据", "--sources", "src-r")
+	// claim-with-reference-only：写入校验会拒绝新造这种论断，这里模拟旧工作区遗留的误分类状态（lint 仍须报告）。
+	mustRunWS(t, dir, "claim", "add", "my-post", "--kind", "fact", "--text", "数据", "--sources", "src-r")
+	writeFile(t, wsPath(dir, ".writing-anything/works/my-post/claims.yaml"),
+		strings.Replace(readFile(t, wsPath(dir, ".writing-anything/works/my-post/claims.yaml")), "kind: fact", "kind: data", 1))
 	_, res = runLintJSON(t, dir, "")
 	if c := findingsOf(res.Findings, "claims"); len(c) != 2 || !strings.Contains(c[0]["message"].(string)+c[1]["message"].(string), "src-r（reference）") {
 		t.Fatalf("claim-with-reference-only: %v", c)

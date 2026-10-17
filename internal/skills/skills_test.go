@@ -199,6 +199,25 @@ func TestSkillHistoryCoversCurrent(t *testing.T) {
 	}
 }
 
+// 每个技能都带「会话协议」一节：可执行 wrapper 模板（set -euo pipefail、失败即停）、吞错禁止与
+// harness 提问回写决策队列的映射（skill-session-protocol-scripts）。
+func TestSessionProtocolSection(t *testing.T) {
+	for _, s := range All() {
+		body := string(s.Content)
+		for _, want := range []string{
+			"## 会话协议（可执行模板）",
+			"set -euo pipefail",
+			"绝不 `|| true`、管道或输出重定向吞掉失败",
+			"wa-cli decision add --question",
+			"wa-cli decide <决策 id>",
+		} {
+			if !strings.Contains(body, want) {
+				t.Errorf("%s: session protocol lacks %q", s.Name, want)
+			}
+		}
+	}
+}
+
 // 旧版本只按本技能自己的历史判定；混合情况下作者改过的技能阻止全部写入，旧版本文件也不更新；CRLF 的旧版本同样识别。
 func TestInstallOutdatedEdgeCases(t *testing.T) {
 	old, err := os.ReadFile(filepath.Join("testdata", "wa-auto-5ca203b.md"))

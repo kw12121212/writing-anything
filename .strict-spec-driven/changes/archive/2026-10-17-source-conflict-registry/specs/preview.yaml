@@ -1,0 +1,21 @@
+schema: strict-spec-driven/delta-spec/v1
+schema_version: 1
+artifact_type: delta_spec
+schema_file: templates/strict-spec-driven/schemas/delta-spec.yaml
+target_spec: preview
+operations:
+  ADDED: {}
+  MODIFIED:
+    preview-confirm-queue:
+      strength: MUST
+      statement: wa-cli preview <unit> --serve 的阅读页（GET /）必须按当前工作区状态列出单元所在作品的待作者确认区：当前阶段的必需产物含 acceptance 且没有有效验收（没有 acceptance.yaml，或其不通过校验、过期或关卡强度更宽松）的单元（kind 为 acceptance）、units 为空或含该作品单元的 open 决策（kind 为 decision，带选项、推荐与理由，没有选项时需要作者答复；带冲突（Conflict）载荷的决策在说明前拼接冲突摘要：主题与两说各出自的素材及引文，请作者裁定采信哪一方）、规划类写作法当前步已起草未确认的单元（kind 为 plan）、状态台账与知情表中 status 为 proposed 的条目（kind 为 state 与 knowledge，可以确认或拒绝）以及已生成未确认的卷末检查点（kind 为 volume）；每项带作者填写原话摘要的输入框与确认按钮，没有事项时显示「没有待作者确认的事项」。工作区 gate_level 为 strict 时另列出待作者复核区：该作品的待作者复核项（见 review 主规格的 review-show-author-review），每项带默认勾选的复选框（值为 key）与「复核所选」按钮，没有时显示「没有待作者复核的确认」；其他关卡强度不显示待作者复核区。静态阅读页（不加 --serve）不含这两个区。
+      scenarios:
+        page-lists-queue:
+          - GIVEN: gate_level 为 strict，作品 my-novel 的 scene-9 处于审稿阶段，scene-1 经 wa-cli accept 验收未复核
+          - WHEN: 带令牌 GET /（wa-cli preview my-novel --serve 正在运行）
+          - THEN: 页面含「待作者确认」区与 my-novel/scene-9 的验收项，含「待作者复核」区与 key 以 acceptance:my-novel/scene-1@ 开头的复选框
+        standard-no-review-section:
+          - GIVEN: 同上，但 gate_level 为 standard
+          - WHEN: 带令牌 GET /
+          - THEN: 页面不含待作者复核区
+  REMOVED: {}

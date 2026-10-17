@@ -119,6 +119,8 @@ func TestCandidateCoverage(t *testing.T) {
 		// 论断只覆盖了句子中无关的部分，或是 fact 类型：不算已登记。
 		{[]Claim{{Kind: "experience", Text: "迁移"}}, "亲历、数据"},
 		{[]Claim{{Kind: "fact", Text: "我曾经负责迁移，延迟降低了 90%"}}, "亲历、数据"},
+		// 关联了素材的 fact 论断覆盖数据候选；亲历候选仍只认 cover_kinds。
+		{[]Claim{{Kind: "fact", Text: "我曾经负责迁移，延迟降低了 90%", Sources: []ClaimSource{{"src-r", "reference"}}}}, "亲历"},
 	}
 	// 亲历区间从标记词之前最近的代词开始：前面泛指的「我们」不要求论断一并覆盖。
 	if res, _ := Run("我们知道，我曾经踩过这个坑。", r, "draft.md", Input{Claims: []Claim{{Kind: "experience", Text: "我曾经踩过这个坑"}}}); len(res.Findings) != 0 {
@@ -154,16 +156,59 @@ func TestCandidateCoverage(t *testing.T) {
 	}
 }
 
+// 关联了素材的 fact 论断覆盖数据候选；未参与覆盖的论断在发现项 message 末尾按 claims.yaml 顺序说明原因。
+func TestCandidateFactCoverAndNotes(t *testing.T) {
+	r := rules(map[string]string{"cc": "claim-candidates"}, nil)
+	sourced := []Claim{{ID: "claim-1", Kind: "fact", Text: "我曾经负责迁移，延迟降低了 90%", Sources: []ClaimSource{{"src-r", "reference"}}}}
+	// 关联了素材的 fact 论断：数据候选被覆盖，亲历候选仍报告，说明其类型不在 cover_kinds 内。
+	res, _ := Run("我曾经负责迁移，延迟降低了 90%。", r, "draft.md", Input{Claims: sourced})
+	if len(res.Findings) != 1 || !strings.Contains(res.Findings[0].Message, "亲历") || strings.Contains(res.Findings[0].Message, "数据") {
+		t.Fatalf("sourced fact: %+v", res.Findings)
+	}
+	if msg := res.Findings[0].Message; !strings.Contains(msg, "论断 claim-1（fact）的类型不在 claim-candidates 的 cover_kinds（默认 experience、opinion、case、data）内，未参与覆盖") ||
+		strings.Contains(msg, "未关联素材") {
+		t.Fatalf("sourced fact note: %s", msg)
+	}
+	// 数据句子被关联了素材的 fact 论断整段覆盖：不再报告。
+	sourcedData := []Claim{{ID: "claim-1b", Kind: "fact", Text: "延迟降低了 90%", Sources: []ClaimSource{{"src-r", "reference"}}}}
+	if res, _ = Run("延迟降低了 90%。", r, "draft.md", Input{Claims: sourcedData}); len(res.Findings) != 0 {
+		t.Fatalf("sourced fact data: %+v", res.Findings)
+	}
+	// 未关联素材的 fact 论断不覆盖数据候选，说明原因是未关联素材而不是类型。
+	res, _ = Run("延迟降低了 90%。", r, "draft.md", Input{Claims: []Claim{{ID: "claim-2", Kind: "fact", Text: "延迟降低了 90%"}}})
+	if len(res.Findings) != 1 || !strings.Contains(res.Findings[0].Message, "论断 claim-2（fact）未关联素材，不能覆盖数据候选") ||
+		strings.Contains(res.Findings[0].Message, "未参与覆盖") {
+		t.Fatalf("unsourced fact data: %+v", res.Findings)
+	}
+	// 同一论断未覆盖亲历与数据两种区间时，两句说明都追加。
+	res, _ = Run("我曾经负责迁移，延迟降低了 90%。", r, "draft.md", Input{Claims: []Claim{{ID: "claim-3", Kind: "fact", Text: "我曾经负责迁移，延迟降低了 90%"}}})
+	if len(res.Findings) != 1 {
+		t.Fatalf("unsourced fact both: %+v", res.Findings)
+	}
+	msg := res.Findings[0].Message
+	if !strings.Contains(msg, "论断 claim-3（fact）的类型不在 claim-candidates 的 cover_kinds（默认 experience、opinion、case、data）内，未参与覆盖") ||
+		!strings.Contains(msg, "论断 claim-3（fact）未关联素材，不能覆盖数据候选") {
+		t.Fatalf("unsourced fact notes: %s", msg)
+	}
+	// cover_kinds 配置为 [fact] 时，experience 论断不参与覆盖，说明列出实际取值。
+	r2 := rules(map[string]string{"cc": "claim-candidates"}, map[string]map[string]any{"cc": {"cover_kinds": []any{"fact"}}})
+	res, _ = Run("我曾经踩过坑。", r2, "draft.md", Input{Claims: []Claim{{ID: "claim-4", Kind: "experience", Text: "我曾经踩过坑"}}})
+	if len(res.Findings) != 1 || !strings.Contains(res.Findings[0].Message, "论断 claim-4（experience）的类型不在 claim-candidates 的 cover_kinds（fact）内，未参与覆盖") {
+		t.Fatalf("custom cover_kinds: %+v", res.Findings)
+	}
+}
+
 // 句子切分与数据模式的边界：标题与引用块不检查；全角空白后的列、全角数字、百分之与中文倍数；text 为原文。
 func TestCandidateEdges(t *testing.T) {
 	r := rules(map[string]string{"cc": "claim-candidates"}, nil)
-	content := "## 我曾经踩过的坑\n\n> 我们去年增长了 50%。\n\n\u3000吞吐提升５０％。成本降为百分之十。性能提高三倍。用 `50%` 说明我曾经负责。"
+	content := "## 我曾经踩过的坑\n\n## 0.81 秒、33.2 万、2028\n\n> 我们去年增长了 50%。\n\n\u3000吞吐提升５０％。成本降为百分之十。性能提高三倍。用 `50%` 说明我曾经负责。"
 	res, _ := Run(content, r, "draft.md", Input{})
 	var got []string
 	for _, f := range res.Findings {
 		got = append(got, fmt.Sprintf("%d:%d:%s", f.Line, f.Column, f.Text))
 	}
-	want := []string{"3:1:> 我们去年增长了 50%。", "5:2:吞吐提升５０％。", "5:10:成本降为百分之十。", "5:19:性能提高三倍。", "5:26:用 `50%` 说明我曾经负责。"}
+	// 两个标题行（含数字标题）都不产生任何候选：标题是电报式标签，其中的数字应在正文句子中登记。
+	want := []string{"5:1:> 我们去年增长了 50%。", "7:2:吞吐提升５０％。", "7:10:成本降为百分之十。", "7:19:性能提高三倍。", "7:26:用 `50%` 说明我曾经负责。"}
 	if strings.Join(got, "|") != strings.Join(want, "|") {
 		t.Fatalf("candidates = %q, want %q", got, want)
 	}
@@ -176,5 +221,37 @@ func TestCandidateEdges(t *testing.T) {
 	res, ps := Run(strings.Repeat("提升 50%。", MaxHits+5), r, "draft.md", Input{})
 	if len(res.Findings) != MaxHits || len(ps) != 1 || ps[0].Code != CodeTruncated {
 		t.Fatalf("truncated: %d findings, %+v", len(res.Findings), ps)
+	}
+}
+
+// checkConflicts（conflict-sources）：open 冲突的任一方引文（规范化后）出现在正文报 error，两说都命中各一条；
+// 围栏代码块内不报；句末标点与右引号在匹配前去掉。
+func TestCheckConflicts(t *testing.T) {
+	r := rules(map[string]string{"conflicts": "conflict-sources"}, nil)
+	in := Input{Conflicts: []Conflict{{ID: "dec-1", About: "喷嘴数量",
+		A: "10 个喷嘴。", B: "4 个推进器」", SrcA: "src-a", SrcB: "src-r"}}}
+	res, _ := Run("一段介绍。\n\n官方说法是 10 个喷嘴，另一方坚持 4 个推进器。\n\n```\n10 个喷嘴\n```\n", r, "draft.md", in)
+	var msgs []string
+	for _, f := range res.Findings {
+		msgs = append(msgs, f.Message)
+	}
+	if len(res.Findings) != 2 {
+		t.Fatalf("findings = %d, want 2 (both sides): %+v", len(res.Findings), res.Findings)
+	}
+	for _, m := range msgs {
+		if !strings.Contains(m, "喷嘴数量") || !strings.Contains(m, "src-a") || !strings.Contains(m, "src-r") || !strings.Contains(m, "wa-cli decide dec-1") {
+			t.Fatalf("message lacks about/sources/decide: %s", m)
+		}
+	}
+	// 围栏内的引文不产生发现项：第三段在代码块中。
+	for _, f := range res.Findings {
+		if f.Line == 7 {
+			t.Fatalf("fenced code produced a finding: %+v", f)
+		}
+	}
+	// 无冲突时不报。
+	res, _ = Run("官方说法是 10 个喷嘴。", r, "draft.md", Input{})
+	if len(res.Findings) != 0 {
+		t.Fatalf("no conflicts: %+v", res.Findings)
 	}
 }

@@ -1,0 +1,22 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: skill-session-protocol-scripts
+  status: proposed
+summary:
+  what:
+    - 十二个 wa-* 技能统一增加「会话协议」一节：可执行的 wrapper 模板（set -euo pipefail、失败即停读诊断 next、禁用管道或重定向吞错）与「harness 提问工具得到的作者决定回写决策队列」的映射指引；skills 主规格 builtin-skills 同步
+  why:
+    - 反馈 P1-3（L3 脚本层）：方法论是「提示词是劝告，机制是约束」——会话纪律只存在于 prose 时，agent 仍会 || true 吞错（下游实测 review record 失败被吞，靠事后 stale 才暴露，正是 P0-1 案例）；harness 提问工具得到的作者决定不回写 decision 则审计链断裂（IMPROVEMENTS Agent 纪律自查项）
+scope:
+  in:
+    - internal/skills/skills/wa-*/SKILL.md（十二个技能正文各加一节，内容一致以保证单技能自包含）；internal/skills/history.txt（内容哈希登记）；internal/skills 的结构校验测试（断言每技能含会话协议一节与模板要素）；skills 主规格 builtin-skills
+  out:
+    - 随技能分发的独立脚本文件（技能格式仍是单 SKILL.md，模板是复制即用的正文段落）；strict-spec-driven 侧的任何依赖（产品运行时不得依赖）
+unchanged_behavior:
+  - 技能文件头格式与 name/description 约束；「必须停下来问作者」一节；命令引用仍须是真实命令与真实参数（模板中 wa-cli 只以参数转发形式出现，不引入伪命令）；skills list/install 行为
+roadmap:
+  milestone: boundary-semantics-silent-failure
+  planned_change: skill-session-protocol-scripts

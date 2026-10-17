@@ -40,7 +40,7 @@ func TestTechBlogEndToEnd(t *testing.T) {
 		step(fixture(t, s[2]), "source", "add", "--type", s[1], "--id", s[0], "--title", s[2])
 	}
 	// 写作简报：受众、目的与有出处的核心观点；默认写作法为金字塔原理与 SCQA。
-	step("", "brief", "set", "pool", "--audience", "后端工程师", "--purpose", "讲清楚怎样用连接复用降低接口延迟", "--sources", "note,talk,go-docs")
+	step("", "brief", "set", "pool", "--audience", "后端工程师", "--audience-sources", "note", "--purpose", "讲清楚怎样用连接复用降低接口延迟", "--purpose-sources", "note", "--sources", "note,talk,go-docs")
 	step("", "brief", "set", "pool", "--message", "reuse", "--message-text", "复用连接是降低延迟最直接的办法", "--message-sources", "note,go-docs")
 	step("", "brief", "set", "pool", "--message", "body", "--message-text", "读完并关闭响应体，连接才能回到连接池", "--message-sources", "talk,go-docs")
 	step("", "advance", "pool")
@@ -150,7 +150,7 @@ func TestShortStoryEndToEnd(t *testing.T) {
 	step("", "canon", "add", "lamp", "--type", "character", "--name", "守灯人", "--text", "五十岁，左手有旧伤，守灯三十年")
 	// 写作简报：前提与视角先不关联素材，关键转折（核心观点）也没有出处。
 	step("", "brief", "set", "lamp", "--premise", "灯里的精灵每撒一次谎，灯就暗一分", "--theme", "善意的谎言",
-		"--pov-person", "third", "--pov-character", "守灯人", "--length", "2000-8000",
+		"--pov-person", "third", "--pov-character", "守灯人", "--pov-sources", "idea", "--length", "2000-8000", "--length-sources", "idea",
 		"--message", "turn-1", "--message-text", "守灯人发现谎言与灯焰的联系")
 	d := fail("brief.unsourced-premise", "advance", "lamp")
 	if d.Path != ".writing-anything/works/lamp/brief.yaml" || !hasNext(d, "wa-cli help brief set --json") ||
@@ -483,8 +483,8 @@ func TestShortStoryCanonEndToEnd(t *testing.T) {
 	step("", "canon", "add", "lighthouse", "--type", "world-rule", "--text", "灯油只能燃烧到黎明", "--sources", "notes", "--pin")
 	// 写作简报：前提与关键转折都关联作者素材（short-story 的推进关卡）。
 	step("", "brief", "set", "lighthouse", "--premise", "守灯人必须在天亮前弄清精灵的身份", "--premise-sources", "notes")
-	step("", "brief", "set", "lighthouse", "--pov-person", "third")
-	step("", "brief", "set", "lighthouse", "--length", "2000-8000")
+	step("", "brief", "set", "lighthouse", "--pov-person", "third", "--pov-sources", "notes")
+	step("", "brief", "set", "lighthouse", "--length", "2000-8000", "--length-sources", "notes")
 	step("", "brief", "set", "lighthouse", "--message", "reveal", "--message-text", "精灵就是当年救过守灯人的船长", "--message-sources", "notes")
 	// Agent 试图修改作者钦定的条目：被拒绝，自动生成阻塞决策，canon.yaml 不变。
 	_, res := refuse("canon", "set", "lighthouse", "canon-4", "--text", "灯油能烧两天")
@@ -536,7 +536,7 @@ func TestShortStoryCurve(t *testing.T) {
 	step("", "new", "short-story", "lamp")
 	step("守灯人笔记：灯里的精灵每撒一次谎，灯就暗一分。", "source", "add", "--type", "author-note", "--id", "idea", "--title", "前提笔记")
 	step("", "brief", "set", "lamp", "--premise", "灯里的精灵每撒一次谎，灯就暗一分", "--premise-sources", "idea",
-		"--theme", "善意的谎言", "--pov-person", "third", "--pov-character", "守灯人", "--length", "1000-8000",
+		"--theme", "善意的谎言", "--pov-person", "third", "--pov-character", "守灯人", "--pov-sources", "idea", "--length", "1000-8000", "--length-sources", "idea",
 		"--message", "turn-1", "--message-text", "守灯人发现谎言与灯焰的联系", "--message-sources", "idea")
 	step("", "advance", "lamp")
 	for _, b := range []struct{ id, title, role string }{
@@ -560,7 +560,7 @@ func TestShortStoryCurve(t *testing.T) {
 		step(fmt.Sprintf(session, id), "metrics", "record", "lamp/s1")
 	}
 	// curve 列出张力曲线的偏离发现项；changedPaths 为空（只读），发现项不影响退出码。
-	code, out := runWS(t, dir, "curve", "lamp", "--json")
+	code, out := runWS(t, dir, "curve", "lamp")
 	if code != 0 {
 		t.Fatalf("curve: exit code = %d, diagnostics = %+v", code, out.Diagnostics)
 	}

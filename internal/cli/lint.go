@@ -8,6 +8,7 @@ import (
 
 	"github.com/kw12121212/writing-anything/internal/brief"
 	"github.com/kw12121212/writing-anything/internal/catalog"
+	"github.com/kw12121212/writing-anything/internal/decision"
 	"github.com/kw12121212/writing-anything/internal/draft"
 	"github.com/kw12121212/writing-anything/internal/lint"
 	"github.com/kw12121212/writing-anything/internal/outline"
@@ -132,6 +133,36 @@ func lintClaims(dir string, w *work.Work, u *work.Unit) (claims []lint.Claim, in
 	return claims, len(ps) > 0, ps
 }
 
+// conflictRules 报告合并结果中是否有生效的 conflict-sources 规则；没有时 lint 不读取决策队列的冲突载荷。
+func conflictRules(r *resolve.Resolved) bool {
+	for _, rule := range r.Rules {
+		if rule.Enabled && fmt.Sprint(rule.Type.Value) == "conflict-sources" {
+			return true
+		}
+	}
+	return false
+}
+
+// lintConflicts 返回关联作品 w（或不关联任何单元）且仍 open 的冲突（Conflict）决策载荷；决策队列无法加载时
+// unloaded 为 true（调用方报告 warning：静默跳过正是本里程碑要消灭的失败形态）。
+func lintConflicts(dir string, w *work.Work) (out []lint.Conflict, unloaded bool) {
+	ds, _, ps := decision.Load(dir)
+	if len(ps) > 0 {
+		return nil, true
+	}
+	for _, d := range ds {
+		if d.Status != decision.StatusOpen || d.Conflict == nil {
+			continue
+		}
+		if len(d.Units) > 0 && !slices.ContainsFunc(d.Units, func(ref string) bool { return inWork(w, ref) }) {
+			continue
+		}
+		out = append(out, lint.Conflict{ID: d.ID, About: d.Conflict.About,
+			A: d.Conflict.A.Quote, B: d.Conflict.B.Quote, SrcA: d.Conflict.A.Source, SrcB: d.Conflict.B.Source})
+	}
+	return out, false
+}
+
 // povRules 报告合并结果中是否有生效的 pov-consistency 规则；没有时 lint 不读取写作简报。
 func povRules(r *resolve.Resolved) bool {
 	for _, rule := range r.Rules {
@@ -241,8 +272,17 @@ func runUnitLintWith(dir string, w *work.Work, u *work.Unit, deps lintDeps) (out
 	if povRules(r) {
 		in.POVPerson = lintPOV(dir, w, u)
 	}
+	var conflictQueueWarning []workspace.Problem
+	if conflictRules(r) {
+		var unloaded bool
+		in.Conflicts, unloaded = lintConflicts(dir, w)
+		if unloaded {
+			conflictQueueWarning = append(conflictQueueWarning, workspace.Problem{Code: decision.CodeInvalidQueue, Severity: workspace.SeverityWarning,
+				Path: decision.Path, Message: "决策队列（Decision Queue）无法加载，冲突（Conflict）检查未运行；下一步可用 wa-cli validate --dir " + dir + " --json 查看队列问题"})
+		}
+	}
 	out, ps = lint.Run(string(content), r, rel, in)
-	return out, r, content, slices.Concat(problems, warnings, cps, ps, beatPositions(dir, w, u, content, rel, deps.story))
+	return out, r, content, slices.Concat(problems, warnings, cps, conflictQueueWarning, ps, beatPositions(dir, w, u, content, rel, deps.story))
 }
 
 // beatPositions 核对成稿中节拍的位置，超出范围时给出 warning（只提示，不阻塞）：单元自身选用结构类写作法时按正文同名标题核对；

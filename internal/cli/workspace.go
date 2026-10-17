@@ -692,7 +692,7 @@ func next(p workspace.Problem, dir string) []string {
 		}
 		return []string{"wa-cli help knowledge set --json", validateAll}
 	case decision.CodeBlocking, brief.CodeMissingField, brief.CodeUnsourcedMessage, brief.CodeUnconfirmedMessage,
-		brief.CodeUnsourcedPremise, brief.CodeUnconfirmedPremise, brief.CodeInvalid,
+		brief.CodeUnsourcedPremise, brief.CodeUnconfirmedPremise, brief.CodeUnsourcedField, brief.CodeUnconfirmedField, brief.CodeInvalid,
 		outline.CodeInvalid, outline.CodeUncoveredMessage, outline.CodeMissingReason, marketing.CodeInvalid, marketing.CodeMissingField, marketing.CodeTooManyHeadlines, marketing.CodeHeadlineUnasked, marketing.CodeHeadlineStale:
 		return blockerNext(dir, p.Code, p.Path)
 	case outline.CodeMissingPart, outline.CodeMethodOrder, outline.CodeUnknownRole:
@@ -892,6 +892,7 @@ func finish(inv *invocation, v enveloped, text func(io.Writer) error) int {
 	if err != nil {
 		return writeFailed(inv.stderr, err)
 	}
+	auditRememberCodes(r.Diagnostics)
 	if hasError(r.Diagnostics) {
 		return exitError
 	}
