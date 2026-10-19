@@ -1,0 +1,12 @@
+schema: strict-spec-driven/planned-change/v1
+schema_version: 1
+artifact_type: planned_change
+schema_file: ../../templates/strict-spec-driven/schemas/planned-change.yaml
+planned_change:
+  id: artifact-views
+  milestone: dsh-workspace-viewer
+status: planned
+summary: 产物语义视图与高亮：写作简报（Brief）、大纲（Outline）、论断（Claim）与出处、作者反馈、决策、审稿与验收等产物按语义卡片化展示并可切换到 YAML 源码高亮视图；正文 Markdown 提供渲染阅读视图与源码高亮
+details: YAML 高亮为必须项：键、标量、数组/映射结构、注释、锚点与别名着色；结构化视图按产物 Schema 字段组织成卡片（如 brief 的受众/目的/核心观点、outline 的层级与覆盖、claims 的论断-素材关联），两种视图一键切换并保持滚动位置。Markdown：渲染阅读视图（标题、列表、代码块、引用、表格）与源码高亮视图切换。claims 关联的素材引用可跳转到素材视图。界面严格只读：不出现任何编辑、写入或确认控件（确认与复核属于 wa-cli 阅读页（Reading View）的职责）。高亮实现打包进客户端 bundle，不依赖网络与外部 CDN；性能上对大 YAML（长篇产物）做虚拟化或折叠处理。
+depends_on:
+  - overview-navigation

@@ -1,0 +1,50 @@
+schema: strict-spec-driven/roadmap-milestone/v2
+schema_version: 2
+artifact_type: roadmap_milestone
+schema_file: ../schemas/roadmap-milestone.yaml
+milestone:
+  dsh-workspace-viewer:
+    title: DSH 工作区查看插件（DSH Workspace Viewer）
+order: 600
+goal: 为 DeepSeek Harness（DSH）开发一个只读 Web 插件：在 Web GUI 中以重新设计的界面查看 .writing-anything/ 工作区的结构化内容——作品（Work）与单元（Unit）树、生命周期（Lifecycle）阶段与进度、写作简报（Brief）、大纲（Outline）、论断（Claim）与出处（Provenance）、素材（Source）、决策队列（Decision Queue）、审稿与验收证据等；不是把目录文件平铺出来，而是按写作概念重新组织信息架构；YAML 与 Markdown 均有语法高亮；插件作为独立 TypeScript 包在本仓库开发，可装入 DSH web profile。
+scope:
+  in:
+    - DSH 插件包骨架：bundle patch、host 入口（Node/cordis）与 web client 入口，声明 engines.dsh 兼容范围
+    - host 侧只读快照服务：聚合 .writing-anything/ 的配置、单元树、素材、决策、规范包（Pack）与待复核摘要为结构化数据
+    - 重设计的查看界面：总览仪表盘、单元树导航、按语义组织的产物视图（非文件浏览器）
+    - YAML 与 Markdown 语法高亮、明暗主题适配、空态与错误态
+    - 插件自身构建、类型检查、单元测试与安装使用文档
+  out:
+    - 任何写入或变更工作区产物的能力：插件严格只读，作者确认与复核仍走 wa-cli 阅读页（Reading View）
+    - wa-cli（Go 内核）行为改动与 MCP、Skill 改动
+    - DSH Desktop/Electron 端适配与 npm 市场发布
+    - 多项目管理的复杂配置界面
+done_criteria:
+  - '插件经 link: 依赖装入本机 web profile 后，Web GUI 出现工作区查看面板，能浏览一个真实写作项目'
+  - 总览、单元树导航、产物语义视图可用；YAML 可在结构化视图与源码高亮视图间切换；Markdown 正文既有渲染阅读视图也有源码高亮
+  - 快照服务不含任何写路径，测试覆盖读取逻辑与只读约束；Go 完整回归不受影响仍通过
+  - 安装与使用文档就绪，新增术语已按首次出现规则写入 docs/GLOSSARY.md
+intake_questions:
+  - id: data-source
+    question: 快照数据来源走 wa-cli 只读命令还是插件直接解析工作区文件？
+    context: wa-cli 是唯一真相来源，status/validate --json 覆盖单元树与诊断，但部分产物全文细节未必有对应只读命令；直接解析文件零进程开销但要在插件里重复 Schema 逻辑。
+    impact: 决定 host 服务实现方式与对 wa-cli 版本的耦合强度。
+    recommendation: 已定案：混合方案——结构状态走 wa-cli --json，产物全文按 JSON Schema 只读解析文件（依据仓库「wa-cli 是唯一真相来源、接入层薄封装」约定）；提案阶段只细化命令选择与字段映射，不再重新比选。
+  - id: workspace-root
+    question: 插件展示哪个工作区：GUI 进程工作区根、会话工作目录，还是面板内可切换的项目路径？
+    context: DSH 以调用目录为工作区根，多会话可能各有工作目录；.writing-anything/ 位于项目目录。
+    impact: 决定 host 如何定位与刷新数据以及多项目下的行为。
+    recommendation: 已定案：默认跟随 DSH 工作区根/会话工作目录，面板内支持切换到显式输入的项目路径；定位不到 .writing-anything 时进入空态指引（wa-cli init 提示），不报错崩溃。
+planned_changes: {}
+dependencies:
+  - '本机 DSH 0.2.x：web profile 可用，dsh plugin / link: 安装路径可用'
+risks:
+  - DSH 插件与客户端注入 API 处于 0.2.x rc 阶段，可能随版本演进破坏兼容；缓解：声明 engines.dsh 范围，以已上架的第三方插件为参考实现，必要时按 DSH 版本豁免机制处理
+  - 长篇小说类大工作区的快照体积与刷新开销；缓解：按作品/单元分层按需拉取
+  - wa-cli --json 输出字段在 0.x 版本仍可能演进；缓解：快照层隔离 CLI 输出映射，缺字段时容错降级而不是失败
+status: proposed
+notes:
+  - 术语：DSH 插件（DSH Plugin）指 DeepSeek Harness 的插件包，与本产品规范包（Pack）是不同概念，首个实现变更须把新词条加入 docs/GLOSSARY.md
+  - 产品定位：帮作者与 Agent 查看工作区状态，不替作者决策；界面只读
+  - 评审定案：intake data-source（混合数据来源）与 workspace-root（默认跟随工作区根、面板可切换）已按 recommendation 定案，提案与实现直接沿用，不再作为开放问题重新比选。
+details: 信息架构按写作概念组织：总览（作品卡片：阶段、进度、阻塞项）→ 作品 → 单元树 → 产物语义视图；不复制目录树。产物视图区分两种呈现：语义卡片（按产物的 Schema 字段组织）与源码视图（YAML 语法高亮）；正文 Markdown 提供渲染阅读视图与源码高亮。host 侧负责定位工作区、产出只读快照（含 validate 诊断的错误态，覆盖各单元产物全文与 draft 正文），client 侧负责面板注册、导航与渲染，高亮实现打包进客户端 bundle 不依赖网络。插件目录建议放 plugins/ 下，最终目录与包名在提案阶段定案。

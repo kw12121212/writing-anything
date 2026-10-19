@@ -1,0 +1,36 @@
+schema: strict-spec-driven/main-spec/v1
+schema_version: 1
+artifact_type: main_spec
+schema_file: templates/strict-spec-driven/schemas/main-spec.yaml
+spec:
+  id: dsh-plugin
+  title: DSH 插件（DSH Plugin）
+requirements:
+  panel-visible:
+    strength: MUST
+    statement: 插件装入 DSH web profile 后，Web GUI 必须提供该插件的面板入口，选中后加载出最小只读查看面板
+    scenarios:
+      gui-entry-load:
+        - GIVEN: '插件已通过 link: 依赖装入本机 DSH 的 web profile'
+        - WHEN: 打开 Web GUI 并从面板入口选中该插件的面板
+        - THEN: 侧栏出现插件面板入口，面板完成加载并显示内容，不报错、不空白崩溃
+  workspace-root-status:
+    strength: MUST
+    statement: 面板必须默认按 DSH 工作区根定位项目目录并显示 .writing-anything/ 工作区的存在状态；定位不到时给出空态指引而不是报错
+    scenarios:
+      workspace-found:
+        - GIVEN: DSH 工作区根下存在 .writing-anything/ 工作区
+        - WHEN: 打开插件面板
+        - THEN: 面板显示定位到的项目目录与工作区存在状态
+      workspace-missing:
+        - GIVEN: 定位不到 .writing-anything/ 工作区
+        - WHEN: 打开插件面板
+        - THEN: 面板显示空态指引，提示可用 wa-cli init 创建工作区，插件不报错崩溃
+  read-only-workspace:
+    strength: MUST
+    statement: 插件在加载、定位与展示工作区的全过程中不得创建、修改或删除 .writing-anything/ 工作区内的任何产物
+    scenarios:
+      no-workspace-writes:
+        - GIVEN: 插件已装入 web profile，面板尚未打开，.writing-anything/ 内文件清单、内容与修改时间已记录
+        - WHEN: 在 Web GUI 中打开插件面板并完成工作区定位与展示
+        - THEN: .writing-anything/ 内文件的清单、内容与修改时间与打开面板前一致

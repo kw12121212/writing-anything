@@ -1,0 +1,47 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: plugin-scaffold
+sections:
+  Implementation:
+    scaffold-plugin-package:
+      text: '新建 plugins/dsh-writing-viewer/ 独立 TypeScript 包骨架：package.json 声明 dsh.bundle.patch（指向 cordis.patch.yml，insert 一个插件行）、dsh.client（platform: web 与 inject 列表）、engines.dsh 兼容范围与 build/test scripts（tsdown、vitest）；附 tsconfig.json、cordis.patch.yml 与 .gitignore（node_modules 与构建产物）；形状参照已上架第三方 DSH 插件与本机 DSH 0.2.x 的实际要求'
+      status: complete
+    implement-host-entry:
+      text: 实现 host 入口：导出 name 与 apply(ctx, config) 的 cordis 插件；在 apply 中验证取得要展示的项目目录的宿主 API（GUI 进程工作区根/会话工作目录），只读探测其下 .writing-anything/ 的存在性，把定位结果提供给 client；host 侧不含任何写路径
+      status: complete
+    implement-client-entry:
+      text: 实现 web client 入口：以 window.__ModuleLoader__.load 工厂形式构建，注册 root-scoped main 全局面板（可被 ctx.layout.selectPanel 选中）并提供侧栏入口；渲染最小只读面板——定位到的项目目录、.writing-anything/ 存在性，以及定位不到时的空态指引（提示用 wa-cli init 创建工作区，不报错崩溃）
+      status: complete
+    glossary-and-plugin-readme:
+      text: 'docs/GLOSSARY.md 新增「DSH 插件（DSH Plugin）」词条（说明其指 DeepSeek Harness 的插件包、与规范包（Pack）是不同概念），既有词条不变；插件包 README 记录开发、构建、测试步骤与以 link: 依赖装入本机 DSH web profile 的安装方法'
+      status: complete
+  Testing:
+    plugin-build-and-typecheck:
+      text: 插件包构建与类型检查通过（tsdown 构建入口产物，含类型检查），命令在包内 scripts 声明
+      status: complete
+      command: pnpm --dir plugins/dsh-writing-viewer run build
+    plugin-unit-tests:
+      text: vitest 最小单元测试通过：host 工作区定位与 .writing-anything/ 探测逻辑、client 面板注册与空态渲染逻辑
+      status: complete
+      command: pnpm --dir plugins/dsh-writing-viewer run test
+    plugin-load-e2e:
+      text: '以 link: 依赖把插件装入本机 DSH 0.2.x web profile，打开 Web GUI 实测：侧栏出现插件面板入口、面板可加载显示（工作区定位成功与定位不到两种情形各验证一次，后者显示空态指引不崩溃）；把加载证据（步骤与结果）、发现的 DSH API 约束与最终 engines.dsh 范围记录进插件包 README；面板打开前后 .writing-anything/ 无任何文件被创建、修改或删除'
+      status: complete
+    go-full-regression:
+      text: 完整项目回归（vet、build、test、covercheck ≥80）原样通过，证明新增 TypeScript 插件包不影响 Go 工程与覆盖率关卡
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    strict-verify:
+      text: strict-spec-cli verify plugin-scaffold 通过（含 delta-spec 与 delta-tech 的目标映射与活动冲突检查）
+      status: complete
+      command: strict-spec-cli verify plugin-scaffold
+    archive-merge-reconcile:
+      text: 核对归档前提与合并面：questions.yaml 无未决项、全部任务完成；delta-spec 归档后创建主规格 dsh-plugin、delta-tech 归档后创建标准 dsh-plugin-structure 且索引再生可解析；归档后经 roadmap-status 确认计划变更 plugin-scaffold 的状态推进
+      status: complete
+      command: strict-spec-cli roadmap-status
+testing_gates:
+  validation_task: go-full-regression
+  unit_test_task: plugin-unit-tests

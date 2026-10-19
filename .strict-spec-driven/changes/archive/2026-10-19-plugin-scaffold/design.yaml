@@ -1,0 +1,29 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: plugin-scaffold
+approach:
+  - '仓库根新增 plugins/dsh-writing-viewer/ 独立 TypeScript 包，形状参照已上架第三方 DSH 插件：package.json 声明 dsh.bundle.patch（指向 cordis.patch.yml，insert 一个插件行）、dsh.client（platform: web 与 inject 列表）与 engines.dsh 兼容范围；host 入口导出 name 与 apply(ctx, config)，在其中验证取得项目目录的宿主 API（GUI 进程工作区根/会话工作目录）并以只读方式探测 .writing-anything/；client 入口以 window.__ModuleLoader__.load 工厂形式构建，注册 root-scoped main 全局面板（可被 ctx.layout.selectPanel 选中）并提供侧栏入口，渲染最小只读面板：定位到的项目目录、工作区存在性与定位不到时的空态指引（提示 wa-cli init）。'
+  - '验证以真实宿主为准：插件以 link: 依赖装入本机 DSH 0.2.x web profile，在 Web GUI 实测面板加载（定位成功与空态两种情形），把加载证据、发现的 API 约束与最终 engines.dsh 范围记录进插件包 README；Go 侧完整回归命令原样运行，证明新增 TypeScript 包不影响产品工程。'
+decisions:
+  plugin-directory-and-name:
+    decision: 插件目录与包名定为 plugins/dsh-writing-viewer/，包名 dsh-writing-viewer
+    rationale: 计划变更把目录与包名留给提案定案并建议该值；plugins/ 前缀把 DSH 宿主扩展与 Go 产品树（cmd/、internal/）清晰分离，里程碑后续 4 个计划变更都在同一包上演进，现在定案避免中途改名
+  build-and-test-toolchain:
+    decision: 构建与类型检查用 tsdown（产出宿主可加载的入口 bundle 与类型声明），单元测试用 vitest，全部局限在插件包内
+    rationale: 计划变更允许 tsc 或 tsdown 二选一；tsdown 一步产出 ESM/CJS 入口与 .d.ts，适配宿主对入口文件的加载要求；vitest 与该工具链同源、Node 环境即可运行最小单元测试，不引入浏览器测试设施
+  default-workspace-root:
+    decision: host 侧项目目录来源以 DSH 工作区注册表为准（ctx.workspaceRegistry.list() 的注册表顺序）；插件配置 workspaceRoot 为排他固定；注册表为空时回退 process.cwd()；定位不到进入空态指引
+    rationale: 0.2.1-rc.2 实测：GUI 进程 cwd 是启动目录而非工作区根；workspaceController.follow 挂在按连接的 remotes API 上、静态插件行注入不触发，而 root 作用域的 workspaceRegistry 同步 list() 即为 GUI 的项目目录清单；排他固定使被固定目录无工作区时如实显示空态，也是后续面板路径切换的语义基础
+  delta-spec-home:
+    decision: 新建主规格 dsh-plugin（DSH 插件（DSH Plugin））作为本里程碑各计划变更行为要求的统一落点，本变更收录面板加载、工作区定位与只读约束三条要求
+    rationale: 面板加载与工作区定位是外部可观察行为，却不属于任何既有主规格；集中一个规格避免后续 4 个变更各自制造规格碎片
+alternatives:
+  - option: 直接在本变更实现快照聚合与完整查看界面，一次到位
+    reason: 计划变更明确本变更只做骨架与宿主验证；快照服务与产物视图属 workspace-snapshot、artifact-views 等后续变更，越界会放大 rc 阶段 API 变动的返工面
+  - option: 把插件放进 internal/ 或 cmd/ 下的子目录随 Go 工程管理
+    reason: 产品运行时是 Go 单文件二进制，覆盖率与回归关卡都以 internal/** 为范围，TypeScript 插件混入会污染统计并使「产品运行时不依赖插件」失去结构保证
+risks:
+  - DSH 插件与客户端注入 API 处于 0.2.x rc 阶段，真实加载可能暴露与参考插件形状不一致的约束；缓解：engines.dsh 声明兼容范围，实测证据与 API 约束记录进插件包 README，必要时按 DSH 版本豁免机制在后续变更处理
+  - 'link: 依赖实测依赖本机 DSH 环境可用性；缓解：里程碑依赖已确认本机 0.2.x web profile 可用；环境缺失时按 config.yaml 的 review_evidence.unavailable_behavior 阻塞归档并请人工准备环境'

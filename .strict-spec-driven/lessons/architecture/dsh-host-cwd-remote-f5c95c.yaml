@@ -1,0 +1,19 @@
+schema: strict-spec-driven/lesson/v1
+schema_version: 1
+artifact_type: lesson
+schema_file: templates/strict-spec-driven/schemas/lesson.yaml
+lesson:
+  id: dsh-host-cwd-remote-f5c95c
+  title: DSH 插件 host 侧取项目目录：读工作区注册表，别信进程 cwd，也别注入按连接的 remote 服务
+category: architecture
+status: active
+created_at: '2026-10-19T15:20:03.451Z'
+updated_at: '2026-10-19T15:20:03.451Z'
+context: 为 DSH 插件（DSH Plugin）的 host 入口实现「要展示的项目目录」定位时，需要知道 DSH 宿主里哪一份数据是 GUI 语义下的项目目录清单
+observation: 0.2.1-rc.2 实测：GUI 进程的 process.cwd() 是启动目录（本机为用户主目录），不是工作区根；workspaceController.follow() 挂在按连接的 remotes API 组合上，静态插件行的 ctx.inject(['workspaceController']) 闭包根本不触发（路由只回退到 process-cwd 候选）；root 作用域的 ctx.inject(['workspaceRegistry']) 可注入，list() 同步返回全部注册工作区实体（带规范 path），正是侧栏工作区列表的数据源
+takeaway: 静态插件行要读 DSH 的项目目录清单，注入 workspaceRegistry 并调 list()；process.cwd() 只能作最后回退；按连接的 remote 服务（workspaceController 一类）不要指望从插件行注入，需要时另走 webServer 路由的请求上下文
+applies_when: 在 DSH 插件 host 入口需要获知 GUI 的工作区/项目目录、或发现 ctx.inject 某个 remote 命名空间的闭包不触发时
+occurrences:
+  - origin: plugin-scaffold
+    date: '2026-10-19'
+    evidence: plugins/dsh-writing-viewer/src/host.ts 注入 workspaceRegistry；plugins/dsh-writing-viewer/README.md「实测加载证据与 API 约束」第 1、2 条：注入 workspaceController 的旧构建路由只回 process-cwd，改为 workspaceRegistry 并重启实例后注册表路径与定位结果出现

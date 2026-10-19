@@ -24,6 +24,9 @@ specs:
   - id: decisions
     title: 决策队列（Decision Queue）
     path: .strict-spec-driven/specs/decisions.yaml
+  - id: dsh-plugin
+    title: DSH 插件（DSH Plugin）
+    path: .strict-spec-driven/specs/dsh-plugin.yaml
   - id: export
     title: 导出（Export）
     path: .strict-spec-driven/specs/export.yaml

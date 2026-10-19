@@ -1,0 +1,33 @@
+schema: strict-spec-driven/main-tech/v1
+schema_version: 1
+artifact_type: main_tech
+schema_file: templates/strict-spec-driven/schemas/main-tech.yaml
+standard:
+  id: dsh-plugin-structure
+  title: DSH 插件（DSH Plugin）包结构与隔离
+  category: architecture
+rules:
+  plugin-package-isolation:
+    strength: MUST
+    statement: DSH 插件源码位于 plugins/<name>/ 独立 TypeScript 包：自带 package.json（声明 dsh.bundle.patch、dsh.client 与 engines.dsh）、构建与测试脚本；不得放入 cmd/ 或 internal/，不得加入 Go 模块
+    rationale: 产品运行时是 Go 单文件 wa-cli 二进制，覆盖率与回归关卡都以 internal/** 为范围；插件是 DSH 宿主的扩展，混入 Go 树会污染统计并使「产品运行时不依赖插件」失去结构保证
+    enforcement:
+      method: review
+    examples:
+      good:
+        - plugins/dsh-writing-viewer/package.json 声明 dsh.bundle.patch 指向 cordis.patch.yml，构建测试脚本都在包内
+      bad:
+        - 把插件 client 入口放进 internal/dshviewer/ 并由 internal 包引用
+  runtime-plugin-independence:
+    strength: MUST
+    statement: wa-cli、内置技能与 MCP 服务不得依赖、引用或调用 DSH 插件包；完整 Go 回归命令保持不变并仍通过，插件包不改变其结果
+    rationale: 与「产品运行时不得依赖 strict-spec-driven」同一隔离方向：插件属 DSH 宿主扩展而非产品运行时；两侧互不牵连让单文件二进制分发与 Go 回归语义保持不变
+    enforcement:
+      method: test
+      detail: 完整回归命令（config.yaml 的 review_evidence.project_regression.command）原样通过即强制；评审核对 plugins/ 下无 .go 文件、无 Go import 指向插件目录
+  plugin-toolchain-self-contained:
+    strength: SHOULD
+    statement: 插件包的构建、类型检查与单元测试在包内 package.json scripts 声明并可在包目录独立运行；不在仓库根新增共享 Node 工作区或根 package.json
+    rationale: 仓库主体是 Go 工程；插件工具链自包含使 Go 回归与插件回归互不牵连，仓库根保持无 Node 清单，直到有变更显式定案共享工作区的需要
+    enforcement:
+      method: review

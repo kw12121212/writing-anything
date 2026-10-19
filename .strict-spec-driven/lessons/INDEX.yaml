@@ -29,6 +29,11 @@ categories:
       status: active
       occurrences: 1
       path: .strict-spec-driven/lessons/architecture/lesson-33acd7.yaml
+    dsh-host-cwd-remote-f5c95c:
+      title: DSH 插件 host 侧取项目目录：读工作区注册表，别信进程 cwd，也别注入按连接的 remote 服务
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/architecture/dsh-host-cwd-remote-f5c95c.yaml
   coding:
     go-flag-bd930f:
       title: Go flag 包的默认报错不符合中文术语约定

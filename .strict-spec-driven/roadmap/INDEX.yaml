@@ -23,3 +23,7 @@ milestones:
     title: 边界语义与静默失败加固（Boundary Semantics & Silent Failure Hardening）
     path: roadmap/milestones/boundary-semantics-silent-failure.yaml
     status: complete
+  dsh-workspace-viewer:
+    title: DSH 工作区查看插件（DSH Workspace Viewer）
+    path: roadmap/milestones/dsh-workspace-viewer.yaml
+    status: proposed

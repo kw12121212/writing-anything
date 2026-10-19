@@ -1,0 +1,8 @@
+# dsh bundle layer: mount the writing-viewer host entry (package root export
+# dist/index.js). The browser half loads from the ./client export declared in
+# package.json's dsh.client manifest; per-profile config (for example an
+# explicit workspaceRoot) belongs in the profile's own cordis.patch.yml row
+# with the same id, not in this shipped insert.
+- insert:
+    - id: dsh-writing-viewer
+      name: dsh-writing-viewer
