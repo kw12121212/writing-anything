@@ -60,3 +60,21 @@ fetch 覆盖：篡改字节拒绝安装、缺记录拒绝安装、HTTP 失败可
      b) 在宿主 PATH 最前放置假外部 wa-cli（/tmp/fakebin/wa-cli，v9.9.9-external）重启实例：
         resolved=/tmp/fakebin/wa-cli、external=/tmp/fakebin/wa-cli，内置 v0.3.0 仍 ready 作为
         后备（追加在末尾不干扰既有顺序），技能注册不受影响——外部优先实测成立。
+
+7. 来源对照与溯源标记（plugin-setup-provenance，2026-10-20）：
+   - 初版对照表消费宿主技能注册表合并 list()，实测（13099 实例）把 12 个 wa-* 全部误报「内置」。
+     根因（dsh --profile web --dump-config 实证）：web profile 中 dsh-base 顶层的 dsh-skill-filesystem
+     行 disabled: true，真正启用的一份挂在 agent preset 层；SkillRegistry 的层合并要求查询带
+     会话 scope 才含 preset 层，静态插件行拿到的注册表 list({}) 只见全局层（仅本插件）。
+     独立探针（真实 dsh-skill + 真实 dsh-skill-filesystem 同层挂载，/tmp/skill-fs-probe.mjs）证实
+     同层 rank 竞争与来源标签本身正确（user-agents 胜出、带路径）——误报纯属层视角缺失。
+   - 改为标准技能目录存在性比对后实测（13099，web profile，enableSetup: true）：
+     GET /dsh-writing-viewer/setup → report rows: 12 | external: 12 | builtin: 0
+       wa-assemble → external user-agents /home/wx766/.agents/skills/wa-assemble/SKILL.md | fallback: true
+       wa-auto / wa-brief …（其余 9 个同形，均为 user-agents 外部胜出、内置后备就绪）
+     cli.pluginInstalled: false——waCliPath 为操作者指定路径且无标记，如实显示非插件安装；
+     cli.resolved: /home/wx766/.local/bin/wa-cli。
+     GET ?root=/home/wx766/Code/writing-anything → 接受项目目录参数（该项目无 wa-* 技能，
+     结果仍全部 user-agents；项目级目录命中形态由单元测试覆盖：project-dsh 优先于 user-agents）。
+   - 标记链路（下载→写标记→sha256 一致判定 / 无标记、标记不符、写入失败不阻塞）由单元测试
+     覆盖（src/setup.test.ts provenance marker 组）；本机 CLI 为操作者自装，走「非插件安装」分支。

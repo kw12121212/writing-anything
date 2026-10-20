@@ -1,0 +1,43 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: plugin-setup-provenance
+sections:
+  Implementation:
+    provenance-marker:
+      text: setup.ts：标记常量与写入/读取/校验（writeProvenanceMarker、readProvenanceMarker + 磁盘 sha256 重算比对）；SetupFs 增 readFileBytes；setuproutes：下载安装成功后 best-effort 写标记，状态组装增加 cli.pluginInstalled
+      status: complete
+    skill-source-report:
+      text: 技能来源对照（定案为目录存在性比对）：standardRoots 优先级序（project-dsh、project-agents、user-dsh、user-agents，用户目录随 DSH_HOME/DSH_AGENTS_HOME）、findExternalSkill 探测、buildSetupStatus/动作管线接受经 parsePanelRoot 校验的 ?root=（非法按未提供）
+      status: complete
+    client-provenance-view:
+      text: setupview：解析 skills.report 与 cli.pluginInstalled（tolerant）、对照表行视图模型与双语文案；client 渲染对照表
+      status: complete
+    provenance-tests:
+      text: setup.test.ts：标记写入/读取/sha 不一致/waCliPath 无标记/写入失败不阻塞；report 映射（外部胜、内置胜、服务缺失降级）；client.test.ts：对照表渲染与降级
+      status: complete
+    provenance-docs-evidence:
+      text: README（对照表与溯源标记行为、API 约束补 source 标签清单）、GLOSSARY 新词（溯源标记（Provenance Marker））、另起 13099 实测并追加 docs/evidence/setup-check.txt
+      status: complete
+  Testing:
+    lint-typecheck:
+      text: 类型检查与构建
+      status: complete
+      command: pnpm --dir plugins/dsh-writing-viewer run build
+    unit-tests:
+      text: 插件全量 vitest
+      status: complete
+      command: pnpm --dir plugins/dsh-writing-viewer test
+    full-regression:
+      text: 完整项目回归
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    strict-verify:
+      text: strict 变更工件结构校验
+      status: complete
+      command: strict-spec-cli verify plugin-setup-provenance
+testing_gates:
+  validation_task: lint-typecheck
+  unit_test_task: unit-tests

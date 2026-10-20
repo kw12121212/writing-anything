@@ -24,13 +24,19 @@ import {
   CLI_BINARY_NAME,
   SetupError,
   downloadRelease,
+  externalSkillRoots,
+  findExternalSkill,
   installBinary,
   materializeSkills,
   parseVersionOutput,
   appendPathValue,
+  provenanceMarker,
+  parseProvenanceMarker,
+  provenanceMarkerPath,
   registerSetupSkills,
   releaseAssetName,
   resolveAllOnPath,
+  sha256HexOf,
   type FetchLike,
   type ParsedSkill,
   type SetupFs,
@@ -39,6 +45,8 @@ import {
   type SkillsServiceLike,
 } from './setup';
 import { guardRequest, type GuardOptions } from './routeguard';
+import { isAbsolute, resolve as resolvePath } from 'node:path';
+import { parsePanelRoot } from './root';
 
 /** Mutable setup state shared by the routes, the startup path and the panel actions. */
 export interface SetupState {
@@ -70,6 +78,11 @@ export interface SetupDeps {
   tempBase: string;
   platform: string;
   arch: string;
+  /** ISO timestamp for provenance markers; injected for tests. */
+  now(): string;
+  /** User-level external skill directories, honoring the same environment
+   * overrides as the host's skill filesystem source (DSH_HOME / DSH_AGENTS_HOME). */
+  skillHomes: { dsh: string; agents: string };
 }
 
 /** The status route body. Fields are additive-only from here on. */
@@ -83,9 +96,30 @@ export interface SetupStatusBody {
     version: string | null;
     resolved: string | null;
     external: string | null;
+    /** True only when the plugin's own provenance marker is present next to
+     * the binary AND its recorded sha256 matches the bytes on disk. */
+    pluginInstalled: boolean;
   };
-  skills: { registered: boolean; names: string[] };
+  skills: {
+    registered: boolean;
+    names: string[];
+    /** Per-name source report from the standard-directory presence probe;
+     * null before registration. */
+    report: SkillSourceReport[] | null;
+  };
   lastError: string | null;
+}
+
+/** One row of the skill source report. */
+export interface SkillSourceReport {
+  name: string;
+  winner: 'builtin' | 'external';
+  /** Source label of the winner (provider name for builtin). */
+  source: string;
+  /** SKILL.md path of the winning external copy, when it has one. */
+  path: string | null;
+  /** The builtin registration exists for this name (fallback ready). */
+  fallbackReady: boolean;
 }
 
 /** The builtin binary path the setup manages (or the configured override). */
@@ -98,13 +132,64 @@ async function queryVersion(deps: SetupDeps, binary: string): Promise<string | n
   return result === null ? null : parseVersionOutput(result.stdout);
 }
 
+/** Whether the binary at `path` was installed by this plugin: the sidecar
+ * marker must exist and its recorded sha256 must match the on-disk bytes —
+ * a marker left behind by a manually replaced binary does not count. */
+export async function isPluginInstalled(fs: SetupFs, path: string): Promise<boolean> {
+  const text = await fs.readFile(provenanceMarkerPath(path));
+  if (text === null) return false;
+  const marker = parseProvenanceMarker(text);
+  if (marker === null) return false;
+  const bytes = await fs.readFileBytes(path);
+  if (bytes === null) return false;
+  return marker.sha256 === sha256HexOf(bytes);
+}
+
+/** Build the per-name source report by probing the standard external skill
+ * directories in the filesystem source's own precedence order — under
+ * external-first semantics an existing external copy wins over the builtin
+ * registration, so presence decides. The preset-layer registry scope the
+ * sessions see is not reachable from a static host plugin (the enabled
+ * dsh-skill-filesystem lives in the agent preset layer on web profiles), so
+ * this is a directory-presence comparison; custom skill dirs and other
+ * providers are out of its scope by design. Null before registration. */
+function skillSourceReport(
+  deps: SetupDeps,
+  state: SetupState,
+  projectRoot: string | null,
+): { name: string; resolve: Promise<{ source: string; path: string } | null> }[] | null {
+  if (!state.registered) return null;
+  const roots = externalSkillRoots(projectRoot, deps.skillHomes);
+  return state.skillNames.map((name) => ({ name, resolve: findExternalSkill(deps.fs, roots, name) }));
+}
+
+/** Materialize the report rows (probing is async). */
+async function resolveSkillSourceReport(deps: SetupDeps, state: SetupState, projectRoot: string | null): Promise<SkillSourceReport[] | null> {
+  const pending = skillSourceReport(deps, state, projectRoot);
+  if (pending === null) return null;
+  const rows: SkillSourceReport[] = [];
+  for (const item of pending) {
+    const external = await item.resolve;
+    rows.push(
+      external === null
+        ? { name: item.name, winner: 'builtin', source: 'dsh-writing-viewer', path: null, fallbackReady: true }
+        : { name: item.name, winner: 'external', source: external.source, path: external.path, fallbackReady: true },
+    );
+  }
+  return rows;
+}
+
 /** Assemble the status body from live probes; never throws. */
-export async function buildSetupStatus(deps: SetupDeps, state: SetupState): Promise<SetupStatusBody> {
+export async function buildSetupStatus(deps: SetupDeps, state: SetupState, projectRoot: string | null = null): Promise<SetupStatusBody> {
   const path = builtinCliPath(deps);
   const info = await deps.fs.stat(path);
   const ready = info !== null && info.isFile;
   let version: string | null = null;
-  if (ready && !state.busy) version = await queryVersion(deps, path);
+  let pluginInstalled = false;
+  if (ready && !state.busy) {
+    version = await queryVersion(deps, path);
+    pluginInstalled = await isPluginInstalled(deps.fs, path);
+  }
   const hits = await resolveAllOnPath(deps.fs, deps.env.PATH, CLI_BINARY_NAME, deps.pathSeparator);
   const resolved = hits[0] ?? null;
   const external = hits.find((hit) => hit !== path) ?? null;
@@ -112,8 +197,8 @@ export async function buildSetupStatus(deps: SetupDeps, state: SetupState): Prom
     ok: true,
     enabled: true,
     busy: state.busy,
-    cli: { ready, path: ready ? path : null, version, resolved, external },
-    skills: { registered: state.registered, names: [...state.skillNames] },
+    cli: { ready, path: ready ? path : null, version, resolved, external, pluginInstalled },
+    skills: { registered: state.registered, names: [...state.skillNames], report: await resolveSkillSourceReport(deps, state, projectRoot) },
     lastError: state.lastError,
   };
 }
@@ -147,7 +232,16 @@ async function ensureCli(deps: SetupDeps): Promise<string> {
     version: deps.options.waVersion,
     asset,
   });
-  return await installBinary(deps.fs, deps.options.cliInstallDir, bytes);
+  const installed = await installBinary(deps.fs, deps.options.cliInstallDir, bytes);
+  // Best-effort provenance marker: failing to mark must not fail a working
+  // install — the status then honestly classifies it as not-plugin-installed.
+  try {
+    const marker = JSON.stringify(provenanceMarker(bytes, deps.now()));
+    await deps.fs.writeFile(provenanceMarkerPath(installed), new TextEncoder().encode(marker));
+  } catch (error) {
+    console.error(`[dsh-writing-viewer] provenance marker not written: ${String((error as Error)?.message ?? error)}`);
+  }
+  return installed;
 }
 
 /** Materialize, register and keep names in state; disposes any previous provider. */
@@ -176,8 +270,8 @@ function appendCliDir(deps: SetupDeps, binary: string): void {
  * The full enable pipeline. Single-flight: while `state.busy` is true the
  * call returns the busy status without starting anything.
  */
-export async function runSetupAction(deps: SetupDeps, state: SetupState): Promise<SetupStatusBody> {
-  if (state.busy) return await buildSetupStatus(deps, state);
+export async function runSetupAction(deps: SetupDeps, state: SetupState, projectRoot: string | null = null): Promise<SetupStatusBody> {
+  if (state.busy) return await buildSetupStatus(deps, state, projectRoot);
   state.busy = true;
   state.lastError = null;
   try {
@@ -189,7 +283,7 @@ export async function runSetupAction(deps: SetupDeps, state: SetupState): Promis
   } finally {
     state.busy = false;
   }
-  return await buildSetupStatus(deps, state);
+  return await buildSetupStatus(deps, state, projectRoot);
 }
 
 /**
@@ -223,6 +317,23 @@ interface RouteResponse {
   end(body?: string): void;
 }
 
+/** The setup route's optional `root` query parameter (the panel's current
+ * project directory), validated exactly like the snapshot route's panel root
+ * (host-route-path-input MUST): only an absolute, non-network path survives;
+ * anything else is treated as absent so the report falls back to the
+ * user-level directories instead of probing unintended paths. */
+function rootParamOf(url: string | undefined): string | null {
+  let raw: string | null = null;
+  try {
+    raw = new URL(url ?? '/', 'http://x').searchParams.get('root');
+  } catch {
+    return null;
+  }
+  if (raw === null) return null;
+  const parsed = parsePanelRoot(raw, { isAbsolute, resolve: resolvePath });
+  return parsed.kind === 'ok' ? parsed.path : null;
+}
+
 export const SETUP_PATH = '/dsh-writing-viewer/setup';
 
 /** Register the setup route on an acquired webServer scope: GET answers the
@@ -254,9 +365,10 @@ export function registerSetupRoutes(
         return;
       }
       const method = req.method ?? 'GET';
+      const root = rootParamOf((req as { url?: string }).url);
       if (method === 'GET') {
         try {
-          json(res, 200, await buildSetupStatus(deps, state));
+          json(res, 200, await buildSetupStatus(deps, state, root));
         } catch (error) {
           json(res, 200, { ok: false, error: String(error) });
         }
@@ -264,7 +376,7 @@ export function registerSetupRoutes(
       }
       if (method === 'POST') {
         try {
-          json(res, 200, await runSetupAction(deps, state));
+          json(res, 200, await runSetupAction(deps, state, root));
         } catch (error) {
           json(res, 200, { ok: false, error: String(error) });
         }

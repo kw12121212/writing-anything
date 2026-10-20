@@ -62,8 +62,13 @@ const PANEL_ID = 'dsh-writing-viewer';
 const PACKAGE_NAME = 'dsh-writing-viewer';
 const ROUTE_PATH = '/dsh-writing-viewer/snapshot';
 /** The setup route exists only while the host's enableSetup switch is on;
- * a failed probe keeps the whole setup section hidden. */
+ * a failed probe keeps the whole setup section hidden. The optional root
+ * parameter scopes the skill source report to the panel's project. */
 const SETUP_ROUTE = '/dsh-writing-viewer/setup';
+
+function setupRouteUrl(panelRoot: string | null): string {
+  return panelRoot === null ? SETUP_ROUTE : SETUP_ROUTE + '?root=' + encodeURIComponent(panelRoot);
+}
 
 /** Panel container width below which the unit tree and detail stack. */
 const STACK_CONTAINER_WIDTH = 640;
@@ -1018,9 +1023,19 @@ function renderSetupSection(h: H, s: PanelState, a: PanelActions): unknown {
     sectionTitle(h, 'title', labels.title),
     h('p', { key: 'headline', 'data-setup-headline': model.state, style: { margin: 0, fontWeight: '600' } }, model.headline),
     line('cli', model.cliLine),
+    model.provenanceLine === null ? null : line('provenance', labels.cliReady + '：' + model.provenanceLine),
     model.resolvedLine === null ? null : line('resolved', model.resolvedLine),
     model.externalLine === null ? null : line('external', model.externalLine, COLOR.warn),
     line('skills', model.skillsLine),
+    model.reportRows === null
+      ? null
+      : h(
+          'details',
+          { key: 'source-report', 'data-setup-report': 'true', style: { color: COLOR.secondary } },
+          h('summary', { key: 's', style: { cursor: 'pointer' } }, labels.sourceTable + '（' + String(model.reportRows.length) + '）'),
+          h('ul', { key: 'l', style: { margin: '2px 0', paddingLeft: '18px' } },
+            model.reportRows.map((row, i) => h('li', { key: 'r' + i, 'data-setup-report-row': row.name, style: { overflowWrap: 'anywhere' } }, row.text))),
+        ),
     model.skillNames.length === 0
       ? null
       : h(
@@ -1260,12 +1275,14 @@ window.__ModuleLoader__?.load({
         fetchSnapshot(panelRoot);
       }, [fetchSnapshot, panelRoot]);
 
-      // Probe the setup route once: 200 with a well-formed status shows the
-      // section; anything else (including the host not registering the route
-      // because enableSetup is off) keeps the panel exactly as before.
+      // Probe the setup route (again whenever the panel switches project —
+      // the skill source report follows the located directory): 200 with a
+      // well-formed status shows the section; anything else (including the
+      // host not registering the route because enableSetup is off) keeps the
+      // panel exactly as before.
       react.useEffect(() => {
         let cancelled = false;
-        fetch(SETUP_ROUTE)
+        fetch(setupRouteUrl(panelRoot))
           .then((response: Response) => (response.ok ? (response.json() as Promise<unknown>) : null))
           .then((body: unknown) => {
             if (cancelled) return;
@@ -1276,7 +1293,7 @@ window.__ModuleLoader__?.load({
         return () => {
           cancelled = true;
         };
-      }, []);
+      }, [panelRoot]);
 
       react.useEffect(() => {
         const element = containerRef.current as HTMLElement | null;
@@ -1412,7 +1429,7 @@ window.__ModuleLoader__?.load({
           // action is ignored before it can queue another POST.
           if (setup.busy) return;
           setSetup((prev: { status: SetupStatus | null }) => ({ status: prev.status, busy: true }));
-          fetch(SETUP_ROUTE, { method: 'POST' })
+          fetch(setupRouteUrl(panelRoot), { method: 'POST' })
             .then((response: Response) => (response.ok ? (response.json() as Promise<unknown>) : null))
             .then((body: unknown) => {
               const status = parseSetupStatus(body);

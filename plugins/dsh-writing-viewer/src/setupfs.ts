@@ -43,6 +43,13 @@ export function realSetupFs(): SetupFs {
         return null;
       }
     },
+    async readFileBytes(path: string): Promise<Uint8Array | null> {
+      try {
+        return new Uint8Array(await fsp.readFile(path));
+      } catch {
+        return null;
+      }
+    },
     async readdir(dir: string): Promise<string[] | null> {
       try {
         return (await fsp.readdir(dir)).map((entry) => String(entry));

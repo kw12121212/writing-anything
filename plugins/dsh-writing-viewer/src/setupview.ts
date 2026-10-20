@@ -8,13 +8,22 @@
  * here, pure of React and the DOM, per the client module conventions.
  */
 
+/** One row of the skill source report mirror. */
+export interface SkillReportRow {
+  name: string;
+  winner: 'builtin' | 'external';
+  source: string;
+  path: string | null;
+  fallbackReady: boolean;
+}
+
 /** Client-side mirror of the setup status route body. */
 export interface SetupStatus {
   ok: true;
   enabled: true;
   busy: boolean;
-  cli: { ready: boolean; path: string | null; version: string | null; resolved: string | null; external: string | null };
-  skills: { registered: boolean; names: string[] };
+  cli: { ready: boolean; path: string | null; version: string | null; resolved: string | null; external: string | null; pluginInstalled: boolean };
+  skills: { registered: boolean; names: string[]; report: SkillReportRow[] | null };
   lastError: string | null;
 }
 
@@ -28,6 +37,21 @@ export function parseSetupStatus(body: unknown): SetupStatus | null {
   const skills = raw.skills as SetupStatus['skills'] | undefined;
   if (cli === null || typeof cli !== 'object' || typeof cli.ready !== 'boolean') return null;
   if (skills === null || typeof skills !== 'object' || !Array.isArray(skills.names)) return null;
+  const reportRows: SkillReportRow[] = [];
+  if (Array.isArray(skills.report)) {
+    for (const row of skills.report) {
+      if (row === null || typeof row !== 'object') continue;
+      const entry = row as unknown as Record<string, unknown>;
+      if (typeof entry.name !== 'string') continue;
+      reportRows.push({
+        name: entry.name,
+        winner: entry.winner === 'external' ? 'external' : 'builtin',
+        source: typeof entry.source === 'string' ? entry.source : '',
+        path: typeof entry.path === 'string' ? entry.path : null,
+        fallbackReady: entry.fallbackReady === true,
+      });
+    }
+  }
   return {
     ok: true,
     enabled: true,
@@ -38,8 +62,13 @@ export function parseSetupStatus(body: unknown): SetupStatus | null {
       version: typeof cli.version === 'string' ? cli.version : null,
       resolved: typeof cli.resolved === 'string' ? cli.resolved : null,
       external: typeof cli.external === 'string' ? cli.external : null,
+      pluginInstalled: cli.pluginInstalled === true,
     },
-    skills: { registered: skills.registered === true, names: skills.names.filter((n): n is string => typeof n === 'string') },
+    skills: {
+      registered: skills.registered === true,
+      names: skills.names.filter((n): n is string => typeof n === 'string'),
+      report: Array.isArray(skills.report) ? reportRows : null,
+    },
     lastError: typeof raw.lastError === 'string' && raw.lastError !== '' ? raw.lastError : null,
   };
 }
@@ -59,6 +88,12 @@ export interface SetupLabels {
   skillsRegistered: string;
   skillsMissing: string;
   failed: string;
+  sourceTable: string;
+  externalSource: string;
+  builtinSource: string;
+  fallbackReady: string;
+  pluginInstalled: string;
+  notPluginInstalled: string;
 }
 
 const SETUP_TEXT: Record<'zh' | 'en', SetupLabels> = {
@@ -76,6 +111,12 @@ const SETUP_TEXT: Record<'zh' | 'en', SetupLabels> = {
     skillsRegistered: '已注册内置技能',
     skillsMissing: '内置技能未注册',
     failed: '启用失败',
+    sourceTable: '技能来源对照',
+    externalSource: '外部',
+    builtinSource: '内置',
+    fallbackReady: '内置后备就绪',
+    pluginInstalled: '插件安装',
+    notPluginInstalled: '非插件安装',
   },
   en: {
     title: 'Built-in skills & CLI (setup)',
@@ -91,6 +132,12 @@ const SETUP_TEXT: Record<'zh' | 'en', SetupLabels> = {
     skillsRegistered: 'Registered built-in skills',
     skillsMissing: 'Built-in skills not registered',
     failed: 'Enable failed',
+    sourceTable: 'Skill source report',
+    externalSource: 'External',
+    builtinSource: 'Built-in',
+    fallbackReady: 'built-in fallback ready',
+    pluginInstalled: 'installed by this plugin',
+    notPluginInstalled: 'not installed by this plugin',
   },
 };
 
@@ -118,6 +165,10 @@ export interface SetupViewModel {
   /** The enable button renders disabled unless this is true. */
   canEnable: boolean;
   skillNames: string[];
+  /** Provenance of the ready CLI: plugin-installed (marker verified) or not. */
+  provenanceLine: string | null;
+  /** Source report rows as display text; null when degraded/absent. */
+  reportRows: { name: string; text: string }[] | null;
 }
 
 /** Derive the whole section view model from the status plus the client-side
@@ -157,5 +208,20 @@ export function setupViewModel(status: SetupStatus, actionInFlight: boolean, lab
     error: state === 'error' ? status.lastError : null,
     canEnable: !actionInFlight && !status.busy,
     skillNames: [...status.skills.names],
+    provenanceLine: status.cli.ready
+      ? status.cli.pluginInstalled
+        ? labels.pluginInstalled
+        : labels.notPluginInstalled
+      : null,
+    reportRows:
+      status.skills.report == null
+        ? null
+        : status.skills.report.map((row) => ({
+            name: row.name,
+            text:
+              row.winner === 'builtin'
+                ? `${row.name} → ${labels.builtinSource}（${row.source}）`
+                : `${row.name} → ${labels.externalSource} ${row.source}${row.path === null ? '' : `（${row.path}）`}` + (row.fallbackReady ? ` · ${labels.fallbackReady}` : ''),
+          })),
   };
 }

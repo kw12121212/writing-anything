@@ -26,6 +26,11 @@ import {
   type SetupRunner,
   type SkillsServiceLike,
   type SkillCandidate,
+  externalSkillRoots,
+  findExternalSkill,
+  PROVENANCE_MARKER_NAME,
+  parseProvenanceMarker,
+  provenanceMarker,
 } from './setup';
 import {
   SETUP_PATH,
@@ -81,6 +86,11 @@ function memoryFs(initial: Record<string, string> = {}) {
       const value = files.get(path);
       if (value === undefined) return null;
       return typeof value === 'string' ? value : new TextDecoder().decode(value);
+    },
+    async readFileBytes(path) {
+      const value = files.get(path);
+      if (value === undefined) return null;
+      return typeof value === 'string' ? new TextEncoder().encode(value) : value;
     },
     async readdir(dir) {
       const prefix = dir.endsWith('/') ? dir : dir + '/';
@@ -537,6 +547,8 @@ function makeDeps(spec: DepsSpec = {}): SetupDeps {
     tempBase: '/tmp',
     platform: 'linux',
     arch: 'x64',
+    now: () => '2026-10-20T00:00:00Z',
+    skillHomes: { dsh: '/home/u/.dsh', agents: '/home/u/.agents' },
   };
 }
 
@@ -718,7 +730,7 @@ function captureScope() {
 
 function callRoute(
   route: CapturedRoute,
-  req: { method?: string; headers?: Record<string, unknown> },
+  req: { method?: string; headers?: Record<string, unknown>; url?: string },
 ): Promise<{ status: number; headers: Record<string, string>; body: string | undefined }> {
   let captured: { status: number; headers: Record<string, string>; body: string | undefined };
   const res = {
@@ -756,6 +768,34 @@ describe('registerSetupRoutes', () => {
     const body = JSON.parse(actionResponse.body!);
     expect(body.skills.registered).toBe(true);
     expect(deps.env.PATH).toBe('/usr/bin:/inst');
+  });
+
+  it('scopes the source report to a validated root parameter', async () => {
+    const deps = makeDeps({
+      files: {
+        '/inst/wa-cli': 'x',
+        '/home/u/.agents/skills/wa-auto/SKILL.md': 'user copy',
+        '/proj/.dsh/skills/wa-auto/SKILL.md': 'project copy',
+      },
+    });
+    const runner = fullRunner(deps.fs);
+    deps.spawn = () => runner;
+    const state = createSetupState();
+    const { scope, routes } = captureScope();
+    registerSetupRoutes(scope, deps, state, { allowedHosts: [], bindHost: null });
+    const route = routes[0]!;
+    // Register first, then ask with the project root: the project copy wins.
+    await callRoute(route, { method: 'POST', headers: LOOPBACK_HEADERS });
+    const project = await callRoute(route, { method: 'GET', headers: LOOPBACK_HEADERS, url: '/dsh-writing-viewer/setup?root=/proj' });
+    const projectRow = JSON.parse(project.body!).skills.report[0];
+    expect(projectRow).toMatchObject({ winner: 'external', source: 'project-dsh', path: '/proj/.dsh/skills/wa-auto/SKILL.md' });
+    // Without root the user-level copy wins.
+    const user = await callRoute(route, { method: 'GET', headers: LOOPBACK_HEADERS });
+    expect(JSON.parse(user.body!).skills.report[0]).toMatchObject({ source: 'user-agents' });
+    // An invalid root (relative path) is treated as absent — no unintended
+    // probing, the report falls back to the user-level directories.
+    const invalid = await callRoute(route, { method: 'GET', headers: LOOPBACK_HEADERS, url: '/dsh-writing-viewer/setup?root=proj/relative' });
+    expect(JSON.parse(invalid.body!).skills.report[0]).toMatchObject({ source: 'user-agents' });
   });
 
   it('rejects forged origins before any pipeline step and 405s other methods', async () => {
@@ -837,5 +877,139 @@ describe('apply setup gate', () => {
     // Missing binary: resolving the service stays quiet and harmless.
     const skillsInject = injected.find((entry) => entry.names.includes('skills'))!;
     expect(() => skillsInject.closure({ skills: fakeSkills() })).not.toThrow();
+  });
+});
+
+describe('provenance marker', () => {
+  const asset = 'wa-cli-linux-amd64';
+
+  it('rejects malformed or foreign marker payloads', () => {
+    const good = JSON.stringify(provenanceMarker(new Uint8Array([1]), '2026-10-20T00:00:00Z'));
+    expect(parseProvenanceMarker(good)).not.toBeNull();
+    expect(parseProvenanceMarker('not json')).toBeNull();
+    expect(parseProvenanceMarker('[]')).toBeNull();
+    expect(parseProvenanceMarker(JSON.stringify({ managedBy: 'someone-else', sha256: 'a'.repeat(64), installedAt: 'x' }))).toBeNull();
+    expect(parseProvenanceMarker(JSON.stringify({ managedBy: 'dsh-writing-viewer' }))).toBeNull();
+    expect(parseProvenanceMarker(JSON.stringify({ managedBy: 'dsh-writing-viewer', sha256: '', installedAt: 'x' }))).toBeNull();
+    expect(parseProvenanceMarker(JSON.stringify({ managedBy: 'dsh-writing-viewer', sha256: 'a'.repeat(64), installedAt: 42 }))).toBeNull();
+  });
+
+  function releaseFor(bytes: Uint8Array): FetchLike {
+    return releaseFetch({ [asset]: bytes, SHA256SUMS: `${createHash('sha256').update(bytes).digest('hex')}  ${asset}\n` });
+  }
+
+  it('writes a marker after a plugin install and classifies it plugin-installed', async () => {
+    const bytes = new Uint8Array([3, 1, 4]);
+    const deps = makeDeps({ fetch: releaseFor(bytes) });
+    const runner = fullRunner(deps.fs);
+    deps.spawn = () => runner;
+    const state = createSetupState();
+    const status = await runSetupAction(deps, state);
+    expect(status.lastError).toBe(null);
+    const markerText = await deps.fs.readFile('/inst/wa-cli.dsh-writing-viewer.json');
+    expect(markerText).not.toBeNull();
+    const marker = JSON.parse(markerText!) as { managedBy: string; sha256: string; installedAt: string };
+    expect(marker).toEqual({ managedBy: 'dsh-writing-viewer', sha256: createHash('sha256').update(bytes).digest('hex'), installedAt: '2026-10-20T00:00:00Z' });
+    expect(status.cli.pluginInstalled).toBe(true);
+  });
+
+  it('classifies an unmarked binary at the same path as not plugin-installed', async () => {
+    const deps = makeDeps({ files: { '/inst/wa-cli': 'x' } });
+    const runner = fullRunner(deps.fs);
+    deps.spawn = () => runner;
+    const status = await runSetupAction(deps, createSetupState());
+    expect(status.cli.ready).toBe(true);
+    expect(status.cli.pluginInstalled).toBe(false);
+    // The same holds for an operator-designated waCliPath binary.
+    const configured = makeDeps({ files: { '/opt/wa-cli': 'x' } });
+    configured.waCliPath = '/opt/wa-cli';
+    const configuredRunner = fullRunner(configured.fs);
+    configured.spawn = () => configuredRunner;
+    const configuredStatus = await runSetupAction(configured, createSetupState());
+    expect(configuredStatus.cli.pluginInstalled).toBe(false);
+  });
+
+  it('rejects a stale marker whose sha256 no longer matches the binary', async () => {
+    const deps = makeDeps({ files: { '/inst/wa-cli': 'x' } });
+    const stale = JSON.stringify({ managedBy: 'dsh-writing-viewer', sha256: '0'.repeat(64), installedAt: '2026-01-01T00:00:00Z' });
+    await deps.fs.writeFile('/inst/wa-cli.dsh-writing-viewer.json', new TextEncoder().encode(stale));
+    const runner = fullRunner(deps.fs);
+    deps.spawn = () => runner;
+    const status = await runSetupAction(deps, createSetupState());
+    expect(status.cli.pluginInstalled).toBe(false);
+  });
+
+  it('keeps the install working when the marker write fails', async () => {
+    const bytes = new Uint8Array([7]);
+    const deps = makeDeps({ fetch: releaseFor(bytes) });
+    const runner = fullRunner(deps.fs);
+    deps.spawn = () => runner;
+    const original = deps.fs.writeFile;
+    deps.fs.writeFile = async (path: string, data: Uint8Array) => {
+      if (path.endsWith('.dsh-writing-viewer.json')) throw new Error('read-only marker dir');
+      await original(path, data);
+    };
+    const state = createSetupState();
+    const status = await runSetupAction(deps, state);
+    expect(status.lastError).toBe(null);
+    expect(status.cli.ready).toBe(true);
+    expect(status.cli.pluginInstalled).toBe(false);
+  });
+});
+
+describe('skill source report (directory presence)', () => {
+  it('orders the standard external roots like the filesystem source', () => {
+    expect(externalSkillRoots('/proj', { dsh: '/home/u/.dsh', agents: '/home/u/.agents' })).toEqual([
+      { dir: '/proj/.dsh/skills', source: 'project-dsh' },
+      { dir: '/proj/.agents/skills', source: 'project-agents' },
+      { dir: '/home/u/.dsh/skills', source: 'user-dsh' },
+      { dir: '/home/u/.agents/skills', source: 'user-agents' },
+    ]);
+    expect(externalSkillRoots(null, { dsh: '/home/u/.dsh', agents: '/home/u/.agents' })).toEqual([
+      { dir: '/home/u/.dsh/skills', source: 'user-dsh' },
+      { dir: '/home/u/.agents/skills', source: 'user-agents' },
+    ]);
+  });
+
+  it('finds the first external copy in precedence order', async () => {
+    const fs = memoryFs({ '/proj/.agents/skills/wa-auto/SKILL.md': 'x', '/home/u/.agents/skills/wa-auto/SKILL.md': 'y' });
+    const roots = externalSkillRoots('/proj', { dsh: '/home/u/.dsh', agents: '/home/u/.agents' });
+    expect(await findExternalSkill(fs, roots, 'wa-auto')).toEqual({ source: 'project-agents', path: '/proj/.agents/skills/wa-auto/SKILL.md' });
+    expect(await findExternalSkill(fs, roots, 'wa-missing')).toBeNull();
+  });
+
+  it('reports external winners with paths and builtin otherwise', async () => {
+    const deps = makeDeps({
+      files: { '/inst/wa-cli': 'x', '/home/u/.agents/skills/wa-auto/SKILL.md': 'external copy' },
+    });
+    const runner = fullRunner(deps.fs);
+    deps.spawn = () => runner;
+    const state = createSetupState();
+    await runSetupAction(deps, state);
+    const status = await buildSetupStatus(deps, state);
+    expect(status.skills.report).toHaveLength(1);
+    expect(status.skills.report![0]).toEqual({ name: 'wa-auto', winner: 'external', source: 'user-agents', path: '/home/u/.agents/skills/wa-auto/SKILL.md', fallbackReady: true });
+    // With a project root whose .dsh dir holds a copy, the project wins.
+    const depsProject = makeDeps({
+      files: {
+        '/inst/wa-cli': 'x',
+        '/home/u/.agents/skills/wa-auto/SKILL.md': 'user copy',
+        '/proj/.dsh/skills/wa-auto/SKILL.md': 'project copy',
+      },
+    });
+    const runnerProject = fullRunner(depsProject.fs);
+    depsProject.spawn = () => runnerProject;
+    const stateProject = createSetupState();
+    await runSetupAction(depsProject, stateProject);
+    const projectStatus = await buildSetupStatus(depsProject, stateProject, '/proj');
+    expect(projectStatus.skills.report![0]).toEqual({ name: 'wa-auto', winner: 'external', source: 'project-dsh', path: '/proj/.dsh/skills/wa-auto/SKILL.md', fallbackReady: true });
+    // No external copy anywhere → builtin; null before registration.
+    const depsClean = makeDeps({ files: { '/inst/wa-cli': 'x' } });
+    const runnerClean = fullRunner(depsClean.fs);
+    depsClean.spawn = () => runnerClean;
+    const cleanState = createSetupState();
+    expect((await buildSetupStatus(depsClean, cleanState)).skills.report).toBeNull();
+    await runSetupAction(depsClean, cleanState);
+    expect((await buildSetupStatus(depsClean, cleanState)).skills.report![0]).toEqual({ name: 'wa-auto', winner: 'builtin', source: 'dsh-writing-viewer', path: null, fallbackReady: true });
   });
 });

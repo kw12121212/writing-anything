@@ -1015,6 +1015,39 @@ describe('ViewerPanel wiring (runnable react)', () => {
     panel.restore();
   });
 
+  it('carries the panel root on setup probes and re-probes when it changes', async () => {
+    const setupUrls: string[] = [];
+    const urlFetch = (async (input: unknown, init?: { method?: string }) => {
+      const url = String(input);
+      if (url.includes('/dsh-writing-viewer/setup')) {
+        setupUrls.push((init?.method ?? 'GET') + ' ' + url);
+        return {
+          ok: true,
+          json: async () => ({
+            ok: true, enabled: true, busy: false,
+            cli: { ready: false, path: null, version: null, resolved: null, external: null, pluginInstalled: false },
+            skills: { registered: false, names: [] },
+            lastError: null,
+          }),
+        };
+      }
+      return { ok: true, json: async () => await fixtureBody() };
+    }) as unknown as typeof fetch;
+    const panel = await mountPanel(await fixtureBody(), urlFetch);
+    await settle();
+    expect(setupUrls).toEqual(['GET /dsh-writing-viewer/setup']);
+    // Switching the panel project re-probes the setup route with the root.
+    const input = elements(toNode(panel.tree()) as Node, 'input').find((n) => n.props?.['aria-label'] !== undefined);
+    (input?.props?.['onChange'] as (event: { target?: { value?: string } }) => void)({ target: { value: '/home/me/project' } });
+    await settle();
+    // The switch control is a form submit; drive its onSubmit like a browser.
+    const form = elements(toNode(panel.tree()) as Node, 'form').find((n) => n !== undefined);
+    (form?.props?.['onSubmit'] as (event: { preventDefault?: () => void }) => void)({ preventDefault: () => {} });
+    await settle();
+    expect(setupUrls.some((entry) => entry === 'GET /dsh-writing-viewer/setup?root=%2Fhome%2Fme%2Fproject')).toBe(true);
+    panel.restore();
+  });
+
   it('shows a readable setup error line and keeps the enable button usable', async () => {
     const failing = (async (input: unknown) => {
       const url = String(input);
@@ -1169,8 +1202,15 @@ describe('setup section', () => {
       ok: true,
       enabled: true,
       busy: false,
-      cli: { ready: true, path: '/inst/wa-cli', version: 'v0.3.0', resolved: '/usr/bin/wa-cli', external: '/usr/bin/wa-cli' },
-      skills: { registered: true, names: ['wa-auto', 'wa-init'] },
+      cli: { ready: true, path: '/inst/wa-cli', version: 'v0.3.0', resolved: '/usr/bin/wa-cli', external: '/usr/bin/wa-cli', pluginInstalled: false },
+      skills: {
+        registered: true,
+        names: ['wa-auto', 'wa-init'],
+        report: [
+          { name: 'wa-auto', winner: 'external', source: 'user-agents', path: '/home/u/.agents/skills/wa-auto/SKILL.md', fallbackReady: true },
+          { name: 'wa-init', winner: 'builtin', source: 'dsh-writing-viewer', path: null, fallbackReady: true },
+        ],
+      },
       lastError: null,
       ...overrides,
     };
@@ -1231,6 +1271,16 @@ describe('setup section', () => {
     );
     expect(builtinAhead.resolvedLine).toContain('/inst/wa-cli');
     expect(builtinAhead.externalLine).toBe(null);
+    // Provenance line reflects the marker verdict; the report renders one
+    // row per registered skill (external winner with path, builtin winner).
+    const marked = t.setupViewModel(t.parseSetupStatus(status({ cli: { ready: true, path: '/inst/wa-cli', version: 'v0.3.0', resolved: '/usr/bin/wa-cli', external: '/usr/bin/wa-cli', pluginInstalled: true } }))!, false, labels);
+    expect(marked.provenanceLine).toBe(labels.pluginInstalled);
+    expect(marked.reportRows).not.toBeNull();
+    expect(marked.reportRows![0]!.text).toContain('user-agents');
+    expect(marked.reportRows![0]!.text).toContain('/home/u/.agents/skills/wa-auto/SKILL.md');
+    expect(marked.reportRows![0]!.text).toContain(labels.fallbackReady);
+    expect(marked.reportRows![1]!.text).toContain('dsh-writing-viewer');
+    expect(t.setupViewModel(t.parseSetupStatus(status())!, false, labels).provenanceLine).toBe(labels.notPluginInstalled);
     const failed = t.setupViewModel(t.parseSetupStatus(status({ cli: { ready: false, path: null, version: null, resolved: null, external: null }, skills: { registered: false, names: [] }, lastError: '校验失败' }))!, false, labels);
     expect(failed.state).toBe('error');
     expect(failed.error).toBe('校验失败');
@@ -1249,8 +1299,26 @@ describe('setup section', () => {
     const buttons = elements(section, 'button');
     expect(buttons).toHaveLength(1);
     expect(buttons[0]?.props?.['data-setup-enable']).toBe('true');
+    // The source report table renders one row per registered skill.
+    const report = elements(section, 'details').find((n) => n.props?.['data-setup-report'] === 'true');
+    expect(report).toBeDefined();
+    const rows = elements(report, 'li');
+    expect(rows.some((row) => row.props?.['data-setup-report-row'] === 'wa-auto' && textOf(row).includes('user-agents'))).toBe(true);
+    expect(rows.some((row) => row.props?.['data-setup-report-row'] === 'wa-init' && textOf(row).includes('Built-in'))).toBe(true);
+    // The provenance line shows the marker verdict.
+    expect(elements(section, 'p').some((n) => n.props?.['data-setup-line'] === 'provenance' && textOf(n).includes('not installed'))).toBe(true);
     // Without a status the section is absent — the switch is off.
     const plain = t.renderPanel(h, await stateFor(body), actions);
     expect(elements(plain, 'section').some((n) => n.props?.['data-setup-section'] === 'true')).toBe(false);
+  });
+
+  it('hides the source report when the host delivers none (degraded)', async () => {
+    const t = await hooks();
+    const body = await fixtureBody();
+    const noReport = status({ skills: { registered: true, names: ['wa-auto'], report: null } });
+    const tree = t.renderPanel(h, await stateFor(body, { setup: t.parseSetupStatus(noReport), setupBusy: false }), actions);
+    const section = elements(tree, 'section').find((n) => n.props?.['data-setup-section'] === 'true');
+    expect(section).toBeDefined();
+    expect(elements(section, 'details').some((n) => n.props?.['data-setup-report'] === 'true')).toBe(false);
   });
 });

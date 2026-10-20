@@ -1,0 +1,42 @@
+schema: strict-spec-driven/question-list/v1
+schema_version: 1
+artifact_type: question_list
+schema_file: templates/strict-spec-driven/schemas/question-list.yaml
+change: plugin-setup-provenance
+open: []
+resolved:
+  - id: requirement-problem
+    question: 现在哪里不方便？
+    context: 需求拷问
+    answer: 使用时分不清技能/CLI 是内置还是外置：技能来源只在加载包裹层可见、面板不可见；CLI 在同一路径下分不清是插件装的还是作者手动 install.sh 装的
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-outcome
+    question: 可观察的完成判据？
+    context: 需求拷问
+    answer: 面板设置区出现技能来源对照表（每个 wa-* 胜出来源与路径、内置后备状态）；CLI 状态显示是否插件安装（依据溯源标记），waCliPath 指定的路径如实显示非插件安装
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-trigger
+    question: 为什么做？
+    context: 需求拷问
+    answer: 外部优先反转后作者在 DSH 内使用时需要随时分辨生效来源，方案 A+B 已获作者确认
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-non-goals
+    question: 什么不变？
+    context: 需求拷问
+    answer: 优先级语义、下载安装链路、开关、单飞行、来源校验、工作区零触碰、既有状态字段、技能正文保持 wa-cli 原文
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-interpretation
+    question: 实现读法？
+    context: 需求拷问。初版拟消费宿主注册表合并清单，实测推翻：web profile 的 dsh-skill-filesystem 挂在 agent preset 层（宿主层行 disabled），静态插件行的 list() 只见全局层，全部误报内置
+    answer: 对照表按文件系统技能源优先级做标准技能目录存在性比对（?root= 走与快照路由相同的路径校验）；溯源标记为 cliInstallDir 内 sidecar JSON，分类=标记存在且 sha256 与磁盘一致
+    status: resolved
+    kind: requirement
+    answered_by: human

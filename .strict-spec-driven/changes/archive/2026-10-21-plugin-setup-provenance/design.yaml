@@ -1,0 +1,25 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: plugin-setup-provenance
+approach:
+  - 全部 additive：状态路由新增 skills.report 数组与 cli.pluginInstalled 布尔（依据 sidecar 标记存在与 sha256 一致性）；host 侧把 SkillsServiceLike 扩展出异步 list(options)（真实注册表合并清单带 source/provider/path 标签），对 state.skillNames 逐名映射胜者——provider 为 dsh-writing-viewer 即内置，否则记录外部 source 标签与 path；client 纯视图模型把 report 渲染成对照表（外部生效行、内置后备就绪标记）；installBinary 成功后由动作管线写 sidecar（best-effort，失败仅日志），读取时重算磁盘二进制 sha256 与标记比对；时钟注入 now() 供 installedAt
+decisions:
+  report-from-merged-registry:
+    decision: （已被实施证据推翻）技能来源对照消费宿主技能注册表合并 list() 结果
+    rationale: '原以为合并清单即生效真相；实测 web profile 中启用的 dsh-skill-filesystem 挂在 agent preset 层（宿主层同名行 disabled: true），插件所在的宿主层 list() 不带会话 scope 只能看到全局层（仅本插件），全部误报内置；会话 scope 依赖 live agent 租约机制，插件无法可靠取得。推翻该决策，改用目录存在性比对（见 report-by-directory-presence）'
+  sidecar-provenance-marker:
+    decision: 在 cliInstallDir 写 wa-cli.dsh-writing-viewer.json（managedBy/sha256/installedAt）；分类=有标记且 sha256 与磁盘一致→插件安装，否则非插件安装
+    rationale: 同目录同名二进制只能靠谁装的留痕区分；sha256 比对防「插件装过之后被手动覆盖」的陈旧标记误报；waCliPath 操作者指定路径无标记、如实显示非插件安装；写入仍在声明的 setupfs 写入面内（cliInstallDir）
+  marker-best-effort:
+    decision: 标记写入失败不使安装失败：日志记录，状态如实分类为非插件安装
+    rationale: 标记是溯源元数据而非功能前提；为它整体失败会把可用安装误报为失败
+  scene-artifact-absent:
+    decision: 本变更不携带 delta 场景工件：唯一可用的 strict-spec-cli 构建不含 scene 命令（宿主重启后 sop-agent 轮换为无 scene 支持的旧构建），按 CLI-Only YAML 协议不手写场景工件。场景四问已答（本决策与 proposal/questions 记录）；行为增量（来源对照表、插件安装标记）由新需求 setup-provenance 覆盖，既有场景 plugin-setup-enable 的 status-shown 步骤所述显示行为仍然成立
+    rationale: 场景工件缺席是工具能力缺口而非范围判断；归档时该缺口如实报告，后续构建恢复 scene 支持时可用 scene-edit 补记
+  report-by-directory-presence:
+    decision: 对照表改为标准技能目录存在性比对：对每个内置名单技能按序探测项目 .dsh/skills、项目 .agents/skills、用户 ~/.dsh/skills、~/.agents/skills 下是否存在 <name>/SKILL.md——存在即外部胜出（显示来源标签与路径）并标明内置后备就绪，否则内置；项目目录经 setup 路由的 ?root= 查询参数传入（与面板定位一致），未定位时仅比对用户级目录
+    rationale: 外部优先语义下「存在外部副本 ⇒ 外部胜出」是确定结论，存在性检查不需要复制宿主 rank 竞争；探测的是 preset 层文件系统源读取的同一批标准目录，结论与加载时包裹层一致；局限如实登记：自定义技能目录（custom）与其他提供者不在比对之列，加载时包裹层仍是权威
+alternatives: []
+risks: []

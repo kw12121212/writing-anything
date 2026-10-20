@@ -1,0 +1,65 @@
+schema: strict-spec-driven/delta-spec/v1
+schema_version: 1
+artifact_type: delta_spec
+schema_file: templates/strict-spec-driven/schemas/delta-spec.yaml
+target_spec: dsh-plugin
+operations:
+  ADDED:
+    setup-provenance:
+      strength: MUST
+      statement: enableSetup 开启且启用完成后，设置区必须回答「内置还是外置」：为内置名单中的每个技能按序探测标准技能目录（项目的 .dsh/skills 与 .agents/skills、用户的 ~/.dsh/skills 与 ~/.agents/skills，用户目录随 DSH_HOME / DSH_AGENTS_HOME 环境覆盖）下是否存在同名 SKILL.md——存在即显示外部胜出（来源标签 project-dsh、project-agents、user-dsh 或 user-agents 与该文件路径）并标明内置后备就绪，全部不存在则显示内置（dsh-writing-viewer）；项目目录取 setup 状态请求的 root 参数（与面板当前定位一致，经与快照路由相同的路径校验，非法取值按未提供处理），未提供时仅比对用户级目录；对照表是文件存在性比对，自定义技能目录、其他技能提供者与深层嵌套工作区的仓库根推导不在比对之列（加载时的技能包裹层仍是权威）；CLI 状态必须依据溯源标记如实分类：插件安装的 wa-cli（同目录存在插件写入的标记且其记录的 SHA-256 与磁盘二进制一致）显示为插件安装，其余（含操作者经 waCliPath 指定的路径、标记缺失或与磁盘不符）如实显示为非插件安装
+      scenarios:
+        external-skill-reported:
+          - GIVEN: 用户级技能目录存在同名 wa-* 技能且按优先级胜出，内置后备已注册
+          - WHEN: 查看设置区的技能来源对照表
+          - THEN: 该技能显示外部来源标签与 SKILL.md 路径，并标明内置后备就绪；无外部同名的技能显示内置（dsh-writing-viewer）
+        report-degraded:
+          - GIVEN: 宿主 skills 服务不可用或 list() 抛错
+          - WHEN: 查看设置区
+          - THEN: 对照表整体降级不显示，其余状态（CLI、注册名单等）照常，不空白不报错
+        cli-plugin-installed:
+          - GIVEN: 插件刚下载安装了 wa-cli（标记写入成功且 sha256 一致）
+          - WHEN: 查看设置区 CLI 状态
+          - THEN: 显示为插件安装
+        cli-not-plugin-installed:
+          - GIVEN: CLI 路径来自操作者配置的 waCliPath，或路径上二进制被手动更换导致标记 sha256 不符，或无标记
+          - WHEN: 查看设置区 CLI 状态
+          - THEN: 如实显示为非插件安装
+        external-in-user-dir:
+          - GIVEN: 用户 ~/.agents/skills 下存在同名 wa-* 技能的 SKILL.md
+          - WHEN: 查看设置区的技能来源对照表
+          - THEN: 该技能显示外部 user-agents 与该文件路径并标明内置后备就绪
+        external-in-project-dir:
+          - GIVEN: 面板定位的项目 .agents/skills 或 .dsh/skills 下存在同名技能
+          - WHEN: 携带该项目目录请求 setup 状态
+          - THEN: 该技能显示对应 project 来源标签与路径；未携带 root 或 root 非法时该行按用户级目录与内置判定
+        builtin-when-absent:
+          - GIVEN: 全部标准技能目录均无同名外部技能
+          - WHEN: 查看对照表
+          - THEN: 该技能显示内置（dsh-writing-viewer）
+  MODIFIED:
+    setup-provenance:
+      strength: MUST
+      statement: enableSetup 开启且启用完成后，设置区必须回答「内置还是外置」：为内置名单中的每个技能按序探测标准技能目录（项目的 .dsh/skills 与 .agents/skills、用户的 ~/.dsh/skills 与 ~/.agents/skills）下是否存在同名 SKILL.md——存在即显示外部胜出（来源标签 project-dsh、project-agents、user-dsh 或 user-agents 与该文件路径）并标明内置后备就绪，全部不存在则显示内置（dsh-writing-viewer）；项目目录取 setup 状态请求的 root 参数（与面板当前定位一致），未提供时仅比对用户级目录；对照表是文件存在性比对，自定义技能目录与其他技能提供者不在比对之列（加载时的技能包裹层仍是权威）；CLI 状态必须依据溯源标记如实分类：插件安装的 wa-cli（同目录存在插件写入的标记且其记录的 SHA-256 与磁盘二进制一致）显示为插件安装，其余（含操作者经 waCliPath 指定的路径、标记缺失或与磁盘不符）如实显示为非插件安装
+      scenarios:
+        external-in-user-dir:
+          - GIVEN: 用户 ~/.agents/skills 下存在同名 wa-* 技能的 SKILL.md
+          - WHEN: 查看设置区的技能来源对照表
+          - THEN: 该技能显示外部 user-agents 与该文件路径并标明内置后备就绪
+        external-in-project-dir:
+          - GIVEN: 面板定位的项目 .agents/skills 下存在同名技能
+          - WHEN: 携带该项目目录请求 setup 状态
+          - THEN: 该技能显示外部 project-agents 与路径；未携带 root 时该行按用户级目录与内置判定
+        builtin-when-absent:
+          - GIVEN: 全部标准技能目录均无同名外部技能
+          - WHEN: 查看对照表
+          - THEN: 该技能显示内置（dsh-writing-viewer）
+        cli-plugin-installed:
+          - GIVEN: 插件刚下载安装了 wa-cli（标记写入成功且 sha256 一致）
+          - WHEN: 查看设置区 CLI 状态
+          - THEN: 显示为插件安装
+        cli-not-plugin-installed:
+          - GIVEN: CLI 路径来自操作者配置的 waCliPath，或路径上二进制被手动更换导致标记 sha256 不符，或无标记
+          - WHEN: 查看设置区 CLI 状态
+          - THEN: 如实显示为非插件安装
+  REMOVED: {}

@@ -118,6 +118,49 @@ function sha256Hex(bytes: Uint8Array): string {
   return createHash('sha256').update(bytes).digest('hex');
 }
 
+/** SHA-256 of arbitrary bytes, hex — used for download verification and for
+ * provenance-marker comparison against the on-disk binary. */
+export const sha256HexOf = sha256Hex;
+
+/** Sidecar marker the plugin writes next to a binary IT installed, so
+ * "built-in" can be distinguished from an author-installed binary at the
+ * same path (install.sh defaults to the same directory). */
+export const PROVENANCE_MARKER_NAME = 'wa-cli.dsh-writing-viewer.json';
+
+/** Marker payload: who manages the binary, what bytes were installed, when. */
+export interface ProvenanceMarker {
+  managedBy: string;
+  sha256: string;
+  installedAt: string;
+}
+
+/** Marker path next to a binary path. */
+export function provenanceMarkerPath(binaryPath: string): string {
+  const at = binaryPath.lastIndexOf('/');
+  return at <= 0 ? PROVENANCE_MARKER_NAME : binaryPath.slice(0, at) + '/' + PROVENANCE_MARKER_NAME;
+}
+
+/** Build the marker for bytes the plugin is about to install. */
+export function provenanceMarker(bytes: Uint8Array, installedAt: string): ProvenanceMarker {
+  return { managedBy: 'dsh-writing-viewer', sha256: sha256Hex(bytes), installedAt };
+}
+
+/** Parse marker JSON; null for anything malformed or foreign. */
+export function parseProvenanceMarker(text: string): ProvenanceMarker | null {
+  let raw: unknown;
+  try {
+    raw = JSON.parse(text);
+  } catch {
+    return null;
+  }
+  if (raw === null || typeof raw !== 'object') return null;
+  const marker = raw as Record<string, unknown>;
+  if (marker.managedBy !== 'dsh-writing-viewer') return null;
+  if (typeof marker.sha256 !== 'string' || marker.sha256 === '') return null;
+  if (typeof marker.installedAt !== 'string' || marker.installedAt === '') return null;
+  return { managedBy: marker.managedBy, sha256: marker.sha256, installedAt: marker.installedAt };
+}
+
 /** Expected SHA-256 for `asset` from a SHA256SUMS body, or null when absent. */
 export function checksumFor(sumsText: string, asset: string): string | null {
   for (const rawLine of sumsText.split('\n')) {
@@ -179,6 +222,8 @@ export interface SetupFs {
   rename(from: string, to: string): Promise<void>;
   stat(path: string): Promise<{ isFile: boolean; isDirectory: boolean } | null>;
   readFile(path: string): Promise<string | null>;
+  /** Raw bytes read (marker verification hashes the real binary). */
+  readFileBytes(path: string): Promise<Uint8Array | null>;
   readdir(dir: string): Promise<string[] | null>;
   mkdtemp(prefix: string): Promise<string>;
   rm(dir: string, recursive: boolean): Promise<void>;
@@ -338,6 +383,44 @@ export interface SkillsServiceLike {
     list(options: { signal?: AbortSignal }): Promise<readonly SkillCandidate[]>;
     get(candidate: SkillCandidate, options: { signal?: AbortSignal }): Promise<SkillDefinition | undefined>;
   }): () => void;
+}
+
+/** Standard external skill directories, in the filesystem source's own
+ * precedence order (project .dsh < project .agents < user .dsh < user
+ * .agents — custom dirs and bundled roots are not enumerable from here).
+ * `projectRoot` null skips the project-level roots; the user-level dirs come
+ * from the caller, who honors DSH_HOME / DSH_AGENTS_HOME like the host
+ * source. The real source derives project roots by walking up to .git while
+ * the panel supplies its located root — the two diverge for deeply nested
+ * workspaces (a documented limitation, not a second truth source). */
+export function externalSkillRoots(
+  projectRoot: string | null,
+  homes: { dsh: string; agents: string },
+): { dir: string; source: string }[] {
+  const roots: { dir: string; source: string }[] = [];
+  if (projectRoot !== null) {
+    roots.push({ dir: `${projectRoot}/.dsh/skills`, source: 'project-dsh' });
+    roots.push({ dir: `${projectRoot}/.agents/skills`, source: 'project-agents' });
+  }
+  roots.push({ dir: `${homes.dsh}/skills`, source: 'user-dsh' });
+  roots.push({ dir: `${homes.agents}/skills`, source: 'user-agents' });
+  return roots;
+}
+
+/** First standard directory holding `<name>/SKILL.md` for this skill, in
+ * precedence order — under external-first semantics an existing external
+ * copy wins over the builtin registration, so presence decides the report. */
+export async function findExternalSkill(
+  fs: SetupFs,
+  roots: readonly { dir: string; source: string }[],
+  name: string,
+): Promise<{ source: string; path: string } | null> {
+  for (const root of roots) {
+    const path = `${root.dir}/${name}/SKILL.md`;
+    const info = await fs.stat(path);
+    if (info !== null && info.isFile) return { source: root.source, path };
+  }
+  return null;
 }
 
 /** Register the built-in skills as one provider ranked ABOVE every filesystem

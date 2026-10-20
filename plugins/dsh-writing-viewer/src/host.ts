@@ -447,6 +447,11 @@ export function apply(ctx: {
       tempBase: tmpdir(),
       platform: process.platform,
       arch: process.arch,
+      now: () => new Date().toISOString(),
+      skillHomes: {
+        dsh: process.env.DSH_HOME ?? `${homedir()}/.dsh`,
+        agents: process.env.DSH_AGENTS_HOME ?? `${homedir()}/.agents`,
+      },
     };
     // Once the host skills service is available, register from an existing
     // builtin binary — startup never downloads; the panel action does.

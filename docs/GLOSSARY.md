@@ -402,6 +402,7 @@
 | 预发布版 | Prerelease | 预发布版 | 带连字符的版本号（如 `v0.1.0-rc1`）；GitHub Release 标记为 pre-release，安装脚本默认不下载 |
 | 项目技能 | Project Skill | 项目技能 | 放在仓库 `.agents/skills/<name>/SKILL.md`、指导开发流程的 Agent Skills（如正式发布）；不随二进制分发，产品运行时不依赖它 |
 | 持续集成与持续交付 | CI/CD | CI/CD | 推送后由服务端自动构建、测试与发布的机制；本项目不使用，仓库中不放置任何工作流文件 |
+| 溯源标记 | Provenance Marker | 溯源标记 | dsh-writing-viewer 插件下载安装 wa-cli 时写在同目录的 sidecar 文件 `wa-cli.dsh-writing-viewer.json`（managedBy、sha256、installedAt）；状态按「标记存在且 sha256 与磁盘二进制一致」判定为插件安装，否则如实显示非插件安装——install.sh 与插件默认同目录，只有标记能区分二进制是谁装的 |
 | 发布产物 | Release Asset | 发布产物 | 随版本发布的文件：各平台的 `wa-cli-<os>-<arch>` 二进制与 `SHA256SUMS` |
 | 校验文件 | Checksum File | 校验文件 | 记录每个发布产物 SHA-256 的 `SHA256SUMS`，格式与 `sha256sum` 兼容 |
 | 发布说明 | Release Notes | 发布说明 | GitHub Release 页面上的版本说明：按里程碑汇总的变化摘要，后接 gh 自动生成的比较链接 |
