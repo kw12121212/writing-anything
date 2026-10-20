@@ -370,7 +370,7 @@
 | 源码高亮视图 | Source Highlight View | 源码视图 | DSH 插件产物视图的两种呈现之一：YAML 与 Markdown 产物原文的只读着色展示（YAML 着色键、标量、结构、注释、锚点与别名，Markdown 着色标题、列表、代码块、引用、表格等结构）；大 YAML 按顶层键折叠，高亮实现打包进客户端 bundle 不依赖网络 |
 | 请求来源校验 | Request Origin Guard | 来源校验 | DSH 插件在自注册 host 路由 handler 内做的请求来源判定，与 DSH 宿主 `/api` 浏览器信任栅栏（api-request-trust）同构：Host 头须为回环字面量、宿主监听地址字面量或插件配置 `allowedHosts` 显式放行的权威；`sec-fetch-site: cross-site` 拒绝；带 Origin 头时须与 Host 同权威；不满足返回 403（`cache-control: no-store`）。针对浏览器载体攻击（跨站读取、DNS rebinding），不是身份认证——本机进程访问与直接读文件等价，不在其威胁模型内 |
 | 技能 | Skill | 技能 | Agent Skills 格式的操作说明包；wa-cli 内置的技能用 wa-cli skills install 安装 |
-| 技能提供者 | Skill Provider | 技能提供者 | DSH 技能注册表（`@deepseek-ai/dsh-skill` 的 SkillRegistry）的技能来源接口；各来源以 rank 升序竞争同名技能，rank 越小优先级越高；dsh-writing-viewer 插件以 rank 50 的提供者注册内置技能，优先于全部文件系统技能源（project 100/200、user 400/500、bundled 600） |
+| 技能提供者 | Skill Provider | 技能提供者 | DSH 技能注册表（`@deepseek-ai/dsh-skill` 的 SkillRegistry）的技能来源接口；各来源以 rank 升序竞争同名技能，rank 越小优先级越高；dsh-writing-viewer 插件以 rank 650 的提供者注册内置技能作为后备——高于全部技能层级（project 100/200、custom 300、user 400/500、运行时注册 250、bundled 600），任何同名外部技能优先，内置仅在无同名外部技能时提供 |
 | 模型上下文协议 | Model Context Protocol | MCP | Agent 调用外部工具的开放协议 |
 | 大语言模型 | Large Language Model | LLM | Agent 背后的 AI 模型；`wa-cli` 本身不调用 |
 | MCP 服务 | MCP Server | MCP 服务 | 由 `wa-cli mcp --dir <项目目录>` 以 stdio 方式提供（双代服务端，支持 MCP 2026-07-28、2025-11-25 与 2025-06-18 版协议）：tools 对应命令，resources 暴露工作区产物、生效配置与作者反馈，prompts 对应技能 |

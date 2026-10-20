@@ -55,7 +55,7 @@ export interface SetupLabels {
   cliMissing: string;
   version: string;
   resolvedTo: string;
-  shadowed: string;
+  externalActive: string;
   skillsRegistered: string;
   skillsMissing: string;
   failed: string;
@@ -65,14 +65,14 @@ const SETUP_TEXT: Record<'zh' | 'en', SetupLabels> = {
   zh: {
     title: '内置技能与 CLI（Setup）',
     notEnabled: '尚未启用：点击下方按钮安装内置 wa-cli 并注册内置技能',
-    enabled: '已启用：内置技能已注册，wa-cli 解析为内置版本',
+    enabled: '已启用：外部技能与 CLI 优先，内置版本作为后备',
     busy: '启用进行中…',
     enable: '启用内置技能与 CLI',
     cliReady: '内置 CLI',
     cliMissing: '内置 CLI 未就绪',
     version: '版本',
     resolvedTo: 'wa-cli 解析为',
-    shadowed: '已遮蔽外部版本',
+    externalActive: '外部版本生效，内置为后备',
     skillsRegistered: '已注册内置技能',
     skillsMissing: '内置技能未注册',
     failed: '启用失败',
@@ -80,14 +80,14 @@ const SETUP_TEXT: Record<'zh' | 'en', SetupLabels> = {
   en: {
     title: 'Built-in skills & CLI (setup)',
     notEnabled: 'Not enabled yet: click below to install the built-in wa-cli and register the built-in skills',
-    enabled: 'Enabled: built-in skills registered, wa-cli resolves to the built-in binary',
+    enabled: 'Enabled: external skills and CLI win, the built-in versions serve as fallback',
     busy: 'Enabling…',
     enable: 'Enable built-in skills & CLI',
     cliReady: 'Built-in CLI',
     cliMissing: 'Built-in CLI not ready',
     version: 'Version',
     resolvedTo: 'wa-cli resolves to',
-    shadowed: 'Shadowed external binary',
+    externalActive: 'External binary active, built-in as fallback',
     skillsRegistered: 'Registered built-in skills',
     skillsMissing: 'Built-in skills not registered',
     failed: 'Enable failed',
@@ -112,7 +112,7 @@ export interface SetupViewModel {
   headline: string;
   cliLine: string;
   resolvedLine: string | null;
-  shadowedLine: string | null;
+  externalLine: string | null;
   skillsLine: string;
   error: string | null;
   /** The enable button renders disabled unless this is true. */
@@ -136,7 +136,14 @@ export function setupViewModel(status: SetupStatus, actionInFlight: boolean, lab
     ? `${labels.cliReady}：${status.cli.path ?? '—'}${status.cli.version === null ? '' : `（${labels.version} ${status.cli.version}）`}`
     : labels.cliMissing;
   const resolvedLine = status.cli.resolved === null ? null : `${labels.resolvedTo}：${status.cli.resolved}`;
-  const shadowedLine = status.cli.external === null ? null : `${labels.shadowed}：${status.cli.external}`;
+  // The active-external line only renders when the external binary is what
+  // actually resolves (resolved === external). When the builtin dir already
+  // sits ahead of an external wa-cli on PATH, claiming "external active"
+  // would contradict the resolved line right above it.
+  const externalLine =
+    status.cli.external !== null && status.cli.resolved === status.cli.external
+      ? `${labels.externalActive}：${status.cli.external}`
+      : null;
   const skillsLine = status.skills.registered
     ? `${labels.skillsRegistered}（${status.skills.names.length}）`
     : labels.skillsMissing;
@@ -145,7 +152,7 @@ export function setupViewModel(status: SetupStatus, actionInFlight: boolean, lab
     headline: state === 'busy' ? labels.busy : state === 'enabled' ? labels.enabled : labels.notEnabled,
     cliLine,
     resolvedLine,
-    shadowedLine,
+    externalLine,
     skillsLine,
     error: state === 'error' ? status.lastError : null,
     canEnable: !actionInFlight && !status.busy,

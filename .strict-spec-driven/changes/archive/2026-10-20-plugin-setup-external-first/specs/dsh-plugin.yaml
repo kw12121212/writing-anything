@@ -1,0 +1,73 @@
+schema: strict-spec-driven/delta-spec/v1
+schema_version: 1
+artifact_type: delta_spec
+schema_file: templates/strict-spec-driven/schemas/delta-spec.yaml
+target_spec: dsh-plugin
+operations:
+  ADDED: {}
+  MODIFIED:
+    setup-skills-registered:
+      strength: MUST
+      statement: 启用完成后，全部内置技能（wa-* Skills）必须注册进 DSH 可调用的技能清单；存在同名外部技能（来自用户级或项目级技能目录）时，同名技能必须解析为外部版本，内置版本仅在不存在同名外部技能时提供（后备）；启用过程不得向用户级或项目级技能目录写入任何文件
+      scenarios:
+        builtin-listed:
+          - GIVEN: 启用动作已完成，不存在同名外部技能
+          - WHEN: 查看 DSH 的技能清单
+          - THEN: 全部内置 wa-* 技能出现且可加载，内容与内置版本一致
+        external-name-wins:
+          - GIVEN: 用户级或项目级技能目录已存在同名 wa-* 技能
+          - WHEN: 启用完成后解析该同名技能
+          - THEN: 解析结果为外部技能目录中的版本，内置版本保留为后备（外部技能移除后内置随即生效）
+        no-skill-dir-writes:
+          - GIVEN: 已记录用户级与项目级技能目录的文件清单
+          - WHEN: 完成一次启用
+          - THEN: 这些目录的清单、内容与修改时间不变
+    setup-cli-precedence:
+      strength: MUST
+      statement: 启用完成后，宿主会话的 shell 工具中 wa-cli 必须按既有 PATH 顺序优先解析外部版本；不存在外部 wa-cli 时必须解析到内置二进制（内置目录幂等追加到 PATH 末尾实现后备）；插件自身的快照命令调用遵循同一解析顺序；设置区必须如实显示当前解析到的二进制与内置后备路径（如存在外部版本则一并显示）
+      scenarios:
+        shell-resolves-external-first:
+          - GIVEN: PATH 上已能解析到外部 wa-cli
+          - WHEN: 启用完成后在 Agent 的 shell 工具中运行 wa-cli version
+          - THEN: 输出版本为外部二进制的版本，内置目录位于 PATH 末尾仅作后备
+        shell-falls-back-to-builtin:
+          - GIVEN: PATH 上没有任何 wa-cli
+          - WHEN: 启用完成后在 Agent 的 shell 工具中运行 wa-cli version
+          - THEN: 输出为内置二进制的版本（内置目录追加到 PATH 末尾被解析到）
+        snapshot-follows-path:
+          - GIVEN: 启用完成且 PATH 上存在外部 wa-cli
+          - WHEN: 请求一次完整快照
+          - THEN: 快照的结构状态来自按 PATH 顺序解析到的二进制的命令输出，与设置区显示的解析路径一致
+        status-reports-both:
+          - GIVEN: 存在外部 wa-cli 且内置二进制已就绪
+          - WHEN: 查看设置区状态
+          - THEN: 状态同时显示当前生效的外部路径与内置后备路径
+    setup-panel-section:
+      strength: MUST
+      statement: enableSetup 开启时，面板必须出现「内置技能与 CLI」设置区：显示内置 CLI 就绪状态（版本与路径）、已注册的内置技能清单、外部优先与内置后备的解析情况（外部版本实际生效时如实标明，内置为后备）与进行中提示；尚未启用时提供「启用内置技能与 CLI」的显式入口，该区不得出现任何其他写入控件
+      scenarios:
+        status-unenabled:
+          - GIVEN: 开关已开启，启用动作尚未完成
+          - WHEN: 作者打开插件面板
+          - THEN: 设置区显示未启用状态与「启用内置技能与 CLI」入口，不报错不空白
+        status-enabled:
+          - GIVEN: 启用动作已完成，内置 CLI 就绪且技能已注册
+          - WHEN: 打开插件面板
+          - THEN: 设置区列出已注册技能清单与内置 CLI 的版本和路径；存在实际生效的外部 wa-cli 时如实显示外部版本生效、内置为后备，不显示与当前解析结果矛盾的生效声明
+    setup-action:
+      strength: MUST
+      statement: 点击「启用内置技能与 CLI」必须触发一次完整启用：确保内置 CLI 就绪、注册全部内置技能（外部同名优先、内置后备）、把内置二进制目录幂等追加到宿主 PATH 末尾（既有顺序的外部 wa-cli 保持优先）、随后刷新设置区状态；同一时间至多存在一个进行中的启用动作，进行中时不得重复触发并显示提示；任一步失败时设置区显示可读原因、不进入已启用状态且可重试
+      scenarios:
+        enable-completes:
+          - GIVEN: 开关已开启且本机尚无 wa-cli
+          - WHEN: 作者点击「启用内置技能与 CLI」并等待完成
+          - THEN: 设置区进入已启用状态：技能清单与内置 CLI 版本路径齐备，内置目录位于 PATH 末尾作后备，过程中显示进行中提示
+        concurrent-click-ignored:
+          - GIVEN: 一次启用动作正在进行
+          - WHEN: 再次点击启用入口
+          - THEN: 不发起第二次启用动作，显示进行中提示，完成后状态区只反映这一次动作的结果
+        failure-readable:
+          - GIVEN: 启用动作中某一步失败（如下载失败）
+          - WHEN: 动作结束
+          - THEN: 设置区显示可读的失败原因，状态不是已启用，启用入口可再次使用
+  REMOVED: {}

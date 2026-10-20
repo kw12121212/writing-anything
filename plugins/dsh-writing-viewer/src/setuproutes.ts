@@ -3,15 +3,17 @@
  *
  * One origin-guarded route is registered only while `enableSetup` is on:
  * `GET /dsh-writing-viewer/setup` answers the panel's status section — CLI
- * readiness (path, version), the skills registered from the builtin
- * provider, what a later host shell resolves `wa-cli` to, and the external
- * binary being shadowed (when one exists). `POST` on the same path runs the
- * explicit enable action: ensure the builtin CLI (download + verify + atomic
- * install when missing or version-pinned differently), materialize the
- * builtin skills through a workspace-free temp directory, register them as
- * the low-rank provider, and prepend the builtin binary's directory to the
- * host PATH. One action runs at a time; a POST during an action just reports
- * the busy status. Any other method is a 405.
+ * readiness (path, version), the skills registered from the fallback
+ * provider, what a later host shell resolves `wa-cli` to (external first,
+ * builtin fallback), and the external binary currently winning (when one
+ * exists). `POST` on the same path runs the explicit enable action: ensure
+ * the builtin CLI (download + verify + atomic install when missing or
+ * version-pinned differently), materialize the builtin skills through a
+ * workspace-free temp directory, register them as the high-rank fallback
+ * provider, and append the builtin binary's directory to the END of the
+ * host PATH so existing order keeps winning. One action runs at a time; a
+ * POST during an action just reports the busy status. Any other method is
+ * a 405.
  *
  * The same pipeline (minus any download) also runs once at host start when
  * the builtin binary already exists, so a restart re-registers the skills
@@ -25,7 +27,7 @@ import {
   installBinary,
   materializeSkills,
   parseVersionOutput,
-  prependPathValue,
+  appendPathValue,
   registerSetupSkills,
   releaseAssetName,
   resolveAllOnPath,
@@ -159,14 +161,15 @@ async function registerSkills(deps: SetupDeps, state: SetupState, binary: string
   state.registered = true;
 }
 
-/** Prepend the builtin binary's directory to the host PATH (idempotent).
- * A bare binary name without a directory separator yields no directory, so
- * nothing is prepended for it. */
-function prependCliDir(deps: SetupDeps, binary: string): void {
+/** Append the builtin binary's directory to the END of the host PATH
+ * (idempotent): existing order wins, so an external wa-cli keeps resolving
+ * first and the builtin is the fallback. A bare binary name without a
+ * directory separator yields no directory, so nothing is appended for it. */
+function appendCliDir(deps: SetupDeps, binary: string): void {
   const at = binary.lastIndexOf('/');
   if (at <= 0) return;
   const dir = binary.slice(0, at);
-  deps.env.PATH = prependPathValue(deps.env.PATH, dir, deps.pathSeparator);
+  deps.env.PATH = appendPathValue(deps.env.PATH, dir, deps.pathSeparator);
 }
 
 /**
@@ -180,7 +183,7 @@ export async function runSetupAction(deps: SetupDeps, state: SetupState): Promis
   try {
     const binary = await ensureCli(deps);
     await registerSkills(deps, state, binary);
-    prependCliDir(deps, binary);
+    appendCliDir(deps, binary);
   } catch (error) {
     state.lastError = error instanceof SetupError ? error.message : `启用失败：${String((error as Error)?.message ?? error)}`;
   } finally {
@@ -192,9 +195,10 @@ export async function runSetupAction(deps: SetupDeps, state: SetupState): Promis
 /**
  * Host-start registration when the builtin binary already exists: no
  * download, no version check, no network — just materialize, register and
- * prepend, so the skills survive a host restart without another click. A
- * missing binary stays quiet (the panel's enable action downloads it).
- * Failures stay quiet too (the enable action reports them properly).
+ * append the fallback PATH entry, so the skills survive a host restart
+ * without another click. A missing binary stays quiet (the panel's enable
+ * action downloads it). Failures stay quiet too (the enable action reports
+ * them properly).
  */
 export async function startupSetup(deps: SetupDeps, state: SetupState): Promise<void> {
   try {
@@ -202,7 +206,7 @@ export async function startupSetup(deps: SetupDeps, state: SetupState): Promise<
     const info = await deps.fs.stat(path);
     if (info === null || !info.isFile) return;
     await registerSkills(deps, state, path);
-    prependCliDir(deps, path);
+    appendCliDir(deps, path);
   } catch (error) {
     console.error(`[dsh-writing-viewer] startup setup skipped: ${String((error as Error)?.message ?? error)}`);
   }

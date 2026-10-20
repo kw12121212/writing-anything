@@ -1019,7 +1019,7 @@ function renderSetupSection(h: H, s: PanelState, a: PanelActions): unknown {
     h('p', { key: 'headline', 'data-setup-headline': model.state, style: { margin: 0, fontWeight: '600' } }, model.headline),
     line('cli', model.cliLine),
     model.resolvedLine === null ? null : line('resolved', model.resolvedLine),
-    model.shadowedLine === null ? null : line('shadowed', model.shadowedLine, COLOR.warn),
+    model.externalLine === null ? null : line('external', model.externalLine, COLOR.warn),
     line('skills', model.skillsLine),
     model.skillNames.length === 0
       ? null

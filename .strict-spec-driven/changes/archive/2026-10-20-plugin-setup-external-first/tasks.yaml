@@ -1,0 +1,43 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: plugin-setup-external-first
+sections:
+  Implementation:
+    flip-skill-rank:
+      text: setup.ts：SETUP_SKILL_RANK 改为 650（高于文件系统源全部层级），注释与导出名同步；rank 相关断言反转
+      status: complete
+    path-append-fallback:
+      text: setup.ts：prependPathValue 改为 appendPathValue（目录已在 PATH 任意位置则不动，否则追加末尾）；setuproutes.ts 的 prependCliDir 改为 appendCliDir 调用新语义
+      status: complete
+    status-and-labels:
+      text: setupview.ts 状态语义与双语文案反转（外部生效、内置后备）；setuproutes.ts 状态组装注释同步；client 渲染属性 data-setup-* 语义对应调整
+      status: complete
+    tests-flip:
+      text: 更新 setup.test.ts 与 client.test.ts：rank 高于 600 且输给文件系统源竞争者、PATH 追加幂等且外部优先、状态文案断言反转；保留异步契约回归网
+      status: complete
+    docs-and-evidence:
+      text: 'README（setup 专节、API 约束 #9/#10 表述反转）、GLOSSARY 技能提供者词条 rank 说明更新；另起 13099 实例实测外部优先与后备两种形态并追加 docs/evidence/setup-check.txt'
+      status: complete
+  Testing:
+    lint-typecheck:
+      text: 类型检查与构建
+      status: complete
+      command: pnpm --dir plugins/dsh-writing-viewer run build
+    unit-tests:
+      text: 插件全量 vitest
+      status: complete
+      command: pnpm --dir plugins/dsh-writing-viewer test
+    full-regression:
+      text: 完整项目回归
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    strict-verify:
+      text: strict 变更工件结构校验
+      status: complete
+      command: strict-spec-cli verify plugin-setup-external-first
+testing_gates:
+  validation_task: lint-typecheck
+  unit_test_task: unit-tests

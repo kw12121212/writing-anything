@@ -1,0 +1,34 @@
+schema: strict-spec-driven/delta-scene/v1
+schema_version: 1
+artifact_type: delta_scene
+schema_file: templates/strict-spec-driven/schemas/delta-scene.yaml
+target_scene: plugin-setup-enable
+operations:
+  ADDED: {}
+  MODIFIED:
+    exception_flows:
+      external-shadowed:
+        trigger: 用户级或项目级目录已存在同名 wa-* 技能，且 PATH 上已能解析到外部 wa-cli
+        steps:
+          report:
+            action: 启用完成后，DSH 技能清单中同名技能解析为外部技能目录版本，Agent shell 的 wa-cli 解析为外部二进制；内置版本保持注册与安装作为后备，状态区如实显示当前生效的外部来源与内置后备路径
+            covered_by:
+              - spec_id: dsh-plugin
+                requirement_id: setup-skills-registered
+              - spec_id: dsh-plugin
+                requirement_id: setup-cli-precedence
+      already-installed:
+        trigger: 配置目录已存在同版本内置二进制
+        steps:
+          skip:
+            action: 跳过下载直接进入技能注册与 PATH 追加（内置目录置于末尾作后备）
+            covered_by:
+              - spec_id: dsh-plugin
+                requirement_id: setup-cli-download
+    main_flow:
+      cli-precedence:
+        action: host 把内置二进制目录幂等追加到宿主 PATH 末尾，之后的 Agent shell 按既有 PATH 顺序优先解析外部 wa-cli，无外部版本时落到内置二进制
+        covered_by:
+          - spec_id: dsh-plugin
+            requirement_id: setup-cli-precedence
+  REMOVED: {}

@@ -15,7 +15,7 @@ import {
   parseSetupConfig,
   parseSkillFile,
   parseVersionOutput,
-  prependPathValue,
+  appendPathValue,
   releaseAssetName,
   resolveAllOnPath,
   registerSetupSkills,
@@ -442,7 +442,7 @@ describe('materializeSkills', () => {
 });
 
 describe('registerSetupSkills', () => {
-  it('registers one async provider, ranked below every filesystem source, speaking the registry contract', async () => {
+  it('registers one async provider, ranked above every filesystem source (fallback), speaking the registry contract', async () => {
     const service = fakeSkills();
     const dispose = registerSetupSkills(service, [SKILL_A, SKILL_B], 'dsh-writing-viewer');
     expect(service.providers).toHaveLength(1);
@@ -454,10 +454,22 @@ describe('registerSetupSkills', () => {
     expect(candidates.map((candidate) => candidate.name)).toEqual(['wa-auto', 'wa-init']);
     for (const candidate of candidates) {
       expect(candidate.rank).toBe(SETUP_SKILL_RANK);
-      expect(candidate.rank).toBeLessThan(100);
+      // Above every host skill layer (filesystem 100/200/300/400/500, runtime
+      // 250, bundled 600): external wins, builtin is the fallback.
+      expect(candidate.rank).toBeGreaterThan(600);
       expect(candidate.provider).toBe('dsh-writing-viewer');
       expect(candidate.locator).toBe(candidate.name);
       expect(candidate.invocation).toEqual({ modelInvocable: true, userInvocable: true });
+    }
+    // Same-name contest, mirroring the registry's ascending comparator: every
+    // host layer rank (100/200/300/400/500/600 and runtime 250) sorts ahead
+    // of the builtin fallback rank, so an external same-name skill wins.
+    const hostLayerRanks = [100, 200, 250, 300, 400, 500, 600];
+    for (const externalRank of hostLayerRanks) {
+      const ordered = [{ rank: externalRank, provider: 'external' }, { rank: SETUP_SKILL_RANK, provider: 'dsh-writing-viewer' }].sort(
+        (left, right) => left.rank - right.rank,
+      );
+      expect(ordered[0]!.provider).toBe('external');
     }
     const definition = await registryGet(provider, candidates[0]!);
     expect(definition?.content).toBe(SKILL_A.body);
@@ -467,11 +479,15 @@ describe('registerSetupSkills', () => {
   });
 });
 
-describe('prependPathValue and resolveAllOnPath', () => {
-  it('prepends once and stays stable afterwards', () => {
-    expect(prependPathValue(undefined, '/bin', ':')).toBe('/bin');
-    expect(prependPathValue('/usr/bin', '/bin', ':')).toBe('/bin:/usr/bin');
-    expect(prependPathValue('/bin:/usr/bin', '/bin', ':')).toBe('/bin:/usr/bin');
+describe('appendPathValue and resolveAllOnPath', () => {
+  it('appends at the end once and stays stable wherever the dir sits', () => {
+    expect(appendPathValue(undefined, '/inst', ':')).toBe('/inst');
+    // Existing order wins: the builtin dir goes last, external stays first.
+    expect(appendPathValue('/usr/bin', '/inst', ':')).toBe('/usr/bin:/inst');
+    // Present anywhere in PATH (front, middle, end) means no change at all.
+    expect(appendPathValue('/inst:/usr/bin', '/inst', ':')).toBe('/inst:/usr/bin');
+    expect(appendPathValue('/usr/bin:/inst', '/inst', ':')).toBe('/usr/bin:/inst');
+    expect(appendPathValue('/a:/usr/bin:/b:/inst:/c', '/inst', ':')).toBe('/a:/usr/bin:/b:/inst:/c');
   });
 
   it('lists every PATH entry holding the binary, in order', async () => {
@@ -539,7 +555,7 @@ function fullRunner(fs: SetupFs, version = 'v0.3.0'): SetupRunner {
 }
 
 describe('runSetupAction', () => {
-  it('installs, registers and prepends in one action', async () => {
+  it('installs, registers and appends the fallback PATH entry in one action', async () => {
     const asset = 'wa-cli-linux-amd64';
     const binary = new Uint8Array([7, 7]);
     const deps = makeDeps({
@@ -557,7 +573,7 @@ describe('runSetupAction', () => {
     expect(status.skills.registered).toBe(true);
     expect(status.skills.names).toEqual(['wa-auto']);
     expect(status.lastError).toBe(null);
-    expect(deps.env.PATH).toBe('/inst:/usr/bin');
+    expect(deps.env.PATH).toBe('/usr/bin:/inst');
   });
 
   it('keeps an existing binary with latest and never attempts the download', async () => {
@@ -635,20 +651,34 @@ describe('runSetupAction', () => {
 });
 
 describe('buildSetupStatus', () => {
-  it('reports resolution and shadowing against the live PATH', async () => {
+  it('reports resolution with external first and builtin as fallback', async () => {
     const deps = makeDeps({ files: { '/inst/wa-cli': 'x', '/usr/bin/wa-cli': 'old' }, envPath: '/usr/bin' });
     const runner = fullRunner(deps.fs);
     deps.spawn = () => runner;
     const state = createSetupState();
-    // Not enabled yet: resolved still points at the external binary.
+    // Not enabled yet: resolved points at the external binary.
     const before = await buildSetupStatus(deps, state);
     expect(before.cli.ready).toBe(true);
     expect(before.cli.resolved).toBe('/usr/bin/wa-cli');
     expect(before.cli.external).toBe('/usr/bin/wa-cli');
     await runSetupAction(deps, state);
+    // External-first unchanged after enabling: the builtin dir only appends.
     const after = await buildSetupStatus(deps, state);
-    expect(after.cli.resolved).toBe('/inst/wa-cli');
+    expect(deps.env.PATH).toBe('/usr/bin:/inst');
+    expect(after.cli.resolved).toBe('/usr/bin/wa-cli');
     expect(after.cli.external).toBe('/usr/bin/wa-cli');
+  });
+
+  it('falls back to the builtin binary when no external wa-cli is on PATH', async () => {
+    const deps = makeDeps({ files: { '/inst/wa-cli': 'x' }, envPath: '/usr/bin' });
+    const runner = fullRunner(deps.fs);
+    deps.spawn = () => runner;
+    const state = createSetupState();
+    await runSetupAction(deps, state);
+    expect(deps.env.PATH).toBe('/usr/bin:/inst');
+    const status = await buildSetupStatus(deps, state);
+    expect(status.cli.resolved).toBe('/inst/wa-cli');
+    expect(status.cli.external).toBe(null);
   });
 });
 
@@ -661,7 +691,7 @@ describe('startupSetup', () => {
     expect(deps.env.PATH).toBe('/usr/bin');
   });
 
-  it('registers and prepends from an existing binary', async () => {
+  it('registers and appends the fallback entry from an existing binary', async () => {
     const deps = makeDeps({ files: { '/inst/wa-cli': 'x' }, fetch: releaseFetch({}, { failAsset: true }) });
     const runner = fullRunner(deps.fs);
     deps.spawn = () => runner;
@@ -669,7 +699,7 @@ describe('startupSetup', () => {
     await startupSetup(deps, state);
     expect(state.registered).toBe(true);
     expect(state.skillNames).toEqual(['wa-auto']);
-    expect(deps.env.PATH).toBe('/inst:/usr/bin');
+    expect(deps.env.PATH).toBe('/usr/bin:/inst');
   });
 });
 
@@ -725,7 +755,7 @@ describe('registerSetupRoutes', () => {
     const actionResponse = await callRoute(route, { method: 'POST', headers: LOOPBACK_HEADERS });
     const body = JSON.parse(actionResponse.body!);
     expect(body.skills.registered).toBe(true);
-    expect(deps.env.PATH).toBe('/inst:/usr/bin');
+    expect(deps.env.PATH).toBe('/usr/bin:/inst');
   });
 
   it('rejects forged origins before any pipeline step and 405s other methods', async () => {

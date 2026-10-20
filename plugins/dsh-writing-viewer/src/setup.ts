@@ -17,14 +17,17 @@
  *   `.writing-anything`, so the spawn writes no audit line anywhere
  *   (verified against the real binary). Parsed SKILL.md bodies are
  *   registered into the DSH skill registry through a provider whose rank
- *   (50) sits below every filesystem source (project 100/200, user 400/500,
- *   bundled 600), which is what makes the built-in skill win same-name
- *   contests. No user or project skill directory is ever written.
- * - CLI precedence is a host-level PATH prepend: the DSH host builds child
- *   process environments from the host `process.env` (minus sensitive keys
- *   and `DSH_*`), so prepending the managed binary's directory once makes
- *   later agent shells resolve `wa-cli` to the built-in binary. The prepend
- *   is idempotent and only happens while setup is enabled.
+ *   (650) sits ABOVE every filesystem source (project 100/200, user
+ *   400/500, bundled 600) in the ascending rank contest — any same-name
+ *   external skill wins and the built-in serves as the fallback when none
+ *   exists. No user or project skill directory is ever written.
+ * - CLI precedence is external-first with a builtin fallback: the DSH host
+ *   builds child process environments from the host `process.env` (minus
+ *   sensitive keys and `DSH_*`), so idempotently APPENDING the managed
+ *   binary's directory to the end of PATH keeps the existing order — an
+ *   external wa-cli keeps resolving first, and the builtin is reachable
+ *   only when no external binary is. The append happens only while setup
+ *   is enabled.
  */
 import { createHash } from 'node:crypto';
 
@@ -48,9 +51,11 @@ export const DEFAULT_INSTALL_DIR = '~/.local/bin';
 /** Name of the installed binary. */
 export const CLI_BINARY_NAME = 'wa-cli';
 
-/** The setup skill provider's fixed rank: below every DSH filesystem source
- * (project .dsh = 100, project .agents = 200, user = 400/500, bundled = 600). */
-export const SETUP_SKILL_RANK = 50;
+/** The setup skill provider's fixed rank: ABOVE every DSH filesystem source
+ * (project .dsh = 100, project .agents = 200, user = 400/500, bundled = 600)
+ * in the ascending rank contest — any same-name external skill wins, and the
+ * built-in registration serves as the fallback when none exists. */
+export const SETUP_SKILL_RANK = 650;
 
 /** Read the setup config tolerantly; anything absent or malformed keeps the
  * capability disabled or on its default — a broken config never turns writes on. */
@@ -335,8 +340,9 @@ export interface SkillsServiceLike {
   }): () => void;
 }
 
-/** Register the built-in skills as one provider ranked below every filesystem
- * source; same-name external skills lose to these. Returns the disposer. */
+/** Register the built-in skills as one provider ranked ABOVE every filesystem
+ * source; any same-name external skill wins, and the built-in serves as the
+ * fallback when none exists. Returns the disposer. */
 export function registerSetupSkills(service: SkillsServiceLike, skills: readonly ParsedSkill[], providerName: string): () => void {
   const byName = new Map(skills.map((skill) => [skill.name, skill]));
   return service.registerProvider(() => ({
@@ -369,17 +375,24 @@ export function registerSetupSkills(service: SkillsServiceLike, skills: readonly
   }));
 }
 
-/** Idempotent PATH prepend: unchanged when the directory already leads, the
- * prepended value otherwise. The separator follows the host platform. */
-export function prependPathValue(pathValue: string | undefined, dir: string, separator: string): string {
+/**
+ * Idempotent PATH append: the builtin binary's directory goes to the END of
+ * PATH (fallback position) when it is not on PATH at all, and PATH is left
+ * untouched when the directory is already present anywhere — existing order
+ * wins, so an external wa-cli keeps resolving first and the builtin serves
+ * only when no external binary is reachable.
+ */
+export function appendPathValue(pathValue: string | undefined, dir: string, separator: string): string {
   const current = pathValue ?? '';
-  if (current === dir || current.startsWith(dir + separator)) return current;
-  return current === '' ? dir : dir + separator + current;
+  const entries = current.split(separator);
+  if (entries.includes(dir)) return current;
+  return current === '' ? dir : current + separator + dir;
 }
 
 /** Every PATH entry holding a regular file named `name`, in PATH order —
- * an honest report of what later host children resolve and what an earlier
- * (now shadowed) external binary sits at. */
+ * an honest report of what later host children resolve and where the other
+ * binaries (external ahead of the appended builtin, or the builtin itself
+ * when no external exists) sit. */
 export async function resolveAllOnPath(
   fs: SetupFs,
   pathValue: string | undefined,

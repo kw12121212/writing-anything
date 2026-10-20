@@ -1169,7 +1169,7 @@ describe('setup section', () => {
       ok: true,
       enabled: true,
       busy: false,
-      cli: { ready: true, path: '/inst/wa-cli', version: 'v0.3.0', resolved: '/inst/wa-cli', external: '/usr/bin/wa-cli' },
+      cli: { ready: true, path: '/inst/wa-cli', version: 'v0.3.0', resolved: '/usr/bin/wa-cli', external: '/usr/bin/wa-cli' },
       skills: { registered: true, names: ['wa-auto', 'wa-init'] },
       lastError: null,
       ...overrides,
@@ -1217,9 +1217,20 @@ describe('setup section', () => {
     expect(enabled.state).toBe('enabled');
     expect(enabled.cliLine).toContain('/inst/wa-cli');
     expect(enabled.cliLine).toContain('v0.3.0');
-    expect(enabled.resolvedLine).toContain('/inst/wa-cli');
-    expect(enabled.shadowedLine).toContain('/usr/bin/wa-cli');
+    expect(enabled.resolvedLine).toContain('/usr/bin/wa-cli');
+    expect(enabled.externalLine).toContain('/usr/bin/wa-cli');
+    expect(enabled.headline).toContain('fallback');
     expect(enabled.skillsLine).toContain('2');
+    // When the external binary is NOT what resolves (builtin dir ahead on
+    // PATH), the active-external line must stay hidden — a "外部版本生效"
+    // claim next to a builtin resolved line would be self-contradictory.
+    const builtinAhead = t.setupViewModel(
+      t.parseSetupStatus(status({ cli: { ready: true, path: '/inst/wa-cli', version: 'v0.3.0', resolved: '/inst/wa-cli', external: '/usr/bin/wa-cli' } }))!,
+      false,
+      labels,
+    );
+    expect(builtinAhead.resolvedLine).toContain('/inst/wa-cli');
+    expect(builtinAhead.externalLine).toBe(null);
     const failed = t.setupViewModel(t.parseSetupStatus(status({ cli: { ready: false, path: null, version: null, resolved: null, external: null }, skills: { registered: false, names: [] }, lastError: '校验失败' }))!, false, labels);
     expect(failed.state).toBe('error');
     expect(failed.error).toBe('校验失败');

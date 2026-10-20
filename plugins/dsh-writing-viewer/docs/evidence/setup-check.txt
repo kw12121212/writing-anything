@@ -2,7 +2,7 @@
 日期：2026-10-20（Asia/Taipei）
 环境：DSH 0.2.1-rc.2 web profile（`dsh --profile web --patch /tmp/setup-overlay.yml --host 127.0.0.1 --port 13099 --no-open` 测试实例，插件 link: 安装并重建），本机已有 wa-cli v0.3.0 于 ~/.local/bin（因此走「已存在 → 跳过下载」分支；下载与 SHA256SUMS 校验分支由插件单元测试以注入式 fetch 覆盖）。
 
-1. 启动即注册（enableSetup: true，宿主启动、无任何点击）：
+1. 启动即注册（enableSetup: true，宿主启动、无任何点击）【本节及第 5 节的「内置优先」语义已被第 6 节的外部优先、内置后备取代】：
    GET /dsh-writing-viewer/setup →
    {"ok":true,"enabled":true,"busy":false,
     "cli":{"ready":true,"path":"/home/wx766/.local/bin/wa-cli","version":"v0.3.0",
@@ -34,7 +34,7 @@
 fetch 覆盖：篡改字节拒绝安装、缺记录拒绝安装、HTTP 失败可读报错、失败不留部分文件）；下载最新
 版本（latest 解析 URL 形态由单元测试断言）。
 
-5. 真实注册表取证（评审修复后追加，2026-10-20）：
+5. 真实注册表取证（评审修复后追加，2026-10-20）【rank 50 内置胜出的表述已被第 6 节取代】：
    初版 provider 的 list/get 是同步的——插件自身状态显示 registered:true，但每个真实消费方都带
    AbortSignal 调用，注册表 waitWithAbort 对返回值直接调 .then，同步数组导致整个 provider 被跳过，
    宿主技能清单里一个 wa-* 都不会出现（全新上下文评审发现；插件自身路由的状态字段正是盲区）。
@@ -47,3 +47,16 @@ fetch 覆盖：篡改字节拒绝安装、缺记录拒绝安装、HTTP 失败可
    - REAL-REGISTRY-OK：异步契约在 signal 路径下成立，同名时 rank 50 的内置版本胜出。
    单元测试同步加了契约回归网：fakeSkills 按 waitWithAbort 语义（带 signal、要求 thenable）驱动
    provider，同步返回会直接测试失败。
+
+6. 优先级反转为外部优先、内置后备（plugin-setup-external-first，2026-10-20）：
+   - 真实注册表取证（/tmp/skill-registry-evidence.mjs，真实 dsh-skill SkillRegistry + 本插件 provider）：
+     注册 rank 200 的同名外部 provider 后，`registry.list({ signal })` 中 wa-init 解析到
+     fake-project-filesystem（外部胜出），`get` 返回 EXTERNAL BODY；无外部同名的 wa-auto 仍由
+     dsh-writing-viewer 提供——REAL-REGISTRY-OK: external wins same-name (rank 200 < 650),
+     builtin fills gaps only。
+   - 实例实测（13099，web profile，enableSetup: true）：
+     a) 宿主 PATH 无外部 wa-cli：resolved=/home/wx766/.local/bin/wa-cli、external=null——内置目录
+        追加到 PATH 末尾后被解析到（后备生效），12 个技能照常注册。
+     b) 在宿主 PATH 最前放置假外部 wa-cli（/tmp/fakebin/wa-cli，v9.9.9-external）重启实例：
+        resolved=/tmp/fakebin/wa-cli、external=/tmp/fakebin/wa-cli，内置 v0.3.0 仍 ready 作为
+        后备（追加在末尾不干扰既有顺序），技能注册不受影响——外部优先实测成立。

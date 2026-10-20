@@ -329,7 +329,7 @@ categories:
     must-must-6af326:
       title: 修改一条 MUST 需求时，要检查同一规格里相邻的 MUST 是否因此冲突
       status: active
-      occurrences: 1
+      occurrences: 2
       path: .strict-spec-driven/lessons/documentation/must-must-6af326.yaml
     lesson-cdee49:
       title: 夹具文档同样执行术语表首现双语；量化声明须带可复验锚点

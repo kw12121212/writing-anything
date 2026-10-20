@@ -1,0 +1,19 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: plugin-setup-external-first
+  status: proposed
+summary:
+  what:
+    - 反转 plugin-builtin-setup 落地的优先级：同名时外部技能与外部 wa-cli 优先，内置版本退为后备——技能提供者（Skill Provider）rank 从 50（低于全部文件系统源）改为高于文件系统源全部层级（>600），使任何用户级或项目级同名外部技能胜出、内置仅在无外部同名技能时提供；CLI 解析从把内置二进制目录前置 PATH 改为幂等追加到 PATH 末尾，宿主 shell 与插件快照桥按既有 PATH 顺序优先解析外部 wa-cli，仅在无任何外部 wa-cli 时落到内置二进制；设置区状态如实显示当前解析结果（外部生效/内置后备）
+  why:
+    - 作者明确改为外部技能与 CLI 优先、内置为 fallback：本机自装的 wa-* 技能与 wa-cli 应胜出，插件提供的内置版本只用于补缺，安装插件即完整可用的目标不变（无外部版本时内置兜底）
+scope:
+  in:
+    - plugins/dsh-writing-viewer 的 setup 核心（rank 常量、PATH 追加语义）、路由状态语义与文案、client 设置区文案与视图模型、插件测试、README 与 docs/GLOSSARY.md、实测证据
+  out:
+    - 下载校验安装链路、enableSetup 开关语义、技能注册机制（仍为进程内 provider、不写任何技能目录）、面板既有查看行为与快照响应结构的任何改变；wa-cli 内核与 Go 代码
+unchanged_behavior:
+  - enableSetup 关闭（默认）时插件行为不变；启用链路（确保 CLI→物化→注册→PATH 调整）与单飞行、来源校验、工作区零触碰承诺不变；setup 状态响应字段只增不改（resolved/external 字段保留，语义随优先级反转更新）；无外部版本时内置技能与 CLI 照常提供（后备语义）
