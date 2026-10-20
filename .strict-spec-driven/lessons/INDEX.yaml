@@ -361,6 +361,11 @@ categories:
       status: active
       occurrences: 1
       path: .strict-spec-driven/lessons/documentation/findings-rule-id-type-4ee84a.yaml
+    api-b3f45a:
+      title: 登记宿主 API 用法的文档必须同时实测并写明安全边界（认证与暴露面）
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/documentation/api-b3f45a.yaml
   operations:
     pr-gh-generate-notes-8e86ae:
       title: 不走 PR 的仓库里 gh --generate-notes 只生成一行比较链接，不是提交清单

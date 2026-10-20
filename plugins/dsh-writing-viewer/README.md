@@ -113,7 +113,7 @@ package.json 声明：
 
 界面只有刷新、路径切换与选择三类控件，没有任何编辑、写入或确认控件；作者确认与复核仍走 wa-cli 阅读页（Reading View）。文案中英双语，按页面语言选择。
 
-client bundle 内联了 `yaml` 解析器（用于读取 `work.yaml` 的文体与 `decisions.yaml` 的待决条目），`dist/client.js` 约 237 kB（gzip 约 58 kB），仍是单一 `__ModuleLoader__.load` 脚本、唯一外部依赖为宿主的 `react`，不访问网络。
+client bundle 内联了 `yaml` 解析器（用于读取 `work.yaml` 的文体与 `decisions.yaml` 的待决条目），`dist/client.js` 约 286 kB（gzip 约 69 kB；2026-10-20 实测：`wc -c dist/client.js` 为 285,985 B、`gzip -c dist/client.js | wc -c` 为 69,437 B，体积随依赖与视图演进会变，以这两条命令复验），仍是单一 `__ModuleLoader__.load` 脚本、唯一外部依赖为宿主的 `react`，不访问网络。
 
 ## 开发、构建与测试
 
@@ -153,6 +153,8 @@ dsh plugin --profile web add link:/home/wx766/Code/writing-anything/plugins/dsh-
 
 按 DSH 版本验证兼容性：`engines.dsh` 不满足运行中的 DSH 版本时，安装会要求版本豁免（`dsh plugin --profile web allow-version …`）；本插件按 0.2.1-rc.2 实测，范围声明为 `>=0.2.1-rc.2 <0.3.0`。
 
+安全提示：插件的两条只读路由注册在 DSH webServer 上，**不在** Web GUI 的浏览器认证（`?token=`）栅栏之内——无 token 访问 `/` 返回 401，但 `/dsh-writing-viewer/workspace` 与 `/dsh-writing-viewer/snapshot` 返回 200 并携带工作区数据（详见下方「发现的 DSH API 约束」第 8 条）。因此宿主应保持绑定回环地址（`--host 127.0.0.1`）；确需绑定非回环接口时，先在前面加带认证的反向代理。
+
 如需固定展示某个项目目录，在该 profile 的 `cordis.patch.yml` 中为插件行加配置：
 
 ```yaml
@@ -191,6 +193,7 @@ dsh plugin --profile web add link:/home/wx766/Code/writing-anything/plugins/dsh-
 5. **profile 补丁行即插件配置**：与插件 insert 行同 id 的 `- id: …, name: …, config: …` 行提供 `apply(ctx, config)` 的 config；`dsh web --patch <overlay.yml>` 可不改 profile 文件叠加配置。
 6. **host 路由即同源数据通道**：`ctx.inject(['webServer'], scope => scope.webServer.register({ name, kind: 'exact', path, handler }))` 注册的路由可被 client 以相对路径 `fetch` 访问（沿用 modsearch 模式，实测可用）。
 7. **UI 基础组件不作为依赖**：DSH 自带 client 包（如 dsh-client-ui-workspace、dsh-client-ui-trajectory）都经同一加载器 `require('@deepseek-ai/dsh-client-ui-primitives')`，说明该模块在加载器注册表中存在；但它不是面向第三方插件声明的契约，且加载器按需执行注册（`mode: live` 下临时注册的探测 factory 不会被执行），无法在页面上直接验证其导出。本插件只用主题令牌与原生元素，不依赖该模块。
+8. **插件路由不在认证栅栏内**：`webServer.register` 注册的路由不经 Web GUI 的浏览器认证（2026-10-20 实测）：无 token `GET /` 返回 `401 dsh web authentication required`，而无 token `GET /dsh-writing-viewer/workspace`、`GET /dsh-writing-viewer/snapshot` 返回 200，并携带工作区根路径、作品、素材与产物全文等全部快照数据。回环地址绑定下的单用户开发机风险有限；宿主一旦绑定非回环接口，任何能到达该端口的进程都可整库读取写作工作区——这种部署须自行加带认证的反向代理。
 
 ### 总览与导航实测（overview-navigation，2026-10-20）
 

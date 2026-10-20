@@ -1,0 +1,19 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: fix-dsh-writing-viewer-readme
+  status: proposed
+summary:
+  what:
+    - 修复 plugins/dsh-writing-viewer/README.md 的两处文档缺陷：1) client bundle 体积声明过期——README:116 写「约 237 kB（gzip 约 58 kB）」，2026-10-20 实测 dist/client.js 为 285,985 B（约 286 kB）、gzip 69,437 B（约 69 kB）；2) host 路由的认证暴露面未披露——插件经 webServer.register 注册的两条 GET 路由不在 Web GUI 浏览器认证栅栏之内（0.2.1-rc.2 实测：无 token GET / 返回 401，无 token GET /dsh-writing-viewer/snapshot 返回 200 并给出工作区根路径、作品、素材等全部快照数据），README 全文无任何披露
+  why:
+    - README 是本插件唯一安装与使用文档（polish-release 变更 docs-location 决策），读者据它决策安装与暴露面：过期的体积数字误导供应链评估，缺失的认证披露让操作者不知晓路由可被无认证读取、可能把宿主绑到非回环接口后泄露整个写作工作区
+scope:
+  in:
+    - plugins/dsh-writing-viewer/README.md
+  out:
+    - 插件源码、构建产物与测试（plugins/dsh-writing-viewer/src、dist、scripts、testdata）；dsh-plugin 主规格与技术标准（无产品行为变化）；路由实现与认证姿态本身（属 DSH 宿主 API 约束，插件侧不加认证机制——如需加认证属后续独立变更）；曾误判为缺陷的 dsh web --patch 命令形态（实测有效，无需修改）
+unchanged_behavior:
+  - 插件全部运行时行为（host 路由、快照聚合、client 渲染、键盘导航）；构建产物与体积本身（只改文档声明，不改产物）；两条路由的注册方式与响应结构
