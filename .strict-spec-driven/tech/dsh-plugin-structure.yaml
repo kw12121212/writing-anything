@@ -55,3 +55,27 @@ rules:
         - plugins/dsh-writing-viewer/src/wacli.ts：mapStatus/mapValidate/mapNext/mapTimeline 各自容错缺字段并给出降级原因；spawnCliRunner 无 shell、15 秒超时、8 MiB stdout 上限
       bad:
         - 在快照聚合函数里内联 execSync('wa-cli status --json')：wa-cli 缺失时整个面板 500，字段演进时聚合逻辑与映射一起改
+  host-route-path-input:
+    strength: MUST
+    statement: DSH 插件 host 路由接受客户端提供的本机路径时，必须先经纯函数校验：非空、不含 NUL、有长度上限、为绝对路径，并拒绝以两个斜杠或反斜杠开头的网络与设备路径（UNC、\\?\ 等），通过后规范化；该路径只作用于单次请求、host 不保存状态；路径无效或其下没有工作区时返回带可读原因的空态，不得回退到默认定位；读取范围限于 <路径>/.writing-anything/ 且不跟随其下的符号链接，传给 wa-cli 时只作为 --dir 的取值
+    rationale: 相对路径会随宿主工作目录漂移，绝对路径不会以 - 开头，传给 --dir 时不会被当作参数；UNC 与设备路径的一次 stat 就会触发网络访问；插件路由是简单 GET，任意网页可对本机端口发起跨站请求，读取范围与副作用必须先在校验处收口；静默回退会让作者误以为切换成功（overview-navigation 变更的面板路径切换确立此约定）
+    enforcement:
+      method: test
+      detail: host 测试断言相对、NUL、超长、UNC 与设备路径被拒且返回空态与原因、不回退默认定位、不带参数时行为不变；用写入型假 wa-cli 断言 --dir 取值为所选路径且调用集合有界；评审核对校验函数为纯函数且路径 API 经注入
+    examples:
+      good:
+        - plugins/dsh-writing-viewer/src/root.ts 的 parsePanelRoot：注入 isAbsolute/resolve，拒绝相对、NUL、超长与 // 或 \\ 开头的路径；host.ts 的 fullSnapshot 对无效路径返回 rootError 空态
+      bad:
+        - 快照路由直接 join(process.cwd(), req.query.root) 后读取：相对路径漂移、UNC 路径触发网络访问，无工作区时静默回退显示另一个项目
+  client-view-model-module:
+    strength: SHOULD
+    statement: DSH 插件 client 侧从快照等路由数据推导显示内容（计数、树、卡片、详情）的逻辑应单列为无 React、无 DOM、无 fetch 的纯函数模块，由 client 入口导入并经 tsdown 内联进同一 iife；client 入口只负责状态、事件绑定与以注入的 createElement 渲染，渲染函数对 createElement 保持纯，以便测试用记录型 createElement 断言渲染结构
+    rationale: 手写 lazy-CJS 的 client 入口只能经假 react 观察插槽注册，计数、树构建与降级呈现这类逻辑若混在组件里就无法表驱动测试；纯模块可直接用 testdata 构建的真实快照驱动，后续产物视图（artifact-views）也能复用同一视图模型与选中接口（overview-navigation 变更确立）
+    enforcement:
+      method: review
+      detail: 评审核对：推导逻辑位于独立模块（如 src/overview.ts）且不引用 react、window、document 或 fetch；渲染函数以参数接收 createElement；对应 vitest 以真实快照驱动视图模型并以记录型 createElement 断言渲染结构
+    examples:
+      good:
+        - plugins/dsh-writing-viewer/src/overview.ts 的 overviewModel/unitTree/unitDetail 纯函数，client.ts 的 renderPanel(h, state, actions) 由 client.test.ts 以记录型 h 断言
+      bad:
+        - 在 ViewerPanel 组件体内直接遍历 snapshot 计算阻塞项去重与树缩进，测试只能确认组件被注册

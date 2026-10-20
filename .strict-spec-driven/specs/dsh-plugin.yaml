@@ -86,3 +86,79 @@ requirements:
         - GIVEN: 主机环境可执行 wa-cli 且快照完整可用（未降级）
         - WHEN: 请求一次快照后读取 audit.log
         - THEN: 本次快照追加的审计行与有界命令集合一一对应（status、validate、next 各一条，每个长篇作品 timeline 一条），无多余调用
+  unit-tree-navigation:
+    strength: MUST
+    statement: 面板必须为选中的作品提供单元（Unit）树导航：按层级缩进展示单元，汇总单元带进度标记；选中某个单元后详情区显示该单元的阶段、进度、阻塞项、下一步命令与产物清单，且不提供任何编辑、写入或确认控件
+    scenarios:
+      tree-hierarchy:
+        - GIVEN: novel 作品含卷、章、场景三级单元
+        - WHEN: 在总览中选中该作品
+        - THEN: 单元树按卷、章、场景的层级缩进展示全部单元，卷与章节点显示 done/total 进度标记
+      unit-detail:
+        - GIVEN: 单元树已展示
+        - WHEN: 选中某个场景单元
+        - THEN: 详情区显示该单元的阶段、进度、阻塞项列表、下一步命令与产物清单，界面中没有编辑、写入或确认控件
+  overview-empty-and-error:
+    strength: MUST
+    statement: 面板在空态与错误态下必须可读：定位不到 .writing-anything/ 时显示 wa-cli init 指引；工作区内没有作品时显示创建作品的指引；validate 诊断与快照降级（degraded）原因必须以列表透出；取数失败时显示原因与重试，不得空白或崩溃；面板必须提供手动刷新入口
+    scenarios:
+      empty-workspace:
+        - GIVEN: 工作区已初始化但没有任何作品
+        - WHEN: 打开插件面板
+        - THEN: 面板显示没有作品的空态与创建作品的指引，不报错
+      diagnostics-and-degraded:
+        - GIVEN: validate 报告诊断，且快照的某个 wa-cli 区域（如 next）降级并在 degraded 中给出原因
+        - WHEN: 打开插件面板
+        - THEN: 面板列出诊断（严重级别、消息、路径）与降级原因，其余可用数据照常显示
+      manual-refresh:
+        - GIVEN: 面板已显示总览
+        - WHEN: 修改工作区内某单元阶段后点击刷新
+        - THEN: 总览与单元树显示修改后的阶段
+  overview-dashboard:
+    strength: MUST
+    statement: 定位到工作区时，面板必须以总览仪表盘（Overview Dashboard）呈现：每个作品（Work）一张卡片，显示作品 id、文体（Genre）、当前生命周期（Lifecycle）阶段、汇总单元进度（done/total）、阻塞项（Blocker）数量与摘要；阻塞项数量按作品内各单元阻塞项去重计数（汇总单元重复列出的子孙阻塞项只计一次）；工作区级汇总显示素材（Source）数、待决决策数、待复核数与 validate 诊断数，提供该数的 wa-cli 区域降级时显示为不可用而不是 0；信息按写作概念组织，不平铺目录文件
+    scenarios:
+      work-cards:
+        - GIVEN: 工作区含 tech-blog 文章 my-post 与 novel 作品 my-novel，my-novel 有阻塞项与多层级单元
+        - WHEN: 打开插件面板
+        - THEN: 面板为两个作品各显示一张卡片：文体与 work.yaml 一致，阶段与进度与 wa-cli status --json 对同一作品的结果一致，阻塞项数量等于该作品各单元阻塞项去重后的数量并附前两条摘要
+      workspace-summary:
+        - GIVEN: 工作区登记了素材、存在 status 为 open 的决策与待作者复核条目，validate 报告诊断
+        - WHEN: 打开插件面板
+        - THEN: 总览汇总区显示的素材数、待决决策数、待复核数与诊断数分别与素材目录、decisions.yaml、wa-cli next、wa-cli validate 的结果一致
+  overview-theme-and-narrow:
+    strength: MUST
+    statement: 总览与单元树必须随 DSH 明暗主题切换保持可读，并在 DSH 主面板常见宽度区间内可读可操作：视口宽度低于 1024px（侧栏收为 56px 导轨）或面板宽度低于 640px 时单元树与详情改为上下堆叠
+    scenarios:
+      theme-switch:
+        - GIVEN: 面板显示总览与单元树
+        - WHEN: 在 DSH 中切换明暗主题
+        - THEN: 文字、卡片边框与状态色随主题切换，文字与背景保持可读对比
+      narrow-stack:
+        - GIVEN: 浏览器窗口宽度低于 1024px，DSH 侧栏收为导轨
+        - WHEN: 在面板中选中作品查看单元树
+        - THEN: 单元树与详情上下堆叠展示，内容不被截断且可点击选中单元
+  panel-path-switch:
+    strength: MUST
+    statement: 面板必须允许作者切换到显式输入的项目目录绝对路径查看其工作区，并可恢复默认定位；所选路径只作用于面板本次查看，优先于插件配置的固定目录；路径不是绝对路径、是网络或设备路径，或其下没有 .writing-anything/ 时，面板必须显示空态与可读原因，不得静默改显示其他项目；切换或刷新进行中面板必须给出可见提示，较早请求的响应不得覆盖较新的选择；切换后插件仍只读取所选目录的 .writing-anything/，且除 wa-cli 追加的 audit.log 外不改变其中任何文件
+    scenarios:
+      switch-to-path:
+        - GIVEN: DSH 默认定位到项目 A，本机另有含 .writing-anything/ 的项目 B
+        - WHEN: 在面板输入项目 B 的绝对路径并切换
+        - THEN: 面板显示项目 B 的总览，工具栏标明当前路径为项目 B、来源为面板输入；项目 B 的 .writing-anything/ 除 audit.log 外文件清单、内容与修改时间不变
+      restore-default:
+        - GIVEN: 面板正在查看手动切换的项目 B
+        - WHEN: 选择恢复默认
+        - THEN: 面板回到按默认定位顺序找到的项目 A
+      invalid-path:
+        - GIVEN: 作者输入相对路径、网络路径（如 //server/share），或一个没有 .writing-anything/ 的目录绝对路径
+        - WHEN: 切换
+        - THEN: 面板显示空态与说明原因（路径须为绝对路径 / 不能是网络或设备路径 / 该目录下没有工作区，可用 wa-cli init 创建），不显示其他项目的数据
+      default-unchanged:
+        - GIVEN: 作者没有在面板中切换路径
+        - WHEN: 打开插件面板
+        - THEN: 面板按配置固定、DSH 工作区注册表、宿主进程目录的既有顺序定位工作区
+      superseded-request:
+        - GIVEN: 作者切换到项目 B 后、B 的快照返回之前又选择恢复默认
+        - WHEN: B 的快照晚于默认项目的快照返回
+        - THEN: 面板保持显示默认项目，迟到的 B 响应被丢弃

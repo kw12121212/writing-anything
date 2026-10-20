@@ -1,16 +1,21 @@
 import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { isAbsolute, join, resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   collectCandidates,
   apply,
+  fullSnapshot,
   registerRoute,
+  registerSnapshotRoute,
+  rootQueryOf,
   workspaceExistsAt,
   workspaceSnapshot,
   type WorkspaceRouteBody,
 } from './host';
 import type { WorkspaceRegistryLike } from './registry';
+import { parsePanelRoot, PANEL_ROOT_MAX_LENGTH } from './root';
+import type { SnapshotRouteBody } from './snapshot';
 
 const tempRoots: string[] = [];
 
@@ -197,7 +202,9 @@ describe('apply wiring', () => {
         }
       },
     };
-    apply(ctx, {});
+    // Pin a binary that cannot exist so the assertion below does not depend
+    // on whether the developer machine has wa-cli on PATH.
+    apply(ctx, { waCliPath: '/nonexistent/wa-cli-for-tests' });
     expect(routes.map((route) => route.path)).toEqual([
       '/dsh-writing-viewer/workspace',
       '/dsh-writing-viewer/snapshot',
@@ -255,3 +262,105 @@ describe('apply wiring', () => {
     expect(() => apply({}, {})).not.toThrow();
   });
 });
+
+/** A wa-cli path that cannot exist, so tests never depend on the machine's PATH. */
+const NO_CLI = { waCliPath: '/nonexistent/wa-cli-for-tests' };
+
+describe('parsePanelRoot', () => {
+  const pathApi = { isAbsolute, resolve };
+
+  it('treats a missing or blank parameter as absent', () => {
+    expect(parsePanelRoot(null, pathApi)).toEqual({ kind: 'absent' });
+    expect(parsePanelRoot(undefined, pathApi)).toEqual({ kind: 'absent' });
+    expect(parsePanelRoot('   ', pathApi)).toEqual({ kind: 'absent' });
+  });
+
+  it('accepts an absolute path and normalizes it', () => {
+    expect(parsePanelRoot(' /tmp/a/../b/ ', pathApi)).toEqual({ kind: 'ok', path: '/tmp/b' });
+  });
+
+  it('rejects relative, NUL-carrying and oversized paths with a readable reason', () => {
+    const relative = parsePanelRoot('projects/x', pathApi);
+    expect(relative.kind).toBe('invalid');
+    expect(relative.kind === 'invalid' && relative.reason).toContain('绝对路径');
+    expect(parsePanelRoot('-rf', pathApi).kind).toBe('invalid');
+    // UNC and device paths (and their POSIX look-alikes) are refused everywhere.
+    for (const unc of ['\\\\server\\share', '//server/share', '\\\\?\\C:\\x', '\\/mixed']) {
+      const result = parsePanelRoot(unc, pathApi);
+      expect(result.kind, unc).toBe('invalid');
+    }
+    expect(parsePanelRoot('/tmp/a\u0000b', pathApi).kind).toBe('invalid');
+    expect(parsePanelRoot('/' + 'a'.repeat(PANEL_ROOT_MAX_LENGTH), pathApi).kind).toBe('invalid');
+  });
+});
+
+describe('rootQueryOf', () => {
+  it('reads the root query parameter from the request url', () => {
+    expect(rootQueryOf('/dsh-writing-viewer/snapshot?root=%2Ftmp%2Fmy%20project')).toBe('/tmp/my project');
+    expect(rootQueryOf('/dsh-writing-viewer/snapshot')).toBeNull();
+    expect(rootQueryOf(undefined)).toBeNull();
+  });
+});
+
+describe('fullSnapshot with a panel root', () => {
+  it('views the requested project ahead of the config pin and the registry', async () => {
+    const other = await tempProject(true);
+    const pinned = await tempProject(true);
+    const body = await fullSnapshot(registryWith([pinned]), { workspaceRoot: pinned, ...NO_CLI }, '/nowhere', other + '/');
+    expect(body.root).toBe(other);
+    expect(body.source).toBe('panel-input');
+    expect(body.workspaceExists).toBe(true);
+    expect(body.candidates).toEqual([{ source: 'panel-input', path: other, workspaceExists: true }]);
+    expect('rootError' in body).toBe(false);
+  });
+
+  it('answers the empty state with a reason for a relative path, without falling back', async () => {
+    const project = await tempProject(true);
+    const body = await fullSnapshot(registryWith([project]), NO_CLI, project, 'relative/path');
+    expect(body.ok).toBe(true);
+    expect(body.root).toBeNull();
+    expect(body.workspaceExists).toBe(false);
+    expect(body.candidates).toEqual([]);
+    expect(body.emptyState).toEqual({ command: 'wa-cli init' });
+    expect(body.rootError).toContain('绝对路径');
+  });
+
+  it('answers the empty state with a reason when the path has no workspace, without falling back', async () => {
+    const empty = await tempProject(false);
+    const project = await tempProject(true);
+    const body = await fullSnapshot(registryWith([project]), NO_CLI, project, empty);
+    expect(body.root).toBeNull();
+    expect(body.snapshot).toBeNull();
+    expect(body.candidates).toEqual([{ source: 'panel-input', path: empty, workspaceExists: false }]);
+    expect(body.rootError).toContain('.writing-anything/');
+    expect(await readdir(empty)).toEqual([]);
+  });
+
+  it('keeps the default resolution and body shape without the parameter', async () => {
+    const project = await tempProject(true);
+    const body = await fullSnapshot(registryWith([project]), NO_CLI, '/nowhere');
+    expect(body.root).toBe(project);
+    expect(body.source).toBe('workspace-registry');
+    expect('rootError' in body).toBe(false);
+  });
+});
+
+describe('snapshot route query wiring', () => {
+  it('hands the root query parameter to the builder', async () => {
+    const routes: { path: string; handler: (req: unknown, res: unknown) => Promise<void> }[] = [];
+    const seen: (string | null)[] = [];
+    registerSnapshotRoute(
+      { webServer: { register: (route: (typeof routes)[number]) => routes.push(route) } } as Parameters<typeof registerSnapshotRoute>[0],
+      async (query) => {
+        seen.push(query.root);
+        return { ok: true } as SnapshotRouteBody;
+      },
+    );
+    const res = { writeHead: () => res, end: () => {} };
+    await routes[0]!.handler({ method: 'GET', url: '/dsh-writing-viewer/snapshot?root=%2Fsrv%2Fbook' }, res);
+    await routes[0]!.handler({ method: 'GET', url: '/dsh-writing-viewer/snapshot' }, res);
+    await routes[0]!.handler({ method: 'GET' }, res);
+    expect(seen).toEqual(['/srv/book', null, null]);
+  });
+});
+

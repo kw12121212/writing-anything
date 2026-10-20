@@ -1,0 +1,42 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: overview-navigation
+approach:
+  - '验证：overview.ts 由 vitest 以 testdata 罐装快照（tech-blog + novel 多层级、空工作区、缺失工作区、降级、诊断）驱动；client.test.ts 继续以假 react 验证插槽注册与路由切换；真实宿主实测（link: 装入 web profile）截取总览、单元树、窄宽度与空态证据，并复核打开面板与刷新前后工作区除 audit.log 外逐字节不变。'
+  - client 侧改为拉取既有只读快照路由 GET /dsh-writing-viewer/snapshot（不再只用定位路由）。新增纯函数视图模型模块 src/overview.ts：输入 SnapshotRouteBody，输出总览模型（作品卡片：作品 id 为标题、work.yaml 的 genre、根单元 stage、汇总单元 progress done/total、阻塞项数量与前若干条摘要；工作区级计数：素材数、待决决策数、待复核数、validate 诊断数与按严重级别分组；degraded 降级说明）、单元树模型（按 status 单元的 parent 关系建立层级，含深度、是否汇总单元、进度标记）与单元详情模型（阶段、进度、阻塞项列表、下一步命令、产物清单名称与路径）。client.ts 只负责 React 渲染、选中状态、刷新与布局，从 overview.ts 导入，由 tsdown 打进同一个 iife client bundle。
+  - 面板布局：顶部工具栏（标题、项目目录与来源、刷新按钮、路径输入与切换）→ 工作区汇总条与诊断/降级可展开列表 → 作品卡片网格 → 选中作品后左侧单元树、右侧单元详情；视口宽度低于 1024px（DSH 侧栏收为 56px 导轨）或面板容器宽度低于 640px 时单元树与详情上下堆叠。样式只用 DSH 主题令牌（--dsw-alias-* 等 CSS 自定义属性，带回退值），明暗主题随宿主切换。空态（定位不到工作区、工作区内无作品）显示 wa-cli init / wa-cli new 指引；错误态（路由失败）显示原因与重试。作品卡片的阻塞项按（错误码、路径、消息）去重计数，因为汇总单元会重复列出子孙单元的阻塞项；单元树以 status 的 parent 关系为主，status 降级时退回 work.yaml 层级（汇总单元不显示占位阶段），再退回目录单元。
+  - 面板内路径切换：root.ts 新增纯函数 parsePanelRoot（取查询参数 root，要求非空、不含 NUL、不超过长度上限、不以两个斜杠或反斜杠开头（UNC 与设备路径）、为绝对路径，规范化后返回；否则返回带原因的拒绝）与新的候选来源 panel-input；host.ts 的快照路由处理器从 req.url 解析查询参数，合法时以该路径为本次请求唯一候选（与配置固定同为排他语义，但只作用于本次请求），不合法或无工作区时返回 ok:true 的空态并带可读的 rootError，不落回默认定位以免作者误以为已切换；不带参数时走原有定位顺序。聚合仍只读取 <root>/.writing-anything/，wa-cli 仍以 --dir <root> 调用、次数有界。client 工具栏提供路径输入与「切换」「恢复默认」，所选路径只保存在面板组件状态中；请求经最新请求闸门（latestGate）只让最后一次请求落地，避免慢响应覆盖新选择。
+decisions:
+  view-model-module:
+    decision: 视图推导逻辑单列为 src/overview.ts 纯函数模块，client.ts 只做渲染与交互
+    rationale: client.ts 是无 import 的手写 lazy-CJS 脚本，测试只能经假 react 观察插槽注册，难以覆盖计数与树构建；纯函数模块可直接用罐装快照做表驱动测试，且 artifact-views 的产物视图可复用同一模型与选中单元接口
+  client-yaml-parse:
+    decision: client bundle 内置 yaml 包解析 work.yaml（genre）与 decisions.yaml（待决决策计数），打进 iife 不依赖网络
+    rationale: 快照把产物按全文文本下发且 status --json 不含文体与待决决策数；在 host 响应里追加派生计数会改变已归档 workspace-snapshot 定案的快照载荷形状，而手写行扫描对 YAML 流式写法（如 decisions 的内联映射）不可靠；artifact-views 的语义卡片同样需要解析 YAML，现在引入一次即可复用
+  theme-tokens-only:
+    decision: 视觉上只使用 DSH 主题令牌（CSS 自定义属性）与原生元素，不硬依赖 @deepseek-ai/dsh-client-ui-primitives；实测阶段核查该模块对第三方 client 的 require 可用性并写入 README
+    rationale: 该基础组件模块是 DSH 内部包，未出现在第三方插件可声明的契约里，0.2.x rc 阶段导出随时可能变化，硬依赖会让 require 失败时整个面板不可用；主题令牌已在 scaffold 面板实测可用，满足「不引入独立样式体系」与明暗主题适配
+  work-card-title:
+    decision: 作品卡片标题使用作品 id
+    rationale: work.yaml 的 JSON Schema 只有 id、genre、type、stage 与 units，没有标题字段；从写作简报推断标题会把产物语义解读混进总览，属 artifact-views 范围
+  unit-detail-placeholder:
+    decision: 选中单元时详情区展示结构状态与产物清单（名称、格式、路径），不渲染产物内容
+    rationale: 计划变更要求「选中单元进入其产物视图」，但产物语义卡片与高亮属依赖本变更的 artifact-views；先提供清单与稳定的选中接口，下一变更在同一详情区挂载视图，避免本变更越界
+  panel-root-query:
+    decision: 路径切换经快照路由的可选查询参数 root 实现，要求绝对路径，作用于单次请求且优先于插件配置的 workspaceRoot 固定；不新增路由、不在 host 侧保存状态
+    rationale: DSH webServer 按 pathname 精确匹配路由，查询参数不影响注册；单次请求作用域让 host 保持无状态、每次请求重读的既有契约；绝对路径要求排除了相对路径随宿主 cwd 漂移的歧义，并保证传给 wa-cli 的 --dir 取值不会以 - 开头被当作参数；作者在面板上的显式输入是比配置更近的意图，因此优先
+  invalid-root-no-fallback:
+    decision: root 参数不合法或其下没有 .writing-anything/ 时返回空态与可读原因，不回退到默认定位
+    rationale: 回退会让面板静默显示另一个项目，作者无法分辨切换是否生效；与 plugin-scaffold 定案的「排他固定使被固定目录无工作区时如实显示空态」一致
+alternatives:
+  - option: 在 host 快照路由中追加派生的 summary 计数字段（文体、待决决策数）
+    reason: 改变已归档 workspace-snapshot 定案的路由形状并扩大本变更到 host 侧，需要连带更新 snapshot-aggregation 规格与 host 测试；client 侧解析同样可得且不触碰只读服务
+  - option: client 用正则逐行扫描 YAML 顶层键
+    reason: decisions.yaml 的选项为流式内联映射、status 位于列表项内部缩进处，行扫描在合法 YAML 写法变化时会静默算错计数
+risks:
+  - 面板容器宽度判定依赖宿主布局，rc 版本可能调整侧栏宽度；缓解：按容器宽度而非视口宽度切换堆叠布局，实测窄窗口截图留证
+  - 长篇多卷工作区单元数多时一次性渲染整棵树可能变慢；缓解：本变更只保证可用，性能打磨属 polish-release
+  - 引入 yaml 依赖使 client bundle 增至约 237 kB（gzip 约 58 kB），yaml 包的解析路径无法有效摇树；缓解：体积在 README 如实记录，作为面板首次打开时的一次性本地加载可接受，后续 artifact-views 复用同一解析器不再增加体积
+  - 快照路由带 root 参数后可让本机任意含 .writing-anything/ 的目录被读取并触发 wa-cli 只读调用（追加 audit.log）；该路由是简单 GET，任意网页都可对本机端口发起跨站请求（读不到响应，但副作用会发生）。缓解：读取范围限死在 <root>/.writing-anything/ 且不跟随符号链接；拒绝 UNC 与设备路径以免 stat 触发网络访问；副作用上限为对含工作区目录的有界审计行追加；DSH webServer 只绑定具体本地地址，Web GUI 本身已具备本机命令执行能力，信任边界不扩大

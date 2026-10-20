@@ -108,6 +108,8 @@ export interface SnapshotRouteBody {
   emptyState: { command: string } | null;
   degraded: Degraded;
   snapshot: SnapshotPayload | null;
+  /** Present only when the request named a project path that could not be used. */
+  rootError?: string;
 }
 
 function reasons(...outcomes: CliOutcome<unknown>[]): string[] {

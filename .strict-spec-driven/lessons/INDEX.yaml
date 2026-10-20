@@ -320,6 +320,11 @@ categories:
       status: active
       occurrences: 1
       path: .strict-spec-driven/lessons/coding/wa-cli-42ec4e.yaml
+    wa-cli-path-wa-cli-wa-cli-134c20:
+      title: 测试「wa-cli 不可用」时依赖开发机 PATH 上没有 wa-cli，装上 wa-cli 后就失败
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/coding/wa-cli-path-wa-cli-wa-cli-134c20.yaml
   documentation:
     must-must-6af326:
       title: 修改一条 MUST 需求时，要检查同一规格里相邻的 MUST 是否因此冲突

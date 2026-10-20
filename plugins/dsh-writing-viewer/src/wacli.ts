@@ -146,8 +146,11 @@ export function mapValidate(raw: unknown): CliOutcome<ValidateOutput> {
     diagnostics: asArray(raw.diagnostics),
     checked: asArray(raw.checked).filter((c): c is string => typeof c === 'string'),
   };
-  if (output.valid === null) {
-    return { output, reason: 'validate: 缺少字段 valid，该部分按降级标注呈现' };
+  const missing: string[] = [];
+  if (output.valid === null) missing.push('valid');
+  if (!Array.isArray(raw.diagnostics)) missing.push('diagnostics');
+  if (missing.length > 0) {
+    return { output, reason: `validate: 缺少字段 ${missing.join('、')}，该部分按降级标注呈现` };
   }
   return { output, reason: null };
 }

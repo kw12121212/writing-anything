@@ -1,0 +1,21 @@
+# overview-navigation 只读核对（2026-10-20，DSH 0.2.1-rc.2 web profile，测试实例 127.0.0.1:13099）
+# 方法：打开面板前后对 .writing-anything/ 记录 find -printf '%p %T@ %s'（排除 audit.log）与全部文件 SHA-256；
+# 期间：默认定位浏览总览与单元树、切换到 project-b、切换到无工作区目录、恢复默认、再切回 project-b、窄宽度与暗色主题截图。
+
+## 默认项目 /home/wx766/Code/writing-desk（DSH 工作区注册表定位）
+before 378b022de4f5e131894caf731761f874fb64a1d16b8b11d2586728fbd35594d1
+after  378b022de4f5e131894caf731761f874fb64a1d16b8b11d2586728fbd35594d1
+结果：清单、修改时间、大小与内容逐字节一致（70 行）
+
+## 切换项目 /tmp/wa-viewer-e2e/project-b（testdata/workspace 副本，原无 audit.log）
+diff:
+  1c1
+  < . 1792464385.4624919380 4096
+  ---
+  > . 1792464399.3224885610 4096
+结果：全部文件内容、修改时间与大小一致；唯一差异是 .writing-anything/ 目录自身的修改时间——wa-cli 按审计日志契约新建了 audit.log。
+audit.log 行数：12（3 次快照请求 × status/validate/next/timeline(my-novel) 各 1 次 = 12，有界）
+命令序列：status validate next timeline status validate next timeline status validate next timeline
+
+## 无工作区目录 /tmp/wa-viewer-e2e/no-ws
+切换后目录条目数：0（插件与 wa-cli 均未写入；该目录下没有工作区，未调用 wa-cli）

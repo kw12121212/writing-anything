@@ -131,6 +131,20 @@ describe('buildSnapshotPayload on the multi-work fixture', () => {
     expect(post.units[0]!.stage).toBeNull();
   });
 
+  it('annotates degradation when validate output lacks diagnostics', async () => {
+    const runner: CliRunner = {
+      run: async (args: readonly string[]) => ({
+        stdout:
+          args[0] === 'validate'
+            ? JSON.stringify({ valid: true, changedPaths: [] })
+            : JSON.stringify({ valid: true, diagnostics: [], changedPaths: [], units: [], steps: [], pendingAuthorReviews: [] }),
+      }),
+    };
+    const { payload, degraded } = await buildSnapshotPayload(realSnapshotFs(), runner, FIXTURE_ROOT);
+    expect(degraded).toContain('validate: 缺少字段 diagnostics，该部分按降级标注呈现');
+    expect(payload.cli.validate?.diagnostics).toEqual([]);
+  });
+
   it('degrades per area when wa-cli stdout is not JSON, without failing', async () => {
     const garbageRunner: CliRunner = { run: async () => ({ stdout: 'not-json{{' }) };
     const { payload, degraded } = await buildSnapshotPayload(realSnapshotFs(), garbageRunner, FIXTURE_ROOT);
@@ -230,28 +244,38 @@ describe('buildSnapshot route body', () => {
  */
 const itPosix = process.platform === 'win32' ? it.skip : it;
 
+/**
+ * A wa-cli-shaped fake binary that, like the real one, appends one audit
+ * line to <--dir>/.writing-anything/audit.log per invocation and prints the
+ * canned --json capture for the subcommand.
+ */
+async function writingFakeCli(): Promise<{ binDir: string; bin: string }> {
+  const binDir = await mkdtemp(join(tmpdir(), 'wa-fakecli-'));
+  const bin = join(binDir, 'wa-cli');
+  const script = [
+    '#!/bin/sh',
+    'dir=',
+    'prev=',
+    'for a in "$@"; do',
+    '  if [ "$prev" = "--dir" ]; then dir=$a; fi',
+    '  prev=$a',
+    'done',
+    'echo "audit $1" >> "$dir/.writing-anything/audit.log"',
+    `case "$1" in`,
+    `  status) sed "s|<root>|$dir|g" '${CLI_DIR}/status.json' ;;`,
+    `  validate) sed "s|<root>|$dir|g" '${CLI_DIR}/validate.json' ;;`,
+    `  next) sed "s|<root>|$dir|g" '${CLI_DIR}/next.json' ;;`,
+    `  timeline) f="$2"; sed "s|<root>|$dir|g" "${CLI_DIR}/timeline-$f.json" ;;`,
+    `esac`,
+  ].join('\n');
+  await writeFile(bin, script, { mode: 0o755 });
+  return { binDir, bin };
+}
+
 describe('fullSnapshot with a spawned wa-cli', () => {
   itPosix('one snapshot appends only the audit log and leaves every artifact untouched', async () => {
     const root = await tempCopyOfFixture();
-    const binDir = await mkdtemp(join(tmpdir(), 'wa-fakecli-'));
-    const bin = join(binDir, 'wa-cli');
-    const script = [
-      '#!/bin/sh',
-      'dir=',
-      'prev=',
-      'for a in "$@"; do',
-      '  if [ "$prev" = "--dir" ]; then dir=$a; fi',
-      '  prev=$a',
-      'done',
-      'echo "audit $1" >> "$dir/.writing-anything/audit.log"',
-      `case "$1" in`,
-      `  status) sed "s|<root>|$dir|g" '${CLI_DIR}/status.json' ;;`,
-      `  validate) sed "s|<root>|$dir|g" '${CLI_DIR}/validate.json' ;;`,
-      `  next) sed "s|<root>|$dir|g" '${CLI_DIR}/next.json' ;;`,
-      `  timeline) f="$2"; sed "s|<root>|$dir|g" "${CLI_DIR}/timeline-$f.json" ;;`,
-      `esac`,
-    ].join('\n');
-    await writeFile(bin, script, { mode: 0o755 });
+    const { binDir, bin } = await writingFakeCli();
 
     const before = await inventoryOf(join(root, '.writing-anything'));
     const body = await fullSnapshot(null, { workspaceRoot: root, waCliPath: bin }, '/nowhere');
@@ -277,6 +301,32 @@ describe('fullSnapshot with a spawned wa-cli', () => {
 
     await rm(binDir, { recursive: true, force: true });
     await rm(root, { recursive: true, force: true });
+  });
+
+  itPosix('a panel-switched project is read with --dir <that path> and bounded calls only', async () => {
+    const root = await tempCopyOfFixture();
+    const { binDir, bin } = await writingFakeCli();
+    try {
+    const before = await inventoryOf(join(root, '.writing-anything'));
+
+    // The config pins some other directory; the panel's explicit path wins.
+    const body = await fullSnapshot(null, { workspaceRoot: '/nowhere', waCliPath: bin }, '/nowhere', root);
+    expect(body.source).toBe('panel-input');
+    expect(body.root).toBe(root);
+    expect(body.degraded).toEqual([]);
+    expect(body.snapshot?.works.map((w) => w.id)).toEqual(['my-novel', 'my-post']);
+
+    // The fake writes its audit line under the --dir it was given, so the
+    // audit log of the selected project proves where wa-cli was pointed.
+    const audit = await readFile(join(root, '.writing-anything/audit.log'), 'utf8');
+    expect(audit.trim().split('\n')).toEqual(['audit status', 'audit validate', 'audit next', 'audit timeline']);
+    const after = await inventoryOf(join(root, '.writing-anything'));
+    for (const [path, fingerprint] of before) expect(after.get(path), path).toBe(fingerprint);
+    expect([...after.keys()].filter((path) => !before.has(path))).toEqual(['audit.log']);
+    } finally {
+      await rm(binDir, { recursive: true, force: true });
+      await rm(root, { recursive: true, force: true });
+    }
   });
 });
 

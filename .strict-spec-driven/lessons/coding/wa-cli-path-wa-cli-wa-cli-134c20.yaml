@@ -1,0 +1,19 @@
+schema: strict-spec-driven/lesson/v1
+schema_version: 1
+artifact_type: lesson
+schema_file: templates/strict-spec-driven/schemas/lesson.yaml
+lesson:
+  id: wa-cli-path-wa-cli-wa-cli-134c20
+  title: 测试「wa-cli 不可用」时依赖开发机 PATH 上没有 wa-cli，装上 wa-cli 后就失败
+category: coding
+status: active
+created_at: '2026-10-20T03:04:11.469Z'
+updated_at: '2026-10-20T03:04:11.469Z'
+context: dsh-writing-viewer 的 host.test.ts「apply wiring」测试经 apply(ctx, {}) 注册路由后请求快照，断言 wa-cli 缺失时 degraded 恰有 3 条（status、validate、next 各一条）
+observation: 开发机 ~/.local/bin/wa-cli 已安装后，该测试在未改动的基线上就失败（degraded 只有 1 条）：插件默认按 PATH 解析 wa-cli，测试实际起了真实二进制。它在 workspace-snapshot 归档时通过，只因当时环境恰好没有 wa-cli；overview-navigation 跑回归时才暴露，并非本变更引入
+takeaway: '凡断言外部 CLI 缺失或降级行为的测试，都要显式注入一个不存在的可执行文件路径（如 waCliPath: ''/nonexistent/wa-cli-for-tests''）或注入式执行器，不要依赖开发机 PATH 的偶然状态；反过来，需要真实行为时用写入型假二进制，同样不取 PATH'
+applies_when: 编写或评审会经 PATH 解析外部可执行文件（wa-cli、git、dsh 等）的测试，尤其是断言「不可用/降级」分支、或测试经入口函数（apply、fullSnapshot）而非注入式执行器触达子进程时
+occurrences:
+  - origin: overview-navigation
+    date: '2026-10-20'
+    evidence: 'plugins/dsh-writing-viewer/src/host.test.ts「apply wiring」测试改为 apply(ctx, { waCliPath: ''/nonexistent/wa-cli-for-tests'' })；host.test.ts 新增 NO_CLI 常量供路径切换测试复用'

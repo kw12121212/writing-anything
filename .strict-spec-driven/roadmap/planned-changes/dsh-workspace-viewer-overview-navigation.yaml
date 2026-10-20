@@ -5,7 +5,7 @@ schema_file: ../../templates/strict-spec-driven/schemas/planned-change.yaml
 planned_change:
   id: overview-navigation
   milestone: dsh-workspace-viewer
-status: planned
+status: complete
 summary: 总览仪表盘与单元树导航：作品卡片（生命周期（Lifecycle）阶段、进度、阻塞项计数）、素材/决策/待复核计数与单元层级树，按写作概念组织而非目录平铺
 details: 总览页给每个作品（Work）一张卡片：标题、文体（Genre）、当前阶段、汇总单元的进度（done/total）、阻塞项数量与摘要；工作区级汇总展示素材（Source）数、待决决策数、待复核数与 validate 诊断。左侧单元（Unit）树按层级缩进展示，汇总单元带进度标记，选中单元进入其产物视图。空态（项目无 .writing-anything、空工作区）给出指引（wa-cli init 提示），错误态透出诊断列表。适配明暗主题；在 DSH 主面板常见宽度区间（含 1024px 以下窄窗口把侧栏收起为 56px 导轨时）布局仍可读可操作，单元树与详情在窄宽度下改为上下堆叠。视觉上利用 DSH 客户端 UI 基础组件与主题令牌，不引入独立样式体系。
 depends_on:

@@ -1,6 +1,6 @@
 # dsh-writing-viewer（工作区查看插件）
 
-DSH 插件（DSH Plugin）`dsh-writing-viewer` 是 writing-anything 仓库的 DSH 工作区查看插件：只读定位一个包含 `.writing-anything/` 工作区（Workspace）的项目目录，在 DeepSeek Harness（DSH）Web GUI 的全局面板中报告定位结果；定位不到时给出 `wa-cli init` 空态指引。host 侧同时提供只读的工作区快照（Workspace Snapshot）路由，把工作区的配置、作品（Work）与单元（Unit）树、各单元产物（Artifact）全文、素材、决策、规范包（Pack）与校验诊断聚合为结构化 JSON 供 client 拉取——面板对快照的可视化浏览由本里程碑（`dsh-workspace-viewer`）的后续变更在同一包内扩展。
+DSH 插件（DSH Plugin）`dsh-writing-viewer` 是 writing-anything 仓库的 DSH 工作区查看插件：只读定位一个包含 `.writing-anything/` 工作区（Workspace）的项目目录，在 DeepSeek Harness（DSH）Web GUI 的全局面板中以总览仪表盘（Overview Dashboard）呈现：作品（Work）卡片、工作区级计数、校验诊断与单元（Unit）树导航；定位不到时给出 `wa-cli init` 空态指引，面板内可切换到显式输入的项目路径。host 侧提供只读的工作区快照（Workspace Snapshot）路由，把工作区的配置、作品与单元树、各单元产物（Artifact）全文、素材、决策、规范包（Pack）与校验诊断聚合为结构化 JSON 供 client 拉取——产物语义视图与语法高亮由本里程碑（`dsh-workspace-viewer`）的后续变更在同一包内扩展。
 
 - 严格只读：host 侧的全部文件系统操作都是读取（对 `.writing-anything` 的 `stat`、目录列举 `readdir` 与文件读取 `readFile`，均不跟随符号链接）；不提供任何写入工作区的能力。
 - 一个例外要如实说明：快照经子进程调用 wa-cli 只读命令（`status`/`validate`/`next`/`timeline`）取结构状态，而 wa-cli 的审计日志（Audit Log）契约规定每次调用（含只读命令）都向 `.writing-anything/audit.log` 追加一行运维痕迹——该追加出自 wa-cli 而非插件代码，且 audit.log 不是产物（Artifact）；插件在每次快照请求内有界调用这些命令，不做轮询式反复调用。
@@ -11,7 +11,8 @@ DSH 插件（DSH Plugin）`dsh-writing-viewer` 是 writing-anything 仓库的 DS
 ```
 cordis.patch.yml   bundle patch：向 DSH profile 组合插入插件行
 src/host.ts        host 入口（cordis 插件：导出 name 与 apply(ctx, config)，含只读 fs/spawn 适配器与两个路由注册）
-src/client.ts      web client 入口（window.__ModuleLoader__.load 工厂）
+src/client.ts      web client 入口（window.__ModuleLoader__.load 工厂）：总览、单元树、路径切换的渲染与交互
+src/overview.ts    总览视图模型的纯函数：作品卡片、工作区计数、单元树与单元详情（client 打包内联）
 src/root.ts        工作区定位的纯逻辑（候选顺序、去重、探测）
 src/registry.ts    DSH 工作区注册表（workspaceRegistry.list()）的容错读取
 src/snapshot.ts    工作区快照聚合：类型定义与注入式聚合入口（每次请求重读，无缓存）
@@ -81,6 +82,12 @@ package.json 声明：
 
 快照数据来源（里程碑定案的混合方案）：结构状态（单元树、阶段、阻塞项、进度、诊断、待复核摘要、长篇时间线）复用 wa-cli 只读命令的 `--json` 输出——每次请求有界调用 `status`、`validate`、`next` 与每个长篇作品一次 `timeline`；产物全文按 JSON Schema 约束的路径直接读取文件（YAML 与 Markdown 全文，含 `draft.md` 正文）。wa-cli 不可用、执行失败、超时或输出缺字段时按区域降级：`degraded` 数组记录原因，文件可解析的数据照常返回，不整体失败。每次请求都重新读取（无缓存、无文件监听）；client 侧的手动刷新即重新拉取该路由。
 
+快照路由接受可选查询参数 `root`（项目目录的绝对路径，供面板内路径切换）：
+
+- 合法时该路径是本次请求的唯一候选（`source: "panel-input"`），优先于插件配置的 `workspaceRoot` 固定，只作用于这一次请求，host 不保存状态；
+- 不是绝对路径（或含 NUL、超长、以两个斜杠或反斜杠开头的网络与设备路径）时不做任何读取，返回空态并附 `rootError` 说明原因；路径下没有 `.writing-anything/` 时同样返回空态与 `rootError`——两种情形都不回退到默认定位，避免面板静默显示另一个项目；
+- 不带参数时行为与响应形状不变（不出现 `rootError` 字段）。读取范围始终限于所选目录的 `.writing-anything/`，wa-cli 仍以 `--dir <所选路径>` 有界调用。
+
 插件配置除 `workspaceRoot` 外还接受 `waCliPath`：覆盖 wa-cli 可执行文件路径（默认 `PATH` 上的 `wa-cli`），用于宿主未把 wa-cli 装进 PATH 的环境。
 
 ## client 侧行为
@@ -90,7 +97,18 @@ package.json 声明：
 - root-scoped `main` keyed 面板，key 为 `dsh-writing-viewer`（`ctx.layout.selectPanel('dsh-writing-viewer')` 可选中）；
 - `sidebar.panellist` 列表条目，id 同为 `dsh-writing-viewer`，侧栏按钮由宿主渲染并在点击时选中面板。
 
-面板拉取上述路由并渲染：定位成功态（项目目录、来源、工作区目录、探测记录）、空态（`wa-cli init` 指引）、加载失败态（重试）。文案中英双语，按页面语言选择。
+面板拉取快照路由，按写作概念（而非目录树）组织：
+
+- **工具栏**：当前项目目录与来源、刷新按钮；路径输入框与「切换」「恢复默认」——输入项目目录的绝对路径即以 `?root=` 重新拉取快照。所选路径只保存在面板组件状态里。刷新或切换进行中，旧数据保留在屏幕上并显示「读取中…」提示；只有最新一次请求的响应会落地，较慢的旧响应被丢弃，不会覆盖新的选择。
+- **总览仪表盘（Overview Dashboard）**：工作区级计数——素材数、待决决策数（`decisions.yaml` 中 `status: open` 的条目）、待复核数（`wa-cli next` 的 `pendingAuthorReviews`）、validate 诊断数；对应区域降级（含 `next` 缺少 `pendingAuthorReviews`、`validate` 缺少 `diagnostics` 这类部分降级）时显示「—」而不是 0。诊断按严重级别汇总并可展开为列表，降级原因同样可展开。
+- **作品卡片**：作品 id、文体（`work.yaml` 的 `genre`）、单元数、当前阶段、进度（根单元为汇总单元时取其 progress，否则为最外层各汇总单元之和）、去重后的阻塞项数量与前两条摘要（汇总单元会重复列出子孙的阻塞项，按 code、路径与消息去重）。
+- **单元树与单元详情**：选中作品后，单元树按 `wa-cli status` 的 parent 关系缩进展示，汇总单元带 done/total 进度标记、有阻塞项的单元带计数；status 降级时退回 `work.yaml` 的层级（汇总单元不显示其占位阶段）。选中单元后详情区显示类型、阶段、进度、阻塞项、下一步命令与产物清单（名称与路径）；产物内容视图由后续变更挂载到同一详情区。
+- **空态与错误态**：定位不到工作区显示 `wa-cli init` 指引（路径切换失败时附原因）；工作区没有作品显示 `wa-cli new <genre> <id>` 指引；取数失败显示原因与重试。
+- **主题与窄宽度**：样式只用 DSH 主题令牌（`--dsw-alias-*` CSS 自定义属性，带回退值），明暗主题随宿主切换；视口低于 1024px（DSH 侧栏收为 56px 导轨）或面板容器低于 640px 时，单元树与详情改为上下堆叠。
+
+界面只有刷新、路径切换与选择三类控件，没有任何编辑、写入或确认控件；作者确认与复核仍走 wa-cli 阅读页（Reading View）。文案中英双语，按页面语言选择。
+
+client bundle 内联了 `yaml` 解析器（用于读取 `work.yaml` 的文体与 `decisions.yaml` 的待决条目），`dist/client.js` 约 237 kB（gzip 约 58 kB），仍是单一 `__ModuleLoader__.load` 脚本、唯一外部依赖为宿主的 `react`，不访问网络。
 
 ## 开发、构建与测试
 
@@ -99,7 +117,7 @@ package.json 声明：
 ```sh
 pnpm install            # 安装开发依赖
 pnpm run build          # 类型检查（tsc --noEmit）+ 构建（tsdown）+ 产物名归一
-pnpm test               # vitest 单元测试（定位逻辑、注册表读取、路由、快照聚合、CLI 桥降级、只读约束）
+pnpm test               # vitest 单元测试（定位逻辑、路径切换校验、注册表读取、路由、快照聚合、CLI 桥降级、只读约束、总览视图模型、面板渲染）
 ```
 
 构建产物名归一（`scripts/normalize-outputs.mjs`）把 tsdown 的 `host.js`/`client.iife.js` 改名为 `dist/index.js`/`dist/client.js`，与 package.json 的 `exports` 对齐；缺少任一产物时构建失败。
@@ -147,4 +165,14 @@ dsh plugin --profile web add link:/home/wx766/Code/writing-anything/plugins/dsh-
 4. **全局面板注册**：root-scoped `main` keyed 插槽（`{ name: 'main', key: <面板 id> }` + 组件）+ `sidebar.panellist` 列表条目（同 id，宿主渲染按钮并 `ctx.layout.selectPanel(id)` 选中）；`selectPanel` 对未注册 key 抛错。
 5. **profile 补丁行即插件配置**：与插件 insert 行同 id 的 `- id: …, name: …, config: …` 行提供 `apply(ctx, config)` 的 config；`dsh web --patch <overlay.yml>` 可不改 profile 文件叠加配置。
 6. **host 路由即同源数据通道**：`ctx.inject(['webServer'], scope => scope.webServer.register({ name, kind: 'exact', path, handler }))` 注册的路由可被 client 以相对路径 `fetch` 访问（沿用 modsearch 模式，实测可用）。
+7. **UI 基础组件不作为依赖**：DSH 自带 client 包（如 dsh-client-ui-workspace、dsh-client-ui-trajectory）都经同一加载器 `require('@deepseek-ai/dsh-client-ui-primitives')`，说明该模块在加载器注册表中存在；但它不是面向第三方插件声明的契约，且加载器按需执行注册（`mode: live` 下临时注册的探测 factory 不会被执行），无法在页面上直接验证其导出。本插件只用主题令牌与原生元素，不依赖该模块。
 
+### 总览与导航实测（overview-navigation，2026-10-20）
+
+同一宿主（DSH 0.2.1-rc.2 web profile，`dsh web --host 127.0.0.1 --port 13099 --no-open` 测试实例）重建插件后实测：
+
+- 默认定位（`docs/evidence/overview-default.png`）：面板定位到注册表中的 `writing-desk`，显示 2 个作品卡片、工作区计数与选中作品的单元树和详情（含 7 个产物清单）。
+- 路径切换（`docs/evidence/overview-switched.png`）：输入 `testdata/workspace` 副本的绝对路径后，来源显示「panel input」，novel 作品的单元树按 part-1 → ch-1 → scene-1/scene-2 缩进，part 与 ch 带 0/2 进度；作品卡片阻塞项 6（去重后）、待决决策 1、validate 诊断 5（error 5），与 `wa-cli status`/`decisions.yaml`/`wa-cli validate` 一致。
+- 无效路径（`docs/evidence/panel-switch-invalid.png`）：切换到没有工作区的目录时显示空态、原因（`该目录下没有 .writing-anything/ 工作区`）与 `wa-cli init` 指引，不显示其他项目数据；「恢复默认」回到注册表定位的 `writing-desk`。
+- 窄宽度与主题（`docs/evidence/overview-narrow.png`、`overview-narrow-dark.png`、`overview-narrow-tree.png`、`overview-dark.png`）：900px 视口下 DSH 侧栏收为导轨，面板 `data-layout` 为 `stacked`，单元树与详情上下堆叠；暗色主题下文字、卡片与状态色随 DSH 令牌切换。
+- 只读核对（`docs/evidence/readonly-check-overview.txt`）：默认项目 `.writing-anything/` 前后逐字节一致；切换项目的全部文件一致，唯一差异是 wa-cli 新建 `audit.log` 导致的目录修改时间变化，audit.log 共 12 行 = 3 次快照请求 × status/validate/next/timeline 各 1 次；无工作区目录未被写入。

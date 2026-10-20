@@ -1,0 +1,43 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: overview-navigation
+  status: proposed
+summary:
+  what:
+    - 在 dsh-writing-viewer 插件 client 侧把最小定位面板升级为总览仪表盘（Overview Dashboard）与单元树导航：消费已有只读快照路由 GET /dsh-writing-viewer/snapshot，按写作概念组织信息而不是平铺目录
+    - 总览页：每个作品（Work）一张卡片（标题、文体（Genre）、当前生命周期（Lifecycle）阶段、汇总单元进度 done/total、阻塞项（Blocker）数量与摘要）；工作区级汇总展示素材（Source）数、待决决策数、待复核数与 validate 诊断计数
+    - 单元（Unit）树导航：按层级缩进展示作品的单元树，汇总单元带进度标记，选中单元在详情区显示该单元的阶段、进度、阻塞项、下一步命令与产物清单（产物语义视图留给 artifact-views）
+    - 空态（无 .writing-anything/、空工作区）给出 wa-cli init 指引，错误态透出 validate 诊断列表与 degraded 降级说明；面板提供手动刷新；适配明暗主题与窄宽度（1024px 以下侧栏收为 56px 导轨时单元树与详情上下堆叠）
+    - 面板内项目路径切换：作者可输入一个显式的项目目录绝对路径查看该项目的工作区，并可一键回到默认定位；host 快照路由接受可选的 root 查询参数并校验（拒绝相对、网络与设备路径），只读取该目录下的 .writing-anything/
+  why:
+    - workspace-snapshot 已让 host 侧产出完整只读快照，但面板仍只显示项目目录与工作区存在性；作者与 Agent 在 Web GUI 里看不到作品、阶段、进度与阻塞项，只能回到终端跑 wa-cli status/next
+    - 里程碑 dsh-workspace-viewer 的后续 artifact-views、polish-release 都依赖本变更提供的导航骨架（选中单元进入其产物视图），本变更是里程碑当前唯一可推进项
+    - 里程碑 intake 定案 workspace-root 要求「面板内支持切换到显式输入的项目路径」，此前没有计划变更认领；作者在本变更的开放问题中选择纳入（2026-10-20）
+scope:
+  in:
+    - client.ts：总览仪表盘、作品卡片、工作区级汇总计数、单元树（层级缩进、汇总单元进度标记、选中态）、单元详情区（阶段、进度、阻塞项、下一步命令、产物清单）
+    - client.ts：从定位路由切换到快照路由取数；加载态、空态（wa-cli init 指引）、错误态（validate 诊断列表与 degraded 说明）与手动刷新按钮
+    - 视图模型（由快照 JSON 推导卡片、计数、树节点与详情的纯函数）独立可测，vitest 覆盖 tech-blog 与 novel 多层级、空工作区、缺失工作区、降级与诊断态
+    - 样式只用 DSH 主题令牌（--dsw-alias-* 等 CSS 自定义属性）适配明暗主题；窄宽度布局改为上下堆叠
+    - README 更新面板导览与真实宿主实测证据（总览、单元树、空态截图与只读核对）
+    - dsh-plugin 主规格新增总览、单元树导航、空态/错误态、窄宽度可读的行为要求
+    - host 侧：GET /dsh-writing-viewer/snapshot 接受可选查询参数 root（项目目录绝对路径）；校验为非空绝对路径、不含 NUL，规范化后作为本次请求唯一候选（来源 panel-input），定位不到工作区时返回空态；只读取该目录下的 .writing-anything/，wa-cli 调用集合与有界次数不变
+    - client 侧：工具栏的项目路径输入与「切换」「恢复默认」操作；当前查看的路径与来源在工具栏显示，切换或刷新进行中有可见的读取提示，过期请求的响应被丢弃
+  out:
+    - 产物语义卡片、YAML/Markdown 语法高亮与渲染阅读视图（属 artifact-views）
+    - 键盘导航、大工作区性能打磨与安装使用文档收尾（属 polish-release）
+    - 任何写入或变更工作区产物的控件与能力；作者确认与复核仍走 wa-cli 阅读页（Reading View）
+    - wa-cli（Go 内核）、MCP 服务与内置技能改动
+    - 文件监听与自动刷新；GET /dsh-writing-viewer/workspace 路由的改动；跨会话持久化面板选择的路径
+    - 从探测记录点选候选目录切换：定位在首个有工作区的候选处停止探测，空态与成功态都不存在可切换的其他工作区候选，提供该入口需改变 /workspace 定位轨迹，超出本变更
+unchanged_behavior:
+  - 插件严格只读：打开面板、浏览总览与单元树、刷新后 .writing-anything/ 内除 wa-cli 追加的 audit.log 外文件清单、内容与修改时间不变
+  - 侧栏面板入口（sidebar.panellist 同 id 条目）与 main 插槽注册方式不变
+  - 完整 Go 回归命令原样通过，结果不受插件包影响
+  - GET /dsh-writing-viewer/workspace 路由行为不变；GET /dsh-writing-viewer/snapshot 不带 root 参数时的定位顺序（配置固定 → 工作区注册表 → 宿主进程目录）与响应形状不变，带参数时响应只新增来源取值 panel-input
+roadmap:
+  milestone: dsh-workspace-viewer
+  planned_change: overview-navigation

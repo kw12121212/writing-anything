@@ -11,8 +11,9 @@
  * empty-state guidance (run `wa-cli init`) instead of an error.
  */
 
-/** Where a candidate project directory came from. */
-export type RootSource = 'config' | 'workspace-registry' | 'process-cwd';
+/** Where a candidate project directory came from. `panel-input` is a path
+ * the author typed (or picked) in the panel for one snapshot request. */
+export type RootSource = 'config' | 'workspace-registry' | 'process-cwd' | 'panel-input';
 
 /** One directory that might contain a writing-anything workspace. */
 export interface RootCandidate {
@@ -55,6 +56,39 @@ export function normalizePathInput(value: unknown): string | null {
   if (typeof value !== 'string') return null;
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
+}
+
+/** Longest project path the panel may request; real paths are far shorter. */
+export const PANEL_ROOT_MAX_LENGTH = 4096;
+
+/** Outcome of reading the panel's `root` query parameter. */
+export type PanelRoot =
+  | { kind: 'absent' }
+  | { kind: 'ok'; path: string }
+  | { kind: 'invalid'; reason: string };
+
+/**
+ * Validate the project path the panel asked for. Only an absolute path is
+ * accepted: a relative one would drift with the host's working directory,
+ * and an absolute one can never begin with `-`, so it cannot be mistaken for
+ * a flag when handed to wa-cli as `--dir <root>`. A leading pair of slashes
+ * or backslashes is refused on every platform: on Windows it is a UNC or
+ * device path, whose mere `stat` reaches out over the network, and no local
+ * project needs it. The path API is injected
+ * (node:path in the host) to keep this module free of node imports.
+ */
+export function parsePanelRoot(
+  value: string | null | undefined,
+  pathApi: { isAbsolute(path: string): boolean; resolve(path: string): string },
+): PanelRoot {
+  if (value === null || value === undefined) return { kind: 'absent' };
+  const trimmed = value.trim();
+  if (trimmed === '') return { kind: 'absent' };
+  if (trimmed.includes('\u0000')) return { kind: 'invalid', reason: '项目路径含有非法字符（NUL）' };
+  if (trimmed.length > PANEL_ROOT_MAX_LENGTH) return { kind: 'invalid', reason: `项目路径超过 ${PANEL_ROOT_MAX_LENGTH} 个字符` };
+  if (/^[\\/]{2}/.test(trimmed)) return { kind: 'invalid', reason: `项目路径不能是网络或设备路径：${trimmed}` };
+  if (!pathApi.isAbsolute(trimmed)) return { kind: 'invalid', reason: `项目路径必须是绝对路径：${trimmed}` };
+  return { kind: 'ok', path: pathApi.resolve(trimmed) };
 }
 
 /** Workspace dir path for a project root, joined without node:path so the

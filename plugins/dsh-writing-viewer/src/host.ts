@@ -12,7 +12,9 @@
  *   whether `.writing-anything/` exists under it, and every candidate probed
  *   on the way. `/dsh-writing-viewer/snapshot` aggregates the whole workspace
  *   (config, works, unit trees, artifact full texts, decisions, sources,
- *   packs, validate diagnostics) read-only for the viewer client.
+ *   packs, validate diagnostics) read-only for the viewer client. An optional
+ *   `?root=<absolute project path>` query parameter makes that path the only
+ *   candidate for the one request (the panel's path switch).
  * - `workspaceRegistry` (DSH workspace registry): synchronous `list()` read
  *   of registered workspace paths, which are the GUI's own notion of project
  *   directories. The per-connection `workspaceController` remote is not
@@ -23,12 +25,13 @@
  * workspace is only ever read; the author keeps editing through wa-cli.
  */
 import { lstat, readdir, readFile, stat } from 'node:fs/promises';
-import { join } from 'node:path';
+import { isAbsolute, join, resolve } from 'node:path';
 import { spawn } from 'node:child_process';
 import {
   dedupeCandidates,
   locateWorkspace,
   normalizePathInput,
+  parsePanelRoot,
   WORKSPACE_DIR,
   type CandidateProbe,
   type RootCandidate,
@@ -241,17 +244,26 @@ export function registerRoute(
   });
 }
 
+/** Read the snapshot route's optional `root` query parameter. */
+export function rootQueryOf(url: string | undefined): string | null {
+  try {
+    return new URL(url ?? '/', 'http://x').searchParams.get('root');
+  } catch {
+    return null;
+  }
+}
+
 /** Register the read-only snapshot route on an acquired webServer scope. */
 export function registerSnapshotRoute(
   scope: { webServer?: { register: (route: unknown) => unknown } & Record<string, unknown> } & Record<string, unknown>,
-  build: () => Promise<SnapshotRouteBody>,
+  build: (query: { root: string | null }) => Promise<SnapshotRouteBody>,
 ): void {
   const server = (scope.webServer ?? scope) as { register: (route: unknown) => unknown };
   server.register({
     name: 'dsh-writing-viewer-snapshot',
     kind: 'exact',
     path: '/dsh-writing-viewer/snapshot',
-    handler: async (req: { method?: string }, res: {
+    handler: async (req: { method?: string; url?: string }, res: {
       writeHead: (status: number, headers?: Record<string, string>) => { end: (body?: string) => void };
       end: (body?: string) => void;
     }) => {
@@ -260,7 +272,7 @@ export function registerSnapshotRoute(
         return;
       }
       try {
-        const body = await build();
+        const body = await build({ root: rootQueryOf(req.url) });
         res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' }).end(JSON.stringify(body));
       } catch (error) {
         // The snapshot is best-effort per area; an unexpected failure still
@@ -290,15 +302,40 @@ async function locateOnce(
   return { candidates: probe.candidates, located: null };
 }
 
-/** Build the full snapshot route body from the real adapters. */
+/**
+ * Build the full snapshot route body from the real adapters.
+ *
+ * `panelRoot` is the panel's path switch: a valid absolute path becomes the
+ * only candidate for this request, ahead of even the config pin, because it
+ * is the author's most recent explicit choice. An invalid path, or one with
+ * no workspace under it, answers the empty state with a readable `rootError`
+ * instead of falling back to the default location — a silent fallback would
+ * show another project while the author believes the switch worked.
+ */
 export async function fullSnapshot(
   registry: WorkspaceRegistryLike | null,
   config: { workspaceRoot?: unknown; waCliPath?: unknown } | undefined,
   processCwd: string,
+  panelRoot: string | null = null,
 ): Promise<SnapshotRouteBody> {
+  const fs = realSnapshotFs();
+  const runner = spawnCliRunner(normalizePathInput(config?.waCliPath) ?? 'wa-cli');
+  const requested = parsePanelRoot(panelRoot, { isAbsolute, resolve });
+  if (requested.kind === 'invalid') {
+    return { ...(await buildSnapshot(fs, runner, [], null)), rootError: requested.reason };
+  }
+  if (requested.kind === 'ok') {
+    const probe = await locateWorkspace([{ source: 'panel-input', path: requested.path }], workspaceExistsAt);
+    if (probe.root === null) {
+      return {
+        ...(await buildSnapshot(fs, runner, probe.candidates, null)),
+        rootError: `该目录下没有 ${WORKSPACE_DIR}/ 工作区：${requested.path}`,
+      };
+    }
+    return await buildSnapshot(fs, runner, probe.candidates, { root: probe.root, source: probe.source });
+  }
   const { candidates, located } = await locateOnce(registry, config, processCwd);
-  const binary = normalizePathInput(config?.waCliPath) ?? 'wa-cli';
-  return await buildSnapshot(realSnapshotFs(), spawnCliRunner(binary), candidates, located);
+  return await buildSnapshot(fs, runner, candidates, located);
 }
 
 export function apply(ctx: {
@@ -321,7 +358,7 @@ export function apply(ctx: {
       console.error(`[dsh-writing-viewer] route skipped: ${String(error)}`);
     }
     try {
-      registerSnapshotRoute(scope as Parameters<typeof registerSnapshotRoute>[0], () => fullSnapshot(registry, config, process.cwd()));
+      registerSnapshotRoute(scope as Parameters<typeof registerSnapshotRoute>[0], (query) => fullSnapshot(registry, config, process.cwd(), query.root));
     } catch (error) {
       console.error(`[dsh-writing-viewer] snapshot route skipped: ${String(error)}`);
     }
