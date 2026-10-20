@@ -1,0 +1,19 @@
+schema: strict-spec-driven/lesson/v1
+schema_version: 1
+artifact_type: lesson
+schema_file: templates/strict-spec-driven/schemas/lesson.yaml
+lesson:
+  id: dsh-client-definition-factory-hooks-react-34fff9
+  title: 驱动 DSH 插件 client 组件状态：必须经 definition.factory 注入可运行 hooks 的假 react
+category: testing
+status: active
+created_at: '2026-10-20T04:11:09.691Z'
+updated_at: '2026-10-20T04:11:09.691Z'
+context: plugins/dsh-writing-viewer 的 client 入口在 window.__ModuleLoader__.load 的 factory 闭包里 require('react') 并把 ViewerPanel 注册进插槽；client.test.ts 缓存的插件经 loadClientPlugin 取得的 factory 已绑定首次注入的 noop fakeReact（useState 返回初始值、useEffect 为空操作）。
+observation: 为 artifact-views 变更补滚动保持与跳转接线的组件级测试时，起初用注册到的组件配合自建可运行 hooks 假 react 挂载，面板永远停在 Loading：注册到的组件闭包捕获的是旧 fakeReact，任何 hooks 驱动都不生效；且假 react 的 useMemo 忽略依赖数组会让 overviewModel 永远是 null。
+takeaway: '要驱动带状态的插件 client 组件，用 captured.definition.factory((id) => id === ''react'' ? runnableReact : throw) 重新实例化插件再经插槽取组件；假 react 的 useState/useRef/useCallback/useMemo/useEffect 都要带槽位与依赖比较（setter 与回调保持恒等），否则效应循环或陈旧 memo 会静默失败。'
+applies_when: 为 plugins/ 下的 DSH 插件 client（bundle 协议组件）编写涉及状态、效应或滚动/DOM 行为的 vitest 组件测试时
+occurrences:
+  - origin: artifact-views 变更评审修复（SHOULD FIX：滚动保持与跳转接线零覆盖）
+    date: '2026-10-20'
+    evidence: plugins/dsh-writing-viewer/src/client.test.ts 的 describe('ViewerPanel wiring (runnable react)')：三个用例经 factory 注入可运行假 react，断言 scrollTop 恢复、claims 跳转与大 YAML 折叠懒渲染

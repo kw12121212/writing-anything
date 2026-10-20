@@ -1,0 +1,22 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: artifact-views
+  status: proposed
+summary:
+  what:
+    - DSH 工作区查看插件（DSH Workspace Viewer，plugins/dsh-writing-viewer）新增产物视图层：单元（Unit）详情中的每个产物（Artifact）与 draft 正文可打开为按写作概念组织的视图——YAML 产物提供语义卡片视图（Semantic Card View，按产物 Schema 字段组织：brief 的受众/目的/核心观点、outline 的层级与覆盖、claims 的论断-素材关联，其余产物按字段通用卡片化）与 YAML 源码高亮视图（键、标量、数组/映射结构、注释、锚点与别名着色）的一键切换，切换保持滚动位置；Markdown 正文提供渲染阅读视图（标题、列表、代码块、引用、表格）与源码高亮视图切换；claims 视图中的素材（Source）引用可跳转到新增的素材清单视图（含 source.yaml 与原文 original.md）；高亮与渲染实现全部打包进客户端 bundle 不依赖网络；大 YAML（长篇产物）做折叠或虚拟化处理；全部视图严格只读，不出现任何编辑、写入或确认控件
+  why:
+    - 里程碑 dsh-workspace-viewer 的核心差异化能力：把 .writing-anything/ 的产物按写作概念重新组织展示而不是平铺目录文件，让作者与 Agent 在 Web GUI 中按语义浏览写作简报、大纲、论断与素材关联、审稿与验收证据；这是计划变更 artifact-views 的既定范围，且是后续 polish-release 的前置依赖
+scope:
+  in:
+    - plugins/dsh-writing-viewer/src/client.ts（面板 UI：单元详情产物清单入口、产物视图与切换、素材视图）、plugins/dsh-writing-viewer/src/overview.ts 或新增视图模型模块（产物语义卡片模型、通用字段卡片、claims 素材引用模型）、新增 YAML 高亮器与 Markdown 渲染模块（打包进 client bundle）、plugins/dsh-writing-viewer/src/*.test.ts（vitest）、docs/GLOSSARY.md（新增术语词条）
+  out:
+    - wa-cli（Go 内核）与 cmd/、internal/ 的任何改动；MCP 服务与 Skill 改动；host 侧快照聚合逻辑改动（快照已携带产物全文与素材全文，本变更纯客户端消费）；任何写入工作区的能力（插件保持只读）；DSH Desktop/Electron 适配；键盘导航、性能打磨与安装使用文档（属后续 polish-release 计划变更）
+unchanged_behavior:
+  - 既有总览仪表盘（Overview Dashboard）、单元树导航、路径切换、快照聚合与降级、审计日志（Audit Log）有界调用行为均不变；插件仍不新增任何 wa-cli 调用；产品运行时仍不依赖 DSH 插件，完整 Go 回归不受影响
+roadmap:
+  milestone: dsh-workspace-viewer
+  planned_change: artifact-views

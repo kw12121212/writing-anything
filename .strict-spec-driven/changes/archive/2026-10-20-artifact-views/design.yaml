@@ -1,0 +1,19 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: artifact-views
+approach:
+  - 纯客户端扩展：host 快照（Workspace Snapshot）已携带各单元产物全文（ArtifactText：path/format/text）与素材全文（sources[].sourceYaml/original.md），本变更不动 host，只在 client 侧新增视图层。分层：① 视图模型层（纯函数，扩展 overview.ts 或并列新模块 artifactview.ts）用已打包的 yaml 解析器把产物文本解析为语义卡片模型——brief/outline/claims 三类按计划变更 details 定制布局，其余产物按 Schema 字段通用卡片化，YAML 解析失败降级为源码视图加解析错误提示；② 高亮与渲染层新增两个零依赖纯模块：yaml-highlight.ts 手写行级 tokenizer 着色键、标量、数组/映射结构、注释、锚点与别名；markdown-view.ts 手写受限渲染器（标题、列表、代码块、引用、表格）并全程 HTML 转义保证只读安全，两者均打包进 tsdown 产出的 iife，无网络与 CDN；③ UI 层在单元详情产物清单上增加打开入口，产物视图头部提供语义卡片/源码高亮一键切换并保持滚动位置（记录 scrollTop 恢复），draft 正文提供渲染阅读/源码高亮切换，大 YAML 按顶层键折叠或按行虚拟化；④ 素材视图列出工作区素材，claims 卡片中的素材引用 id 渲染为可点击跳转到对应素材条目。沿用现有注入式可测约定，视图模型、高亮器、渲染器均为纯函数，vitest 直接驱动，不依赖 DOM 的模型与高亮逻辑单测覆盖，client 集成行为沿用 client.test.ts 的 h 桩模式
+decisions:
+  client-bundled-hand-rolled-highlighting:
+    decision: YAML 高亮与 Markdown 渲染采用手写零依赖纯模块并打包进客户端 bundle，不引入 highlight.js/shiki/marked 等运行时依赖，不依赖网络与外部 CDN
+    rationale: 插件 client 现为零依赖 stance（仅 yaml 解析器内联）；shiki 需 wasm 与语言资源、highlight.js+marked 会显著增大注入 DSH Web GUI 的 iife 并引入供应链面。计划变更 details 明确限定 Markdown 渲染范围为标题、列表、代码块、引用、表格，YAML 高亮范围为键、标量、结构、注释、锚点与别名——受限子集手写可控、可测、体量小，且只读视图无编辑交互复杂度
+  semantic-card-tiered-layouts:
+    decision: 语义卡片视图分层：brief、outline、claims 三类产物定制卡片布局，其余产物（provenance、feedback、review、acceptance、plan 等）按字段通用卡片化；YAML 解析失败时降级为源码高亮视图并显示解析错误提示
+    rationale: 计划变更 details 点名三类布局（brief 受众/目的/核心观点、outline 层级与覆盖、claims 论断-素材关联）并以「如」举例其余产物；通用字段卡片让全部产物都有语义视图而不逐一定制；解析失败降级保证错误态可读不崩溃，与既有 overview-empty-and-error 需求一致
+  scroll-preserving-toggle-and-fold:
+    decision: 语义卡片视图与源码高亮视图切换通过记录并恢复容器滚动位置实现「一键切换并保持滚动位置」；大 YAML 源码视图按顶层键折叠、语义视图按需展开，避免整篇长篇产物一次性渲染
+    rationale: 计划变更 details 将两种呈现的一键切换与滚动保持、大 YAML 虚拟化或折叠列为必须项；折叠实现简单可靠、可测性好，长篇产物按顶层键折叠即可控制首屏节点数，无需引入虚拟滚动库
+alternatives: []
+risks: []

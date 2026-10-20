@@ -162,3 +162,71 @@ requirements:
         - GIVEN: 作者切换到项目 B 后、B 的快照返回之前又选择恢复默认
         - WHEN: B 的快照晚于默认项目的快照返回
         - THEN: 面板保持显示默认项目，迟到的 B 响应被丢弃
+  artifact-semantic-view:
+    strength: MUST
+    statement: 面板必须为选中单元（Unit）产物清单中的每个 YAML 产物（Artifact）提供语义卡片视图（Semantic Card View）：按产物的 Schema 字段组织成卡片而非平铺文件——写作简报（Brief）展示受众、目的、前提、核心观点等字段，大纲（Outline）展示层级结构与核心观点覆盖，论断（Claim）展示论断与素材（Source）关联；其余产物（出处（Provenance）、作者反馈（Feedback）、审稿、验收、规划（Plan）等）按字段通用卡片化；整个产物视图不得出现任何编辑、写入或确认控件
+    scenarios:
+      brief-cards:
+        - GIVEN: 某单元目录存在内容完整的 brief.yaml
+        - WHEN: 在该单元详情中打开 brief 产物视图
+        - THEN: 语义卡片视图按受众、目的、核心观点等 Schema 字段组织展示，字段值与产物原文一致，视图中没有任何编辑、写入或确认控件
+      outline-cards:
+        - GIVEN: 某单元目录存在多层级 outline.yaml
+        - WHEN: 打开 outline 产物视图
+        - THEN: 语义卡片视图按层级结构展示大纲与核心观点覆盖，内容与产物原文一致
+      claims-cards:
+        - GIVEN: 某单元目录存在关联素材引用的 claims.yaml
+        - WHEN: 打开 claims 产物视图
+        - THEN: 语义卡片视图逐条展示论断及其关联的素材引用，内容与产物原文一致
+      generic-artifact-cards:
+        - GIVEN: 某单元目录存在无定制布局的产物（如 review.yaml 或 acceptance.yaml）
+        - WHEN: 打开该产物视图
+        - THEN: 语义卡片视图按该产物的 Schema 字段通用卡片化展示，不因缺少定制布局而空白或报错
+  yaml-source-highlight-view:
+    strength: MUST
+    statement: 每个 YAML 产物必须可在语义卡片视图（Semantic Card View）与源码高亮视图（Source Highlight View）之间一键切换，切换后保持滚动位置；源码高亮视图必须对键、标量、数组/映射结构、注释、锚点与别名着色；高亮实现打包进客户端 bundle、渲染过程不得发起网络请求；大型 YAML（长篇产物）源码必须按顶层键折叠渲染；产物 YAML 解析失败时必须降级为源码高亮视图并显示解析错误提示，不得空白或崩溃
+    scenarios:
+      toggle-preserves-scroll:
+        - GIVEN: 已打开一个较长 YAML 产物的语义卡片视图并滚动到中部
+        - WHEN: 一键切换到源码高亮视图再切换回来
+        - THEN: 两种视图分别按语义与源码呈现同一产物，切换前后滚动位置保持，不重新跳回顶部
+      highlight-coverage:
+        - GIVEN: 某产物 YAML 含键、字符串与数字标量、数组与映射结构、注释、锚点与别名
+        - WHEN: 打开其源码高亮视图
+        - THEN: 键、标量、结构、注释、锚点与别名分别着色，文本内容与产物原文逐字一致不丢失
+      offline-highlight:
+        - GIVEN: 浏览器断开网络（或屏蔽所有外部请求）
+        - WHEN: 打开产物视图并切换源码高亮
+        - THEN: 高亮与渲染正常完成，没有任何对外网络请求
+      large-yaml-fold:
+        - GIVEN: 长篇（novel）作品某产物 YAML 顶层键数量多、总体积大
+        - WHEN: 打开其源码高亮视图
+        - THEN: 源码按顶层键折叠呈现，展开后内容完整，面板不因一次性渲染全部行而卡死
+      malformed-yaml-fallback:
+        - GIVEN: 某单元目录的产物 YAML 语法损坏无法解析
+        - WHEN: 打开该产物视图
+        - THEN: 面板显示源码高亮视图与可读的解析错误提示，不空白、不崩溃
+  draft-markdown-views:
+    strength: MUST
+    statement: 草稿（Draft）正文（Markdown）必须提供两种可一键切换的视图：渲染阅读视图（标题、列表、代码块、引用、表格）与源码高亮视图（Source Highlight View），切换保持滚动位置；渲染与高亮打包进客户端 bundle、渲染过程不得发起网络请求，渲染结果不得执行正文中的任何 HTML 或脚本
+    scenarios:
+      rendered-reading:
+        - GIVEN: 某单元 draft 正文 Markdown 含标题、列表、代码块、引用与表格
+        - WHEN: 打开该正文视图
+        - THEN: 渲染阅读视图按对应元素呈现，正文中的 HTML 片段被转义显示而不是执行
+      draft-toggle:
+        - GIVEN: 已打开正文渲染阅读视图并滚动到中部
+        - WHEN: 切换到源码高亮视图再切换回来
+        - THEN: Markdown 源码着色呈现，切换前后滚动位置保持
+  sources-view-claims-navigation:
+    strength: MUST
+    statement: 面板必须提供素材（Source）清单视图：列出工作区全部素材，每个素材条目展示其 source.yaml 语义卡片与原文 Markdown 的阅读视图（可切换源码高亮视图（Source Highlight View））；论断（Claim）语义卡片中的素材引用必须可点击并跳转到对应素材条目；素材视图同样不得出现任何编辑、写入或确认控件
+    scenarios:
+      claims-source-jump:
+        - GIVEN: claims 语义卡片中某论断关联素材引用 s-01，工作区存在素材 s-01
+        - WHEN: 点击该素材引用
+        - THEN: 面板跳转到素材清单中 s-01 的条目并展示其 source.yaml 卡片与原文，视图中没有任何编辑、写入或确认控件
+      sources-list:
+        - GIVEN: 工作区登记了多个素材（各含 source.yaml 与 original.md）
+        - WHEN: 打开素材清单视图
+        - THEN: 全部素材逐条列出，每条可查看 source.yaml 语义卡片与原文阅读视图

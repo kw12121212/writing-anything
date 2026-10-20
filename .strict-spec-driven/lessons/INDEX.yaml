@@ -439,3 +439,8 @@ categories:
       status: active
       occurrences: 1
       path: .strict-spec-driven/lessons/testing/lf-windows-autocrlf-4e756d.yaml
+    dsh-client-definition-factory-hooks-react-34fff9:
+      title: 驱动 DSH 插件 client 组件状态：必须经 definition.factory 注入可运行 hooks 的假 react
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/testing/dsh-client-definition-factory-hooks-react-34fff9.yaml

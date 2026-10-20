@@ -164,6 +164,14 @@ function textOf(node: unknown): string {
   return textOf((node as Node).children);
 }
 
+/** Like textOf but joins without separators, so adjacent spans concatenate. */
+function concatText(node: unknown): string {
+  if (typeof node === 'string' || typeof node === 'number') return String(node);
+  if (Array.isArray(node)) return node.map(concatText).join('');
+  if (node === null || typeof node !== 'object') return '';
+  return concatText((node as Node).children);
+}
+
 function elements(node: unknown, type: string): Node[] {
   const out: Node[] = [];
   walk(node, (n) => {
@@ -180,6 +188,11 @@ interface TestHooks {
   shouldStack: (container: number | null, viewport: number | null) => boolean;
   labelsFor: (active?: string | null) => Record<string, string>;
   stageTitle: (stage: string | null, active?: string | null) => string;
+  nextViewMode: (mode: 'semantic' | 'source') => 'semantic' | 'source';
+  nextReadingMode: (mode: 'reading' | 'source') => 'reading' | 'source';
+  artifactTextOf: (body: SnapshotRouteBody, unitRef: string, name: string) => { path: string; format: string; text: string } | null;
+  sourceEntriesOf: (body: SnapshotRouteBody) => { id: string }[];
+  FOLD_LINE_THRESHOLD: number;
   ROUTE_PATH: string;
 }
 
@@ -188,7 +201,7 @@ async function hooks(): Promise<TestHooks> {
 }
 
 const noop = (): void => {};
-const actions = { refresh: noop, setPathInput: noop, switchTo: noop, restoreDefault: noop, selectWork: noop, selectUnit: noop };
+const actions = { refresh: noop, setPathInput: noop, switchTo: noop, restoreDefault: noop, selectWork: noop, selectUnit: noop, openArtifactView: noop, closeArtifactView: noop, toggleViewMode: noop, showSources: noop, backToOverview: noop, toggleSourcesMode: noop };
 
 async function fixtureBody(): Promise<SnapshotRouteBody> {
   const root = join(TESTDATA, 'workspace');
@@ -339,7 +352,10 @@ describe('renderPanel', () => {
     expect(elements(tree, 'select')).toHaveLength(0);
     walk(tree, (n) => expect(n.props?.['contentEditable']).toBeUndefined());
     const labels = elements(tree, 'button').map((b) => textOf(b));
-    const allowed = /^(Refresh|Switch|Restore default)$|^(my-novel|my-post)\b|^(my-novel|part-1|ch-1|scene-1|scene-2)\b/;
+    // Read-only controls only: refresh, path switching, work/unit selection,
+    // artifact opening, and sources navigation. Nothing edits, writes or confirms.
+    const allowed =
+      /^(Refresh|Switch|Restore default)$|^(my-novel|my-post)\b|^(my-novel|part-1|ch-1|scene-1|scene-2)\b|^Sources \d+$|^(brief|outline|claims|feedback|provenance|draft|work)\s+\S+\s+Open$|^(src-migration|src-note)$/;
     for (const label of labels) expect(label, label).toMatch(allowed);
   });
 
@@ -353,4 +369,469 @@ describe('renderPanel', () => {
     expect(text).toContain('wa-cli init');
     expect(elements(tree, 'button').map(textOf)).toContain('Restore default');
   });
+});
+
+describe('artifact views', () => {
+  /** Panel state focused on one unit, with the artifact viewer wired in. */
+  async function unitState(
+    body: SnapshotRouteBody,
+    extra: Record<string, unknown> = {},
+  ): Promise<Record<string, unknown>> {
+    const t = await hooks();
+    const model = t.overviewModel(body);
+    const picked = t.reconcileSelection(body, model, 'my-post', 'my-post');
+    return {
+      labels: t.labelsFor('en'),
+      loading: false,
+      loadError: null,
+      body,
+      model,
+      selectedWork: 'my-post',
+      selectedUnit: 'my-post',
+      tree: picked?.tree ?? [],
+      detail: picked?.detail ?? null,
+      stacked: false,
+      pathInput: '',
+      panelRoot: null,
+      view: 'overview',
+      openArtifact: null,
+      viewMode: 'semantic',
+      sourcesMode: 'reading',
+      selectedSource: null,
+      ...extra,
+    };
+  }
+
+  /** Actions that record what the rendered tree invoked. */
+  function recordingActions(): { actions: Record<string, unknown>; calls: string[] } {
+    const calls: string[] = [];
+    const actions = {
+      refresh: () => calls.push('refresh'),
+      setPathInput: () => calls.push('setPathInput'),
+      switchTo: () => calls.push('switchTo'),
+      restoreDefault: () => calls.push('restoreDefault'),
+      selectWork: () => calls.push('selectWork'),
+      selectUnit: () => calls.push('selectUnit'),
+      openArtifactView: (unit: string, name: string) => calls.push(`open:${unit}/${name}`),
+      closeArtifactView: () => calls.push('close'),
+      toggleViewMode: () => calls.push('toggle-view'),
+      showSources: (id: string | null) => calls.push(`sources:${id}`),
+      backToOverview: () => calls.push('back-overview'),
+      toggleSourcesMode: () => calls.push('toggle-sources'),
+    };
+    return { actions, calls };
+  }
+
+  it('lists unit artifacts as openable entries bound to openArtifactView', async () => {
+    const t = await hooks();
+    const body = await fixtureBody();
+    const { actions, calls } = recordingActions();
+    const tree = t.renderPanel(h, await unitState(body), actions);
+    const brief = elements(tree, 'button').find((button) => button.props?.['data-open-artifact'] === 'brief');
+    expect(brief).toBeDefined();
+    (brief?.props?.['onClick'] as () => void)();
+    expect(calls).toEqual(['open:my-post/brief']);
+  });
+
+  it('renders brief semantic cards and toggles to the highlighted source view', async () => {
+    const t = await hooks();
+    const body = await fixtureBody();
+    const state = await unitState(body, { openArtifact: { unit: 'my-post', name: 'brief' } });
+    const semantic = t.renderPanel(h, state, actions);
+    const viewer = elements(semantic, 'section').find((n) => n.props?.['data-artifact-viewer'] === 'brief');
+    expect(viewer).toBeDefined();
+    expect(textOf(viewer)).toContain('维护大型单体服务的工程师');
+    expect(textOf(viewer)).toContain('audience:');
+    // Cards carry the key message and its clickable source reference.
+    const sourceRef = elements(semantic, 'button').find((button) => button.props?.['data-source-ref'] === 'src-migration');
+    expect(sourceRef).toBeDefined();
+
+    const source = t.renderPanel(h, { ...state, viewMode: 'source' }, actions);
+    const highlighted = elements(source, 'div').find((n) => n.props?.['data-yaml-source'] === 'flat');
+    expect(highlighted).toBeDefined();
+    // Each line's spans concatenate back to the verbatim source line.
+    const lineTexts = elements(highlighted, 'div').map((line) => concatText(line));
+    expect(lineTexts).toContain('audience: 维护大型单体服务的工程师');
+    // Keys and scalars are colored as separate token spans.
+    const tokenClasses = elements(highlighted, 'span').map((span) => String(span.props?.['data-yaml-token']));
+    expect(tokenClasses).toContain('key');
+    expect(tokenClasses).toContain('scalar');
+    expect(tokenClasses).toContain('comment');
+    // The toggle button reports the mode it would leave.
+    const toggle = elements(source, 'button').find((button) => button.props?.['data-view-toggle'] === 'source');
+    expect(toggle).toBeDefined();
+  });
+
+  it('shows the draft as a rendered reading view and a highlighted source view', async () => {
+    const t = await hooks();
+    const body = await fixtureBody();
+    const state = await unitState(body, { openArtifact: { unit: 'my-post', name: 'draft' } });
+    const reading = t.renderPanel(h, state, actions);
+    const viewer = elements(reading, 'section').find((n) => n.props?.['data-artifact-viewer'] === 'draft');
+    expect(viewer).toBeDefined();
+    expect(elements(reading, 'p').map(textOf).join('\n')).toContain('重写大型单体最怕的不是写新代码');
+    const source = t.renderPanel(h, { ...state, viewMode: 'source' }, actions);
+    const highlighted = elements(source, 'div').find((n) => n.props?.['data-md-source'] === 'true');
+    expect(highlighted).toBeDefined();
+    expect(textOf(highlighted)).toContain('契约测试');
+  });
+
+  it('falls back to the source view with a readable alert when YAML fails to parse', async () => {
+    const t = await hooks();
+    const body = JSON.parse(JSON.stringify(await fixtureBody())) as SnapshotRouteBody;
+    const post = body.snapshot!.works.find((work) => work.id === 'my-post')!;
+    post.units.find((unit) => unit.ref === 'my-post')!.artifacts['brief']!.text = 'audience: [unclosed\n  bad:\n- x: {';
+    const state = await unitState(body, { openArtifact: { unit: 'my-post', name: 'brief' } });
+    const tree = t.renderPanel(h, state, actions);
+    const alert = elements(tree, 'p').find((p) => p.props?.['data-parse-error'] === 'true');
+    expect(alert).toBeDefined();
+    expect(textOf(alert)).toContain('failed to parse');
+    // The source view shows despite the semantic mode being requested.
+    expect(elements(tree, 'div').some((n) => n.props?.['data-yaml-source'] === 'flat')).toBe(true);
+    // No card content is invented for the broken artifact.
+    expect(textOf(elements(tree, 'section').find((n) => n.props?.['data-artifact-viewer'] === 'brief'))).not.toContain('维护大型单体服务的工程师');
+  });
+
+  it('folds a large YAML source by top-level key and keeps small sources flat', async () => {
+    const t = await hooks();
+    const body = JSON.parse(JSON.stringify(await fixtureBody())) as SnapshotRouteBody;
+    const post = body.snapshot!.works.find((work) => work.id === 'my-post')!;
+    const lines = Array.from({ length: t.FOLD_LINE_THRESHOLD + 10 }, (_, i) => `key${i}: value${i}`);
+    post.units.find((unit) => unit.ref === 'my-post')!.artifacts['brief']!.text = lines.join('\n');
+    const state = await unitState(body, { openArtifact: { unit: 'my-post', name: 'brief' }, viewMode: 'source' });
+    const tree = t.renderPanel(h, state, actions);
+    const folded = elements(tree, 'div').find((n) => n.props?.['data-yaml-source'] === 'folded');
+    expect(folded).toBeDefined();
+    const folds = elements(tree, 'details').filter((n) => n.props?.['data-fold'] !== undefined);
+    expect(folds.length).toBeGreaterThan(10);
+    expect(textOf(folds[0])).toContain('key0: value0');
+
+    const small = await unitState(await fixtureBody(), { openArtifact: { unit: 'my-post', name: 'brief' }, viewMode: 'source' });
+    const smallTree = t.renderPanel(h, small, actions);
+    expect(elements(smallTree, 'div').some((n) => n.props?.['data-yaml-source'] === 'flat')).toBe(true);
+  });
+
+  it('jumps from a claims card source reference to the open source entry', async () => {
+    const t = await hooks();
+    const body = await fixtureBody();
+    const { actions, calls } = recordingActions();
+    const state = await unitState(body, { openArtifact: { unit: 'my-post', name: 'claims' } });
+    const tree = t.renderPanel(h, state, actions);
+    const ref = elements(tree, 'button').find((button) => button.props?.['data-source-ref'] === 'src-note');
+    expect(ref).toBeDefined();
+    (ref?.props?.['onClick'] as () => void)();
+    expect(calls).toEqual(['sources:src-note']);
+
+    // With the sources view open and that source selected, its entry is open
+    // and shows the metadata card plus the original reading view.
+    const sourcesState = await unitState(body, { view: 'sources', selectedSource: 'src-note' });
+    const sources = t.renderPanel(h, sourcesState, actions);
+    const view = elements(sources, 'section').find((n) => n.props?.['data-sources-view'] === 'true');
+    expect(view).toBeDefined();
+    const entry = elements(sources, 'details').find((n) => n.props?.['data-source-entry'] === 'src-note');
+    expect(entry?.props?.['open']).toBe(true);
+    expect(textOf(entry)).toContain('author-note');
+    expect(textOf(entry)).toContain('作者亲历说明');
+    // The other entry stays collapsed but present.
+    const other = elements(sources, 'details').find((n) => n.props?.['data-source-entry'] === 'src-migration');
+    expect(other?.props?.['open']).toBeUndefined();
+  });
+
+  it('switches the sources originals between reading and highlighted source', async () => {
+    const t = await hooks();
+    const body = await fixtureBody();
+    const state = await unitState(body, { view: 'sources' });
+    const reading = t.renderPanel(h, state, actions);
+    expect(elements(reading, 'p').map(textOf).join('\n')).toContain('迁移');
+    expect(elements(reading, 'div').some((n) => n.props?.['data-md-source'] === 'true')).toBe(false);
+
+    const highlighted = t.renderPanel(h, { ...state, sourcesMode: 'source' }, actions);
+    expect(elements(highlighted, 'div').some((n) => n.props?.['data-md-source'] === 'true')).toBe(true);
+    const modeButton = elements(highlighted, 'button').find((button) => button.props?.['data-sources-mode'] === 'source');
+    expect(modeButton).toBeDefined();
+  });
+
+  it('offers no editing, writing or confirming controls in the artifact and sources views', async () => {
+    const t = await hooks();
+    const body = await fixtureBody();
+    const allowed =
+      /^(Refresh|Switch|Restore default)$|^(my-novel|my-post)\b|^(my-novel|part-1|ch-1|scene-1|scene-2)\b|^Sources \d+$|^(brief|outline|claims|feedback|provenance|draft|work)\s+\S+\s+Open$|^(src-migration|src-note)$|^(Back to unit detail|Back to overview|Semantic cards|Source highlight|Reading view)$/;
+    for (const extra of [
+      { openArtifact: { unit: 'my-post', name: 'brief' } },
+      { openArtifact: { unit: 'my-post', name: 'brief' }, viewMode: 'source' },
+      { openArtifact: { unit: 'my-post', name: 'draft' }, viewMode: 'source' },
+      { view: 'sources', selectedSource: 'src-note' },
+      { view: 'sources', sourcesMode: 'source' },
+    ]) {
+      const tree = t.renderPanel(h, await unitState(body, extra), actions);
+      expect(elements(tree, 'input')).toHaveLength(1);
+      expect(elements(tree, 'textarea')).toHaveLength(0);
+      expect(elements(tree, 'select')).toHaveLength(0);
+      walk(tree, (n) => expect(n.props?.['contentEditable']).toBeUndefined());
+      for (const button of elements(tree, 'button')) {
+        expect(textOf(button), textOf(button)).toMatch(allowed);
+      }
+    }
+  });
+
+  it('toggles view modes through the exported pure helpers', async () => {
+    const t = await hooks();
+    expect(t.nextViewMode('semantic')).toBe('source');
+    expect(t.nextViewMode('source')).toBe('semantic');
+    expect(t.nextReadingMode('reading')).toBe('source');
+    expect(t.nextReadingMode('source')).toBe('reading');
+  });
+});
+describe('ViewerPanel wiring (runnable react)', () => {
+  /**
+   * A hooks-capable react stand-in: state slots persist across renders,
+   * setters re-render synchronously, memoized callbacks keep their identity,
+   * effects re-run only when their deps changed, and function refs receive
+   * one shared fake DOM node so scrollTop capture/restore is observable.
+   * It drives the real ViewerPanel end to end against a stubbed fetch.
+   */
+  interface MountedPanel {
+    tree(): unknown;
+    node: { scrollTop: number; clientWidth: number };
+    restore(): void;
+  }
+
+  async function mountPanel(body: SnapshotRouteBody): Promise<MountedPanel> {
+    const plugin = await loadClientPlugin();
+    void plugin;
+    if (captured === null) throw new Error('client definition not captured');
+
+    const hooks: unknown[] = [];
+    const setters: Record<number, unknown> = {};
+    const memoSlots: unknown[] = [];
+    const callbackSlots: unknown[] = [];
+    const effectSlots: ({ deps?: unknown[]; cleanup?: unknown } | undefined)[] = [];
+    const fakeNode = { scrollTop: 0, clientWidth: 900 };
+    let hookIndex = 0;
+    let rendering = false;
+    let dirty = false;
+    let current: unknown = null;
+    let componentFn: (react: unknown) => unknown = () => null;
+
+    const react = {
+      createElement: (...args: unknown[]) => ({ kind: 'element', args }),
+      useState: (initial: unknown): [unknown, (value: unknown) => void] => {
+        const slot = hookIndex++;
+        if (!(slot in hooks)) hooks[slot] = typeof initial === 'function' ? (initial as () => unknown)() : initial;
+        if (setters[slot] === undefined) {
+          setters[slot] = (value: unknown) => {
+            const next = typeof value === 'function' ? (value as (prev: unknown) => unknown)(hooks[slot]) : value;
+            if (Object.is(next, hooks[slot])) return;
+            hooks[slot] = next;
+            rerender();
+          };
+        }
+        return [hooks[slot], setters[slot] as (value: unknown) => void];
+      },
+      useRef: (initial: unknown): { current: unknown } => {
+        const slot = hookIndex++;
+        if (!(slot in hooks)) hooks[slot] = { current: initial };
+        return hooks[slot] as { current: unknown };
+      },
+      useCallback: (fn: unknown): unknown => {
+        const slot = hookIndex++;
+        if (callbackSlots[slot] === undefined) callbackSlots[slot] = fn;
+        return callbackSlots[slot];
+      },
+      useMemo: (fn: () => unknown, deps?: unknown[]): unknown => {
+        const slot = hookIndex++;
+        const prev = memoSlots[slot] as { deps?: unknown[]; value: unknown } | undefined;
+        const changed =
+          prev === undefined ||
+          deps === undefined ||
+          deps.length !== prev.deps?.length ||
+          deps.some((dep, i) => !Object.is(dep, prev.deps?.[i]));
+        if (changed) memoSlots[slot] = { deps, value: fn() };
+        return (memoSlots[slot] as { value: unknown }).value;
+      },
+      useEffect: (effect: () => unknown, deps?: unknown[]): void => {
+        const slot = hookIndex++;
+        const previous = effectSlots[slot];
+        const changed =
+          previous === undefined ||
+          deps === undefined ||
+          deps.length !== previous.deps?.length ||
+          deps.some((dep, i) => !Object.is(dep, previous.deps?.[i]));
+        effectSlots[slot] = { deps, cleanup: previous?.cleanup };
+        if (!changed) return;
+        if (typeof previous?.cleanup === 'function') (previous.cleanup as () => void)();
+        const cleanup = effect();
+        effectSlots[slot] = { deps, cleanup };
+      },
+    };
+
+    const attachRefs = (): void => {
+      const visit = (value: unknown): void => {
+        if (Array.isArray(value)) {
+          value.forEach(visit);
+          return;
+        }
+        if (value === null || typeof value !== 'object' || (value as { kind?: string }).kind !== 'element') return;
+        const args = (value as { args: unknown[] }).args;
+        const props = args[1] as Record<string, unknown> | null;
+        if (typeof props?.['ref'] === 'function') (props['ref'] as (n: unknown) => void)(fakeNode);
+        args.slice(2).forEach(visit);
+      };
+      visit(current);
+    };
+
+    const render = (): void => {
+      rendering = true;
+      hookIndex = 0;
+      try {
+        current = componentFn(react);
+      } finally {
+        rendering = false;
+      }
+      attachRefs();
+    };
+
+    const runEffects = (): void => {
+      rendering = true;
+      try {
+        // Effects append to effectSlots while running; a setState inside an
+        // effect marks dirty and the pass re-renders, like react's flush.
+        for (let pass = 0; pass < 6 && dirty; pass += 1) {
+          dirty = false;
+          render();
+        }
+      } finally {
+        rendering = false;
+      }
+    };
+
+    const rerender = (): void => {
+      if (rendering) {
+        dirty = true;
+        return;
+      }
+      render();
+      queueMicrotask(() => runEffects());
+    };
+
+    // The panel component must close over THIS runnable react: the cached
+    // plugin's factory received the noop fakeReact and drives no state.
+    const runnablePlugin = (captured as unknown as Captured).definition.factory((id: string) => {
+      if (id === 'react') return react;
+      throw new Error('unexpected require: ' + id);
+    }) as Record<string, unknown>;
+    const { slots, registrations } = slotCollector();
+    (runnablePlugin['apply'] as (ctx: { slots: unknown }) => void)({ slots });
+    const registered = registrations.find((r) => r.slot === 'main')!.component as (react: unknown) => unknown;
+    componentFn = registered;
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async () => ({ ok: true, json: async () => body })) as unknown as typeof fetch;
+    render();
+    runEffects();
+    return {
+      tree: () => current,
+      node: fakeNode,
+      restore: () => {
+        globalThis.fetch = originalFetch;
+      },
+    };
+  }
+
+  /** Convert the runnable-react element shape into the Node shape helpers use. */
+  function toNode(value: unknown): unknown {
+    if (Array.isArray(value)) return value.map(toNode);
+    if (value === null || typeof value !== 'object') return value;
+    const element = value as { kind?: string; args?: unknown[] };
+    if (element.kind === 'element' && Array.isArray(element.args)) {
+      const [type, props, ...children] = element.args as [string, Record<string, unknown> | null, ...unknown[]];
+      return { type, props, children: children.map(toNode) } as Node;
+    }
+    return value;
+  }
+
+  async function settle(): Promise<void> {
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+
+  function click(panel: MountedPanel, find: (button: Node) => boolean): void {
+    const tree = toNode(panel.tree());
+    const button = elements(tree, 'button').find(find);
+    if (button === undefined) throw new Error('button not found');
+    (button.props?.['onClick'] as () => void)();
+  }
+
+  it('preserves the scroll position across the artifact view-mode toggle', async () => {
+    const panel = await mountPanel(await fixtureBody());
+    await settle();
+    // Navigate to my-post's root unit and open its brief.
+    click(panel, (button) => textOf(button).startsWith('my-post'));
+    await settle();
+    click(panel, (button) => button.props?.['data-open-artifact'] === 'brief');
+    await settle();
+    panel.node.scrollTop = 300;
+    click(panel, (button) => button.props?.['data-view-toggle'] === 'semantic');
+    await settle();
+    const source = toNode(panel.tree()) as Node;
+    const highlighted = elements(source, 'div').find((n) => n.props?.['data-yaml-source'] === 'flat');
+    expect(highlighted).toBeDefined();
+    // The captured offset was restored after the new view rendered.
+    expect(panel.node.scrollTop).toBe(300);
+    // Toggling back captures the new offset too.
+    panel.node.scrollTop = 120;
+    click(panel, (button) => button.props?.['data-view-toggle'] === 'source');
+    await settle();
+    expect(panel.node.scrollTop).toBe(120);
+    expect(elements(toNode(panel.tree()) as Node, 'section').some((n) => n.props?.['data-artifact-viewer'] === 'brief')).toBe(true);
+    panel.restore();
+  });
+
+  it('wires a claims source reference into the open sources entry', async () => {
+    const panel = await mountPanel(await fixtureBody());
+    await settle();
+    click(panel, (button) => textOf(button).startsWith('my-post'));
+    await settle();
+    click(panel, (button) => button.props?.['data-open-artifact'] === 'claims');
+    await settle();
+    click(panel, (button) => button.props?.['data-source-ref'] === 'src-note');
+    await settle();
+    const tree = toNode(panel.tree()) as Node;
+    expect(elements(tree, 'section').some((n) => n.props?.['data-sources-view'] === 'true')).toBe(true);
+    const entry = elements(tree, 'details').find((n) => n.props?.['data-source-entry'] === 'src-note');
+    expect(entry?.props?.['open']).toBe(true);
+    expect(textOf(entry)).toContain('author-note');
+    panel.restore();
+  });
+
+  it('renders large YAML fold bodies lazily and fully after expanding', async () => {
+    const body = JSON.parse(JSON.stringify(await fixtureBody())) as SnapshotRouteBody;
+    const post = body.snapshot!.works.find((work) => work.id === 'my-post')!;
+    post.units.find((unit) => unit.ref === 'my-post')!.artifacts['brief']!.text =
+      'big:\n' + Array.from({ length: 139 }, (_, i) => `  k${i}: v${i}`).join('\n');
+    const panel = await mountPanel(body);
+    await settle();
+    click(panel, (button) => textOf(button).startsWith('my-post'));
+    await settle();
+    click(panel, (button) => button.props?.['data-open-artifact'] === 'brief');
+    await settle();
+    click(panel, (button) => button.props?.['data-view-toggle'] === 'semantic');
+    await settle();
+    const folded = toNode(panel.tree()) as Node;
+    expect(elements(folded, 'div').some((n) => n.props?.['data-yaml-source'] === 'folded')).toBe(true);
+    const big = elements(folded, 'details').find((n) => n.props?.['data-fold'] === 'big:');
+    expect(big).toBeDefined();
+    expect(big?.props?.['data-fold-open']).toBe('false');
+    // A closed fold mounts its summary plus a line-count placeholder only.
+    expect(elements(big, 'div').length).toBe(0);
+    expect(big !== undefined ? elements(big, 'span').find((n) => n.props?.['data-fold-pending'] === '140') : undefined).toBeDefined();
+    (big?.props?.['onToggle'] as (event: { target: { open: boolean } }) => void)({ target: { open: true } });
+    await settle();
+    const expanded = toNode(panel.tree()) as Node;
+    const reopened = elements(expanded, 'details').find((n) => n.props?.['data-fold'] === 'big:');
+    expect(reopened?.props?.['data-fold-open']).toBe('true');
+    expect(elements(reopened, 'div').length).toBeGreaterThan(100);
+    expect(concatText(reopened)).toContain('k138: v138');
+    panel.restore();
+  });
+
 });

@@ -366,6 +366,8 @@
 | DSH 插件 | DSH Plugin | DSH 插件 | DeepSeek Harness（DSH，运行本仓库开发会话的 Agent 宿主）的插件包：随 DSH Web GUI 加载的宿主扩展（如本仓库 `plugins/dsh-writing-viewer` 的只读工作区查看插件）；与规范包（Pack）是不同概念——规范包是纯数据的写作规范，DSH 插件是宿主 GUI 的扩展，二者互不相关 |
 | 工作区快照 | Workspace Snapshot | 工作区快照 | DSH 插件 host 侧对 .writing-anything/ 的只读聚合数据：结构状态（单元树、阶段、阻塞项、诊断、待复核摘要）复用 wa-cli 只读命令的 --json 输出，产物（Artifact）全文按 JSON Schema 约束的路径读取文件；经只读路由 GET /dsh-writing-viewer/snapshot 供 client 拉取，每次请求重读、不含任何写入路径；与「状态快照（State Snapshot）」（某场景开始时的设定状态）是不同概念 |
 | 总览仪表盘 | Overview Dashboard | 总览 | DSH 插件工作区查看面板的首页：每个作品（Work）一张卡片（文体、当前阶段、汇总单元进度、去重后的阻塞项数量与摘要），工作区级汇总素材数、待决决策数、待复核数与 validate 诊断；选中作品后展示单元树导航与单元详情。按写作概念组织信息而不平铺目录，界面只读 |
+| 语义卡片视图 | Semantic Card View | 语义卡片 | DSH 插件产物视图的两种呈现之一：把 YAML 产物（Artifact）按其 JSON Schema 字段组织成卡片（写作简报的受众/目的/核心观点、大纲的层级与覆盖、论断的论断-素材关联，其余产物按字段通用卡片化），而非展示文件原文；与「源码高亮视图（Source Highlight View）」一键切换 |
+| 源码高亮视图 | Source Highlight View | 源码视图 | DSH 插件产物视图的两种呈现之一：YAML 与 Markdown 产物原文的只读着色展示（YAML 着色键、标量、结构、注释、锚点与别名，Markdown 着色标题、列表、代码块、引用、表格等结构）；大 YAML 按顶层键折叠，高亮实现打包进客户端 bundle 不依赖网络 |
 | 技能 | Skill | 技能 | Agent Skills 格式的操作说明包；wa-cli 内置的技能用 wa-cli skills install 安装 |
 | 模型上下文协议 | Model Context Protocol | MCP | Agent 调用外部工具的开放协议 |
 | 大语言模型 | Large Language Model | LLM | Agent 背后的 AI 模型；`wa-cli` 本身不调用 |

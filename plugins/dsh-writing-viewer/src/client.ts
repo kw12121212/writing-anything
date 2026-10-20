@@ -5,7 +5,8 @@
  * a factory returning cordis-plugin exports), the same zero-dependency stance
  * as @liustack/modsearch's client: no dsh package imports, `react` acquired
  * through the loader's `require`. The only bundled imports are the pure view
- * model (./overview) and the yaml parser it uses, which tsdown inlines into
+ * models and helpers (./overview, ./artifactview, ./yamlhighlight,
+ * ./markdownview) and the yaml parser they use, which tsdown inlines into
  * the iife — the emitted file stays one plain script that needs no network.
  *
  * It contributes exactly two slot entries:
@@ -17,11 +18,18 @@
  *   the unit tree with the selected unit's detail. A toolbar shows the
  *   project directory being viewed and lets the author switch to another
  *   absolute project path and back to the default;
+ *   the unit detail's artifact (Artifact) entries open the artifact viewer:
+ *   YAML artifacts show the semantic card view (Semantic Card View) and the
+ *   highlighted source view with one toggle that preserves the scroll
+ *   position, draft Markdown shows the rendered reading view and the
+ *   highlighted source view, and claim (Claim) source references jump into
+ *   the sources list, which shows each source's metadata card and original;
  * - a `sidebar.panellist` list entry with the same id, so the sidebar owns a
  *   button that selects the panel.
  *
- * The panel never writes: its only controls are refresh, path switching and
- * selection. Author confirmation and review stay in wa-cli's Reading View.
+ * The panel never writes: its only controls are refresh, path switching,
+ * selection and view toggles. Author confirmation and review stay in wa-cli's
+ * Reading View.
  */
 import {
   overviewModel,
@@ -33,6 +41,10 @@ import {
   type UnitDetail,
   type WorkCard,
 } from './overview';
+import { artifactTextOf, cachedArtifactView, sourceEntriesOf, type ArtifactView, type CardRow } from './artifactview';
+import { foldYaml, highlightYaml, type YamlTokenClass } from './yamlhighlight';
+import { highlightMarkdownSource, renderMarkdown, type MdBlock, type MdTokenClass } from './markdownview';
+import type { ArtifactText } from './artifacts';
 import type { SnapshotRouteBody } from './snapshot';
 
 declare global {
@@ -94,6 +106,18 @@ interface PanelLabels {
   artifacts: string;
   none: string;
   selectUnit: string;
+  openArtifact: string;
+  semanticView: string;
+  sourceView: string;
+  readingView: string;
+  backToDetail: string;
+  parseErrorTitle: string;
+  noCardsHint: string;
+  sourcesView: string;
+  backToOverview: string;
+  originalDoc: string;
+  originalMissing: string;
+  sourcesEmpty: string;
 }
 
 const TEXT: { zh: PanelLabels; en: PanelLabels } = {
@@ -139,6 +163,18 @@ const TEXT: { zh: PanelLabels; en: PanelLabels } = {
     artifacts: '产物',
     none: '无',
     selectUnit: '在单元树中选择一个单元查看详情',
+    openArtifact: '打开',
+    semanticView: '语义卡片',
+    sourceView: '源码高亮',
+    readingView: '阅读视图',
+    backToDetail: '返回单元详情',
+    parseErrorTitle: '产物 YAML 解析失败，已显示源码',
+    noCardsHint: '没有可卡片化的字段，可切换源码视图查看原文',
+    sourcesView: '素材清单',
+    backToOverview: '返回总览',
+    originalDoc: '原文',
+    originalMissing: '未存档原文',
+    sourcesEmpty: '工作区还没有登记素材（Source）',
   },
   en: {
     panelTitle: 'Writing Workspace',
@@ -182,6 +218,18 @@ const TEXT: { zh: PanelLabels; en: PanelLabels } = {
     artifacts: 'Artifacts',
     none: 'None',
     selectUnit: 'Select a unit in the tree to see its detail',
+    openArtifact: 'Open',
+    semanticView: 'Semantic cards',
+    sourceView: 'Source highlight',
+    readingView: 'Reading view',
+    backToDetail: 'Back to unit detail',
+    parseErrorTitle: 'Artifact YAML failed to parse; showing the source',
+    noCardsHint: 'No cardable fields; switch to the source view to read the raw text',
+    sourcesView: 'Sources',
+    backToOverview: 'Back to overview',
+    originalDoc: 'Original',
+    originalMissing: 'No archived original',
+    sourcesEmpty: 'This workspace has no registered sources yet',
   },
 };
 
@@ -224,6 +272,9 @@ function progressText(progress: ProgressView | null): string | null {
   return progress === null ? null : progress.done + '/' + progress.total;
 }
 
+/** Which top-level panel view is showing. */
+export type PanelView = 'overview' | 'sources';
+
 /** Everything the panel renders from, gathered by the stateful component. */
 interface PanelState {
   labels: PanelLabels;
@@ -238,6 +289,18 @@ interface PanelState {
   stacked: boolean;
   pathInput: string;
   panelRoot: string | null;
+  /** Top-level view: the overview or the sources list. */
+  view: PanelView;
+  /** The artifact opened from a unit detail list, if any. */
+  openArtifact: { unit: string; name: string } | null;
+  /** View toggle of the open artifact (reading view for Markdown). */
+  viewMode: 'semantic' | 'source';
+  /** View toggle for the sources' original documents. */
+  sourcesMode: 'reading' | 'source';
+  /** Source (Source) id highlighted in the sources view. */
+  selectedSource: string | null;
+  /** Which large-YAML fold regions the author expanded (lazy bodies). */
+  openFolds: Record<string, boolean> | null;
 }
 
 /** Event handlers the rendered tree binds to. */
@@ -248,6 +311,13 @@ interface PanelActions {
   restoreDefault(): void;
   selectWork(id: string): void;
   selectUnit(ref: string): void;
+  openArtifactView(unit: string, name: string): void;
+  closeArtifactView(): void;
+  toggleViewMode(): void;
+  showSources(sourceId: string | null): void;
+  backToOverview(): void;
+  toggleSourcesMode(): void;
+  toggleFold(key: string, open: boolean): void;
 }
 
 type H = (type: string, props: Record<string, unknown> | null, ...children: unknown[]) => unknown;
@@ -267,6 +337,42 @@ const COLOR = {
 };
 
 const MONO = 'var(--ds-font-family-code, ui-monospace, Menlo, Consolas, monospace)';
+
+/** YAML source lines above this count render folded by top-level key. */
+const FOLD_LINE_THRESHOLD = 120;
+
+/** The other view mode: semantic cards ⇄ highlighted source. */
+export function nextViewMode(mode: 'semantic' | 'source'): 'semantic' | 'source' {
+  return mode === 'semantic' ? 'source' : 'semantic';
+}
+
+/** The other original-document mode: rendered reading ⇄ highlighted source. */
+export function nextReadingMode(mode: 'reading' | 'source'): 'reading' | 'source' {
+  return mode === 'reading' ? 'source' : 'reading';
+}
+
+/** Color role per YAML token class. */
+const YAML_TOKEN_COLOR: Record<YamlTokenClass, string> = {
+  key: COLOR.brand,
+  scalar: COLOR.primary,
+  structure: COLOR.secondary,
+  comment: COLOR.tertiary,
+  anchor: COLOR.warn,
+  alias: COLOR.success,
+  plain: COLOR.primary,
+};
+
+/** Color role per Markdown token class. */
+const MD_TOKEN_COLOR: Record<MdTokenClass, string> = {
+  'md-heading': COLOR.brand,
+  'md-quote': COLOR.secondary,
+  'md-list': COLOR.brand,
+  'md-code': COLOR.success,
+  'md-inline-code': COLOR.success,
+  'md-emphasis': COLOR.primary,
+  'md-table': COLOR.secondary,
+  plain: COLOR.primary,
+};
 
 function buttonStyle(primary = false): Record<string, string> {
   return {
@@ -377,16 +483,23 @@ function countTile(h: H, key: string, label: string, value: number | null, s: Pa
   );
 }
 
-function renderSummary(h: H, s: PanelState): unknown[] {
+function renderSummary(h: H, s: PanelState, a: PanelActions): unknown[] {
   const model = s.model as OverviewModel;
   const summary = model.summary;
   const out: unknown[] = [];
   if (summary !== null) {
+    // The sources tile opens the sources list view — the jump target the
+    // claim cards' source references share.
+    const sourcesTile = h(
+      'button',
+      { key: 'sources-button', type: 'button', 'data-open-sources': 'true', onClick: () => a.showSources(null), style: { font: 'inherit', cursor: 'pointer', padding: 0, border: 'none', textAlign: 'left', color: 'inherit', background: 'transparent' } },
+      countTile(h, 'sources', s.labels.sources, summary.sources, s),
+    );
     out.push(
       h(
         'div',
         { key: 'summary', style: { display: 'flex', flexWrap: 'wrap', gap: '8px' } },
-        countTile(h, 'sources', s.labels.sources, summary.sources, s),
+        sourcesTile,
         countTile(h, 'decisions', s.labels.pendingDecisions, summary.pendingDecisions, s, COLOR.warn),
         countTile(h, 'reviews', s.labels.pendingReviews, summary.pendingReviews, s, COLOR.warn),
         countTile(h, 'diagnostics', s.labels.diagnostics, summary.diagnostics, s, COLOR.error),
@@ -492,7 +605,239 @@ function renderTree(h: H, s: PanelState, a: PanelActions): unknown {
   );
 }
 
-function renderDetail(h: H, s: PanelState): unknown {
+/** One row (or nested group) of a semantic card. */
+function renderCardRows(h: H, s: PanelState, a: PanelActions, rows: CardRow[], keyPrefix: string, depth: number): unknown[] {
+  const out: unknown[] = [];
+  rows.forEach((row, index) => {
+    const key = `${keyPrefix}-${index}`;
+    const label = h('strong', { key: key + '-l', style: { color: COLOR.secondary, fontWeight: '500' } }, row.label + ':');
+    if (row.type === 'text') {
+      out.push(h('div', { key, style: { display: 'flex', flexWrap: 'wrap', gap: '4px 8px', alignItems: 'baseline' } }, label, h('span', { key: key + '-v', style: { overflowWrap: 'anywhere' } }, row.text)));
+    } else if (row.type === 'list') {
+      out.push(
+        h('div', { key, style: { display: 'flex', flexDirection: 'column', gap: '2px' } },
+          label,
+          h('ul', { key: key + '-v', style: { margin: 0, paddingLeft: '16px' } }, row.items.map((item, i) => h('li', { key: key + '-' + i, style: { overflowWrap: 'anywhere' } }, item)))),
+      );
+    } else if (row.type === 'sources') {
+      // The one interactive element of a card: each source id jumps to the
+      // sources view. It only navigates — never edits or confirms.
+      out.push(
+        h('div', { key, style: { display: 'flex', flexDirection: 'column', gap: '2px' } },
+          label,
+          h('div', { key: key + '-v', style: { display: 'flex', flexWrap: 'wrap', gap: '4px' } },
+            row.ids.map((id, i) =>
+              h('button', {
+                key: key + '-' + i,
+                type: 'button',
+                'data-source-ref': id,
+                onClick: () => a.showSources(id),
+                style: { ...buttonStyle(), padding: '1px 8px' },
+              }, id)))),
+      );
+    } else {
+      out.push(
+        h('div', { key, style: { display: 'flex', flexDirection: 'column', gap: '2px', paddingLeft: depth === 0 ? '0' : '10px', borderLeft: depth === 0 ? 'none' : '2px solid ' + COLOR.border } },
+          label,
+          ...renderCardRows(h, s, a, row.rows, key, depth + 1)),
+      );
+    }
+  });
+  return out;
+}
+
+/** The semantic card view of one artifact. */
+function renderSemanticCards(h: H, s: PanelState, a: PanelActions, view: ArtifactView): unknown[] {
+  if (view.cards.length === 0) {
+    return [h('p', { key: 'no-cards', style: { margin: 0, color: COLOR.tertiary } }, s.labels.noCardsHint)];
+  }
+  return view.cards.map((card, index) =>
+    h(
+      'div',
+      { key: 'card-' + index, 'data-card': card.id, style: { display: 'flex', flexDirection: 'column', gap: '6px', padding: '8px 12px', background: COLOR.card, border: '1px solid ' + COLOR.border, borderRadius: '8px' } },
+      card.title === null ? null : h('strong', { key: 't', style: { overflowWrap: 'anywhere' } }, card.title),
+      ...renderCardRows(h, s, a, card.rows, 'card-' + index, 0),
+    ),
+  );
+}
+
+/** One highlighted YAML line as spans. */
+function yamlLineNode(h: H, line: { indent: string; tokens: { text: string; cls: YamlTokenClass }[] }, key: string): unknown {
+  return h(
+    'div',
+    { key, style: { whiteSpace: 'pre', minHeight: '18px' } },
+    line.indent,
+    line.tokens.map((token, i) => h('span', { key: i, 'data-yaml-token': token.cls, style: { color: YAML_TOKEN_COLOR[token.cls] } }, token.text)),
+  );
+}
+
+/**
+ * The YAML source view: highlighted verbatim, folded by top-level key once
+ * the document exceeds FOLD_LINE_THRESHOLD lines. Fold bodies render lazily —
+ * a closed region mounts only its summary line, so a novel-sized artifact
+ * does not mount thousands of line nodes up front.
+ */
+function renderYamlSource(h: H, s: PanelState, a: PanelActions, text: string, keyPrefix: string): unknown {
+  const lineCount = text.split('\n').length;
+  if (lineCount <= FOLD_LINE_THRESHOLD) {
+    return h(
+      'div',
+      { key: keyPrefix + '-lines', 'data-yaml-source': 'flat', style: { ...codeStyle(), background: COLOR.subtle, border: '1px solid ' + COLOR.border, borderRadius: '8px', padding: '8px 10px', overflowX: 'auto' } },
+      highlightYaml(text).map((line, i) => yamlLineNode(h, line, 'l' + i)),
+    );
+  }
+  return h(
+    'div',
+    { key: keyPrefix + '-folds', 'data-yaml-source': 'folded', style: { ...codeStyle(), display: 'flex', flexDirection: 'column', gap: '4px' } },
+    foldYaml(text).map((fold, i) => {
+      const key = `${i}:${fold.header.trim().slice(0, 40)}`;
+      const open = s.openFolds?.[key] === true;
+      return h(
+        'details',
+        {
+          key: 'f' + i,
+          'data-fold': fold.header.trim().slice(0, 40),
+          'data-fold-open': open ? 'true' : 'false',
+          open: open ? true : undefined,
+          onToggle: (event: { target?: { open?: boolean } }) => a.toggleFold(key, event?.target?.open === true),
+          style: { background: COLOR.subtle, border: '1px solid ' + COLOR.border, borderRadius: '8px', padding: '4px 10px' },
+        },
+        h('summary', { key: 's', style: { cursor: 'pointer', color: COLOR.brand, overflowWrap: 'anywhere' } }, fold.header.trim() || '…'),
+        open
+          ? fold.lines.map((line, j) => yamlLineNode(h, highlightYaml(line)[0] ?? { indent: '', tokens: [] }, 'l' + j))
+          : h('span', { key: 'pending', 'data-fold-pending': String(fold.lines.length), style: { color: COLOR.tertiary } }, fold.lines.length + ' lines'),
+      );
+    }),
+  );
+}
+
+/** Rendered Markdown blocks; text children stay plain text in createElement. */
+function renderMarkdownBlocks(h: H, blocks: MdBlock[], keyPrefix: string): unknown[] {
+  return blocks.map((block, index) => {
+    const key = `${keyPrefix}-${index}`;
+    switch (block.type) {
+      case 'heading': {
+        const tag = block.level <= 1 ? 'h3' : block.level === 2 ? 'h4' : 'h5';
+        return h(tag, { key, 'data-md': 'heading', style: { margin: '6px 0 2px' } }, block.text);
+      }
+      case 'paragraph':
+        return h('p', { key, 'data-md': 'paragraph', style: { margin: '4px 0', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' } }, block.text);
+      case 'list':
+        return h(
+          block.ordered ? 'ol' : 'ul',
+          { key, 'data-md': 'list', style: { margin: '4px 0', paddingLeft: '20px' } },
+          block.items.map((item, i) => h('li', { key: key + '-' + i, style: { overflowWrap: 'anywhere' } }, item)),
+        );
+      case 'code':
+        return h('pre', { key, 'data-md': 'code', style: { ...codeStyle(), margin: '4px 0', padding: '8px 10px', background: COLOR.subtle, border: '1px solid ' + COLOR.border, borderRadius: '8px', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' } }, block.text);
+      case 'quote':
+        return h('blockquote', { key, 'data-md': 'quote', style: { margin: '4px 0', padding: '2px 10px', borderLeft: '3px solid ' + COLOR.border, color: COLOR.secondary } }, renderMarkdownBlocks(h, block.blocks, key));
+      case 'table':
+        return h(
+          'table',
+          { key, 'data-md': 'table', style: { borderCollapse: 'collapse', margin: '4px 0', fontSize: '12px' } },
+          h('thead', { key: 'h' }, h('tr', { key: 'r' }, block.header.map((cell, i) => h('th', { key: 'c' + i, style: { border: '1px solid ' + COLOR.border, padding: '2px 8px', textAlign: 'left' } }, cell)))),
+          h('tbody', { key: 'b' }, block.rows.map((row, r) => h('tr', { key: 'r' + r }, row.map((cell, c) => h('td', { key: 'c' + c, style: { border: '1px solid ' + COLOR.border, padding: '2px 8px' } }, cell))))),
+        );
+    }
+  });
+}
+
+/** Highlighted Markdown source lines. */
+function renderMarkdownSource(h: H, text: string, keyPrefix: string): unknown {
+  return h(
+    'div',
+    { key: keyPrefix + '-lines', 'data-md-source': 'true', style: { ...codeStyle(), background: COLOR.subtle, border: '1px solid ' + COLOR.border, borderRadius: '8px', padding: '8px 10px', overflowX: 'auto' } },
+    highlightMarkdownSource(text).map((line, i) =>
+      h('div', { key: 'l' + i, style: { whiteSpace: 'pre', minHeight: '18px' } },
+        line.tokens.map((token, j) => h('span', { key: j, 'data-md-token': token.cls, style: { color: MD_TOKEN_COLOR[token.cls], fontStyle: token.cls === 'md-quote' ? 'italic' : 'normal' } }, token.text)))),
+  );
+}
+
+/**
+ * The artifact viewer for one opened artifact: the view toggle in a header,
+ * semantic cards or the rendered reading view on one side, highlighted
+ * source on the other. A parse failure forces the source view with an alert.
+ */
+function renderArtifactViewer(h: H, s: PanelState, a: PanelActions, artifact: ArtifactText, path: string): unknown {
+  const labels = s.labels;
+  const isMarkdown = artifact.format === 'markdown';
+  const view = isMarkdown ? null : cachedArtifactView(s.openArtifact?.name ?? '', artifact);
+  const parseError = view?.parseError ?? null;
+  const mode = parseError !== null ? 'source' : s.viewMode;
+  const toggleLabel = isMarkdown ? (mode === 'semantic' ? labels.readingView : labels.sourceView) : mode === 'semantic' ? labels.semanticView : labels.sourceView;
+  const body: unknown[] = [];
+  if (parseError !== null) {
+    body.push(h('p', { key: 'parse-error', role: 'alert', 'data-parse-error': 'true', style: { margin: 0, color: COLOR.error, overflowWrap: 'anywhere' } }, labels.parseErrorTitle + ' — ' + parseError));
+  }
+  if (isMarkdown) {
+    body.push(mode === 'semantic' ? renderMarkdownBlocks(h, renderMarkdown(artifact.text), 'md') : [renderMarkdownSource(h, artifact.text, 'md')]);
+  } else if (view !== null) {
+    body.push(mode === 'semantic' ? renderSemanticCards(h, s, a, view) : [renderYamlSource(h, s, a, artifact.text, 'yaml')]);
+  }
+  return h(
+    'section',
+    { key: 'artifact-viewer', 'data-artifact-viewer': s.openArtifact?.name ?? '', 'aria-label': s.openArtifact?.name ?? '', style: { display: 'flex', flexDirection: 'column', gap: '8px', minWidth: 0 } },
+    h(
+      'div',
+      { key: 'header', style: { display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', gap: '4px 10px' } },
+      h('strong', { key: 'name' }, s.openArtifact?.name ?? ''),
+      h('code', { key: 'path', style: { ...codeStyle(), color: COLOR.tertiary } }, path),
+      h('span', { key: 'spacer', style: { flex: '1 1 auto' } }),
+      h('button', { key: 'back', type: 'button', style: buttonStyle(), onClick: a.closeArtifactView }, labels.backToDetail),
+      h('button', { key: 'toggle', type: 'button', 'data-view-toggle': mode, 'aria-pressed': mode === 'source', disabled: parseError !== null, style: buttonStyle(mode === 'source'), onClick: a.toggleViewMode }, toggleLabel),
+    ),
+    ...body,
+  );
+}
+
+/** The sources list: every registered source with its metadata card and original. */
+function renderSources(h: H, s: PanelState, a: PanelActions): unknown {
+  const entries = s.body === null ? [] : sourceEntriesOf(s.body);
+  const children: unknown[] = [
+    h(
+      'div',
+      { key: 'header', style: { display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', gap: '4px 10px' } },
+      sectionTitle(h, 'title', s.labels.sourcesView + ' (' + entries.length + ')'),
+      h('span', { key: 'spacer', style: { flex: '1 1 auto' } }),
+      h('button', { key: 'mode', type: 'button', 'data-sources-mode': s.sourcesMode, style: buttonStyle(s.sourcesMode === 'source'), onClick: a.toggleSourcesMode }, s.sourcesMode === 'reading' ? s.labels.readingView : s.labels.sourceView),
+      h('button', { key: 'back', type: 'button', style: buttonStyle(), onClick: a.backToOverview }, s.labels.backToOverview),
+    ),
+  ];
+  if (entries.length === 0) {
+    children.push(h('p', { key: 'empty', style: { margin: 0, color: COLOR.tertiary } }, s.labels.sourcesEmpty));
+    return h('section', { key: 'sources', 'data-sources-view': 'true', style: { display: 'flex', flexDirection: 'column', gap: '8px' } }, children);
+  }
+  children.push(
+    ...entries.map((entry, index) => {
+      const selected = entry.id === s.selectedSource;
+      const meta = cachedArtifactView('source', entry.sourceYaml);
+      const body: unknown[] =
+        meta.parseError !== null
+          ? [h('p', { key: 'parse-error', role: 'alert', 'data-parse-error': 'true', style: { margin: 0, color: COLOR.error, overflowWrap: 'anywhere' } }, s.labels.parseErrorTitle + ' — ' + meta.parseError)]
+          : [...renderSemanticCards(h, s, a, meta)];
+      if (entry.original === null) {
+        body.push(h('p', { key: 'no-original', style: { margin: 0, color: COLOR.tertiary } }, s.labels.originalMissing));
+      } else {
+        body.push(
+          sectionTitle(h, 'original-title', s.labels.originalDoc),
+          s.sourcesMode === 'reading'
+            ? renderMarkdownBlocks(h, renderMarkdown(entry.original.text), 'src-' + index)
+            : renderMarkdownSource(h, entry.original.text, 'src-' + index),
+        );
+      }
+      return h(
+        'details',
+        { key: 'src-' + index, 'data-source-entry': entry.id, open: selected ? true : undefined, style: { padding: '6px 12px', background: selected ? COLOR.selected : COLOR.card, border: '1px solid ' + (selected ? COLOR.brand : COLOR.border), borderRadius: '8px' } },
+        h('summary', { key: 's', style: { cursor: 'pointer', fontWeight: '600', overflowWrap: 'anywhere' } }, entry.id),
+        h('div', { key: 'body', style: { display: 'flex', flexDirection: 'column', gap: '8px', paddingTop: '6px' } }, ...body),
+      );
+    }),
+  );
+  return h('section', { key: 'sources', 'data-sources-view': 'true', style: { display: 'flex', flexDirection: 'column', gap: '8px' } }, children);
+}
+
+function renderDetail(h: H, s: PanelState, a: PanelActions): unknown {
   const d = s.detail;
   const labels = s.labels;
   const children: unknown[] = [sectionTitle(h, 'title', labels.unitDetail)];
@@ -522,11 +867,19 @@ function renderDetail(h: H, s: PanelState): unknown {
       sectionTitle(h, 'artifacts-title', labels.artifacts + ' (' + d.artifacts.length + ')'),
       d.artifacts.length === 0
         ? h('p', { key: 'no-artifacts', style: { margin: 0, color: COLOR.tertiary } }, labels.none)
-        : h('ul', { key: 'artifacts', style: { margin: 0, paddingLeft: '18px' } },
+        : h('ul', { key: 'artifacts', style: { margin: 0, paddingLeft: '0', listStyle: 'none', display: 'flex', flexDirection: 'column', gap: '2px' } },
             d.artifacts.map((f, i) =>
               h('li', { key: 'f' + i },
-                h('strong', { key: 'n' }, f.name), ' ',
-                h('code', { key: 'p', style: { ...codeStyle(), color: COLOR.tertiary } }, f.path)))),
+                h('button', {
+                  key: 'open',
+                  type: 'button',
+                  'data-open-artifact': f.name,
+                  onClick: () => a.openArtifactView(d.ref, f.name),
+                  style: { display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'baseline', cursor: 'pointer', font: 'inherit', textAlign: 'left', padding: '2px 8px', border: 'none', borderRadius: '6px', color: COLOR.primary, background: 'transparent' },
+                },
+                  h('strong', { key: 'n' }, f.name), ' ',
+                  h('code', { key: 'p', style: { ...codeStyle(), color: COLOR.tertiary } }, f.path),
+                  h('span', { key: 'go', style: { color: COLOR.brand } }, labels.openArtifact))))),
     );
   }
   return h('section', { key: 'detail', style: { flex: '1 1 auto', minWidth: '0', display: 'flex', flexDirection: 'column', gap: '6px' } }, children);
@@ -546,10 +899,18 @@ function renderPanel(h: H, s: PanelState, a: PanelActions): unknown {
   } else if (s.model.state === 'missing') {
     children.push(...renderEmpty(h, s, labels.emptyTitle, labels.emptyHint, s.model.emptyCommand ?? 'wa-cli init'));
   } else {
-    children.push(...renderSummary(h, s));
-    if (s.model.state === 'no-works') {
+    children.push(...renderSummary(h, s, a));
+    const openArtifact = s.openArtifact ?? null;
+    if ((s.view ?? 'overview') === 'sources') {
+      children.push(renderSources(h, { ...s, sourcesMode: s.sourcesMode ?? 'reading', selectedSource: s.selectedSource ?? null }, a));
+    } else if (s.model.state === 'no-works') {
       children.push(...renderEmpty(h, s, labels.noWorksTitle, labels.noWorksHint, s.model.emptyCommand ?? 'wa-cli new'));
     } else {
+      const opened =
+        openArtifact !== null && s.body !== null && openArtifact.unit === s.selectedUnit
+          ? artifactTextOf(s.body, openArtifact.unit, openArtifact.name)
+          : null;
+      const openedPath = opened !== null && s.detail !== null ? (s.detail.artifacts.find((f) => f.name === openArtifact?.name)?.path ?? opened.path) : null;
       children.push(
         sectionTitle(h, 'works-title', labels.works + ' (' + s.model.works.length + ')'),
         h('div', { key: 'works', style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '8px' } },
@@ -558,7 +919,10 @@ function renderPanel(h: H, s: PanelState, a: PanelActions): unknown {
           key: 'navigation',
           'data-layout': s.stacked ? 'stacked' : 'split',
           style: { display: 'flex', flexDirection: s.stacked ? 'column' : 'row', gap: '16px', paddingTop: '10px', borderTop: '1px solid ' + COLOR.border },
-        }, renderTree(h, s, a), renderDetail(h, s)),
+        }, renderTree(h, s, a),
+          opened !== null && openedPath !== null
+            ? renderArtifactViewer(h, { ...s, openArtifact, viewMode: s.viewMode ?? 'semantic' }, a, opened, openedPath)
+            : renderDetail(h, s, a)),
       );
     }
   }
@@ -611,7 +975,10 @@ window.__ModuleLoader__?.load({
   factory: (require: (id: string) => unknown) => {
     const module = { exports: {} as Record<string, unknown> };
     const exports = module.exports;
-    const testHooks = { latestGate, overviewModel, reconcileSelection, renderPanel, routeUrl, shouldStack, labelsFor, stageTitle, PANEL_ID, ROUTE_PATH };
+    const testHooks = {
+      latestGate, overviewModel, reconcileSelection, renderPanel, routeUrl, shouldStack, labelsFor, stageTitle,
+      nextViewMode, nextReadingMode, artifactTextOf, sourceEntriesOf, PANEL_ID, ROUTE_PATH, FOLD_LINE_THRESHOLD,
+    };
 
     let react: any;
     try {
@@ -643,7 +1010,16 @@ window.__ModuleLoader__?.load({
       const [pathInput, setPathInput] = react.useState('');
       const [selection, setSelection] = react.useState({ work: null as string | null, unit: null as string | null });
       const [stacked, setStacked] = react.useState(false);
+      const [view, setView] = react.useState('overview' as PanelView);
+      const [openArtifact, setOpenArtifact] = react.useState(null as { unit: string; name: string } | null);
+      const [viewMode, setViewMode] = react.useState('semantic' as 'semantic' | 'source');
+      const [sourcesMode, setSourcesMode] = react.useState('reading' as 'reading' | 'source');
+      const [selectedSource, setSelectedSource] = react.useState(null as string | null);
+      const [openFolds, setOpenFolds] = react.useState({} as Record<string, boolean>);
       const containerRef = react.useRef(null);
+      // Scroll offset captured before a view toggle, restored after the new
+      // view has rendered, so switching never jumps back to the top.
+      const scrollSave = react.useRef(0);
       // Only the latest request may land: a slow answer for a path the author
       // already switched away from must not overwrite the newer one.
       const gate = react.useRef(null);
@@ -684,6 +1060,19 @@ window.__ModuleLoader__?.load({
         return () => observer.disconnect();
       }, [setStacked]);
 
+      // After a view toggle re-renders, put the scroll offset back where the
+      // author was reading; the effect runs once the new content is mounted.
+      react.useEffect(() => {
+        const element = containerRef.current as HTMLElement | null;
+        if (element !== null && scrollSave.current > 0) element.scrollTop = scrollSave.current;
+        scrollSave.current = 0;
+      }, [viewMode, sourcesMode]);
+
+      const captureScroll = (): void => {
+        const element = containerRef.current as HTMLElement | null;
+        scrollSave.current = element?.scrollTop ?? 0;
+      };
+
       const body = load.body as SnapshotRouteBody | null;
       const model = react.useMemo(() => (body === null ? null : overviewModel(body)), [body]);
       const picked = react.useMemo(
@@ -704,6 +1093,12 @@ window.__ModuleLoader__?.load({
         stacked,
         pathInput,
         panelRoot,
+        view,
+        openArtifact,
+        viewMode,
+        sourcesMode,
+        selectedSource,
+        openFolds,
       };
       const actions: PanelActions = {
         refresh: () => fetchSnapshot(panelRoot),
@@ -713,6 +1108,10 @@ window.__ModuleLoader__?.load({
           if (trimmed === '') return;
           setPathInput(trimmed);
           setSelection({ work: null, unit: null });
+          setOpenArtifact(null);
+          setView('overview');
+          setSelectedSource(null);
+          setOpenFolds({});
           // Re-requesting the same path still refreshes it.
           if (trimmed === panelRoot) fetchSnapshot(trimmed);
           else setPanelRoot(trimmed);
@@ -720,10 +1119,45 @@ window.__ModuleLoader__?.load({
         restoreDefault: () => {
           setPathInput('');
           setSelection({ work: null, unit: null });
+          setOpenArtifact(null);
+          setView('overview');
+          setSelectedSource(null);
+          setOpenFolds({});
           setPanelRoot(null);
         },
-        selectWork: (id: string) => setSelection({ work: id, unit: null }),
-        selectUnit: (ref: string) => setSelection((prev: { work: string | null }) => ({ work: prev.work ?? picked?.work ?? null, unit: ref })),
+        selectWork: (id: string) => {
+          setSelection({ work: id, unit: null });
+          setOpenArtifact(null);
+        },
+        selectUnit: (ref: string) => {
+          setSelection((prev: { work: string | null }) => ({ work: prev.work ?? picked?.work ?? null, unit: ref }));
+          setOpenArtifact(null);
+        },
+        openArtifactView: (unit: string, name: string) => {
+          setView('overview');
+          setOpenArtifact({ unit, name });
+          setViewMode('semantic');
+        },
+        closeArtifactView: () => setOpenArtifact(null),
+        toggleViewMode: () => {
+          captureScroll();
+          setViewMode((prev: 'semantic' | 'source') => nextViewMode(prev));
+        },
+        showSources: (sourceId: string | null) => {
+          setView('sources');
+          setSelectedSource(sourceId);
+        },
+        backToOverview: () => {
+          setView('overview');
+          setSelectedSource(null);
+        },
+        toggleSourcesMode: () => {
+          captureScroll();
+          setSourcesMode((prev: 'reading' | 'source') => nextReadingMode(prev));
+        },
+        toggleFold: (key: string, open: boolean) => {
+          setOpenFolds((prev: Record<string, boolean>) => ({ ...prev, [key]: open }));
+        },
       };
       return react.createElement('div', { ref: containerRef, style: { width: '100%', height: '100%', overflow: 'auto' } },
         renderPanel(react.createElement, state, actions));
