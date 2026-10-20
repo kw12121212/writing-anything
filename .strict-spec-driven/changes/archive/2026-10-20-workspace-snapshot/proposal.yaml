@@ -1,0 +1,39 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: workspace-snapshot
+  status: proposed
+summary:
+  what:
+    - 在 plugins/dsh-writing-viewer 插件包的 host 侧新增只读快照（Snapshot）服务：把 .writing-anything/ 工作区的配置、作品（Work）与单元（Unit）树（阶段、进度、阻塞项）及各单元产物全文聚合为结构化 JSON 供 client 拉取，不含任何写入路径
+    - 数据来源按里程碑定案采用混合方案：结构状态复用 wa-cli status 与 validate 的 --json 只读输出，产物全文按 JSON Schema 只读解析文件
+    - 快照内嵌 validate 诊断作为错误态数据；刷新策略定案为首版手动刷新——每次快照请求重新读取工作区，不做文件监听
+  why:
+    - 里程碑 dsh-workspace-viewer 内 artifact-views、overview-navigation、polish-release 三个计划变更都依赖本变更：总览仪表盘、单元树导航与产物语义视图需要统一、结构化且只读的数据来源
+    - wa-cli 是唯一真相来源：结构状态复用其只读命令输出，避免在插件内重复实现状态汇总与校验逻辑，也与「接入层薄封装」的仓库约定一致
+scope:
+  in:
+    - host 侧快照模块：聚合工作区与 config、works（work.yaml、单元树、stage、progress、blockers）
+    - 各单元目录产物全文：写作简报（Brief）、大纲（Outline）、出处（Provenance）、论断（Claim）、作者反馈（Feedback）、草稿正文（Markdown 全文）、审稿与验收证据
+    - 长篇（novel）文体按文体存在的产物：场景契约、伏笔台账（Foreshadowing Ledger）、时间线（Timeline）、知情表（Knowledge State）等
+    - 工作区级数据：素材（sources）、决策（decisions，含待决）、规范包（packs）、待复核摘要（author-reviews/）
+    - 快照内嵌 wa-cli validate --json 诊断作为错误态数据；wa-cli 不可用或缺字段时容错降级并标注，不整体失败
+    - host 注册只读 GET 快照路由；定位不到工作区时返回可读的缺失状态与空态指引
+    - 插件包内多作品测试夹具（含长篇层级与多类单元产物）、快照单元测试与只读约束测试
+    - 新术语按首次出现规则加入 docs/GLOSSARY.md（如 工作区快照（Workspace Snapshot））
+    - host 侧插件配置支持 waCliPath：覆盖 wa-cli 可执行文件路径（默认 PATH 上的 wa-cli），供宿主未安装到 PATH 的环境使用；默认值与配置归一有测试覆盖
+  out:
+    - 任何写入或变更工作区产物的能力：插件严格只读，作者确认与复核仍走 wa-cli 阅读页（Reading View）
+    - client 侧面板对快照的渲染：总览仪表盘、单元树导航、产物语义视图、YAML 与 Markdown 语法高亮（属后续计划变更）
+    - wa-cli（Go 内核）行为改动与 MCP 服务、内置技能改动
+    - 文件监听与自动刷新（后续增强）
+    - 面板内切换显式项目路径的界面（host 侧沿用现有 workspaceRoot 配置定位）
+unchanged_behavior:
+  - 现有 /dsh-writing-viewer/workspace 路由的定位、候选探测与空态行为保持不变（快照走独立只读路由）
+  - wa-cli 与 Go 内核行为不变；完整 Go 回归命令原样通过，插件包不改变其结果
+  - 插件包结构、构建与测试脚本的自包含约定不变（dsh-plugin-structure 技术标准）
+roadmap:
+  milestone: dsh-workspace-viewer
+  planned_change: workspace-snapshot

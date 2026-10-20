@@ -1,0 +1,8 @@
+# 写作简报（Brief）；请用 wa-cli brief set 修改。
+
+schema_version: 1
+premise:
+  text: 守塔人与舵手在风暴夜互相救赎
+theme: 孤独与信任
+pov:
+  person: third

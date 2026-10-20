@@ -1,0 +1,18 @@
+# 设定集（Canon）；请用 wa-cli canon add 追加设定条目。
+
+schema_version: 1
+entries:
+  - id: lin-che
+    type: character
+    scope: work
+    name: 林澈
+    text: 夜航船的年轻舵手
+    sources: []
+    protection: normal
+  - id: lighthouse
+    type: location
+    scope: work
+    name: 灯塔
+    text: 废弃的信号灯塔
+    sources: []
+    protection: normal

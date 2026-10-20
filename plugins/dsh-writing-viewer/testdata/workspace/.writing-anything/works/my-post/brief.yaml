@@ -1,0 +1,21 @@
+# 写作简报（Brief）；请用 wa-cli brief set 修改。
+
+schema_version: 1
+audience: 维护大型单体服务的工程师
+purpose: 说服读者用契约测试守住重写边界
+premise:
+  text: 重写不失控的前提是边界有测试守着
+  sources: [src-migration]
+pov:
+  person: first
+key_messages:
+  - id: msg-boundary
+    text: 重写项目的安全网是契约测试，不是加班
+    sources: [src-migration]
+length: {min: 1500, max: 2500}
+avoid:
+  - 绝对化用语
+provenance:
+  pov:
+    sources:
+      - src-migration

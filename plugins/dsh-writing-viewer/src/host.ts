@@ -7,10 +7,12 @@
  * stays inert on profiles that never mount those services. The only service
  * seams used are:
  *
- * - `webServer` (web profile): register one read-only GET route
- *   `/dsh-writing-viewer/workspace` that returns the located project
- *   directory, whether `.writing-anything/` exists under it, and every
- *   candidate probed on the way.
+ * - `webServer` (web profile): registers two read-only GET routes.
+ *   `/dsh-writing-viewer/workspace` returns the located project directory,
+ *   whether `.writing-anything/` exists under it, and every candidate probed
+ *   on the way. `/dsh-writing-viewer/snapshot` aggregates the whole workspace
+ *   (config, works, unit trees, artifact full texts, decisions, sources,
+ *   packs, validate diagnostics) read-only for the viewer client.
  * - `workspaceRegistry` (DSH workspace registry): synchronous `list()` read
  *   of registered workspace paths, which are the GUI's own notion of project
  *   directories. The per-connection `workspaceController` remote is not
@@ -20,8 +22,9 @@
  * this plugin is a `stat` on `<candidate>/.writing-anything`. The writing
  * workspace is only ever read; the author keeps editing through wa-cli.
  */
-import { stat } from 'node:fs/promises';
+import { lstat, readdir, readFile, stat } from 'node:fs/promises';
 import { join } from 'node:path';
+import { spawn } from 'node:child_process';
 import {
   dedupeCandidates,
   locateWorkspace,
@@ -32,11 +35,106 @@ import {
   type RootSource,
 } from './root';
 import { registryPaths, type WorkspaceRegistryLike } from './registry';
+import {
+  buildSnapshot,
+  type SnapshotRouteBody,
+} from './snapshot';
+import type { CliRunner } from './wacli';
+import type { DirEntry, SnapshotFs } from './artifacts';
 
 export const name = 'dsh-writing-viewer';
 
 /** No hard service requirements: both seams are acquired via scoped inject. */
 export const inject: string[] = [];
+
+/** Milliseconds before a wa-cli invocation counts as unavailable. */
+const CLI_TIMEOUT_MS = 15_000;
+
+/** Upper bound on captured wa-cli stdout; real envelopes are far smaller. */
+const CLI_STDOUT_CAP = 8 * 1024 * 1024;
+
+/**
+ * Read-only filesystem adapter for the snapshot: listing and reading only.
+ * Symlinks are never followed — a symlinked directory entry is not a real
+ * subdirectory for the walker, and a symlinked artifact file reads as absent,
+ * matching wa-cli's artifact.not-found treatment of linked artifacts.
+ */
+export function realSnapshotFs(): SnapshotFs {
+  return {
+    async readDir(path: string): Promise<DirEntry[] | null> {
+      try {
+        const info = await lstat(path);
+        if (!info.isDirectory() || info.isSymbolicLink()) return null;
+        const entries = await readdir(path, { withFileTypes: true });
+        return entries.map((entry) => ({
+          name: entry.name,
+          isDirectory: entry.isDirectory(),
+          isSymbolicLink: entry.isSymbolicLink(),
+        }));
+      } catch {
+        return null;
+      }
+    },
+    async readFile(path: string): Promise<string | null> {
+      try {
+        const info = await lstat(path);
+        if (!info.isFile() || info.isSymbolicLink()) return null;
+        return await readFile(path, 'utf8');
+      } catch {
+        return null;
+      }
+    },
+  };
+}
+
+/**
+ * Spawn adapter for the wa-cli bridge: argument list only, never a shell,
+ * stdout captured, stderr ignored, one timeout. A missing binary (ENOENT),
+ * a timeout, or any spawn failure yields null, which the snapshot records as
+ * a degradation instead of failing the whole response.
+ */
+export function spawnCliRunner(binary: string): CliRunner {
+  return {
+    run(args: readonly string[]): Promise<{ stdout: string } | null> {
+      return new Promise((resolve) => {
+        let child: ReturnType<typeof spawn>;
+        try {
+          child = spawn(binary, args, { stdio: ['ignore', 'pipe', 'ignore'] });
+        } catch {
+          resolve(null);
+          return;
+        }
+        let stdout = '';
+        let settled = false;
+        const finish = (value: { stdout: string } | null): void => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          resolve(value);
+        };
+        const timer = setTimeout(() => {
+          child.kill();
+          finish(null);
+        }, CLI_TIMEOUT_MS);
+        child.stdout?.on('data', (chunk: Buffer) => {
+          // Bounded accumulation: an output stream larger than any legitimate
+          // envelope stops growing and the oversized result parses as a
+          // degradation instead of exhausting memory.
+          if (stdout.length > CLI_STDOUT_CAP) return;
+          stdout += chunk.toString('utf8');
+          if (stdout.length > CLI_STDOUT_CAP) stdout = stdout.slice(0, CLI_STDOUT_CAP);
+        });
+        child.on('error', () => finish(null));
+        child.on('close', (code: number | null) => {
+          // Exit code is not failure: status/validate legitimately exit 1 on
+          // an invalid workspace while still printing a full JSON envelope.
+          if (code === null) finish(null);
+          else finish({ stdout });
+        });
+      });
+    },
+  };
+}
 
 /** The JSON body the route serves. Fields are additive-only from here on. */
 export interface WorkspaceRouteBody {
@@ -49,7 +147,11 @@ export interface WorkspaceRouteBody {
   emptyState: { command: string } | null;
 }
 
-/** Read-only probe: does `<root>/.writing-anything` exist as a directory? */
+/** Read-only probe: does `<root>/.writing-anything` exist as a directory?
+ *
+ * Like wa-cli's own workspace detection (os.Stat semantics), a symlinked
+ * .writing-anything itself is followed here; everything beneath it is walked
+ * with lstat and never follows symlinks. */
 export async function workspaceExistsAt(root: string): Promise<boolean> {
   try {
     const info = await stat(join(root, WORKSPACE_DIR));
@@ -139,9 +241,69 @@ export function registerRoute(
   });
 }
 
+/** Register the read-only snapshot route on an acquired webServer scope. */
+export function registerSnapshotRoute(
+  scope: { webServer?: { register: (route: unknown) => unknown } & Record<string, unknown> } & Record<string, unknown>,
+  build: () => Promise<SnapshotRouteBody>,
+): void {
+  const server = (scope.webServer ?? scope) as { register: (route: unknown) => unknown };
+  server.register({
+    name: 'dsh-writing-viewer-snapshot',
+    kind: 'exact',
+    path: '/dsh-writing-viewer/snapshot',
+    handler: async (req: { method?: string }, res: {
+      writeHead: (status: number, headers?: Record<string, string>) => { end: (body?: string) => void };
+      end: (body?: string) => void;
+    }) => {
+      if ((req.method ?? 'GET') !== 'GET') {
+        res.writeHead(405, { allow: 'GET' }).end();
+        return;
+      }
+      try {
+        const body = await build();
+        res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' }).end(JSON.stringify(body));
+      } catch (error) {
+        // The snapshot is best-effort per area; an unexpected failure still
+        // answers readable JSON instead of an unhandled route error. Status
+        // stays 200 on purpose: the panel contract is "always parse this
+        // body", and `ok: false` plus the error text is the readable failure
+        // shape — the DSH 0.2.x webServer exposes no documented error channel
+        // a 500 would serve better than this body.
+        res
+          .writeHead(200, { 'content-type': 'application/json; charset=utf-8' })
+          .end(JSON.stringify({ ok: false, error: String(error) } satisfies Partial<SnapshotRouteBody> & { error: string }));
+      }
+    },
+  });
+}
+
+/** Locate a workspace once, shared by both routes of one snapshot call. */
+async function locateOnce(
+  registry: WorkspaceRegistryLike | null,
+  config: { workspaceRoot?: unknown } | undefined,
+  processCwd: string,
+): Promise<{ candidates: CandidateProbe[]; located: { root: string; source: RootSource } | null }> {
+  const summaries = registryPaths(registry);
+  const candidates = collectCandidates(config, summaries.map((s) => s.path), processCwd);
+  const probe = await locateWorkspace(candidates, workspaceExistsAt);
+  if (probe.root !== null) return { candidates: probe.candidates, located: { root: probe.root, source: probe.source } };
+  return { candidates: probe.candidates, located: null };
+}
+
+/** Build the full snapshot route body from the real adapters. */
+export async function fullSnapshot(
+  registry: WorkspaceRegistryLike | null,
+  config: { workspaceRoot?: unknown; waCliPath?: unknown } | undefined,
+  processCwd: string,
+): Promise<SnapshotRouteBody> {
+  const { candidates, located } = await locateOnce(registry, config, processCwd);
+  const binary = normalizePathInput(config?.waCliPath) ?? 'wa-cli';
+  return await buildSnapshot(realSnapshotFs(), spawnCliRunner(binary), candidates, located);
+}
+
 export function apply(ctx: {
   inject?: (names: string[], closure: (scope: unknown) => void) => unknown;
-}, config: { workspaceRoot?: unknown } = {}): void {
+}, config: { workspaceRoot?: unknown; waCliPath?: unknown } = {}): void {
   if (typeof ctx?.inject !== 'function') return;
   let registry: WorkspaceRegistryLike | null = null;
   ctx.inject(['workspaceRegistry'], (scope: unknown) => {
@@ -157,6 +319,11 @@ export function apply(ctx: {
       registerRoute(scope as Parameters<typeof registerRoute>[0], () => workspaceSnapshot(registry, config, process.cwd()));
     } catch (error) {
       console.error(`[dsh-writing-viewer] route skipped: ${String(error)}`);
+    }
+    try {
+      registerSnapshotRoute(scope as Parameters<typeof registerSnapshotRoute>[0], () => fullSnapshot(registry, config, process.cwd()));
+    } catch (error) {
+      console.error(`[dsh-writing-viewer] snapshot route skipped: ${String(error)}`);
     }
   });
 }

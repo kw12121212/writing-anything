@@ -1,0 +1,8 @@
+# 写入记录（Draft Record）：由 wa-cli draft write 生成，用于推导段落出处（Provenance），请勿修改。
+
+schema_version: 1
+sha256: 8172739a6486eb98d2b2fefd0ea86cc5d743cdc1ff5303b711853c5f19cbdafe
+paragraphs:
+  - {hash: 7cb8ed6f6aa6ee6d155dfccb6ee487792b05120ee8998422703428eb10ee72cc, origin: agent, text: 重写大型单体最怕的不是写新代码，而是没人说得清旧边界。}
+  - {hash: bb30a0a6ef2b6d0b913732e85b180e2bdf60bf2a1b54a32ec3f2f404fa3e2198, origin: agent, text: 我们先把服务间调用冻结成契约测试，再动第一行代码。}
+  - {hash: a97f18130c531199a5da6e046b1177f9a9ee2802c63c98ff6920176df130e617, origin: agent, text: 事故率下降了 40%，构建时间从 25 分钟降到 3 分钟。}

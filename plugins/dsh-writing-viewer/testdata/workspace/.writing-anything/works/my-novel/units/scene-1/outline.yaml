@@ -1,0 +1,12 @@
+# 大纲（Outline）；请用 wa-cli outline set、wa-cli outline remove 与 wa-cli scene contract 修改。
+
+schema_version: 1
+sections:
+  - id: s1
+    title: 风暴夜
+    characters: [lin-che]
+    reveal: 日志的真正主人
+    pov: lin-che
+    location: lighthouse
+    plants: [log-thread]
+    time: 第 1 夜

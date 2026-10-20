@@ -1,0 +1,10 @@
+# 素材（Source）元数据；原文逐字节存档在同目录的 file 中，请勿修改。
+
+schema_version: 1
+id: src-migration
+type: past-article
+title: 迁移复盘
+original_name: wa-src-1.md
+file: original.md
+sha256: 2b93aa27685c48e6fdfb5ea38c3934a96bc19492333e0d04727a5e742b281ccd
+bytes: 154

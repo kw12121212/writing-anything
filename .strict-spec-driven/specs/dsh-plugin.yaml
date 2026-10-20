@@ -34,3 +34,55 @@ requirements:
         - GIVEN: 插件已装入 web profile，面板尚未打开，.writing-anything/ 内文件清单、内容与修改时间已记录
         - WHEN: 在 Web GUI 中打开插件面板并完成工作区定位与展示
         - THEN: .writing-anything/ 内文件的清单、内容与修改时间与打开面板前一致
+  snapshot-aggregation:
+    strength: MUST
+    statement: 插件的 host 侧必须提供只读的工作区快照（Workspace Snapshot）服务：按定位到的项目目录聚合 .writing-anything/ 的配置、素材（Source）清单、规范包（Pack）清单、决策（含待决）与待复核摘要，以及每个作品（Work）的 work.yaml、单元（Unit）树（阶段、进度、阻塞项）与各单元目录产物全文——写作简报（Brief）、大纲（Outline）、出处（Provenance）、论断（Claim）、作者反馈（Feedback）、草稿（Draft）正文（Markdown 全文）、审稿与验收证据；长篇（novel）文体按文体存在的产物（如场景契约、伏笔台账（Foreshadowing Ledger）、时间线（Timeline）、知情表（Knowledge State））同样纳入；快照必须内嵌 wa-cli validate 的诊断作为错误态数据
+    scenarios:
+      multi-work-snapshot:
+        - GIVEN: 一个工作区含 tech-blog 文章与 novel 作品（含卷、章、场景层级，场景带场景契约与伏笔台账条目）
+        - WHEN: 通过插件的只读快照路由请求快照
+        - THEN: 响应为结构化 JSON，包含两个作品各自的单元树（阶段、进度、阻塞项）、各类产物全文、素材与决策（含待决）及待复核摘要，并内嵌 validate 诊断
+      novel-genre-artifacts:
+        - GIVEN: novel 作品某场景单元目录下存在场景契约与伏笔台账产物
+        - WHEN: 请求快照
+        - THEN: 快照包含这些按文体存在的产物全文
+  snapshot-fresh-read:
+    strength: MUST
+    statement: 每次快照请求必须重新读取工作区当前内容，不得返回跨请求的缓存数据；首版不得引入文件监听，数据刷新由 client 的手动刷新（面板刷新按钮或重新打开面板）触发
+    scenarios:
+      fresh-reread:
+        - GIVEN: 已获得一次快照响应
+        - WHEN: 修改工作区内某单元的草稿正文后再次请求快照
+        - THEN: 新响应包含修改后的正文而非旧内容
+  snapshot-missing-workspace:
+    strength: MUST
+    statement: 定位不到 .writing-anything/ 工作区时，快照路由必须返回可读的缺失状态与空态指引（提示可用 wa-cli init 创建工作区），不得以未处理错误或空白响应失败
+    scenarios:
+      missing-workspace-readable:
+        - GIVEN: 插件定位不到任何含 .writing-anything/ 的项目目录
+        - WHEN: 请求快照路由
+        - THEN: 响应为正常 JSON，含可读的缺失状态与空态指引，而非服务器错误或崩溃
+  snapshot-cli-degradation:
+    strength: MUST
+    statement: wa-cli 只读命令不可用或其 --json 输出缺少快照所需字段时，快照必须降级：返回文件可直接解析的部分数据，并在快照中明确标注降级状态与原因，不得整体失败
+    scenarios:
+      cli-unavailable:
+        - GIVEN: 主机环境找不到可执行的 wa-cli
+        - WHEN: 请求快照
+        - THEN: 响应仍包含按 JSON Schema 只读解析的产物全文数据，并标注降级（degraded）与原因，不整体失败
+      missing-field:
+        - GIVEN: wa-cli status --json 输出缺少快照所需的部分字段
+        - WHEN: 请求快照
+        - THEN: 缺失部分按降级标注呈现，其余数据照常返回
+  snapshot-no-writes:
+    strength: MUST
+    statement: 快照的生成与提供过程不得创建、修改或删除 .writing-anything/ 工作区内的任何产物（Artifact），插件自身代码不得向项目目录写入任何文件；唯一例外是快照经子进程调用的 wa-cli 只读命令按其审计日志（Audit Log）契约向 .writing-anything/audit.log 追加运维痕迹——审计日志不是产物、追加出自 wa-cli，且每次快照请求的 wa-cli 调用必须限定在有界命令集合内（status、validate、next 各一次，每个长篇（novel）作品 timeline 一次），不得轮询式反复调用
+    scenarios:
+      snapshot-no-writes:
+        - GIVEN: 已记录 .writing-anything/ 内除 audit.log 外全部文件的清单、内容与修改时间
+        - WHEN: 请求一次完整快照
+        - THEN: 这些文件的清单、内容与修改时间与请求前一致；新增或发生变化的文件至多为 wa-cli 追加的 audit.log
+      audit-log-bounded:
+        - GIVEN: 主机环境可执行 wa-cli 且快照完整可用（未降级）
+        - WHEN: 请求一次快照后读取 audit.log
+        - THEN: 本次快照追加的审计行与有界命令集合一一对应（status、validate、next 各一条，每个长篇作品 timeline 一条），无多余调用

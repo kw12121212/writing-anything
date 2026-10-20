@@ -31,3 +31,27 @@ rules:
     rationale: 仓库主体是 Go 工程；插件工具链自包含使 Go 回归与插件回归互不牵连，仓库根保持无 Node 清单，直到有变更显式定案共享工作区的需要
     enforcement:
       method: review
+  plugin-cli-audit-exception:
+    strength: MUST
+    statement: DSH 插件以子进程调用 wa-cli 只读命令（status、validate 等带 --json 的查看命令）视为只读访问，但必须在自己的 delta 规格中显式写明审计日志（Audit Log）例外：wa-cli 每次调用（含只读命令）都会向 .writing-anything/audit.log 追加一行运维痕迹，插件不得宣称绝对零写入；插件在一次用户动作内对 wa-cli 的调用次数必须有界并可在规格中枚举，不得以轮询或监听名义反复调用（审计日志有轮转上限，轮询会灌满它）
+    rationale: 实测（workspace-snapshot 变更，2026-10-20）：对无 audit.log 的工作区跑一次只读 status --json 即创建该文件；runQuiet 仅供进程内 MCP，外部子进程无抑制手段。不声明例外的「只读插件」宣称会被任何真实宿主实测推翻；调用无界则一次面板刷新即可写入大量审计行
+    enforcement:
+      method: test
+      detail: 测试用写入型假二进制（模拟 wa-cli：输出罐装 --json 并向 audit.log 追加行）驱动一次完整快照，断言追加的审计行与规格枚举的有界命令集合一一对应，且除 audit.log 外工作区逐字节不变；评审核对 delta 规格确有审计例外陈述
+    examples:
+      good:
+        - dsh-writing-viewer 的 snapshot-no-writes 需求：除 audit.log 外全部文件清单、内容与修改时间不变，audit.log 追加行与 status/validate/next/timeline×N 有界集合对应
+      bad:
+        - 插件每秒调用 wa-cli status 刷新面板并宣称「只读、零写入」：轮询式调用灌满审计日志，且宣称与实测不符
+  plugin-cli-json-bridge:
+    strength: SHOULD
+    statement: DSH 插件消费 wa-cli 的 --json 输出时：输出映射单列为独立模块（不与聚合逻辑混写）；每个命令区域（status、validate、next、timeline 等）独立降级——二进制不可用、执行失败、超时、stdout 无法解析或缺少所需字段时，该区域按降级标注呈现（原因写入响应的 degraded 数组），文件可直接解析的数据照常返回，不得整体失败；子进程以参数列表直接 spawn（不经 shell、设超时、有界累积 stdout），文件读取器与执行器经参数注入以便单元测试用罐装输出驱动
+    rationale: wa-cli 的 --json 字段在 0.x 仍会演进，且 DSH 宿主环境未必装有 wa-cli；区域级降级让面板在任何缺角下仍有内容可看，映射隔离让字段演进只改一处。注入式读取器/执行器沿用 root.ts 的可测性约定，测试不需要真实二进制
+    enforcement:
+      method: review
+      detail: 评审核对：映射与聚合分离、每个 CLI 区域有降级路径与测试覆盖、spawn 无 shell 且有超时与 stdout 上限
+    examples:
+      good:
+        - plugins/dsh-writing-viewer/src/wacli.ts：mapStatus/mapValidate/mapNext/mapTimeline 各自容错缺字段并给出降级原因；spawnCliRunner 无 shell、15 秒超时、8 MiB stdout 上限
+      bad:
+        - 在快照聚合函数里内联 execSync('wa-cli status --json')：wa-cli 缺失时整个面板 500，字段演进时聚合逻辑与映射一起改

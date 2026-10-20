@@ -315,6 +315,11 @@ categories:
       status: active
       occurrences: 1
       path: .strict-spec-driven/lessons/coding/lesson-eaf147.yaml
+    wa-cli-42ec4e:
+      title: 外部工具把调用 wa-cli 当只读访问前，先实测一次完整调用：审计日志每次都追加，假执行器测试会把它完全掩盖
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/coding/wa-cli-42ec4e.yaml
   documentation:
     must-must-6af326:
       title: 修改一条 MUST 需求时，要检查同一规格里相邻的 MUST 是否因此冲突

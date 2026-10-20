@@ -1,0 +1,8 @@
+# 规范包锁定文件（Lock File）；请用 wa-cli pack install 与 wa-cli pack remove 修改。
+
+schema_version: 1
+packs:
+  - id: lean-style
+    source:
+      path: /tmp/wa-pack-lean
+    sha256: cb7ca8e4f68be81758a1cf41072f0ff4505b707c3a54eb26acae1668e355b478

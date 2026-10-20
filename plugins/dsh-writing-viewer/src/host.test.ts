@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -24,7 +24,7 @@ async function tempProject(withWorkspace: boolean): Promise<string> {
 }
 
 afterEach(async () => {
-  await Promise.all(tempRoots.splice(0).map(() => Promise.resolve()));
+  await Promise.all(tempRoots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 });
 
 function registryWith(paths: string[]): WorkspaceRegistryLike {
@@ -198,8 +198,10 @@ describe('apply wiring', () => {
       },
     };
     apply(ctx, {});
-    expect(routes).toHaveLength(1);
-    expect(routes[0]!.path).toBe('/dsh-writing-viewer/workspace');
+    expect(routes.map((route) => route.path)).toEqual([
+      '/dsh-writing-viewer/workspace',
+      '/dsh-writing-viewer/snapshot',
+    ]);
     const written: { status: number; body?: string }[] = [];
     const res = {
       writeHead: (status: number) => {
@@ -214,6 +216,21 @@ describe('apply wiring', () => {
     const body = JSON.parse(written[0]!.body!) as WorkspaceRouteBody;
     expect(body.root).toBe(project);
     expect(body.source).toBe('workspace-registry');
+
+    // The snapshot route serves a readable body without wa-cli installed:
+    // an empty workspace degrades per area but never fails the response.
+    written.length = 0;
+    await routes[1]!.handler({ method: 'GET' }, res);
+    const snapshotBody = JSON.parse(written[0]!.body!) as {
+      ok: boolean;
+      workspaceExists: boolean;
+      degraded: string[];
+      snapshot: { works: unknown[] } | null;
+    };
+    expect(snapshotBody.ok).toBe(true);
+    expect(snapshotBody.workspaceExists).toBe(true);
+    expect(snapshotBody.snapshot?.works).toEqual([]);
+    expect(snapshotBody.degraded.length).toBe(3);
   });
 
   it('ignores a registry service without list and stays quiet without inject at all', async () => {
@@ -233,7 +250,7 @@ describe('apply wiring', () => {
     };
     apply(ctx, {});
     expect(seen).toEqual([['workspaceRegistry'], ['webServer']]);
-    expect(routes).toHaveLength(1);
+    expect(routes).toHaveLength(2);
     // A ctx without inject (older host shapes) must not throw.
     expect(() => apply({}, {})).not.toThrow();
   });

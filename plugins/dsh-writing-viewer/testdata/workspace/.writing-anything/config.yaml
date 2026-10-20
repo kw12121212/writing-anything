@@ -1,0 +1,7 @@
+# writing-anything 工作区配置；请用 wa-cli config set <key> <value> 修改。
+
+schema_version: 1
+language: zh-CN
+default_genre: tech-blog
+packs: [lean-style]
+gate_level: strict
