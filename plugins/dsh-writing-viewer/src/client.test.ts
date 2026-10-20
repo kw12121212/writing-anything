@@ -194,6 +194,10 @@ interface TestHooks {
   sourceEntriesOf: (body: SnapshotRouteBody) => { id: string }[];
   FOLD_LINE_THRESHOLD: number;
   ROUTE_PATH: string;
+  SETUP_ROUTE: string;
+  parseSetupStatus: (body: unknown) => any;
+  setupViewModel: (status: any, actionInFlight: boolean, labels: any) => any;
+  setupLabelsFor: (active?: string | null) => any;
 }
 
 async function hooks(): Promise<TestHooks> {
@@ -201,7 +205,7 @@ async function hooks(): Promise<TestHooks> {
 }
 
 const noop = (): void => {};
-const actions = { refresh: noop, setPathInput: noop, switchTo: noop, restoreDefault: noop, selectWork: noop, selectUnit: noop, openArtifactView: noop, closeArtifactView: noop, toggleViewMode: noop, showSources: noop, backToOverview: noop, toggleSourcesMode: noop };
+const actions = { refresh: noop, setPathInput: noop, switchTo: noop, restoreDefault: noop, selectWork: noop, selectUnit: noop, openArtifactView: noop, closeArtifactView: noop, toggleViewMode: noop, showSources: noop, showQueue: noop, backToOverview: noop, toggleSourcesMode: noop, enableSetup: noop };
 
 async function fixtureBody(): Promise<SnapshotRouteBody> {
   const root = join(TESTDATA, 'workspace');
@@ -231,6 +235,15 @@ async function stateFor(body: SnapshotRouteBody | null, extra: Record<string, un
     stacked: false,
     pathInput: '',
     panelRoot: null,
+    view: 'overview',
+    openArtifact: null,
+    viewMode: 'semantic',
+    sourcesMode: 'reading',
+    selectedSource: null,
+    openFolds: {},
+    treeCollapsed: {},
+    setup: null,
+    setupBusy: false,
     ...extra,
   };
 }
@@ -360,9 +373,10 @@ describe('renderPanel', () => {
     walk(tree, (n) => expect(n.props?.['contentEditable']).toBeUndefined());
     const labels = elements(tree, 'button').map((b) => textOf(b));
     // Read-only controls only: refresh, path switching, work/unit selection,
-    // artifact opening, and sources navigation. Nothing edits, writes or confirms.
+    // artifact opening, sources navigation, and the two queue tiles. Nothing
+    // edits, writes or confirms.
     const allowed =
-      /^(Refresh|Switch|Restore default)$|^(my-novel|my-post)\b|^(my-novel|part-1|ch-1|scene-1|scene-2)\b|^Sources \d+$|^(brief|outline|claims|feedback|provenance|draft|work)\s+\S+\s+Open$|^(src-migration|src-note)$/;
+      /^(Refresh|Switch|Restore default)$|^(my-novel|my-post)\b|^(my-novel|part-1|ch-1|scene-1|scene-2)\b|^Sources \d+$|^Pending decisions \d+( —)?$|^Pending reviews \d+( —)?$|^(brief|outline|claims|feedback|provenance|draft|work)\s+\S+\s+Open$|^(src-migration|src-note)$/;
     for (const label of labels) expect(label, label).toMatch(allowed);
   });
 
@@ -467,6 +481,8 @@ describe('artifact views', () => {
       viewMode: 'semantic',
       sourcesMode: 'reading',
       selectedSource: null,
+      setup: null,
+      setupBusy: false,
       ...extra,
     };
   }
@@ -485,6 +501,7 @@ describe('artifact views', () => {
       closeArtifactView: () => calls.push('close'),
       toggleViewMode: () => calls.push('toggle-view'),
       showSources: (id: string | null) => calls.push(`sources:${id}`),
+      showQueue: (view: 'decisions' | 'reviews') => calls.push(`queue:${view}`),
       backToOverview: () => calls.push('back-overview'),
       toggleSourcesMode: () => calls.push('toggle-sources'),
     };
@@ -624,7 +641,7 @@ describe('artifact views', () => {
     const t = await hooks();
     const body = await fixtureBody();
     const allowed =
-      /^(Refresh|Switch|Restore default)$|^(my-novel|my-post)\b|^(my-novel|part-1|ch-1|scene-1|scene-2)\b|^Sources \d+$|^(brief|outline|claims|feedback|provenance|draft|work)\s+\S+\s+Open$|^(src-migration|src-note)$|^(Back to unit detail|Back to overview|Semantic cards|Source highlight|Reading view)$/;
+      /^(Refresh|Switch|Restore default)$|^(my-novel|my-post)\b|^(my-novel|part-1|ch-1|scene-1|scene-2)\b|^Sources \d+$|^Pending decisions \d+( —)?$|^Pending reviews \d+( —)?$|^(brief|outline|claims|feedback|provenance|draft|work)\s+\S+\s+Open$|^(src-migration|src-note)$|^(Back to unit detail|Back to overview|Semantic cards|Source highlight|Reading view)$/;
     for (const extra of [
       { openArtifact: { unit: 'my-post', name: 'brief' } },
       { openArtifact: { unit: 'my-post', name: 'brief' }, viewMode: 'source' },
@@ -665,7 +682,7 @@ describe('ViewerPanel wiring (runnable react)', () => {
     restore(): void;
   }
 
-  async function mountPanel(body: SnapshotRouteBody): Promise<MountedPanel> {
+  async function mountPanel(body: SnapshotRouteBody, fetchImpl?: typeof fetch): Promise<MountedPanel> {
     const plugin = await loadClientPlugin();
     void plugin;
     if (captured === null) throw new Error('client definition not captured');
@@ -795,7 +812,7 @@ describe('ViewerPanel wiring (runnable react)', () => {
     componentFn = registered;
 
     const originalFetch = globalThis.fetch;
-    globalThis.fetch = (async () => ({ ok: true, json: async () => body })) as unknown as typeof fetch;
+    globalThis.fetch = (fetchImpl ?? (async () => ({ ok: true, json: async () => body }))) as unknown as typeof fetch;
     render();
     runEffects();
     return {
@@ -949,5 +966,280 @@ describe('ViewerPanel wiring (runnable react)', () => {
     expect(elements(tree, 'button').some((b) => b.props?.['data-tree-ref'] === 'my-novel/scene-1')).toBe(true);
     expect(elements(tree, 'button').find((b) => b.props?.['data-tree-ref'] === 'my-novel/ch-1')?.props?.['aria-expanded']).toBe('true');
     panel.restore();
+  });
+
+  it('hides the setup section while the host serves no setup route', async () => {
+    const urlFetch = (async (input: unknown) => {
+      const url = String(input);
+      if (url.includes('/dsh-writing-viewer/setup')) return { ok: false, status: 404, json: async () => ({}) };
+      return { ok: true, json: async () => await fixtureBody() };
+    }) as unknown as typeof fetch;
+    const panel = await mountPanel(await fixtureBody(), urlFetch);
+    await settle();
+    const tree = toNode(panel.tree()) as Node;
+    expect(elements(tree, 'section').some((n) => n.props?.['data-setup-section'] === 'true')).toBe(false);
+    panel.restore();
+  });
+
+  it('probes the setup route, runs the explicit enable action and lands in the enabled state', async () => {
+    let enabled = false;
+    let posts = 0;
+    const idleStatus = { ok: true, enabled: true, busy: false, cli: { ready: false, path: null, version: null, resolved: null, external: null }, skills: { registered: false, names: [] }, lastError: null };
+    const enabledStatus = { ok: true, enabled: true, busy: false, cli: { ready: true, path: '/inst/wa-cli', version: 'v0.3.0', resolved: '/inst/wa-cli', external: '/usr/bin/wa-cli' }, skills: { registered: true, names: ['wa-auto'] }, lastError: null };
+    const urlFetch = (async (input: unknown, init?: { method?: string }) => {
+      const url = String(input);
+      if (url.includes('/dsh-writing-viewer/setup')) {
+        if ((init?.method ?? 'GET') === 'POST') {
+          posts += 1;
+          enabled = true;
+        }
+        return { ok: true, json: async () => (enabled ? enabledStatus : idleStatus) };
+      }
+      return { ok: true, json: async () => await fixtureBody() };
+    }) as unknown as typeof fetch;
+    const panel = await mountPanel(await fixtureBody(), urlFetch);
+    await settle();
+    let tree = toNode(panel.tree()) as Node;
+    const section = elements(tree, 'section').find((n) => n.props?.['data-setup-section'] === 'true');
+    expect(section).toBeDefined();
+    expect(section?.props?.['data-setup-state']).toBe('idle');
+    const enable = elements(tree, 'button').find((button) => button.props?.['data-setup-enable'] === 'true');
+    expect(enable).toBeDefined();
+    (enable?.props?.['onClick'] as () => void)();
+    await settle();
+    expect(posts).toBe(1);
+    tree = toNode(panel.tree()) as Node;
+    const done = elements(tree, 'section').find((n) => n.props?.['data-setup-section'] === 'true');
+    expect(done?.props?.['data-setup-state']).toBe('enabled');
+    expect(textOf(done)).toContain('wa-auto');
+    panel.restore();
+  });
+
+  it('shows a readable setup error line and keeps the enable button usable', async () => {
+    const failing = (async (input: unknown) => {
+      const url = String(input);
+      if (url.includes('/dsh-writing-viewer/setup')) {
+        return {
+          ok: true,
+          json: async () => ({
+            ok: true,
+            enabled: true,
+            busy: false,
+            cli: { ready: false, path: null, version: null, resolved: null, external: null },
+            skills: { registered: false, names: [] },
+            lastError: 'SHA256SUMS 中没有记录，拒绝安装',
+          }),
+        };
+      }
+      return { ok: true, json: async () => await fixtureBody() };
+    }) as unknown as typeof fetch;
+    const panel = await mountPanel(await fixtureBody(), failing);
+    await settle();
+    const tree = toNode(panel.tree()) as Node;
+    const section = elements(tree, 'section').find((n) => n.props?.['data-setup-section'] === 'true');
+    expect(section?.props?.['data-setup-state']).toBe('error');
+    const alert = elements(section, 'p').find((n) => n.props?.['data-setup-error'] === 'true');
+    expect(textOf(alert)).toContain('SHA256SUMS');
+    const enable = elements(section, 'button').find((button) => button.props?.['data-setup-enable'] === 'true');
+    expect(enable?.props?.['disabled']).toBe(false);
+    panel.restore();
+  });
+});
+
+describe('queue views', () => {
+  /** Actions that record what the rendered tree invoked. */
+  function recordingActions(): { actions: Record<string, unknown>; calls: string[] } {
+    const calls: string[] = [];
+    const actions = {
+      refresh: () => calls.push('refresh'),
+      setPathInput: () => calls.push('setPathInput'),
+      switchTo: () => calls.push('switchTo'),
+      restoreDefault: () => calls.push('restoreDefault'),
+      selectWork: () => calls.push('selectWork'),
+      selectUnit: () => calls.push('selectUnit'),
+      openArtifactView: (unit: string, name: string) => calls.push(`open:${unit}/${name}`),
+      closeArtifactView: () => calls.push('close'),
+      toggleViewMode: () => calls.push('toggle-view'),
+      showSources: (id: string | null) => calls.push(`sources:${id}`),
+      showQueue: (view: 'decisions' | 'reviews') => calls.push(`queue:${view}`),
+      backToOverview: () => calls.push('back-overview'),
+      toggleSourcesMode: () => calls.push('toggle-sources'),
+    };
+    return { actions, calls };
+  }
+
+  /** Overview-ready state so the summary tiles render. */
+  async function overviewState(body: SnapshotRouteBody, extra: Record<string, unknown> = {}): Promise<Record<string, unknown>> {
+    const t = await hooks();
+    const model = t.overviewModel(body);
+    const picked = t.reconcileSelection(body, model, null, null);
+    return {
+      labels: t.labelsFor('en'),
+      loading: false,
+      loadError: null,
+      body,
+      model,
+      selectedWork: picked?.work ?? null,
+      selectedUnit: picked?.unit ?? null,
+      tree: picked?.tree ?? [],
+      detail: picked?.detail ?? null,
+      stacked: false,
+      pathInput: '',
+      panelRoot: null,
+      view: 'overview',
+      openArtifact: null,
+      viewMode: 'semantic',
+      sourcesMode: 'reading',
+      selectedSource: null,
+      setup: null,
+      setupBusy: false,
+      ...extra,
+    };
+  }
+
+  it('renders the decision and review tiles as navigation buttons', async () => {
+    const t = await hooks();
+    const body = await fixtureBody();
+    const { actions, calls } = recordingActions();
+    const tree = t.renderPanel(h, await overviewState(body), actions);
+    const decisions = elements(tree, 'button').find((button) => button.props?.['data-open-decisions'] === 'true');
+    const reviews = elements(tree, 'button').find((button) => button.props?.['data-open-reviews'] === 'true');
+    expect(decisions).toBeDefined();
+    expect(reviews).toBeDefined();
+    (decisions?.props?.['onClick'] as () => void)();
+    (reviews?.props?.['onClick'] as () => void)();
+    expect(calls).toEqual(['queue:decisions', 'queue:reviews']);
+  });
+
+  it('renders the decision queue with every field and the recommendation mark', async () => {
+    const t = await hooks();
+    const body = await fixtureBody();
+    const tree = t.renderPanel(h, await overviewState(body, { view: 'decisions' }), actions);
+    const view = elements(tree, 'section').find((n) => n.props?.['data-decisions-view'] === 'true');
+    expect(view).toBeDefined();
+    const text = textOf(view);
+    expect(text).toContain('dec-1');
+    expect(text).toContain('open');
+    expect(text).toContain('事故率下降了 40%');
+    expect(text).toContain('允许');
+    expect(text).toContain('保持不变');
+    expect(text).toContain('Recommended');
+    expect(text).toContain('Blocking');
+    expect(text).toContain('my-post');
+    // The only button in the queue view is the back-to-overview control.
+    const buttons = elements(view, 'button');
+    expect(buttons).toHaveLength(1);
+    expect(textOf(buttons[0])).toContain('Back to overview');
+  });
+
+  it('renders the author-review records with every field', async () => {
+    const t = await hooks();
+    const body = await fixtureBody();
+    const tree = t.renderPanel(h, await overviewState(body, { view: 'reviews' }), actions);
+    const view = elements(tree, 'section').find((n) => n.props?.['data-reviews-view'] === 'true');
+    expect(view).toBeDefined();
+    const text = textOf(view);
+    expect(text).toContain('acceptance');
+    expect(text).toContain('my-post');
+    expect(text).toContain('preview');
+    expect(text).toContain('2026-10-19');
+    expect(elements(view, 'button')).toHaveLength(1);
+  });
+
+  it('shows an empty hint when decisions.yaml is absent and an alert when it fails to parse', async () => {
+    const t = await hooks();
+    const body = await fixtureBody();
+    const missing = { ...body, snapshot: { ...body.snapshot!, decisions: null } } as SnapshotRouteBody;
+    const empty = t.renderPanel(h, await overviewState(missing, { view: 'decisions' }), actions);
+    const emptyView = elements(empty, 'section').find((n) => n.props?.['data-decisions-view'] === 'true');
+    expect(textOf(emptyView)).toContain('decision queue is empty');
+    const malformed = { ...body, snapshot: { ...body.snapshot!, decisions: { path: 'decisions.yaml', format: 'yaml' as const, text: 'decisions: [' } } } as SnapshotRouteBody;
+    const broken = t.renderPanel(h, await overviewState(malformed, { view: 'decisions' }), actions);
+    const brokenView = elements(broken, 'section').find((n) => n.props?.['data-decisions-view'] === 'true');
+    const alert = elements(brokenView, 'p').find((n) => n.props?.['data-parse-error'] === 'true' && n.props?.role === 'alert');
+    expect(alert).toBeDefined();
+    expect(textOf(alert)).toContain('failed to parse');
+  });
+});
+
+describe('setup section', () => {
+  /** A well-formed setup status for the view-model and render tests. */
+  function status(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+    return {
+      ok: true,
+      enabled: true,
+      busy: false,
+      cli: { ready: true, path: '/inst/wa-cli', version: 'v0.3.0', resolved: '/inst/wa-cli', external: '/usr/bin/wa-cli' },
+      skills: { registered: true, names: ['wa-auto', 'wa-init'] },
+      lastError: null,
+      ...overrides,
+    };
+  }
+
+  it('parses only well-formed setup statuses', async () => {
+    const t = await hooks();
+    const parsed = t.parseSetupStatus(status());
+    expect(parsed?.cli.path).toBe('/inst/wa-cli');
+    expect(parsed?.skills.names).toEqual(['wa-auto', 'wa-init']);
+    expect(t.parseSetupStatus({ ok: true })).toBe(null);
+    expect(t.parseSetupStatus({ ok: false, error: 'x' })).toBe(null);
+    expect(t.parseSetupStatus(null)).toBe(null);
+    // A snapshot body must not be mistaken for a setup status.
+    expect(t.parseSetupStatus(await fixtureBody())).toBe(null);
+  });
+
+  it('derives idle, busy, enabled and error view states', async () => {
+    const t = await hooks();
+    const labels = t.setupLabelsFor('en');
+    const idle = t.setupViewModel(
+      { ok: true, enabled: true, busy: false, cli: { ready: false, path: null, version: null, resolved: null, external: null }, skills: { registered: false, names: [] }, lastError: null },
+      false,
+      labels,
+    );
+    expect(idle.state).toBe('idle');
+    expect(idle.canEnable).toBe(true);
+    expect(idle.headline).toContain('Not enabled yet');
+    const busy = t.setupViewModel(
+      { ok: true, enabled: true, busy: true, cli: { ready: false, path: null, version: null, resolved: null, external: null }, skills: { registered: false, names: [] }, lastError: null },
+      false,
+      labels,
+    );
+    expect(busy.state).toBe('busy');
+    expect(busy.canEnable).toBe(false);
+    const clientBusy = t.setupViewModel(
+      { ok: true, enabled: true, busy: false, cli: { ready: false, path: null, version: null, resolved: null, external: null }, skills: { registered: false, names: [] }, lastError: null },
+      true,
+      labels,
+    );
+    expect(clientBusy.state).toBe('busy');
+    expect(clientBusy.canEnable).toBe(false);
+    const enabled = t.setupViewModel(t.parseSetupStatus(status())!, false, labels);
+    expect(enabled.state).toBe('enabled');
+    expect(enabled.cliLine).toContain('/inst/wa-cli');
+    expect(enabled.cliLine).toContain('v0.3.0');
+    expect(enabled.resolvedLine).toContain('/inst/wa-cli');
+    expect(enabled.shadowedLine).toContain('/usr/bin/wa-cli');
+    expect(enabled.skillsLine).toContain('2');
+    const failed = t.setupViewModel(t.parseSetupStatus(status({ cli: { ready: false, path: null, version: null, resolved: null, external: null }, skills: { registered: false, names: [] }, lastError: '校验失败' }))!, false, labels);
+    expect(failed.state).toBe('error');
+    expect(failed.error).toBe('校验失败');
+    expect(failed.canEnable).toBe(true);
+  });
+
+  it('renders the section with the explicit enable button and no other write controls', async () => {
+    const t = await hooks();
+    const body = await fixtureBody();
+    const tree = t.renderPanel(h, await stateFor(body, { setup: t.parseSetupStatus(status()), setupBusy: false }), actions);
+    const section = elements(tree, 'section').find((n) => n.props?.['data-setup-section'] === 'true');
+    expect(section).toBeDefined();
+    expect(section?.props?.['data-setup-state']).toBe('enabled');
+    expect(textOf(section)).toContain('/inst/wa-cli');
+    expect(textOf(section)).toContain('/usr/bin/wa-cli');
+    const buttons = elements(section, 'button');
+    expect(buttons).toHaveLength(1);
+    expect(buttons[0]?.props?.['data-setup-enable']).toBe('true');
+    // Without a status the section is absent — the switch is off.
+    const plain = t.renderPanel(h, await stateFor(body), actions);
+    expect(elements(plain, 'section').some((n) => n.props?.['data-setup-section'] === 'true')).toBe(false);
   });
 });

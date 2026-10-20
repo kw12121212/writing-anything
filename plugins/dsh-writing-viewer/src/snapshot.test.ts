@@ -226,7 +226,7 @@ describe('buildSnapshot route body', () => {
         written[written.length - 1]!.body = body;
       },
     };
-    await routes[0]!.handler({ method: 'GET' }, res);
+    await routes[0]!.handler({ method: 'GET', headers: { host: '127.0.0.1:13080' } }, res);
     const body = JSON.parse(written[0]!.body!) as { ok: boolean; workspaceExists: boolean; emptyState: { command: string }; snapshot: unknown };
     expect(body.ok).toBe(true);
     expect(body.workspaceExists).toBe(false);

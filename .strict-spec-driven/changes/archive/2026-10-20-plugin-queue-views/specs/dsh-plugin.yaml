@@ -1,0 +1,25 @@
+schema: strict-spec-driven/delta-spec/v1
+schema_version: 1
+artifact_type: delta_spec
+schema_file: templates/strict-spec-driven/schemas/delta-spec.yaml
+target_spec: dsh-plugin
+operations:
+  ADDED:
+    queue-views:
+      strength: MUST
+      statement: 面板必须提供两个只读的作者行动队列清单视图：总览的「待决决策」计数磁贴可点开决策队列（Decision Queue）清单，逐条展示每条决策的 id、status、question、options（id 与 text，recommendation 指向的选项带可辨识标记）、rationale、blocking 标记与关联 units；「待复核」计数磁贴可点开作者复核清单，逐条展示 kind、work、ref、channel、confirmed_at 与 reviewed_at。两个清单只消费快照已携带的 decisions.yaml 与 author-reviews.yaml 全文；文件缺失时显示空态提示、YAML 解析失败时显示可读错误提示，均不得空白或崩溃；清单视图不得出现任何编辑、写入或确认控件，作者操作仍走 wa-cli
+      scenarios:
+        decisions-list:
+          - GIVEN: 工作区 decisions.yaml 含一条 open 决策：id dec-1、question、options a/b、recommendation b、rationale、blocking true、units [my-post]
+          - WHEN: 点击总览「待决决策」磁贴
+          - THEN: 决策清单逐条显示上述全部字段，推荐选项 b 带可辨识标记，清单内没有任何编辑或确认控件，返回总览入口可用
+        reviews-list:
+          - GIVEN: 工作区 author-reviews.yaml 含一条 kind acceptance、work/ref my-post、channel preview、confirmed_at 与 reviewed_at 的复核记录
+          - WHEN: 点击总览「待复核」磁贴
+          - THEN: 复核清单逐条显示全部字段，无编辑控件，返回总览入口可用
+        missing-and-malformed:
+          - GIVEN: 快照中 decisions 为 null（文件缺失），或 decisions.yaml 文本语法损坏无法解析
+          - WHEN: 打开决策清单
+          - THEN: 分别显示空态提示或可读的解析错误提示，不空白、不崩溃；解析失败分支的计数磁贴显示「—」而不是 0（文件缺失分支的计数仍按既有语义为 0）
+  MODIFIED: {}
+  REMOVED: {}

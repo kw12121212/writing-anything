@@ -1,0 +1,19 @@
+schema: strict-spec-driven/lesson/v1
+schema_version: 1
+artifact_type: lesson
+schema_file: templates/strict-spec-driven/schemas/lesson.yaml
+lesson:
+  id: lesson-971ba4
+  title: 宿主服务假件必须复刻真实调用路径，同步近似会静默掩盖契约破坏
+category: testing
+status: active
+created_at: '2026-10-20T13:32:36.793Z'
+updated_at: '2026-10-20T13:32:36.793Z'
+context: dsh-writing-viewer 的 setup 以 ctx.skills.registerProvider 向宿主技能注册表注册技能提供者；单元测试用最小 fakeSkills 同步调用 provider.list()/get() 并同步消费返回值，全部通过且插件自身状态显示 registered:true
+observation: 真实注册表对 list/get 的每个调用都带 AbortSignal，waitWithAbort 会直接对返回值调 .then；同步返回数组的 provider 在真实宿主中被整个跳过（日志 skill provider "…" skipped），宿主技能清单里一个技能都不出现——假件测试与插件自身状态字段都是盲区，只有全新上下文评审对照宿主源码才发现
+takeaway: 为宿主或第三方服务的回调接口写假件时，先读真实消费方的调用形态（参数、await、AbortSignal、thenable 检查），让假件按同一语义驱动被测对象；关键契约另加一层针对真实包的取证脚本或类型导入，不要按「最小可用」自行发明契约
+applies_when: 在插件或外部集成中实现宿主/第三方服务的回调接口，并用注入式假件做单元测试时
+occurrences:
+  - origin: plugin-builtin-setup
+    date: '2026-10-20'
+    evidence: 评审发现同步 provider 被真实注册表跳过（plugins/dsh-writing-viewer/docs/evidence/setup-check.txt 第 5 节）；修复为异步契约并补 locator 后，真实 @deepseek-ai/dsh-skill SkillRegistry 取证 REAL-REGISTRY-OK，src/setup.test.ts 增加按 waitWithAbort 语义驱动的契约回归网

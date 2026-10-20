@@ -1,0 +1,16 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: plugin-queue-views
+approach:
+  - 新增 src/queueview.ts：decisionEntries(text) 与 reviewEntries(text) 把快照携带的 decisions.yaml / author-reviews.yaml 全文解析为视图模型（yaml 解析器已内联在 bundle），逐字段容错、永不抛错，解析失败返回 parseError 由 client 显示。client.ts：PanelView 增加 decisions 与 reviews 两个取值；「待决决策」「待复核」磁贴沿用素材磁贴的按钮包裹模式（data-open-decisions / data-open-reviews），点开对应清单视图；渲染复用现有清单视图的骨架（标题+计数+返回按钮+逐条卡片），决策条目展示 id/status/question/options（recommendation 加标记）/rationale/blocking/units，复核条目展示 kind/work/ref/channel/confirmed_at/reviewed_at，全部中英双语文案
+decisions:
+  queue-views-read-existing-snapshot:
+    decision: 两个清单视图只消费快照已携带的 decisions 与 authorReviews 全文，host 侧零改动
+    rationale: workspace-snapshot 变更本就把两份全文放进快照（当时明确留给后续视图消费），host 不动意味着无新路由面、无新 CLI 调用、审计日志次数不变；快照字段只增不改的约定保持
+  tiles-as-navigation:
+    decision: 计数磁贴升级为导航入口（沿用素材磁贴的模式），计数语义本身不变
+    rationale: 磁贴已是面板的信息层级入口（素材磁贴先例），作者从计数到内容一步直达；计数为 null（降级）时清单视图如实显示提示而不是空白，与「—而非 0」的既有立场一致
+alternatives: []
+risks: []

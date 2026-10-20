@@ -1,0 +1,22 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: plugin-builtin-setup
+approach:
+  - 配置开关默认关闭，apply 在未开启时保持现有行为完全不变。开启后：host 新增 setup 模块——(1) CLI 获取：复刻 install.sh 的发布产物约定（wa-cli-<os>-<arch> 与 SHA256SUMS，base 地址与版本、安装目录均可配置），Node fetch 有界下载、SHA-256 比对、临时文件加 rename 原子写入并 chmod 755，仅由面板显式点击触发，host 启动不做网络动作；(2) 技能注册：spawn 内置 wa-cli skills install --target <临时目录>（cwd 为该临时目录、其下无 .writing-anything，实测不写审计日志）物化全部内置技能，解析 SKILL.md 文件头后经 ctx.skills.registerProvider 注册 rank 50 的技能提供者——低于 DSH 文件系统技能源的全部权重（project .dsh=100、project .agents=200、user=400/500、bundled=600），同名时内置优先，且不写任何用户或项目技能目录；(3) CLI 优先：把内置二进制所在目录幂等前置到 process.env.PATH，DSH 子进程环境以宿主 process.env 为基底（dsh-subprocess），故 Agent shell 与插件快照桥都先解析内置 wa-cli；(4) 路由：GET setup 状态与 POST setup 动作各一条，沿用既有 Request Origin Guard，同一时间至多一个进行中的动作；client 面板新增设置区（状态、显式按钮、结果与遮蔽反馈）。全部 setup 写入只落在配置的安装目录与操作系统临时目录
+decisions:
+  skills-via-dsh-registry:
+    decision: 内置技能不写入 ~/.agents/skills、.claude/skills 或项目 .agents/skills，而是经 DSH 技能注册表以技能提供者（Skill Provider）进程内注册（@deepseek-ai/dsh-skill 的 SkillRegistry.registerProvider，0.2.1-rc.2 实装），provider 候选可声明任意 rank 且同名按 rank 升序取胜
+    rationale: 作者明确要求不改动用户目录且直接注册到 DSH 内置使用；rank 机制让同名优先可控（文件系统源最低为 100，取 50 即全面优先），同时免去跨 Agent 的目录约定差异（lesson-234cd1）
+  cli-path-prepend:
+    decision: 内置 CLI 优先通过把内置二进制目录前置到宿主 process.env.PATH 实现（幂等，仅 setup 启用后）
+    rationale: dsh-subprocess 以宿主 process.env 为子进程环境基底（过滤敏感键与 DSH_ 前缀），前置后 Agent 的 bash 工具与插件自身 spawn 都先解析内置二进制；这是插件可用的唯一宿主级杠杆，副作用边界（仅本宿主进程后续子进程）写进 README
+  download-explicit-only:
+    decision: 发布产物下载只由面板显式点击触发，host 启动时最多做技能注册与 PATH 前置，绝不发起网络请求；已存在且版本一致时跳过下载
+    rationale: 下载可执行文件是高敏感动作，保持每次都出自作者显式意图；失败不留部分文件（先校验后落盘）
+  tempdir-materialization:
+    decision: 技能经操作系统临时目录物化（spawn wa-cli skills install --target，cwd 为该临时目录），解析后仅在内存注册，资源基址（resourceBase）省略
+    rationale: wa-* 技能是 CLI 薄封装，正文只引用 wa-cli 命令、不引用相对资源；临时物化使 setup 全程不触碰 .writing-anything/（无工作区 cwd 实测不写 audit.log）与用户目录
+alternatives: []
+risks: []

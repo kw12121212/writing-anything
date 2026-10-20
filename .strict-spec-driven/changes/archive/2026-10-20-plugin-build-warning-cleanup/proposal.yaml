@@ -1,0 +1,19 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: plugin-build-warning-cleanup
+  status: proposed
+summary:
+  what:
+    - 清理插件构建的两类告警：tsdown 0.14.2 构建输出两条 'Invalid input options - For the "define"' 告警（来自 tsdown↔rolldown 版本组合的兼容瑕疵）与一条 MISSING_NAME_OPTION_FOR_IIFE_EXPORT 告警（client iife 产物未提供 output.name）。把 tsdevDependencies.tsdown 从 ^0.14.0 升级到当前稳定版并按需适配 tsdown.config.ts，使 pnpm run build 零告警完成且产物名归一脚本照常工作
+  why:
+    - 构建告警是噪声：每次构建刷屏掩盖真问题，且 MISSING_NAME 提示潜在失去 iife 导出访问（当前 client 恰好不依赖导出，但告警让这一点不可见）；0.14 已落后当前稳定版 9 个 minor
+scope:
+  in:
+    - plugins/dsh-writing-viewer/package.json（devDependencies.tsdown 升级）、pnpm-lock.yaml、plugins/dsh-writing-viewer/tsdown.config.ts（按新 API 适配）、plugins/dsh-writing-viewer/scripts/normalize-outputs.mjs（仅当产物名变化时适配）、plugins/dsh-writing-viewer/README.md（体积声明按升级后实测更新）
+  out:
+    - 不改动任何 src/ 源码与测试逻辑（构建工具链升级不得改变运行时行为）；不升级 typescript/vitest/yaml 等其他依赖；不引入新的构建步骤或插件
+unchanged_behavior:
+  - 构建产物语义不变：dist/index.js 与 dist/client.js 的导出路径、__ModuleLoader__.load 副作用形态、client 仍是单一自包含脚本；全部 182 项测试通过；Go 完整回归不受影响

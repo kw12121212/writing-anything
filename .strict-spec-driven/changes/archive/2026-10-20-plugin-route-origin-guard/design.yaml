@@ -1,0 +1,17 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: plugin-route-origin-guard
+approach:
+  - '新增纯函数模块 src/routeguard.ts 实现与 DSH api-request-trust 同构的判定：Host 头必须可解析且 hostname 为回环（localhost、127.0.0.0/8、::1）、等于监听绑定地址字面量（忽略端口与 %zone）、或命中插件配置 allowedHosts 的权威（带端口精确匹配、不带端口匹配任意端口，经 WHATWG URL 规范化）；sec-fetch-site 为 cross-site 拒绝；带 Origin 头时必须与 Host 同权威（按 Origin 的 scheme 规范化默认端口）。host.ts 的两个路由 handler 在处理前先校验，拒绝时返回 403 JSON + cache-control: no-store。绑定地址从注入的 webServer 作用域的 host 属性读取（容错：读不到时仅回环+allowedHosts 判定）。client 不改：面板同源 fetch 天然通过'
+decisions:
+  mirror-dsh-api-trust-fence:
+    decision: 校验语义照抄 DSH /api 栅栏（Host 锚定 + cross-site 拒绝 + Origin 同源），并以其 allowedHosts 配置对齐 trustedHosts 的例外机制
+    rationale: DSH 自己的 api-request-trust 注释明说：纯 HTTP 下浏览器对部分读取既不带 Origin 也不带 Fetch-Metadata，Host 是 rebinding 无法伪造的唯一锚点；与其发明新语义，不如与宿主 /api 的判定完全同构，评审与后续维护只需对照一处实现。token/cookie 认证不可行：launch token 挂在 HostConnectionService 私有状态上，webServer.register 无认证选项，静态插件行也注入不到按连接服务——依赖这些内部结构会违反插件只用文档化契约的既定立场（README 约束 7）
+  allowed-hosts-config:
+    decision: 新增插件配置 allowedHosts（字符串数组，默认空）：经反向代理或 tailscale 等远程权威访问面板时显式放行
+    rationale: 默认严格会挡住宿主 --trusted-host 场景（本机 GUI 即带 gamepc.tail1234.ts.net:13080），默认放行则形同虚设；把放行决定交给部署者，与 DSH trustedHosts 的立场一致
+alternatives: []
+risks:
+  - 绑定地址读取依赖 webServer 作用域的 host 属性（dsh-web-app 同样用法，0.2.1-rc.2 实测在）；若宿主改形态，容错路径退化为回环+allowedHosts 判定，远程绑定者需显式配置——降级可接受且会在 README 写明

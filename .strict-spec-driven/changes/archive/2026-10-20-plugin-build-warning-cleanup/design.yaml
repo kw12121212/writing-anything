@@ -1,0 +1,19 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: plugin-build-warning-cleanup
+approach:
+  - 升级 tsdevDependencies.tsdown 至当前稳定版（^0.23），构建后核对：告警清零、两个产物名与 exports 对齐（tsdown 新版若改变默认产物名则适配 tsdown.config.ts 的 outExtensions 或产物名归一脚本）、client 仍为自包含 iife、体积变化如实更新 README 锚点数字。若新版 API 不兼容 outExtensions 等既有配置则按其迁移指南最小适配
+decisions:
+  upgrade-tsdown-not-suppress:
+    decision: 升级 tsdown 而不是寻找压制告警的开关
+    rationale: define 告警出自 tsdown 内部管线向 rolldown 传参，插件配置层无法移除；0.14→0.23 的升级同时消除两类告警的根因。压制类开关即使存在也只是把兼容瑕疵藏起来
+  dist-not-committed:
+    decision: 产物体积数字若因打包器升级变化，按 README 既有锚点流程更新数字与日期
+    rationale: dist 不进版本库（.gitignore），README 的体积声明带日期与复验命令，本来就是快照式声明
+  no-delta-spec:
+    decision: 纯构建工具链升级，无任何用户可观察的产品行为变化
+    rationale: 告警与依赖版本不进入任何主规格需求；产物语义（导出路径与加载副作用）由 182 项测试与 normalize 断言保证不变
+alternatives: []
+risks: []

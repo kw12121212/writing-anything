@@ -1,0 +1,19 @@
+schema: strict-spec-driven/lesson/v1
+schema_version: 1
+artifact_type: lesson
+schema_file: templates/strict-spec-driven/schemas/lesson.yaml
+lesson:
+  id: lesson-9241c3
+  title: 声称与另一实现同构时，用差分探针对齐边界，不要靠读代码比对
+category: testing
+status: active
+created_at: '2026-10-20T11:15:23.737Z'
+updated_at: '2026-10-20T11:15:23.737Z'
+context: plugin-route-origin-guard 的请求来源校验声称与 DSH 宿主 api-request-trust 同构；实现者读双方代码比对并写了判定矩阵测试，自认同构；评审用 node 逐字复刻双方实现跑差异探针，抓出两处边界分歧——allowedHosts 条目带冗余默认端口（host:80）在插件侧永不匹配（宿主侧等价主机名放行）、空串 Origin 插件放行宿主拒绝
+observation: 读代码比对会无意识地把『主体逻辑一致』当成『语义一致』；分歧恰恰藏在双方都正确处理、但处理方式不同的边界上（默认端口的规范化时机、空值的判定入口），这类边界双方测试各自都不会失败
+takeaway: 声称与另一个实现同构（同语义/等价/对齐）时，把两边实现提取成可调用的纯函数，对共享输入域生成边界用例（空值、默认值、大小写、规范化前后）跑差分探针，输出分歧清单；先让探针复现已知断言验证转录准确，再信探针结果
+applies_when: 任何『照抄/对齐另一个实现（本仓库或第三方库）的语义』的变更：安全栅栏、解析器、规范化、协议兼容层
+occurrences:
+  - origin: plugin-route-origin-guard 评审（2026-10-20）
+    date: '2026-10-20'
+    evidence: 差分探针输出：entry host:80 vs Host host → host=true plugin=false；Origin:(empty) → host=false plugin=true；修复 commit 见 archive/2026-10-20-plugin-route-origin-guard（routeguard.test.ts 增补 redundant-default-port 与 empty-origin 边界断言）

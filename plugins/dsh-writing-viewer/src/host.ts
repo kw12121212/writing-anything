@@ -25,7 +25,8 @@
  * workspace is only ever read; the author keeps editing through wa-cli.
  */
 import { lstat, readdir, readFile, stat } from 'node:fs/promises';
-import { isAbsolute, join, resolve } from 'node:path';
+import { homedir, tmpdir } from 'node:os';
+import { delimiter as pathDelimiter, isAbsolute, join, resolve } from 'node:path';
 import { spawn } from 'node:child_process';
 import {
   dedupeCandidates,
@@ -42,8 +43,16 @@ import {
   buildSnapshot,
   type SnapshotRouteBody,
 } from './snapshot';
+import { guardRequest, type GuardOptions } from './routeguard';
 import type { CliRunner } from './wacli';
 import type { DirEntry, SnapshotFs } from './artifacts';
+import { parseSetupConfig, type SkillsServiceLike } from './setup';
+import { realSetupFs } from './setupfs';
+import { createSetupState, registerSetupRoutes, startupSetup, type SetupDeps, type SetupState } from './setuproutes';
+
+// Re-exported so the live evidence harness can drive the exact provider the
+// host registers against the real DSH skill registry (docs/evidence).
+export { registerSetupSkills } from './setup';
 
 export const name = 'dsh-writing-viewer';
 
@@ -94,15 +103,17 @@ export function realSnapshotFs(): SnapshotFs {
  * Spawn adapter for the wa-cli bridge: argument list only, never a shell,
  * stdout captured, stderr ignored, one timeout. A missing binary (ENOENT),
  * a timeout, or any spawn failure yields null, which the snapshot records as
- * a degradation instead of failing the whole response.
+ * a degradation instead of failing the whole response. The optional cwd is
+ * how the setup path keeps `wa-cli skills install` inside a workspace-free
+ * temporary directory, so no audit line is ever appended to a workspace.
  */
 export function spawnCliRunner(binary: string): CliRunner {
   return {
-    run(args: readonly string[]): Promise<{ stdout: string } | null> {
+    run(args: readonly string[], options?: { cwd?: string }): Promise<{ stdout: string } | null> {
       return new Promise((resolve) => {
         let child: ReturnType<typeof spawn>;
         try {
-          child = spawn(binary, args, { stdio: ['ignore', 'pipe', 'ignore'] });
+          child = spawn(binary, args, { cwd: options?.cwd, stdio: ['ignore', 'pipe', 'ignore'] });
         } catch {
           resolve(null);
           return;
@@ -220,22 +231,64 @@ export async function workspaceSnapshot(
   };
 }
 
+/** Tolerantly read the plugin's `allowedHosts` config into bare authorities. */
+export function collectAllowedHosts(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const out: string[] = [];
+  for (const entry of value) {
+    if (typeof entry === 'string' && entry.trim() !== '') out.push(entry.trim());
+  }
+  return out;
+}
+
+/** Tolerantly read the listener's bind address off the injected webServer scope. */
+export function bindHostOf(scope: unknown): string | null {
+  const wrapper = (scope as { webServer?: unknown } | undefined) ?? undefined;
+  const source = wrapper !== null && typeof wrapper === 'object' && 'webServer' in wrapper
+    ? wrapper.webServer
+    : scope;
+  const host = (source as { host?: unknown } | undefined)?.host;
+  return typeof host === 'string' && host.trim() !== '' ? host : null;
+}
+
+/** Route request shape the handlers need: method plus headers for the guard. */
+interface RouteRequest {
+  method?: string;
+  headers?: Record<string, unknown>;
+}
+
+/** Route response shape: writeHead chains to end like node:http. */
+interface RouteResponse {
+  writeHead: (status: number, headers?: Record<string, string>) => { end: (body?: string) => void };
+  end: (body?: string) => void;
+}
+
+/** Reject one request the origin guard refused: 403 JSON, never cached. */
+function refuseOrigin(res: RouteResponse, reason: string): void {
+  res
+    .writeHead(403, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' })
+    .end(JSON.stringify({ ok: false, error: reason }));
+}
+
 /** Register the read-only route on an acquired webServer scope. */
 export function registerRoute(
   scope: { webServer?: { register: (route: unknown) => unknown } & Record<string, unknown> } & Record<string, unknown>,
   snapshot: () => Promise<WorkspaceRouteBody>,
+  guardOptions: GuardOptions = { allowedHosts: [], bindHost: null },
 ): void {
   const server = (scope.webServer ?? scope) as { register: (route: unknown) => unknown };
   server.register({
     name: 'dsh-writing-viewer-workspace',
     kind: 'exact',
     path: '/dsh-writing-viewer/workspace',
-    handler: async (req: { method?: string }, res: {
-      writeHead: (status: number, headers?: Record<string, string>) => { end: (body?: string) => void };
-      end: (body?: string) => void;
-    }) => {
+    handler: async (req: RouteRequest, res: RouteResponse) => {
       if ((req.method ?? 'GET') !== 'GET') {
         res.writeHead(405, { allow: 'GET' }).end();
+        return;
+      }
+      const verdict = guardRequest(req.headers ?? {}, guardOptions);
+      if (!verdict.ok) {
+        refuseOrigin(res, verdict.reason);
         return;
       }
       const body = await snapshot();
@@ -257,18 +310,21 @@ export function rootQueryOf(url: string | undefined): string | null {
 export function registerSnapshotRoute(
   scope: { webServer?: { register: (route: unknown) => unknown } & Record<string, unknown> } & Record<string, unknown>,
   build: (query: { root: string | null }) => Promise<SnapshotRouteBody>,
+  guardOptions: GuardOptions = { allowedHosts: [], bindHost: null },
 ): void {
   const server = (scope.webServer ?? scope) as { register: (route: unknown) => unknown };
   server.register({
     name: 'dsh-writing-viewer-snapshot',
     kind: 'exact',
     path: '/dsh-writing-viewer/snapshot',
-    handler: async (req: { method?: string; url?: string }, res: {
-      writeHead: (status: number, headers?: Record<string, string>) => { end: (body?: string) => void };
-      end: (body?: string) => void;
-    }) => {
+    handler: async (req: RouteRequest & { url?: string }, res: RouteResponse) => {
       if ((req.method ?? 'GET') !== 'GET') {
         res.writeHead(405, { allow: 'GET' }).end();
+        return;
+      }
+      const verdict = guardRequest(req.headers ?? {}, guardOptions);
+      if (!verdict.ok) {
+        refuseOrigin(res, verdict.reason);
         return;
       }
       try {
@@ -338,9 +394,28 @@ export async function fullSnapshot(
   return await buildSnapshot(fs, runner, candidates, located);
 }
 
+/** Resolve the injected `skills` service off whatever scope shape the host
+ * hands over (wrapper object or the service itself), tolerantly. */
+function resolveSkillsService(scope: unknown): SkillsServiceLike | null {
+  const service = (scope as { skills?: SkillsServiceLike } | SkillsServiceLike | undefined) ?? undefined;
+  const resolved =
+    service !== null && typeof service === 'object' && 'skills' in (service as object)
+      ? (service as { skills?: SkillsServiceLike }).skills ?? null
+      : (service as SkillsServiceLike | undefined) ?? null;
+  return resolved !== null && typeof resolved.registerProvider === 'function' ? resolved : null;
+}
+
 export function apply(ctx: {
   inject?: (names: string[], closure: (scope: unknown) => void) => unknown;
-}, config: { workspaceRoot?: unknown; waCliPath?: unknown } = {}): void {
+}, config: {
+  workspaceRoot?: unknown;
+  waCliPath?: unknown;
+  allowedHosts?: unknown;
+  enableSetup?: unknown;
+  waVersion?: unknown;
+  cliInstallDir?: unknown;
+  waBaseUrl?: unknown;
+} = {}): void {
   if (typeof ctx?.inject !== 'function') return;
   let registry: WorkspaceRegistryLike | null = null;
   ctx.inject(['workspaceRegistry'], (scope: unknown) => {
@@ -351,16 +426,59 @@ export function apply(ctx: {
         : (service as WorkspaceRegistryLike | undefined) ?? null;
     if (resolved !== null && typeof resolved.list === 'function') registry = resolved;
   });
+  // The setup capability exists only behind its config switch: with
+  // enableSetup off there is no route, no skills injection, no PATH change
+  // and no network access — the plugin behaves exactly as before.
+  const setupOptions = parseSetupConfig(config, homedir());
+  let setupDeps: SetupDeps | null = null;
+  let setupState: SetupState | null = null;
+  if (setupOptions.enabled) {
+    setupState = createSetupState();
+    let skills: SkillsServiceLike | null = null;
+    setupDeps = {
+      options: setupOptions,
+      waCliPath: normalizePathInput(config?.waCliPath),
+      fs: realSetupFs(),
+      fetchLike: (url, init) => fetch(url, init),
+      spawn: spawnCliRunner,
+      skillsService: () => skills,
+      env: process.env,
+      pathSeparator: pathDelimiter,
+      tempBase: tmpdir(),
+      platform: process.platform,
+      arch: process.arch,
+    };
+    // Once the host skills service is available, register from an existing
+    // builtin binary — startup never downloads; the panel action does.
+    ctx.inject(['skills'], (scope: unknown) => {
+      const resolved = resolveSkillsService(scope);
+      if (resolved !== null) {
+        skills = resolved;
+        void startupSetup(setupDeps as SetupDeps, setupState as SetupState);
+      }
+    });
+  }
   ctx.inject(['webServer'], (scope: unknown) => {
+    const guardOptions: GuardOptions = {
+      allowedHosts: collectAllowedHosts(config.allowedHosts),
+      bindHost: bindHostOf(scope),
+    };
     try {
-      registerRoute(scope as Parameters<typeof registerRoute>[0], () => workspaceSnapshot(registry, config, process.cwd()));
+      registerRoute(scope as Parameters<typeof registerRoute>[0], () => workspaceSnapshot(registry, config, process.cwd()), guardOptions);
     } catch (error) {
       console.error(`[dsh-writing-viewer] route skipped: ${String(error)}`);
     }
     try {
-      registerSnapshotRoute(scope as Parameters<typeof registerSnapshotRoute>[0], (query) => fullSnapshot(registry, config, process.cwd(), query.root));
+      registerSnapshotRoute(scope as Parameters<typeof registerSnapshotRoute>[0], (query) => fullSnapshot(registry, config, process.cwd(), query.root), guardOptions);
     } catch (error) {
       console.error(`[dsh-writing-viewer] snapshot route skipped: ${String(error)}`);
+    }
+    if (setupDeps !== null && setupState !== null) {
+      try {
+        registerSetupRoutes(scope as Parameters<typeof registerSetupRoutes>[0], setupDeps, setupState, guardOptions);
+      } catch (error) {
+        console.error(`[dsh-writing-viewer] setup route skipped: ${String(error)}`);
+      }
     }
   });
 }

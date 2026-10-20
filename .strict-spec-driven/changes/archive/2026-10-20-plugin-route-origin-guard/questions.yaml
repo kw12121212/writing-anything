@@ -1,0 +1,56 @@
+schema: strict-spec-driven/question-list/v1
+schema_version: 1
+artifact_type: question_list
+schema_file: templates/strict-spec-driven/schemas/question-list.yaml
+change: plugin-route-origin-guard
+open: []
+resolved:
+  - id: route-auth-mechanism
+    question: 「路由认证」按什么机制实现——宿主 token 校验，还是与 DSH /api 信任栅栏同构的来源校验？
+    context: 影响规格 delta、实现文件与默认部署行为。token 通道不可行：webServer.register 无认证选项，launch token 是 dsh-client-connection 私有状态，静态插件行注入不到按连接服务，依赖内部结构违反插件只用文档化契约的立场；DSH 自身 /api 也是 Host 栅栏+跨源拒绝而非逐请求 token。推荐：照 DSH api-request-trust 同构实现（回环/绑定字面量/allowedHosts + cross-site 拒绝 + Origin 同源），403 拒绝，面板同源访问零影响
+    answer: 采用与 DSH /api 信任栅栏同构的来源校验；token 体系不做（无文档化通道，design 记录依据）
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: remote-host-policy
+    question: 经反向代理或 tailscale 等远程权威访问面板时默认放行还是默认拒绝？
+    context: 影响配置面与部署体验。本机 GUI 实例带 --trusted-host gamepc.tail1234.ts.net:13080——默认拒绝会让该域名下的面板 403，默认放行则防线形同虚设。推荐：默认拒绝，新增插件配置 allowedHosts（bare host[:port]，带端口精确、不带端口任意端口）由部署者显式放行，与 DSH trustedHosts 立场一致
+    answer: 默认拒绝 + allowedHosts 显式放行
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-problem
+    question: What is concretely going wrong today, and for whom?
+    context: 'Why this is asked: the change is planned against a need, and the need lives only with the requester. A "problem" here means what someone does or suffers today — not a feature that is missing. If the answer names a button, a field, a page, or an endpoint, it is a solution, and the underlying problem is still unstated. What a sufficient answer contains: who is affected, what they do today instead, and how often. Worked example: "every Monday one person spends forty minutes copying order rows into a spreadsheet to send the weekly report". What it changes: this becomes the proposal''s why, and it decides whether the change is worth making.'
+    answer: 装/用插件的部署者：两条路由对任意来源开放——跨站页面与 DNS rebinding 可借浏览器整库读取写作工作区（2026-10-20 review 实测无凭证 GET 即 200），部署者无从收紧
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-outcome
+    question: What observable difference proves the problem is solved?
+    context: 'Why this is asked: without a success condition, nobody can tell afterwards whether the change worked. "Observable" means someone outside the system can check it without reading the code. What a sufficient answer contains: what a person will see, or no longer have to do, once this is done. Worked example: "the report is in the manager''s inbox on Monday morning without anyone assembling it". What it changes: this becomes the delta spec''s scenarios and the acceptance evidence at review time.'
+    answer: '无 Host、陌生 Host、cross-site sec-fetch-site、跨源 Origin 的请求收到 403 与 cache-control: no-store 的 JSON 错误体；面板自身的同源加载、刷新、路径切换行为与之前完全一致；远程权威经 allowedHosts 配置后可用'
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-trigger
+    question: Why now — what forced this?
+    context: 'Why this is asked: work that nothing forced is the work most often thrown away later. This question catches a request that sounds reasonable but has no real driver behind it. What a sufficient answer contains: the concrete event, deadline, incident, or cost that made this surface now, or an honest statement that nothing did. Worked example: "the report was missed last month and it was raised with the team". What it changes: a change with no trigger is a candidate for deferral, and the answer is weighed at review before archive.'
+    answer: 用户在对插件 review 后指示「修复 路由认证」（2026-10-20，与决策/复核视图、构建告警清理两项一同排期）
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-non-goals
+    question: What must explicitly not change?
+    context: 'Why this is asked: the requester knows which nearby behavior other people depend on, and the agent does not. A "non-goal" is something the change must leave alone even though it sits close to the work. What a sufficient answer contains: the behavior, setting, or output that must survive untouched, and who relies on it. Worked example: "do not change the saved filters — several people rely on their own". What it changes: these become the proposal''s unchanged_behavior items, which review checks the finished result against.'
+    answer: client 渲染、快照结构与响应字段、只读约束、DSH 宿主行为全部不变；不引入 token/cookie 身份认证体系；allowedHosts 默认为空、不预放行任何远程权威
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-interpretation
+    question: Which reading of the request is intended, where more than one is possible?
+    context: 'Why this is asked: a short request usually admits several readings, and building the wrong one is indistinguishable from building nothing. What a sufficient answer contains: the reading that is meant, stated plainly enough to rule the others out — or a statement that only one reading exists and what it is. Worked example: "export means the version sent to the manager, not the one I read myself". What it changes: this fixes the scope boundary before any code is written, and settles disputes about what was asked for.'
+    answer: 「路由认证」解读为：插件在自己注册的路由 handler 内做请求来源校验（与宿主 /api 信任栅栏同构），而非建立 token 身份认证——宿主对插件路由不提供认证通道，这是 0.2.1-rc.2 上可实现的完整修复
+    status: resolved
+    kind: requirement
+    answered_by: human

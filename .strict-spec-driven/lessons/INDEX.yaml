@@ -366,6 +366,11 @@ categories:
       status: active
       occurrences: 1
       path: .strict-spec-driven/lessons/documentation/api-b3f45a.yaml
+    delta-d60013:
+      title: delta 场景断言涉及既有行为时，逐分支对照该行为的既有测试
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/documentation/delta-d60013.yaml
   operations:
     pr-gh-generate-notes-8e86ae:
       title: 不走 PR 的仓库里 gh --generate-notes 只生成一行比较链接，不是提交清单
@@ -449,3 +454,13 @@ categories:
       status: active
       occurrences: 1
       path: .strict-spec-driven/lessons/testing/dsh-client-definition-factory-hooks-react-34fff9.yaml
+    lesson-9241c3:
+      title: 声称与另一实现同构时，用差分探针对齐边界，不要靠读代码比对
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/testing/lesson-9241c3.yaml
+    lesson-971ba4:
+      title: 宿主服务假件必须复刻真实调用路径，同步近似会静默掩盖契约破坏
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/testing/lesson-971ba4.yaml

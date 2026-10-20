@@ -1,0 +1,52 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: plugin-builtin-setup
+sections:
+  Implementation:
+    setup-config-gate:
+      text: host 新增 setup 配置解析（enableSetup、waVersion、cliInstallDir、waBaseUrl）与开关隔离：未开启时 apply 不注册 setup 路由、不注入 skills 服务、不修改 PATH
+      status: complete
+    setup-release-download:
+      text: 实现发布产物（Release Asset）下载器：平台映射（linux/darwin × amd64/arm64）、有界 fetch、SHA256SUMS 解析与校验、临时文件加 rename 原子写入、chmod 755、失败不留部分文件；经注入式 fetch 与文件适配器可测
+      status: complete
+    setup-skills-materialize:
+      text: 实现内置技能物化：spawn wa-cli skills install --target <临时目录>（cwd 为该临时目录），解析每个 <name>/SKILL.md 的文件头与正文；spawn 经注入适配器可测
+      status: complete
+    setup-skill-provider:
+      text: 实现 DSH 技能注册：ctx.inject(['skills']) 后 registerProvider（name dsh-writing-viewer、rank 50，低于文件系统源全部权重），候选来自物化结果；host 启动且开关开启且内置二进制存在时注册，无网络动作
+      status: complete
+    setup-path-prepend:
+      text: 实现 PATH 前置纯函数：把内置二进制目录幂等插入 process.env.PATH 首位（已在前位则不动），并供状态路由报告当前 wa-cli 解析结果
+      status: complete
+    setup-routes:
+      text: host 注册 GET /dsh-writing-viewer/setup（状态：开关、CLI 路径与版本、已注册技能、外部遮蔽信息、进行中标记）与 POST /dsh-writing-viewer/setup（显式启用动作：确保 CLI→物化→注册→PATH 前置；单飞行；每条路由沿用 Request Origin Guard 与 405 处理）
+      status: complete
+    client-setup-view:
+      text: client 面板新增设置区（开关开启时可见）：状态展示、「启用内置技能与 CLI」显式按钮、进行中提示、结果与失败反馈；视图模型为无 React 纯函数模块，client 入口接线
+      status: complete
+    plugin-docs:
+      text: 更新 plugins/dsh-writing-viewer/README.md（开关配置示例、setup 行为、DSH skills 服务与 PATH 前置的用法及安全边界）与 docs/GLOSSARY.md 新术语（技能提供者（Skill Provider）、发布产物（Release Asset）等，按首现双语规则）；另起 DSH 测试实例实测 setup 动作（技能注册、PATH 前置、外部同名遮蔽）并把带日期证据追加到 docs/evidence/setup-check.txt
+      status: complete
+  Testing:
+    lint-typecheck:
+      text: 类型检查与构建（tsc --noEmit + tsdown + 产物名归一）
+      status: complete
+      command: pnpm --dir plugins/dsh-writing-viewer run build
+    unit-tests:
+      text: 插件全量 vitest：下载校验、物化解析、技能提供者注册、PATH 前置、setup 路由（含来源校验与单飞行）、client 设置区组件（经 definition.factory 注入可运行 hooks 的假 react）、开关关闭时行为不变
+      status: complete
+      command: pnpm --dir plugins/dsh-writing-viewer test
+    full-regression:
+      text: 完整项目回归（插件不影响 Go 模块，结果应与变更前一致）
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    strict-verify:
+      text: strict 变更工件结构校验
+      status: complete
+      command: strict-spec-cli verify plugin-builtin-setup
+testing_gates:
+  validation_task: lint-typecheck
+  unit_test_task: unit-tests

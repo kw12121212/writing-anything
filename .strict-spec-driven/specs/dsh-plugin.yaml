@@ -254,3 +254,143 @@ requirements:
         - GIVEN: 键盘已选中某单元并焦点在其产物清单条目上
         - WHEN: 按 Enter 打开产物视图，再经键盘激活视图切换控件
         - THEN: 产物视图打开，语义卡片视图与源码高亮视图可仅用键盘切换，全程无需鼠标
+  route-origin-guard:
+    strength: MUST
+    statement: '插件注册的每条 host 路由（/dsh-writing-viewer/workspace、/dsh-writing-viewer/snapshot 与 /dsh-writing-viewer/setup 的状态与动作路由）在处理请求前必须做请求来源校验（Request Origin Guard）：Host 头缺失或不可解析时拒绝；Host 的 hostname 必须是回环地址（localhost、127.0.0.0/8、::1）、等于宿主监听绑定地址的字面量（比较忽略端口与接口 zone），或命中插件配置 allowedHosts 的权威（bare host[:port]：带端口精确匹配，不带端口匹配任意端口，经 WHATWG URL 规范化含默认端口）；请求带 sec-fetch-site: cross-site 时拒绝；带 Origin 头时其 http(s) 权威必须与 Host 相同权威。拒绝时返回 403 与 cache-control: no-store 的 JSON 错误体，不读取任何工作区数据、不触发任何下载或注册动作；面板 client 的同源请求必须不受影响'
+    scenarios:
+      unknown-host-rejected:
+        - GIVEN: 插件已加载，宿主监听 127.0.0.1
+        - WHEN: '携带 Host: attacker.example 的 GET 请求访问任一插件路由（模拟 DNS rebinding 或陌生域名）'
+        - THEN: '响应为 403，content-type 为 application/json，带 cache-control: no-store 与可读错误原因，响应体不含任何工作区数据'
+      cross-site-rejected:
+        - GIVEN: 插件已加载，请求 Host 为 127.0.0.1:端口
+        - WHEN: '同一请求携带 sec-fetch-site: cross-site（恶意页面的跨站读取）'
+        - THEN: 响应为 403 JSON 错误体，不返回快照数据
+      cross-origin-marker-rejected:
+        - GIVEN: 插件已加载，请求 Host 为 127.0.0.1:端口
+        - WHEN: '同一请求携带 Origin: http://evil.example 而 Host 不变'
+        - THEN: 响应为 403 JSON 错误体，不返回快照数据
+      same-origin-panel-unaffected:
+        - GIVEN: 插件已装入 web profile，浏览器经宿主页面同源打开面板
+        - WHEN: 面板 client 以相对路径 fetch 全部插件路由（加载、刷新、路径切换、设置区状态与启用动作）
+        - THEN: 请求照常返回 200 与原有响应结构，面板行为与本变更之前一致
+      allowed-hosts-config:
+        - GIVEN: 插件配置 allowedHosts 含 gamepc.example.net:13080（bare host:port 权威）
+        - WHEN: '携带 Host: gamepc.example.net:13080 的请求访问任一路由'
+        - THEN: 请求按原有行为处理（200），未被 403 拒绝
+      bind-literal-accepted:
+        - GIVEN: 宿主以 --host 192.168.1.10 绑定非回环接口
+        - WHEN: 浏览器经 http://192.168.1.10:端口/ 打开面板并同源访问插件路由
+        - THEN: Host 命中监听绑定地址字面量，请求照常处理，面板可用
+      setup-action-guarded:
+        - GIVEN: 插件已加载且 enableSetup 开启
+        - WHEN: 携带伪造 Host 的 POST 请求访问设置动作路由
+        - THEN: 响应为 403 JSON 错误体，不触发任何下载、技能注册或环境修改
+  queue-views:
+    strength: MUST
+    statement: 面板必须提供两个只读的作者行动队列清单视图：总览的「待决决策」计数磁贴可点开决策队列（Decision Queue）清单，逐条展示每条决策的 id、status、question、options（id 与 text，recommendation 指向的选项带可辨识标记）、rationale、blocking 标记与关联 units；「待复核」计数磁贴可点开作者复核清单，逐条展示 kind、work、ref、channel、confirmed_at 与 reviewed_at。两个清单只消费快照已携带的 decisions.yaml 与 author-reviews.yaml 全文；文件缺失时显示空态提示、YAML 解析失败时显示可读错误提示，均不得空白或崩溃；清单视图不得出现任何编辑、写入或确认控件，作者操作仍走 wa-cli
+    scenarios:
+      decisions-list:
+        - GIVEN: 工作区 decisions.yaml 含一条 open 决策：id dec-1、question、options a/b、recommendation b、rationale、blocking true、units [my-post]
+        - WHEN: 点击总览「待决决策」磁贴
+        - THEN: 决策清单逐条显示上述全部字段，推荐选项 b 带可辨识标记，清单内没有任何编辑或确认控件，返回总览入口可用
+      reviews-list:
+        - GIVEN: 工作区 author-reviews.yaml 含一条 kind acceptance、work/ref my-post、channel preview、confirmed_at 与 reviewed_at 的复核记录
+        - WHEN: 点击总览「待复核」磁贴
+        - THEN: 复核清单逐条显示全部字段，无编辑控件，返回总览入口可用
+      missing-and-malformed:
+        - GIVEN: 快照中 decisions 为 null（文件缺失），或 decisions.yaml 文本语法损坏无法解析
+        - WHEN: 打开决策清单
+        - THEN: 分别显示空态提示或可读的解析错误提示，不空白、不崩溃；解析失败分支的计数磁贴显示「—」而不是 0（文件缺失分支的计数仍按既有语义为 0）
+  setup-switch-gate:
+    strength: MUST
+    statement: 插件配置的启用开关 enableSetup 默认关闭；未开启时，插件不得注册任何设置（Setup）路由、不得向 DSH 注册任何技能、不得修改宿主环境、不得发起任何网络请求，面板不出现设置区，插件全部行为与本变更之前的规格一致
+    scenarios:
+      switch-off-inert:
+        - GIVEN: 插件已装入 web profile，配置未开启 enableSetup（默认）
+        - WHEN: 宿主启动并打开插件面板
+        - THEN: 面板与既有规格一致且没有设置区；host 未注册设置路由，进程环境与网络行为与未装本能力力的插件一致
+  setup-panel-section:
+    strength: MUST
+    statement: enableSetup 开启时，面板必须出现「内置技能与 CLI」设置区：显示内置 CLI 就绪状态（版本与路径）、已注册的内置技能清单、同名外部技能与外部 CLI 的遮蔽情况与进行中提示；尚未启用时提供「启用内置技能与 CLI」的显式入口，该区不得出现任何其他写入控件
+    scenarios:
+      status-unenabled:
+        - GIVEN: 开关已开启，启用动作尚未完成
+        - WHEN: 作者打开插件面板
+        - THEN: 设置区显示未启用状态与「启用内置技能与 CLI」入口，不报错不空白
+      status-enabled:
+        - GIVEN: 启用动作已完成，内置 CLI 就绪且技能已注册
+        - WHEN: 打开插件面板
+        - THEN: 设置区列出已注册技能清单与内置 CLI 的版本和路径；存在同名外部技能或外部 CLI 时一并显示遮蔽说明
+  setup-action:
+    strength: MUST
+    statement: 点击「启用内置技能与 CLI」必须触发一次完整启用：确保内置 CLI 就绪、注册全部内置技能、使宿主 shell 优先解析内置 CLI、随后刷新设置区状态；同一时间至多存在一个进行中的启用动作，进行中时不得重复触发并显示提示；任一步失败时设置区显示可读原因、不进入已启用状态且可重试
+    scenarios:
+      enable-completes:
+        - GIVEN: 开关已开启且本机尚无 wa-cli
+        - WHEN: 作者点击「启用内置技能与 CLI」并等待完成
+        - THEN: 设置区进入已启用状态：技能清单与内置 CLI 版本路径齐备，过程中显示进行中提示
+      concurrent-click-ignored:
+        - GIVEN: 一次启用动作正在进行
+        - WHEN: 再次点击启用入口
+        - THEN: 不发起第二次启用动作，显示进行中提示，完成后状态区只反映这一次动作的结果
+      failure-readable:
+        - GIVEN: 启用动作中某一步失败（如下载失败）
+        - WHEN: 动作结束
+        - THEN: 设置区显示可读的失败原因，状态不是已启用，启用入口可再次使用
+  setup-cli-download:
+    strength: MUST
+    statement: 内置 CLI 不就绪（缺失或版本与配置不符）时，启用动作必须从配置的发布地址下载对应平台的发布产物（Release Asset），按发布方的 SHA256SUMS 记录校验通过后原子安装到配置目录（默认 ~/.local/bin，可配置）；下载或校验失败时不得留下任何部分写入的可执行文件并显示可读原因；配置目录已存在同版本二进制时跳过下载
+    scenarios:
+      fresh-download-install:
+        - GIVEN: 开关已开启，配置目录没有 wa-cli
+        - WHEN: 启用动作完成
+        - THEN: 配置目录出现可执行的内置 wa-cli，版本与配置一致，设置区显示其版本与路径
+      checksum-mismatch-refused:
+        - GIVEN: 下载到的发布产物内容与 SHA256SUMS 记录不符
+        - WHEN: 启用动作执行
+        - THEN: 安装不发生，配置目录没有新增或被改写的可执行文件，设置区显示校验失败的可读原因
+      existing-same-version-skip:
+        - GIVEN: 配置目录已存在与配置版本一致的 wa-cli
+        - WHEN: 点击启用
+        - THEN: 跳过下载直接完成注册与状态刷新，不发起对发布地址的产物下载请求
+  setup-skills-registered:
+    strength: MUST
+    statement: 启用完成后，全部内置技能（wa-* Skills）必须注册进 DSH 可调用的技能清单并可供模型与用户调用；存在同名外部技能（来自用户级或项目级技能目录）时，同名技能必须解析为内置版本；启用过程不得向用户级或项目级技能目录写入任何文件
+    scenarios:
+      builtin-listed:
+        - GIVEN: 启用动作已完成
+        - WHEN: 查看 DSH 的技能清单
+        - THEN: 全部内置 wa-* 技能出现且可加载，内容与内置版本一致
+      same-name-shadowing:
+        - GIVEN: 用户级或项目级技能目录已存在同名 wa-* 技能
+        - WHEN: 启用完成后解析该同名技能
+        - THEN: 解析结果为内置版本而非外部目录中的版本
+      no-skill-dir-writes:
+        - GIVEN: 已记录用户级与项目级技能目录的文件清单
+        - WHEN: 完成一次启用
+        - THEN: 这些目录的清单、内容与修改时间不变
+  setup-cli-precedence:
+    strength: MUST
+    statement: 启用完成后，宿主会话的 shell 工具中 wa-cli 必须解析到内置二进制，优先于 PATH 上既有的外部版本；插件自身的快照命令调用同样优先使用内置二进制；设置区必须如实显示当前解析到的二进制与被遮蔽的外部版本（如存在）
+    scenarios:
+      shell-resolves-builtin:
+        - GIVEN: PATH 上已能解析到旧版外部 wa-cli
+        - WHEN: 启用完成后在 Agent 的 shell 工具中运行 wa-cli version
+        - THEN: 输出版本为内置二进制的版本，而非外部旧版
+      snapshot-uses-builtin:
+        - GIVEN: 启用完成且外部旧版 wa-cli 仍在 PATH 上
+        - WHEN: 请求一次完整快照
+        - THEN: 快照的结构状态来自内置二进制的命令输出，设置区显示的解析路径与之一致
+      status-reports-shadowing:
+        - GIVEN: 存在被遮蔽的外部 wa-cli
+        - WHEN: 查看设置区状态
+        - THEN: 状态同时显示内置二进制的路径版本与被遮蔽的外部路径
+  setup-workspace-untouched:
+    strength: MUST
+    statement: 启用动作（含下载、技能物化与注册）与设置区状态查询的全过程不得创建、修改或删除 .writing-anything/ 工作区内的任何文件（含审计日志 audit.log）
+    scenarios:
+      workspace-untouched:
+        - GIVEN: 已记录定位项目 .writing-anything/ 内全部文件（含 audit.log）的清单、内容与修改时间
+        - WHEN: 完成一次启用并查看设置区状态
+        - THEN: 这些文件的清单、内容与修改时间逐项一致，audit.log 没有新增行

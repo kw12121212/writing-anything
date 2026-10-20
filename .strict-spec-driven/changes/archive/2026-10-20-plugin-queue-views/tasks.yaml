@@ -1,0 +1,42 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: plugin-queue-views
+sections:
+  Implementation:
+    implement-queueview-module:
+      text: 实现 src/queueview.ts：decisionEntries/reviewEntries 解析快照携带的 decisions.yaml 与 author-reviews.yaml 全文为视图模型（逐字段容错、永不抛错、空文件为无数据、解析失败返回 parseError）
+      status: complete
+      command: pnpm --dir plugins/dsh-writing-viewer exec tsc --noEmit
+    render-queue-views:
+      text: client.ts：PanelView 增加 decisions/reviews；「待决决策」「待复核」磁贴按素材磁贴模式包按钮导航；新增两个清单视图渲染（决策：id/status/question/options+recommendation 标记/rationale/blocking/units；复核：kind/work/ref/channel/confirmed_at/reviewed_at）与中英文案；返回总览按钮
+      status: complete
+    update-readme:
+      text: README：client 侧行为与界面导览补充两个清单视图（含截图索引不变，纯文字描述）
+      status: complete
+  Testing:
+    queueview-unit-tests:
+      text: queueview.test.ts：正常解析（含 options/recommendation/blocking/units 全字段）、字段缺失容错、空文件、缺失文件（text 为 null）、解析失败 parseError、author-reviews 各字段
+      status: complete
+      command: pnpm --dir plugins/dsh-writing-viewer exec vitest run src/queueview.test.ts
+    client-queue-view-tests:
+      text: client.test.ts 增补：待决决策磁贴点击进入决策清单且渲染 testdata 决策内容；待复核磁贴进入复核清单；返回总览；decisions 缺失或解析失败时清单显示提示不崩溃；无编辑控件
+      status: complete
+      command: pnpm --dir plugins/dsh-writing-viewer exec vitest run src/client.test.ts
+    plugin-package-check:
+      text: 插件统一检查（含新模块与新测试，重建 dist）
+      status: complete
+      command: pnpm --dir plugins/dsh-writing-viewer run check
+  Verification:
+    strict-ready-and-verify:
+      text: strict ready 与 verify 干净
+      status: complete
+      command: strict-spec-cli ready plugin-queue-views && strict-spec-cli verify plugin-queue-views
+    full-project-regression:
+      text: config.yaml 完整项目级回归，归档前通过
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+testing_gates:
+  validation_task: plugin-package-check
+  unit_test_task: plugin-package-check

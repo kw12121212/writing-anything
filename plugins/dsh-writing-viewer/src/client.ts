@@ -45,6 +45,8 @@ import { artifactTextOf, cachedArtifactView, sourceEntriesOf, type ArtifactView,
 import { foldYaml, highlightYaml, type YamlTokenClass } from './yamlhighlight';
 import { treeKeyAction, visibleTreeNodes } from './treekeys';
 import { highlightMarkdownSource, renderMarkdown, type MdBlock, type MdTokenClass } from './markdownview';
+import { decisionEntries, queueTextOf, reviewEntries } from './queueview';
+import { parseSetupStatus, setupLabelsFor, setupViewModel, type SetupStatus } from './setupview';
 import type { ArtifactText } from './artifacts';
 import type { SnapshotRouteBody } from './snapshot';
 
@@ -59,6 +61,9 @@ declare global {
 const PANEL_ID = 'dsh-writing-viewer';
 const PACKAGE_NAME = 'dsh-writing-viewer';
 const ROUTE_PATH = '/dsh-writing-viewer/snapshot';
+/** The setup route exists only while the host's enableSetup switch is on;
+ * a failed probe keeps the whole setup section hidden. */
+const SETUP_ROUTE = '/dsh-writing-viewer/setup';
 
 /** Panel container width below which the unit tree and detail stack. */
 const STACK_CONTAINER_WIDTH = 640;
@@ -119,6 +124,20 @@ interface PanelLabels {
   originalDoc: string;
   originalMissing: string;
   sourcesEmpty: string;
+  decisionsView: string;
+  reviewsView: string;
+  question: string;
+  options: string;
+  recommended: string;
+  rationale: string;
+  blockingTag: string;
+  relatedUnits: string;
+  channel: string;
+  confirmedAt: string;
+  reviewedAt: string;
+  decisionsEmpty: string;
+  reviewsEmpty: string;
+  queueParseErrorTitle: string;
 }
 
 const TEXT: { zh: PanelLabels; en: PanelLabels } = {
@@ -176,6 +195,20 @@ const TEXT: { zh: PanelLabels; en: PanelLabels } = {
     originalDoc: '原文',
     originalMissing: '未存档原文',
     sourcesEmpty: '工作区还没有登记素材（Source）',
+    decisionsView: '决策队列',
+    reviewsView: '复核记录',
+    question: '问题',
+    options: '选项',
+    recommended: '推荐',
+    rationale: '理由',
+    blockingTag: '阻塞',
+    relatedUnits: '关联单元',
+    channel: '渠道',
+    confirmedAt: '确认时间',
+    reviewedAt: '复核时间',
+    decisionsEmpty: '决策队列为空，或工作区还没有 decisions.yaml',
+    reviewsEmpty: '没有复核记录，或工作区还没有 author-reviews.yaml',
+    queueParseErrorTitle: '清单 YAML 解析失败',
   },
   en: {
     panelTitle: 'Writing Workspace',
@@ -231,6 +264,20 @@ const TEXT: { zh: PanelLabels; en: PanelLabels } = {
     originalDoc: 'Original',
     originalMissing: 'No archived original',
     sourcesEmpty: 'This workspace has no registered sources yet',
+    decisionsView: 'Decision queue',
+    reviewsView: 'Review records',
+    question: 'Question',
+    options: 'Options',
+    recommended: 'Recommended',
+    rationale: 'Rationale',
+    blockingTag: 'Blocking',
+    relatedUnits: 'Units',
+    channel: 'Channel',
+    confirmedAt: 'Confirmed at',
+    reviewedAt: 'Reviewed at',
+    decisionsEmpty: 'The decision queue is empty, or decisions.yaml does not exist yet',
+    reviewsEmpty: 'No review records, or author-reviews.yaml does not exist yet',
+    queueParseErrorTitle: 'The queue YAML failed to parse',
   },
 };
 
@@ -274,7 +321,7 @@ function progressText(progress: ProgressView | null): string | null {
 }
 
 /** Which top-level panel view is showing. */
-export type PanelView = 'overview' | 'sources';
+export type PanelView = 'overview' | 'sources' | 'decisions' | 'reviews';
 
 /** Everything the panel renders from, gathered by the stateful component. */
 interface PanelState {
@@ -304,6 +351,10 @@ interface PanelState {
   openFolds: Record<string, boolean> | null;
   /** Which tree nodes the author collapsed (keyboard ←/→); empty = full tree. */
   treeCollapsed: Record<string, boolean> | null;
+  /** Setup section status (null while the host serves no setup route). */
+  setup: SetupStatus | null;
+  /** Client-side in-flight flag for the explicit enable action. */
+  setupBusy: boolean;
 }
 
 /** Event handlers the rendered tree binds to. */
@@ -318,9 +369,12 @@ interface PanelActions {
   closeArtifactView(): void;
   toggleViewMode(): void;
   showSources(sourceId: string | null): void;
+  showQueue(view: 'decisions' | 'reviews'): void;
   backToOverview(): void;
   toggleSourcesMode(): void;
   toggleFold(key: string, open: boolean): void;
+  /** Run the explicit setup enable action (single-flight on the client too). */
+  enableSetup(): void;
   /** One key pressed on a tree node: move selection or collapse/expand. */
   treeKey(event: unknown, ref: string): void;
 }
@@ -494,19 +548,21 @@ function renderSummary(h: H, s: PanelState, a: PanelActions): unknown[] {
   const out: unknown[] = [];
   if (summary !== null) {
     // The sources tile opens the sources list view — the jump target the
-    // claim cards' source references share.
-    const sourcesTile = h(
-      'button',
-      { key: 'sources-button', type: 'button', 'data-open-sources': 'true', onClick: () => a.showSources(null), style: { font: 'inherit', cursor: 'pointer', padding: 0, border: 'none', textAlign: 'left', color: 'inherit', background: 'transparent' } },
-      countTile(h, 'sources', s.labels.sources, summary.sources, s),
-    );
+    // claim cards' source references share. The two queue tiles open the
+    // decision queue and the author-review records the counts stand for.
+    const tileButton = (key: string, dataAttr: string, onClick: () => void, tile: unknown): unknown =>
+      h(
+        'button',
+        { key, type: 'button', [dataAttr]: 'true', onClick, style: { font: 'inherit', cursor: 'pointer', padding: 0, border: 'none', textAlign: 'left', color: 'inherit', background: 'transparent' } },
+        tile,
+      );
     out.push(
       h(
         'div',
         { key: 'summary', style: { display: 'flex', flexWrap: 'wrap', gap: '8px' } },
-        sourcesTile,
-        countTile(h, 'decisions', s.labels.pendingDecisions, summary.pendingDecisions, s, COLOR.warn),
-        countTile(h, 'reviews', s.labels.pendingReviews, summary.pendingReviews, s, COLOR.warn),
+        tileButton('sources-button', 'data-open-sources', () => a.showSources(null), countTile(h, 'sources', s.labels.sources, summary.sources, s)),
+        tileButton('decisions-button', 'data-open-decisions', () => a.showQueue('decisions'), countTile(h, 'decisions', s.labels.pendingDecisions, summary.pendingDecisions, s, COLOR.warn)),
+        tileButton('reviews-button', 'data-open-reviews', () => a.showQueue('reviews'), countTile(h, 'reviews', s.labels.pendingReviews, summary.pendingReviews, s, COLOR.warn)),
         countTile(h, 'diagnostics', s.labels.diagnostics, summary.diagnostics, s, COLOR.error),
       ),
     );
@@ -858,6 +914,132 @@ function renderSources(h: H, s: PanelState, a: PanelActions): unknown {
   return h('section', { key: 'sources', 'data-sources-view': 'true', style: { display: 'flex', flexDirection: 'column', gap: '8px' } }, children);
 }
 
+/** The decision queue: one card per recorded decision, all fields read-only. */
+function renderDecisions(h: H, s: PanelState, a: PanelActions): unknown {
+  const labels = s.labels;
+  const texts = s.body === null ? { decisions: null, authorReviews: null } : queueTextOf(s.body);
+  const { entries, parseError } = decisionEntries(texts.decisions);
+  const children: unknown[] = [
+    h(
+      'div',
+      { key: 'header', style: { display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', gap: '4px 10px' } },
+      sectionTitle(h, 'title', labels.decisionsView + ' (' + entries.length + ')'),
+      h('span', { key: 'spacer', style: { flex: '1 1 auto' } }),
+      h('button', { key: 'back', type: 'button', style: buttonStyle(), onClick: a.backToOverview }, labels.backToOverview),
+    ),
+  ];
+  if (parseError !== null) {
+    children.push(h('p', { key: 'parse-error', role: 'alert', 'data-parse-error': 'true', style: { margin: 0, color: COLOR.error, overflowWrap: 'anywhere' } }, labels.queueParseErrorTitle + ' — ' + parseError));
+    return h('section', { key: 'decisions', 'data-decisions-view': 'true', style: { display: 'flex', flexDirection: 'column', gap: '8px' } }, children);
+  }
+  if (entries.length === 0) {
+    children.push(h('p', { key: 'empty', style: { margin: 0, color: COLOR.tertiary } }, labels.decisionsEmpty));
+    return h('section', { key: 'decisions', 'data-decisions-view': 'true', style: { display: 'flex', flexDirection: 'column', gap: '8px' } }, children);
+  }
+  children.push(
+    ...entries.map((decision, index) =>
+      h(
+        'div',
+        { key: 'dec-' + index, 'data-decision': decision.id, style: { display: 'flex', flexDirection: 'column', gap: '4px', padding: '8px 12px', background: COLOR.card, border: '1px solid ' + COLOR.border, borderRadius: '8px' } },
+        h('div', { key: 'head', style: { display: 'flex', flexWrap: 'wrap', gap: '4px 8px', alignItems: 'baseline' } },
+          h('strong', { key: 'id', style: { overflowWrap: 'anywhere' } }, decision.id),
+          decision.status === null ? null : h('code', { key: 'status', style: codeStyle() }, decision.status),
+          decision.blocking ? h('span', { key: 'blocking', style: { color: COLOR.warn, fontSize: '12px', border: '1px solid ' + COLOR.warn, borderRadius: '6px', padding: '0 6px' } }, labels.blockingTag) : null),
+        decision.question === null ? null : h('p', { key: 'question', style: { margin: 0, overflowWrap: 'anywhere' } }, decision.question),
+        decision.options.length === 0 ? null : h(
+          'ul',
+          { key: 'options', style: { margin: 0, paddingLeft: '18px', display: 'flex', flexDirection: 'column', gap: '2px' } },
+          decision.options.map((option, i) =>
+            h('li', { key: 'o' + i, 'data-option': option.id, style: { overflowWrap: 'anywhere' } },
+              h('code', { key: 'id', style: codeStyle() }, option.id), ' ', option.text,
+              option.recommended ? h('span', { key: 'rec', 'data-recommended': 'true', style: { color: COLOR.brand, fontSize: '12px', marginLeft: '6px' } }, '← ' + labels.recommended) : null)),
+        ),
+        decision.rationale === null ? null : h('p', { key: 'rationale', style: { margin: 0, color: COLOR.secondary, overflowWrap: 'anywhere' } }, labels.rationale + '：' + decision.rationale),
+        decision.units.length === 0 ? null : h('p', { key: 'units', style: { margin: 0, color: COLOR.tertiary } }, labels.relatedUnits + '：' + decision.units.join('、')),
+      ),
+    ),
+  );
+  return h('section', { key: 'decisions', 'data-decisions-view': 'true', style: { display: 'flex', flexDirection: 'column', gap: '8px' } }, children);
+}
+
+/** The author-review records: one row card per recorded review. */
+function renderReviews(h: H, s: PanelState, a: PanelActions): unknown {
+  const labels = s.labels;
+  const texts = s.body === null ? { decisions: null, authorReviews: null } : queueTextOf(s.body);
+  const { entries, parseError } = reviewEntries(texts.authorReviews);
+  const children: unknown[] = [
+    h(
+      'div',
+      { key: 'header', style: { display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', gap: '4px 10px' } },
+      sectionTitle(h, 'title', labels.reviewsView + ' (' + entries.length + ')'),
+      h('span', { key: 'spacer', style: { flex: '1 1 auto' } }),
+      h('button', { key: 'back', type: 'button', style: buttonStyle(), onClick: a.backToOverview }, labels.backToOverview),
+    ),
+  ];
+  if (parseError !== null) {
+    children.push(h('p', { key: 'parse-error', role: 'alert', 'data-parse-error': 'true', style: { margin: 0, color: COLOR.error, overflowWrap: 'anywhere' } }, labels.queueParseErrorTitle + ' — ' + parseError));
+    return h('section', { key: 'reviews', 'data-reviews-view': 'true', style: { display: 'flex', flexDirection: 'column', gap: '8px' } }, children);
+  }
+  if (entries.length === 0) {
+    children.push(h('p', { key: 'empty', style: { margin: 0, color: COLOR.tertiary } }, labels.reviewsEmpty));
+    return h('section', { key: 'reviews', 'data-reviews-view': 'true', style: { display: 'flex', flexDirection: 'column', gap: '8px' } }, children);
+  }
+  const row = (key: string, label: string, value: string | null): unknown =>
+    value === null ? null : h('div', { key, style: { display: 'flex', flexWrap: 'wrap', gap: '4px 10px', alignItems: 'baseline' } }, h('strong', { key: 'l' }, label + ':'), h('span', { key: 'v', style: { overflowWrap: 'anywhere' } }, value));
+  children.push(
+    ...entries.map((review, index) =>
+      h(
+        'div',
+        { key: 'rev-' + index, 'data-review': review.ref ?? review.work ?? String(index), style: { display: 'flex', flexDirection: 'column', gap: '2px', padding: '8px 12px', background: COLOR.card, border: '1px solid ' + COLOR.border, borderRadius: '8px' } },
+        row('kind', labels.type, review.kind),
+        row('ref', 'ref', review.ref),
+        row('work', labels.works, review.work),
+        row('channel', labels.channel, review.channel),
+        row('confirmed', labels.confirmedAt, review.confirmedAt),
+        row('reviewed', labels.reviewedAt, review.reviewedAt),
+      ),
+    ),
+  );
+  return h('section', { key: 'reviews', 'data-reviews-view': 'true', style: { display: 'flex', flexDirection: 'column', gap: '8px' } }, children);
+}
+
+/** The opt-in setup section: status lines plus the one explicit enable
+ * button. Rendered only when the host answered the setup probe. */
+function renderSetupSection(h: H, s: PanelState, a: PanelActions): unknown {
+  // Tolerant of tests and older states assembled without the field.
+  if (s.setup === null || s.setup === undefined) return null;
+  const labels = setupLabelsFor();
+  const model = setupViewModel(s.setup, s.setupBusy, labels);
+  const line = (key: string, text: string, tone?: string): unknown =>
+    h('p', { key, 'data-setup-line': key, style: { margin: 0, color: tone ?? COLOR.secondary, overflowWrap: 'anywhere' } }, text);
+  return h(
+    'section',
+    { key: 'setup', 'data-setup-section': 'true', 'data-setup-state': model.state, style: { display: 'flex', flexDirection: 'column', gap: '4px', padding: '8px 12px', background: COLOR.card, border: '1px solid ' + COLOR.border, borderRadius: '8px' } },
+    sectionTitle(h, 'title', labels.title),
+    h('p', { key: 'headline', 'data-setup-headline': model.state, style: { margin: 0, fontWeight: '600' } }, model.headline),
+    line('cli', model.cliLine),
+    model.resolvedLine === null ? null : line('resolved', model.resolvedLine),
+    model.shadowedLine === null ? null : line('shadowed', model.shadowedLine, COLOR.warn),
+    line('skills', model.skillsLine),
+    model.skillNames.length === 0
+      ? null
+      : h(
+          'details',
+          { key: 'skill-names', style: { color: COLOR.tertiary } },
+          h('summary', { key: 's', style: { cursor: 'pointer' } }, String(model.skillNames.length)),
+          h('ul', { key: 'l', style: { margin: '2px 0', paddingLeft: '18px' } }, model.skillNames.map((name, i) => h('li', { key: 'n' + i, 'data-setup-skill': name }, name))),
+        ),
+    model.error === null
+      ? null
+      : h('p', { key: 'error', role: 'alert', 'data-setup-error': 'true', style: { margin: 0, color: COLOR.error, overflowWrap: 'anywhere' } }, labels.failed + '：' + model.error),
+    h(
+      'button',
+      { key: 'enable', type: 'button', 'data-setup-enable': 'true', disabled: !model.canEnable, style: { ...buttonStyle(true), alignSelf: 'flex-start' }, onClick: a.enableSetup },
+      labels.enable,
+    ),
+  );
+}
+
 function renderDetail(h: H, s: PanelState, a: PanelActions): unknown {
   const d = s.detail;
   const labels = s.labels;
@@ -909,7 +1091,7 @@ function renderDetail(h: H, s: PanelState, a: PanelActions): unknown {
 /** Render the whole panel body from gathered state; pure over `h`. */
 function renderPanel(h: H, s: PanelState, a: PanelActions): unknown {
   const labels = s.labels;
-  const children: unknown[] = [renderToolbar(h, s, a)];
+  const children: unknown[] = [renderToolbar(h, s, a), renderSetupSection(h, s, a)];
   if (s.loadError !== null) {
     children.push(
       h('p', { key: 'error', role: 'alert', style: { margin: 0, color: COLOR.error, overflowWrap: 'anywhere' } }, labels.loadFailed + ': ' + s.loadError),
@@ -927,6 +1109,10 @@ function renderPanel(h: H, s: PanelState, a: PanelActions): unknown {
     const openArtifact = s.openArtifact ?? null;
     if ((s.view ?? 'overview') === 'sources') {
       children.push(renderSources(h, { ...s, sourcesMode: s.sourcesMode ?? 'reading', selectedSource: s.selectedSource ?? null }, a));
+    } else if ((s.view ?? 'overview') === 'decisions') {
+      children.push(renderDecisions(h, s, a));
+    } else if ((s.view ?? 'overview') === 'reviews') {
+      children.push(renderReviews(h, s, a));
     } else if (s.model.state === 'no-works') {
       children.push(...renderEmpty(h, s, labels.noWorksTitle, labels.noWorksHint, s.model.emptyCommand ?? 'wa-cli new'));
     } else {
@@ -1002,6 +1188,7 @@ window.__ModuleLoader__?.load({
     const testHooks = {
       latestGate, overviewModel, reconcileSelection, renderPanel, routeUrl, shouldStack, labelsFor, stageTitle,
       nextViewMode, nextReadingMode, artifactTextOf, sourceEntriesOf, PANEL_ID, ROUTE_PATH, FOLD_LINE_THRESHOLD,
+      SETUP_ROUTE, parseSetupStatus, setupViewModel, setupLabelsFor,
     };
 
     let react: any;
@@ -1041,6 +1228,7 @@ window.__ModuleLoader__?.load({
       const [selectedSource, setSelectedSource] = react.useState(null as string | null);
       const [openFolds, setOpenFolds] = react.useState({} as Record<string, boolean>);
       const [treeCollapsed, setTreeCollapsed] = react.useState({} as Record<string, boolean>);
+      const [setup, setSetup] = react.useState({ status: null as SetupStatus | null, busy: false });
       const containerRef = react.useRef(null);
       // Scroll offset captured before a view toggle, restored after the new
       // view has rendered, so switching never jumps back to the top.
@@ -1071,6 +1259,24 @@ window.__ModuleLoader__?.load({
       react.useEffect(() => {
         fetchSnapshot(panelRoot);
       }, [fetchSnapshot, panelRoot]);
+
+      // Probe the setup route once: 200 with a well-formed status shows the
+      // section; anything else (including the host not registering the route
+      // because enableSetup is off) keeps the panel exactly as before.
+      react.useEffect(() => {
+        let cancelled = false;
+        fetch(SETUP_ROUTE)
+          .then((response: Response) => (response.ok ? (response.json() as Promise<unknown>) : null))
+          .then((body: unknown) => {
+            if (cancelled) return;
+            const status = parseSetupStatus(body);
+            if (status !== null) setSetup((prev: { busy: boolean }) => ({ status, busy: prev.busy }));
+          })
+          .catch(() => undefined);
+        return () => {
+          cancelled = true;
+        };
+      }, []);
 
       react.useEffect(() => {
         const element = containerRef.current as HTMLElement | null;
@@ -1135,6 +1341,8 @@ window.__ModuleLoader__?.load({
         selectedSource,
         openFolds,
         treeCollapsed,
+        setup: setup.status,
+        setupBusy: setup.busy,
       };
       const actions: PanelActions = {
         refresh: () => fetchSnapshot(panelRoot),
@@ -1185,6 +1393,9 @@ window.__ModuleLoader__?.load({
           setView('sources');
           setSelectedSource(sourceId);
         },
+        showQueue: (view: 'decisions' | 'reviews') => {
+          setView(view);
+        },
         backToOverview: () => {
           setView('overview');
           setSelectedSource(null);
@@ -1195,6 +1406,21 @@ window.__ModuleLoader__?.load({
         },
         toggleFold: (key: string, open: boolean) => {
           setOpenFolds((prev: Record<string, boolean>) => ({ ...prev, [key]: open }));
+        },
+        enableSetup: () => {
+          // Single-flight on the client as well: a second click during an
+          // action is ignored before it can queue another POST.
+          if (setup.busy) return;
+          setSetup((prev: { status: SetupStatus | null }) => ({ status: prev.status, busy: true }));
+          fetch(SETUP_ROUTE, { method: 'POST' })
+            .then((response: Response) => (response.ok ? (response.json() as Promise<unknown>) : null))
+            .then((body: unknown) => {
+              const status = parseSetupStatus(body);
+              setSetup((prev: { status: SetupStatus | null }) => ({ status: status ?? prev.status, busy: false }));
+            })
+            .catch(() => {
+              setSetup((prev: { status: SetupStatus | null }) => ({ status: prev.status, busy: false }));
+            });
         },
         treeKey: (event: unknown, ref: string) => {
           const decision = treeKeyAction(picked?.tree ?? [], treeCollapsed, ref, String((event as { key?: unknown })?.key ?? ''));

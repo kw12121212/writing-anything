@@ -163,7 +163,7 @@ describe('registerRoute', () => {
         written[written.length - 1]!.body = body;
       },
     };
-    await route.handler({ method: 'GET' }, res);
+    await route.handler({ method: 'GET', headers: { host: '127.0.0.1:13080' } }, res);
     const served = JSON.parse(written[0]!.body!) as WorkspaceRouteBody;
     expect(served.root).toBe(snapshotRoot);
     expect(written[0]!.headers?.['content-type']).toBe('application/json; charset=utf-8');
@@ -219,7 +219,7 @@ describe('apply wiring', () => {
         written[written.length - 1]!.body = body;
       },
     };
-    await routes[0]!.handler({ method: 'GET' }, res);
+    await routes[0]!.handler({ method: 'GET', headers: { host: '127.0.0.1:13080' } }, res);
     const body = JSON.parse(written[0]!.body!) as WorkspaceRouteBody;
     expect(body.root).toBe(project);
     expect(body.source).toBe('workspace-registry');
@@ -227,7 +227,7 @@ describe('apply wiring', () => {
     // The snapshot route serves a readable body without wa-cli installed:
     // an empty workspace degrades per area but never fails the response.
     written.length = 0;
-    await routes[1]!.handler({ method: 'GET' }, res);
+    await routes[1]!.handler({ method: 'GET', headers: { host: '127.0.0.1:13080' } }, res);
     const snapshotBody = JSON.parse(written[0]!.body!) as {
       ok: boolean;
       workspaceExists: boolean;
@@ -357,10 +357,106 @@ describe('snapshot route query wiring', () => {
       },
     );
     const res = { writeHead: () => res, end: () => {} };
-    await routes[0]!.handler({ method: 'GET', url: '/dsh-writing-viewer/snapshot?root=%2Fsrv%2Fbook' }, res);
-    await routes[0]!.handler({ method: 'GET', url: '/dsh-writing-viewer/snapshot' }, res);
-    await routes[0]!.handler({ method: 'GET' }, res);
+    const loopback = { host: 'localhost:13080' };
+    await routes[0]!.handler({ method: 'GET', url: '/dsh-writing-viewer/snapshot?root=%2Fsrv%2Fbook', headers: loopback }, res);
+    await routes[0]!.handler({ method: 'GET', url: '/dsh-writing-viewer/snapshot', headers: loopback }, res);
+    await routes[0]!.handler({ method: 'GET', headers: loopback }, res);
     expect(seen).toEqual(['/srv/book', null, null]);
+  });
+});
+
+describe('route origin guard', () => {
+  /** Register both routes with explicit guard options and capture responses. */
+  async function guardedRoutes(guardOptions: Parameters<typeof registerRoute>[2]) {
+    const routes: { path: string; handler: (req: unknown, res: unknown) => Promise<void> }[] = [];
+    const scope = { webServer: { register: (route: (typeof routes)[number]) => routes.push(route) } };
+    registerRoute(scope as Parameters<typeof registerRoute>[0], async () => ({ ok: true }) as WorkspaceRouteBody, guardOptions);
+    registerSnapshotRoute(
+      scope as Parameters<typeof registerSnapshotRoute>[0],
+      async () => ({ ok: true } as SnapshotRouteBody),
+      guardOptions,
+    );
+    const written: { status: number; headers?: Record<string, string>; body?: string }[] = [];
+    const res = {
+      writeHead: (status: number, headers?: Record<string, string>) => {
+        written.push({ status, headers });
+        return res;
+      },
+      end: (body?: string) => {
+        written[written.length - 1]!.body = body;
+      },
+    };
+    return { routes, written, res };
+  }
+
+  it('refuses an untrusted Host on both routes with 403, no-store, and no data', async () => {
+    const { routes, written, res } = await guardedRoutes({ allowedHosts: [], bindHost: null });
+    for (const route of routes) {
+      written.length = 0;
+      await route.handler({ method: 'GET', headers: { host: 'attacker.example' } }, res);
+      expect(written[0]!.status).toBe(403);
+      expect(written[0]!.headers?.['cache-control']).toBe('no-store');
+      const body = JSON.parse(written[0]!.body!) as { ok: boolean; error: string };
+      expect(body.ok).toBe(false);
+      expect(typeof body.error).toBe('string');
+    }
+  });
+
+  it('refuses missing Host headers and cross-site fetch markers, still serving loopback', async () => {
+    const { routes, written, res } = await guardedRoutes({ allowedHosts: [], bindHost: null });
+    const route = routes[0]!;
+    written.length = 0;
+    await route.handler({ method: 'GET', headers: {} }, res);
+    expect(written[0]!.status).toBe(403);
+    written.length = 0;
+    await route.handler({ method: 'GET', headers: { host: '127.0.0.1:13080', 'sec-fetch-site': 'cross-site' } }, res);
+    expect(written[0]!.status).toBe(403);
+    written.length = 0;
+    await route.handler({ method: 'GET', headers: { host: '127.0.0.1:13080' } }, res);
+    expect(written[0]!.status).toBe(200);
+  });
+
+  it('refuses an Origin that names a different authority than the Host', async () => {
+    const { routes, written, res } = await guardedRoutes({ allowedHosts: [], bindHost: null });
+    written.length = 0;
+    await routes[0]!.handler({ method: 'GET', headers: { host: '127.0.0.1:13080', origin: 'http://evil.example' } }, res);
+    expect(written[0]!.status).toBe(403);
+    written.length = 0;
+    await routes[0]!.handler({ method: 'GET', headers: { host: '127.0.0.1:13080', origin: 'http://127.0.0.1:13080' } }, res);
+    expect(written[0]!.status).toBe(200);
+  });
+
+  it('accepts an explicitly allowed remote authority and the bind-address literal', async () => {
+    const { routes, written, res } = await guardedRoutes({
+      allowedHosts: ['gamepc.example.net:13080', 'proxy.internal'],
+      bindHost: '192.168.1.10',
+    });
+    const route = routes[0]!;
+    written.length = 0;
+    await route.handler({ method: 'GET', headers: { host: 'gamepc.example.net:13080' } }, res);
+    expect(written[0]!.status).toBe(200);
+    written.length = 0;
+    // Port-less entries match the hostname on any port.
+    await route.handler({ method: 'GET', headers: { host: 'proxy.internal:9999' } }, res);
+    expect(written[0]!.status).toBe(200);
+    written.length = 0;
+    // The bind address literal is accepted regardless of port.
+    await route.handler({ method: 'GET', headers: { host: '192.168.1.10:13080' } }, res);
+    expect(written[0]!.status).toBe(200);
+    written.length = 0;
+    // An allowed host on a different port when the entry pinned one is not.
+    await route.handler({ method: 'GET', headers: { host: 'gamepc.example.net:9999' } }, res);
+    expect(written[0]!.status).toBe(403);
+  });
+
+  it('collectAllowedHosts and bindHostOf tolerate arbitrary config and scope shapes', async () => {
+    const { collectAllowedHosts, bindHostOf } = await import('./host');
+    expect(collectAllowedHosts(undefined)).toEqual([]);
+    expect(collectAllowedHosts(['a.example', ' ', 3, 'b.example:8080'])).toEqual(['a.example', 'b.example:8080']);
+    expect(bindHostOf({ webServer: { host: '127.0.0.1' } })).toBe('127.0.0.1');
+    expect(bindHostOf({ host: '0.0.0.0' })).toBe('0.0.0.0');
+    expect(bindHostOf({ webServer: {} })).toBeNull();
+    expect(bindHostOf({})).toBeNull();
   });
 });
 

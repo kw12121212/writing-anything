@@ -19,9 +19,11 @@ export interface CliOutcome<T> {
   reason: string | null;
 }
 
-/** Injected executor: runs the wa-cli binary, no shell, argument list only. */
+/** Injected executor: runs the wa-cli binary, no shell, argument list only.
+ * The optional cwd lets the setup path run commands inside a workspace-free
+ * temporary directory (the snapshot itself always spawns with the host cwd). */
 export interface CliRunner {
-  run(args: readonly string[]): Promise<{ stdout: string } | null>;
+  run(args: readonly string[], options?: { cwd?: string }): Promise<{ stdout: string } | null>;
 }
 
 /** A wa-cli status --json units[] row, as far as the snapshot consumes it. */

@@ -1,0 +1,42 @@
+schema: strict-spec-driven/question-list/v1
+schema_version: 1
+artifact_type: question_list
+schema_file: templates/strict-spec-driven/schemas/question-list.yaml
+change: plugin-build-warning-cleanup
+open: []
+resolved:
+  - id: requirement-problem
+    question: What is concretely going wrong today, and for whom?
+    context: 影响构建工具链与开发者体验；答案来自用户指示与构建输出实测
+    answer: 每次 pnpm run build 刷出两条 define 兼容告警与一条 MISSING_NAME_OPTION_FOR_IIFE_EXPORT 告警，贡献者无法分辨真问题与噪声，iife 无名的潜在风险被埋没
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-outcome
+    question: What observable difference proves the problem is solved?
+    context: 验收口径
+    answer: pnpm run build 零告警完成，dist/index.js 与 dist/client.js 照常产出且与 exports 对齐，182 项测试全绿
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-trigger
+    question: Why now — what forced this?
+    context: 排期依据
+    answer: 用户在插件 review 后指示「构建告警清理」（2026-10-20，与路由认证、队列视图一同排期）
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-non-goals
+    question: What must explicitly not change?
+    context: 评审对照 unchanged_behavior 检查
+    answer: src 源码与测试逻辑、产物语义（exports 路径、__ModuleLoader__.load 副作用、自包含 iife）、其他依赖版本、Go 回归
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-interpretation
+    question: Which reading of the request is intended, where more than one is possible?
+    context: 存在压制告警 vs 升级根治两种读法；design 已定
+    answer: 升级 tsdown 根治（压制开关即使存在也只是掩盖兼容瑕疵）；技术型变更，无 delta 规格
+    status: resolved
+    kind: requirement
+    answered_by: human
