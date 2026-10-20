@@ -318,7 +318,7 @@ categories:
     wa-cli-42ec4e:
       title: 外部工具把调用 wa-cli 当只读访问前，先实测一次完整调用：审计日志每次都追加，假执行器测试会把它完全掩盖
       status: active
-      occurrences: 1
+      occurrences: 2
       path: .strict-spec-driven/lessons/coding/wa-cli-42ec4e.yaml
     wa-cli-path-wa-cli-wa-cli-134c20:
       title: 测试「wa-cli 不可用」时依赖开发机 PATH 上没有 wa-cli，装上 wa-cli 后就失败

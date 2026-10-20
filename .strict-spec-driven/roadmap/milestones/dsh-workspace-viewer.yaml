@@ -42,7 +42,7 @@ risks:
   - DSH 插件与客户端注入 API 处于 0.2.x rc 阶段，可能随版本演进破坏兼容；缓解：声明 engines.dsh 范围，以已上架的第三方插件为参考实现，必要时按 DSH 版本豁免机制处理
   - 长篇小说类大工作区的快照体积与刷新开销；缓解：按作品/单元分层按需拉取
   - wa-cli --json 输出字段在 0.x 版本仍可能演进；缓解：快照层隔离 CLI 输出映射，缺字段时容错降级而不是失败
-status: proposed
+status: complete
 notes:
   - 术语：DSH 插件（DSH Plugin）指 DeepSeek Harness 的插件包，与本产品规范包（Pack）是不同概念，首个实现变更须把新词条加入 docs/GLOSSARY.md
   - 产品定位：帮作者与 Agent 查看工作区状态，不替作者决策；界面只读

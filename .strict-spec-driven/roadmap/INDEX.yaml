@@ -26,4 +26,4 @@ milestones:
   dsh-workspace-viewer:
     title: DSH 工作区查看插件（DSH Workspace Viewer）
     path: roadmap/milestones/dsh-workspace-viewer.yaml
-    status: proposed
+    status: complete

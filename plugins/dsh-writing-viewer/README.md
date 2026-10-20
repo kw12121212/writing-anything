@@ -11,13 +11,16 @@ DSH 插件（DSH Plugin）`dsh-writing-viewer` 是 writing-anything 仓库的 DS
 ```
 cordis.patch.yml   bundle patch：向 DSH profile 组合插入插件行
 src/host.ts        host 入口（cordis 插件：导出 name 与 apply(ctx, config)，含只读 fs/spawn 适配器与两个路由注册）
-src/client.ts      web client 入口（window.__ModuleLoader__.load 工厂）：总览、单元树、路径切换的渲染与交互
+src/client.ts      web client 入口（window.__ModuleLoader__.load 工厂）：总览、单元树、路径切换、加载态与键盘导航的渲染与交互
 src/overview.ts    总览视图模型的纯函数：作品卡片、工作区计数、单元树与单元详情（client 打包内联）
+src/treekeys.ts    单元树键盘导航的纯逻辑：可见节点过滤与方向键决策（选中/收起/展开），无 React 与 DOM 依赖
 src/root.ts        工作区定位的纯逻辑（候选顺序、去重、探测）
 src/registry.ts    DSH 工作区注册表（workspaceRegistry.list()）的容错读取
 src/snapshot.ts    工作区快照聚合：类型定义与注入式聚合入口（每次请求重读，无缓存）
 src/wacli.ts       wa-cli 只读命令桥：--json 输出映射与按区域容错降级
 src/artifacts.ts   产物清单与全文读取（按 JSON Schema 约束的路径，跳过符号链接）
+scripts/gen-large-workspace.mjs  经 wa-cli 生成多卷多场景长篇合成工作区（性能检查夹具）
+scripts/perf-check.mjs           端到端大工作区性能检查并把耗时记录进 docs/evidence/perf-check.txt
 testdata/          测试夹具：真实命令生成的多作品工作区 + 捕获的 --json 输出
 dist/index.js      构建产物：host 入口（package.json 的 "." 导出）
 dist/client.js     构建产物：client 入口（package.json 的 "./client" 导出）
@@ -104,6 +107,8 @@ package.json 声明：
 - **作品卡片**：作品 id、文体（`work.yaml` 的 `genre`）、单元数、当前阶段、进度（根单元为汇总单元时取其 progress，否则为最外层各汇总单元之和）、去重后的阻塞项数量与前两条摘要（汇总单元会重复列出子孙的阻塞项，按 code、路径与消息去重）。
 - **单元树与单元详情**：选中作品后，单元树按 `wa-cli status` 的 parent 关系缩进展示，汇总单元带 done/total 进度标记、有阻塞项的单元带计数；status 降级时退回 `work.yaml` 的层级（汇总单元不显示其占位阶段）。选中单元后详情区显示类型、阶段、进度、阻塞项、下一步命令与产物清单（名称与路径）；产物内容视图由后续变更挂载到同一详情区。
 - **空态与错误态**：定位不到工作区显示 `wa-cli init` 指引（路径切换失败时附原因）；工作区没有作品显示 `wa-cli new <genre> <id>` 指引；取数失败显示原因与重试。
+- **加载反馈**：首次打开面板、快照尚未返回且没有数据可显示时，面板显示独立的加载提示（`role="status"` + `aria-busy`），不空白、也不复用空态或错误态文案；刷新与路径切换进行中旧数据保留并显示进行中提示，较慢的旧响应被丢弃。
+- **键盘导航**：面板内全程可不碰鼠标——焦点在单元树上时 ↑/↓ 在可见单元间移动选中（详情区同步更新，DOM 焦点随选中移动）、→ 展开已收起的汇总单元或进入第一个子单元、← 收起已展开的汇总单元或回到父单元（roving tabindex：选中节点是树内唯一 Tab 停留点，带 `aria-current` 与 `aria-expanded`，Tab 离开树到下一控件）；单元详情里的「打开」产物条目、视图切换按钮与素材跳转都是原生按钮，Enter/空格即激活。
 - **主题与窄宽度**：样式只用 DSH 主题令牌（`--dsw-alias-*` CSS 自定义属性，带回退值），明暗主题随宿主切换；视口低于 1024px（DSH 侧栏收为 56px 导轨）或面板容器低于 640px 时，单元树与详情改为上下堆叠。
 
 界面只有刷新、路径切换与选择三类控件，没有任何编辑、写入或确认控件；作者确认与复核仍走 wa-cli 阅读页（Reading View）。文案中英双语，按页面语言选择。
@@ -117,10 +122,23 @@ client bundle 内联了 `yaml` 解析器（用于读取 `work.yaml` 的文体与
 ```sh
 pnpm install            # 安装开发依赖
 pnpm run build          # 类型检查（tsc --noEmit）+ 构建（tsdown）+ 产物名归一
-pnpm test               # vitest 单元测试（定位逻辑、路径切换校验、注册表读取、路由、快照聚合、CLI 桥降级、只读约束、总览视图模型、面板渲染）
+pnpm test               # vitest 单元测试（定位、路径切换、注册表、路由、快照聚合、CLI 桥降级、只读约束、总览视图模型、面板渲染、产物视图、高亮器、键盘导航）
+pnpm run check          # 一次执行类型检查、构建与全部测试（统一检查入口）
+pnpm run perf:check     # 大工作区性能检查：构建 wa-cli → 生成 3 卷×8 章×8 场景（220 单元）合成夹具 → 计时并记录 docs/evidence/perf-check.txt
 ```
 
-构建产物名归一（`scripts/normalize-outputs.mjs`）把 tsdown 的 `host.js`/`client.iife.js` 改名为 `dist/index.js`/`dist/client.js`，与 package.json 的 `exports` 对齐；缺少任一产物时构建失败。
+构建产物名归一（`scripts/normalize-outputs.mjs`）把 tsdown 的 `host.js`/`client.iife.js` 改名为 `dist/index.js`/`dist/client.js`，与 package.json 的 `exports` 对齐；缺少任一产物时构建失败。性能检查的夹具由 `pnpm run perf:workspace`（`scripts/gen-large-workspace.mjs`）经 wa-cli 生成，结构与真实长篇一致；`perf:check` 是记录证据而非数值门槛，实测数字见 `docs/evidence/perf-check.txt`。
+
+## 界面导览
+
+按写作概念（而不是目录树）组织，全部只读；截图在 `docs/evidence/`：
+
+1. **总览仪表盘（Overview Dashboard）**（`overview-default.png`）：每个作品一张卡片（文体、单元数、当前阶段、汇总进度、去重后的阻塞项数量与前两条摘要），工作区级计数（素材、待决决策、待复核、validate 诊断；对应区域降级时显示「—」而不是 0），诊断与降级原因可展开。
+2. **单元树与单元详情**（`overview-switched.png`、`overview-narrow-tree.png`）：选中作品后按卷、章、场景层级缩进展示单元树，汇总单元带 done/total 进度、有阻塞项的单元带计数；选中单元后详情区显示类型、阶段、进度、阻塞项、下一步命令与产物清单。
+3. **产物视图**：单元详情的产物清单里「打开」任一产物——YAML 产物默认语义卡片视图（按 Schema 字段组织成卡片），一键切换源码高亮视图（滚动位置保持；大 YAML 按顶层键折叠）；draft 正文提供渲染阅读视图与源码高亮切换；claims 语义卡片中的素材引用可点击跳转到素材条目。
+4. **素材清单**：总览的「素材」计数即可进入素材清单，逐条查看 source.yaml 语义卡片与原文 Markdown（阅读视图/源码高亮切换）。
+5. **空态与路径切换**（`panel-empty.png`、`panel-switch-invalid.png`）：定位不到工作区显示 `wa-cli init` 指引；工具栏可输入另一个项目目录的绝对路径切换查看，或恢复默认定位。
+6. **加载与键盘**（`polish-first-load.png`、`polish-keyboard-tree.png`、`polish-large-workspace.png`）：首次打开显示加载提示（无数据、非空态、非错误态）；↑/↓/←/→ 在单元树内导航（含收起/展开，截图摄于键盘把选中移到 ch-1-1 并收起其 8 个场景后）；`polish-large-workspace.png` 为 3 卷×8 章×8 场景（220 单元）合成长篇的实测面板。
 
 ## 装入本机 DSH web profile
 
@@ -133,7 +151,7 @@ dsh plugin --profile web add link:/home/wx766/Code/writing-anything/plugins/dsh-
 
 `dsh plugin add` 在 profile 的 package.json 中同时登记依赖与 `dsh.profile.bundles`。插件行在宿主启动时组合生效——已经运行的 Web GUI 不会自动加载新装的插件，需重启宿主或在另一端口启动一个新实例验证（避免重启正在使用的 GUI 进程）。
 
-按 DSH 版本验证兼容性：`engines.dsh` 不满足运行中的 DSH 版本时，安装会要求版本豁免（`dsh plugin --profile web allow-version …`）；本骨架按 0.2.1-rc.2 实测，范围声明为 `>=0.2.1-rc.2 <0.3.0`。
+按 DSH 版本验证兼容性：`engines.dsh` 不满足运行中的 DSH 版本时，安装会要求版本豁免（`dsh plugin --profile web allow-version …`）；本插件按 0.2.1-rc.2 实测，范围声明为 `>=0.2.1-rc.2 <0.3.0`。
 
 如需固定展示某个项目目录，在该 profile 的 `cordis.patch.yml` 中为插件行加配置：
 
@@ -144,6 +162,13 @@ dsh plugin --profile web add link:/home/wx766/Code/writing-anything/plugins/dsh-
     workspaceRoot: /home/user/Code/writing-anything
     waCliPath: /usr/local/bin/wa-cli   # 可选：覆盖 wa-cli 可执行文件路径
 ```
+
+### 与 wa-cli 版本的兼容说明
+
+- 快照的结构状态（单元树、阶段、阻塞项、诊断、待复核摘要）来自 wa-cli 只读命令的 `--json` 输出，每次完整快照的有界命令集合是 `status`、`validate`、`next` 各一次、每个长篇（novel）作品 `timeline` 一次；产物与素材全文按 JSON Schema 约束的路径直接读文件，不依赖命令输出。
+- 0.x 的 wa-cli `--json` 字段仍可能演进。映射层（`src/wacli.ts`）按区域独立降级：二进制不可用、执行失败、超时或输出缺少所需字段时，该区域在面板上标注降级原因（总览计数显示「—」而不是 0），文件可直接解析的产物全文照常返回，整体不失败。
+- 面板按「渲染并核对」验证而不是按版本号：仓库测试夹具 `testdata/cli/*.json` 捕获自 2026-10-20 的仓库 wa-cli（v0.2.x 世代）真实输出；升级 wa-cli 后运行 `pnpm run check` 与面板实测即可确认映射仍成立，缺字段会以降级形式显式暴露而不是静默错误。
+- `wa-cli` 不在 `PATH` 上时可用上面的 `waCliPath` 配置指向二进制；找不到可执行文件时插件按降级路径工作（产物全文仍可查看）。
 
 ## 实测加载证据与 API 约束
 

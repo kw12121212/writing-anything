@@ -1,0 +1,30 @@
+# polish-release 键盘导航实测记录（2026-10-20，DSH 0.2.1-rc.2 web profile，独立实例 127.0.0.1:13099）
+
+全程无鼠标（键盘事件经 CDP 派发，DOM 断言同步读取），对应 delta 规格 dsh-plugin 的 panel-keyboard-navigation 三个场景与 panel-loading-feedback 场景。
+
+## 单元树方向键（tree-arrow-select / tree-expand-collapse）
+
+工作区：合成长篇 big-novel（3 卷×8 章×8 场景，220 单元），路径 /tmp/dsh-large-ws。
+
+1. 点击根单元 big-novel 后仅用键盘：ArrowDown ×2 →
+   `document.activeElement[data-tree-ref]` = `big-novel/ch-1-1`，`[aria-current="true"]` 同为 `big-novel/ch-1-1`（选中与 DOM 焦点同步移动，详情区跟随）。
+2. ArrowLeft（焦点在已展开的 ch-1-1）→ 可见树节点 220 → 212（该章 8 个场景收起），
+   `[data-tree-ref="big-novel/ch-1-1"][aria-expanded]` = `"false"`，焦点保持 ch-1-1。
+3. ArrowRight → 节点回到 220，`aria-expanded` = `"true"`。
+4. 截图：`polish-keyboard-tree.png`（摄于第 2 步收起态）、`polish-large-workspace.png`（220 单元总览）。
+
+## 键盘打开产物视图与切换（keyboard-open-artifact）
+
+工作区：默认注册表定位的 writing-desk（作品 tesla-flying-car）。
+
+1. 树根获得焦点后按 Tab 一次 → 焦点落在单元详情的产物清单条目 `brief`（树内唯一 Tab 停留点是选中节点，Tab 离开树进入详情）。
+2. 按 Enter → `section[data-artifact-viewer]` 出现，`data-artifact-viewer` = `"brief"`，视图切换按钮 `data-view-toggle` = `"semantic"`。
+3. 再按 Tab ×2 → 焦点落在视图切换按钮；按 Enter → `data-view-toggle` = `"source"`，`[data-yaml-source]` = `"flat"`（YAML 源码高亮视图呈现），焦点保持在切换按钮。
+
+## 首载加载提示（first-load-hint）
+
+经 CDP 在客户端把快照 fetch 延迟 8 秒后重新挂载面板：面板显示项目目录「—」与独立的「Loading…」提示，无工作区数据、无空态指引文案、无错误文案；截图 `polish-first-load.png`。（延迟仅作用于客户端 fetch 以捕获瞬时态，面板代码未改动。）
+
+## 只读核对
+
+面板多次完整快照（含路径切换与刷新）后，/tmp/dsh-large-ws/.writing-anything 内除 wa-cli 自身按审计日志（Audit Log）契约追加的 audit.log 外，无任何文件新增或变化。

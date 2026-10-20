@@ -1,0 +1,41 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: polish-release
+  status: proposed
+summary:
+  what:
+    - 打磨面板加载反馈：首次打开面板、快照请求进行中且尚无数据时显示可读的加载提示，不空白；刷新与路径切换进行中保持既有提示与旧数据可见
+    - 键盘导航：焦点在单元（Unit）树上时用方向键在可见单元间移动选中、收起或展开层级，用键盘打开产物（Artifact）视图并在视图间切换，全部操作不依赖鼠标
+    - 大工作区性能检查：用生成的多卷多场景长篇（novel）合成夹具实测首屏与单元/视图切换并记录耗时，必要时按既有折叠与按需渲染策略做渲染层优化
+    - 测试收尾：补齐快照聚合、视图逻辑与高亮器的 vitest 覆盖；插件包增加一次执行类型检查、构建与测试的检查命令
+    - '安装使用文档：README 扩充 link: 安装、启用、与 wa-cli 版本的兼容说明、界面导览与截图；新术语按实际引入写入 docs/GLOSSARY.md'
+    - 里程碑收尾对账：对照 dsh-workspace-viewer 的 done criteria 逐条核对并留存证据；Go 完整回归确认不受影响仍通过
+  why:
+    - 插件四个前置变更（plugin-scaffold、workspace-snapshot、overview-navigation、artifact-views）已归档，功能可用但首载反馈、键盘可达性与大工作区表现未验收，安装使用文档尚未就绪——这是作者与 Agent 在 DSH Web GUI 中查看工作区的最后一道可用性缺口（来自计划变更 polish-release 的 summary）
+    - 里程碑 done criteria 要求安装与使用文档就绪、新增术语入表、测试覆盖读取逻辑与只读约束、Go 完整回归不受影响；polish-release 是该里程碑唯一剩余的实现计划变更（来自里程碑 done_criteria 与 roadmap-recommend 结果）
+scope:
+  in:
+    - client 侧首载加载提示：快照请求进行中且尚无数据时显示加载态（不改快照路由结构与聚合逻辑）
+    - 单元树与产物视图的键盘导航（roving tabindex 与方向键，面板内焦点时生效，不引入新运行时依赖）
+    - 大工作区性能检查与渲染层优化（生成合成夹具实测，必要时优化；不改快照响应结构）
+    - vitest 覆盖补齐：快照聚合、视图逻辑与高亮器的缺口用例，含新交互的渲染测试
+    - 插件检查命令：类型检查 + 构建 + 测试一次执行
+    - README 安装（dsh plugin add link:）、启用、与 wa-cli 版本的兼容说明、界面导览与截图
+    - docs/GLOSSARY.md 按实际引入的新术语词条；对照里程碑 done criteria 的收尾对账记录
+  out:
+    - 任何写入或变更工作区产物的能力（插件保持严格只读，作者确认与复核仍走 wa-cli 阅读页（Reading View））
+    - wa-cli（Go 内核）行为改动与 MCP、Skill 改动（Go 代码零改动，只跑完整回归确认不受影响）
+    - DSH Desktop/Electron 端适配与 npm 市场发布
+    - 新的信息架构、新的产物视图类型或新的快照数据域（只打磨既有视图与交互）
+unchanged_behavior:
+  - 快照路由的聚合内容、定位顺序、降级行为与只读约束不变（host 侧结构不动，响应字段只增不改的原则下本变更不新增字段）
+  - 语义卡片视图与源码高亮视图的一键切换、滚动位置保持与离线渲染行为不变
+  - 总览仪表盘、单元树导航、路径切换与请求时序丢弃（较早请求的响应不得覆盖较新的选择）行为不变
+  - 主题令牌与窄宽度堆叠布局行为不变
+  - Go 内核、MCP 服务与 wa-* 技能行为不变；Go 完整回归保持通过
+roadmap:
+  milestone: dsh-workspace-viewer
+  planned_change: polish-release

@@ -294,6 +294,13 @@ describe('renderPanel', () => {
     const t = await hooks();
     const loading = t.renderPanel(h, await stateFor(null, { loading: true }), actions);
     expect(textOf(loading)).toContain('Loading');
+    // The first-load hint is an announced status region, distinct from the
+    // empty and error states: no empty-state guidance, no failure copy.
+    const status = elements(loading, 'p').find((n) => n.props?.['role'] === 'status' && n.props?.['data-loading'] === 'first')!;
+    expect(status).toBeDefined();
+    expect(status.props?.['aria-busy']).toBe('true');
+    expect(textOf(loading)).not.toContain('No writing-anything workspace found');
+    expect(textOf(loading)).not.toContain('Failed to load');
     const failed = t.renderPanel(h, await stateFor(null, { loadError: 'boom' }), actions);
     expect(textOf(failed)).toContain('Failed to load the workspace snapshot: boom');
     expect(elements(failed, 'button').map(textOf)).toContain('Retry');
@@ -368,6 +375,68 @@ describe('renderPanel', () => {
     expect(text).toContain('not absolute');
     expect(text).toContain('wa-cli init');
     expect(elements(tree, 'button').map(textOf)).toContain('Restore default');
+  });
+
+  it('keeps every control outside the unit tree in the natural tab order', async () => {
+    const t = await hooks();
+    const tree = t.renderPanel(h, await stateFor(await fixtureBody()), actions);
+    const outside = elements(tree, 'button').filter((b) => b.props?.['data-tree-ref'] === undefined);
+    expect(outside.length).toBeGreaterThan(0);
+    for (const button of outside) expect(button.props?.['tabIndex']).toBeUndefined();
+  });
+});
+
+describe('keyboard navigation', () => {
+  function treeButtons(rendered: unknown): Node[] {
+    const nav = elements(rendered, 'nav').find((n) => n.props?.['data-tree'] === 'units');
+    expect(nav).toBeDefined();
+    const out: Node[] = [];
+    const collect = (node: unknown): void => {
+      if (Array.isArray(node)) {
+        for (const child of node) collect(child);
+        return;
+      }
+      if (node === null || typeof node !== 'object') return;
+      const n = node as Node;
+      if (n.type === 'button') out.push(n);
+      collect(n.children);
+    };
+    collect((nav as Node).children);
+    return out;
+  }
+
+  it('gives the tree one roving tab stop, per-node key handlers and expand state', async () => {
+    const t = await hooks();
+    const rendered = t.renderPanel(h, await stateFor(await fixtureBody()), actions);
+    const nodes = treeButtons(rendered);
+    expect(nodes.map((n) => n.props?.['data-tree-ref'])).toEqual(['my-novel', 'my-novel/part-1', 'my-novel/ch-1', 'my-novel/scene-1', 'my-novel/scene-2']);
+    const tabStops = nodes.filter((n) => n.props?.['tabIndex'] === 0);
+    expect(tabStops.map((n) => n.props?.['data-tree-ref'])).toEqual(['my-novel']);
+    for (const node of nodes) {
+      expect(node.props?.['onKeyDown'], 'onKeyDown on ' + String(node.props?.['data-tree-ref'])).toBeTypeOf('function');
+    }
+    // Nodes with children announce their expansion; leaves announce nothing.
+    expect(nodes.find((n) => n.props?.['data-tree-ref'] === 'my-novel/part-1')?.props?.['aria-expanded']).toBe('true');
+    expect(nodes.find((n) => n.props?.['data-tree-ref'] === 'my-novel/scene-1')?.props?.['aria-expanded']).toBeUndefined();
+  });
+
+  it('hides the subtree of a collapsed node and flags the node collapsed', async () => {
+    const t = await hooks();
+    const rendered = t.renderPanel(h, await stateFor(await fixtureBody(), { treeCollapsed: { 'my-novel/part-1': true } }), actions);
+    const nodes = treeButtons(rendered);
+    expect(nodes.map((n) => n.props?.['data-tree-ref'])).toEqual(['my-novel', 'my-novel/part-1']);
+    expect(nodes.find((n) => n.props?.['data-tree-ref'] === 'my-novel/part-1')?.props?.['aria-expanded']).toBe('false');
+  });
+
+  it('routes tree keydowns through the treeKey action with the node ref', async () => {
+    const t = await hooks();
+    const calls: { event: unknown; ref: string }[] = [];
+    const bound = { ...actions, treeKey: (event: unknown, ref: string) => { calls.push({ event, ref }); } };
+    const rendered = t.renderPanel(h, await stateFor(await fixtureBody()), bound);
+    const part = treeButtons(rendered).find((n) => n.props?.['data-tree-ref'] === 'my-novel/part-1')!;
+    const event = { key: 'ArrowRight' };
+    (part.props?.['onKeyDown'] as (event: unknown) => void)(event);
+    expect(calls).toEqual([{ event, ref: 'my-novel/part-1' }]);
   });
 });
 
@@ -834,4 +903,51 @@ describe('ViewerPanel wiring (runnable react)', () => {
     panel.restore();
   });
 
+  function pressKey(panel: { tree: () => unknown }, find: (button: Node) => boolean, key: string): void {
+    const tree = toNode(panel.tree()) as Node;
+    const button = elements(tree, 'button').find(find);
+    if (button === undefined) throw new Error('tree button not found for key ' + key);
+    (button.props?.['onKeyDown'] as (event: { key: string; preventDefault: () => void }) => void)({ key, preventDefault: () => {} });
+  }
+
+  function unitDetailSection(tree: Node): Node {
+    const detail = elements(tree, 'section').find((n) => n.props?.['key'] === 'detail');
+    if (detail === undefined) throw new Error('unit detail section not found');
+    return detail;
+  }
+
+  it('drives the tree with arrow keys alone: selection, detail, collapse, expand', async () => {
+    const panel = await mountPanel(await fixtureBody());
+    await settle();
+    // ↓ from the selected root moves the selection to the first child; the
+    // detail area follows without any mouse interaction.
+    pressKey(panel, (b) => b.props?.['data-tree-ref'] === 'my-novel', 'ArrowDown');
+    await settle();
+    let tree = toNode(panel.tree()) as Node;
+    expect(textOf(unitDetailSection(tree))).toContain('my-novel/part-1');
+    expect(elements(tree, 'button').find((b) => b.props?.['data-tree-ref'] === 'my-novel/part-1')?.props?.['tabIndex']).toBe(0);
+    // → descends into the expanded child.
+    pressKey(panel, (b) => b.props?.['data-tree-ref'] === 'my-novel/part-1', 'ArrowRight');
+    await settle();
+    tree = toNode(panel.tree()) as Node;
+    expect(textOf(unitDetailSection(tree))).toContain('my-novel/ch-1');
+    // ← collapses the expanded chapter; its scenes disappear and ↓ at the end
+    // of the visible list keeps the selection.
+    pressKey(panel, (b) => b.props?.['data-tree-ref'] === 'my-novel/ch-1', 'ArrowLeft');
+    await settle();
+    tree = toNode(panel.tree()) as Node;
+    expect(elements(tree, 'button').some((b) => b.props?.['data-tree-ref'] === 'my-novel/scene-1')).toBe(false);
+    expect(elements(tree, 'button').find((b) => b.props?.['data-tree-ref'] === 'my-novel/ch-1')?.props?.['aria-expanded']).toBe('false');
+    pressKey(panel, (b) => b.props?.['data-tree-ref'] === 'my-novel/ch-1', 'ArrowDown');
+    await settle();
+    tree = toNode(panel.tree()) as Node;
+    expect(textOf(unitDetailSection(tree))).toContain('my-novel/ch-1');
+    // → on the collapsed chapter expands it again; the scenes return.
+    pressKey(panel, (b) => b.props?.['data-tree-ref'] === 'my-novel/ch-1', 'ArrowRight');
+    await settle();
+    tree = toNode(panel.tree()) as Node;
+    expect(elements(tree, 'button').some((b) => b.props?.['data-tree-ref'] === 'my-novel/scene-1')).toBe(true);
+    expect(elements(tree, 'button').find((b) => b.props?.['data-tree-ref'] === 'my-novel/ch-1')?.props?.['aria-expanded']).toBe('true');
+    panel.restore();
+  });
 });

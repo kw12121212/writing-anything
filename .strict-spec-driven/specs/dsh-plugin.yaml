@@ -230,3 +230,27 @@ requirements:
         - GIVEN: 工作区登记了多个素材（各含 source.yaml 与 original.md）
         - WHEN: 打开素材清单视图
         - THEN: 全部素材逐条列出，每条可查看 source.yaml 语义卡片与原文阅读视图
+  panel-loading-feedback:
+    strength: MUST
+    statement: 面板在快照请求进行中且尚无数据可显示时（首次打开面板或定位后尚未获得任何快照数据）必须显示可读的加载提示，不得空白或无反馈；请求完成后按结果呈现数据、空态或错误态
+    scenarios:
+      first-load-hint:
+        - GIVEN: 插件已装入 web profile，面板刚打开，快照请求尚未返回，面板尚无任何数据
+        - WHEN: 快照请求进行中
+        - THEN: 面板显示可读的加载提示而非空白，不报错、不显示空态或错误态文案
+  panel-keyboard-navigation:
+    strength: MUST
+    statement: 面板必须支持纯键盘操作：焦点在单元（Unit）树内时，上下方向键在可见单元间移动选中并同步详情区，左右方向键收起或展开汇总单元，Enter 打开选中单元的产物（Artifact）视图或激活清单条目；产物视图中语义卡片视图与源码高亮视图的切换控件必须可经键盘激活；面板全部交互控件必须可经 Tab 到达
+    scenarios:
+      tree-arrow-select:
+        - GIVEN: novel 作品含卷、章、场景三级单元的树已展示，焦点在单元树上
+        - WHEN: 按上或下方向键
+        - THEN: 选中在可见单元间移动，详情区随选中更新，全程无需鼠标
+      tree-expand-collapse:
+        - GIVEN: 焦点在某带子单元的汇总单元上
+        - WHEN: 按右或左方向键
+        - THEN: 子单元展开或收起，焦点与选中保持可读
+      keyboard-open-artifact:
+        - GIVEN: 键盘已选中某单元并焦点在其产物清单条目上
+        - WHEN: 按 Enter 打开产物视图，再经键盘激活视图切换控件
+        - THEN: 产物视图打开，语义卡片视图与源码高亮视图可仅用键盘切换，全程无需鼠标

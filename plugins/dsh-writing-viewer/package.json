@@ -1,7 +1,7 @@
 {
   "name": "dsh-writing-viewer",
   "version": "0.1.0",
-  "description": "Read-only DeepSeek Harness (DSH) panel that locates a writing-anything workspace (.writing-anything/) and reports its status. Scaffold panel of the DSH workspace viewer plugin.",
+  "description": "Read-only DeepSeek Harness (DSH) panel for writing-anything workspaces (.writing-anything/): overview dashboard, unit tree, artifact semantic-card and source-highlight views, sources list.",
   "type": "module",
   "private": true,
   "license": "MIT",
@@ -32,7 +32,10 @@
   },
   "scripts": {
     "build": "tsc --noEmit && tsdown && node scripts/normalize-outputs.mjs",
-    "test": "vitest run"
+    "test": "vitest run",
+    "check": "pnpm run build && pnpm test",
+    "perf:check": "node scripts/perf-check.mjs",
+    "perf:workspace": "node scripts/gen-large-workspace.mjs"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

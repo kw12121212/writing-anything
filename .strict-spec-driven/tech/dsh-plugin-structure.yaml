@@ -91,3 +91,15 @@ rules:
         - plugins/dsh-writing-viewer/src/markdownview.ts 的 renderMarkdown 返回 MdBlock 节点树，client.ts 的 renderMarkdownBlocks 经 createElement 以文本子节点渲染，HTML 片段原样显示为文字
       bad:
         - 渲染器返回 HTML 字符串并经 innerHTML 注入，或从 CDN 加载 highlight.js/marked：产物中的脚本获得执行面，且断网时高亮失效
+  plugin-perf-evidence:
+    strength: SHOULD
+    statement: DSH 插件包含规模敏感路径（快照聚合、大工作区的树与产物渲染）时，应以包内脚本生成合成夹具（经 wa-cli 真实命令创建、结构合法）并用计时探针实测关键阶段，把带日期与参数的记录追加到 docs/evidence/；性能检查是证据而非数值门槛——出现不可交互级卡顿才做渲染层优化，且不改快照响应结构；计时探针经环境变量门控，未提供夹具时默认测试套件跳过它
+    rationale: polish-release 确立了完整可复用形态：scripts/gen-large-workspace.mjs（经 wa-cli 生成多卷多场景长篇）、scripts/perf-check.mjs（构建 wa-cli → 生成夹具 → 运行探针 → 追加证据）与 src/largeperf.test.ts（LARGE_WS_DIR 门控）。把「证据优先于门槛、探针不拖慢默认套件、夹具必须真实合法」固化为标准，后续规模敏感改动不再重新发明流程，也避免把探针塞进默认套件拖慢每次检查
+    enforcement:
+      method: review
+      detail: 评审核对 docs/evidence/perf-check.txt 存在且带日期与规模参数、package.json 声明 perf:check 与 perf:workspace 脚本、探针测试在无环境变量时按设计跳过（默认套件不承担其耗时）
+    examples:
+      good:
+        - pnpm run perf:check 在 220 单元夹具上把 host 聚合、首屏、单元切换与大产物渲染耗时记录进 docs/evidence/perf-check.txt；pnpm test 中探针因无 LARGE_WS_DIR 跳过
+      bad:
+        - 把性能断言写死为每次检查必须低于某个毫秒数，或用手写 YAML 文件冒充经 wa-cli 生成的夹具

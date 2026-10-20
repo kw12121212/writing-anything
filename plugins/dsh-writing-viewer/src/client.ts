@@ -43,6 +43,7 @@ import {
 } from './overview';
 import { artifactTextOf, cachedArtifactView, sourceEntriesOf, type ArtifactView, type CardRow } from './artifactview';
 import { foldYaml, highlightYaml, type YamlTokenClass } from './yamlhighlight';
+import { treeKeyAction, visibleTreeNodes } from './treekeys';
 import { highlightMarkdownSource, renderMarkdown, type MdBlock, type MdTokenClass } from './markdownview';
 import type { ArtifactText } from './artifacts';
 import type { SnapshotRouteBody } from './snapshot';
@@ -301,6 +302,8 @@ interface PanelState {
   selectedSource: string | null;
   /** Which large-YAML fold regions the author expanded (lazy bodies). */
   openFolds: Record<string, boolean> | null;
+  /** Which tree nodes the author collapsed (keyboard ←/→); empty = full tree. */
+  treeCollapsed: Record<string, boolean> | null;
 }
 
 /** Event handlers the rendered tree binds to. */
@@ -318,6 +321,8 @@ interface PanelActions {
   backToOverview(): void;
   toggleSourcesMode(): void;
   toggleFold(key: string, open: boolean): void;
+  /** One key pressed on a tree node: move selection or collapse/expand. */
+  treeKey(event: unknown, ref: string): void;
 }
 
 type H = (type: string, props: Record<string, unknown> | null, ...children: unknown[]) => unknown;
@@ -575,20 +580,36 @@ function renderWorkCard(h: H, s: PanelState, a: PanelActions, card: WorkCard): u
 }
 
 function renderTree(h: H, s: PanelState, a: PanelActions): unknown {
+  const all: TreeNode[] = s.tree;
+  // Keyboard navigation keeps one roving tab stop (the selected node); the
+  // arrows move within the tree, Tab leaves it for the next control.
+  const visible = visibleTreeNodes(all, s.treeCollapsed ?? {});
+  const hasChildren = (ref: string): boolean => {
+    const index = all.findIndex((node) => node.ref === ref);
+    const node = all[index];
+    const next = all[index + 1];
+    return node !== undefined && next !== undefined && next.depth > node.depth;
+  };
   return h(
     'nav',
-    { key: 'tree', 'aria-label': s.labels.unitTree, style: { flex: s.stacked ? '0 0 auto' : '0 0 260px', minWidth: '0', display: 'flex', flexDirection: 'column', gap: '2px' } },
+    { key: 'tree', 'aria-label': s.labels.unitTree, 'data-tree': 'units', style: { flex: s.stacked ? '0 0 auto' : '0 0 260px', minWidth: '0', display: 'flex', flexDirection: 'column', gap: '2px' } },
     sectionTitle(h, 'title', s.labels.unitTree),
-    s.tree.map((node) => {
+    visible.map((node) => {
       const selected = node.ref === s.selectedUnit;
+      const expandable = hasChildren(node.ref);
+      const nodeCollapsed = (s.treeCollapsed ?? {})[node.ref] === true;
       const progress = progressText(node.progress);
       return h(
         'button',
         {
           key: 'node-' + node.ref,
           type: 'button',
+          'data-tree-ref': node.ref,
+          tabIndex: selected ? 0 : -1,
           'aria-current': selected ? 'true' : undefined,
+          'aria-expanded': expandable ? (nodeCollapsed ? 'false' : 'true') : undefined,
           onClick: () => a.selectUnit(node.ref),
+          onKeyDown: (event: unknown) => a.treeKey(event, node.ref),
           style: {
             display: 'flex', alignItems: 'baseline', gap: '6px', textAlign: 'left', cursor: 'pointer', font: 'inherit',
             padding: '3px 8px', paddingLeft: 8 + node.depth * 16 + 'px', border: 'none', borderRadius: '6px',
@@ -895,7 +916,10 @@ function renderPanel(h: H, s: PanelState, a: PanelActions): unknown {
       h('button', { key: 'retry', type: 'button', style: { ...buttonStyle(), alignSelf: 'flex-start' }, onClick: a.refresh }, labels.retry),
     );
   } else if (s.model === null) {
-    children.push(h('p', { key: 'loading', style: { margin: 0 } }, labels.loading));
+    // First load (or a reload whose only answer failed): no data to keep on
+    // screen, so the loading hint itself is the announced status region —
+    // readable, not blank, and distinct from the empty and error states.
+    children.push(h('p', { key: 'loading', role: 'status', 'aria-busy': 'true', 'data-loading': 'first', style: { margin: 0 } }, labels.loading));
   } else if (s.model.state === 'missing') {
     children.push(...renderEmpty(h, s, labels.emptyTitle, labels.emptyHint, s.model.emptyCommand ?? 'wa-cli init'));
   } else {
@@ -1016,6 +1040,7 @@ window.__ModuleLoader__?.load({
       const [sourcesMode, setSourcesMode] = react.useState('reading' as 'reading' | 'source');
       const [selectedSource, setSelectedSource] = react.useState(null as string | null);
       const [openFolds, setOpenFolds] = react.useState({} as Record<string, boolean>);
+      const [treeCollapsed, setTreeCollapsed] = react.useState({} as Record<string, boolean>);
       const containerRef = react.useRef(null);
       // Scroll offset captured before a view toggle, restored after the new
       // view has rendered, so switching never jumps back to the top.
@@ -1073,6 +1098,16 @@ window.__ModuleLoader__?.load({
         scrollSave.current = element?.scrollTop ?? 0;
       };
 
+      // Arrow-key navigation moves DOM focus with the selection, so the tree
+      // stays operable without a mouse. The panel owns the only tree markup,
+      // and refs are schema-constrained unit ids (no quotes to escape beyond
+      // the defensive replace).
+      const focusTreeNode = (ref: string): void => {
+        if (typeof document === 'undefined') return;
+        const node = document.querySelector('[data-tree-ref="' + ref.replace(/"/g, '\\"') + '"]');
+        if (node !== null && typeof (node as HTMLElement).focus === 'function') (node as HTMLElement).focus();
+      };
+
       const body = load.body as SnapshotRouteBody | null;
       const model = react.useMemo(() => (body === null ? null : overviewModel(body)), [body]);
       const picked = react.useMemo(
@@ -1099,6 +1134,7 @@ window.__ModuleLoader__?.load({
         sourcesMode,
         selectedSource,
         openFolds,
+        treeCollapsed,
       };
       const actions: PanelActions = {
         refresh: () => fetchSnapshot(panelRoot),
@@ -1112,6 +1148,7 @@ window.__ModuleLoader__?.load({
           setView('overview');
           setSelectedSource(null);
           setOpenFolds({});
+          setTreeCollapsed({});
           // Re-requesting the same path still refreshes it.
           if (trimmed === panelRoot) fetchSnapshot(trimmed);
           else setPanelRoot(trimmed);
@@ -1123,6 +1160,7 @@ window.__ModuleLoader__?.load({
           setView('overview');
           setSelectedSource(null);
           setOpenFolds({});
+          setTreeCollapsed({});
           setPanelRoot(null);
         },
         selectWork: (id: string) => {
@@ -1157,6 +1195,19 @@ window.__ModuleLoader__?.load({
         },
         toggleFold: (key: string, open: boolean) => {
           setOpenFolds((prev: Record<string, boolean>) => ({ ...prev, [key]: open }));
+        },
+        treeKey: (event: unknown, ref: string) => {
+          const decision = treeKeyAction(picked?.tree ?? [], treeCollapsed, ref, String((event as { key?: unknown })?.key ?? ''));
+          if (decision.kind === 'none') return;
+          if (decision.kind === 'select') {
+            setSelection((prev: { work: string | null }) => ({ work: prev.work ?? picked?.work ?? null, unit: decision.ref }));
+          } else {
+            setTreeCollapsed((prev: Record<string, boolean>) => ({ ...prev, [decision.ref]: decision.collapsed }));
+          }
+          focusTreeNode(decision.ref);
+          // The arrows are consumed here so the panel container does not
+          // scroll underneath the moving selection.
+          (event as { preventDefault?: () => void })?.preventDefault?.();
         },
       };
       return react.createElement('div', { ref: containerRef, style: { width: '100%', height: '100%', overflow: 'auto' } },
