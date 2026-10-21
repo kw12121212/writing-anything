@@ -417,10 +417,12 @@ describe('renderPanel', () => {
     const labels = elements(tree, 'button').map((b) => textOf(b));
     // Read-only controls only: refresh, path switching, work/unit selection,
     // artifact opening, sources navigation, and the two queue tiles. Nothing
-    // edits, writes or confirms.
+    // edits, writes or confirms. The one exception is the detail's single
+    // Review entry, which embeds the wa-cli reading view (review-panel-embed).
     const allowed =
-      /^(Refresh|Switch|Restore default)$|^(my-novel|my-post)\b|^(my-novel|part-1|ch-1|scene-1|scene-2)\b|^Sources \d+$|^Pending decisions \d+( —)?$|^Pending reviews \d+( —)?$|^(brief|outline|claims|feedback|provenance|draft|work)\s+\S+\s+Open$|^(src-migration|src-note)$/;
+      /^(Refresh|Switch|Restore default)$|^(my-novel|my-post)\b|^(my-novel|part-1|ch-1|scene-1|scene-2)\b|^Sources \d+$|^Pending decisions \d+( —)?$|^Pending reviews \d+( —)?$|^(brief|outline|claims|feedback|provenance|draft|work)\s+\S+\s+Open$|^(src-migration|src-note)$|^Review$/;
     for (const label of labels) expect(label, label).toMatch(allowed);
+    expect(labels.filter((label) => label === 'Review')).toHaveLength(1);
   });
 
   it('shows the init guidance and the path error when no workspace was found', async () => {
@@ -684,7 +686,7 @@ describe('artifact views', () => {
     const t = await hooks();
     const body = await fixtureBody();
     const allowed =
-      /^(Refresh|Switch|Restore default)$|^(my-novel|my-post)\b|^(my-novel|part-1|ch-1|scene-1|scene-2)\b|^Sources \d+$|^Pending decisions \d+( —)?$|^Pending reviews \d+( —)?$|^(brief|outline|claims|feedback|provenance|draft|work)\s+\S+\s+Open$|^(src-migration|src-note)$|^(Back to unit detail|Back to overview|Semantic cards|Source highlight|Reading view)$/;
+      /^(Refresh|Switch|Restore default)$|^(my-novel|my-post)\b|^(my-novel|part-1|ch-1|scene-1|scene-2)\b|^Sources \d+$|^Pending decisions \d+( —)?$|^Pending reviews \d+( —)?$|^(brief|outline|claims|feedback|provenance|draft|work)\s+\S+\s+Open$|^(src-migration|src-note)$|^(Back to unit detail|Back to overview|Semantic cards|Source highlight|Reading view)$|^Review$/;
     for (const extra of [
       { openArtifact: { unit: 'my-post', name: 'brief' } },
       { openArtifact: { unit: 'my-post', name: 'brief' }, viewMode: 'source' },
@@ -1120,6 +1122,120 @@ describe('ViewerPanel wiring (runnable react)', () => {
     expect(enable?.props?.['disabled']).toBe(false);
     panel.restore();
   });
+
+  it('starts, embeds, detects an ended session, and ends a review through the session routes', async () => {
+    const fixture = await fixtureBody();
+    const requests: { url: string; method: string; body: string | null }[] = [];
+    let sessionLive = true;
+    const stub = (async (input: unknown, init?: { method?: string; body?: string }) => {
+      const url = String(input);
+      const method = init?.method ?? 'GET';
+      requests.push({ url, method, body: init?.body ?? null });
+      if (url === '/dsh-writing-viewer/review-session' && method === 'POST') {
+        return { ok: true, status: 200, json: async () => ({ ok: true, session: { unit: 'my-novel', root: fixture.root, startedAt: 't' + requests.length } }) };
+      }
+      if (url === '/dsh-writing-viewer/review-session') {
+        return { ok: true, status: 200, json: async () => ({ ok: true, session: sessionLive ? { unit: 'my-novel' } : null }) };
+      }
+      if (url === '/dsh-writing-viewer/review-session/end') return { ok: true, status: 200, json: async () => ({ ok: true, session: null }) };
+      if (url.includes('/dsh-writing-viewer/setup')) return { ok: false, status: 404, json: async () => ({}) };
+      return { ok: true, status: 200, json: async () => fixture };
+    }) as unknown as typeof fetch;
+    const panel = await mountPanel(fixture, stub);
+    await settle();
+    const selected = (elements(toNode(panel.tree()), 'button').find((b) => b.props?.['data-review-start'] !== undefined)?.props?.['data-review-start']) as string;
+    expect(selected).toBeTruthy();
+    click(panel, (b) => b.props?.['data-review-start'] === selected);
+    await settle();
+    const start = requests.find((r) => r.url === '/dsh-writing-viewer/review-session' && r.method === 'POST');
+    expect(JSON.parse(start!.body!)).toEqual({ unit: selected, root: fixture.root });
+    let tree = toNode(panel.tree()) as Node;
+    const frame = elements(tree, 'iframe')[0];
+    expect(frame?.props?.['src']).toBe('/dsh-writing-viewer/review/');
+    // A load while the session runs keeps the iframe; once it is gone the
+    // panel shows the ended notice with a restart entry.
+    (frame!.props?.['onLoad'] as () => void)();
+    await settle();
+    expect(elements(toNode(panel.tree()), 'iframe')).toHaveLength(1);
+    sessionLive = false;
+    (elements(toNode(panel.tree()), 'iframe')[0]!.props?.['onLoad'] as () => void)();
+    await settle();
+    tree = toNode(panel.tree()) as Node;
+    expect(elements(tree, 'iframe')).toHaveLength(0);
+    expect(elements(tree, 'p').some((p) => p.props?.['data-review-ended'] === 'true')).toBe(true);
+    // Restart, then end: the end route is posted and the snapshot refetched.
+    click(panel, (b) => b.props?.['data-review-start'] === selected);
+    await settle();
+    const snapshotsBefore = requests.filter((r) => r.url.startsWith('/dsh-writing-viewer/snapshot')).length;
+    click(panel, (b) => b.props?.['data-review-end'] === selected);
+    await settle();
+    expect(requests.some((r) => r.url === '/dsh-writing-viewer/review-session/end' && r.method === 'POST')).toBe(true);
+    expect(requests.filter((r) => r.url.startsWith('/dsh-writing-viewer/snapshot')).length).toBe(snapshotsBefore + 1);
+    expect(elements(toNode(panel.tree()), 'iframe')).toHaveLength(0);
+    panel.restore();
+  });
+
+  it('re-checks the session when the window regains focus and shows the ended notice', async () => {
+    const fixture = await fixtureBody();
+    const win = (globalThis as unknown as { window: Record<string, unknown> }).window;
+    const listeners: Record<string, (() => void)[]> = {};
+    win['addEventListener'] = (name: string, fn: () => void) => (listeners[name] ??= []).push(fn);
+    win['removeEventListener'] = (name: string, fn: () => void) => {
+      listeners[name] = (listeners[name] ?? []).filter((f) => f !== fn);
+    };
+    let live = true;
+    const stub = (async (input: unknown, init?: { method?: string }) => {
+      const url = String(input);
+      if (url === '/dsh-writing-viewer/review-session' && init?.method === 'POST') {
+        return { ok: true, status: 200, json: async () => ({ ok: true, session: { startedAt: 't1' } }) };
+      }
+      if (url === '/dsh-writing-viewer/review-session') return { ok: true, status: 200, json: async () => ({ ok: true, session: live ? {} : null }) };
+      if (url.includes('/dsh-writing-viewer/setup')) return { ok: false, status: 404, json: async () => ({}) };
+      return { ok: true, status: 200, json: async () => fixture };
+    }) as unknown as typeof fetch;
+    try {
+      const panel = await mountPanel(fixture, stub);
+      await settle();
+      click(panel, (b) => b.props?.['data-review-start'] !== undefined);
+      await settle();
+      expect(elements(toNode(panel.tree()), 'iframe')).toHaveLength(1);
+      expect(listeners['focus']?.length).toBe(1);
+      live = false;
+      listeners['focus']![0]!();
+      await settle();
+      const tree = toNode(panel.tree()) as Node;
+      expect(elements(tree, 'iframe')).toHaveLength(0);
+      expect(elements(tree, 'p').some((p) => p.props?.['data-review-ended'] === 'true')).toBe(true);
+      // Leaving the active phase removes the listener again.
+      expect(listeners['focus']?.length ?? 0).toBe(0);
+      panel.restore();
+    } finally {
+      delete win['addEventListener'];
+      delete win['removeEventListener'];
+    }
+  });
+
+  it('shows the origin refusal when the start route answers 403', async () => {
+    const fixture = await fixtureBody();
+    const stub = (async (input: unknown, init?: { method?: string }) => {
+      const url = String(input);
+      if (url === '/dsh-writing-viewer/review-session' && init?.method === 'POST') {
+        return { ok: false, status: 403, json: async () => ({ ok: false, error: 'Host gamepc.tail1234.ts.net:13080 is not allowed' }) };
+      }
+      if (url.includes('/dsh-writing-viewer/setup')) return { ok: false, status: 404, json: async () => ({}) };
+      return { ok: true, status: 200, json: async () => fixture };
+    }) as unknown as typeof fetch;
+    const panel = await mountPanel(fixture, stub);
+    await settle();
+    click(panel, (b) => b.props?.['data-review-start'] !== undefined);
+    await settle();
+    const tree = toNode(panel.tree()) as Node;
+    expect(elements(tree, 'iframe')).toHaveLength(0);
+    const alert = elements(tree, 'p').find((p) => p.props?.['data-review-error'] === 'forbidden');
+    expect(textOf(alert)).toContain('allowedHosts');
+    expect(textOf(alert)).toContain('gamepc.tail1234.ts.net:13080');
+    panel.restore();
+  });
 });
 
 describe('queue views', () => {
@@ -1363,5 +1479,70 @@ describe('setup section', () => {
     const section = elements(tree, 'section').find((n) => n.props?.['data-setup-section'] === 'true');
     expect(section).toBeDefined();
     expect(elements(section, 'details').some((n) => n.props?.['data-setup-report'] === 'true')).toBe(false);
+  });
+});
+
+describe('unit review controls', () => {
+  async function reviewState(review: Record<string, unknown>): Promise<Record<string, unknown>> {
+    const t = await hooks();
+    const body = await fixtureBody();
+    const model = t.overviewModel(body);
+    const picked = t.reconcileSelection(body, model, 'my-post', 'my-post');
+    return stateFor(body, { selectedWork: 'my-post', selectedUnit: 'my-post', tree: picked.tree, detail: picked.detail, review });
+  }
+
+  function reviewActions() {
+    const calls: string[] = [];
+    return {
+      calls,
+      actions: { ...actions, startReview: (ref: string) => calls.push('start ' + ref), endReview: () => calls.push('end'), reviewFrameLoaded: () => calls.push('loaded') },
+    };
+  }
+
+  it('offers a keyboard-activatable Review button in the unit detail (open-unit)', async () => {
+    const t = await hooks();
+    const { calls, actions: bound } = reviewActions();
+    const tree = t.renderPanel(h, await reviewState({ unit: null, phase: 'idle', error: null, forbidden: false, startedAt: null }), bound);
+    const button = elements(tree, 'button').find((b) => b.props?.['data-review-start'] === 'my-post');
+    expect(button).toBeDefined();
+    expect(button!.props?.['type']).toBe('button');
+    expect(textOf(button)).toBe('Review');
+    (button!.props?.['onClick'] as () => void)();
+    expect(calls).toEqual(['start my-post']);
+    expect(elements(tree, 'iframe')).toHaveLength(0);
+  });
+
+  it('embeds the proxied reading view with an End review button while active (panel-embed)', async () => {
+    const t = await hooks();
+    const { calls, actions: bound } = reviewActions();
+    const tree = t.renderPanel(h, await reviewState({ unit: 'my-post', phase: 'active', error: null, forbidden: false, startedAt: 't1' }), bound);
+    const frames = elements(tree, 'iframe');
+    expect(frames).toHaveLength(1);
+    expect(frames[0]!.props?.['src']).toBe('/dsh-writing-viewer/review/');
+    expect(frames[0]!.props?.['title']).toBeTruthy();
+    (frames[0]!.props?.['onLoad'] as () => void)();
+    const end = elements(tree, 'button').find((b) => b.props?.['data-review-end'] === 'my-post');
+    expect(textOf(end)).toBe('End review');
+    (end!.props?.['onClick'] as () => void)();
+    expect(calls).toEqual(['loaded', 'end']);
+    // The iframe takes the detail area; the artifact list steps aside.
+    expect(elements(tree, 'button').some((b) => b.props?.['data-open-artifact'] !== undefined)).toBe(false);
+  });
+
+  it('shows the origin-guard refusal with the allowedHosts hint instead of a blank iframe (panel-origin-rejected)', async () => {
+    const t = await hooks();
+    const tree = t.renderPanel(h, await reviewState({ unit: 'my-post', phase: 'error', error: 'host not allowed', forbidden: true, startedAt: null }), reviewActions().actions);
+    expect(elements(tree, 'iframe')).toHaveLength(0);
+    const alert = elements(tree, 'p').find((p) => p.props?.['data-review-error'] === 'forbidden');
+    expect(textOf(alert)).toContain('allowedHosts');
+    expect(elements(tree, 'button').find((b) => b.props?.['data-review-start'] === 'my-post')).toBeDefined();
+  });
+
+  it('shows the ended notice with a restart entry (session-gone)', async () => {
+    const t = await hooks();
+    const tree = t.renderPanel(h, await reviewState({ unit: 'my-post', phase: 'ended', error: null, forbidden: false, startedAt: 't1' }), reviewActions().actions);
+    expect(elements(tree, 'iframe')).toHaveLength(0);
+    expect(textOf(elements(tree, 'p').find((p) => p.props?.['data-review-ended'] === 'true'))).toContain('ended');
+    expect(textOf(elements(tree, 'button').find((b) => b.props?.['data-review-start'] === 'my-post'))).toBe('Review again');
   });
 });

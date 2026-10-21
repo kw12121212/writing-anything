@@ -134,3 +134,19 @@ requirements:
         - GIVEN: 工作区 D 的 audit.log 中有 2 条失败记录
         - WHEN: 带令牌 GET /（wa-cli preview my-post --serve 正在运行）
         - THEN: 页面含「最近失败的命令」区块，列出 2 条失败的时间与命令名，排在待作者确认区之前
+  preview-relative-submit:
+    strength: MUST
+    statement: wa-cli preview --serve 阅读页（GET /）中的脚本必须以相对于页面地址的路径提交 feedback、confirm 与 author-review 请求，使阅读页经同源反向代理挂在任意路径前缀下（如 /dsh-writing-viewer/review/）时，提交请求落到该前缀下的同名路径；页面直接以 http://127.0.0.1:<port>/?token=<令牌> 打开时，提交仍落到 /feedback、/confirm 与 /author-review，行为与 preview-feedback、preview-confirm、preview-author-review 相同。Content-Security-Policy 的脚本哈希必须与改动后的页面脚本一致
+    scenarios:
+      direct-unchanged:
+        - GIVEN: preview my-post --serve --max 1 正在运行，draft.md 含「连接池很重要」一次
+        - WHEN: 用首行信封的地址打开阅读页，在页面中选中该句并提交意见
+        - THEN: 请求为 POST /feedback，返回 200，wa-cli feedback list my-post --json 列出这条反馈
+      prefixed-path:
+        - GIVEN: preview my-post --serve 正在运行
+        - WHEN: 读取 GET / 返回页面中的脚本
+        - THEN: 脚本中提交 feedback、confirm 与 author-review 的路径不以 / 开头；按页面地址 http://host/dsh-writing-viewer/review/ 解析时分别为 /dsh-writing-viewer/review/feedback、/dsh-writing-viewer/review/confirm 与 /dsh-writing-viewer/review/author-review
+      csp-hash-matches:
+        - GIVEN: preview my-post --serve 正在运行
+        - WHEN: GET / 读取响应头 Content-Security-Policy 与页面内联脚本
+        - THEN: script-src 中的 sha256 哈希等于页面内联脚本内容的 SHA-256

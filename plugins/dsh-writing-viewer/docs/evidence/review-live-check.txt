@@ -1,0 +1,55 @@
+单元审阅（dsh-review-proxy）真实环境实测 — 2026-10-21，GAMEPC（Tailscale 节点 gamepc，100.64.0.1）
+
+环境
+- DSH 0.2.1-rc.2 web profile；为不影响正在使用的 GUI（127.0.0.1:13080），另起隔离实例：
+  DSH_HOME=<临时目录> dsh plugin --profile web add link:<repo>/plugins/dsh-writing-viewer
+  DSH_HOME=<临时目录> dsh --profile web --patch overlay.yml --host 100.64.0.1 --port 13099 --no-open --trusted-host gamepc.tail1234.ts.net:13099
+- overlay.yml 为插件行配置 waCliPath（本仓库当前构建的 wa-cli，含相对路径提交）、workspaceRoot（临时工作区，作品 my-post 已有正文）与
+  allowedHosts: [gamepc.tail1234.ts.net:13099]
+- 浏览器与 curl 都以 MagicDNS 名 http://gamepc.tail1234.ts.net:13099 访问（--host-resolver-rules / --resolve 映射到 tailnet 地址），即纯 http、非安全上下文。
+
+一、HTTP 层（curl，Host 与 Origin 均为 MagicDNS 权威）
+== 1. start session via MagicDNS authority (allowed)
+{"ok":true,"session":{"unit":"my-post","root":"/tmp/dsh-review-live-XpdF/book","startedAt":"2026-10-21T15:14:56.225Z"}}
+== 2. proxied page headers
+HTTP/1.1 200 OK
+cache-control: no-store
+content-security-policy: default-src 'none'; style-src 'unsafe-inline'; script-src 'sha256-IrAZsV3hlHAc6Nf+Ijka7LsOGMKo7bpACRHiBZ9kr7Q='; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'
+page contains draft: 1  relative submit: 1  loopback leak: 0
+== 3. proxied feedback submit (browser token forged)
+{"valid":true,"diagnostics":[],"changedPaths":[".writing-anything/works/my-post/feedback.yaml"],"feedback":{"unit":"my-post","id":"fb-2","kind":"suggestion","status":"open","text":"补一个例子","note":null,"source":"conversation","anchor":{"state":"located","quote":"连接池很重要","line":1,
+== 4. proxied confirm not in queue (wa-cli 400 passes through)
+作者确认队列中：可能已经确认、已被修改或不属于这个阅读页；请刷新阅读页后重试","next":["wa-cli help preview --json"]}],"changedPaths":[],"confirmation":null}
+ 400
+== 5. un-allowed tailnet authority -> 403
+{"ok":false,"error":"Host 不在允许的来源内：other.tail1234.ts.net:13099（回环、监听地址或 allowedHosts 之外的权威）"} 403
+== 6. foreign Origin -> 403
+403
+== 7. wa-cli sees the feedback
+{"valid":true,"diagnostics":[],"changedPaths":[],"feedback":[{"unit":"my-post","id":"fb-1","kind":"suggestion","status":"open","text":"补一个例子","note":null,"source":"conversation","anchor":{"state":"located","quote":"连接池很重要","line":1,"paragraph":1}},{"unit":"my-post","id":"fb-2",
+== 8. end, then page
+{"ok":true,"session":null}
+ 没有进行中的审阅 没有进行中的审阅 在插件面板的单元详情中点「审阅」重新开始。 409
+== 9. leftover wa-cli processes
+0
+
+二、浏览器（headless Chrome，经 MagicDNS 名打开 DSH Web GUI）
+- 侧栏 Writing Workspace 面板 → 单元详情出现「Review」按钮；点击后详情区出现「End review」与 iframe「Reading view」，内嵌阅读页正常渲染
+  （阅读页：my-post、待作者确认区、逐段正文与出处着色、提交面板），截图 review-embedded.png。
+- 在 iframe 内以真实鼠标点击「提交意见」：阅读页状态行显示「已保存作者反馈 fb-5」，wa-cli feedback list 列出该条（text「真实鼠标点击提交」），
+  截图 review-iframe-submitted.png。说明 frame-ancestors 'self' 放宽后同源内嵌可用、内联脚本按原 CSP 哈希执行、相对路径提交经代理落到 wa-cli。
+  （注：agent-browser 以快照 ref 跨帧点击未命中按钮，改用坐标真实鼠标事件与同源 contentDocument 调用均成功；属自动化工具的跨帧点击限制，非插件问题。）
+- 点击「End review」：iframe 移除、回到「Review」按钮，宿主上 wa-cli 进程数为 0。
+- 来源校验拒绝的面板文案由 client 单测与 curl 第 5、6 项覆盖（未放行权威与异源 Origin 均 403，不启动会话、不转发）。
+
+三、评审后补测（同日，修复插件卸载清理后重建插件，另起隔离实例）
+- 作者确认经代理（proxy-confirm-decision-channel）：工作区预置 open 决策 dec-1（wa-cli decision add，关联 my-post）。面板「Review」→ 内嵌阅读页的
+  「待作者确认」区出现 dec-1；选中选项 b、填写原话摘要后以真实鼠标点击「确认」，阅读页显示「已记录作者确认（渠道 preview）」，
+  decisions.yaml 中 dec-1 为 status: decided、channel: preview。截图 review-confirm.png。
+- 宿主停止时的子进程清理（review-session-end / host-resource-teardown-effect）：审阅进行中宿主上有 1 个 wa-cli 进程；对隔离的 dsh 进程发送
+  SIGTERM，6 秒后 dsh 已退出，wa-cli 进程数为 0。（DSH profile-boot 在 SIGTERM/SIGINT 时 dispose 应用 fiber，effect disposer 终止子进程；
+  宿主 exit 钩子兜底。SIGKILL 强杀不在此列，README 已登记。）
+- 未放行 MagicDNS 权威（overlay 不含 allowedHosts）：经 http://gamepc.tail1234.ts.net:13099 打开面板，快照路由即被来源校验拒绝，面板显示
+  「Failed to load the workspace snapshot: Host 不在允许的来源内：gamepc.tail1234.ts.net:13099（回环、监听地址或 allowedHosts 之外的权威）」
+  与 Retry 按钮，不崩溃、无空白（截图 review-denied.png）。由于全部插件路由共用同一来源校验，此时面板在加载阶段就给出原因，到不了「Review」按钮；
+  审阅路由单独被拒时的 allowedHosts 提示文案由 client 单测覆盖（client.test.ts「shows the origin refusal when the start route answers 403」）。

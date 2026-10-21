@@ -44,6 +44,11 @@ categories:
       status: active
       occurrences: 1
       path: .strict-spec-driven/lessons/architecture/client-exports-inject-0822d2.yaml
+    dsh-host-ctx-effect-disposer-cordis-4-dispose-ct-5fa2a3:
+      title: DSH 插件 host 的清理要挂 ctx.effect disposer：cordis 4 没有 dispose 事件，ctx.on('dispose') 永不触发
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/architecture/dsh-host-ctx-effect-disposer-cordis-4-dispose-ct-5fa2a3.yaml
   coding:
     go-flag-bd930f:
       title: Go flag 包的默认报错不符合中文术语约定

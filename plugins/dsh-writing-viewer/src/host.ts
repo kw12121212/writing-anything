@@ -7,7 +7,9 @@
  * stays inert on profiles that never mount those services. The only service
  * seams used are:
  *
- * - `webServer` (web profile): registers two read-only GET routes.
+ * - `webServer` (web profile): registers two read-only GET routes, plus the
+ *   review routes (session start/status/end and the same-origin proxy of the
+ *   wa-cli reading view, see reviewroutes.ts).
  *   `/dsh-writing-viewer/workspace` returns the located project directory,
  *   whether `.writing-anything/` exists under it, and every candidate probed
  *   on the way. `/dsh-writing-viewer/snapshot` aggregates the whole workspace
@@ -22,7 +24,8 @@
  *
  * The host performs no writes anywhere: the single filesystem operation in
  * this plugin is a `stat` on `<candidate>/.writing-anything`. The writing
- * workspace is only ever read; the author keeps editing through wa-cli.
+ * workspace is only ever read here; the one write path is the review session,
+ * where the wa-cli reading-view child writes what the author submits.
  */
 import { lstat, readdir, readFile, stat } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
@@ -49,6 +52,9 @@ import type { DirEntry, SnapshotFs } from './artifacts';
 import { parseSetupConfig, type SkillsServiceLike } from './setup';
 import { realSetupFs } from './setupfs';
 import { createSetupState, registerSetupRoutes, startupSetup, type SetupDeps, type SetupState } from './setuproutes';
+import { createReviewSessions, type ReviewChild, type ReviewSessions } from './reviewsession';
+import { registerReviewRoutes, type ReviewRootResolver } from './reviewroutes';
+import type { ProxyFetch } from './reviewproxy';
 
 // Re-exported so the live evidence harness can drive the exact provider the
 // host registers against the real DSH skill registry (docs/evidence).
@@ -61,6 +67,9 @@ export const inject: string[] = [];
 
 /** Milliseconds before a wa-cli invocation counts as unavailable. */
 const CLI_TIMEOUT_MS = 15_000;
+
+/** Milliseconds a proxied reading-view request may wait on the upstream. */
+const REVIEW_UPSTREAM_TIMEOUT_MS = 30_000;
 
 /** Upper bound on captured wa-cli stdout; real envelopes are far smaller. */
 const CLI_STDOUT_CAP = 8 * 1024 * 1024;
@@ -394,6 +403,35 @@ export async function fullSnapshot(
   return await buildSnapshot(fs, runner, candidates, located);
 }
 
+/** Spawn adapter for the review session child: argument list only, never a
+ * shell; stdout piped (the session drains it), stdin and stderr ignored. */
+export function spawnReviewChild(binary: string, args: readonly string[]): ReviewChild {
+  return spawn(binary, args, { stdio: ['ignore', 'pipe', 'ignore'] }) as unknown as ReviewChild;
+}
+
+/**
+ * Where a review session starts: the panel's explicit root (validated like
+ * the snapshot's `root` query, never falling back), else the default
+ * location. A directory without a workspace is a readable refusal.
+ */
+export function reviewRootResolver(
+  registry: () => WorkspaceRegistryLike | null,
+  config: { workspaceRoot?: unknown } | undefined,
+  processCwd: () => string,
+): ReviewRootResolver {
+  return async (root) => {
+    const requested = parsePanelRoot(root, { isAbsolute, resolve });
+    if (requested.kind === 'invalid') return { ok: false, error: requested.reason };
+    if (requested.kind === 'ok') {
+      return (await workspaceExistsAt(requested.path))
+        ? { ok: true, root: requested.path }
+        : { ok: false, error: `该目录下没有 ${WORKSPACE_DIR}/ 工作区：${requested.path}` };
+    }
+    const { located } = await locateOnce(registry(), config, processCwd());
+    return located === null ? { ok: false, error: `没有找到 ${WORKSPACE_DIR}/ 工作区` } : { ok: true, root: located.root };
+  };
+}
+
 /** Resolve the injected `skills` service off whatever scope shape the host
  * hands over (wrapper object or the service itself), tolerantly. */
 function resolveSkillsService(scope: unknown): SkillsServiceLike | null {
@@ -407,6 +445,7 @@ function resolveSkillsService(scope: unknown): SkillsServiceLike | null {
 
 export function apply(ctx: {
   inject?: (names: string[], closure: (scope: unknown) => void) => unknown;
+  effect?: (execute: () => () => void, label?: string) => unknown;
 }, config: {
   workspaceRoot?: unknown;
   waCliPath?: unknown;
@@ -463,6 +502,26 @@ export function apply(ctx: {
       }
     });
   }
+  // One review session per host; the plugin going away (or the host process
+  // exiting) never leaves a reading-view child or its port behind.
+  const reviewSessions: ReviewSessions = createReviewSessions({
+    binary: normalizePathInput(config?.waCliPath) ?? 'wa-cli',
+    spawn: spawnReviewChild,
+    now: () => new Date().toISOString(),
+  });
+  // Teardown rides a cordis effect disposer: DSH 0.2.x's cordis 4 emits no
+  // dispose event, so a listener registered for one would never run. The
+  // disposer runs when the plugin fiber unloads (uninstall, reload, host stop).
+  const endReviewOnExit = (): void => reviewSessions.dispose();
+  process.once('exit', endReviewOnExit);
+  try {
+    ctx.effect?.(() => () => {
+      process.removeListener('exit', endReviewOnExit);
+      reviewSessions.dispose();
+    }, 'dsh-writing-viewer: review sessions');
+  } catch (error) {
+    console.error(`[dsh-writing-viewer] review teardown not registered: ${String(error)}`);
+  }
   ctx.inject(['webServer'], (scope: unknown) => {
     const guardOptions: GuardOptions = {
       allowedHosts: collectAllowedHosts(config.allowedHosts),
@@ -477,6 +536,18 @@ export function apply(ctx: {
       registerSnapshotRoute(scope as Parameters<typeof registerSnapshotRoute>[0], (query) => fullSnapshot(registry, config, process.cwd(), query.root), guardOptions);
     } catch (error) {
       console.error(`[dsh-writing-viewer] snapshot route skipped: ${String(error)}`);
+    }
+    try {
+      const server = ((scope as { webServer?: unknown }).webServer ?? scope) as { register(route: unknown): unknown };
+      registerReviewRoutes(server, {
+        sessions: reviewSessions,
+        resolveRoot: reviewRootResolver(() => registry, config, () => process.cwd()),
+        // Bounded upstream wait: a hung reading view never pins a proxied request.
+        fetchLike: ((url, init) => fetch(url, { ...(init as RequestInit), signal: AbortSignal.timeout(REVIEW_UPSTREAM_TIMEOUT_MS) })) as ProxyFetch,
+        guardOptions,
+      });
+    } catch (error) {
+      console.error(`[dsh-writing-viewer] review routes skipped: ${String(error)}`);
     }
     if (setupDeps !== null && setupState !== null) {
       try {

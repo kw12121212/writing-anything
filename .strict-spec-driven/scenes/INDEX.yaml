@@ -13,6 +13,10 @@ areas:
       title: 插件内置技能与 CLI 的启用与优先
       status: draft
       path: .strict-spec-driven/scenes/dsh-plugin/plugin-setup-enable.yaml
+    remote-review:
+      title: 作者经 Tailscale 远程在 DSH 内审阅单元
+      status: draft
+      path: .strict-spec-driven/scenes/dsh-plugin/remote-review.yaml
   lint:
     claim-candidates-coverage:
       title: 疑似论断（Claim Candidate）的登记与覆盖检查

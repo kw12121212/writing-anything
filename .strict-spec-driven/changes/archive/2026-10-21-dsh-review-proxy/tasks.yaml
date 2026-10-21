@@ -1,0 +1,55 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: dsh-review-proxy
+sections:
+  Implementation:
+    probe-dsh-route-capabilities:
+      text: 实测 DSH 0.2.1-rc.2 的 webServer exact 路由 handler：能否读取 POST 请求体、能否设置任意响应头（去掉 X-Frame-Options、改写 CSP）、iframe 同源加载插件路由是否可用；结论记入 README「发现的 DSH API 约束」；任一项不可行时停下回到方案讨论
+      status: complete
+    wa-cli-relative-submit:
+      text: internal/preview/template.go 阅读页脚本把 fetch('/feedback')、post('/confirm')、post('/author-review') 改为相对路径 'feedback'、'confirm'、'author-review'，ScriptCSP 哈希随脚本自动更新（preview:preview-relative-submit）
+      status: complete
+    review-session-module:
+      text: 新增 plugins/dsh-writing-viewer/src/reviewsession.ts：注入式 spawn 的会话管理（单会话、10 秒首行信封时限、解析 preview.url 取端口与令牌、持续读空 stdout、替换/显式结束/30 分钟空闲/子进程退出/dispose 时 kill 并清空状态），令牌只存于模块内存（dsh-plugin:review-session-start、review-session-end；tech review-child-lifecycle）
+      status: complete
+    review-proxy-module:
+      text: 新增 plugins/dsh-writing-viewer/src/reviewproxy.ts：固定精确路径到上游的映射、丢弃浏览器 token 与 X-WA-Token 并注入会话令牌、上游 Host 为 127.0.0.1:<port>、64 KiB 请求体上限、正文原样回传、只去掉 X-Frame-Options 并把 frame-ancestors 'none' 换成 'self'、无会话时的 HTML/JSON 提示（dsh-plugin:review-proxy；tech review-proxy-thin）
+      status: complete
+    review-routes-register:
+      text: host.ts 注册 /dsh-writing-viewer/review-session（GET 状态、POST 启动，root 复用快照路由的路径校验）、/dsh-writing-viewer/review-session/end 与 /dsh-writing-viewer/review/ 下四条代理路由，每条先过 guardRequest，拒绝时 403 不启动会话、不转发；插件 dispose 时结束会话；默认开启无配置开关（dsh-plugin:route-origin-guard、review-session-start）
+      status: complete
+    review-panel-ui:
+      text: client.ts 单元详情加「审阅」按钮（启动进行中提示）、成功后 iframe 内嵌 dsh-writing-viewer/review/ 与「结束审阅」按钮、结束后刷新快照；启动失败、403（提示在 allowedHosts 放行当前访问权威，如 Tailscale MagicDNS 名与端口）与会话已结束时显示可读原因与重新审阅入口；按钮可键盘激活，不使用仅安全上下文可用的 API；视图状态放进纯函数视图模型模块（dsh-plugin:review-panel-embed）
+      status: complete
+    readme-and-glossary:
+      text: 更新 plugins/dsh-writing-viewer/README.md：结构清单加审阅模块、host 与 client 行为加审阅节、删去「作者确认与复核仍走 wa-cli 阅读页」的限定、Tailscale MagicDNS 的 allowedHosts 示例（gamepc.tail1234.ts.net:13080）、纯 http 非安全上下文约束、默认开启的安全边界与不得经 Tailscale Funnel 暴露到公网的警示；docs/GLOSSARY.md 新增「审阅会话（Review Session）」
+      status: complete
+  Testing:
+    go-preview-tests:
+      text: internal/cli/preview_test.go 与 internal/preview 测试新增：页面脚本提交路径为相对路径、按前缀页面地址解析到前缀下的同名路径、CSP 脚本哈希与内联脚本一致、直接访问 --serve 的反馈提交仍为 POST /feedback（preview:preview-relative-submit 全部场景）
+      status: complete
+      command: go test ./internal/preview/... ./internal/cli/...
+    plugin-unit-tests:
+      text: 插件单测：reviewsession（启动成功、替换、坏单元透出诊断、坏 root 不调用 wa-cli、超时、空闲到期、dispose、一次启动只 spawn 一次）、reviewproxy（路径映射、令牌覆盖与伪造令牌被替换、正文逐字节、头改写范围、无会话提示、响应不含令牌与端口）、host 路由 403 不转发与 Tailscale allowedHosts 放行、client 视图模型与渲染（审阅按钮、iframe、失败与 403 文案、结束后刷新）；readonly.test.ts 静态扫描覆盖新模块且写入名单不变；以真实 wa-cli 二进制跑一次端到端代理（启动会话、代理 GET 页面、代理 POST 反馈、结束会话）并断言除反馈文件与 audit.log 外工作区不变
+      status: complete
+      command: cd plugins/dsh-writing-viewer && pnpm run check
+    full-regression:
+      text: 运行完整 Go 回归与覆盖率关卡
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    live-tailscale-check:
+      text: 在作者的真实环境实测：经 MagicDNS 名 http://gamepc.tail1234.ts.net 访问隔离的 DSH 实例（不影响作者正在使用的 13080 实例），allowedHosts 放行后在面板审阅一个单元、在内嵌阅读页提交一条反馈与一次决策确认（确认渠道为 preview）、结束审阅；审阅进行中 SIGTERM 宿主并核对子进程被清理；不放行时核对面板显示来源校验拒绝原因；记录与截图存入 plugins/dsh-writing-viewer/docs/evidence/（review-live-check.txt 与 review-*.png）
+      status: complete
+    strict-ready-verify:
+      text: 运行 strict-spec-cli ready dsh-review-proxy 与 strict-spec-cli verify dsh-review-proxy，确认场景覆盖、delta 规格与 delta 技术标准均通过
+      status: complete
+      command: strict-spec-cli ready dsh-review-proxy && strict-spec-cli verify dsh-review-proxy
+    scope-review:
+      text: 对照 proposal 的 unchanged_behavior 核对：wa-cli preview 仍只监听 127.0.0.1 且各接口语义不变、插件既有视图与 setup 行为不变、插件代码无写入型 fs 调用新增、Go 回归命令与覆盖率范围不变
+      status: complete
+testing_gates:
+  validation_task: full-regression
+  unit_test_task: plugin-unit-tests

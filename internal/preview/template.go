@@ -1,7 +1,7 @@
 package preview
 
 // pageScript 是 serve 模式内联的脚本：读取选区并向本地服务提交意见，提交作者在待确认队列中的确认与对待复核确认的
-// 批量复核；令牌取自页面地址。内容固定，Content-Security-Policy 按其 SHA-256 放行（ScriptCSP）。
+// 批量复核；令牌取自页面地址，提交路径相对于页面地址（经反向代理挂在路径前缀下也能用）。内容固定，Content-Security-Policy 按其 SHA-256 放行（ScriptCSP）。
 const pageScript = `
 (function () {
   var token = new URLSearchParams(location.search).get('token');
@@ -23,7 +23,7 @@ const pageScript = `
   document.querySelectorAll('#panel button').forEach(function (b) {
     b.addEventListener('click', function () {
       var body = { unit: $('unit').value, quote: quote, text: $('text').value, kind: $('kind').value, mark: b.dataset.mark };
-      fetch('/feedback', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-WA-Token': token }, body: JSON.stringify(body) })
+      fetch('feedback', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-WA-Token': token }, body: JSON.stringify(body) })
         .then(function (r) { return r.json(); })
         .then(function (res) {
           if (res.valid) {
@@ -50,7 +50,7 @@ const pageScript = `
       var field = function (c) { var el = item.querySelector(c); return el ? el.value : ''; };
       var body = { kind: item.dataset.kind, unit: item.dataset.unit, id: item.dataset.id, action: b.dataset.action,
         option: field('.option'), answer: field('.answer'), confirmation: field('.summary') };
-      post('/confirm', body, item.querySelector('.result'), function () { b.disabled = true; return '已记录作者确认（渠道 preview）'; });
+      post('confirm', body, item.querySelector('.result'), function () { b.disabled = true; return '已记录作者确认（渠道 preview）'; });
     });
   });
   var review = $('review-submit');
@@ -58,7 +58,7 @@ const pageScript = `
     review.addEventListener('click', function () {
       var keys = [];
       document.querySelectorAll('#author-review input[type=checkbox]:checked').forEach(function (c) { keys.push(c.value); });
-      post('/author-review', { keys: keys }, $('review-result'), function (res) {
+      post('author-review', { keys: keys }, $('review-result'), function (res) {
         review.disabled = true;
         return '已复核 ' + res.authorReview.reviewed.length + ' 项（渠道 preview）';
       });

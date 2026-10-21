@@ -228,6 +228,22 @@ func TestPreviewServe(t *testing.T) {
 		h.Get("Cache-Control") != "no-store" || h.Get("Referrer-Policy") != "no-referrer" || h.Get("X-Frame-Options") != "DENY" || h.Get("Content-Security-Policy") == "" {
 		t.Fatalf("serve-url: status %d, headers %v", resp.StatusCode, h)
 	}
+	// preview-relative-submit：提交路径相对于页面地址，直接访问时落到 /<path>，挂在代理前缀下时落到前缀下的同名路径。
+	script := scriptOf(string(body))
+	direct, _ := url.Parse(s.url)
+	prefixed, _ := url.Parse("http://gamepc.example:13080/dsh-writing-viewer/review/")
+	for _, p := range []string{"feedback", "confirm", "author-review"} {
+		if !strings.Contains(script, "('"+p+"'") || strings.Contains(script, "('/"+p+"'") {
+			t.Errorf("script does not submit %s by a relative path", p)
+		}
+		ref, _ := url.Parse(p)
+		if got := direct.ResolveReference(ref).Path; got != "/"+p {
+			t.Errorf("direct %s resolves to %s", p, got)
+		}
+		if got := prefixed.ResolveReference(ref).Path; got != "/dsh-writing-viewer/review/"+p {
+			t.Errorf("prefixed %s resolves to %s", p, got)
+		}
+	}
 	// serve-reject-no-token：GET 与 POST 缺少令牌、令牌错误或 Host 不符时都返回 403，不写文件。
 	base := "http://" + s.host + "/"
 	evil := func(r *http.Request) { r.Host = "evil.example:" + strings.Split(s.host, ":")[1] }

@@ -1,0 +1,95 @@
+schema: strict-spec-driven/scene/v1
+schema_version: 1
+artifact_type: scene
+schema_file: templates/strict-spec-driven/schemas/scene.yaml
+scene:
+  id: remote-review
+  title: 作者经 Tailscale 远程在 DSH 内审阅单元
+area: dsh-plugin
+status: draft
+actors:
+  - name: 作者
+    role: 经 Tailscale MagicDNS 地址远程打开 DSH Web GUI，在插件面板里审阅单元并提交反馈、确认与复核
+  - name: 插件 host
+    role: 按作者点击启动并管理 wa-cli preview --serve 子进程，以同源路由校验来源并代理阅读页
+  - name: wa-cli
+    role: 在宿主机 127.0.0.1 提供阅读页（Reading View），执行反馈、确认与复核的写入
+preconditions:
+  - DSH Web GUI 已装入插件并以 http://gamepc.tail1234.ts.net:13080 这类 MagicDNS 地址经 tailnet 可达，插件配置 allowedHosts 已放行该权威
+  - 面板已定位到含 .writing-anything/ 的项目目录，宿主机可执行 wa-cli
+main_flow:
+  open-unit:
+    action: 作者在面板单元树选中单元，单元详情出现「审阅」按钮
+    covered_by:
+      - spec_id: dsh-plugin
+        requirement_id: review-panel-embed
+  start-session:
+    action: 作者点「审阅」，插件 host 结束任何既有会话后以面板当前项目目录启动 wa-cli preview <unit> --serve，取得端口与令牌并只留在服务端
+    covered_by:
+      - spec_id: dsh-plugin
+        requirement_id: review-session-start
+  embed-page:
+    action: 面板详情区以 iframe 内嵌同源代理地址，显示该单元的阅读页
+    covered_by:
+      - spec_id: dsh-plugin
+        requirement_id: review-panel-embed
+      - spec_id: dsh-plugin
+        requirement_id: review-proxy
+  submit-feedback:
+    action: 作者在阅读页划词提交反馈或快捷标记，请求以相对路径经代理到达 wa-cli 并保存
+    covered_by:
+      - spec_id: preview
+        requirement_id: preview-relative-submit
+      - spec_id: dsh-plugin
+        requirement_id: review-proxy
+      - spec_id: preview
+        requirement_id: preview-feedback
+  confirm-and-review:
+    action: 作者在待作者确认区提交验收或决策确认、在待作者复核区批量复核，写入的确认渠道为 preview
+    covered_by:
+      - spec_id: preview
+        requirement_id: preview-confirm
+      - spec_id: preview
+        requirement_id: preview-author-review
+      - spec_id: dsh-plugin
+        requirement_id: review-proxy
+  end-session:
+    action: 作者点「结束审阅」，插件 host 结束子进程，面板移除 iframe 并刷新快照显示新状态
+    covered_by:
+      - spec_id: dsh-plugin
+        requirement_id: review-session-end
+      - spec_id: dsh-plugin
+        requirement_id: review-panel-embed
+exception_flows:
+  origin-rejected:
+    trigger: allowedHosts 未放行作者使用的 Tailscale 权威，插件路由被来源校验拒绝
+    steps:
+      report:
+        action: 插件全部路由（快照与审阅路由同一校验）返回 403 且审阅请求不触达 wa-cli；面板在加载快照时即显示被拒原因（指出被拒的 Host）与重试入口，不崩溃也不显示空白；审阅路由单独被拒时，单元详情显示在 allowedHosts 中放行该权威的提示，不显示空白 iframe
+        covered_by:
+          - spec_id: dsh-plugin
+            requirement_id: route-origin-guard
+          - spec_id: dsh-plugin
+            requirement_id: overview-empty-and-error
+          - spec_id: dsh-plugin
+            requirement_id: review-panel-embed
+  start-failed:
+    trigger: wa-cli 不可执行、单元引用无法解析或阅读页服务未能在限定时间内给出首行信封
+    steps:
+      report:
+        action: 启动路由返回可读失败原因，面板显示原因与重试入口，不留下残留子进程
+        covered_by:
+          - spec_id: dsh-plugin
+            requirement_id: review-session-start
+          - spec_id: dsh-plugin
+            requirement_id: review-panel-embed
+  session-gone:
+    trigger: 会话因空闲超时、子进程退出或被另一单元的审阅替换而结束后，iframe 或面板仍发出请求
+    steps:
+      report:
+        action: 代理路由返回可读的「没有进行中的审阅」提示，面板显示会话已结束并可重新审阅
+        covered_by:
+          - spec_id: dsh-plugin
+            requirement_id: review-proxy
+          - spec_id: dsh-plugin
+            requirement_id: review-session-end
