@@ -47,6 +47,17 @@ import { treeKeyAction, visibleTreeNodes } from './treekeys';
 import { highlightMarkdownSource, renderMarkdown, type MdBlock, type MdTokenClass } from './markdownview';
 import { decisionEntries, queueTextOf, reviewEntries } from './queueview';
 import { parseSetupStatus, setupLabelsFor, setupViewModel, type SetupStatus } from './setupview';
+import {
+  IDLE_REVIEW,
+  REVIEW_SESSION_END_ROUTE,
+  REVIEW_SESSION_ROUTE,
+  reviewAfterStart,
+  reviewAfterStatus,
+  reviewLabelsFor,
+  reviewStartBody,
+  reviewViewModel,
+  type ReviewPanelState,
+} from './reviewview';
 import type { ArtifactText } from './artifacts';
 import type { SnapshotRouteBody } from './snapshot';
 
@@ -148,7 +159,7 @@ interface PanelLabels {
 const TEXT: { zh: PanelLabels; en: PanelLabels } = {
   zh: {
     panelTitle: '写作工作区',
-    subtitle: 'writing-anything 工作区总览（只读面板）',
+    subtitle: 'writing-anything 工作区总览与单元审阅',
     loading: '读取中…',
     refresh: '刷新',
     projectDir: '项目目录',
@@ -217,7 +228,7 @@ const TEXT: { zh: PanelLabels; en: PanelLabels } = {
   },
   en: {
     panelTitle: 'Writing Workspace',
-    subtitle: 'writing-anything workspace overview (read-only panel)',
+    subtitle: 'writing-anything workspace overview and unit review',
     loading: 'Loading…',
     refresh: 'Refresh',
     projectDir: 'Project directory',
@@ -360,6 +371,8 @@ interface PanelState {
   setup: SetupStatus | null;
   /** Client-side in-flight flag for the explicit enable action. */
   setupBusy: boolean;
+  /** Review (审阅) session state of this panel. */
+  review: ReviewPanelState;
 }
 
 /** Event handlers the rendered tree binds to. */
@@ -380,6 +393,12 @@ interface PanelActions {
   toggleFold(key: string, open: boolean): void;
   /** Run the explicit setup enable action (single-flight on the client too). */
   enableSetup(): void;
+  /** Start a review session for one unit and embed its reading view. */
+  startReview(ref: string): void;
+  /** End the review session, drop the iframe and refresh the snapshot. */
+  endReview(): void;
+  /** The embedded reading view finished loading: check the session still runs. */
+  reviewFrameLoaded(): void;
   /** One key pressed on a tree node: move selection or collapse/expand. */
   treeKey(event: unknown, ref: string): void;
 }
@@ -1055,18 +1074,64 @@ function renderSetupSection(h: H, s: PanelState, a: PanelActions): unknown {
   );
 }
 
+/** The review controls of one unit detail: start / progress / failure /
+ * ended notice, and while active the embedded reading view with its end
+ * button. Returns whether the iframe is showing so the detail can make room. */
+function renderReviewControls(h: H, s: PanelState, a: PanelActions, ref: string): { nodes: unknown[]; active: boolean } {
+  const labels = reviewLabelsFor();
+  const host = typeof window !== 'undefined' && window.location ? window.location.host : '';
+  const model = reviewViewModel(s.review ?? IDLE_REVIEW, ref, labels, host);
+  const nodes: unknown[] = [];
+  const restart = model.errorText !== null || model.endedText !== null;
+  const row: unknown[] = [];
+  if (model.showStart) {
+    row.push(h('button', { key: 'start', type: 'button', 'data-review-start': ref, disabled: model.startDisabled, style: buttonStyle(true), onClick: () => a.startReview(ref) },
+      restart ? labels.restart : labels.review));
+  }
+  if (model.showEnd) {
+    row.push(h('button', { key: 'end', type: 'button', 'data-review-end': ref, style: buttonStyle(), onClick: a.endReview }, labels.end));
+  }
+  if (model.busyText !== null) {
+    row.push(h('span', { key: 'busy', role: 'status', 'aria-busy': 'true', 'data-review-busy': 'true', style: { color: COLOR.secondary } }, model.busyText));
+  }
+  nodes.push(h('div', { key: 'review-row', style: { display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center' } }, row));
+  if (model.errorText !== null) {
+    nodes.push(h('p', { key: 'review-error', role: 'alert', 'data-review-error': s.review?.forbidden ? 'forbidden' : 'failed', style: { margin: 0, color: COLOR.error, overflowWrap: 'anywhere' } }, model.errorText));
+  }
+  if (model.endedText !== null) {
+    nodes.push(h('p', { key: 'review-ended', role: 'status', 'data-review-ended': 'true', style: { margin: 0, color: COLOR.warn } }, model.endedText));
+  }
+  if (model.frame !== null) {
+    nodes.push(h('iframe', {
+      key: model.frame.key,
+      src: model.frame.src,
+      title: model.frame.title,
+      'data-review-frame': ref,
+      onLoad: a.reviewFrameLoaded,
+      style: { width: '100%', height: '70vh', minHeight: '360px', border: '1px solid ' + COLOR.border, borderRadius: '8px', background: COLOR.card },
+    }));
+  }
+  return { nodes, active: model.frame !== null };
+}
+
 function renderDetail(h: H, s: PanelState, a: PanelActions): unknown {
   const d = s.detail;
   const labels = s.labels;
   const children: unknown[] = [sectionTitle(h, 'title', labels.unitDetail)];
+  const review = d === null ? null : renderReviewControls(h, s, a, d.ref);
   if (d === null) {
     children.push(h('p', { key: 'hint', style: { margin: 0, color: COLOR.tertiary } }, labels.selectUnit));
+  } else if (review !== null && review.active) {
+    // The embedded reading view takes the detail area; ending the review
+    // brings the unit's rows back.
+    children.push(h('code', { key: 'ref', style: { ...codeStyle(), fontSize: '13px' } }, d.ref), ...review.nodes);
   } else {
     const progress = progressText(d.progress);
     const row = (key: string, label: string, value: unknown): unknown =>
       h('div', { key, style: { display: 'flex', flexWrap: 'wrap', gap: '4px 10px', alignItems: 'baseline' } }, h('strong', { key: 'l' }, label + ':'), value);
     children.push(
       h('code', { key: 'ref', style: { ...codeStyle(), fontSize: '13px' } }, d.ref),
+      ...(review?.nodes ?? []),
       row('type', labels.type, d.type ?? '—'),
       row('stage', labels.stage, stageTitle(d.stage) + (d.stage === null ? '' : ' (' + d.stage + ')')),
       progress === null ? null : row('progress', labels.progress, progress),
@@ -1204,6 +1269,7 @@ window.__ModuleLoader__?.load({
       latestGate, overviewModel, reconcileSelection, renderPanel, routeUrl, shouldStack, labelsFor, stageTitle,
       nextViewMode, nextReadingMode, artifactTextOf, sourceEntriesOf, PANEL_ID, ROUTE_PATH, FOLD_LINE_THRESHOLD,
       SETUP_ROUTE, parseSetupStatus, setupViewModel, setupLabelsFor,
+      REVIEW_SESSION_ROUTE, REVIEW_SESSION_END_ROUTE, reviewViewModel, reviewLabelsFor,
     };
 
     let react: any;
@@ -1244,6 +1310,7 @@ window.__ModuleLoader__?.load({
       const [openFolds, setOpenFolds] = react.useState({} as Record<string, boolean>);
       const [treeCollapsed, setTreeCollapsed] = react.useState({} as Record<string, boolean>);
       const [setup, setSetup] = react.useState({ status: null as SetupStatus | null, busy: false });
+      const [review, setReview] = react.useState(IDLE_REVIEW as ReviewPanelState);
       const containerRef = react.useRef(null);
       // Scroll offset captured before a view toggle, restored after the new
       // view has rendered, so switching never jumps back to the top.
@@ -1331,6 +1398,33 @@ window.__ModuleLoader__?.load({
         if (node !== null && typeof (node as HTMLElement).focus === 'function') (node as HTMLElement).focus();
       };
 
+      // One status read of the plugin route (never a wa-cli call): a session
+      // that ended elsewhere — idle expiry, another tab's review — turns into
+      // a readable notice with a restart entry.
+      const checkReviewStatus = (): void => {
+        fetch(REVIEW_SESSION_ROUTE)
+          .then((response: Response) => (response.ok ? (response.json() as Promise<unknown>) : null))
+          .then((parsed: unknown) => {
+            if (parsed !== null) setReview((prev: ReviewPanelState) => reviewAfterStatus(prev, parsed));
+          })
+          .catch(() => undefined);
+      };
+
+      // While a review shows, re-check when the author comes back to the page
+      // (window focus or the tab becoming visible), besides every iframe load.
+      react.useEffect(() => {
+        if (review.phase !== 'active' || typeof window === 'undefined' || typeof window.addEventListener !== 'function') return undefined;
+        const onVisible = (): void => {
+          if (typeof document === 'undefined' || document.visibilityState !== 'hidden') checkReviewStatus();
+        };
+        window.addEventListener('focus', onVisible);
+        if (typeof document !== 'undefined') document.addEventListener('visibilitychange', onVisible);
+        return () => {
+          window.removeEventListener('focus', onVisible);
+          if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', onVisible);
+        };
+      }, [review.phase]);
+
       const body = load.body as SnapshotRouteBody | null;
       const model = react.useMemo(() => (body === null ? null : overviewModel(body)), [body]);
       const picked = react.useMemo(
@@ -1360,6 +1454,7 @@ window.__ModuleLoader__?.load({
         treeCollapsed,
         setup: setup.status,
         setupBusy: setup.busy,
+        review,
       };
       const actions: PanelActions = {
         refresh: () => fetchSnapshot(panelRoot),
@@ -1439,6 +1534,29 @@ window.__ModuleLoader__?.load({
               setSetup((prev: { status: SetupStatus | null }) => ({ status: prev.status, busy: false }));
             });
         },
+        startReview: (ref: string) => {
+          if (review.phase === 'starting') return;
+          setReview({ ...IDLE_REVIEW, unit: ref, phase: 'starting' });
+          // The session starts in the directory the panel is showing, so the
+          // reading view always matches the snapshot on screen.
+          const root = body?.root ?? panelRoot;
+          fetch(REVIEW_SESSION_ROUTE, { method: 'POST', headers: { 'content-type': 'application/json' }, body: reviewStartBody(ref, root) })
+            .then((response: Response) =>
+              response.json().then(
+                (parsed: unknown) => reviewAfterStart(ref, response.status, parsed),
+                () => reviewAfterStart(ref, response.status, null),
+              ),
+            )
+            .then((next: ReviewPanelState) => setReview(next))
+            .catch((cause: unknown) => setReview(reviewAfterStart(ref, 0, { ok: false, error: String((cause as Error)?.message ?? cause) })));
+        },
+        endReview: () => {
+          setReview(IDLE_REVIEW);
+          fetch(REVIEW_SESSION_END_ROUTE, { method: 'POST' })
+            .catch(() => undefined)
+            .then(() => fetchSnapshot(panelRoot));
+        },
+        reviewFrameLoaded: checkReviewStatus,
         treeKey: (event: unknown, ref: string) => {
           const decision = treeKeyAction(picked?.tree ?? [], treeCollapsed, ref, String((event as { key?: unknown })?.key ?? ''));
           if (decision.kind === 'none') return;

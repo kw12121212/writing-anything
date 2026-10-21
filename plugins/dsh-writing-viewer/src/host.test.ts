@@ -12,6 +12,7 @@ import {
   workspaceExistsAt,
   workspaceSnapshot,
   type WorkspaceRouteBody,
+  reviewRootResolver,
 } from './host';
 import type { WorkspaceRegistryLike } from './registry';
 import { parsePanelRoot, PANEL_ROOT_MAX_LENGTH } from './root';
@@ -208,6 +209,9 @@ describe('apply wiring', () => {
     expect(routes.map((route) => route.path)).toEqual([
       '/dsh-writing-viewer/workspace',
       '/dsh-writing-viewer/snapshot',
+      '/dsh-writing-viewer/review-session',
+      '/dsh-writing-viewer/review-session/end',
+      '/dsh-writing-viewer/review',
     ]);
     const written: { status: number; body?: string }[] = [];
     const res = {
@@ -257,7 +261,8 @@ describe('apply wiring', () => {
     };
     apply(ctx, {});
     expect(seen).toEqual([['workspaceRegistry'], ['webServer']]);
-    expect(routes).toHaveLength(2);
+    // Two viewer routes plus the three default-on review routes.
+    expect(routes).toHaveLength(5);
     // A ctx without inject (older host shapes) must not throw.
     expect(() => apply({}, {})).not.toThrow();
   });
@@ -460,3 +465,49 @@ describe('route origin guard', () => {
   });
 });
 
+
+describe('review session wiring', () => {
+  it('resolves the review root: explicit path, missing workspace, invalid input, default location', async () => {
+    const project = await mkdtemp(join(tmpdir(), 'dsh-review-root-'));
+    const empty = await mkdtemp(join(tmpdir(), 'dsh-review-empty-'));
+    try {
+      await mkdir(join(project, '.writing-anything'));
+      const resolver = reviewRootResolver(() => null, undefined, () => project);
+      expect(await resolver(project)).toEqual({ ok: true, root: project });
+      const missing = await resolver(empty);
+      expect(missing.ok).toBe(false);
+      expect(missing.ok === false && missing.error).toContain('.writing-anything/');
+      expect((await resolver('relative/path')).ok).toBe(false);
+      expect(await resolver(null)).toEqual({ ok: true, root: project });
+      const none = reviewRootResolver(() => null, { workspaceRoot: empty }, () => empty);
+      expect((await none(null)).ok).toBe(false);
+    } finally {
+      await rm(project, { recursive: true, force: true });
+      await rm(empty, { recursive: true, force: true });
+    }
+  });
+
+  it('releases the review session through a cordis effect disposer (host-resource-teardown-effect)', () => {
+    const disposers: (() => void)[] = [];
+    const exitListeners = (): number => process.listenerCount('exit');
+    const before = exitListeners();
+    const ctx = {
+      inject: () => undefined,
+      effect: (execute: () => () => void) => {
+        disposers.push(execute());
+        return () => undefined;
+      },
+    };
+    apply(ctx, { waCliPath: '/nonexistent/wa-cli-for-tests' });
+    expect(disposers).toHaveLength(1);
+    expect(exitListeners()).toBe(before + 1);
+    disposers[0]!();
+    // The disposer removes the process exit hook it installed.
+    expect(exitListeners()).toBe(before);
+  });
+
+  it('still applies when the host context offers no effect, or effect throws', () => {
+    expect(() => apply({ inject: () => undefined }, {})).not.toThrow();
+    expect(() => apply({ inject: () => undefined, effect: () => { throw new Error('inactive'); } }, {})).not.toThrow();
+  });
+});

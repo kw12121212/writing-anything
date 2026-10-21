@@ -180,6 +180,8 @@
 | 阅读卡点 | Sticking Point | 阅读卡点 | 作者阅读时标记的"读不下去"的位置 |
 | 阅读页 | Reading View | 阅读页 | `wa-cli preview` 生成的逐段阅读页面：默认为可离线打开的静态 HTML；加 `--serve` 时为本地服务提供、可以选中文字提交反馈、确认待作者确认的事项与复核待作者复核项的页面 |
 | 令牌 | Token | 令牌 | `wa-cli preview --serve` 每次运行生成的随机字符串，访问本地阅读页必须携带，防止本机其他网页或程序冒用 |
+| 审阅会话 | Review Session | 审阅会话 | DSH 插件 dsh-writing-viewer 按作者在面板点「审阅」启动的一次 `wa-cli preview --serve`：插件经同源路由代理该阅读页并内嵌到面板，令牌只留在宿主机；同一宿主同一时间至多一个，结束审阅、空闲 30 分钟或启动另一单元时结束 |
+| 安全上下文 | Secure Context | 安全上下文 | 浏览器把 https 页面与本机回环地址视为安全上下文，只有在其中才开放部分 Web API；经纯 http 的 tailnet 地址打开的 DSH 页面不是安全上下文，dsh-writing-viewer 的面板与内嵌阅读页因此不依赖这类 API |
 | 人工编辑保护 | Human Edit Protection | 人工编辑保护 | 人改过的正文不被 Agent 覆盖 |
 | 上下文包 | Context Pack | 上下文包 | 只包含当前单元所需信息的输入集合 |
 | 上下文预算 | Context Budget | 上下文预算 | 上下文包的大小上限，以字符数近似度量 |

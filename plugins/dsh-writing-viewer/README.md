@@ -4,6 +4,7 @@ DSH 插件（DSH Plugin）`dsh-writing-viewer` 是 writing-anything 仓库的 DS
 
 - 默认严格只读：host 侧的全部文件系统操作都是读取（对 `.writing-anything` 的 `stat`、目录列举 `readdir` 与文件读取 `readFile`，均不跟随符号链接）；不提供任何写入工作区的能力。
 - 一个例外要如实说明：快照经子进程调用 wa-cli 只读命令（`status`/`validate`/`next`/`timeline`）取结构状态，而 wa-cli 的审计日志（Audit Log）契约规定每次调用（含只读命令）都向 `.writing-anything/audit.log` 追加一行运维痕迹——该追加出自 wa-cli 而非插件代码，且 audit.log 不是产物（Artifact）；插件在每次快照请求内有界调用这些命令，不做轮询式反复调用。
+- 一个由作者显式触发的工作区写入面：单元审阅（见下文「单元审阅」专节，默认开启）在面板内嵌 wa-cli 阅读页（Reading View），作者在其中提交的反馈、确认与复核由 wa-cli 子进程写入工作区；插件代码只做同源代理，自身不写任何文件，确认渠道（Confirmation Channel）如实记为 `preview`。
 - 一个可选的写入面：默认关闭的「内置技能与 CLI」设置能力（`enableSetup`，见下文专节）在作者显式点击启用后，向配置的 CLI 安装目录与操作系统临时目录写入——绝不写入 `.writing-anything/`、用户级或项目级技能目录；静态只读测试把该写入面钉在 setup 三个模块内，viewer 路径保持零写入调用。
 - 不属于产品运行时：wa-cli（Go 内核）、内置技能与 MCP 服务不依赖本包；本包也不进入 Go 模块与覆盖率范围。
 
@@ -26,6 +27,10 @@ src/setup.ts       「内置技能与 CLI」设置核心（纯逻辑）：配置
 src/setuproutes.ts setup 路由与启用动作管线（状态聚合、单飞行、宿主启动时的免下载注册）
 src/setupfs.ts     setup 的真实文件系统适配器——包内唯一持有写入型 node:fs 调用的模块之一（与上两个 setup 模块同为静态只读测试声明的写入面）
 src/setupview.ts   client 侧设置区的纯视图模型：状态解析、双语文案、idle/busy/enabled/error 状态机
+src/reviewsession.ts 审阅会话（Review Session）：注入式 spawn 管理唯一的 wa-cli preview --serve 子进程（首行信封取端口与令牌、空闲与替换时终止）
+src/reviewproxy.ts 阅读页同源代理的纯逻辑：子路径白名单、令牌注入、响应头只放宽 frame-ancestors、无会话提示
+src/reviewroutes.ts 审阅会话路由与代理 prefix 路由的注册（先过请求来源校验）
+src/reviewview.ts  client 侧审阅控件的纯视图模型：启动/进行中/失败/来源拒绝/已结束状态与双语文案
 scripts/gen-large-workspace.mjs  经 wa-cli 生成多卷多场景长篇合成工作区（性能检查夹具）
 scripts/perf-check.mjs           端到端大工作区性能检查并把耗时记录进 docs/evidence/perf-check.txt
 testdata/          测试夹具：真实命令生成的多作品工作区 + 捕获的 --json 输出
@@ -100,6 +105,33 @@ package.json 声明：
 
 插件配置除 `workspaceRoot` 外还接受 `waCliPath`：覆盖 wa-cli 可执行文件路径（默认 `PATH` 上的 `wa-cli`），用于宿主未把 wa-cli 装进 PATH 的环境。
 
+## 单元审阅（Review，默认开启）
+
+审稿环节作者要用的 wa-cli 阅读页（`wa-cli preview <unit> --serve`）只监听宿主机 `127.0.0.1`；经 Tailscale 等网络远程打开 DSH 的浏览器访问不到它。插件因此在 DSH 同源路由下代理阅读页，面板内嵌显示：
+
+1. 单元详情的「审阅」按钮向 `POST /dsh-writing-viewer/review-session`（`{ unit, root }`，root 为面板当前显示的项目目录）发起启动；host 先结束任何既有会话，再执行一次 `wa-cli preview <unit> --serve --json --dir <root>`，10 秒内读到首行输出信封即成功，从中取得端口与令牌——令牌只留在 host 进程内存，不进入任何响应；之后持续读空子进程输出。同一宿主同一时间至多一个会话（审阅会话，Review Session）。`GET` 同一路由返回当前会话摘要（unit、root、开始时间），`POST /dsh-writing-viewer/review-session/end` 显式结束。
+2. 代理是一条 prefix 路由 `/dsh-writing-viewer/review`（宿主 exact 路由不能带结尾斜杠），只放行固定子路径：`GET /dsh-writing-viewer/review/` 对应阅读页 `GET /`，`POST …/review/feedback`、`…/review/confirm`、`…/review/author-review` 对应阅读页同名接口；其他子路径 404、方法不符 405、不带结尾斜杠时 308 跳转。代理丢弃浏览器带来的 `token` 与 `X-WA-Token`、注入会话令牌，上游 Host 为 `127.0.0.1:<port>`，wa-cli 自身的 Host 与令牌校验原样生效；请求体超过 64 KiB 不转发。上游正文逐字节回传（不改写 HTML，否则 CSP 的脚本哈希失配），响应头只去掉 `X-Frame-Options` 并把 CSP 的 `frame-ancestors 'none'` 换成 `'self'`，使面板能同源内嵌。阅读页脚本以相对路径提交（wa-cli 侧的配合改动），因此挂在前缀下也能工作，浏览器始终只请求 DSH 同源地址、看不到 `127.0.0.1`。
+3. 会话在作者点「结束审阅」、30 分钟内没有代理请求、启动另一个单元的审阅、阅读页子进程退出、插件卸载或宿主停止时结束并终止子进程。卸载与停止的清理挂在 cordis 的 `ctx.effect` disposer 上（DSH 0.2.x 的 cordis 4 不发出 `dispose` 事件，`ctx.on('dispose')` 永不触发）；DSH 收到 SIGTERM/SIGINT 时会 dispose 应用 fiber，因此常规停止也会清理，宿主进程退出另有 `exit` 钩子兜底——只有宿主被 SIGKILL 强杀时子进程会残留（`wa-cli preview --serve` 本身不感知父进程退出），需手动结束。会话结束后代理返回可读的「没有进行中的审阅」提示；面板在 iframe 每次加载、窗口重新获得焦点或页面重新可见时查询一次会话状态（只访问插件路由，不调用 wa-cli），发现已结束即显示「审阅已结束」与「重新审阅」入口。结束审阅后面板自动刷新快照。同一宿主只有一个会话：在另一个浏览器标签页启动审阅会替换旧会话，旧标签页 iframe 里的提交会被 wa-cli 以「不属于这个阅读页」可读拒绝。
+4. 写入全部出自 wa-cli 子进程：经代理提交的反馈、确认与复核与直接使用阅读页完全相同，确认渠道记为 `preview`；只浏览不提交时工作区（除 wa-cli 追加的 audit.log 外）不变。
+
+实测证据（2026-10-21，经 Tailscale MagicDNS 名访问隔离的 DSH 0.2.1-rc.2 实例）：`docs/evidence/review-live-check.txt`（路由逐项 curl 结果与浏览器操作记录）、`docs/evidence/review-embedded.png`（面板内嵌阅读页）、`docs/evidence/review-iframe-submitted.png`（iframe 内提交反馈后的保存提示）、`docs/evidence/review-confirm.png`（iframe 内确认决策，渠道 preview）、`docs/evidence/review-denied.png`（未放行 MagicDNS 权威时面板的拒绝原因）。
+
+Tailscale 远程访问：以 `http://<machine>.<tailnet>.ts.net:13080`（`tailscale serve --tcp` 直通）或 `https://<machine>.<tailnet>.ts.net:13080`（`tailscale serve --https`，Tailscale 终止 TLS 并自动签发、续期证书）这类 MagicDNS 地址访问时，Host 不是回环地址也不是宿主监听地址字面量，所以全部插件路由（含审阅）都需要在 `allowedHosts` 中放行该权威，例如：
+
+```yaml
+- id: dsh-writing-viewer
+  name: dsh-writing-viewer
+  config:
+    allowedHosts:
+      - gamepc.tail1234.ts.net:13080   # 浏览器地址栏里的主机名与端口
+```
+
+`tailscale serve --https=<port> http://127.0.0.1:<port>` 会把浏览器地址栏里的 Host（`<machine>.<tailnet>.ts.net:<port>`）原样转给 DSH（2026-10-21 实测：同源请求通过，伪造为 `http://127.0.0.1:<port>` 的 Origin 被判为与 Host 不同权威而 403），所以从 http 换成 https 时 `allowedHosts` 与 DSH 的 `--trusted-host` 写法都不变——同一个主机名与端口即可。经 https 访问时审阅 iframe 也无需改动：iframe 地址、阅读页的提交路径与代理跳转都不带协议，随页面走 https，不产生混合内容；代理到 `http://127.0.0.1:<port>` 的那一段只发生在宿主进程内部。证书只签给 MagicDNS 名，按 `https://<tailnet IP>:<port>` 访问会证书不匹配。
+
+未放行时全部插件路由都被来源校验拒绝：面板在加载快照时即显示被拒原因（指出被拒的 Host）与重试按钮，不崩溃也不空白；若只有审阅路由被拒，单元详情显示在 `allowedHosts` 中放行该权威的提示，不会出现空白 iframe。纯 http 的 tailnet 地址不是安全上下文（Secure Context），https 地址是；面板与阅读页都不依赖仅安全上下文可用的浏览器 API，两种访问方式都可用。
+
+安全边界：审阅默认开启、没有配置开关，凡通过请求来源校验的请求（本机进程、`allowedHosts` 放行的远程权威）都能经代理提交作者确认。内嵌后阅读页运行在 DSH 同源下（可访问父页面），其安全性依赖 wa-cli 的 CSP（`default-src 'none'` 加脚本哈希）与模板转义——代理只放宽 `frame-ancestors`，不改动其他 CSP 指令。安全前提是 tailnet 本身只对作者的设备开放——**不要用 Tailscale Funnel 或其他公网反向代理暴露 DSH**；需要更宽的网络暴露时请置于带认证的反向代理之后。
+
 ## 内置技能与 CLI 的启用（Setup，默认关闭）
 
 配置开关 `enableSetup`（默认 `false`）之后是插件的全部「安装类」能力。未开启时插件不注册 setup 路由、不注入宿主 `skills` 服务、不修改宿主环境、不发起任何网络请求，行为与本节不存在时完全一致。
@@ -149,7 +181,7 @@ host 启动且开关开启、内置二进制已存在时，自动重做第 2、3
 - **键盘导航**：面板内全程可不碰鼠标——焦点在单元树上时 ↑/↓ 在可见单元间移动选中（详情区同步更新，DOM 焦点随选中移动）、→ 展开已收起的汇总单元或进入第一个子单元、← 收起已展开的汇总单元或回到父单元（roving tabindex：选中节点是树内唯一 Tab 停留点，带 `aria-current` 与 `aria-expanded`，Tab 离开树到下一控件）；单元详情里的「打开」产物条目、视图切换按钮与素材跳转都是原生按钮，Enter/空格即激活。
 - **主题与窄宽度**：样式只用 DSH 主题令牌（`--dsw-alias-*` CSS 自定义属性，带回退值），明暗主题随宿主切换；视口低于 1024px（DSH 侧栏收为 56px 导轨）或面板容器低于 640px 时，单元树与详情改为上下堆叠。
 
-界面只有刷新、路径切换与选择三类控件，没有任何编辑、写入或确认控件；作者确认与复核仍走 wa-cli 阅读页（Reading View）。唯一例外是默认关闭的 setup 设置区（`enableSetup` 开启且路由可达时出现）：它的「启用内置技能与 CLI」按钮是显式的安装动作，不作用于任何工作区产物。文案中英双语，按页面语言选择。
+面板自身只有刷新、路径切换与选择三类控件，没有任何编辑、写入或确认控件；作者确认与复核走 wa-cli 阅读页（Reading View）——单元详情的「审阅」按钮把它经同源代理内嵌到面板里（见上文「单元审阅」），其中的反馈、确认与复核控件由 wa-cli 提供并写入。另一个例外是默认关闭的 setup 设置区（`enableSetup` 开启且路由可达时出现）：它的「启用内置技能与 CLI」按钮是显式的安装动作，不作用于任何工作区产物。文案中英双语，按页面语言选择。
 
 client bundle 内联了 `yaml` 解析器（用于读取 `work.yaml` 的文体与 `decisions.yaml` 的待决条目），`dist/client.js` 约 306 kB（gzip 约 73 kB；2026-10-20 实测：`wc -c dist/client.js` 为 305,683 B、`gzip -c dist/client.js | wc -c` 为 73,461 B，体积随依赖与视图演进会变，以这两条命令复验），仍是单一 `__ModuleLoader__.load` 脚本、唯一外部依赖为宿主的 `react`，不访问网络。
 
@@ -200,7 +232,7 @@ dsh plugin --profile web add link:/home/wx766/Code/writing-anything/plugins/dsh-
 
 按 DSH 版本验证兼容性：`engines.dsh` 不满足运行中的 DSH 版本时，安装会要求版本豁免（`dsh plugin --profile web allow-version …`）；本插件按 0.2.1-rc.2 实测，范围声明为 `>=0.2.1-rc.2 <0.3.0`。
 
-安全提示：插件的两条只读路由自带请求来源校验（Request Origin Guard，见下方「发现的 DSH API 约束」第 8 条）——不在 Web GUI 浏览器认证（`?token=`）栅栏之内的请求，只有 Host 为回环地址、宿主监听地址字面量、或 `allowedHosts` 显式放行的权威，且不带 `cross-site` 标记、Origin 与 Host 同权威时才被处理，否则返回 403（`cache-control: no-store`）。经反向代理或 tailscale 等远程权威访问面板时，需在该 profile 的插件配置中显式放行（见下方示例）；本机其他进程仍可直接访问路由——这与直接读取工作区文件等价，不是该防线针对的威胁。
+安全提示：插件的全部路由（两条只读路由、审阅会话与代理路由、setup 路由）自带请求来源校验（Request Origin Guard，见下方「发现的 DSH API 约束」第 8 条）——不在 Web GUI 浏览器认证（`?token=`）栅栏之内的请求，只有 Host 为回环地址、宿主监听地址字面量、或 `allowedHosts` 显式放行的权威，且不带 `cross-site` 标记、Origin 与 Host 同权威时才被处理，否则返回 403（`cache-control: no-store`）。经反向代理或 tailscale 等远程权威访问面板时，需在该 profile 的插件配置中显式放行（见下方示例）；本机其他进程仍可直接访问路由——这与直接读取工作区文件等价，不是该防线针对的威胁。
 
 如需固定展示某个项目目录，在该 profile 的 `cordis.patch.yml` 中为插件行加配置：
 
@@ -247,6 +279,7 @@ dsh plugin --profile web add link:/home/wx766/Code/writing-anything/plugins/dsh-
 9. **宿主技能注册表可注入（skills 服务）**：`ctx.inject(['skills'], …)` 拿到 `@deepseek-ai/dsh-skill`（0.2.1-rc.2）的 SkillRegistry；`registerProvider(create)` 注册一个技能提供者（Skill Provider），`create({ signal, invalidate })` 返回 `{ name, list(options), get(candidate, options) }`。契约要点（初版实现曾因忽略而让全部技能被注册表静默跳过，见 docs/evidence/setup-check.txt 的真实注册表取证）：**`list`/`get` 必须返回 Promise**——每个真实消费方都带 AbortSignal 调用，注册表的 waitWithAbort 会对返回值直接调 `.then`，同步返回数组/对象是 TypeError，整个 provider 被捕获并跳过（日志 `skill provider "…" skipped`）；候选须含 `name/description/source/provider/rank/locator`（`provider` 必须等于提供者名，`rank` 为有限数字，`locator` 是回传给 `get` 的不透明句柄），`get` 返回的定义另须 `content`、查不到时 resolve `undefined`。同名候选按 rank 升序取胜，且技能层级为 project `.dsh`=100、project `.agents`=200、custom=300、user `.dsh`=400、user `.agents`=500、运行时注册=250、bundled=600——插件取 650（高于全部层级）即让任何同名外部技能优先、内置作为后备。静态插件行的注册落入全局层，与文件系统源同层按 rank 竞争。注册表 `list()` 的合并清单携带来源标签（project-dsh、project-agents、custom、user-dsh、user-agents、bundled 或提供者名）与 SKILL.md 路径——但静态插件行查询时只见全局层（见第 11 条），插件的技能来源对照表因此不消费该清单，改做标准技能目录存在性比对（见上方 setup 专节）。
 10. **宿主子进程环境以宿主 `process.env` 为基底**：`@deepseek-ai/dsh-subprocess` 组装子进程环境时逐键复制宿主 `process.env`（过滤敏感键与 `DSH_*` 前缀）再叠加覆盖项；bash 工具的 PATH 即来自宿主进程。插件在 setup 启用后把内置二进制目录幂等追加到宿主 `process.env.PATH` 末尾，既有顺序的外部 `wa-cli` 保持优先、无外部版本时内置兜底——这是宿主级的进程内副作用（不落盘、不改动用户 shell 配置、只影响本宿主进程之后的子进程），已在上方 setup 专节与规格中如实登记。
 11. **web profile 的 dsh-skill-filesystem 挂在 agent preset 层，宿主层同名行被禁用**：`dsh --profile web --dump-config` 显示 dsh-base 顶层的 `skill-filesystem` 行 `disabled: true`，真正启用的一份在 agent preset 的常驻组合里。SkillRegistry 的层合并按「查询带 scope 才含 preset 层」——静态插件行 `ctx.inject(['skills'])` 拿到的注册表 `list({})`（无 scope）只能看到全局层（仅本插件），看不到会话实际加载的 user/project 技能；会话侧经 `agentPresets.serviceFor(live, 'skills')` + `scope` 查询才含全部层（dsh-api-session-controller 实证）。因此插件的技能来源对照表不能用注册表清单，改为标准技能目录存在性比对（见上方 setup 专节）；独立探针（真实 dsh-skill + 真实 dsh-skill-filesystem 同层挂载）证实 rank 竞争与来源标签行为符合预期。
+12. **webServer 路由的 handler 拿原生 req/res，支持 prefix 路由**（dsh-host-webserver 0.2.1-rc.2 的类型声明与分发源码）：`register({ kind, path, handler })` 的 handler 收到 node:http 的 `IncomingMessage` 与 `ServerResponse`（可读请求体、可设任意响应头、自持响应生命周期）；`kind: 'exact'` 逐字匹配且路径不得带结尾斜杠，`kind: 'prefix'` 匹配 `p` 与 `p/<任意>`、exact 未命中时最长前缀胜出；宿主可配置 gzip 中间件包裹 res，因此代理不透传上游的 content-length 与 content-encoding。宿主首页不设 CSP，同源 iframe 可内嵌插件路由。审阅代理据此用一条 prefix 路由加子路径白名单实现。
 
 ### 总览与导航实测（overview-navigation，2026-10-20）
 

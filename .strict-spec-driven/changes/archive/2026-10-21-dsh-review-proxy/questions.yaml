@@ -1,0 +1,48 @@
+schema: strict-spec-driven/question-list/v1
+schema_version: 1
+artifact_type: question_list
+schema_file: templates/strict-spec-driven/schemas/question-list.yaml
+change: dsh-review-proxy
+open: []
+resolved:
+  - id: http-access-form
+    question: 作者经 Tailscale 访问 DSH 的具体方式是什么？
+    context: 决定浏览器带来的 Host 与 Origin、页面是否为安全上下文，以及来源校验需要放行的权威；选项为 MagicDNS 名或 100.x IP 加端口的 http、tailscale serve 的 https ts.net，或两者都用
+    answer: 只用 MagicDNS 名的 http 访问，形如 http://gamepc.tail1234.ts.net:13080
+    status: resolved
+    answered_by: human
+  - id: requirement-problem
+    question: What is concretely going wrong today, and for whom?
+    context: 'Why this is asked: the change is planned against a need, and the need lives only with the requester. A "problem" here means what someone does or suffers today — not a feature that is missing. If the answer names a button, a field, a page, or an endpoint, it is a solution, and the underlying problem is still unstated. What a sufficient answer contains: who is affected, what they do today instead, and how often. Worked example: "every Monday one person spends forty minutes copying order rows into a spreadsheet to send the weekly report". What it changes: this becomes the proposal''s why, and it decides whether the change is worth making.'
+    answer: 作者经 Tailscale 远程使用 DSH Web GUI，而审稿环节作者要用的 wa-cli 阅读页（preview --serve）只监听宿主机 127.0.0.1，远程浏览器打不开，审稿时的反馈、确认与复核无法在 DSH 里完成
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-outcome
+    question: What observable difference proves the problem is solved?
+    context: 'Why this is asked: without a success condition, nobody can tell afterwards whether the change worked. "Observable" means someone outside the system can check it without reading the code. What a sufficient answer contains: what a person will see, or no longer have to do, once this is done. Worked example: "the report is in the manager''s inbox on Monday morning without anyone assembling it". What it changes: this becomes the delta spec''s scenarios and the acceptance evidence at review time.'
+    answer: 作者在 DSH Web GUI 的插件面板里选中单元点「审阅」，面板内嵌显示该单元的阅读页，作者在其中提交反馈、验收或决策确认与批量复核，结果与直接用阅读页相同（确认渠道为 preview）
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-trigger
+    question: Why now — what forced this?
+    context: 'Why this is asked: work that nothing forced is the work most often thrown away later. This question catches a request that sounds reasonable but has no real driver behind it. What a sufficient answer contains: the concrete event, deadline, incident, or cost that made this surface now, or an honest statement that nothing did. Worked example: "the report was missed last month and it was raised with the team". What it changes: a change with no trigger is a candidate for deferral, and the answer is weighed at review before archive.'
+    answer: 作者实际经 Tailscale 网络远程访问 DSH，需要在审稿环节直接在 DSH 内部页面完成作者动作
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-non-goals
+    question: What must explicitly not change?
+    context: 'Why this is asked: the requester knows which nearby behavior other people depend on, and the agent does not. A "non-goal" is something the change must leave alone even though it sits close to the work. What a sufficient answer contains: the behavior, setting, or output that must survive untouched, and who relies on it. Worked example: "do not change the saved filters — several people rely on their own". What it changes: these become the proposal''s unchanged_behavior items, which review checks the finished result against.'
+    answer: 作者确认的范围外：不在面板原生另做反馈或确认界面、不支持多会话、不实时推送反馈事件、不接入 DSH 自身认证栅栏、不做 Agent 启动服务后由插件发现的机制；wa-cli 只监听 127.0.0.1 与确认渠道 preview 保持不变
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-interpretation
+    question: Which reading of the request is intended, where more than one is possible?
+    context: 'Why this is asked: a short request usually admits several readings, and building the wrong one is indistinguishable from building nothing. What a sufficient answer contains: the reading that is meant, stated plainly enough to rule the others out — or a statement that only one reading exists and what it is. Worked example: "export means the version sent to the manager, not the one I read myself". What it changes: this fixes the scope boundary before any code is written, and settles disputes about what was asked for.'
+    answer: 采用代理解读：插件 host 按作者点击启动阅读页服务并以同源路由反向代理，面板 iframe 内嵌显示；单会话、默认开启，均由作者在头脑风暴中逐项确认
+    status: resolved
+    kind: requirement
+    answered_by: human

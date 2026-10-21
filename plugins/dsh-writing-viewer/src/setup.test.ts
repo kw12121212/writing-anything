@@ -853,9 +853,15 @@ describe('apply setup gate', () => {
     return { injected, routes };
   }
 
-  it('registers only the two read-only routes while the switch is off', () => {
+  it('registers no setup route while the switch is off', () => {
     const { injected, routes } = applyWith({});
-    expect(routes.map((route) => route.path)).toEqual(['/dsh-writing-viewer/workspace', '/dsh-writing-viewer/snapshot']);
+    expect(routes.map((route) => route.path)).toEqual([
+      '/dsh-writing-viewer/workspace',
+      '/dsh-writing-viewer/snapshot',
+      '/dsh-writing-viewer/review-session',
+      '/dsh-writing-viewer/review-session/end',
+      '/dsh-writing-viewer/review',
+    ]);
     expect(injected.some((entry) => entry.names.includes('skills'))).toBe(false);
   });
 
@@ -866,6 +872,9 @@ describe('apply setup gate', () => {
     expect(routes.map((route) => route.path)).toEqual([
       '/dsh-writing-viewer/workspace',
       '/dsh-writing-viewer/snapshot',
+      '/dsh-writing-viewer/review-session',
+      '/dsh-writing-viewer/review-session/end',
+      '/dsh-writing-viewer/review',
       SETUP_PATH,
     ]);
     expect(injected.some((entry) => entry.names.includes('skills'))).toBe(true);

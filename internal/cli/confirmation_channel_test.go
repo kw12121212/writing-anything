@@ -121,8 +121,8 @@ func TestConfirmationChannelStrict(t *testing.T) {
 			t.Errorf("page lacks %q", want)
 		}
 	}
-	if !strings.Contains(scriptOf(page), "/author-review") {
-		t.Error("page script lacks /author-review")
+	if !strings.Contains(scriptOf(page), "post('author-review'") {
+		t.Error("page script lacks the relative author-review submit")
 	}
 
 	// 无令牌、错令牌与错误的 Host 都返回 403，不写任何文件。

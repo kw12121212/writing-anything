@@ -54,6 +54,11 @@ const BANNED_PATTERNS: { pattern: RegExp; label: string }[] = [
   { pattern: /\bexec(Sync|File)?\s*\(/, label: 'child_process exec' },
 ];
 
+/** cordis 4 (DSH 0.2.x) emits no 'dispose' event, so a listener for it never
+ * runs: teardown must ride a ctx.effect disposer
+ * (dsh-plugin-structure/host-resource-teardown-effect). */
+const DISPOSE_LISTENER = /\bon\s*\??\.?\s*\(\s*['"]dispose['"]/;
+
 const unavailableRunner: CliRunner = { run: async () => null };
 
 /** Recursive inventory: relative path → size + mtime + content hash. */
@@ -89,6 +94,16 @@ describe('read-only constraint (static)', () => {
         expect(match, `${name} 不应包含${label}：${match?.[0] ?? ''}`).toBeNull();
       }
     }
+  });
+
+  it('no runtime source listens for a cordis dispose event', async () => {
+    const files = (await readdir(SRC_DIR)).filter((name) => name.endsWith('.ts') && !name.endsWith('.test.ts'));
+    for (const name of files) {
+      const match = (await readFile(join(SRC_DIR, name), 'utf8')).match(DISPOSE_LISTENER);
+      expect(match, `${name} 不应监听 cordis 的 dispose 事件：${match?.[0] ?? ''}`).toBeNull();
+    }
+    expect("ctx.on('dispose', fn)").toMatch(DISPOSE_LISTENER);
+    expect('ctx.on?.("dispose", fn)').toMatch(DISPOSE_LISTENER);
   });
 
   it('keeps the setup write surface exactly the declared modules', async () => {

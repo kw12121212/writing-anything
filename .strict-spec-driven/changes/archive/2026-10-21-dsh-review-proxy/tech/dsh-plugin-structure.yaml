@@ -1,0 +1,64 @@
+schema: strict-spec-driven/delta-tech/v1
+schema_version: 1
+artifact_type: delta_tech
+schema_file: templates/strict-spec-driven/schemas/delta-tech.yaml
+target_standard: dsh-plugin-structure
+operations:
+  ADDED:
+    review-proxy-thin:
+      strength: MUST
+      statement: DSH 插件代理 wa-cli 阅读页（Reading View）时只做薄转发：只转发固定的精确路径集合（阅读页 GET / 与 POST /feedback、/confirm、/author-review），上游只连 127.0.0.1 上本插件启动的会话端口；不得改写上游响应正文（含 HTML 与内联脚本）；响应头只允许去掉 X-Frame-Options、把 CSP 的 frame-ancestors 'none' 换成 'self'，以及去掉描述传输本身而由宿主重新派生的头（content-length、content-encoding、transfer-encoding、connection、keep-alive），不得放宽上游 CSP 的其他指令（尤其 script-src 与 default-src）——内嵌后阅读页运行在 DSH 源下，其安全性依赖 wa-cli 的 CSP 与模板转义；会话令牌只存在于 host 进程内存，不得出现在任何插件响应、日志或 client 状态中，代理的错误回显不得包含上游 URL 或原始错误信息；审阅相关模块不得含写入型 node:fs 调用，也不得加入静态只读扫描测试的写入模块名单，工作区写入只能出自 wa-cli 子进程
+      rationale: wa-cli 是唯一真相来源，插件只做薄封装；改写内联脚本会使 CSP 哈希失配，改写正文等于在插件里分叉阅读页逻辑；Node fetch 自动解压且宿主可能套 gzip，透传传输头会使正文与长度不符；内嵌页与 DSH 同源，放宽 script-src 即把 DSH 源暴露给阅读页内容；作者经纯 http 的 Tailscale tailnet 远程访问，令牌不出宿主机可缩小暴露面
+      enforcement:
+        method: test
+        detail: 代理单测以假上游断言：未知路径不转发、浏览器 token 与 X-WA-Token 被丢弃并由会话令牌覆盖、正文逐字节回传、头只改 XFO、frame-ancestors 与传输头且 script-src 原样、全部插件响应与页面不含令牌与上游地址、上游不可达时不回显原始错误；readonly.test.ts 的静态扫描覆盖审阅模块且写入名单不变
+      examples:
+        good:
+          - proxy 把上游 CSP 中 frame-ancestors 'none' 替换为 'self'，script-src 的 sha256 哈希原样回传
+        bad:
+          - proxy 用字符串替换把阅读页 HTML 里的 fetch('/feedback') 改成带前缀的地址
+    review-child-lifecycle:
+      strength: MUST
+      statement: 插件启动的 wa-cli preview --serve 子进程必须有界：同一宿主至多一个；启动在固定时限内未读到首行信封即终止子进程并报告失败；会话结束（显式结束、空闲时限、启动另一会话、子进程退出、插件卸载与宿主停止）时必须终止子进程并释放会话状态；必须持续读空子进程 stdout 防止管道阻塞；一次作者动作只调用一次 wa-cli，不得以轮询或健康检查名义反复调用 wa-cli
+      rationale: 长驻子进程是插件新引入的资源，泄漏会残留监听端口与进程；有界调用延续 plugin-cli-audit-exception 对审计日志的保护
+      enforcement:
+        method: test
+        detail: 会话单测以注入式 spawn 假件驱动：启动超时、非零退出、替换与空闲到期都断言 kill 被调用且状态清空；dispose 断言子进程被终止；断言一次启动只 spawn 一次；宿主 SIGTERM 停止后的子进程清理另有实测记录
+      examples:
+        good:
+          - 启动新会话前先 kill 旧子进程并清空会话状态（端口由系统分配，新旧进程不争用端口）
+        bad:
+          - 为探测阅读页是否存活每分钟 spawn 一次 wa-cli status
+    host-resource-teardown-effect:
+      strength: MUST
+      statement: DSH 插件 host 持有的长驻资源（子进程、定时器、process 级监听）必须经 cordis 的 ctx.effect 返回的 disposer 释放，使插件 fiber 卸载（移除、重载、宿主经 SIGTERM/SIGINT 停止）时资源随之释放；不得依赖 ctx.on('dispose')——DSH 0.2.x 的 cordis 4 不发出 dispose 事件，该监听永不触发
+      rationale: dsh-review-proxy 评审实证：cordis 4.0.5 的 Events 接口与实现都没有 dispose 事件，按 ctx.on('dispose') 写的清理在真实宿主中静默失效；DSH 的 profile-boot 在 SIGTERM/SIGINT 时 dispose 应用 fiber，effect disposer 因而覆盖常规停止路径
+      enforcement:
+        method: test
+        detail: host 测试以假 ctx.effect 捕获 disposer 并断言其释放资源；readonly.test.ts 静态扫描禁止运行时源码出现 on('dispose' 或 on("dispose"
+      examples:
+        good:
+          - ctx.effect(() => () => { process.removeListener('exit', onExit); sessions.dispose(); }, 'review sessions')
+        bad:
+          - ctx.on('dispose', () => sessions.dispose())
+    host-cli-arg-guard:
+      strength: MUST
+      statement: DSH 插件把客户端提供的非路径值（如单元引用）作为 wa-cli 位置参数传入前，必须经纯函数校验：非空、有长度上限、不以 - 开头、不含控制字符，并且只经参数列表传递、从不经 shell
+      rationale: 以 - 开头的值会被 wa-cli 当作参数解析，形成参数注入；路径类输入已由 host-route-path-input 约束，非路径输入需要同等的收口
+      enforcement:
+        method: test
+        detail: 单测断言 validReviewUnit 拒绝 --output=x、-x、含换行与超长输入，路由在校验失败时返回 400 且不 spawn
+  MODIFIED:
+    host-route-path-input:
+      strength: MUST
+      statement: DSH 插件 host 路由接受客户端提供的本机路径时，必须先经纯函数校验：非空、不含 NUL、有长度上限、为绝对路径，并拒绝以两个斜杠或反斜杠开头的网络与设备路径（UNC、\\?\ 等），通过后规范化；该路径只作用于单次请求、host 不保存状态——唯一例外是审阅会话（Review Session）：启动请求所选的项目目录在该会话生命周期内保存（作为 wa-cli preview --dir 的取值并在会话摘要中回显），会话结束即释放；路径无效或其下没有工作区时返回带可读原因的空态或拒绝，不得回退到默认定位；读取范围限于 <路径>/.writing-anything/ 且不跟随其下的符号链接，传给 wa-cli 时只作为 --dir 的取值
+      rationale: 相对路径会随宿主工作目录漂移，绝对路径不会以 - 开头，传给 --dir 时不会被当作参数；UNC 与设备路径的一次 stat 就会触发网络访问；插件路由是简单 GET，任意网页可对本机端口发起跨站请求，读取范围与副作用必须先在校验处收口；静默回退会让作者误以为切换成功（overview-navigation 变更的面板路径切换确立此约定）；审阅会话是长驻子进程，其 --dir 必须在会话期间保持（dsh-review-proxy）
+      enforcement:
+        method: test
+        detail: host 测试断言相对、NUL、超长、UNC 与设备路径被拒且返回空态与原因、不回退默认定位、不带参数时行为不变；用写入型假 wa-cli 断言 --dir 取值为所选路径且调用集合有界；评审核对校验函数为纯函数且路径 API 经注入；审阅根目录解析（reviewRootResolver）同样拒绝无效与无工作区的路径
+      examples:
+        good:
+          - plugins/dsh-writing-viewer/src/root.ts 的 parsePanelRoot：注入 isAbsolute/resolve，拒绝相对、NUL、超长与 // 或 \\ 开头的路径；host.ts 的 fullSnapshot 对无效路径返回 rootError 空态
+        bad:
+          - 快照路由直接 join(process.cwd(), req.query.root) 后读取：相对路径漂移、UNC 路径触发网络访问，无工作区时静默回退显示另一个项目
+  REMOVED: {}

@@ -1,0 +1,35 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: dsh-review-proxy
+  status: proposed
+summary:
+  what:
+    - DSH 插件（DSH Plugin）dsh-writing-viewer 在单元详情提供「审阅」入口：插件 host 按作者点击启动 wa-cli preview <unit> --serve 子进程，经 DSH 同源路由反向代理其阅读页（Reading View），面板以 iframe 内嵌显示，作者在 DSH Web GUI 内完成审稿环节的反馈、验收与决策确认和批量复核
+    - wa-cli 阅读页脚本改为以相对路径提交 feedback、confirm 与 author-review，使阅读页挂在任意路径前缀下都能工作
+  why:
+    - 作者经 Tailscale 网络（如 http://gamepc.tail1234.ts.net:13080）远程使用 DSH，而 wa-cli preview --serve 只监听宿主机 127.0.0.1，远程浏览器打不开阅读页，审稿环节的作者动作无法在 DSH 里完成
+    - 插件现有界面严格只读，README 明言作者确认与复核仍走 wa-cli 阅读页；把阅读页经同源代理带进 DSH，写入仍由 wa-cli 完成，保持 wa-cli 是唯一真相来源
+scope:
+  in:
+    - 插件 host：审阅会话的启动、状态与结束路由；启动时以面板当前定位的项目目录（含面板路径切换的目录）为 --dir 起 wa-cli preview <unit> --serve --json，读取首行信封的端口与令牌（令牌只留在服务端），持续读空子进程输出
+    - 单会话：同一宿主同一时间至多一个审阅会话，打开另一个单元即结束旧会话；作者点「结束审阅」、空闲 30 分钟或插件卸载时结束子进程
+    - '代理路由：固定精确路径 GET /dsh-writing-viewer/review/ 与 POST /dsh-writing-viewer/review/feedback、/confirm、/author-review；每条先过既有请求来源校验（Request Origin Guard），转发时 Host 改写为 127.0.0.1:<port>、令牌由服务端注入；响应头原样保留，只把 X-Frame-Options: DENY 放宽为同源可嵌（frame-ancestors ''self''）；无会话时返回可读提示'
+    - client：单元详情的「审阅」按钮、详情区内嵌 iframe 与「结束审阅」按钮；来源校验拒绝（未在 allowedHosts 放行 Tailscale MagicDNS 权威）或会话启动失败时显示可读原因，不显示空白 iframe
+    - 默认开启：不新增配置开关，装上插件即具备审阅能力
+    - wa-cli：internal/preview 阅读页脚本的提交路径改为相对路径，直接访问 --serve 时行为不变
+    - 规格与标准：修订 dsh-plugin 主规格的 read-only-workspace 与 snapshot-no-writes 的写入例外表述并新增审阅相关需求；preview 主规格新增相对路径提交需求；dsh-plugin-structure 技术标准新增审阅代理零写入与子进程生命周期规则；新增场景（Scene）dsh-plugin/remote-review
+    - README：审阅能力说明、Tailscale MagicDNS 经 allowedHosts 放行的配置示例、纯 http 非安全上下文的约束、不得经 Tailscale Funnel 暴露到公网的安全边界
+  out:
+    - 面板原生实现反馈或确认界面（不另起写入渠道）
+    - 多个并发审阅会话
+    - 把阅读页反馈事件实时推送到面板（结束审阅后由手动刷新获取）
+    - 接入 DSH 宿主自身的浏览器认证栅栏
+    - Agent 自行启动 preview --serve 后由插件发现的机制
+    - Tailscale serve（https ts.net）与 Funnel 接入方式的专门适配
+unchanged_behavior:
+  - wa-cli preview --serve 只监听 127.0.0.1，Host 与令牌校验、各 POST 接口的请求体、错误码与写入语义不变；确认渠道（Confirmation Channel）仍记为 preview
+  - 插件快照、总览、单元树、产物视图、素材与队列视图、路径切换与 setup 设置区的行为不变；插件自身代码仍不向项目目录写入任何文件
+  - 完整 Go 回归命令与 internal/** 覆盖率范围不变；wa-cli、内置技能与 MCP 服务不依赖插件包

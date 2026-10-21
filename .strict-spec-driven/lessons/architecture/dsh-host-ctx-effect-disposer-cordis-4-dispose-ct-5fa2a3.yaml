@@ -1,0 +1,19 @@
+schema: strict-spec-driven/lesson/v1
+schema_version: 1
+artifact_type: lesson
+schema_file: templates/strict-spec-driven/schemas/lesson.yaml
+lesson:
+  id: dsh-host-ctx-effect-disposer-cordis-4-dispose-ct-5fa2a3
+  title: DSH 插件 host 的清理要挂 ctx.effect disposer：cordis 4 没有 dispose 事件，ctx.on('dispose') 永不触发
+category: architecture
+status: active
+created_at: '2026-10-21T15:34:12.093Z'
+updated_at: '2026-10-21T15:34:12.093Z'
+context: 为 DSH 插件（DSH Plugin）host 侧持有的长驻资源（wa-cli preview --serve 子进程、定时器、process 级监听）实现插件卸载与宿主停止时的清理
+observation: dsh-review-proxy 首版按常见 Koishi/cordis 3 写法用 ctx.on('dispose', …) 清理；单测用假 ctx 断言监听已注册即通过。独立评审核对 DSH 0.2.1-rc.2 自带 cordis 4.0.5 的 src/events.ts 与 src/fiber.ts：Events 接口与实现都没有 dispose 事件，监听随 fiber 卸载被静默移除、从不执行。改为 ctx.effect(() => () => {…}) 后实测：审阅进行中对 dsh 发 SIGTERM（profile-boot 会 dispose 应用 fiber），wa-cli 子进程随之结束
+takeaway: DSH 插件 host 的任何长驻资源都经 ctx.effect 返回的 disposer 释放，不要写 ctx.on('dispose')；验证要么对照宿主 cordis 源码，要么在真实宿主上停止/重载后核对资源确已释放——只断言「监听已注册」的假件测试证明不了清理会发生
+applies_when: 在 DSH 插件 host 入口里需要在插件卸载、重载或宿主停止时释放子进程、定时器、监听或其他资源，或者看到 ctx.on('dispose') 一类写法时
+occurrences:
+  - origin: dsh-review-proxy
+    date: '2026-10-21'
+    evidence: plugins/dsh-writing-viewer/src/host.ts apply() 的 ctx.effect 审阅会话清理；src/readonly.test.ts「no runtime source listens for a cordis dispose event」；docs/evidence/review-live-check.txt 第三部分 SIGTERM 清理实测；tech delta host-resource-teardown-effect

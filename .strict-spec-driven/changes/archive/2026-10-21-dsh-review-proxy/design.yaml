@@ -1,0 +1,55 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: dsh-review-proxy
+approach:
+  - 插件 host 新增审阅会话管理：作者在面板单元详情点「审阅」时 POST 启动路由（携带面板当前 root 与 unit），host 以 spawn 起 wa-cli preview <unit> --serve --json --dir <root>（不带 --port，由系统分配），读取 stdout 首行输出信封的 preview.url 解析端口与令牌，之后持续读空 stdout 的事件行；令牌只保存在 host 进程内存中，不进入任何响应。同一宿主至多一个会话，新启动先结束旧子进程；结束审阅、空闲 30 分钟（无代理请求）、子进程自行退出或插件卸载时清理会话。
+  - '代理以一条 prefix 路由 /dsh-writing-viewer/review 实现（DSH 0.2.1-rc.2 的 webServer.register 支持 kind: prefix，exact 路径不得带结尾斜杠，无法注册 /dsh-writing-viewer/review/）：handler 按子路径白名单分发——/dsh-writing-viewer/review/ 转发为上游 GET /?token=<令牌>，/dsh-writing-viewer/review/feedback、/confirm、/author-review 的 POST 转发为上游同名 POST 并由 host 覆盖 X-WA-Token；/dsh-writing-viewer/review（无结尾斜杠）重定向到带斜杠的地址，使相对路径解析正确；白名单外子路径返回 404、方法不符返回 405。浏览器带来的 token 查询参数与 X-WA-Token 头一律丢弃。上游请求的 Host 固定为 127.0.0.1:<port>，wa-cli 自身的 Host 与令牌校验因此原样生效。每次请求先过既有 guardRequest（Request Origin Guard），拒绝时返回 403 且不触达上游；无会话时返回可读的 JSON 或 HTML 提示。响应状态码、正文与头原样回传，只把 X-Frame-Options: DENY 去掉并把 Content-Security-Policy 中的 frame-ancestors ''none'' 替换为 frame-ancestors ''self''，其余指令（脚本哈希、connect-src ''self'' 等）不动。'
+  - wa-cli 侧只改 internal/preview 阅读页脚本：fetch('/feedback') 与 post('/confirm')、post('/author-review') 改为相对路径 'feedback'、'confirm'、'author-review'。页面在 / 时解析结果与改动前相同；挂在 /dsh-writing-viewer/review/ 下时解析为代理的同名路由。ScriptCSP 由脚本内容计算哈希，随改动自动更新，代理无需改写 HTML。
+  - client 在单元详情加「审阅」按钮；启动成功后详情区显示 iframe（src 为 dsh-writing-viewer/review/ 相对路径）与「结束审阅」按钮，结束后自动刷新快照。启动失败、来源校验 403（典型原因：Tailscale MagicDNS 权威未写进 allowedHosts）或会话已失效时显示可读原因与下一步提示，不显示空白 iframe。
+decisions:
+  host-spawned-session:
+    decision: 审阅会话由插件 host 按作者点击启动 wa-cli preview --serve 子进程，而不是发现 Agent 启动的服务
+    rationale: 作者已确认；插件 host 从首行信封直接取得端口与令牌，wa-cli 不需要新增服务登记或发现机制，令牌也不经 Agent 输出外泄；一次点击只产生一次 wa-cli 调用，符合 dsh-plugin-structure 的 plugin-cli-audit-exception（调用有界、不轮询）
+  iframe-same-origin:
+    decision: '阅读页以 iframe 内嵌在面板详情区，代理只把 frame-ancestors ''none'' 与 X-Frame-Options: DENY 放宽为同源可嵌'
+    rationale: 作者已确认要「DSH 内部 web ui 里的页面」；代理路由与 DSH Web GUI 同源，frame-ancestors 'self' 只允许同源嵌入，其余安全头与 CSP 指令保持 wa-cli 原样，放宽面最小
+  default-on:
+    decision: 审阅能力默认开启，不新增配置开关
+    rationale: 作者明确选择默认开启；安全前提是既有请求来源校验加 allowedHosts 显式放行远程权威，以及作者的 Tailscale tailnet 作为网络边界，README 如实登记该边界并警示不得经 Funnel 暴露到公网
+  single-session:
+    decision: 同一宿主同一时间至多一个审阅会话，代理用一条 prefix 路由加子路径白名单
+    rationale: 作者已确认单会话；相对路径提交后 POST 不带会话标识，单会话使固定子路径足以定位上游，无需 cookie；DSH 源码（dsh-host-webserver 的 register/match）实证 prefix 路由可用而 exact 路径不能带结尾斜杠
+  relative-submit-paths:
+    decision: wa-cli 阅读页脚本以相对路径提交，代理不改写 HTML
+    rationale: 改写 HTML 会使 CSP 的脚本哈希失配；相对路径对直接访问 --serve 完全等价，且在 Tailscale 远程访问时浏览器只请求 DSH 同源地址，不会看到 127.0.0.1 地址
+  token-server-side:
+    decision: 令牌只保存在 host 内存并由代理注入，浏览器侧既拿不到也不需要令牌
+    rationale: 远程浏览器经 http 明文 tailnet 访问，令牌不出宿主机可减少暴露；代理覆盖而不是透传令牌，避免浏览器侧伪造的令牌被转发
+  writes-only-by-wacli:
+    decision: 工作区写入只由 wa-cli preview 子进程在作者显式提交时完成，插件代码自身仍零写入；修订 read-only-workspace 与 snapshot-no-writes 的表述并在技术标准中钉住审阅代理模块不含写入型 fs 调用
+    rationale: 保持 wa-cli 是唯一真相来源、MCP 与插件只做薄封装；与既有审计日志例外同一表述方式，如实登记而非宣称绝对只读
+  http-non-secure-context:
+    decision: 面板与代理页面不依赖仅安全上下文可用的浏览器 API
+    rationale: 作者经 http://gamepc.tail1234.ts.net:13080 访问，纯 http 非回环地址不是安全上下文；阅读页现有脚本只用 fetch、URLSearchParams 与选区 API，均可用
+  scene-remote-review:
+    decision: 新增场景 dsh-plugin/remote-review 描述作者经 Tailscale 远程打开审阅、提交反馈与确认、结束审阅的流程及来源校验拒绝、启动失败、会话失效等异常流
+    rationale: 变更触及作者可观察行为，按场景优先路由先写场景再写需求
+  probe-evidence:
+    decision: 宿主能力按 dsh-host-webserver 0.2.1-rc.2 源码确认：handler 收到原生 IncomingMessage 与 ServerResponse（可读请求体、可设任意响应头），支持 prefix 路由，宿主首页不设 CSP（iframe 同源可嵌）；iframe 行为另由真实环境实测核对
+    rationale: 风险项「exact 路由能否读请求体与设头」由类型声明与分发源码直接回答，无需改动方案
+alternatives:
+  - option: 插件面板原生实现反馈与确认界面，由 host 子进程调用 wa-cli feedback add、accept、decide 等命令
+    reason: 会在阅读页之外另起一套写入界面与确认渠道，确认渠道无法如实记为 preview，且重复实现 wa-cli 已有的阅读页逻辑，违背薄封装约定
+  - option: 代理改写阅读页 HTML 中的提交路径
+    reason: 改写内联脚本会使 wa-cli CSP 的 sha256 脚本哈希失配，脚本被浏览器拒绝执行
+  - option: 新标签页打开代理地址而不内嵌
+    reason: 作者要求页面在 DSH Web GUI 内部显示
+  - option: wa-cli preview 增加监听非回环地址的选项供 Tailscale 直连
+    reason: 违反 cli-contract 的回环监听规则，且绕开 DSH 的来源校验与 allowedHosts
+risks:
+  - 默认开启后，凡通过来源校验的请求（本机进程、allowedHosts 放行的远程权威）都能经代理提交作者确认；安全依赖 tailnet 边界，若作者经 Funnel 公开 DSH 则失守
+  - iframe 内的阅读页在 DSH 主题与窄宽度下的可读性未经验证，阅读页样式由 wa-cli 内联，插件不改写
+  - 子进程泄漏：宿主异常退出时 preview --serve 子进程可能残留，需在插件卸载与子进程 stdin/父进程退出时清理
+  - '宿主 gzip 压缩（compression: gzip 配置时）包裹 res，代理回传时不得透传上游的 content-length 与 content-encoding'

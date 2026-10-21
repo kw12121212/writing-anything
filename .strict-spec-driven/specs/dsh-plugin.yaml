@@ -28,12 +28,16 @@ requirements:
         - THEN: 面板显示空态指引，提示可用 wa-cli init 创建工作区，插件不报错崩溃
   read-only-workspace:
     strength: MUST
-    statement: 插件在加载、定位与展示工作区的全过程中不得创建、修改或删除 .writing-anything/ 工作区内的任何产物
+    statement: 插件在加载、定位与展示工作区的全过程中不得创建、修改或删除 .writing-anything/ 工作区内的任何产物；唯一例外是审阅会话中作者在代理阅读页显式提交的反馈、确认与复核，由 wa-cli preview 子进程按 preview 主规格写入，插件代码自身不写入任何工作区文件
     scenarios:
       no-workspace-writes:
         - GIVEN: 插件已装入 web profile，面板尚未打开，.writing-anything/ 内文件清单、内容与修改时间已记录
         - WHEN: 在 Web GUI 中打开插件面板并完成工作区定位与展示
         - THEN: .writing-anything/ 内文件的清单、内容与修改时间与打开面板前一致
+      review-open-no-writes:
+        - GIVEN: 已记录 .writing-anything/ 内除 audit.log 外全部文件的清单、内容与修改时间
+        - WHEN: 作者启动审阅会话并在代理阅读页中只浏览、不提交任何反馈、确认或复核，然后结束审阅
+        - THEN: 这些文件的清单、内容与修改时间与审阅前一致；新增或发生变化的文件至多为 wa-cli 追加的 audit.log
   snapshot-aggregation:
     strength: MUST
     statement: 插件的 host 侧必须提供只读的工作区快照（Workspace Snapshot）服务：按定位到的项目目录聚合 .writing-anything/ 的配置、素材（Source）清单、规范包（Pack）清单、决策（含待决）与待复核摘要，以及每个作品（Work）的 work.yaml、单元（Unit）树（阶段、进度、阻塞项）与各单元目录产物全文——写作简报（Brief）、大纲（Outline）、出处（Provenance）、论断（Claim）、作者反馈（Feedback）、草稿（Draft）正文（Markdown 全文）、审稿与验收证据；长篇（novel）文体按文体存在的产物（如场景契约、伏笔台账（Foreshadowing Ledger）、时间线（Timeline）、知情表（Knowledge State））同样纳入；快照必须内嵌 wa-cli validate 的诊断作为错误态数据
@@ -76,19 +80,19 @@ requirements:
         - THEN: 缺失部分按降级标注呈现，其余数据照常返回
   snapshot-no-writes:
     strength: MUST
-    statement: 快照的生成与提供过程不得创建、修改或删除 .writing-anything/ 工作区内的任何产物（Artifact），插件自身代码不得向项目目录写入任何文件；唯一例外是快照经子进程调用的 wa-cli 只读命令按其审计日志（Audit Log）契约向 .writing-anything/audit.log 追加运维痕迹——审计日志不是产物、追加出自 wa-cli，且每次快照请求的 wa-cli 调用必须限定在有界命令集合内（status、validate、next 各一次，每个长篇（novel）作品 timeline 一次），不得轮询式反复调用
+    statement: 快照的生成与提供过程不得创建、修改或删除 .writing-anything/ 工作区内的任何产物（Artifact），插件自身代码不得向项目目录写入任何文件；快照的唯一例外是经子进程调用的 wa-cli 只读命令按其审计日志（Audit Log）契约向 .writing-anything/audit.log 追加运维痕迹——审计日志不是产物、追加出自 wa-cli，且每次快照请求的 wa-cli 调用必须限定在有界命令集合内（status、validate、next 各一次，每个长篇（novel）作品 timeline 一次），不得轮询式反复调用。审阅会话的 wa-cli 调用不属于快照，见 review-session-start
     scenarios:
-      snapshot-no-writes:
-        - GIVEN: 已记录 .writing-anything/ 内除 audit.log 外全部文件的清单、内容与修改时间
-        - WHEN: 请求一次完整快照
-        - THEN: 这些文件的清单、内容与修改时间与请求前一致；新增或发生变化的文件至多为 wa-cli 追加的 audit.log
       audit-log-bounded:
         - GIVEN: 主机环境可执行 wa-cli 且快照完整可用（未降级）
         - WHEN: 请求一次快照后读取 audit.log
         - THEN: 本次快照追加的审计行与有界命令集合一一对应（status、validate、next 各一条，每个长篇作品 timeline 一条），无多余调用
+      snapshot-no-writes:
+        - GIVEN: 已记录 .writing-anything/ 内除 audit.log 外全部文件的清单、内容与修改时间
+        - WHEN: 请求一次完整快照
+        - THEN: 这些文件的清单、内容与修改时间与请求前一致；新增或发生变化的文件至多为 wa-cli 追加的 audit.log
   unit-tree-navigation:
     strength: MUST
-    statement: 面板必须为选中的作品提供单元（Unit）树导航：按层级缩进展示单元，汇总单元带进度标记；选中某个单元后详情区显示该单元的阶段、进度、阻塞项、下一步命令与产物清单，且不提供任何编辑、写入或确认控件
+    statement: 面板必须为选中的作品提供单元（Unit）树导航：按层级缩进展示单元，汇总单元带进度标记；选中某个单元后详情区显示该单元的阶段、进度、阻塞项、下一步命令与产物清单，面板自身不提供任何编辑、写入或确认控件；唯一例外是详情区的「审阅」入口与其内嵌的 wa-cli 阅读页（Reading View），阅读页中的反馈、确认与复核控件由 wa-cli 提供并由 wa-cli 写入（见 review-panel-embed）
     scenarios:
       tree-hierarchy:
         - GIVEN: novel 作品含卷、章、场景三级单元
@@ -97,7 +101,7 @@ requirements:
       unit-detail:
         - GIVEN: 单元树已展示
         - WHEN: 选中某个场景单元
-        - THEN: 详情区显示该单元的阶段、进度、阻塞项列表、下一步命令与产物清单，界面中没有编辑、写入或确认控件
+        - THEN: 详情区显示该单元的阶段、进度、阻塞项列表、下一步命令与产物清单；除「审阅」按钮外，面板中没有编辑、写入或确认控件
   overview-empty-and-error:
     strength: MUST
     statement: 面板在空态与错误态下必须可读：定位不到 .writing-anything/ 时显示 wa-cli init 指引；工作区内没有作品时显示创建作品的指引；validate 诊断与快照降级（degraded）原因必须以列表透出；取数失败时显示原因与重试，不得空白或崩溃；面板必须提供手动刷新入口
@@ -256,24 +260,8 @@ requirements:
         - THEN: 产物视图打开，语义卡片视图与源码高亮视图可仅用键盘切换，全程无需鼠标
   route-origin-guard:
     strength: MUST
-    statement: '插件注册的每条 host 路由（/dsh-writing-viewer/workspace、/dsh-writing-viewer/snapshot 与 /dsh-writing-viewer/setup 的状态与动作路由）在处理请求前必须做请求来源校验（Request Origin Guard）：Host 头缺失或不可解析时拒绝；Host 的 hostname 必须是回环地址（localhost、127.0.0.0/8、::1）、等于宿主监听绑定地址的字面量（比较忽略端口与接口 zone），或命中插件配置 allowedHosts 的权威（bare host[:port]：带端口精确匹配，不带端口匹配任意端口，经 WHATWG URL 规范化含默认端口）；请求带 sec-fetch-site: cross-site 时拒绝；带 Origin 头时其 http(s) 权威必须与 Host 相同权威。拒绝时返回 403 与 cache-control: no-store 的 JSON 错误体，不读取任何工作区数据、不触发任何下载或注册动作；面板 client 的同源请求必须不受影响'
+    statement: '插件注册的每条 host 路由（/dsh-writing-viewer/workspace、/dsh-writing-viewer/snapshot、/dsh-writing-viewer/setup 的状态与动作路由、/dsh-writing-viewer/review-session 及其 end 路由，以及 /dsh-writing-viewer/review/ 下的全部代理路由）在处理请求前必须做请求来源校验（Request Origin Guard）：Host 头缺失或不可解析时拒绝；Host 的 hostname 必须是回环地址（localhost、127.0.0.0/8、::1）、等于宿主监听绑定地址的字面量（比较忽略端口与接口 zone），或命中插件配置 allowedHosts 的权威（bare host[:port]：带端口精确匹配，不带端口匹配任意端口，经 WHATWG URL 规范化含默认端口）；请求带 sec-fetch-site: cross-site 时拒绝；带 Origin 头时其 http(s) 权威必须与 Host 相同权威。拒绝时返回 403 与 cache-control: no-store 的 JSON 错误体，不读取任何工作区数据、不触发任何下载或注册动作、不启动审阅会话也不向阅读页服务转发；面板 client 的同源请求必须不受影响'
     scenarios:
-      unknown-host-rejected:
-        - GIVEN: 插件已加载，宿主监听 127.0.0.1
-        - WHEN: '携带 Host: attacker.example 的 GET 请求访问任一插件路由（模拟 DNS rebinding 或陌生域名）'
-        - THEN: '响应为 403，content-type 为 application/json，带 cache-control: no-store 与可读错误原因，响应体不含任何工作区数据'
-      cross-site-rejected:
-        - GIVEN: 插件已加载，请求 Host 为 127.0.0.1:端口
-        - WHEN: '同一请求携带 sec-fetch-site: cross-site（恶意页面的跨站读取）'
-        - THEN: 响应为 403 JSON 错误体，不返回快照数据
-      cross-origin-marker-rejected:
-        - GIVEN: 插件已加载，请求 Host 为 127.0.0.1:端口
-        - WHEN: '同一请求携带 Origin: http://evil.example 而 Host 不变'
-        - THEN: 响应为 403 JSON 错误体，不返回快照数据
-      same-origin-panel-unaffected:
-        - GIVEN: 插件已装入 web profile，浏览器经宿主页面同源打开面板
-        - WHEN: 面板 client 以相对路径 fetch 全部插件路由（加载、刷新、路径切换、设置区状态与启用动作）
-        - THEN: 请求照常返回 200 与原有响应结构，面板行为与本变更之前一致
       allowed-hosts-config:
         - GIVEN: 插件配置 allowedHosts 含 gamepc.example.net:13080（bare host:port 权威）
         - WHEN: '携带 Host: gamepc.example.net:13080 的请求访问任一路由'
@@ -282,10 +270,34 @@ requirements:
         - GIVEN: 宿主以 --host 192.168.1.10 绑定非回环接口
         - WHEN: 浏览器经 http://192.168.1.10:端口/ 打开面板并同源访问插件路由
         - THEN: Host 命中监听绑定地址字面量，请求照常处理，面板可用
+      cross-origin-marker-rejected:
+        - GIVEN: 插件已加载，请求 Host 为 127.0.0.1:端口
+        - WHEN: '同一请求携带 Origin: http://evil.example 而 Host 不变'
+        - THEN: 响应为 403 JSON 错误体，不返回快照数据
+      cross-site-rejected:
+        - GIVEN: 插件已加载，请求 Host 为 127.0.0.1:端口
+        - WHEN: '同一请求携带 sec-fetch-site: cross-site（恶意页面的跨站读取）'
+        - THEN: 响应为 403 JSON 错误体，不返回快照数据
+      same-origin-panel-unaffected:
+        - GIVEN: 插件已装入 web profile，浏览器经宿主页面同源打开面板
+        - WHEN: 面板 client 以相对路径 fetch 全部插件路由（加载、刷新、路径切换、设置区状态与启用动作）
+        - THEN: 请求照常返回 200 与原有响应结构，面板行为与本变更之前一致
       setup-action-guarded:
         - GIVEN: 插件已加载且 enableSetup 开启
         - WHEN: 携带伪造 Host 的 POST 请求访问设置动作路由
         - THEN: 响应为 403 JSON 错误体，不触发任何下载、技能注册或环境修改
+      unknown-host-rejected:
+        - GIVEN: 插件已加载，宿主监听 127.0.0.1
+        - WHEN: '携带 Host: attacker.example 的 GET 请求访问任一插件路由（模拟 DNS rebinding 或陌生域名）'
+        - THEN: '响应为 403，content-type 为 application/json，带 cache-control: no-store 与可读错误原因，响应体不含任何工作区数据'
+      review-routes-guarded:
+        - GIVEN: 有进行中的审阅会话，allowedHosts 未放行 attacker.example
+        - WHEN: '携带 Host: attacker.example 的请求 POST /dsh-writing-viewer/review/confirm 或 POST /dsh-writing-viewer/review-session'
+        - THEN: 响应为 403 JSON 错误体，请求未转发到阅读页服务，未启动或替换会话，工作区文件不变
+      tailscale-magicdns-allowed:
+        - GIVEN: 插件配置 allowedHosts 含 gamepc.tail1234.ts.net:13080
+        - WHEN: 浏览器经 http://gamepc.tail1234.ts.net:13080 同源访问审阅路由（Origin 与 Host 同权威）
+        - THEN: 请求通过来源校验并按审阅路由的行为处理
   queue-views:
     strength: MUST
     statement: 面板必须提供两个只读的作者行动队列清单视图：总览的「待决决策」计数磁贴可点开决策队列（Decision Queue）清单，逐条展示每条决策的 id、status、question、options（id 与 text，recommendation 指向的选项带可辨识标记）、rationale、blocking 标记与关联 units；「待复核」计数磁贴可点开作者复核清单，逐条展示 kind、work、ref、channel、confirmed_at 与 reviewed_at。两个清单只消费快照已携带的 decisions.yaml 与 author-reviews.yaml 全文；文件缺失时显示空态提示、YAML 解析失败时显示可读错误提示，均不得空白或崩溃；清单视图不得出现任何编辑、写入或确认控件，作者操作仍走 wa-cli
@@ -422,3 +434,83 @@ requirements:
         - GIVEN: CLI 路径来自操作者配置的 waCliPath，或路径上二进制被手动更换导致标记 sha256 不符，或无标记
         - WHEN: 查看设置区 CLI 状态
         - THEN: 如实显示为非插件安装
+  review-session-start:
+    strength: MUST
+    statement: 插件 host 必须提供审阅会话（Review Session）的状态与启动路由 /dsh-writing-viewer/review-session：POST 请求体为不超过 64 KiB 的 JSON 对象，含 unit（单元引用）与可选 root（项目目录绝对路径，校验规则与快照路由的 root 参数相同；省略时按默认定位）。启动时先结束任何既有会话，再以该项目目录调用一次 wa-cli preview <unit> --serve --json --dir <root>，在 10 秒内读到首行输出信封即视为启动成功，返回 200 与会话摘要（unit、root、开始时间），响应与会话摘要不得包含阅读页令牌或上游端口；同一宿主同一时间至多一个会话。root 无效或其下没有 .writing-anything/ 时返回 400 与可读原因、不调用 wa-cli；wa-cli 不可执行、以非零退出码结束（如单元引用无法解析，原样透出其诊断）或超时未给出首行信封时返回可读失败原因，并确保不残留子进程。GET 返回当前是否有会话及其摘要。一次启动动作只调用一次 wa-cli，不得轮询
+    scenarios:
+      start-ok:
+        - GIVEN: 面板已定位到含作品 my-post 的项目目录 D，宿主机可执行 wa-cli
+        - WHEN: '同源 POST /dsh-writing-viewer/review-session：{unit: my-post}'
+        - THEN: 返回 200，会话摘要的 unit 为 my-post、root 为 D，响应体不含 token 与端口；GET 同一路由报告有进行中的会话
+      start-replaces:
+        - GIVEN: 已有 my-post 的审阅会话
+        - WHEN: POST 启动 my-post/intro 的会话
+        - THEN: 旧的 wa-cli preview 子进程已结束，GET 报告的会话 unit 为 my-post/intro，宿主上只有一个 preview 子进程
+      start-bad-unit:
+        - GIVEN: 项目目录 D 中没有单元 nope
+        - WHEN: 'POST /dsh-writing-viewer/review-session：{unit: nope}'
+        - THEN: 返回失败原因并透出 wa-cli 的单元解析诊断，GET 报告没有会话，宿主上没有残留的 preview 子进程
+      start-bad-root:
+        - GIVEN: 插件已加载
+        - WHEN: 'POST /dsh-writing-viewer/review-session：{unit: my-post, root: relative/path}'
+        - THEN: 返回 400 与可读原因，没有调用 wa-cli
+  review-proxy:
+    strength: MUST
+    statement: 插件 host 必须以固定同源路由代理当前会话的阅读页（Reading View）：GET /dsh-writing-viewer/review/ 对应阅读页 GET /，POST /dsh-writing-viewer/review/feedback、/dsh-writing-viewer/review/confirm 与 /dsh-writing-viewer/review/author-review 对应阅读页同名 POST；其他子路径返回 404，不访问上游。代理向上游请求时由 host 注入会话令牌（GET 的 token 查询参数、POST 的 X-WA-Token 头），丢弃浏览器带来的 token 查询参数与 X-WA-Token 头，上游 Host 为 127.0.0.1:<port>；请求体超过 64 KiB 时返回 400 且不转发。上游响应的状态码与正文原样回传；响应头原样保留，只去掉 X-Frame-Options、把 Content-Security-Policy 中的 frame-ancestors 'none' 替换为 frame-ancestors 'self'，并去掉描述传输本身而由宿主重新派生的头（content-length、content-encoding、transfer-encoding、connection、keep-alive），CSP 的其他指令不变。没有进行中的会话时返回可读的「没有进行中的审阅」提示（GET 为 HTML，POST 为 JSON），不访问任何上游；上游不可达或超时时返回可读提示，不回显原始错误信息。经代理写入的结果与直接使用阅读页完全相同，确认渠道（Confirmation Channel）仍为 preview；代理页面与面板不得依赖仅安全上下文（Secure Context）可用的浏览器 API，使作者经 http 的 Tailscale MagicDNS 地址访问时可用
+    scenarios:
+      proxy-page:
+        - GIVEN: 有 my-post 的会话，作者浏览器经 http://gamepc.tail1234.ts.net:13080 访问且该权威已在 allowedHosts 放行
+        - WHEN: 同源 GET /dsh-writing-viewer/review/
+        - THEN: 返回 200 与含 my-post 正文的阅读页；响应不含 X-Frame-Options，Content-Security-Policy 含 frame-ancestors 'self' 且脚本哈希与上游相同；页面中不出现阅读页令牌或 127.0.0.1 地址
+      proxy-feedback:
+        - GIVEN: 同上，draft.md 含「连接池很重要」一次
+        - WHEN: '同源 POST /dsh-writing-viewer/review/feedback（不带 X-WA-Token）：{unit: my-post, quote: 连接池很重要, text: 补一个例子}'
+        - THEN: 返回 200，feedback.id 为 fb-1；wa-cli feedback list my-post --json 列出这条反馈
+      proxy-no-session:
+        - GIVEN: 没有进行中的会话
+        - WHEN: 同源 POST /dsh-writing-viewer/review/feedback
+        - THEN: 返回可读的「没有进行中的审阅」JSON 提示，feedback.yaml 不被创建
+      proxy-forged-token-ignored:
+        - GIVEN: 有进行中的会话
+        - WHEN: '同源 POST /dsh-writing-viewer/review/feedback 携带 X-WA-Token: forged'
+        - THEN: 上游收到的是会话令牌而非 forged，请求按正常反馈处理
+      proxy-confirm-decision-channel:
+        - GIVEN: 作品 my-post 的决策队列中有关联 my-post 的 open 决策 dec-1（选项 a、b），有 my-post 的审阅会话
+        - WHEN: '同源 POST /dsh-writing-viewer/review/confirm：{kind: decision, id: dec-1, option: a, confirmation: 作者：用甲}'
+        - THEN: '返回 200，confirmation 的 kind 为 decision、id 为 dec-1、channel 为 preview；decisions.yaml 中该决策记录 channel: preview'
+  review-session-end:
+    strength: MUST
+    statement: 审阅会话必须在以下任一情形结束并终止对应的 wa-cli preview 子进程：作者经 POST /dsh-writing-viewer/review-session/end 显式结束、30 分钟内没有任何代理请求、子进程自行退出、启动另一会话、插件卸载或宿主停止（含宿主收到 SIGTERM/SIGINT 后的正常停止）；结束后 GET /dsh-writing-viewer/review-session 报告没有会话，代理路由按「没有进行中的审阅」处理
+    scenarios:
+      end-explicit:
+        - GIVEN: 有 my-post 的会话
+        - WHEN: 同源 POST /dsh-writing-viewer/review-session/end
+        - THEN: 返回 200，preview 子进程已结束，GET /dsh-writing-viewer/review/ 返回「没有进行中的审阅」提示
+      end-idle:
+        - GIVEN: 有 my-post 的会话，之后 30 分钟没有任何代理请求
+        - WHEN: 空闲时限到达
+        - THEN: preview 子进程已结束，GET /dsh-writing-viewer/review-session 报告没有会话
+      end-dispose:
+        - GIVEN: 有进行中的会话
+        - WHEN: 插件被卸载或宿主停止该插件
+        - THEN: preview 子进程已结束，不残留监听端口
+  review-panel-embed:
+    strength: MUST
+    statement: 面板的单元详情必须提供「审阅」按钮；点击后启动该单元的审阅会话（项目目录取面板当前显示的目录，含路径切换所选目录），成功后在详情区以 iframe 内嵌同源代理阅读页并提供「结束审阅」按钮，结束后移除 iframe 并刷新快照。启动进行中显示可读的进行中提示；启动失败、审阅路由被请求来源校验拒绝（提示在插件配置 allowedHosts 中放行当前访问的权威，如 Tailscale MagicDNS 名与端口）或会话已结束时，显示可读原因与重新审阅入口，不显示空白 iframe；会话是否已结束由面板在 iframe 每次加载、窗口重新获得焦点或页面重新可见时查询会话状态路由判定（不调用 wa-cli）。「审阅」与「结束审阅」必须可经键盘激活
+    scenarios:
+      panel-embed:
+        - GIVEN: 面板定位到项目目录 D，单元树选中 my-post
+        - WHEN: 作者点「审阅」
+        - THEN: 详情区出现 iframe，其中显示 my-post 的阅读页，并出现「结束审阅」按钮
+      panel-origin-rejected:
+        - GIVEN: 作者经 http://gamepc.tail1234.ts.net:13080 访问，allowedHosts 未放行该权威
+        - WHEN: 作者点「审阅」
+        - THEN: 面板显示来源校验拒绝的原因与在 allowedHosts 中放行该权威的提示，没有空白 iframe
+      panel-end-refresh:
+        - GIVEN: 详情区正显示 my-post 的阅读页，作者已在其中提交一条反馈
+        - WHEN: 作者点「结束审阅」
+        - THEN: iframe 被移除，面板重新拉取快照
+      panel-session-gone-on-focus:
+        - GIVEN: 详情区正显示 my-post 的阅读页，之后会话因空闲超时结束
+        - WHEN: 作者切回该浏览器窗口（窗口获得焦点）
+        - THEN: iframe 被移除，面板显示「审阅已结束」与「重新审阅」入口
