@@ -1,0 +1,16 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: plugin-version-tag-align
+approach:
+  - 版本对齐作为发布前置约束：release 技能第 4 步确认版本号后即校验 plugins/dsh-writing-viewer/package.json 的 version 与 tag（去 v）相等，不等则停止并指引在 dev 上以常规变更对齐后重跑；本次变更把插件版本升到 0.4.0 并纠正 v0.4.0 Release 资产命名（同一构建重打包补传、删除误命名资产），README/术语表/技能说明同步为对齐语义
+decisions:
+  version-check-not-bump:
+    decision: 发布技能只校验不代改：版本号对齐作为 dev 上的常规变更先行提交，发布过程仍不修改代码
+    rationale: 保持「发布只执行不修改代码」的既有边界；校验硬停保证不会再出现 tag 与插件版本错发
+  no-delta-spec:
+    decision: 发布流程与元数据变更，无产品可观察行为变化
+    rationale: 版本号与流程校验不改变系统行为
+alternatives: []
+risks: []

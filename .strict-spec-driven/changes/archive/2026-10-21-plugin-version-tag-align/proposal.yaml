@@ -1,0 +1,19 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: plugin-version-tag-align
+  status: proposed
+summary:
+  what:
+    - 插件版本与发布 tag 对齐：plugins/dsh-writing-viewer/package.json 版本升为 0.4.0（与当前发布 tag 一致）；release 技能在版本号确认后校验插件版本与 tag（去 v 前缀）一致，不一致即停止发布（先在 dev 上把版本号作为常规变更提交对齐再重跑发布）；README 安装 URL 与「独立于发布 tag」表述、术语表插件包词条、技能第 7 步说明同步；把既有 v0.4.0 Release 的插件资产纠正为 dsh-writing-viewer-0.4.0.tgz（同一构建重命名补传并移除误命名的 0.1.0 资产）
+  why:
+    - 作者指出插件版本应跟随发布版本号：v0.4.0 发出 dsh-writing-viewer-0.1.0.tgz 明显不一致；对齐后一个 tag 一个插件版本，分发与升级语义清晰
+scope:
+  in:
+    - plugins/dsh-writing-viewer/package.json（版本号）、.agents/skills/release/SKILL.md（第 4 步校验、第 7 步说明）、plugins/dsh-writing-viewer/README.md（URL 与表述）、docs/GLOSSARY.md（插件包词条）、v0.4.0 Release 资产纠正
+  out:
+    - wa-cli 版本机制、发布流程其余步骤、插件代码行为
+unchanged_behavior:
+  - 插件功能与测试行为不变（仅版本元数据）；release 流程既有步骤与顺序不变（新增校验插在第 4 步确认后）；分发渠道与 URL 形态不变

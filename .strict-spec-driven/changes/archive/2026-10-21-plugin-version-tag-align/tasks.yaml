@@ -1,0 +1,29 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: plugin-version-tag-align
+sections:
+  Implementation:
+    align-plugin-version:
+      text: package.json 版本 0.1.0→0.4.0；README 安装 URL 改 -0.4.0.tgz 并修正「独立于 tag」表述；GLOSSARY 插件包词条同步
+      status: complete
+    release-skill-check:
+      text: release 技能：第 4 步版本号确认后校验插件 version 与 tag 对齐（jq/python 读取，不等即停并指引 dev 上对齐后重跑）；第 7 步说明改为「与发布 tag 对齐（第 4 步已校验）」
+      status: complete
+    fix-v040-assets:
+      text: 重建并打包 0.4.0：gh release upload v0.4.0 dsh-writing-viewer-0.4.0.tgz，删除误命名 dsh-writing-viewer-0.1.0.tgz 资产；匿名 URL -0.4.0.tgz 验证 200
+      status: complete
+  Testing:
+    full-regression:
+      text: 完整项目回归（含项目技能结构校验）
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    strict-verify:
+      text: strict 变更工件结构校验
+      status: complete
+      command: strict-spec-cli verify plugin-version-tag-align
+testing_gates:
+  validation_task: full-regression
+  unit_test_task: full-regression
