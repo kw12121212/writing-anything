@@ -1,6 +1,6 @@
 {
   "name": "dsh-writing-viewer",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Read-only DeepSeek Harness (DSH) panel for writing-anything workspaces (.writing-anything/): overview dashboard, unit tree, artifact semantic-card and source-highlight views, sources list.",
   "type": "module",
   "private": true,
