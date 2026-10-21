@@ -184,7 +184,7 @@ pnpm run perf:check     # 大工作区性能检查：构建 wa-cli → 生成 3 
 公开渠道（推荐）：从本仓库的 GitHub Release 安装插件包（Plugin Package）tarball——它与同版本的 wa-cli 发布产物（Release Asset）一同发布，一条命令完成依赖与 bundle 登记：
 
 ```sh
-dsh plugin --profile web add https://github.com/kw12121212/writing-anything/releases/latest/download/dsh-writing-viewer-0.1.0.tgz
+dsh plugin --profile web add https://github.com/kw12121212/writing-anything/releases/latest/download/dsh-writing-viewer-0.4.1.tgz
 ```
 
 URL 固定用 `latest/download`，升级时先 `dsh plugin --profile web remove dsh-writing-viewer` 再以新版本文件名重新 add。

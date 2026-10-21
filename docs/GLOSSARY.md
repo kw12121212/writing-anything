@@ -404,7 +404,7 @@
 | 持续集成与持续交付 | CI/CD | CI/CD | 推送后由服务端自动构建、测试与发布的机制；本项目不使用，仓库中不放置任何工作流文件 |
 | 溯源标记 | Provenance Marker | 溯源标记 | dsh-writing-viewer 插件下载安装 wa-cli 时写在同目录的 sidecar 文件 `wa-cli.dsh-writing-viewer.json`（managedBy、sha256、installedAt）；状态按「标记存在且 sha256 与磁盘二进制一致」判定为插件安装，否则如实显示非插件安装——install.sh 与插件默认同目录，只有标记能区分二进制是谁装的 |
 | 发布产物 | Release Asset | 发布产物 | 随版本发布的文件：各平台的 `wa-cli-<os>-<arch>` 二进制、`SHA256SUMS` 与插件包（Plugin Package）tarball |
-| 插件包 | Plugin Package | 插件包 | dsh-writing-viewer 插件的 `pnpm pack` 产物 `dsh-writing-viewer-<版本>.tgz`（含 dist/、cordis.patch.yml 与 README），随正式发布上传到 GitHub Release，供 `dsh plugin add <URL>` 公开安装；插件版本独立于发布 tag |
+| 插件包 | Plugin Package | 插件包 | dsh-writing-viewer 插件的 `pnpm pack` 产物 `dsh-writing-viewer-<版本>.tgz`（含 dist/、cordis.patch.yml 与 README），随正式发布上传到 GitHub Release，供 `dsh plugin add <URL>` 公开安装；插件版本与发布 tag 对齐（tag vX.Y.Z 对应插件 X.Y.Z） |
 | 校验文件 | Checksum File | 校验文件 | 记录每个发布产物 SHA-256 的 `SHA256SUMS`，格式与 `sha256sum` 兼容 |
 | 发布说明 | Release Notes | 发布说明 | GitHub Release 页面上的版本说明：按里程碑汇总的变化摘要，后接 gh 自动生成的比较链接 |
 | 安装脚本 | Install Script | 安装脚本 | `install.sh`（Linux、macOS）与 `install.ps1`（Windows）：下载、校验并把 `wa-cli` 安装到用户级目录 |

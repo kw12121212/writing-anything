@@ -1,0 +1,42 @@
+schema: strict-spec-driven/question-list/v1
+schema_version: 1
+artifact_type: question_list
+schema_file: templates/strict-spec-driven/schemas/question-list.yaml
+change: plugin-version-tag-align
+open: []
+resolved:
+  - id: requirement-problem
+    question: 问题？
+    context: 需求拷问
+    answer: v0.4.0 发布了 dsh-writing-viewer-0.1.0.tgz，插件版本与发布版本号脱节，作者判定不对
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-outcome
+    question: 判据？
+    context: 需求拷问
+    answer: 插件版本恒等于发布 tag（去 v）；发布流程校验强制对齐；v0.4.0 Release 资产名为 dsh-writing-viewer-0.4.0.tgz 且可匿名下载
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-trigger
+    question: 为何现在？
+    context: 需求拷问
+    answer: 作者在 v0.4.0 发布后指出
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-non-goals
+    question: 不变？
+    context: 需求拷问
+    answer: wa-cli 版本机制、发布流程其余步骤、插件功能与测试
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-interpretation
+    question: 读法？
+    context: 需求拷问
+    answer: 发布技能只校验不代改（对齐是 dev 上的常规变更）；本次升 0.4.0 并纠正既有 Release 资产
+    status: resolved
+    kind: requirement
+    answered_by: human
