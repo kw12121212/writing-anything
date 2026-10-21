@@ -8,7 +8,7 @@ spec:
 requirements:
   version-command:
     strength: MUST
-    statement: wa-cli version 必须在标准输出打印一行 'wa-cli <version> (commit <commit>)' 并以退出码 0 退出；加 --json 时必须输出统一的 JSON 输出信封，并在其中包含 version 与 commit 字段。version 与 commit 优先取构建时注入的值；未注入时取 Go 构建信息中的主模块版本（为空或为 (devel) 时视为缺失）与源码提交（构建时源码有未提交的修改则加 -dirty 后缀）；仍缺失时 version 为 dev、commit 为 unknown。
+    statement: wa-cli version 必须在标准输出打印一行 'wa-cli <version> (commit <commit>)' 并以退出码 0 退出；加 --json 时必须输出统一的 JSON 输出信封，并在其中包含 version 与 commit 字段。version 与 commit 优先取构建时注入的值；未注入时取 Go 构建信息中的主模块版本（为空或为 (devel) 时视为缺失）与源码提交（构建时源码有未提交的修改则加 -dirty 后缀）；仍缺失时 version 为 dev、commit 为 unknown。第一个参数为 --version 时，wa-cli --version [...] 必须与 wa-cli version [...] 完全等价（输出、退出码、用法错误与审计日志的 command 名都相同，审计日志的 args 记录原始参数）；--version 只在第一个参数位置作为根参数（Root Flag），不作为命令出现在 help 列表、help --json 的 commands 或 MCP tools 中。
     scenarios:
       version-text:
         - GIVEN: 构建时注入版本 v1.2.3 与提交 abc1234 的 wa-cli 二进制
@@ -26,6 +26,26 @@ requirements:
         - GIVEN: 未注入版本且 Go 构建信息中既没有模块版本也没有源码提交的 wa-cli
         - WHEN: 运行 wa-cli version
         - THEN: 标准输出为一行 'wa-cli dev (commit unknown)'，退出码为 0
+      root-version-flag:
+        - GIVEN: 已构建的 wa-cli 二进制
+        - WHEN: 运行 wa-cli --version
+        - THEN: 标准输出与 wa-cli version 相同，标准错误为空，退出码为 0
+      root-version-flag-json:
+        - GIVEN: 已构建的 wa-cli 二进制
+        - WHEN: 运行 wa-cli --version --json
+        - THEN: 标准输出与 wa-cli version --json 相同，valid 为 true，含 version 与 commit，退出码为 0
+      root-version-flag-usage:
+        - GIVEN: 已构建的 wa-cli 二进制
+        - WHEN: 运行 wa-cli --version extra 或 wa-cli --version --unknown --json
+        - THEN: 与 wa-cli version extra 或 wa-cli version --unknown --json 的用法错误相同（usage.unexpected-argument 或 usage.unknown-flag，next 含 wa-cli help version --json），退出码为 2
+      root-version-flag-audit:
+        - GIVEN: 当前目录 D 含 .writing-anything/ 工作区
+        - WHEN: 在 D 中运行 wa-cli --version
+        - THEN: D/.writing-anything/audit.log 追加一行，command 为 version，args 为 ["--version"]，exit 为 0
+      root-version-flag-not-listed:
+        - GIVEN: 已构建的 wa-cli 二进制
+        - WHEN: 运行 wa-cli help --json
+        - THEN: commands 数组中没有名为 --version 的命令，version 命令照常列出
   usage-error:
     strength: MUST
     statement: 未提供命令、命令未知、参数未知、参数缺少取值、不接受取值的参数带了取值、同一非列表参数（列表参数可重复）重复出现、缺少必需的位置参数或位置参数多余时，wa-cli 必须以退出码 2 退出；未加 --json 时必须把用法说明写到标准错误；加 --json 时必须在标准输出写出 valid 为 false、含 usage 领域错误码诊断的 JSON 输出信封。写出用法错误本身失败时按 exit-codes 以退出码 1 退出。

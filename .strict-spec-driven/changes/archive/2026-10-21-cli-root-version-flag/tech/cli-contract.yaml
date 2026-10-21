@@ -1,0 +1,21 @@
+schema: strict-spec-driven/delta-tech/v1
+schema_version: 1
+artifact_type: delta_tech
+schema_file: templates/strict-spec-driven/schemas/delta-tech.yaml
+target_standard: cli-contract
+operations:
+  ADDED:
+    root-flag-alias:
+      strength: SHOULD
+      statement: 根参数（Root Flag，如 --help、--version）只作为第一个参数位置的别名实现：在查找命令之前改写为已注册的命令，之后走同一套参数解析与执行路径；不得在命令注册表中登记以 - 开头的命令，help、help --json 与 MCP tools 都不列出根参数。
+      rationale: 别名改写发生在注册表查找之前，registry-declared、sampleArgs 与 MCP 薄封装都不受影响，也避免隐藏命令混入 help 与 MCP tools；等价表测试能逐字节锁定别名与目标命令的一致性。
+      enforcement:
+        method: test
+        detail: internal/cli 的等价表测试（TestRootHelpFlag、TestRootVersionFlag）断言别名与目标命令的退出码、标准输出与标准错误相同，并断言别名不出现在 help --json 的 commands 中。
+      examples:
+        good:
+          - dispatch 中把 args[0] == "--version" 改写为 version 后再 find
+        bad:
+          - 在注册表中登记 name 为 --version 的隐藏命令
+  MODIFIED: {}
+  REMOVED: {}

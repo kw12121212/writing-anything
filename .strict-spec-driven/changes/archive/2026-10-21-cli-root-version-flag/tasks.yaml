@@ -1,0 +1,39 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: cli-root-version-flag
+sections:
+  Implementation:
+    root-version-alias:
+      text: 在 internal/cli/cli.go 的 dispatch 中把第一个参数位置的 --version 改写为 version（与 --help 改写为 help 的做法一致），抽成函数供审计复用。
+      status: complete
+    audit-name:
+      text: internal/cli/audit.go 的 appendAudit 用同一改写求 command 名，wa-cli --version 记为 version，args 保持原始参数；--help 的审计记录不变。
+      status: complete
+    release-skill-smoke:
+      text: .agents/skills/release/SKILL.md 第 10 步冒烟验证补充 wa-cli --version 核对安装版本。
+      status: complete
+  Testing:
+    lint:
+      text: 运行 go vet 静态检查。
+      status: complete
+      command: go vet ./...
+    cli-tests:
+      text: 补充 internal/cli 测试：--version 与 version 的等价表（文本、--json、extra、--unknown --json）、审计 command 名、help --json 不列出 --version，并运行包测试。
+      status: complete
+      command: go test ./internal/cli/ ./cmd/wa-cli/
+    full-regression:
+      text: 运行项目完整回归与覆盖率阈值。
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    verify-unchanged:
+      text: 核对 proposal 的不变项：version 子命令、help、--help、missing-command、MCP tools 与 version 审计记录均未改变。
+      status: complete
+    strict-verify:
+      text: 运行 strict-spec-cli verify cli-root-version-flag 通过。
+      status: complete
+testing_gates:
+  validation_task: full-regression
+  unit_test_task: cli-tests

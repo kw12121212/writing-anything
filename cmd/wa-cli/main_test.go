@@ -47,6 +47,9 @@ func TestBinary(t *testing.T) {
 	}{
 		{[]string{"version"}, 0, "wa-cli v9.9.9-test (commit abc1234)\n", ""},
 		{[]string{"version", "--json"}, 0, "{\"valid\":true,\"diagnostics\":[],\"changedPaths\":[],\"version\":\"v9.9.9-test\",\"commit\":\"abc1234\"}\n", ""},
+		{[]string{"--version"}, 0, "wa-cli v9.9.9-test (commit abc1234)\n", ""},
+		{[]string{"--version", "--json"}, 0, "{\"valid\":true,\"diagnostics\":[],\"changedPaths\":[],\"version\":\"v9.9.9-test\",\"commit\":\"abc1234\"}\n", ""},
+		{[]string{"--version", "extra"}, 2, "", "多余的参数：extra"},
 		{nil, 2, "", "用法：wa-cli"},
 		{[]string{"nope"}, 2, "", "未知命令：nope"},
 		{[]string{"version", "--unknown"}, 2, "", "未知参数：--unknown"},

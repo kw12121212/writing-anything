@@ -1,0 +1,43 @@
+schema: strict-spec-driven/scene/v1
+schema_version: 1
+artifact_type: scene
+schema_file: templates/strict-spec-driven/schemas/scene.yaml
+scene:
+  id: cli-version-check
+  title: 核对已安装 wa-cli 的版本
+area: cli
+status: draft
+actors:
+  - name: 发布者或 Agent
+    role: 安装或升级 wa-cli 后，用 CLI 常见习惯核对装上的是哪个版本与提交
+preconditions:
+  - wa-cli 已安装在 PATH 中或以路径直接调用
+main_flow:
+  run-root-flag:
+    action: 运行 wa-cli --version（或 wa-cli version）
+    covered_by:
+      - spec_id: cli
+        requirement_id: version-command
+  read-version-line:
+    action: 读取标准输出的一行 'wa-cli <version> (commit <commit>)'，与期望的发布标签对照
+    covered_by:
+      - spec_id: cli
+        requirement_id: version-command
+  machine-check:
+    action: 需要程序判断时运行 wa-cli --version --json，读取信封中的 version 与 commit
+    covered_by:
+      - spec_id: cli
+        requirement_id: version-command
+      - spec_id: cli
+        requirement_id: json-output-envelope
+exception_flows:
+  extra-arguments:
+    trigger: 在 --version 后带了多余参数或未知参数
+    steps:
+      usage-error:
+        action: 得到与 wa-cli version 相同的用法错误，按 next 中的 wa-cli help version --json 查看用法
+        covered_by:
+          - spec_id: cli
+            requirement_id: version-command
+          - spec_id: cli
+            requirement_id: usage-error

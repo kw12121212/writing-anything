@@ -385,6 +385,7 @@
 | 诊断 | Diagnostic | 诊断 | 带错误码、产物路径与修复命令的问题报告 |
 | 错误码 | Error Code | 错误码 | 稳定的机器可读问题标识 |
 | 参数 | Flag | 参数 | 命令行中以 `--` 开头的选项，如 `--json`；命令名后按顺序给出的值称位置参数 |
+| 根参数 | Root Flag | 根参数 | 只在第一个参数位置生效、等同某条命令的参数别名：`wa-cli --help` 等同 `wa-cli help`，`wa-cli --version` 等同 `wa-cli version`；不作为命令出现在 help 中 |
 | 退出码 | Exit Code | 退出码 | 命令结束时返回的数字：0 成功、1 校验失败或执行失败、2 用法错误 |
 | 输出信封 | Output Envelope | 输出信封 | 所有命令 `--json` 输出共用的顶层结构：`valid`、`diagnostics`、`changedPaths` |
 | 命令注册表 | Command Registry | 命令注册表 | 声明每条命令参数、输出键和退出码的清单；help 由它生成，它也是 MCP tools 与 Skill 命令校验的依据 |

@@ -3,6 +3,11 @@ schema_version: 1
 artifact_type: scenes_index
 schema_file: templates/strict-spec-driven/schemas/scenes-index.yaml
 areas:
+  cli:
+    cli-version-check:
+      title: 核对已安装 wa-cli 的版本
+      status: draft
+      path: .strict-spec-driven/scenes/cli/cli-version-check.yaml
   dsh-plugin:
     plugin-setup-enable:
       title: 插件内置技能与 CLI 的启用与优先
