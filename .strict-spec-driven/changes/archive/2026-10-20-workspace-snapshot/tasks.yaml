@@ -1,0 +1,57 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: workspace-snapshot
+sections:
+  Implementation:
+    snapshot-module:
+      text: 在 plugins/dsh-writing-viewer/src 新增快照（Snapshot）模块：快照 JSON 类型定义、聚合入口与注入式读取器接口（文件读取器与 CLI 执行器），聚合 config、works（work.yaml、单元树、stage、progress、blockers）与工作区级数据；不引入任何写文件调用
+      status: complete
+    cli-bridge:
+      text: 实现 wa-cli 结构状态桥：经注入执行器调用 wa-cli status --json 与 validate --json，输出映射单列成独立模块并容错缺字段；wa-cli 不可用或缺字段时产出 degraded 标注与原因
+      status: complete
+    artifact-reader:
+      text: 实现产物全文只读读取：各单元目录产物（写作简报（Brief）、大纲（Outline）、出处（Provenance）、论断（Claim）、作者反馈（Feedback）、草稿（Draft）正文 Markdown 全文、审稿与验收证据，长篇按文体存在的场景契约、伏笔台账、时间线、知情表等）与 sources、decisions（含待决）、packs、author-reviews/ 待复核摘要
+      status: complete
+    snapshot-route:
+      text: host 注册只读 GET 路由 /dsh-writing-viewer/snapshot 并接入 apply：定位到工作区时返回完整快照 JSON，定位不到时返回可读的缺失状态与空态指引（wa-cli init），不抛未处理错误
+      status: complete
+    test-fixtures:
+      text: 在插件包内建多作品测试夹具：tech-blog 文章与 novel 层级（卷、章、场景），覆盖多类单元产物、待决决策、待复核摘要与 validate 诊断数据
+      status: complete
+    glossary-terms:
+      text: 按首次出现规则把新术语写入 docs/GLOSSARY.md：工作区快照（Workspace Snapshot）等本变更引入的词条
+      status: complete
+  Testing:
+    snapshot-unit-tests:
+      text: vitest 单元测试：多作品夹具下快照字段正确（作品、单元树、阶段/进度/阻塞项、各产物全文、validate 诊断与 degraded 降级路径）；无 .writing-anything 时返回可读缺失状态；两次请求之间文件修改后第二次响应反映新内容
+      status: complete
+      command: cd plugins/dsh-writing-viewer && pnpm test
+    readonly-constraint-test:
+      text: 只读约束测试：静态断言插件包源码不含写文件调用（node:fs 写 API 与子进程写路径），夹具目录在快照请求前后的文件清单、内容与修改时间一致
+      status: complete
+      command: cd plugins/dsh-writing-viewer && pnpm test
+    plugin-build:
+      text: 插件包类型检查与构建通过
+      status: complete
+      command: cd plugins/dsh-writing-viewer && pnpm build
+    full-regression:
+      text: 完整 Go 回归确认插件变更不影响产品运行时（wa-cli 与 Go 内核行为不变）
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    ready-check:
+      text: strict-spec-cli ready workspace-snapshot 通过：提案、设计、任务、问题与 delta 工件齐备
+      status: complete
+      command: strict-spec-cli ready workspace-snapshot
+    verify-check:
+      text: strict-spec-cli verify workspace-snapshot 通过：工件结构、任务完成情况、开放问题与不变行为核对
+      status: complete
+      command: strict-spec-cli verify workspace-snapshot
+    delta-merge-check:
+      text: 核对 delta 规格与 dsh-plugin 主规格无需求 id 冲突、各场景可独立验证，归档合并路径就绪（archive 前 ready 与 verify 均无诊断）
+      status: complete
+testing_gates:
+  validation_task: full-regression
+  unit_test_task: snapshot-unit-tests

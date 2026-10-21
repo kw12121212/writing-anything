@@ -1,0 +1,21 @@
+schema: strict-spec-driven/delta-tech/v1
+schema_version: 1
+artifact_type: delta_tech
+schema_file: templates/strict-spec-driven/schemas/delta-tech.yaml
+target_standard: dsh-plugin-structure
+operations:
+  ADDED:
+    host-route-origin-guard:
+      strength: MUST
+      statement: 'DSH 插件经 webServer.register 注册的每条路由必须在 handler 内先做请求来源校验（Request Origin Guard），语义与宿主 /api 浏览器信任栅栏同构：Host 头绑定每个请求（回环字面量、监听绑定地址字面量、或插件配置的显式放行权威），sec-fetch-site: cross-site 拒绝，带 Origin 时须与 Host 同权威；拒绝时 403 + cache-control: no-store，不触达任何读取逻辑。宿主对具名路由不提供认证中间件，launch token 等身份凭据不在插件可注入面内——不得依赖宿主内部结构实现认证'
+      rationale: 2026-10-20 实测插件路由在宿主认证栅栏外整库可读；宿主 webServer 对具名路由直接调用 handler，认证是 / 与 /api 私有实现。与宿主栅栏同构而非自创语义，评审与维护只需对照一处
+      enforcement:
+        method: test
+        detail: routeguard 纯函数判定矩阵（Host/绑定字面量/allowedHosts 端口语义/cross-site/Origin 同源）+ host 路由 403/200 集成断言
+      examples:
+        good:
+          - handler 首行 guardRequest(headers, {allowedHosts, bindHost})，拒绝即 403 return
+        bad:
+          - handler 直接读取请求参数并返回快照，不检查 Host 与浏览器标记
+  MODIFIED: {}
+  REMOVED: {}

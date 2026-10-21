@@ -1,0 +1,42 @@
+schema: strict-spec-driven/question-list/v1
+schema_version: 1
+artifact_type: question_list
+schema_file: templates/strict-spec-driven/schemas/question-list.yaml
+change: plugin-queue-views
+open: []
+resolved:
+  - id: requirement-problem
+    question: What is concretely going wrong today, and for whom?
+    context: 影响规格 delta 与 client 实现。答案来自用户指示与 review 实测：快照已携带 decisions/authorReviews 全文而 UI 只显示计数
+    answer: 作者在面板上只能看到待决决策与待复核的数字，看不到任何一条内容（问题、选项、推荐、涉及单元、复核记录），必须另开终端跑 wa-cli 才能知道要决定什么
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-outcome
+    question: What observable difference proves the problem is solved?
+    context: 影响 delta 规格场景与测试断言
+    answer: 总览的两个计数磁贴可点开对应清单：决策清单逐条显示 id/status/question/options（含推荐标记）/rationale/blocking/units，复核清单逐条显示 kind/work/ref/channel/confirmed_at/reviewed_at；文件缺失或解析失败显示可读提示，无编辑控件
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-trigger
+    question: Why now — what forced this?
+    context: 排期依据
+    answer: 用户在插件 review 后指示修复「决策/复核内容视图」（2026-10-20，与路由认证、构建告警清理一同排期）；review 已确认快照携带全文而 UI 未消费
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-non-goals
+    question: What must explicitly not change?
+    context: 评审将对照 proposal.unchanged_behavior 检查
+    answer: host 侧全部行为、快照结构、路由与来源校验、既有视图、计数语义、只读约束不变；不提供决策/复核的编辑或确认控件
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-interpretation
+    question: Which reading of the request is intended, where more than one is possible?
+    context: 存在另一种读法：把决策/复核做进单元详情或提供操作按钮；本答案排除之
+    answer: 「决策/复核内容视图」= 两个只读清单视图（消费快照已有全文），不含任何操作能力；作者决定与复核确认仍全部走 wa-cli
+    status: resolved
+    kind: requirement
+    answered_by: human

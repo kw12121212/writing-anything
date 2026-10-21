@@ -29,6 +29,21 @@ categories:
       status: active
       occurrences: 1
       path: .strict-spec-driven/lessons/architecture/lesson-33acd7.yaml
+    dsh-host-cwd-remote-f5c95c:
+      title: DSH 插件 host 侧取项目目录：读工作区注册表，别信进程 cwd，也别注入按连接的 remote 服务
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/architecture/dsh-host-cwd-remote-f5c95c.yaml
+    scope-b5e87e:
+      title: 静态插件行消费宿主分层服务：无 scope 的查询只见全局层
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/architecture/scope-b5e87e.yaml
+    client-exports-inject-0822d2:
+      title: client 服务的 exports.inject 是硬激活门：容错声明必须对照宿主协议验证
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/architecture/client-exports-inject-0822d2.yaml
   coding:
     go-flag-bd930f:
       title: Go flag 包的默认报错不符合中文术语约定
@@ -310,11 +325,21 @@ categories:
       status: active
       occurrences: 1
       path: .strict-spec-driven/lessons/coding/lesson-eaf147.yaml
+    wa-cli-42ec4e:
+      title: 外部工具把调用 wa-cli 当只读访问前，先实测一次完整调用：审计日志每次都追加，假执行器测试会把它完全掩盖
+      status: active
+      occurrences: 2
+      path: .strict-spec-driven/lessons/coding/wa-cli-42ec4e.yaml
+    wa-cli-path-wa-cli-wa-cli-134c20:
+      title: 测试「wa-cli 不可用」时依赖开发机 PATH 上没有 wa-cli，装上 wa-cli 后就失败
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/coding/wa-cli-path-wa-cli-wa-cli-134c20.yaml
   documentation:
     must-must-6af326:
       title: 修改一条 MUST 需求时，要检查同一规格里相邻的 MUST 是否因此冲突
       status: active
-      occurrences: 1
+      occurrences: 2
       path: .strict-spec-driven/lessons/documentation/must-must-6af326.yaml
     lesson-cdee49:
       title: 夹具文档同样执行术语表首现双语；量化声明须带可复验锚点
@@ -346,6 +371,16 @@ categories:
       status: active
       occurrences: 1
       path: .strict-spec-driven/lessons/documentation/findings-rule-id-type-4ee84a.yaml
+    api-b3f45a:
+      title: 登记宿主 API 用法的文档必须同时实测并写明安全边界（认证与暴露面）
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/documentation/api-b3f45a.yaml
+    delta-d60013:
+      title: delta 场景断言涉及既有行为时，逐分支对照该行为的既有测试
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/documentation/delta-d60013.yaml
   operations:
     pr-gh-generate-notes-8e86ae:
       title: 不走 PR 的仓库里 gh --generate-notes 只生成一行比较链接，不是提交清单
@@ -424,3 +459,18 @@ categories:
       status: active
       occurrences: 1
       path: .strict-spec-driven/lessons/testing/lf-windows-autocrlf-4e756d.yaml
+    dsh-client-definition-factory-hooks-react-34fff9:
+      title: 驱动 DSH 插件 client 组件状态：必须经 definition.factory 注入可运行 hooks 的假 react
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/testing/dsh-client-definition-factory-hooks-react-34fff9.yaml
+    lesson-9241c3:
+      title: 声称与另一实现同构时，用差分探针对齐边界，不要靠读代码比对
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/testing/lesson-9241c3.yaml
+    lesson-971ba4:
+      title: 宿主服务假件必须复刻真实调用路径，同步近似会静默掩盖契约破坏
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/testing/lesson-971ba4.yaml

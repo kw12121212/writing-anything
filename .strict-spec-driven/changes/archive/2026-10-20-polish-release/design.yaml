@@ -1,0 +1,26 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: polish-release
+approach:
+  - 打磨全部在既有插件包 plugins/dsh-writing-viewer 内小步完成：client 侧把首载、刷新、路径切换统一到同一请求状态机——已有「进行中提示 + 旧数据保留 + 迟到响应丢弃」逻辑沿用到尚无数据的首次加载分支，加载态不复用空态或错误态文案；键盘导航用单元树与产物清单的原生焦点 + roving tabindex 实现（↑/↓ 移动选中、←/→ 收起/展开、Enter 激活），不引入新运行时依赖；大工作区性能用脚本生成的多卷多场景长篇合成夹具实测首屏与切换并记录耗时，优化只做渲染层（复用 large-yaml-fold 的顶层键折叠与按需渲染策略），不改快照响应结构
+  - '测试与文档收尾：在现有 vitest 套件上补齐快照聚合、视图逻辑与高亮器的缺口用例并覆盖新交互；package.json 增加 check 脚本一次执行类型检查、构建与测试；README 扩充为完整安装使用文档（link: 安装、启用、与 wa-cli 版本的兼容说明、界面导览配 docs/evidence/ 截图）；按实际引入的新术语补 docs/GLOSSARY.md；最后对照里程碑 done criteria 逐条对账并跑 Go 完整回归确认不受影响'
+decisions:
+  keyboard-minimal-roving:
+    decision: 键盘导航限定为面板内焦点时生效的最小集合：焦点在单元树时 ↑/↓ 在可见单元间移动选中并同步详情区、←/→ 收起/展开汇总单元、Enter 打开选中单元的产物视图或激活清单条目，Tab/Shift+Tab 按自然顺序到达全部交互控件；不引入全局快捷键
+    rationale: 只读查看面板的导航主体就是单元树与视图切换，roving tabindex 是零依赖、零冲突的实现；全局快捷键会与 DSH 宿主自身的按键处理冲突，且超出计划变更「键盘在单元树与视图间导航」的范围
+  loading-single-state-machine:
+    decision: 首载加载提示复用既有请求状态机：任何快照请求进行中面板显示进行中提示，尚无数据时显示独立的加载态文案而非复用空态或错误态；迟到响应丢弃与旧数据保留逻辑不变
+    rationale: 切换与刷新的进行中提示已在 panel-path-switch 需求落地，补齐首载分支复用同一状态机改动最小且不会产生第二套竞态行为；新造独立加载路径会带来两套时序处理与两倍测试面
+  perf-render-layer-only:
+    decision: 大工作区性能检查以生成的合成夹具（多卷多章多场景长篇 + 大产物）实测首屏与单元/视图切换并记录数字为证据，不设硬性数值门槛；如出现不可交互级卡顿，只做渲染层优化（折叠、按需渲染、分段挂载），不改快照路由的响应结构与聚合逻辑
+    rationale: 快照字段只增不改是已归档变更确立的兼容原则，host 结构变更会波及既有规格与测试；渲染层优化路径已由 large-yaml-fold 的折叠渲染验证可行，实测记录则让「性能检查」可追溯而不是主观印象
+  docs-readme-single-home:
+    decision: 安装与使用文档以 plugins/dsh-writing-viewer/README.md 为唯一入口扩充（安装、启用、与 wa-cli 版本的兼容说明、界面导览与截图），截图放 docs/evidence/；不在仓库 docs/ 另立插件页面
+    rationale: 插件文档随包分发（package.json 的 files 含 README.md 与 docs/），仓库 docs/ 是产品（wa-cli）文档；单一入口避免两处维护漂移，也符合里程碑 done criteria「安装与使用文档就绪」
+alternatives: []
+risks:
+  - 键盘事件与 DSH 宿主全局按键处理冲突：限定面板内焦点时生效、处理已消费的按键，实测确认宿主既有快捷键不受影响
+  - 大工作区优化若滑向数据结构改动会触碰快照兼容原则：以「不改响应结构」为硬边界，超出边界的发现记录为后续工作而不是顺手改
+  - 本机 DSH 0.2.x rc 演进可能破坏插件兼容：engines.dsh 范围已声明，实测以当前 web profile 为准并留存证据

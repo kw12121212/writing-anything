@@ -1,0 +1,62 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: polish-release
+sections:
+  Implementation:
+    client-loading-feedback:
+      text: client.ts 请求状态机补齐首载分支：快照请求进行中且尚无数据时显示可读的加载提示（不复用空态或错误态文案），不空白；刷新与路径切换的既有提示、旧数据保留与迟到响应丢弃行为不变
+      status: complete
+    client-keyboard-navigation:
+      text: 实现面板键盘导航：单元树 roving tabindex（↑/↓ 在可见单元间移动选中并同步详情区、←/→ 收起/展开汇总单元、Enter 打开选中单元的产物视图或激活清单条目），产物视图切换控件可经键盘激活，Tab/Shift+Tab 可达全部交互控件；限定面板内焦点时生效，不与 DSH 宿主全局按键冲突
+      status: complete
+    large-workspace-perf:
+      text: 编写生成多卷多章多场景长篇（novel）大工作区合成夹具的脚本并实测首屏与单元/视图切换，把耗时记录到证据文件；如出现不可交互级卡顿只做渲染层优化（折叠、按需渲染、分段挂载），不改快照响应结构与聚合逻辑
+      status: complete
+    plugin-check-script:
+      text: 插件 package.json 增加 check 脚本：一次执行类型检查（tsc --noEmit）、构建（build）与测试（vitest），作为本变更及后续的统一检查入口
+      status: complete
+    docs-install-usage:
+      text: 'README 扩充为完整安装使用文档：link: 安装（dsh plugin add link:<插件目录> 或等价方式）、启用与重启宿主说明、与 wa-cli 版本的兼容说明（结构状态走 wa-cli --json 的版本耦合与降级行为）、界面导览（总览、单元树、产物视图、素材清单）与 docs/evidence/ 截图'
+      status: complete
+    glossary-new-terms:
+      text: 按实际引入的新术语补 docs/GLOSSARY.md 词条（无新术语则记录核对结论）；面板新增文案与 README 首次出现处按「中文（English）」书写
+      status: complete
+    milestone-closeout-reconcile:
+      text: 对照里程碑 dsh-workspace-viewer 的 done criteria 逐条对账（面板可浏览真实项目、语义视图可用、快照无写路径且测试覆盖、文档与术语就绪），缺口在本变更内补齐或如实记录
+      status: complete
+  Testing:
+    vitest-coverage-gaps:
+      text: 补齐快照聚合、视图逻辑与高亮器的 vitest 缺口用例（对照现有覆盖找出缺口），并新增首载加载提示与键盘导航的渲染测试；全套测试通过
+      status: complete
+      command: pnpm --dir plugins/dsh-writing-viewer test
+    plugin-build-typecheck:
+      text: 插件统一检查通过：类型检查（tsc --noEmit）、构建（tsdown + 产物规整）与全部 vitest 经 check 脚本一次执行；dist/client.js 仍为单一 __ModuleLoader__.load 脚本、不依赖网络
+      status: complete
+      command: pnpm --dir plugins/dsh-writing-viewer run check
+    go-regression:
+      text: 完整 Go 回归原样通过（本变更只动插件包与文档，确认产品工程不受影响、覆盖率不低于阈值）
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    readonly-and-scope-check:
+      text: 核对 client 渲染树与测试证据：host 侧快照路由与 wa-cli 调用集合未改动，插件对工作区仍零写入（audit.log 例外不变）；打磨未引入任何编辑、写入或确认控件；Go 内核、MCP 与 Skill 零改动
+      status: complete
+    delta-spec-scenarios-evidence:
+      text: 逐条核对 delta 规格场景（首载加载提示、单元树方向键导航与详情同步、收起/展开、键盘打开产物视图与切换控件可达）都有对应 vitest 测试或实测证据；确认场景声明的可从外部验证性
+      status: complete
+    manual-panel-evidence:
+      text: 插件装入本机 DSH web profile 实测打磨项并留存证据：首载加载提示、键盘导航全程无鼠标操作、大工作区首屏与切换耗时记录（docs/evidence/ 截图与数据文件）
+      status: complete
+    ready-check:
+      text: strict 变更就绪检查通过
+      status: complete
+      command: strict-spec-cli ready polish-release
+    verify-change:
+      text: strict 变更验证通过，delta 规格与实际实现一致、产物无遗留问题
+      status: complete
+      command: strict-spec-cli verify polish-release
+testing_gates:
+  validation_task: plugin-build-typecheck
+  unit_test_task: vitest-coverage-gaps

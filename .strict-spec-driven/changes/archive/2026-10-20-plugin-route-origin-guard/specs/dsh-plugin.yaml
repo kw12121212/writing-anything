@@ -1,0 +1,37 @@
+schema: strict-spec-driven/delta-spec/v1
+schema_version: 1
+artifact_type: delta_spec
+schema_file: templates/strict-spec-driven/schemas/delta-spec.yaml
+target_spec: dsh-plugin
+operations:
+  ADDED:
+    route-origin-guard:
+      strength: MUST
+      statement: '插件注册的每条 host 路由（/dsh-writing-viewer/workspace 与 /dsh-writing-viewer/snapshot）在处理请求前必须做请求来源校验（Request Origin Guard）：Host 头缺失或不可解析时拒绝；Host 的 hostname 必须是回环地址（localhost、127.0.0.0/8、::1）、等于宿主监听绑定地址的字面量（比较忽略端口与接口 zone），或命中插件配置 allowedHosts 的权威（bare host[:port]：带端口精确匹配，不带端口匹配任意端口，经 WHATWG URL 规范化含默认端口）；请求带 sec-fetch-site: cross-site 时拒绝；带 Origin 头时其 http(s) 权威必须与 Host 相同权威。拒绝时返回 403 与 cache-control: no-store 的 JSON 错误体，不读取任何工作区数据；面板 client 的同源请求必须不受影响'
+      scenarios:
+        unknown-host-rejected:
+          - GIVEN: 插件已加载，宿主监听 127.0.0.1
+          - WHEN: '携带 Host: attacker.example 的 GET 请求访问任一插件路由（模拟 DNS rebinding 或陌生域名）'
+          - THEN: '响应为 403，content-type 为 application/json，带 cache-control: no-store 与可读错误原因，响应体不含任何工作区数据'
+        cross-site-rejected:
+          - GIVEN: 插件已加载，请求 Host 为 127.0.0.1:端口
+          - WHEN: '同一请求携带 sec-fetch-site: cross-site（恶意页面的跨站读取）'
+          - THEN: 响应为 403 JSON 错误体，不返回快照数据
+        cross-origin-marker-rejected:
+          - GIVEN: 插件已加载，请求 Host 为 127.0.0.1:端口
+          - WHEN: '同一请求携带 Origin: http://evil.example 而 Host 不变'
+          - THEN: 响应为 403 JSON 错误体，不返回快照数据
+        same-origin-panel-unaffected:
+          - GIVEN: 插件已装入 web profile，浏览器经宿主页面同源打开面板
+          - WHEN: 面板 client 以相对路径 fetch 两条路由（加载、刷新、路径切换）
+          - THEN: 请求照常返回 200 与原有响应结构，面板行为与本变更之前一致
+        allowed-hosts-config:
+          - GIVEN: 插件配置 allowedHosts 含 gamepc.example.net:13080（bare host:port 权威）
+          - WHEN: '携带 Host: gamepc.example.net:13080 的请求访问任一路由'
+          - THEN: 请求按原有行为处理（200），未被 403 拒绝
+        bind-literal-accepted:
+          - GIVEN: 宿主以 --host 192.168.1.10 绑定非回环接口
+          - WHEN: 浏览器经 http://192.168.1.10:端口/ 打开面板并同源访问插件路由
+          - THEN: Host 命中监听绑定地址字面量，请求照常处理，面板可用
+  MODIFIED: {}
+  REMOVED: {}

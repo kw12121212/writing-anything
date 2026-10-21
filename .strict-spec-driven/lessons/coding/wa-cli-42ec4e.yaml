@@ -1,0 +1,22 @@
+schema: strict-spec-driven/lesson/v1
+schema_version: 1
+artifact_type: lesson
+schema_file: templates/strict-spec-driven/schemas/lesson.yaml
+lesson:
+  id: wa-cli-42ec4e
+  title: 外部工具把调用 wa-cli 当只读访问前，先实测一次完整调用：审计日志每次都追加，假执行器测试会把它完全掩盖
+category: coding
+status: active
+created_at: '2026-10-20T02:05:17.087Z'
+updated_at: '2026-10-20T04:52:00.531Z'
+context: workspace-snapshot 变更为 DSH 插件的快照服务以注入式 CliRunner 调用 wa-cli 只读命令（status/validate/next/timeline --json），并在 delta 规格中宣称快照前后工作区文件清单、内容与修改时间完全一致
+observation: fresh-context 评审用真实构建的 wa-cli 二进制对夹具副本实测：一次只读 status --json 就新建了 .writing-anything/audit.log（265 B）；internal/cli 的审计契约对每次调用（含只读命令）都追加一行，子进程路径无抑制手段（runQuiet 仅进程内 MCP）。而全部插件单测都用假执行器（罐装 JSON、零副作用），只读约束测试因此全绿——假执行器恰好掩盖了真实二进制的唯一写入路径
+takeaway: 凡以子进程消费 wa-cli（或任何带运维副作用的 CLI）并宣称只读的组件：先用真实二进制对干净副本实测一次完整调用序列，确认副作用清单；把不可避免的副作用（如 audit.log 追加）作为显式例外写进自己的规格与文档，并用写入型假二进制（模拟副作用 + 输出罐装数据）钉住「例外之外逐字节不变」，而不是用零副作用假执行器自证清白
+applies_when: 编写以子进程调用 wa-cli 的外部工具、插件或脚本，尤其是要对其宣称只读性、或只用假执行器/罐装输出做测试时
+occurrences:
+  - origin: workspace-snapshot
+    date: '2026-10-20'
+    evidence: .strict-spec-driven/changes/workspace-snapshot/specs/dsh-plugin.yaml 的 snapshot-no-writes 场景（审计例外 + 有界调用集合）；plugins/dsh-writing-viewer/src/snapshot.test.ts「one snapshot appends only the audit log」测试（写入型假二进制）；.strict-spec-driven/changes/workspace-snapshot/tech/dsh-plugin-structure.yaml 的 plugin-cli-audit-exception 规则
+  - origin: polish-release
+    date: '2026-10-20'
+    evidence: 性能探针夹具起初按层级嵌套路径假设单元引用并预期场景单元有目录；改由 gen-large-workspace.mjs 经 wa-cli 真实命令生成后立即暴露真实形态——单元引用是扁平的 <work>/<unit-id>，无产物的场景单元根本没有目录（快照 works[].units 只含根单元）——罐装/手写夹具会把这两个假设固化进测试

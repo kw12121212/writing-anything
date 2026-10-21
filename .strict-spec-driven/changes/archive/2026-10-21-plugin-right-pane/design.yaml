@@ -1,0 +1,22 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: plugin-right-pane
+approach:
+  - 镜像 dsh-plugin-strict-spec 的右侧栏接入：package.json dsh.client.inject 声明 @deepseek-ai/dsh-client-ui-sidebar-right（加载器先载入宿主模块，其 client 提供 sidebarRightTabs 服务与右侧栏插槽）；exports.inject 增 sidebarRightTabs；apply 内先注册静态 tab 类型（页面类型：无 patterns、默认 extension 优先级、title 双语、guide 入口盒），再在 slots 的 sidebar.right.pane.tab 插槽以 tab 类型 id 为 key 注册正文组件——正文复用 ViewerPanel（自带取数、路径切换、设置区、窄容器堆叠布局）；两处注册均容错（服务或插槽缺失时跳过并保留左侧入口）
+decisions:
+  reuse-viewer-panel:
+    decision: 右侧栏正文直接复用现有 ViewerPanel 组件
+    rationale: 面板已按容器宽度自适应（<640px 上下堆叠），右侧栏天然窄容器；避免第二份渲染逻辑
+  tolerant-registration:
+    decision: （被评审推翻）服务缺失时右侧栏页安静跳过、左侧入口不受影响
+    rationale: exports.inject 是 cordis 硬激活门：宿主未提供声明服务时整个 client 插件不激活、apply 根本不执行，行内守卫不可达；ctx 代理对未声明服务的读取直接抛错，行内容错也无从谈起
+  no-delta-spec:
+    decision: 面板可见性属 dsh-plugin 主规格 panel-visible 需求的延伸场景（新增右侧栏入口，不改既有面板行为）
+    rationale: panel-visible 已规定「Web GUI 必须提供该插件的面板入口」——右侧栏页是又一个入口而非行为改变；为避免过度规格化，本变更不新增需求条目
+  hard-client-dependency:
+    decision: 右侧栏接入按硬依赖如实声明：exports.inject 含 sidebarRightTabs，package.json 的 dsh.client.inject 声明宿主 sidebar-right 模块；engines.dsh 范围内（>=0.2.1-rc.2 <0.3.0）的宿主 client 组合均随带该模块并提供服务；tab 类型注册改经 ctx.effect 作用域化（HMR 卸载可释放，避免 id 泄漏后重注册失败）
+    rationale: 真实容错（inject 只留 slots + try/catch 读取）在 cordis 代理下不可达——未声明服务的属性读取恒抛错，右侧栏将永不注册；诚实声明硬依赖 + 引擎范围约束 + README 明示是唯一与宿主协议一致的方案（dsh-plugin-strict-spec 以更窄的引擎范围同款处理）
+alternatives: []
+risks: []

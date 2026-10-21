@@ -1,0 +1,1 @@
+{"valid":true,"diagnostics":[],"changedPaths":[],"timeline":[{"unit":"my-novel/scene-1","time":"第 1 夜","after":[],"position":1},{"unit":"my-novel/scene-2","time":"第 2 天","after":["my-novel/scene-1"],"position":2}]}

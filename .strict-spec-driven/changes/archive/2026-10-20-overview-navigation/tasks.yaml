@@ -1,0 +1,71 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: overview-navigation
+sections:
+  Implementation:
+    add-yaml-dependency:
+      text: 在插件包加入 yaml 依赖并确认 tsdown 将其打入 iife client bundle（client 仍为单一脚本、不依赖网络）；更新 pnpm-lock.yaml
+      status: complete
+    overview-view-model:
+      text: 新增 src/overview.ts 纯函数视图模型：作品卡片（id、genre、阶段、汇总进度、阻塞项计数与摘要）、工作区级计数（素材、待决决策、待复核、validate 诊断按严重级别）、degraded 说明、按 parent 构建的单元树（深度、汇总单元进度标记）与单元详情（阶段、进度、阻塞项、下一步命令、产物清单）；空态区分缺失工作区与无作品
+      status: complete
+    host-panel-root:
+      text: root.ts 新增 parsePanelRoot 与候选来源 panel-input；host.ts 快照路由从 req.url 解析可选查询参数 root：合法则作为本次请求唯一候选，不合法或无工作区时返回空态与可读原因、不回退默认定位；不带参数时行为与响应形状不变；/workspace 路由不改
+      status: complete
+    client-snapshot-route:
+      text: client.ts 改为拉取 GET /dsh-writing-viewer/snapshot，保留加载态、错误态与重试，新增手动刷新按钮；侧栏条目与 main 插槽注册不变
+      status: complete
+    client-path-switch:
+      text: client.ts 工具栏提供项目路径输入与「切换」「恢复默认」，按所选路径带 root 参数请求快照，显示当前路径与来源；路径只保存在组件状态；只让最新请求落地
+      status: complete
+    client-overview-render:
+      text: client.ts 渲染总览仪表盘（工作区汇总条、诊断与降级可展开列表、作品卡片网格）与选中作品后的单元树导航和单元详情区；空态给出 wa-cli init / wa-cli new 指引；界面不出现任何编辑、写入或确认控件
+      status: complete
+    client-responsive-theme:
+      text: 样式只用 DSH 主题令牌（--dsw-alias-* 带回退值）适配明暗主题；按面板容器宽度在窄宽度下把单元树与详情改为上下堆叠，覆盖 1024px 以下侧栏收为 56px 导轨的情形
+      status: complete
+    glossary-terms:
+      text: docs/GLOSSARY.md 新增「总览仪表盘（Overview Dashboard）」等本变更引入的新术语，README 与面板文案首次出现处按「中文（English）」书写
+      status: complete
+    readme-evidence:
+      text: '插件以 link: 装入本机 DSH web profile 实测：截取总览、单元树与详情、窄宽度堆叠、明暗主题、空态与面板内路径切换截图存入 docs/evidence/；复核打开面板、刷新与切换路径前后相关 .writing-anything/ 除 audit.log 外逐字节不变；核查 @deepseek-ai/dsh-client-ui-primitives 对第三方 client 的 require 可用性；结果与面板导览写入 README'
+      status: complete
+  Testing:
+    overview-unit-tests:
+      text: vitest 新增 src/overview.test.ts：以 testdata 罐装快照覆盖 tech-blog 与 novel 多层级树构建、汇总进度与阻塞项计数、待决决策与待复核计数、validate 诊断分组、degraded 降级、缺失工作区与无作品两种空态、work.yaml 缺失或 genre 缺失的容错；client.test.ts 覆盖快照路由路径与插槽注册不变
+      status: complete
+    host-panel-root-tests:
+      text: vitest 覆盖 parsePanelRoot（空串、相对路径、含 NUL、规范化）与快照路由带 root 参数：合法路径定位到该工作区且来源为 panel-input、优先于配置固定、无工作区或非法路径返回空态与原因且不回退、不带参数行为不变；以写入型假 wa-cli 断言切换路径后 wa-cli 仍以 --dir <所选路径> 有界调用且除 audit.log 外工作区逐字节不变
+      status: complete
+    plugin-build-typecheck:
+      text: 插件包类型检查与构建通过（tsc --noEmit、tsdown、输出规整），dist/client.js 仍为单一 __ModuleLoader__.load 脚本
+      status: complete
+      command: cd plugins/dsh-writing-viewer && pnpm run build
+    plugin-unit-tests:
+      text: 插件包 vitest 全部通过（含新增总览视图模型测试与既有快照、只读、定位测试）
+      status: complete
+      command: cd plugins/dsh-writing-viewer && pnpm test
+    go-regression:
+      text: 完整 Go 回归原样通过，确认插件改动不影响产品工程
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    verify-readonly-ui:
+      text: 核对 client 渲染树与 README 实测证据：界面无任何编辑、写入或确认控件；/workspace 路由未改动，快照路由不带 root 参数时行为不变，wa-cli 调用集合仍有界；带 root 参数时读取范围限于所选目录的 .writing-anything/
+      status: complete
+    verify-spec-coverage:
+      text: 逐条核对 delta 规格场景（总览卡片、工作区汇总、单元树导航、空态/错误态、明暗主题与窄宽度堆叠）都有测试或实测截图证据
+      status: complete
+    ready-check:
+      text: strict 变更就绪检查通过
+      status: complete
+      command: strict-spec-cli ready overview-navigation
+    verify-change:
+      text: strict 变更验证通过，delta 规格与实际实现一致
+      status: complete
+      command: strict-spec-cli verify overview-navigation
+testing_gates:
+  validation_task: plugin-build-typecheck
+  unit_test_task: plugin-unit-tests

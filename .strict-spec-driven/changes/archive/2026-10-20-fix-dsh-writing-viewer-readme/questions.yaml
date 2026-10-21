@@ -1,0 +1,49 @@
+schema: strict-spec-driven/question-list/v1
+schema_version: 1
+artifact_type: question_list
+schema_file: templates/strict-spec-driven/schemas/question-list.yaml
+change: fix-dsh-writing-viewer-readme
+open: []
+resolved:
+  - id: doc-scope
+    question: 修复范围是否只限 plugins/dsh-writing-viewer/README.md 单文件的两处文档缺陷（体积声明 + 认证披露），不改任何运行时行为？
+    context: 请求（按建议全部修复，使用 strict spec 流程）指向 review 提出的文档级修复；曾疑似的 dsh web --patch 命令形态缺陷经复现撤回（实测有效）。影响：proposal 范围、实现文件清单；无关测试与依赖
+    answer: 是：仅 README 单文件两处；运行时行为、构建产物、规格与技术标准均不变
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-problem
+    question: What is concretely going wrong today, and for whom?
+    context: 'Why this is asked: the change is planned against a need, and the need lives only with the requester. A "problem" here means what someone does or suffers today — not a feature that is missing. If the answer names a button, a field, a page, or an endpoint, it is a solution, and the underlying problem is still unstated. What a sufficient answer contains: who is affected, what they do today instead, and how often. Worked example: "every Monday one person spends forty minutes copying order rows into a spreadsheet to send the weekly report". What it changes: this becomes the proposal''s why, and it decides whether the change is worth making.'
+    answer: 装/用本插件的人今天读到 README 两处失实信息：client bundle 体积写「约 237 kB（gzip 约 58 kB）」而实测 285,985 B／69,437 B，误导供应链与加载评估；两条 host 路由（/dsh-writing-viewer/workspace、/snapshot）不在 Web GUI 认证栅栏内（实测无 token：GET / 得 401、GET /snapshot 得 200 并返回工作区根路径、作品、素材全文），README 只字未提——把宿主绑到非回环接口的操作者会不知情地暴露整个写作工作区
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-outcome
+    question: What observable difference proves the problem is solved?
+    context: 'Why this is asked: without a success condition, nobody can tell afterwards whether the change worked. "Observable" means someone outside the system can check it without reading the code. What a sufficient answer contains: what a person will see, or no longer have to do, once this is done. Worked example: "the report is in the manager''s inbox on Monday morning without anyone assembling it". What it changes: this becomes the delta spec''s scenarios and the acceptance evidence at review time.'
+    answer: 任何人可在仓库里用 wc -c dist/client.js 与 gzip -c dist/client.js | wc -c 复验 README 的体积声明（10% 容差内一致）；README 的「发现的 DSH API 约束（0.2.1-rc.2）」清单新增认证栅栏条目（含 401/200 对照与保持回环绑定的操作提示），安装节出现对应指引
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-trigger
+    question: Why now — what forced this?
+    context: 'Why this is asked: work that nothing forced is the work most often thrown away later. This question catches a request that sounds reasonable but has no real driver behind it. What a sufficient answer contains: the concrete event, deadline, incident, or cost that made this surface now, or an honest statement that nothing did. Worked example: "the report was missed last month and it was raised with the team". What it changes: a change with no trigger is a candidate for deferral, and the answer is weighed at review before archive.'
+    answer: 2026-10-20 用户要求对 DSH 插件做可用性与完整性 review 并提出意见；review 在运行中的 GUI 上实测发现认证暴露面、重建 dist 时发现体积数字过期，用户随即指示「按建议全部修复，使用 strict spec 流程」
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-non-goals
+    question: What must explicitly not change?
+    context: 'Why this is asked: the requester knows which nearby behavior other people depend on, and the agent does not. A "non-goal" is something the change must leave alone even though it sits close to the work. What a sufficient answer contains: the behavior, setting, or output that must survive untouched, and who relies on it. Worked example: "do not change the saved filters — several people rely on their own". What it changes: these become the proposal''s unchanged_behavior items, which review checks the finished result against.'
+    answer: 插件全部运行时行为（host 路由、快照聚合、client 渲染、键盘导航）、构建产物与其体积本身、dsh-plugin 主规格与技术标准、路由注册方式都必须原样；插件侧不加认证机制（后续独立变更）；曾疑似的 dsh web --patch 命令形态缺陷经复现撤回，不改
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-interpretation
+    question: Which reading of the request is intended, where more than one is possible?
+    context: 'Why this is asked: a short request usually admits several readings, and building the wrong one is indistinguishable from building nothing. What a sufficient answer contains: the reading that is meant, stated plainly enough to rule the others out — or a statement that only one reading exists and what it is. Worked example: "export means the version sent to the manager, not the one I read myself". What it changes: this fixes the scope boundary before any code is written, and settles disputes about what was asked for.'
+    answer: 「全部修复」取 review「建议下一步」一节的口径：①机器本地 profile 加 waCliPath（仓库外，已直接完成）＋②README 两处修正走 strict-spec-bugfix；review 中的增强项（决策/复核内容视图、路由认证机制、构建告警清理）明确不在本次范围
+    status: resolved
+    kind: requirement
+    answered_by: human

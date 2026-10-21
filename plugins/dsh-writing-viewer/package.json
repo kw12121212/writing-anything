@@ -1,0 +1,54 @@
+{
+  "name": "dsh-writing-viewer",
+  "version": "0.1.0",
+  "description": "Read-only DeepSeek Harness (DSH) panel for writing-anything workspaces (.writing-anything/): overview dashboard, unit tree, artifact semantic-card and source-highlight views, sources list.",
+  "type": "module",
+  "private": true,
+  "license": "Apache-2.0",
+  "files": [
+    "dist",
+    "docs",
+    "cordis.patch.yml",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=22.13",
+    "dsh": ">=0.2.1-rc.2 <0.3.0"
+  },
+  "exports": {
+    ".": "./dist/index.js",
+    "./client": "./dist/client.js",
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-sidebar-right"
+      ],
+      "platform": "web",
+      "immediately": true
+    }
+  },
+  "scripts": {
+    "build": "tsc --noEmit && tsdown && node scripts/normalize-outputs.mjs",
+    "test": "vitest run",
+    "check": "pnpm run build && pnpm test",
+    "perf:check": "node scripts/perf-check.mjs",
+    "perf:workspace": "node scripts/gen-large-workspace.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "tsdown": "^0.23.1",
+    "typescript": "^5.9.0",
+    "vitest": "^3.2.0",
+    "yaml": "^2.9.1"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
+  }
+}

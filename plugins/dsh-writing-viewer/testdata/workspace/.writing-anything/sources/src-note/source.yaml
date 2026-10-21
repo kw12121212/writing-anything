@@ -1,0 +1,10 @@
+# 素材（Source）元数据；原文逐字节存档在同目录的 file 中，请勿修改。
+
+schema_version: 1
+id: src-note
+type: author-note
+title: 作者亲历说明
+original_name: wa-note.md
+file: original.md
+sha256: 7d5301f43feceaeaccf146d2cf93b3e6de214699280f6127f3ab4d257922b8a1
+bytes: 106

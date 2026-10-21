@@ -1,0 +1,19 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: plugin-queue-views
+  status: proposed
+summary:
+  what:
+    - 为面板新增两个只读清单视图：总览的「待决决策」计数磁贴可点开决策队列（Decision Queue）清单——逐条展示决策 id、status、question、options（含 recommendation 标记）、rationale、blocking 与关联 units；「待复核」磁贴可点开作者复核清单——逐条展示 kind、work/ref、channel、confirmed_at 与 reviewed_at。数据来自快照已携带的 decisions.yaml 与 author-reviews.yaml 全文，经新的纯函数视图模块解析；文件缺失显示空态提示，YAML 解析失败显示可读错误且不崩溃，均不回退为 0 计数
+  why:
+    - 决策与复核是作者要采取行动的两个队列，面板目前只显示计数（overview-navigation 变更范围所定）；作者必须另开终端才能看到待决内容。快照数据已在（workspace-snapshot 变更聚合了 decisions 与 authorReviews 全文），只缺消费视图——review 也把它列为增强项，用户已指示修复
+scope:
+  in:
+    - plugins/dsh-writing-viewer/src/queueview.ts（新纯函数模块）+ queueview.test.ts；plugins/dsh-writing-viewer/src/client.ts（视图枚举、磁贴导航、两个清单渲染与中英文案）+ client.test.ts；plugins/dsh-writing-viewer/README.md（界面导览与 client 侧行为）；delta 规格 dsh-plugin 新增 queue-views 需求
+  out:
+    - '不改 host 侧（snapshot.ts、wacli.ts、routeguard.ts、host.ts 不动——数据已在快照中）；不改 overview.ts 的计数语义（待决计数仍按 decisions.yaml status: open 统计，待复核仍来自 wa-cli next）；不提供任何决策/复核的编辑或确认控件（作者操作仍走 wa-cli）；不新增规格之外的字段透出'
+unchanged_behavior:
+  - 快照响应结构与聚合逻辑不变；现有视图（总览、单元树、产物、素材清单）行为不变；只读约束与键盘可达性约定不变（新增控件均为原生按钮、可 Tab 到达）

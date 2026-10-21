@@ -7,6 +7,10 @@ standards:
     title: wa-cli 命令契约
     category: architecture
     path: .strict-spec-driven/tech/cli-contract.yaml
+  - id: dsh-plugin-structure
+    title: DSH 插件（DSH Plugin）包结构与隔离
+    category: architecture
+    path: .strict-spec-driven/tech/dsh-plugin-structure.yaml
   - id: go-project-structure
     title: Go 工程结构与回归关卡
     category: architecture

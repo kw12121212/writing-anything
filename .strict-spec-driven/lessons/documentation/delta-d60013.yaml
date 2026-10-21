@@ -1,0 +1,19 @@
+schema: strict-spec-driven/lesson/v1
+schema_version: 1
+artifact_type: lesson
+schema_file: templates/strict-spec-driven/schemas/lesson.yaml
+lesson:
+  id: delta-d60013
+  title: delta 场景断言涉及既有行为时，逐分支对照该行为的既有测试
+category: documentation
+status: active
+created_at: '2026-10-20T11:32:47.766Z'
+updated_at: '2026-10-20T11:32:47.766Z'
+context: plugin-queue-views 的 missing-and-malformed 场景 THEN 尾句写「计数磁贴仍显示『—』而不是 0」，把文件缺失与解析失败两个分支混写：文件缺失分支的待决计数按既有语义就是 0（overview.ts pendingDecisionCount，overview.test.ts 已断言），只有解析失败分支显示「—」；实现没变，是 delta 文案错，评审在归档前拦下，否则错误断言随归档并入主规格
+observation: delta 场景为新行为写断言时容易顺手断言周边既有行为；既有行为的语义由它自己的代码与测试定义，凭印象写就会与实现相悖，而且这类断言错误不会被本变更的任何测试发现——它测的是别的区域
+takeaway: delta 场景的 THEN 若断言任何非本变更实现的既有行为（计数、降级、既有视图），写前找到该行为的实现与既有测试逐分支核对；两个分支行为不同时分别写清各自分支，不合并成一句
+applies_when: 撰写 delta-spec 场景断言，且断言涉及本变更之外的既有行为时
+occurrences:
+  - origin: plugin-queue-views 评审（2026-10-20）
+    date: '2026-10-20'
+    evidence: 评审发现 delta 场景尾句与 overview.test.ts:268 的既有断言（缺失文件计数为 0）相悖；修正后的场景把「—」限定到解析失败分支并注明文件缺失分支保持 0

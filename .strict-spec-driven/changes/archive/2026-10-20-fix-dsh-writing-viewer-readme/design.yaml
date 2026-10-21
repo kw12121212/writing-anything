@@ -1,0 +1,16 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: fix-dsh-writing-viewer-readme
+approach:
+  - 最小文档修复：1) README:116 体积句改为 2026-10-20 实测值并附可复验锚点（wc -c dist/client.js 与 gzip -c dist/client.js | wc -c，遵循 lesson-cdee49「量化声明须带可复验锚点」）；2) 在「发现的 DSH API 约束（0.2.1-rc.2）」清单补第 8 条：webServer.register 注册的路由不在浏览器认证栅栏内（附 401/200 实测对照），并在「装入本机 DSH web profile」一节加一句操作提示——保持宿主绑定回环地址，绑到非回环接口前须自行加反向代理与认证。修改停留在 README 单文件
+decisions:
+  readme-accuracy-anchor-and-disclosure:
+    decision: 体积声明带日期与复验命令；认证暴露面写入 DSH API 约束清单并在安装节提示绑定回环
+    rationale: 两处都是「文档与实测事实不符/缺失」：修文档而非改行为。体积数字不写成测试断言——bundle 体积随正常构建漂移，硬断言会制造假失败；带日期与命令的锚点已满足可复验性。认证披露放在既有 API 约束清单（该清单本就是宿主事实的登记处）加安装节一句提示，避免新开章节扩大改动面
+  no-delta-spec:
+    decision: 本变更只修正 plugins/dsh-writing-viewer/README.md 的两处文档失实（体积声明、认证暴露面披露），不改变任何用户可观察的产品行为
+    rationale: dsh-plugin 主规格约束的是面板/快照/产物的运行时行为，README 是插件包自身的安装使用文档（polish-release 变更 docs-location 决策），其准确性不构成任何主规格需求的增改；路由认证姿态本身属 DSH 宿主 API 事实的登记，不改插件行为
+alternatives: []
+risks: []

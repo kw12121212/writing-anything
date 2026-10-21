@@ -1,0 +1,19 @@
+schema: strict-spec-driven/lesson/v1
+schema_version: 1
+artifact_type: lesson
+schema_file: templates/strict-spec-driven/schemas/lesson.yaml
+lesson:
+  id: scope-b5e87e
+  title: 静态插件行消费宿主分层服务：无 scope 的查询只见全局层
+category: architecture
+status: active
+created_at: '2026-10-20T16:07:00.520Z'
+updated_at: '2026-10-20T16:07:00.520Z'
+context: dsh-writing-viewer 的技能来源对照最初直接消费宿主技能注册表的合并 list()（ctx.inject(['skills']) 拿到的服务）
+observation: 'web profile 中 dsh-base 顶层的 dsh-skill-filesystem 行 disabled: true，真正启用的一份挂在 agent preset 常驻组合里；SkillRegistry 的层合并要求查询带会话 scope 才含 preset 层，静态插件行的 list({}) 只返回全局层（仅本插件自己），12 个技能全部误报「内置」——插件自身状态与单元测试假件（直接喂合并清单）都发现不了，只有真实宿主实例实测暴露'
+takeaway: 静态插件行要消费按层提供宿主状态的服务（技能注册表、类似 scoped 服务）时，先用 dump-config/实测确认目标 provider 挂在哪一层、自己的查询能看到哪层；层视角缺失时改用对同一批底层数据的直接观测（如目录存在性），不要复制宿主的合并逻辑当第二真相源，并把层局限写进文档
+applies_when: DSH 插件经 ctx.inject 消费宿主的分层/按会话组合的服务，并据其结果向用户报告会话将看到的内容时
+occurrences:
+  - origin: plugin-setup-provenance
+    date: '2026-10-20'
+    evidence: 初版对照表在真实 web 实例把 12 个 wa-* 全部误报内置（docs/evidence/setup-check.txt 第 7 节）；dsh --profile web --dump-config 证实 preset 层挂载；独立探针（真实 dsh-skill + dsh-skill-filesystem 同层挂载）证实 rank 竞争本身正确；定案改为标准技能目录存在性比对

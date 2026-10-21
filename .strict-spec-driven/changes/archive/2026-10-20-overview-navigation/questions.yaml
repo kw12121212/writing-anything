@@ -1,0 +1,47 @@
+schema: strict-spec-driven/question-list/v1
+schema_version: 1
+artifact_type: question_list
+schema_file: templates/strict-spec-driven/schemas/question-list.yaml
+change: overview-navigation
+open: []
+resolved:
+  - id: requirement-problem
+    question: What is concretely going wrong today, and for whom?
+    context: 需求本身：今天具体是谁、在做什么时遇到了问题。答案决定提案的 why。
+    answer: workspace-snapshot 已在 host 侧产出完整只读快照，但插件面板仍只显示定位到的项目目录与工作区存在性；作者与 Agent 在 DSH Web GUI 里看不到作品（Work）、生命周期阶段、进度与阻塞项，每次都要回终端跑 wa-cli status / next 才知道写作推进到哪里
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-outcome
+    question: What observable difference proves the problem is solved?
+    context: 外部可检查的成功条件，决定 delta 规格场景与验收证据。
+    answer: ①总览页每个作品一张卡片（标题、文体、当前阶段、汇总进度 done/total、阻塞项数量与摘要）；②工作区级汇总显示素材数、待决决策数、待复核数与 validate 诊断；③左侧单元树按层级缩进、汇总单元带进度标记，选中单元进入其详情；④空态给出 wa-cli init 指引、错误态透出诊断列表；⑤明暗主题适配，1024px 以下窄窗口（侧栏收为 56px 导轨）时单元树与详情上下堆叠仍可读可操作；⑥视觉沿用 DSH 主题令牌，不引入独立样式体系
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-trigger
+    question: Why now — what forced this?
+    context: 是什么迫使这项工作现在发生。
+    answer: roadmap-recommend 在 36 个计划变更中只推荐本变更：其余 33 个已归档、artifact-views 与 polish-release 因依赖本变更被跳过；依赖 workspace-snapshot 已于 2026-10-20 归档
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-non-goals
+    question: What must explicitly not change?
+    context: 必须保持不变的相邻行为，成为提案的 unchanged_behavior。
+    answer: 插件严格只读，不出现任何写入、编辑或确认控件，作者确认与复核仍走 wa-cli 阅读页（Reading View）；host 侧 /workspace 与 /snapshot 路由行为及 wa-cli 有界调用集合不变；wa-cli、MCP 服务与内置技能不变，完整 Go 回归结果不变；产物语义视图与高亮（artifact-views）、键盘导航与性能打磨（polish-release）不在本变更
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-interpretation
+    question: Which reading of the request is intended, where more than one is possible?
+    context: 排除多种解读，固定范围边界。
+    answer: 按计划变更 details：总览仪表盘与单元树导航是 client 侧对既有快照数据的按写作概念重组，不是目录浏览器；「选中单元进入其产物视图」在本变更落为单元详情区与稳定的选中接口，产物内容渲染由后续 artifact-views 挂载
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: project-path-switch
+    question: 里程碑定案的「面板内切换到显式输入的项目路径」是否纳入本变更？
+    context: 背景：里程碑 intake 问题 workspace-root 已定案「默认跟随 DSH 工作区根/会话工作目录，面板内支持切换到显式输入的项目路径」，plugin-scaffold 已实现前半（注册表定位与配置固定），但 overview-navigation、artifact-views、polish-release 三个计划变更的 summary/details 都没有认领后半的面板内切换。影响：纳入会改变本变更的提案范围、需要新增 delta 规格要求，并要求改动 host 侧快照路由（接受项目路径参数及其校验，属读取任意本机路径的安全边界），违反本变更「host 路由形状不变」的约束，同时影响实现文件（host.ts、root.ts、client.ts）与测试；不纳入则里程碑 done criteria 不受影响（done criteria 未列出该能力），但定案的能力在里程碑内无人承接。推荐：不纳入本变更，保持 host 零改动；由作者经 /strict-roadmap-plan 在本里程碑新增一个计划变更（或并入 polish-release）专门承接面板内路径切换与路径校验。选项：A 不纳入、另立计划变更（推荐）；B 纳入本变更，同时扩大到 host 路由与定位逻辑；C 认为该定案已不需要，在里程碑中撤销
+    answer: 纳入本变更（作者 2026-10-20 选择选项 B）：范围扩大到 host 侧——快照路由接受可选的项目路径查询参数并做校验，client 提供路径输入与切换；同步修改 host.ts、root.ts、client.ts，新增 delta 规格要求与测试；proposal 的「host 路由形状不变」约束相应收窄为「不带参数时行为与响应形状不变」
+    status: resolved

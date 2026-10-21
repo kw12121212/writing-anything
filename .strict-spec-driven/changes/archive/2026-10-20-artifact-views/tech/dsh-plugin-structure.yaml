@@ -1,0 +1,21 @@
+schema: strict-spec-driven/delta-tech/v1
+schema_version: 1
+artifact_type: delta_tech
+schema_file: templates/strict-spec-driven/schemas/delta-tech.yaml
+target_standard: dsh-plugin-structure
+operations:
+  ADDED:
+    client-content-rendering-safety:
+      strength: MUST
+      statement: DSH 插件 client 侧渲染来自工作区（Workspace）的内容（Markdown 正文、YAML 源码、产物字段值）时，渲染器必须只产出结构化节点树（块类型与纯文本子节点）或带类别的 token 序列，经注入的 createElement 以纯文本子节点输出；不得拼接 HTML 字符串，不得使用 innerHTML 或 dangerouslySetInnerHTML，不得把产物内容交给 eval/new Function；高亮器与渲染器为零依赖纯模块，打包进 client bundle，渲染过程不得发起任何网络请求
+      rationale: 插件只读面板渲染的是作者的产物原文，其中可以合法含有任意 HTML 与脚本字样；结构化节点 + createElement 纯文本子节点让每个字符保持转义文本，从根上排除执行面，这是 markdownview.ts 与 yamlhighlight.ts 已实现并被测试断言的形态。零依赖与离线约束来自里程碑定案（高亮打包进 bundle、不依赖网络与外部 CDN），把两者固化为标准避免后续视图功能重新引入字符串拼 HTML 或 CDN 依赖
+      enforcement:
+        method: test
+        detail: vitest 断言渲染器输出仅为允许的块类型与纯文本（markdownview.test.ts 的 structured-blocks 与 text-intact 用例）、token 拼接逐字还原原文（yamlhighlight.test.ts 的 round-trip 用例），并核查构建产物 client.js 中除快照路由 fetch 外无任何网络请求与外部 URL
+      examples:
+        good:
+          - plugins/dsh-writing-viewer/src/markdownview.ts 的 renderMarkdown 返回 MdBlock 节点树，client.ts 的 renderMarkdownBlocks 经 createElement 以文本子节点渲染，HTML 片段原样显示为文字
+        bad:
+          - 渲染器返回 HTML 字符串并经 innerHTML 注入，或从 CDN 加载 highlight.js/marked：产物中的脚本获得执行面，且断网时高亮失效
+  MODIFIED: {}
+  REMOVED: {}

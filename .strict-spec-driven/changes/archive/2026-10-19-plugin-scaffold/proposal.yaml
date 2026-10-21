@@ -1,0 +1,39 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: plugin-scaffold
+  status: proposed
+summary:
+  what:
+    - '在仓库新增独立 DSH 插件（DSH Plugin）TypeScript 包 plugins/dsh-writing-viewer/：package.json 声明 dsh.bundle.patch（指向 cordis.patch.yml，insert 一个插件行）、dsh.client（platform: web 与 inject 列表）与 engines.dsh 兼容范围'
+    - host 入口为 cordis 插件（导出 name 与 apply(ctx, config)），验证取得要展示的项目目录（GUI 进程工作区根/会话工作目录）并只读访问 .writing-anything/；web client 入口以 window.__ModuleLoader__.load 工厂形式构建，注册 root-scoped main 全局面板（可被 ctx.layout.selectPanel 选中）并提供侧栏入口，渲染最小只读面板（工作区定位结果与空态指引）
+    - '插件包构建（tsdown）与类型检查、最小 vitest 单元测试就绪；以 link: 依赖装入本机 DSH web profile 实测加载，把加载证据与发现的 API 约束记录进插件包 README'
+    - 按术语规则把「DSH 插件（DSH Plugin）」词条加入 docs/GLOSSARY.md
+  why:
+    - 本变更是里程碑 dsh-workspace-viewer 的第一个计划变更，后续 workspace-snapshot、artifact-views、overview-navigation、polish-release 全部依赖它：只有先验证插件骨架能真实装入 web profile 并注册全局面板、定位工作区根，快照服务与查看界面才有可依赖的宿主与注入基础
+    - DSH 插件与客户端注入 API 处于 0.2.x rc 阶段，尽早以真实宿主实测把 API 约束与 engines.dsh 兼容范围固定下来，降低后续变更的返工风险
+scope:
+  in:
+    - '新增独立 DSH 插件 TypeScript 包 plugins/dsh-writing-viewer/：package.json 声明 dsh.bundle.patch（指向 cordis.patch.yml，insert 一个插件行）、dsh.client（platform: web 与 inject 列表）与 engines.dsh 兼容范围，附 tsconfig 与 .gitignore'
+    - host 入口（cordis 插件：导出 name 与 apply(ctx, config)）：验证取得要展示的项目目录（GUI 进程工作区根/会话工作目录）并只读访问 .writing-anything/
+    - web client 入口（window.__ModuleLoader__.load 工厂）：注册可被选中的 root-scoped main 全局面板并提供侧栏入口，渲染最小只读面板：定位到的项目目录、工作区存在性与定位不到时的空态指引（提示 wa-cli init）
+    - 插件包构建（tsdown）与类型检查、最小 vitest 单元测试
+    - '以 link: 依赖装入本机 DSH web profile 实测加载（定位成功与空态两种情形），把加载证据与发现的 API 约束记录进插件包 README'
+    - docs/GLOSSARY.md 新增「DSH 插件（DSH Plugin）」词条，并在插件包 README 记录开发与安装步骤
+  out:
+    - 对 .writing-anything/ 的任何写入或变更能力：插件严格只读
+    - wa-cli（Go 内核）、MCP 服务与内置技能的行为改动
+    - host 侧工作区快照聚合服务与按作品/单元的分层拉取（属 workspace-snapshot 等后续计划变更）
+    - 总览仪表盘、单元树导航、产物语义视图、YAML/Markdown 语法高亮与明暗主题适配
+    - 面板内切换显式输入项目路径的交互（本变更只验证默认工作区根定位与空态）
+    - DSH Desktop/Electron 端适配与 npm 市场发布
+unchanged_behavior:
+  - wa-cli 全部命令的行为、诊断与退出码不变
+  - 现有工作区产物结构与 JSON Schema 不变
+  - 完整 Go 回归命令与覆盖率关卡不变且仍通过：插件包不进入 Go 模块与覆盖率范围
+  - docs/GLOSSARY.md 既有词条不变，仅新增词条
+roadmap:
+  milestone: dsh-workspace-viewer
+  planned_change: plugin-scaffold

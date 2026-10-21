@@ -1,0 +1,19 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: license-apache2
+  status: proposed
+summary:
+  what:
+    - 仓库改用 Apache-2.0 协议：根目录新增完整 Apache License 2.0 文本（附录版权行 Copyright 2026 kw12121212），plugins/dsh-writing-viewer/package.json 的 license 字段由 MIT 改为 Apache-2.0，全仓协议统一
+  why:
+    - 仓库已 public 且对外分发（Release、install.sh、dsh plugin add）；作者选定 Apache-2.0：宽松且附显式专利授权与贡献条款，适合公开生态分发
+scope:
+  in:
+    - LICENSE（新增）、plugins/dsh-writing-viewer/package.json（license 字段）
+  out:
+    - 任何代码行为、规格、文档语义的改变；协议之外的元数据改动
+unchanged_behavior:
+  - 代码与测试行为完全不变；构建产物内容不变（package.json 仅 license 字段）

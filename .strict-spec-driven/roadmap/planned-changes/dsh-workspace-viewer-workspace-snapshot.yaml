@@ -1,0 +1,12 @@
+schema: strict-spec-driven/planned-change/v1
+schema_version: 1
+artifact_type: planned_change
+schema_file: ../../templates/strict-spec-driven/schemas/planned-change.yaml
+planned_change:
+  id: workspace-snapshot
+  milestone: dsh-workspace-viewer
+status: complete
+summary: host 侧只读快照服务：把 .writing-anything/ 的配置、作品与单元树（阶段、进度、阻塞项）及各单元产物全文（含 draft 正文、论断（Claim）与出处（Provenance）、审稿与验收证据）、素材、决策、规范包（Pack）与待复核摘要聚合为结构化 JSON 供 client 拉取，不含任何写入路径
+details: 数据来源按里程碑定案采用混合方案：结构状态复用 wa-cli 只读命令的 --json 输出（wa-cli 是唯一真相来源，status/validate 覆盖单元树与诊断），产物全文按 JSON Schema 只读解析文件。快照字段覆盖：workspace 与 config；works（work.yaml、单元树、stage、progress、blockers）及各单元目录产物全文——brief、outline、provenance、claims、feedback、draft 正文（Markdown 全文）、review 与验收证据，长篇文体另有场景契约、伏笔台账（Foreshadowing Ledger）、时间线（Timeline）、知情表（Knowledge State）等按文体存在的产物；外加 sources、decisions（含待决）、packs、author-reviews/待复核摘要；快照内嵌 validate 诊断作为错误态数据。刷新策略定案：首版手动刷新（面板刷新按钮与面板重新打开时重读），文件监听列为后续增强。服务有单元测试：多作品夹具（含长篇小说层级与多类单元产物）下快照正确、无 .writing-anything 时给出可读错误，并有断言整个包不含写文件调用的只读约束测试。
+depends_on:
+  - plugin-scaffold

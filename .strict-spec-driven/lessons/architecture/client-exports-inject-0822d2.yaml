@@ -1,0 +1,19 @@
+schema: strict-spec-driven/lesson/v1
+schema_version: 1
+artifact_type: lesson
+schema_file: templates/strict-spec-driven/schemas/lesson.yaml
+lesson:
+  id: client-exports-inject-0822d2
+  title: client 服务的 exports.inject 是硬激活门：容错声明必须对照宿主协议验证
+category: architecture
+status: active
+created_at: '2026-10-21T02:21:14.784Z'
+updated_at: '2026-10-21T02:21:14.784Z'
+context: dsh-writing-viewer 为会话右侧栏接入声明了 sidebarRightTabs client 服务（exports.inject），设计里写了「服务缺失时安静跳过、左侧入口保留」
+observation: cordis 的 inject 是激活门而非解析提示：任一声明服务未提供时整个 fiber 保持 INACTIVE、apply 永不执行，行内守卫不可达；ctx 代理对未声明服务的属性读取也直接抛错，「inject 只留必需项 + try/catch 读取」的容错路径同样走不通——真实宿主（vendored cordis + client runner 源码）证实，全新上下文评审拦下
+takeaway: 给 DSH client 插件新增服务依赖时，先读宿主 cordis/plugin-loader 的激活语义再写容错承诺：exports.inject 是全有或全无的硬门；要么诚实声明硬依赖并核对 engines 范围内宿主均提供该服务（README 明示），要么放弃该功能入口；无法在 apply 内对未声明服务做运行时容错
+applies_when: DSH 插件 client 侧在 exports.inject 增删服务声明、或设计里承诺「服务缺失时降级/跳过」时
+occurrences:
+  - origin: plugin-right-pane
+    date: '2026-10-21'
+    evidence: '评审引 vendored cordis Fiber._refresh（L1317-1329）与 client runner waitingFor 证实硬门；design 的 tolerant-registration 决策被推翻为 hard-client-dependency，README 与约束 #3 改为硬依赖明示'

@@ -1,0 +1,42 @@
+schema: strict-spec-driven/question-list/v1
+schema_version: 1
+artifact_type: question_list
+schema_file: templates/strict-spec-driven/schemas/question-list.yaml
+change: release-plugin-tarball
+open: []
+resolved:
+  - id: requirement-problem
+    question: 现状缺什么？
+    context: 需求拷问
+    answer: '仓库 public 后 dsh plugin 没有可公开安装的分发渠道：link: 只对本机有效，npm 需要新账号与版本流'
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-outcome
+    question: 完成判据？
+    context: 需求拷问
+    answer: 任一用户可按 README 一条 dsh plugin add <URL> 装上插件；此后每次正式发布自动携带配套插件 tarball
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-trigger
+    question: 为什么现在？
+    context: 需求拷问
+    answer: 仓库刚转 public 且插件分发方式比选已获作者确认（Release tarball 为主、npm 留后）
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-non-goals
+    question: 什么不变？
+    context: 需求拷问
+    answer: '发布流程既有步骤与顺序、wa-cli 产物形态、dist/* 上传机制、link: 开发安装、不引入 npm/CI'
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-interpretation
+    question: 实现读法？
+    context: 需求拷问
+    answer: tarball 并入第 7 步构建产物与 dist/* 上传闭环；插件版本独立于 tag，文件名自带版本
+    status: resolved
+    kind: requirement
+    answered_by: human

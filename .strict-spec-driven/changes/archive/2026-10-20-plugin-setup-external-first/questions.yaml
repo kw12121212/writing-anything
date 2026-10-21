@@ -1,0 +1,42 @@
+schema: strict-spec-driven/question-list/v1
+schema_version: 1
+artifact_type: question_list
+schema_file: templates/strict-spec-driven/schemas/question-list.yaml
+change: plugin-setup-external-first
+open: []
+resolved:
+  - id: requirement-problem
+    question: 现在哪里不对？
+    context: 需求拷问
+    answer: 上一变更让内置技能与 CLI 压过外部同名版本；作者要反过来：本机自装的外部技能与 wa-cli 优先，插件内置只作后备
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-outcome
+    question: 可观察的完成判据？
+    context: 需求拷问
+    answer: 存在同名外部技能时 DSH 解析到外部版本；PATH 有外部 wa-cli 时 shell 解析到外部；两者都缺失时内置版本照常供给；设置区如实显示当前生效来源
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-trigger
+    question: 为什么改？
+    context: 需求拷问
+    answer: 作者在实际使用中希望自管的外部工具胜出，内置仅补缺（安装插件即完整可用的目标不变）
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-non-goals
+    question: 什么不变？
+    context: 需求拷问
+    answer: 下载校验安装链路、开关语义、技能注册机制（进程内 provider、零技能目录写入）、单飞行与来源校验、工作区零触碰、面板查看行为与快照响应结构
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-interpretation
+    question: 「外部优先、内部 fallback」的实现读法？
+    context: 需求拷问
+    answer: 技能：provider rank 高于文件系统源全部层级（>600），任何外部同名技能胜出、内置仅在无同名外部时提供；CLI：内置目录幂等追加到 PATH 末尾（不再前置），既有 PATH 顺序优先，无外部 wa-cli 时内置兜底
+    status: resolved
+    kind: requirement
+    answered_by: human

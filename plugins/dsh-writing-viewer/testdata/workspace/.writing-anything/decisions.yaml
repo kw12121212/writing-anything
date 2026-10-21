@@ -1,0 +1,14 @@
+# 决策队列（Decision Queue）；请用 wa-cli decision add 与 wa-cli decide 修改。
+
+schema_version: 1
+decisions:
+  - id: dec-1
+    question: 论断（Claim）my-post 以 data 登记「事故率下降了 40%，构建时间从 25 分钟降到 3 分钟」只关联了非作者亲历素材，允许吗？
+    options:
+      - {id: a, text: 允许}
+      - {id: b, text: 保持不变}
+    recommendation: b
+    rationale: 需要亲历素材的论断类型只关联了非亲历素材：默认改用 fact 或补登亲历素材，等待作者决定是否允许例外
+    blocking: true
+    units: [my-post]
+    status: open

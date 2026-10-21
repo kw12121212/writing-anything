@@ -1,0 +1,16 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: plugin-setup-external-first
+approach:
+  - 最小反转：SETUP_SKILL_RANK 由 50 改为 650（高于文件系统源最高层 bundled=600，任何 project/user 外部同名技能按 rank 升序胜出，内置仅在无同名外部时生效）；PATH 调整由前置改为幂等追加（appendPathValue：目录已在 PATH 任意位置则不动，否则追加到末尾），外部 wa-cli 按 PATH 既有顺序优先，无外部时落到内置；状态区文案与 README、GLOSSARY 同步反转表述（外部生效、内置后备）；场景与规格的 MODIFIED 重述对应行为
+decisions:
+  rank-above-filesystem:
+    decision: 内置技能提供者 rank 取 650，高于 DSH 文件系统技能源全部层级（project 100/200、user 400/500、bundled 600）
+    rationale: 作者要求外部优先、内置后备；rank 升序竞争中高于 600 即让任何文件系统源同名技能胜出，同时保留无外部时的内置供给
+  path-append-fallback:
+    decision: PATH 调整改为幂等追加到末尾（目录已在 PATH 任意位置则不动）
+    rationale: 追加保住既有 PATH 顺序：外部 wa-cli 优先；无任何外部命中时内置目录兜底；幂等语义与边界说明（仅本宿主进程后续子进程）不变
+alternatives: []
+risks: []

@@ -1,0 +1,11 @@
+schema: strict-spec-driven/planned-change/v1
+schema_version: 1
+artifact_type: planned_change
+schema_file: ../../templates/strict-spec-driven/schemas/planned-change.yaml
+planned_change:
+  id: plugin-scaffold
+  milestone: dsh-workspace-viewer
+status: complete
+summary: 插件骨架与宿主验证：在本仓库新增 DSH 插件 TypeScript 包（cordis.patch.yml bundle patch + host 入口 + web client 入口），装入本机 web profile 后 Web GUI 能加载出最小只读面板，并验证全局面板注册与工作区根定位
+details: '目录与包名在提案定案（建议 plugins/dsh-writing-viewer）。package.json 声明 dsh.bundle.patch（指向 cordis.patch.yml，insert 一个插件行）、dsh.client（platform: web 与 inject 列表，参照已上架第三方插件的形状）与 engines.dsh 兼容范围。host 入口是 cordis 插件（导出 name 与 apply(ctx, config)），验证如何取得要展示的项目目录（GUI 进程工作区根/会话工作目录）并只读访问 .writing-anything/；client 入口以 window.__ModuleLoader__.load 工厂形式构建，注册 root-scoped main 全局面板（可被 ctx.layout.selectPanel 选中）并提供侧栏入口。构建（tsc/tsdown）与最小 vitest 就绪；用本机 DSH web profile 以 link: 依赖实测加载，记录加载证据与发现的 API 约束。'
+depends_on: []

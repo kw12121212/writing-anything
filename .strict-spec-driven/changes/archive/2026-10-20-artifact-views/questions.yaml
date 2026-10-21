@@ -1,0 +1,60 @@
+schema: strict-spec-driven/question-list/v1
+schema_version: 1
+artifact_type: question_list
+schema_file: templates/strict-spec-driven/schemas/question-list.yaml
+change: artifact-views
+open: []
+resolved:
+  - id: semantic-view-coverage
+    question: 产物语义卡片视图覆盖哪些产物？定制布局与通用卡片如何划分？
+    context: 计划变更 details 只以「如」举例 brief 受众/目的/核心观点、outline 层级与覆盖、claims 论断-素材关联，未穷举其余产物的呈现方式；影响 delta 规格的 artifact-semantic-view 需求表述与实现工作量。答案来自计划变更 artifact-views 的 details：三类定制布局，其余产物按 Schema 字段通用卡片化
+    answer: brief、outline、claims 三类产物定制语义卡片布局，其余产物（provenance、feedback、review、acceptance、plan 等）按字段通用卡片化，全部产物都有语义视图
+    status: resolved
+    answered_by: roadmap
+  - id: sources-view-scope
+    question: 素材清单视图是否属于本变更范围？
+    context: 计划变更 details 写明「claims 关联的素材引用可跳转到素材视图」，但当前 client 只有素材计数、没有素材视图；影响提案范围（scope.in）与 delta 需求 sources-view-claims-navigation。答案来自计划变更 details 与后续计划变更 polish-release 的范围对照：跳转目标必须存在，polish-release 只做打磨、测试与文档，不含素材视图
+    answer: 素材清单视图（source.yaml 语义卡片 + original.md 阅读视图）纳入本变更范围，作为 claims 素材引用的跳转目标
+    status: resolved
+    answered_by: roadmap
+  - id: highlight-dependency-policy
+    question: YAML 高亮与 Markdown 渲染能否引入第三方运行时库或 CDN 资源？
+    context: 影响实现方式与客户端 bundle 体积、供应链面。答案来自计划变更 details 的明确约束：「高亮实现打包进客户端 bundle，不依赖网络与外部 CDN」；手写零依赖模块是对该约束的实现决策（见 design.yaml 决策 client-bundled-hand-rolled-highlighting）
+    answer: 不得引入 CDN 或网络资源；高亮与渲染全部打包进客户端 bundle，采用手写零依赖纯模块实现
+    status: resolved
+    answered_by: roadmap
+  - id: requirement-problem
+    question: What is concretely going wrong today, and for whom?
+    context: 'Why this is asked: the change is planned against a need, and the need lives only with the requester. A "problem" here means what someone does or suffers today — not a feature that is missing. If the answer names a button, a field, a page, or an endpoint, it is a solution, and the underlying problem is still unstated. What a sufficient answer contains: who is affected, what they do today instead, and how often. Worked example: "every Monday one person spends forty minutes copying order rows into a spreadsheet to send the weekly report". What it changes: this becomes the proposal''s why, and it decides whether the change is worth making.'
+    answer: 插件面板目前只有总览仪表盘（Overview Dashboard）与单元详情里的产物文件名清单：作者与 Agent 在 Web GUI 中看不到产物的实际内容——写作简报、大纲、论断与素材关联、审稿与验收证据都要回终端用 wa-cli 查看；产物被平铺为文件名而不是按写作概念组织的信息（来自里程碑目标与计划变更 artifact-views 的 summary）
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-outcome
+    question: What observable difference proves the problem is solved?
+    context: 'Why this is asked: without a success condition, nobody can tell afterwards whether the change worked. "Observable" means someone outside the system can check it without reading the code. What a sufficient answer contains: what a person will see, or no longer have to do, once this is done. Worked example: "the report is in the manager''s inbox on Monday morning without anyone assembling it". What it changes: this becomes the delta spec''s scenarios and the acceptance evidence at review time.'
+    answer: 打开单元详情中的任一产物即呈现语义卡片视图并可一键切换到 YAML 源码高亮（滚动位置保持），draft 正文有渲染阅读视图与源码高亮切换，claims 的素材引用可点击跳转到素材条目；全部行为可按 delta 规格四个需求（artifact-semantic-view、yaml-source-highlight-view、draft-markdown-views、sources-view-claims-navigation）的场景逐条验证（来自计划变更 details 的验收性描述）
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-interpretation
+    question: Which reading of the request is intended, where more than one is possible?
+    context: 'Why this is asked: a short request usually admits several readings, and building the wrong one is indistinguishable from building nothing. What a sufficient answer contains: the reading that is meant, stated plainly enough to rule the others out — or a statement that only one reading exists and what it is. Worked example: "export means the version sent to the manager, not the one I read myself". What it changes: this fixes the scope boundary before any code is written, and settles disputes about what was asked for.'
+    answer: 按计划变更 details 的解读：语义卡片按产物 Schema 字段组织（brief/outline/claims 定制布局、其余通用卡片化）；YAML 产物语义卡片与源码高亮一键切换且保持滚动位置，高亮覆盖键、标量、结构、注释、锚点与别名；Markdown 正文提供渲染阅读视图与源码高亮切换；claims 素材引用可跳转素材视图；界面严格只读，确认与复核仍属 wa-cli 阅读页（Reading View）；高亮打包进 bundle 不依赖网络；大 YAML 折叠或虚拟化（来自计划变更 details 全文）
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-non-goals
+    question: What must explicitly not change?
+    context: 'Why this is asked: the requester knows which nearby behavior other people depend on, and the agent does not. A "non-goal" is something the change must leave alone even though it sits close to the work. What a sufficient answer contains: the behavior, setting, or output that must survive untouched, and who relies on it. Worked example: "do not change the saved filters — several people rely on their own". What it changes: these become the proposal''s unchanged_behavior items, which review checks the finished result against.'
+    answer: 明确不改：wa-cli（Go 内核）与 cmd/、internal/；MCP 服务与 Skill；host 侧快照聚合与 wa-cli 调用集合（快照已携带产物与素材全文，本变更纯客户端消费）；插件的零写入约束（audit.log 例外不变）；既有总览仪表盘、单元树导航、路径切换行为。键盘导航、性能打磨与安装使用文档属后续计划变更 polish-release（来自里程碑 scope.out 与计划变更对照）
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-trigger
+    question: Why now — what forced this?
+    context: 'Why this is asked: work that nothing forced is the work most often thrown away later. This question catches a request that sounds reasonable but has no real driver behind it. What a sufficient answer contains: the concrete event, deadline, incident, or cost that made this surface now, or an honest statement that nothing did. Worked example: "the report was missed last month and it was raised with the team". What it changes: a change with no trigger is a candidate for deferral, and the answer is weighed at review before archive.'
+    answer: 里程碑 dsh-workspace-viewer 按序推进：plugin-scaffold、workspace-snapshot、overview-navigation 均已归档完成，artifact-views 的唯一依赖 overview-navigation 已就绪，是当前唯一未被依赖阻塞的合格计划变更，且是收尾计划变更 polish-release 的前置依赖（来自 roadmap-recommend 结果与计划变更 depends_on）
+    status: resolved
+    kind: requirement
+    answered_by: roadmap

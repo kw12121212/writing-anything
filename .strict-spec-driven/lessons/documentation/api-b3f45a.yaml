@@ -1,0 +1,19 @@
+schema: strict-spec-driven/lesson/v1
+schema_version: 1
+artifact_type: lesson
+schema_file: templates/strict-spec-driven/schemas/lesson.yaml
+lesson:
+  id: api-b3f45a
+  title: 登记宿主 API 用法的文档必须同时实测并写明安全边界（认证与暴露面）
+category: documentation
+status: active
+created_at: '2026-10-20T10:37:42.838Z'
+updated_at: '2026-10-20T10:37:42.838Z'
+context: dsh-writing-viewer 的 README「发现的 DSH API 约束」清单已登记 7 条宿主能力约束（注入、路由、面板注册），全部是功能视角；没有任何一条记录 webServer.register 的路由不在 Web GUI 浏览器认证栅栏内，直到 2026-10-20 对运行实例做无凭证探测才发现整个写作工作区可被无认证读取（fix-dsh-writing-viewer-readme）
+observation: 只按功能视角登记宿主 API（能注入什么、路由怎么注册、返回什么数据）不会暴露认证差异：路由功能测试全部通过的同时，无凭证访问可整库读取数据；这类缺口既不会被插件测试发现，也不会被文档评审发现，除非有人专门做无凭证探测
+takeaway: 把插件/扩展对宿主 API 的用法写进 README/文档时，逐条补上安全边界：该能力是否在宿主认证栅栏内、默认绑定地址假设、无凭证访问的实测结果；插件侧无法加固时，把部署前提（如仅回环绑定、非回环须加带认证的反向代理）写进安装文档并给出 401/200 式对照证据
+applies_when: 任何插件、扩展或集成在宿主平台上注册路由、服务或 IPC 端点，并把用法登记进 README、技能或规格文档时
+occurrences:
+  - origin: fix-dsh-writing-viewer-readme 评审（2026-10-20）
+    date: '2026-10-20'
+    evidence: 无 token curl http://127.0.0.1:13080/ → 401 dsh web authentication required；无 token curl http://127.0.0.1:13080/dsh-writing-viewer/snapshot → 200 并返回工作区根路径、作品、素材与产物全文；修复见 README「发现的 DSH API 约束」第 8 条与安装节安全提示

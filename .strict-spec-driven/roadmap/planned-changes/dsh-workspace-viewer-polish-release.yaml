@@ -1,0 +1,12 @@
+schema: strict-spec-driven/planned-change/v1
+schema_version: 1
+artifact_type: planned_change
+schema_file: ../../templates/strict-spec-driven/schemas/planned-change.yaml
+planned_change:
+  id: polish-release
+  milestone: dsh-workspace-viewer
+status: complete
+summary: '体验打磨、测试收尾与安装使用文档：加载/空态/错误态打磨、键盘导航、大工作区性能检查，补齐插件测试，并写安装使用文档（link: 装入 web profile、与 wa-cli 的版本联动说明）'
+details: 打磨项：面板加载与刷新反馈、键盘在单元树与视图间导航、大工作区（长篇小说多卷多场景）首屏与切换性能。测试收尾：快照聚合、视图逻辑与高亮器的 vitest 覆盖，构建与类型检查纳入检查脚本。文档：安装（dsh plugin add link:<插件目录> 或等价方式）、启用、与 wa-cli 版本的兼容说明、界面导览与截图。新术语词条（DSH 插件（DSH Plugin）、工作区查看器（Workspace Viewer）等按实际引入）在同一变更加入 docs/GLOSSARY.md。Go 完整回归确认不受影响仍通过；对照里程碑 done criteria 做收尾对账。
+depends_on:
+  - artifact-views

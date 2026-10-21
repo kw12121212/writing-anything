@@ -1,0 +1,42 @@
+schema: strict-spec-driven/question-list/v1
+schema_version: 1
+artifact_type: question_list
+schema_file: templates/strict-spec-driven/schemas/question-list.yaml
+change: workspace-snapshot
+open: []
+resolved:
+  - id: requirement-problem
+    question: What is concretely going wrong today, and for whom?
+    context: 'Why this is asked: the change is planned against a need, and the need lives only with the requester. A "problem" here means what someone does or suffers today — not a feature that is missing. If the answer names a button, a field, a page, or an endpoint, it is a solution, and the underlying problem is still unstated. What a sufficient answer contains: who is affected, what they do today instead, and how often. Worked example: "every Monday one person spends forty minutes copying order rows into a spreadsheet to send the weekly report". What it changes: this becomes the proposal''s why, and it decides whether the change is worth making.'
+    answer: 插件目前只有最小只读面板：能看到定位到的项目目录与 .writing-anything/ 存在性，但 Web GUI 内无法浏览工作区内容——作品（Work）、单元（Unit）树、阶段进度、产物全文与诊断都只能在 GUI 外（终端 wa-cli 命令或直接看文件）了解；里程碑内三个视图类计划变更（artifact-views、overview-navigation、polish-release）都被本变更阻塞
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-outcome
+    question: What observable difference proves the problem is solved?
+    context: 'Why this is asked: without a success condition, nobody can tell afterwards whether the change worked. "Observable" means someone outside the system can check it without reading the code. What a sufficient answer contains: what a person will see, or no longer have to do, once this is done. Worked example: "the report is in the manager''s inbox on Monday morning without anyone assembling it". What it changes: this becomes the delta spec''s scenarios and the acceptance evidence at review time.'
+    answer: ①host 侧只读快照路由返回结构化 JSON：含 workspace 与 config、works（work.yaml、单元树、stage、progress、blockers）、各单元产物全文（写作简报、大纲、出处、论断、作者反馈、草稿正文 Markdown 全文、审稿与验收证据；长篇另有场景契约、伏笔台账、时间线、知情表等按文体存在的产物）及 sources、decisions（含待决）、packs、待复核摘要，内嵌 validate 诊断；②定位不到工作区时返回可读缺失状态与空态指引；③wa-cli 不可用或缺字段时降级标注 degraded 不整体失败；④快照请求前后 .writing-anything/ 文件清单、内容与修改时间一致（无写路径）；⑤插件 vitest 与构建通过，Go 完整回归不受影响仍通过；⑥docs/GLOSSARY.md 有「工作区快照（Workspace Snapshot）」词条
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-trigger
+    question: Why now — what forced this?
+    context: 'Why this is asked: work that nothing forced is the work most often thrown away later. This question catches a request that sounds reasonable but has no real driver behind it. What a sufficient answer contains: the concrete event, deadline, incident, or cost that made this surface now, or an honest statement that nothing did. Worked example: "the report was missed last month and it was raised with the team". What it changes: a change with no trigger is a candidate for deferral, and the answer is weighed at review before archive.'
+    answer: roadmap-recommend 在 36 个计划变更中只推荐本变更：其余 32 个已归档、3 个（artifact-views、overview-navigation、polish-release）因依赖未完成被跳过，而它们都依赖本变更；plugin-scaffold 已于 2026-10-19 归档，快照服务是里程碑当前唯一可推进项
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-non-goals
+    question: What must explicitly not change?
+    context: 'Why this is asked: the requester knows which nearby behavior other people depend on, and the agent does not. A "non-goal" is something the change must leave alone even though it sits close to the work. What a sufficient answer contains: the behavior, setting, or output that must survive untouched, and who relies on it. Worked example: "do not change the saved filters — several people rely on their own". What it changes: these become the proposal''s unchanged_behavior items, which review checks the finished result against.'
+    answer: 插件严格只读：不提供任何写入或变更工作区产物的能力，作者确认与复核仍走 wa-cli 阅读页（Reading View）；现有 /dsh-writing-viewer/workspace 路由行为不变；wa-cli（Go 内核）、MCP 服务与内置技能行为不变，完整 Go 回归结果不变；不做 client 侧渲染（总览仪表盘、单元树导航、产物语义视图、语法高亮）、文件监听与自动刷新
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-interpretation
+    question: Which reading of the request is intended, where more than one is possible?
+    context: 'Why this is asked: a short request usually admits several readings, and building the wrong one is indistinguishable from building nothing. What a sufficient answer contains: the reading that is meant, stated plainly enough to rule the others out — or a statement that only one reading exists and what it is. Worked example: "export means the version sent to the manager, not the one I read myself". What it changes: this fixes the scope boundary before any code is written, and settles disputes about what was asked for.'
+    answer: 「快照服务」按计划变更 details 的定案解读：host 侧只读聚合服务，经只读 HTTP 路由提供结构化 JSON 供 client 拉取；数据来源为混合方案——结构状态走 wa-cli status 与 validate 的 --json 输出，产物全文按 JSON Schema 只读解析文件；刷新策略为首版手动刷新（每次请求重读）；不含 client 渲染，也不改 wa-cli
+    status: resolved
+    kind: requirement
+    answered_by: roadmap

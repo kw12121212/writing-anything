@@ -1,0 +1,8 @@
+# 作者反馈（Feedback）；请用 wa-cli feedback add 与 wa-cli feedback resolve 修改。
+
+schema_version: 1
+feedback:
+  - id: fb-1
+    kind: must-fix
+    status: open
+    text: 开头再直接一点，别绕

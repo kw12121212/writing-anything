@@ -1,0 +1,20 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: plugin-right-pane
+  status: proposed
+summary:
+  what:
+    - 插件在每个会话的右侧边栏提供「写作工作区」页（与 strict-spec 插件同款交互）：client 侧按宿主右侧栏两段契约注册——经 ctx.sidebarRightTabs.register 声明静态 tab 类型（id dsh-writing-viewer、kind writing-workspace、无 patterns 的页面类型、guide 入口盒），并在 sidebar.right.pane.tab 插槽以同 key 注册正文（复用现有面板组件，窄容器自动上下堆叠）；package.json 的 dsh.client.inject 增列 @deepseek-ai/dsh-client-ui-sidebar-right 以让加载器先载入该宿主模块；服务缺失时安静跳过（老宿主不受影响）；左侧全局面板入口保留
+  why:
+    - 作者要求在每个对话的右侧边栏可直接打开写作工作区（与 dsh-plugin-strict-spec 一致），不必切到左侧全局面板
+scope:
+  in:
+    - plugins/dsh-writing-viewer：package.json（dsh.client.inject）、src/client.ts（tab 类型注册 + 右侧栏插槽注册 + exports.inject）、测试、README（结构、右侧栏说明、宿主模块依赖与边界）
+  out:
+    - host 侧行为、路由与快照结构的任何改变；左侧全局面板与侧栏入口的移除；右侧栏宿主模块源码
+unchanged_behavior:
+  - 左侧全局面板与 sidebar.panellist 行为不变；client bundle 仍为单文件 lazy-CJS、仅新增对宿主已声明模块的服务注入；enableSetup 关闭时右侧栏页照常出现（它只是查看入口，与 setup 无关）；面板组件渲染逻辑复用不变
+  - 左侧全局面板与 sidebar.panellist 行为不变；client bundle 仍为单文件 lazy-CJS；enableSetup 关闭时右侧栏页照常出现（它只是查看入口，与 setup 无关）；面板组件渲染逻辑复用不变；sidebarRightTabs 为 client 激活硬依赖（声明于 exports.inject，引擎范围内的宿主均随带该模块）——宿主 client 组合不提供该服务时本插件 client 整体不激活，README 明示

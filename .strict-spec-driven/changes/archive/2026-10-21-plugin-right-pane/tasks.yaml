@@ -1,0 +1,40 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: plugin-right-pane
+sections:
+  Implementation:
+    client-manifest:
+      text: package.json：dsh.client.inject 增列 @deepseek-ai/dsh-client-ui-sidebar-right；README 结构节同步
+      status: complete
+    right-pane-registration:
+      text: client.ts：exports.inject 增 sidebarRightTabs；apply 注册静态 tab 类型（kind writing-workspace、guide 入口）与 sidebar.right.pane.tab 正文（复用 ViewerPanel），服务缺失容错
+      status: complete
+    right-pane-tests:
+      text: client.test.ts：exports.inject 断言、tab 类型注册形状（id/kind/title/guide）、右侧栏插槽注册与正文组件、服务缺失时跳过且左侧入口保留
+      status: complete
+    right-pane-docs:
+      text: README：右侧栏页说明（每个会话可开、与左侧入口并存）、宿主模块依赖与容错边界、实测证据（13099 + agent-browser 截图）
+      status: complete
+  Testing:
+    lint-typecheck:
+      text: 类型检查与构建
+      status: complete
+      command: pnpm --dir plugins/dsh-writing-viewer run build
+    unit-tests:
+      text: 插件全量 vitest
+      status: complete
+      command: pnpm --dir plugins/dsh-writing-viewer test
+    full-regression:
+      text: 完整项目回归
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    strict-verify:
+      text: strict 变更工件结构校验
+      status: complete
+      command: strict-spec-cli verify plugin-right-pane
+testing_gates:
+  validation_task: lint-typecheck
+  unit_test_task: unit-tests

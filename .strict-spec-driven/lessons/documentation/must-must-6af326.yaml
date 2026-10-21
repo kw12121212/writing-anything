@@ -8,7 +8,7 @@ lesson:
 category: documentation
 status: active
 created_at: '2026-09-30T07:05:57.363Z'
-updated_at: '2026-09-30T07:05:57.363Z'
+updated_at: '2026-10-20T14:58:51.569Z'
 context: fix-cli-help-usage-nits 修改 cli 规格 exit-codes，规定写入失败即使发生在写出用法错误时也返回 1。
 observation: delta spec 最初只 MODIFIED 了 exit-codes 和 help-command；usage-error 仍无条件写着「必须以退出码 2 退出」，两条 MUST 合并后字面冲突。verify 与 ready 都不做需求间的语义检查，是独立审查发现的。
 takeaway: 改动一条需求的例外或优先级时，先在主规格里搜索与它约束同一可观察结果（如退出码、输出流）的其他需求；有冲突就在同一 delta 中一并 MODIFIED，并在语句里写明谁优先，同时完整重述其原有场景。
@@ -17,3 +17,6 @@ occurrences:
   - origin: fix-cli-help-usage-nits
     date: '2026-09-30'
     evidence: changes/fix-cli-help-usage-nits/specs/cli.yaml 在审查后补充 MODIFIED usage-error，语句加上「写出用法错误本身失败时按 exit-codes 以退出码 1 退出」，并重述原有 6 个场景。
+  - origin: plugin-setup-external-first
+    date: '2026-10-20'
+    evidence: 反转 setup 优先级时 delta 只改了 setup-skills-registered 与 setup-cli-precedence，漏改同规格相邻的 setup-action（仍要求「使宿主 shell 优先解析内置 CLI」）与 setup-panel-section（仍写「遮蔽情况」），以及场景的 already-installed 步骤（仍写「PATH 前置」）；全新上下文评审在归档前拦下，补三个 MODIFIED 后归档

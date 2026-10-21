@@ -1,0 +1,9 @@
+# 知情表（Knowledge State）；请用 wa-cli knowledge propose 登记知情事件（Knowledge Event），作者经 wa-cli knowledge confirm 确认后生效。
+
+schema_version: 1
+events:
+  - id: know-1
+    scene: my-novel/scene-2
+    entry: lighthouse
+    character: reader
+    status: proposed

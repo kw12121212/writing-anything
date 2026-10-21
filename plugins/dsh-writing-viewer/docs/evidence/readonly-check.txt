@@ -1,0 +1,55 @@
+# 只读验证（2026-10-19，本机 web profile 实测，端口 13099 实例）
+
+面板两次完整加载（Plugins 面板 → Writing Workspace 面板切换，含两次 /dsh-writing-viewer/workspace 路由读取）前后，对 /home/wx766/Code/writing-desk/.writing-anything 执行：
+
+  find $WS -printf "%p %T@ %s\n" | sort
+
+两次输出逐字节一致（diff 为空），且 SHA-256 相同：
+  56992bf7809cabeb4bc4efb389cf0ed131891395a8efcba542812458e995d006
+
+## 第一次（面板打开前，41 个条目）
+
+/home/wx766/Code/writing-desk/.writing-anything 1792419258.4789752050 4096
+/home/wx766/Code/writing-desk/.writing-anything/audit.log 1792419396.1669452860 39203
+/home/wx766/Code/writing-desk/.writing-anything/config.yaml 1792417951.1832573690 196
+/home/wx766/Code/writing-desk/.writing-anything/decisions.yaml 1792419258.4789752050 5659
+/home/wx766/Code/writing-desk/.writing-anything/exports 1792419395.9709453260 4096
+/home/wx766/Code/writing-desk/.writing-anything/exports/tesla-flying-car-v2.html 1792419395.9709453260 5476
+/home/wx766/Code/writing-desk/.writing-anything/exports/tesla-flying-car-v2.md 1792419395.9189453360 4736
+/home/wx766/Code/writing-desk/.writing-anything/exports/tesla-flying-car-v2.preview.html 1792419370.0669508420 10049
+/home/wx766/Code/writing-desk/.writing-anything/exports/tesla-flying-car.md 1792161031.2175822410 4907
+/home/wx766/Code/writing-desk/.writing-anything/handoffs.yaml 1792411975.7525424800 1731
+/home/wx766/Code/writing-desk/.writing-anything/packs 1792418679.7390991420 4096
+/home/wx766/Code/writing-desk/.writing-anything/packs/plain-talk.yaml 1792418679.7390991420 3447
+/home/wx766/Code/writing-desk/.writing-anything/sources 1792408890.3172052140 4096
+/home/wx766/Code/writing-desk/.writing-anything/sources/src-7c8db9668f18 1792408890.3172052140 4096
+/home/wx766/Code/writing-desk/.writing-anything/sources/src-7c8db9668f18/original.md 1792408890.3172052140 2221
+/home/wx766/Code/writing-desk/.writing-anything/sources/src-7c8db9668f18/source.yaml 1792408890.3172052140 448
+/home/wx766/Code/writing-desk/.writing-anything/sources/src-d9ef5010168f 1792159839.6340371170 4096
+/home/wx766/Code/writing-desk/.writing-anything/sources/src-d9ef5010168f/original.md 1792159839.6340371170 3237
+/home/wx766/Code/writing-desk/.writing-anything/sources/src-d9ef5010168f/source.yaml 1792159839.6340371170 297
+/home/wx766/Code/writing-desk/.writing-anything/sources/src-ef3f17f7c577 1792159339.3542279040 4096
+/home/wx766/Code/writing-desk/.writing-anything/sources/src-ef3f17f7c577/original.md 1792159339.3542279040 6738
+/home/wx766/Code/writing-desk/.writing-anything/sources/src-ef3f17f7c577/source.yaml 1792159339.3542279040 299
+/home/wx766/Code/writing-desk/.writing-anything/works 1792407800.3814402860 4096
+/home/wx766/Code/writing-desk/.writing-anything/works/tesla-flying-car 1792161031.1655822580 4096
+/home/wx766/Code/writing-desk/.writing-anything/works/tesla-flying-car-v2 1792419395.8629453480 4096
+/home/wx766/Code/writing-desk/.writing-anything/works/tesla-flying-car-v2/acceptance.yaml 1792419342.8189568400 289
+/home/wx766/Code/writing-desk/.writing-anything/works/tesla-flying-car-v2/brief.yaml 1792419258.5189751970 1224
+/home/wx766/Code/writing-desk/.writing-anything/works/tesla-flying-car-v2/claims.yaml 1792409274.5731248330 2431
+/home/wx766/Code/writing-desk/.writing-anything/works/tesla-flying-car-v2/draft.md 1792419172.4309938020 4126
+/home/wx766/Code/writing-desk/.writing-anything/works/tesla-flying-car-v2/outline.yaml 1792419172.5709937700 1303
+/home/wx766/Code/writing-desk/.writing-anything/works/tesla-flying-car-v2/provenance.yaml 1792419172.4309938020 6035
+/home/wx766/Code/writing-desk/.writing-anything/works/tesla-flying-car-v2/review.yaml 1792419182.5789916790 2403
+/home/wx766/Code/writing-desk/.writing-anything/works/tesla-flying-car-v2/work.yaml 1792419395.8629453480 182
+/home/wx766/Code/writing-desk/.writing-anything/works/tesla-flying-car/acceptance.yaml 1792160883.8016394380 289
+/home/wx766/Code/writing-desk/.writing-anything/works/tesla-flying-car/brief.yaml 1792159839.7780370650 1637
+/home/wx766/Code/writing-desk/.writing-anything/works/tesla-flying-car/claims.yaml 1792160379.9898312040 2565
+/home/wx766/Code/writing-desk/.writing-anything/works/tesla-flying-car/draft.md 1792160614.1497421960 4254
+/home/wx766/Code/writing-desk/.writing-anything/works/tesla-flying-car/outline.yaml 1792159839.8980370200 1313
+/home/wx766/Code/writing-desk/.writing-anything/works/tesla-flying-car/provenance.yaml 1792160614.1497421960 6263
+/home/wx766/Code/writing-desk/.writing-anything/works/tesla-flying-car/review.yaml 1792160637.2937330650 1709
+/home/wx766/Code/writing-desk/.writing-anything/works/tesla-flying-car/work.yaml 1792161031.1655822580 179
+
+## 第二次（两次面板加载后，diff 为空，条目数相同）
+与第一次完全一致（diff /tmp/wa-viewer/ws-before.txt /tmp/wa-viewer/ws-after.txt 无输出，READONLY_OK）。

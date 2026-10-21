@@ -1,0 +1,19 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: plugin-builtin-setup
+  status: proposed
+summary:
+  what:
+    - 插件新增「启用内置技能与 CLI」设置能力：插件配置加 enableSetup 开关（默认关闭）；打开并经面板显式点击后，host 从本项目 GitHub Releases 下载对应平台的 wa-cli 发布产物（Release Asset，按 SHA256SUMS 校验、原子写入、默认 ~/.local/bin 可配置），把内置 wa-* 技能经临时目录物化后注册为 DSH 技能提供者（Skill Provider，rank 低于全部文件系统技能源），并把内置二进制目录前置到宿主 PATH——同名外部技能与外部 wa-cli 一律被内置版本优先覆盖，且不写入用户的 Agent 技能目录（~/.agents/skills、.claude/skills）与项目技能目录
+  why:
+    - 现在装入插件只得到只读查看面板，完整使用 writing-anything 还要手动安装 wa-cli 与内置技能；按作者要求，安装本插件并打开开关即完整可用，内置技能与 CLI 优先于外部同名版本，且不改动用户目录
+scope:
+  in:
+    - plugins/dsh-writing-viewer 的 host 侧（setup 配置解析、发布产物下载与校验、原子安装、技能物化与 DSH 技能注册、PATH 前置、setup 状态与动作两条路由）、client 侧（面板设置区视图与接线）、插件测试、README 与 docs/GLOSSARY.md
+  out:
+    - wa-cli（Go 内核）与仓库 Go 代码的任何改动；向 .agents/skills、.claude/skills 等用户级或项目级技能目录写入文件；面板既有查看行为与快照响应结构的改变；GitHub Releases 发布流程与产物的改变；host 启动时自动下载（下载只由显式动作触发）
+unchanged_behavior:
+  - enableSetup 关闭（默认）时插件行为与本变更之前一致：不注册 setup 路由、不注册技能、不修改 PATH、不发起任何网络请求，面板无设置区；面板既有总览、单元树、产物视图、决策队列、路径切换与键盘导航行为不变；快照路由响应结构只增不改；.writing-anything/ 工作区内的产物（Artifact）与 audit.log 绝不被插件写入

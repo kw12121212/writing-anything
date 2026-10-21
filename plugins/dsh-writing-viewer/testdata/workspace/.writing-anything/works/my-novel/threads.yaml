@@ -1,0 +1,9 @@
+# 伏笔台账（Foreshadowing Ledger）；请用 wa-cli threads add 登记伏笔条目。
+
+schema_version: 1
+entries:
+  - id: log-thread
+    text: 灯塔里藏着的旧航海日志
+    planted_in: my-novel/scene-1
+    planned_recover: my-novel/scene-2
+    status: open

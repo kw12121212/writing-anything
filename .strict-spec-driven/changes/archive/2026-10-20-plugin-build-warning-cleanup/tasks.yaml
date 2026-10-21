@@ -1,0 +1,35 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: plugin-build-warning-cleanup
+sections:
+  Implementation:
+    upgrade-and-adapt:
+      text: 升级 tsdown 至当前稳定版（package.json devDependencies + pnpm install），按需最小适配 tsdown.config.ts 与 normalize-outputs.mjs，使 pnpm run build 零告警且产物名与 exports 对齐
+      status: complete
+      command: pnpm --dir plugins/dsh-writing-viewer run build
+    update-readme-size:
+      text: 构建器升级后用 wc -c 与 gzip -c | wc -c 复测 dist/client.js 体积，README 体积句数字与日期如实更新（10%/5% 容差内的口径一致性）
+      status: complete
+  Testing:
+    zero-warning-build:
+      text: 构建零告警断言：完整构建输出不含 'Invalid input options'、'define'、'MISSING_NAME_OPTION' 任一字样，产物存在且 normalize 成功
+      status: complete
+      command: pnpm --dir plugins/dsh-writing-viewer run build 2>&1 | tee /tmp/wv-build.log | grep -ci 'Invalid input options\|MISSING_NAME_OPTION' | grep -qx 0 && ls plugins/dsh-writing-viewer/dist/index.js plugins/dsh-writing-viewer/dist/client.js
+    plugin-package-check:
+      text: 插件统一检查（类型检查 + 构建 + 全部测试）
+      status: complete
+      command: pnpm --dir plugins/dsh-writing-viewer run check
+  Verification:
+    strict-ready-and-verify:
+      text: strict ready 与 verify 干净
+      status: complete
+      command: strict-spec-cli ready plugin-build-warning-cleanup && strict-spec-cli verify plugin-build-warning-cleanup
+    full-project-regression:
+      text: config.yaml 完整项目级回归，归档前通过
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+testing_gates:
+  validation_task: plugin-package-check
+  unit_test_task: plugin-package-check

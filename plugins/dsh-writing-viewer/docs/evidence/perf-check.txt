@@ -1,0 +1,8 @@
+# 2026-10-20T04:34:06.709Z — volumes=3 chapters=8 scenes=8 (generated via wa-cli, node v24.22.0)
+perf: buildSnapshot(220 units, real wa-cli) 244ms
+perf: overviewModel+workCards 35ms
+perf: unitTree(220 nodes) 0ms
+perf: first-screen renderPanel 2ms (1188 nodes)
+perf: unit switching 192 renders 77ms (~0.4ms/switch)
+perf: large YAML source view (folded, 1242 lines) 20ms
+perf: large YAML semantic view 0ms

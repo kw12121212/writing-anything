@@ -1,0 +1,24 @@
+schema: strict-spec-driven/delta-tech/v1
+schema_version: 1
+artifact_type: delta_tech
+schema_file: templates/strict-spec-driven/schemas/delta-tech.yaml
+target_standard: dsh-plugin-structure
+operations:
+  ADDED:
+    host-env-cli-fallback:
+      strength: SHOULD
+      statement: DSH 插件需要让宿主 shell 以后备方式解析自带 CLI 时，应把二进制目录幂等追加到 process.env.PATH 末尾（目录已在 PATH 任意位置则不动，仅开关开启后），保持既有 PATH 顺序使外部版本优先、无外部版本时内置兜底，并在 README 写明该宿主全局副作用的生效边界：只影响本宿主进程后续派生的子进程，不改变用户 shell 配置
+      rationale: 外部优先由既有 PATH 顺序天然保证；追加只在无任何外部命中时让内置目录兜底；幂等（任意位置存在即不动）与边界说明防止重复叠加与误解
+      enforcement:
+        method: review
+  MODIFIED:
+    dsh-skill-provider-registration:
+      strength: MUST
+      statement: DSH 插件向宿主注册后备技能必须走宿主技能注册表的技能提供者（Skill Provider）接口（ctx.skills 的 registerProvider），并遵守其异步契约：list 与 get 必须返回 Promise——每个真实消费方都带 AbortSignal 调用，注册表会对返回值直接调 .then，同步返回会使整个 provider 被静默跳过；候选须含回传 get 的不透明 locator 字段，get 对不可用候选 resolve undefined。候选 rank 必须高于宿主全部技能层级（文件系统源 project 100/200、custom 300、user 400/500、bundled 600，运行时注册 250，取 >600），使任何同名外部技能优先、内置仅在无同名外部技能时提供；不得通过写入用户级或项目级技能目录实现注册或优先；注册的资源基址（resourceBase）省略时技能正文不得引用相对路径资源。假件测试必须按真实调用形态（带 AbortSignal、要求 thenable）驱动 provider，并以 rank 升序竞争断言与真实注册表取证双重钉住外部优先
+      rationale: 作者要求外部同名技能优先、内置后备；rank 升序竞争中高于宿主全部技能层级（含 custom 300 与运行时 250）即让任何外部同名胜出，同时保留无外部时的内置供给。异步契约与 locator 是评审实证的硬要求：同步实现会被注册表整体跳过而插件自身状态毫无异常
+      enforcement:
+        method: test
+        detail: 单测断言 rank 高于全部宿主层级（100/200/250/300/400/500/600 按升序竞争全部排在内置之前）；仍以带 AbortSignal 的 thenable 契约驱动并配真实注册表取证（docs/evidence/setup-check.txt 第 6 节）
+  REMOVED:
+    host-env-path-prepend:
+      reason: 优先级反转为外部优先、内置后备：前置语义（内置胜出）不再适用，由 host-env-cli-fallback 的追加语义取代

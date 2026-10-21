@@ -1,0 +1,42 @@
+schema: strict-spec-driven/question-list/v1
+schema_version: 1
+artifact_type: question_list
+schema_file: templates/strict-spec-driven/schemas/question-list.yaml
+change: plugin-scaffold
+open: []
+resolved:
+  - id: requirement-problem
+    question: 现状具体错在哪？
+    context: 里程碑 dsh-workspace-viewer 的目标与缺口：问题的必要性只能来自请求方原话或路线图细节，本条答案取自路线图
+    answer: .writing-anything/ 工作区的状态目前只能在 Web GUI 之外了解（终端 wa-cli 命令、阅读页（Reading View）或直接看文件）；DSH 的 Web GUI 没有按写作概念（作品、单元树、生命周期阶段）组织的查看入口，作者与 Agent 无法在 GUI 内浏览工作区
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-interpretation
+    question: 意图如何解读？
+    context: 计划变更 plugin-scaffold 的边界：summary 与 details 明确本变更只做骨架与宿主验证
+    answer: '只做 DSH 插件（DSH Plugin）骨架与宿主验证：独立 TypeScript 插件包（cordis.patch.yml bundle patch、host 入口、web client 入口、engines.dsh 兼容范围），以 link: 依赖装入本机 web profile 后 Web GUI 能加载最小只读面板，并验证全局面板注册与工作区根定位；快照聚合服务与查看界面属 workspace-snapshot、artifact-views 等后续计划变更'
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-outcome
+    question: 可观察差异？
+    context: 验收时可从外部核对的事实清单
+    answer: '①插件以 link: 依赖装入本机 web profile 后，Web GUI 出现插件面板入口，可打开最小只读面板；②面板显示按 DSH 工作区根定位到的项目目录与 .writing-anything/ 存在性；③定位不到时显示空态指引（提示 wa-cli init）不报错崩溃；④面板打开前后 .writing-anything/ 无任何文件被创建、修改或删除；⑤插件包构建与 vitest 测试通过，Go 完整回归不受影响仍通过；⑥docs/GLOSSARY.md 有「DSH 插件（DSH Plugin）」词条'
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-non-goals
+    question: 不变什么？
+    context: 防扩权：里程碑 scope.out 与提案 --out 的交集
+    answer: 插件严格只读，不提供任何写入或变更工作区产物的能力；wa-cli（Go 内核）、MCP 服务与内置技能行为不变；不做快照聚合、总览仪表盘、单元树导航、产物语义视图与语法高亮；不做面板内切换显式项目路径；不做 DSH Desktop/Electron 端适配与 npm 市场发布
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-trigger
+    question: 为什么现在？
+    context: 时机：路线图推荐与依赖链
+    answer: roadmap-recommend 在 36 个计划变更中只推荐本变更：其余或已完成或因依赖未完成被跳过；里程碑内 workspace-snapshot、artifact-views、overview-navigation、polish-release 都依赖 plugin-scaffold，且 DSH 插件与客户端注入 API 处于 0.2.x rc 阶段，需要尽早以真实宿主验证固定 API 约束与 engines.dsh 兼容范围
+    status: resolved
+    kind: requirement
+    answered_by: roadmap

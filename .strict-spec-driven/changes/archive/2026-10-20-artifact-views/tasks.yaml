@@ -1,0 +1,65 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: artifact-views
+sections:
+  Implementation:
+    artifact-view-model:
+      text: 新增 src/artifactview.ts（或并列纯函数模块）产物视图模型：用已打包 yaml 解析器把产物全文解析为语义卡片（Semantic Card View）模型——brief（受众/目的/前提/主题/核心观点等字段）、outline（层级结构与核心观点覆盖）定制布局，claims（论断-素材关联）布局含素材引用 id 提取，其余产物（provenance、feedback、review、acceptance、plan、metrics 等）按 Schema 字段通用卡片化；YAML 解析失败时产出带解析错误提示的降级模型（源码视图兜底）
+      status: complete
+    yaml-highlighter:
+      text: 新增 src/yamlhighlight.ts 零依赖行级 tokenizer：把 YAML 源码切成带类别（键、标量、数组/映射结构、注释、锚点与别名）的 token 序列供着色渲染；纯函数、无 DOM 依赖、打包进 client bundle
+      status: complete
+    markdown-view:
+      text: 新增 src/markdownview.ts 零依赖受限渲染器：把 Markdown 正文渲染为标题、列表、代码块、引用、表格的阅读视图结构，输入全程 HTML 转义防止注入；同一模块提供 Markdown 源码高亮着色；纯函数、无 DOM 依赖、打包进 client bundle
+      status: complete
+    artifact-views-ui:
+      text: client.ts 单元详情产物清单改为可打开的产物视图：YAML 产物提供语义卡片视图与源码高亮视图的一键切换，切换记录并恢复容器滚动位置；draft 正文提供渲染阅读视图与源码高亮视图切换；大 YAML（长篇产物）源码视图按顶层键折叠、语义视图按需展开；视图内不出现任何编辑、写入或确认控件
+      status: complete
+    sources-view-ui:
+      text: client.ts 新增素材（Source）清单视图：列出工作区素材（复用快照 sources[].sourceYaml 与 original.md），素材条目展示 source.yaml 语义卡片与原文 Markdown 阅读视图（可切源码高亮）；claims 语义卡片中的素材引用 id 渲染为可点击项，点击跳转到对应素材条目
+      status: complete
+    glossary-terms:
+      text: docs/GLOSSARY.md 按首次出现规则新增本变更引入的新术语词条（如语义卡片视图（Semantic Card View）、源码高亮视图（Source Highlight View）等以实际落地文案为准），面板文案与注释首次出现处按「中文（English）」书写
+      status: complete
+  Testing:
+    artifact-view-model-tests:
+      text: vitest 新增视图模型测试：以 testdata 罐装产物文本覆盖 brief、outline、claims 定制卡片布局，其余产物通用字段卡片，claims 素材引用 id 提取，YAML 解析失败时的降级模型与错误提示
+      status: complete
+    highlight-markdown-tests:
+      text: vitest 覆盖 yamlhighlight 与 markdownview：YAML token 覆盖键、标量、数组/映射结构、注释、锚点与别名着色且不丢失文本；Markdown 渲染覆盖标题、列表、代码块、引用、表格，特殊字符与 HTML 片段被转义不注入
+      status: complete
+    client-views-tests:
+      text: vitest client.test.ts 扩展：产物清单入口打开产物视图，语义卡片与源码高亮一键切换并保持滚动位置，draft 正文渲染阅读与源码高亮切换，大 YAML 折叠渲染，claims 素材引用点击跳转到素材条目；断言产物与素材视图中没有任何编辑、写入或确认控件
+      status: complete
+    plugin-build-typecheck:
+      text: 插件包类型检查与构建通过（tsc --noEmit、tsdown、输出规整），dist/client.js 仍为单一 __ModuleLoader__.load 脚本、高亮与渲染模块全部打入 bundle 不依赖网络
+      status: complete
+      command: cd plugins/dsh-writing-viewer && pnpm run build
+    plugin-unit-tests:
+      text: 插件包 vitest 全部通过（含新增产物视图模型、高亮与渲染、client 视图测试与既有快照、只读、定位测试）
+      status: complete
+      command: cd plugins/dsh-writing-viewer && pnpm test
+    go-regression:
+      text: 完整 Go 回归原样通过（本变更只动插件包与文档，确认产品工程不受影响）
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    verify-readonly-ui:
+      text: 核对 client 渲染树与测试证据：产物视图与素材视图中无任何编辑、写入或确认控件；host 快照路由与 wa-cli 调用集合未改动（本变更纯客户端），插件对工作区仍零写入（audit.log 例外不变）
+      status: complete
+    verify-spec-coverage:
+      text: 逐条核对 delta 规格场景（产物语义卡片、YAML 源码高亮切换与滚动保持、解析失败降级、大 YAML 折叠、Markdown 双视图、素材视图与 claims 跳转、只读无编辑控件）都有对应 vitest 测试或实测证据；确认已满足场景声明的可从外部验证性
+      status: complete
+    ready-check:
+      text: strict 变更就绪检查通过
+      status: complete
+      command: strict-spec-cli ready artifact-views
+    verify-change:
+      text: strict 变更验证通过，delta 规格与实际实现一致、产物无遗留问题
+      status: complete
+      command: strict-spec-cli verify artifact-views
+testing_gates:
+  validation_task: plugin-build-typecheck
+  unit_test_task: plugin-unit-tests

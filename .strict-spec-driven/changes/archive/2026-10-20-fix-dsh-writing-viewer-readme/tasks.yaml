@@ -1,0 +1,38 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: fix-dsh-writing-viewer-readme
+sections:
+  Implementation:
+    repro-doc-defects:
+      text: 固化两处文档缺陷的复现证据（修复前必须失败）：体积声明与实测不符 + 认证暴露面未披露。脚本从 README 提取「约 X kB」与实际 dist/client.js 字节数比对（十进制 kB，容差 5%），并断言 README 含认证披露锚点（『认证』且含 401/200 对照），两项任一不满足即退出 1
+      status: complete
+      command: node -e 'const fs=require("fs");const r=fs.readFileSync("plugins/dsh-writing-viewer/README.md","utf8");const m=r.match(/约 (\d+) kB/);const actual=require("child_process").execSync("wc -c < plugins/dsh-writing-viewer/dist/client.js").toString().trim()/1000;const stated=m?Number(m[1]):0;const sizeOk=Math.abs(stated-actual)/actual<0.05;const authOk=r.includes("认证")&&r.includes("401")&&r.includes("200");console.log("stated",stated,"kB vs actual",Math.round(actual),"kB ->",sizeOk?"ok":"MISMATCH","; auth disclosure:",authOk?"ok":"MISSING");process.exit(sizeOk&&authOk?0:1)'
+    fix-bundle-size-claim:
+      text: 把 README:116 的 client bundle 体积句改为 2026-10-20 实测值（约 286 kB、gzip 约 69 kB），并附可复验锚点（wc -c dist/client.js 与 gzip -c dist/client.js | wc -c）
+      status: complete
+    fix-auth-disclosure:
+      text: 在 README「发现的 DSH API 约束（0.2.1-rc.2）」清单补第 8 条：webServer.register 注册的路由不在浏览器认证栅栏内（无 token GET / 为 401 而 GET /dsh-writing-viewer/snapshot 为 200，可读取工作区根路径、作品、素材等全部快照）；并在「装入本机 DSH web profile」节加操作提示：保持宿主绑定回环地址，绑到非回环接口前须自行加反向代理与认证
+      status: complete
+  Testing:
+    readme-accuracy-check:
+      text: 修复后回归：README 体积声明与实测一致（十进制 kB，容差 5%，与命令的 <0.05 判定一致）且认证披露在位（复现命令应通过而非失败）
+      status: complete
+      command: node -e 'const fs=require("fs");const r=fs.readFileSync("plugins/dsh-writing-viewer/README.md","utf8");const m=r.match(/约 (\d+) kB/);const actual=require("child_process").execSync("wc -c < plugins/dsh-writing-viewer/dist/client.js").toString().trim()/1000;const stated=m?Number(m[1]):0;const sizeOk=Math.abs(stated-actual)/actual<0.05;const authOk=r.includes("认证")&&r.includes("401")&&r.includes("200");console.log("stated",stated,"kB vs actual",Math.round(actual),"kB ->",sizeOk?"ok":"MISMATCH","; auth disclosure:",authOk?"ok":"MISSING");process.exit(sizeOk&&authOk?0:1)'
+    plugin-package-check:
+      text: 插件包统一检查（README 随包分发，确认文档改动不影响包检查）
+      status: complete
+      command: pnpm --dir plugins/dsh-writing-viewer run check
+  Verification:
+    strict-ready-and-verify:
+      text: strict 变更就绪与结构校验：ready 通过后 verify 只允许出现预期的 pending 任务诊断
+      status: complete
+      command: strict-spec-cli ready fix-dsh-writing-viewer-readme && strict-spec-cli verify fix-dsh-writing-viewer-readme
+    full-project-regression:
+      text: config.yaml 声明的完整项目级回归（Go 回归与覆盖率阈值），归档前必须通过
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+testing_gates:
+  validation_task: readme-accuracy-check
+  unit_test_task: plugin-package-check

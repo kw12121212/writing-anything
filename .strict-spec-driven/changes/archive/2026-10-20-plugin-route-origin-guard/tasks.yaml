@@ -1,0 +1,46 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: plugin-route-origin-guard
+sections:
+  Implementation:
+    implement-routeguard-module:
+      text: 实现 src/routeguard.ts 纯函数模块：parseAuthority/isLoopbackHostname/authorityMatches（带端口精确、不带端口任意端口，双 scheme 规范化默认端口）/isBindAddressAuthority（忽略端口与 %zone）/sameAuthorityOrigin/guardRequest(headers, {allowedHosts, bindHost})，全部零 node 导入、永不抛错
+      status: complete
+      command: pnpm --dir plugins/dsh-writing-viewer exec tsc --noEmit
+    wire-guard-into-routes:
+      text: host.ts：collectAllowedHosts 容错读取 config.allowedHosts；注入时从 webServer 作用域容错读取 host 属性为 bindHost；两条路由 handler 处理前先 guardRequest，拒绝时 writeHead(403, content-type json + cache-control no-store) 返回 {ok:false,error:<reason>}
+      status: complete
+    rebuild-dist:
+      text: 重建插件产物（dist/index.js 随 host.ts 变化，dist/client.js 应保持逐字节不变）并核对 exports 对齐
+      status: complete
+      command: pnpm --dir plugins/dsh-writing-viewer run build
+    update-readme-and-glossary:
+      text: README：约束 8 与安装节安全提示改为描述来源校验（含 allowedHosts 配置示例与 tailscale/反代说明、本机进程仍可访问的剩余边界）；docs/GLOSSARY.md 增加请求来源校验（Request Origin Guard）词条
+      status: complete
+  Testing:
+    routeguard-unit-tests:
+      text: 'routeguard.test.ts 判定矩阵：Host 缺失/不可解析/陌生域名拒绝；localhost、127.0.0.1、127.x、[::1]、绑定字面量（含 %zone 与端口无关）、allowedHosts 带端口与不带端口放行；sec-fetch-site: cross-site 拒绝、same-origin/none/缺失放行；Origin 同源放行、跨源拒绝、非 http(s) 拒绝'
+      status: complete
+      command: pnpm --dir plugins/dsh-writing-viewer exec vitest run src/routeguard.test.ts
+    host-route-guard-tests:
+      text: 'host.test.ts 增补：伪造 Host 的请求两路由均 403 且响应含 cache-control: no-store 与 JSON 错误体；回环 Host 照常 200；allowedHosts 配置命中放行；cross-site sec-fetch-site 403；同源 Origin 放行'
+      status: complete
+      command: pnpm --dir plugins/dsh-writing-viewer exec vitest run src/host.test.ts
+    plugin-package-check:
+      text: 插件统一检查：类型检查 + 构建 + 全部测试（154+ 新增）
+      status: complete
+      command: pnpm --dir plugins/dsh-writing-viewer run check
+  Verification:
+    strict-ready-and-verify:
+      text: strict ready 与 verify 干净（verify 允许仅余预期 pending 任务诊断）
+      status: complete
+      command: strict-spec-cli ready plugin-route-origin-guard && strict-spec-cli verify plugin-route-origin-guard
+    full-project-regression:
+      text: config.yaml 声明的完整项目级回归（Go 回归 + 覆盖率阈值），归档前通过
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+testing_gates:
+  validation_task: plugin-package-check
+  unit_test_task: plugin-package-check

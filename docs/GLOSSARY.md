@@ -363,7 +363,14 @@
 |---|---|---|---|
 | 审计日志 | Audit Log | 审计日志 | .writing-anything/audit.log：wa-cli 每次调用（含失败与用法错误）追加一行的运维痕迹（命令、参数、退出码、诊断码），不进 Schema 校验与 changedPaths；next 的回捞提示与阅读页的最近失败摘要取自它 |
 | 命令行工具 | Command-Line Interface | CLI | 本项目为 `wa-cli` |
+| DSH 插件 | DSH Plugin | DSH 插件 | DeepSeek Harness（DSH，运行本仓库开发会话的 Agent 宿主）的插件包：随 DSH Web GUI 加载的宿主扩展（如本仓库 `plugins/dsh-writing-viewer` 的只读工作区查看插件）；与规范包（Pack）是不同概念——规范包是纯数据的写作规范，DSH 插件是宿主 GUI 的扩展，二者互不相关 |
+| 工作区快照 | Workspace Snapshot | 工作区快照 | DSH 插件 host 侧对 .writing-anything/ 的只读聚合数据：结构状态（单元树、阶段、阻塞项、诊断、待复核摘要）复用 wa-cli 只读命令的 --json 输出，产物（Artifact）全文按 JSON Schema 约束的路径读取文件；经只读路由 GET /dsh-writing-viewer/snapshot 供 client 拉取，每次请求重读、不含任何写入路径；与「状态快照（State Snapshot）」（某场景开始时的设定状态）是不同概念 |
+| 总览仪表盘 | Overview Dashboard | 总览 | DSH 插件工作区查看面板的首页：每个作品（Work）一张卡片（文体、当前阶段、汇总单元进度、去重后的阻塞项数量与摘要），工作区级汇总素材数、待决决策数、待复核数与 validate 诊断；选中作品后展示单元树导航与单元详情。按写作概念组织信息而不平铺目录，界面只读 |
+| 语义卡片视图 | Semantic Card View | 语义卡片 | DSH 插件产物视图的两种呈现之一：把 YAML 产物（Artifact）按其 JSON Schema 字段组织成卡片（写作简报的受众/目的/核心观点、大纲的层级与覆盖、论断的论断-素材关联，其余产物按字段通用卡片化），而非展示文件原文；与「源码高亮视图（Source Highlight View）」一键切换 |
+| 源码高亮视图 | Source Highlight View | 源码视图 | DSH 插件产物视图的两种呈现之一：YAML 与 Markdown 产物原文的只读着色展示（YAML 着色键、标量、结构、注释、锚点与别名，Markdown 着色标题、列表、代码块、引用、表格等结构）；大 YAML 按顶层键折叠，高亮实现打包进客户端 bundle 不依赖网络 |
+| 请求来源校验 | Request Origin Guard | 来源校验 | DSH 插件在自注册 host 路由 handler 内做的请求来源判定，与 DSH 宿主 `/api` 浏览器信任栅栏（api-request-trust）同构：Host 头须为回环字面量、宿主监听地址字面量或插件配置 `allowedHosts` 显式放行的权威；`sec-fetch-site: cross-site` 拒绝；带 Origin 头时须与 Host 同权威；不满足返回 403（`cache-control: no-store`）。针对浏览器载体攻击（跨站读取、DNS rebinding），不是身份认证——本机进程访问与直接读文件等价，不在其威胁模型内 |
 | 技能 | Skill | 技能 | Agent Skills 格式的操作说明包；wa-cli 内置的技能用 wa-cli skills install 安装 |
+| 技能提供者 | Skill Provider | 技能提供者 | DSH 技能注册表（`@deepseek-ai/dsh-skill` 的 SkillRegistry）的技能来源接口；各来源以 rank 升序竞争同名技能，rank 越小优先级越高；dsh-writing-viewer 插件以 rank 650 的提供者注册内置技能作为后备——高于全部技能层级（project 100/200、custom 300、user 400/500、运行时注册 250、bundled 600），任何同名外部技能优先，内置仅在无同名外部技能时提供 |
 | 模型上下文协议 | Model Context Protocol | MCP | Agent 调用外部工具的开放协议 |
 | 大语言模型 | Large Language Model | LLM | Agent 背后的 AI 模型；`wa-cli` 本身不调用 |
 | MCP 服务 | MCP Server | MCP 服务 | 由 `wa-cli mcp --dir <项目目录>` 以 stdio 方式提供（双代服务端，支持 MCP 2026-07-28、2025-11-25 与 2025-06-18 版协议）：tools 对应命令，resources 暴露工作区产物、生效配置与作者反馈，prompts 对应技能 |
@@ -395,7 +402,9 @@
 | 预发布版 | Prerelease | 预发布版 | 带连字符的版本号（如 `v0.1.0-rc1`）；GitHub Release 标记为 pre-release，安装脚本默认不下载 |
 | 项目技能 | Project Skill | 项目技能 | 放在仓库 `.agents/skills/<name>/SKILL.md`、指导开发流程的 Agent Skills（如正式发布）；不随二进制分发，产品运行时不依赖它 |
 | 持续集成与持续交付 | CI/CD | CI/CD | 推送后由服务端自动构建、测试与发布的机制；本项目不使用，仓库中不放置任何工作流文件 |
-| 发布产物 | Release Asset | 发布产物 | 随版本发布的文件：各平台的 `wa-cli-<os>-<arch>` 二进制与 `SHA256SUMS` |
+| 溯源标记 | Provenance Marker | 溯源标记 | dsh-writing-viewer 插件下载安装 wa-cli 时写在同目录的 sidecar 文件 `wa-cli.dsh-writing-viewer.json`（managedBy、sha256、installedAt）；状态按「标记存在且 sha256 与磁盘二进制一致」判定为插件安装，否则如实显示非插件安装——install.sh 与插件默认同目录，只有标记能区分二进制是谁装的 |
+| 发布产物 | Release Asset | 发布产物 | 随版本发布的文件：各平台的 `wa-cli-<os>-<arch>` 二进制、`SHA256SUMS` 与插件包（Plugin Package）tarball |
+| 插件包 | Plugin Package | 插件包 | dsh-writing-viewer 插件的 `pnpm pack` 产物 `dsh-writing-viewer-<版本>.tgz`（含 dist/、cordis.patch.yml 与 README），随正式发布上传到 GitHub Release，供 `dsh plugin add <URL>` 公开安装；插件版本独立于发布 tag |
 | 校验文件 | Checksum File | 校验文件 | 记录每个发布产物 SHA-256 的 `SHA256SUMS`，格式与 `sha256sum` 兼容 |
 | 发布说明 | Release Notes | 发布说明 | GitHub Release 页面上的版本说明：按里程碑汇总的变化摘要，后接 gh 自动生成的比较链接 |
 | 安装脚本 | Install Script | 安装脚本 | `install.sh`（Linux、macOS）与 `install.ps1`（Windows）：下载、校验并把 `wa-cli` 安装到用户级目录 |

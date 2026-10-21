@@ -1,0 +1,13 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: license-apache2
+approach:
+  - 行政变更：写入 Apache-2.0 标准全文并填附录版权行；package.json license 字段同步为 SPDX 标识 Apache-2.0；无任何行为改动
+decisions:
+  no-delta-spec:
+    decision: 纯协议行政变更，无产品可观察行为，不涉及任何主规格需求
+    rationale: LICENSE 文件与元数据字段不改变系统行为
+alternatives: []
+risks: []

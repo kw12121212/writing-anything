@@ -1,0 +1,29 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: release-plugin-tarball
+sections:
+  Implementation:
+    release-skill-pack:
+      text: release 技能 SKILL.md：第 7 步加入插件构建与打包（前置 pnpm 可用性、pack 落 dist/、失败走既有回退），第 10 步核对清单加 tarball（以实际文件名核对，插件版本独立于 tag）
+      status: complete
+    readme-install-channel:
+      text: '插件 README：安装章节改为 Release tarball URL 主渠道（releases/latest/download/dsh-writing-viewer-<版本>.tgz），link: 降为开发模式；保持术语首现双语'
+      status: complete
+    backfill-upload:
+      text: 对既有 v0.3.0 Release 补传 tarball：pnpm pack 后 gh release upload，并验证匿名 URL 可下载（证据记 docs/evidence 或 README 安装节）
+      status: complete
+  Testing:
+    full-regression:
+      text: 完整项目回归（含项目技能结构校验测试覆盖 release 技能格式）
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    strict-verify:
+      text: strict 变更工件结构校验
+      status: complete
+      command: strict-spec-cli verify release-plugin-tarball
+testing_gates:
+  validation_task: full-regression
+  unit_test_task: full-regression

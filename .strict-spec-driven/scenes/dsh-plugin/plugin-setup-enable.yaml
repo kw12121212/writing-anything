@@ -1,0 +1,85 @@
+schema: strict-spec-driven/scene/v1
+schema_version: 1
+artifact_type: scene
+schema_file: templates/strict-spec-driven/schemas/scene.yaml
+scene:
+  id: plugin-setup-enable
+  title: 插件内置技能与 CLI 的启用与优先
+area: dsh-plugin
+status: draft
+actors:
+  - name: 作者
+    role: 安装了 dsh-writing-viewer 插件的 DSH 用户，写作流程的最终决策者
+preconditions:
+  - '插件已装入 DSH web profile 且配置 enableSetup: true；本机可能尚未安装 wa-cli，也可能已存在用户级/项目级同名 wa-* 技能与 PATH 上的旧版 wa-cli'
+main_flow:
+  open-panel:
+    action: 作者打开插件面板，看到「内置技能与 CLI」设置区与当前未启用状态
+    covered_by:
+      - spec_id: dsh-plugin
+        requirement_id: setup-panel-section
+  click-enable:
+    action: 作者点击「启用内置技能与 CLI」按钮
+    covered_by:
+      - spec_id: dsh-plugin
+        requirement_id: setup-action
+  download-install:
+    action: host 从本项目 GitHub Releases 下载对应平台的 wa-cli 发布产物，按 SHA256SUMS 校验后原子安装到配置目录
+    covered_by:
+      - spec_id: dsh-plugin
+        requirement_id: setup-cli-download
+  register-skills:
+    action: host 在临时目录物化全部内置 wa-* 技能并注册为 DSH 技能提供者
+    covered_by:
+      - spec_id: dsh-plugin
+        requirement_id: setup-skills-registered
+  cli-precedence:
+    action: host 把内置二进制目录幂等追加到宿主 PATH 末尾，之后的 Agent shell 按既有 PATH 顺序优先解析外部 wa-cli，无外部版本时落到内置二进制
+    covered_by:
+      - spec_id: dsh-plugin
+        requirement_id: setup-cli-precedence
+  status-shown:
+    action: 设置区显示已注册技能清单、内置 CLI 版本与路径
+    covered_by:
+      - spec_id: dsh-plugin
+        requirement_id: setup-panel-section
+  verify-untouched:
+    action: 启用完成后，定位项目的 .writing-anything/ 内（含 audit.log）没有任何文件被创建、修改或删除
+    covered_by:
+      - spec_id: dsh-plugin
+        requirement_id: setup-workspace-untouched
+exception_flows:
+  external-shadowed:
+    trigger: 用户级或项目级目录已存在同名 wa-* 技能，且 PATH 上已能解析到外部 wa-cli
+    steps:
+      report:
+        action: 启用完成后，DSH 技能清单中同名技能解析为外部技能目录版本，Agent shell 的 wa-cli 解析为外部二进制；内置版本保持注册与安装作为后备，状态区如实显示当前生效的外部来源与内置后备路径
+        covered_by:
+          - spec_id: dsh-plugin
+            requirement_id: setup-skills-registered
+          - spec_id: dsh-plugin
+            requirement_id: setup-cli-precedence
+  download-failure:
+    trigger: 下载失败、网络不可达或 SHA256SUMS 校验不通过
+    steps:
+      report:
+        action: 面板显示可读的失败原因，不留部分安装的可执行文件，可重试
+        covered_by:
+          - spec_id: dsh-plugin
+            requirement_id: setup-cli-download
+  already-installed:
+    trigger: 配置目录已存在同版本内置二进制
+    steps:
+      skip:
+        action: 跳过下载直接进入技能注册与 PATH 追加（内置目录置于末尾作后备）
+        covered_by:
+          - spec_id: dsh-plugin
+            requirement_id: setup-cli-download
+  switch-off:
+    trigger: 插件配置未开启 enableSetup（默认）
+    steps:
+      inert:
+        action: 面板没有设置区，插件不注册 setup 路由、不注册技能、不修改 PATH、不发起网络请求，行为与本变更之前一致
+        covered_by:
+          - spec_id: dsh-plugin
+            requirement_id: setup-switch-gate

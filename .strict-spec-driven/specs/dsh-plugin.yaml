@@ -1,0 +1,424 @@
+schema: strict-spec-driven/main-spec/v1
+schema_version: 1
+artifact_type: main_spec
+schema_file: templates/strict-spec-driven/schemas/main-spec.yaml
+spec:
+  id: dsh-plugin
+  title: DSH 插件（DSH Plugin）
+requirements:
+  panel-visible:
+    strength: MUST
+    statement: 插件装入 DSH web profile 后，Web GUI 必须提供该插件的面板入口，选中后加载出最小只读查看面板
+    scenarios:
+      gui-entry-load:
+        - GIVEN: '插件已通过 link: 依赖装入本机 DSH 的 web profile'
+        - WHEN: 打开 Web GUI 并从面板入口选中该插件的面板
+        - THEN: 侧栏出现插件面板入口，面板完成加载并显示内容，不报错、不空白崩溃
+  workspace-root-status:
+    strength: MUST
+    statement: 面板必须默认按 DSH 工作区根定位项目目录并显示 .writing-anything/ 工作区的存在状态；定位不到时给出空态指引而不是报错
+    scenarios:
+      workspace-found:
+        - GIVEN: DSH 工作区根下存在 .writing-anything/ 工作区
+        - WHEN: 打开插件面板
+        - THEN: 面板显示定位到的项目目录与工作区存在状态
+      workspace-missing:
+        - GIVEN: 定位不到 .writing-anything/ 工作区
+        - WHEN: 打开插件面板
+        - THEN: 面板显示空态指引，提示可用 wa-cli init 创建工作区，插件不报错崩溃
+  read-only-workspace:
+    strength: MUST
+    statement: 插件在加载、定位与展示工作区的全过程中不得创建、修改或删除 .writing-anything/ 工作区内的任何产物
+    scenarios:
+      no-workspace-writes:
+        - GIVEN: 插件已装入 web profile，面板尚未打开，.writing-anything/ 内文件清单、内容与修改时间已记录
+        - WHEN: 在 Web GUI 中打开插件面板并完成工作区定位与展示
+        - THEN: .writing-anything/ 内文件的清单、内容与修改时间与打开面板前一致
+  snapshot-aggregation:
+    strength: MUST
+    statement: 插件的 host 侧必须提供只读的工作区快照（Workspace Snapshot）服务：按定位到的项目目录聚合 .writing-anything/ 的配置、素材（Source）清单、规范包（Pack）清单、决策（含待决）与待复核摘要，以及每个作品（Work）的 work.yaml、单元（Unit）树（阶段、进度、阻塞项）与各单元目录产物全文——写作简报（Brief）、大纲（Outline）、出处（Provenance）、论断（Claim）、作者反馈（Feedback）、草稿（Draft）正文（Markdown 全文）、审稿与验收证据；长篇（novel）文体按文体存在的产物（如场景契约、伏笔台账（Foreshadowing Ledger）、时间线（Timeline）、知情表（Knowledge State））同样纳入；快照必须内嵌 wa-cli validate 的诊断作为错误态数据
+    scenarios:
+      multi-work-snapshot:
+        - GIVEN: 一个工作区含 tech-blog 文章与 novel 作品（含卷、章、场景层级，场景带场景契约与伏笔台账条目）
+        - WHEN: 通过插件的只读快照路由请求快照
+        - THEN: 响应为结构化 JSON，包含两个作品各自的单元树（阶段、进度、阻塞项）、各类产物全文、素材与决策（含待决）及待复核摘要，并内嵌 validate 诊断
+      novel-genre-artifacts:
+        - GIVEN: novel 作品某场景单元目录下存在场景契约与伏笔台账产物
+        - WHEN: 请求快照
+        - THEN: 快照包含这些按文体存在的产物全文
+  snapshot-fresh-read:
+    strength: MUST
+    statement: 每次快照请求必须重新读取工作区当前内容，不得返回跨请求的缓存数据；首版不得引入文件监听，数据刷新由 client 的手动刷新（面板刷新按钮或重新打开面板）触发
+    scenarios:
+      fresh-reread:
+        - GIVEN: 已获得一次快照响应
+        - WHEN: 修改工作区内某单元的草稿正文后再次请求快照
+        - THEN: 新响应包含修改后的正文而非旧内容
+  snapshot-missing-workspace:
+    strength: MUST
+    statement: 定位不到 .writing-anything/ 工作区时，快照路由必须返回可读的缺失状态与空态指引（提示可用 wa-cli init 创建工作区），不得以未处理错误或空白响应失败
+    scenarios:
+      missing-workspace-readable:
+        - GIVEN: 插件定位不到任何含 .writing-anything/ 的项目目录
+        - WHEN: 请求快照路由
+        - THEN: 响应为正常 JSON，含可读的缺失状态与空态指引，而非服务器错误或崩溃
+  snapshot-cli-degradation:
+    strength: MUST
+    statement: wa-cli 只读命令不可用或其 --json 输出缺少快照所需字段时，快照必须降级：返回文件可直接解析的部分数据，并在快照中明确标注降级状态与原因，不得整体失败
+    scenarios:
+      cli-unavailable:
+        - GIVEN: 主机环境找不到可执行的 wa-cli
+        - WHEN: 请求快照
+        - THEN: 响应仍包含按 JSON Schema 只读解析的产物全文数据，并标注降级（degraded）与原因，不整体失败
+      missing-field:
+        - GIVEN: wa-cli status --json 输出缺少快照所需的部分字段
+        - WHEN: 请求快照
+        - THEN: 缺失部分按降级标注呈现，其余数据照常返回
+  snapshot-no-writes:
+    strength: MUST
+    statement: 快照的生成与提供过程不得创建、修改或删除 .writing-anything/ 工作区内的任何产物（Artifact），插件自身代码不得向项目目录写入任何文件；唯一例外是快照经子进程调用的 wa-cli 只读命令按其审计日志（Audit Log）契约向 .writing-anything/audit.log 追加运维痕迹——审计日志不是产物、追加出自 wa-cli，且每次快照请求的 wa-cli 调用必须限定在有界命令集合内（status、validate、next 各一次，每个长篇（novel）作品 timeline 一次），不得轮询式反复调用
+    scenarios:
+      snapshot-no-writes:
+        - GIVEN: 已记录 .writing-anything/ 内除 audit.log 外全部文件的清单、内容与修改时间
+        - WHEN: 请求一次完整快照
+        - THEN: 这些文件的清单、内容与修改时间与请求前一致；新增或发生变化的文件至多为 wa-cli 追加的 audit.log
+      audit-log-bounded:
+        - GIVEN: 主机环境可执行 wa-cli 且快照完整可用（未降级）
+        - WHEN: 请求一次快照后读取 audit.log
+        - THEN: 本次快照追加的审计行与有界命令集合一一对应（status、validate、next 各一条，每个长篇作品 timeline 一条），无多余调用
+  unit-tree-navigation:
+    strength: MUST
+    statement: 面板必须为选中的作品提供单元（Unit）树导航：按层级缩进展示单元，汇总单元带进度标记；选中某个单元后详情区显示该单元的阶段、进度、阻塞项、下一步命令与产物清单，且不提供任何编辑、写入或确认控件
+    scenarios:
+      tree-hierarchy:
+        - GIVEN: novel 作品含卷、章、场景三级单元
+        - WHEN: 在总览中选中该作品
+        - THEN: 单元树按卷、章、场景的层级缩进展示全部单元，卷与章节点显示 done/total 进度标记
+      unit-detail:
+        - GIVEN: 单元树已展示
+        - WHEN: 选中某个场景单元
+        - THEN: 详情区显示该单元的阶段、进度、阻塞项列表、下一步命令与产物清单，界面中没有编辑、写入或确认控件
+  overview-empty-and-error:
+    strength: MUST
+    statement: 面板在空态与错误态下必须可读：定位不到 .writing-anything/ 时显示 wa-cli init 指引；工作区内没有作品时显示创建作品的指引；validate 诊断与快照降级（degraded）原因必须以列表透出；取数失败时显示原因与重试，不得空白或崩溃；面板必须提供手动刷新入口
+    scenarios:
+      empty-workspace:
+        - GIVEN: 工作区已初始化但没有任何作品
+        - WHEN: 打开插件面板
+        - THEN: 面板显示没有作品的空态与创建作品的指引，不报错
+      diagnostics-and-degraded:
+        - GIVEN: validate 报告诊断，且快照的某个 wa-cli 区域（如 next）降级并在 degraded 中给出原因
+        - WHEN: 打开插件面板
+        - THEN: 面板列出诊断（严重级别、消息、路径）与降级原因，其余可用数据照常显示
+      manual-refresh:
+        - GIVEN: 面板已显示总览
+        - WHEN: 修改工作区内某单元阶段后点击刷新
+        - THEN: 总览与单元树显示修改后的阶段
+  overview-dashboard:
+    strength: MUST
+    statement: 定位到工作区时，面板必须以总览仪表盘（Overview Dashboard）呈现：每个作品（Work）一张卡片，显示作品 id、文体（Genre）、当前生命周期（Lifecycle）阶段、汇总单元进度（done/total）、阻塞项（Blocker）数量与摘要；阻塞项数量按作品内各单元阻塞项去重计数（汇总单元重复列出的子孙阻塞项只计一次）；工作区级汇总显示素材（Source）数、待决决策数、待复核数与 validate 诊断数，提供该数的 wa-cli 区域降级时显示为不可用而不是 0；信息按写作概念组织，不平铺目录文件
+    scenarios:
+      work-cards:
+        - GIVEN: 工作区含 tech-blog 文章 my-post 与 novel 作品 my-novel，my-novel 有阻塞项与多层级单元
+        - WHEN: 打开插件面板
+        - THEN: 面板为两个作品各显示一张卡片：文体与 work.yaml 一致，阶段与进度与 wa-cli status --json 对同一作品的结果一致，阻塞项数量等于该作品各单元阻塞项去重后的数量并附前两条摘要
+      workspace-summary:
+        - GIVEN: 工作区登记了素材、存在 status 为 open 的决策与待作者复核条目，validate 报告诊断
+        - WHEN: 打开插件面板
+        - THEN: 总览汇总区显示的素材数、待决决策数、待复核数与诊断数分别与素材目录、decisions.yaml、wa-cli next、wa-cli validate 的结果一致
+  overview-theme-and-narrow:
+    strength: MUST
+    statement: 总览与单元树必须随 DSH 明暗主题切换保持可读，并在 DSH 主面板常见宽度区间内可读可操作：视口宽度低于 1024px（侧栏收为 56px 导轨）或面板宽度低于 640px 时单元树与详情改为上下堆叠
+    scenarios:
+      theme-switch:
+        - GIVEN: 面板显示总览与单元树
+        - WHEN: 在 DSH 中切换明暗主题
+        - THEN: 文字、卡片边框与状态色随主题切换，文字与背景保持可读对比
+      narrow-stack:
+        - GIVEN: 浏览器窗口宽度低于 1024px，DSH 侧栏收为导轨
+        - WHEN: 在面板中选中作品查看单元树
+        - THEN: 单元树与详情上下堆叠展示，内容不被截断且可点击选中单元
+  panel-path-switch:
+    strength: MUST
+    statement: 面板必须允许作者切换到显式输入的项目目录绝对路径查看其工作区，并可恢复默认定位；所选路径只作用于面板本次查看，优先于插件配置的固定目录；路径不是绝对路径、是网络或设备路径，或其下没有 .writing-anything/ 时，面板必须显示空态与可读原因，不得静默改显示其他项目；切换或刷新进行中面板必须给出可见提示，较早请求的响应不得覆盖较新的选择；切换后插件仍只读取所选目录的 .writing-anything/，且除 wa-cli 追加的 audit.log 外不改变其中任何文件
+    scenarios:
+      switch-to-path:
+        - GIVEN: DSH 默认定位到项目 A，本机另有含 .writing-anything/ 的项目 B
+        - WHEN: 在面板输入项目 B 的绝对路径并切换
+        - THEN: 面板显示项目 B 的总览，工具栏标明当前路径为项目 B、来源为面板输入；项目 B 的 .writing-anything/ 除 audit.log 外文件清单、内容与修改时间不变
+      restore-default:
+        - GIVEN: 面板正在查看手动切换的项目 B
+        - WHEN: 选择恢复默认
+        - THEN: 面板回到按默认定位顺序找到的项目 A
+      invalid-path:
+        - GIVEN: 作者输入相对路径、网络路径（如 //server/share），或一个没有 .writing-anything/ 的目录绝对路径
+        - WHEN: 切换
+        - THEN: 面板显示空态与说明原因（路径须为绝对路径 / 不能是网络或设备路径 / 该目录下没有工作区，可用 wa-cli init 创建），不显示其他项目的数据
+      default-unchanged:
+        - GIVEN: 作者没有在面板中切换路径
+        - WHEN: 打开插件面板
+        - THEN: 面板按配置固定、DSH 工作区注册表、宿主进程目录的既有顺序定位工作区
+      superseded-request:
+        - GIVEN: 作者切换到项目 B 后、B 的快照返回之前又选择恢复默认
+        - WHEN: B 的快照晚于默认项目的快照返回
+        - THEN: 面板保持显示默认项目，迟到的 B 响应被丢弃
+  artifact-semantic-view:
+    strength: MUST
+    statement: 面板必须为选中单元（Unit）产物清单中的每个 YAML 产物（Artifact）提供语义卡片视图（Semantic Card View）：按产物的 Schema 字段组织成卡片而非平铺文件——写作简报（Brief）展示受众、目的、前提、核心观点等字段，大纲（Outline）展示层级结构与核心观点覆盖，论断（Claim）展示论断与素材（Source）关联；其余产物（出处（Provenance）、作者反馈（Feedback）、审稿、验收、规划（Plan）等）按字段通用卡片化；整个产物视图不得出现任何编辑、写入或确认控件
+    scenarios:
+      brief-cards:
+        - GIVEN: 某单元目录存在内容完整的 brief.yaml
+        - WHEN: 在该单元详情中打开 brief 产物视图
+        - THEN: 语义卡片视图按受众、目的、核心观点等 Schema 字段组织展示，字段值与产物原文一致，视图中没有任何编辑、写入或确认控件
+      outline-cards:
+        - GIVEN: 某单元目录存在多层级 outline.yaml
+        - WHEN: 打开 outline 产物视图
+        - THEN: 语义卡片视图按层级结构展示大纲与核心观点覆盖，内容与产物原文一致
+      claims-cards:
+        - GIVEN: 某单元目录存在关联素材引用的 claims.yaml
+        - WHEN: 打开 claims 产物视图
+        - THEN: 语义卡片视图逐条展示论断及其关联的素材引用，内容与产物原文一致
+      generic-artifact-cards:
+        - GIVEN: 某单元目录存在无定制布局的产物（如 review.yaml 或 acceptance.yaml）
+        - WHEN: 打开该产物视图
+        - THEN: 语义卡片视图按该产物的 Schema 字段通用卡片化展示，不因缺少定制布局而空白或报错
+  yaml-source-highlight-view:
+    strength: MUST
+    statement: 每个 YAML 产物必须可在语义卡片视图（Semantic Card View）与源码高亮视图（Source Highlight View）之间一键切换，切换后保持滚动位置；源码高亮视图必须对键、标量、数组/映射结构、注释、锚点与别名着色；高亮实现打包进客户端 bundle、渲染过程不得发起网络请求；大型 YAML（长篇产物）源码必须按顶层键折叠渲染；产物 YAML 解析失败时必须降级为源码高亮视图并显示解析错误提示，不得空白或崩溃
+    scenarios:
+      toggle-preserves-scroll:
+        - GIVEN: 已打开一个较长 YAML 产物的语义卡片视图并滚动到中部
+        - WHEN: 一键切换到源码高亮视图再切换回来
+        - THEN: 两种视图分别按语义与源码呈现同一产物，切换前后滚动位置保持，不重新跳回顶部
+      highlight-coverage:
+        - GIVEN: 某产物 YAML 含键、字符串与数字标量、数组与映射结构、注释、锚点与别名
+        - WHEN: 打开其源码高亮视图
+        - THEN: 键、标量、结构、注释、锚点与别名分别着色，文本内容与产物原文逐字一致不丢失
+      offline-highlight:
+        - GIVEN: 浏览器断开网络（或屏蔽所有外部请求）
+        - WHEN: 打开产物视图并切换源码高亮
+        - THEN: 高亮与渲染正常完成，没有任何对外网络请求
+      large-yaml-fold:
+        - GIVEN: 长篇（novel）作品某产物 YAML 顶层键数量多、总体积大
+        - WHEN: 打开其源码高亮视图
+        - THEN: 源码按顶层键折叠呈现，展开后内容完整，面板不因一次性渲染全部行而卡死
+      malformed-yaml-fallback:
+        - GIVEN: 某单元目录的产物 YAML 语法损坏无法解析
+        - WHEN: 打开该产物视图
+        - THEN: 面板显示源码高亮视图与可读的解析错误提示，不空白、不崩溃
+  draft-markdown-views:
+    strength: MUST
+    statement: 草稿（Draft）正文（Markdown）必须提供两种可一键切换的视图：渲染阅读视图（标题、列表、代码块、引用、表格）与源码高亮视图（Source Highlight View），切换保持滚动位置；渲染与高亮打包进客户端 bundle、渲染过程不得发起网络请求，渲染结果不得执行正文中的任何 HTML 或脚本
+    scenarios:
+      rendered-reading:
+        - GIVEN: 某单元 draft 正文 Markdown 含标题、列表、代码块、引用与表格
+        - WHEN: 打开该正文视图
+        - THEN: 渲染阅读视图按对应元素呈现，正文中的 HTML 片段被转义显示而不是执行
+      draft-toggle:
+        - GIVEN: 已打开正文渲染阅读视图并滚动到中部
+        - WHEN: 切换到源码高亮视图再切换回来
+        - THEN: Markdown 源码着色呈现，切换前后滚动位置保持
+  sources-view-claims-navigation:
+    strength: MUST
+    statement: 面板必须提供素材（Source）清单视图：列出工作区全部素材，每个素材条目展示其 source.yaml 语义卡片与原文 Markdown 的阅读视图（可切换源码高亮视图（Source Highlight View））；论断（Claim）语义卡片中的素材引用必须可点击并跳转到对应素材条目；素材视图同样不得出现任何编辑、写入或确认控件
+    scenarios:
+      claims-source-jump:
+        - GIVEN: claims 语义卡片中某论断关联素材引用 s-01，工作区存在素材 s-01
+        - WHEN: 点击该素材引用
+        - THEN: 面板跳转到素材清单中 s-01 的条目并展示其 source.yaml 卡片与原文，视图中没有任何编辑、写入或确认控件
+      sources-list:
+        - GIVEN: 工作区登记了多个素材（各含 source.yaml 与 original.md）
+        - WHEN: 打开素材清单视图
+        - THEN: 全部素材逐条列出，每条可查看 source.yaml 语义卡片与原文阅读视图
+  panel-loading-feedback:
+    strength: MUST
+    statement: 面板在快照请求进行中且尚无数据可显示时（首次打开面板或定位后尚未获得任何快照数据）必须显示可读的加载提示，不得空白或无反馈；请求完成后按结果呈现数据、空态或错误态
+    scenarios:
+      first-load-hint:
+        - GIVEN: 插件已装入 web profile，面板刚打开，快照请求尚未返回，面板尚无任何数据
+        - WHEN: 快照请求进行中
+        - THEN: 面板显示可读的加载提示而非空白，不报错、不显示空态或错误态文案
+  panel-keyboard-navigation:
+    strength: MUST
+    statement: 面板必须支持纯键盘操作：焦点在单元（Unit）树内时，上下方向键在可见单元间移动选中并同步详情区，左右方向键收起或展开汇总单元，Enter 打开选中单元的产物（Artifact）视图或激活清单条目；产物视图中语义卡片视图与源码高亮视图的切换控件必须可经键盘激活；面板全部交互控件必须可经 Tab 到达
+    scenarios:
+      tree-arrow-select:
+        - GIVEN: novel 作品含卷、章、场景三级单元的树已展示，焦点在单元树上
+        - WHEN: 按上或下方向键
+        - THEN: 选中在可见单元间移动，详情区随选中更新，全程无需鼠标
+      tree-expand-collapse:
+        - GIVEN: 焦点在某带子单元的汇总单元上
+        - WHEN: 按右或左方向键
+        - THEN: 子单元展开或收起，焦点与选中保持可读
+      keyboard-open-artifact:
+        - GIVEN: 键盘已选中某单元并焦点在其产物清单条目上
+        - WHEN: 按 Enter 打开产物视图，再经键盘激活视图切换控件
+        - THEN: 产物视图打开，语义卡片视图与源码高亮视图可仅用键盘切换，全程无需鼠标
+  route-origin-guard:
+    strength: MUST
+    statement: '插件注册的每条 host 路由（/dsh-writing-viewer/workspace、/dsh-writing-viewer/snapshot 与 /dsh-writing-viewer/setup 的状态与动作路由）在处理请求前必须做请求来源校验（Request Origin Guard）：Host 头缺失或不可解析时拒绝；Host 的 hostname 必须是回环地址（localhost、127.0.0.0/8、::1）、等于宿主监听绑定地址的字面量（比较忽略端口与接口 zone），或命中插件配置 allowedHosts 的权威（bare host[:port]：带端口精确匹配，不带端口匹配任意端口，经 WHATWG URL 规范化含默认端口）；请求带 sec-fetch-site: cross-site 时拒绝；带 Origin 头时其 http(s) 权威必须与 Host 相同权威。拒绝时返回 403 与 cache-control: no-store 的 JSON 错误体，不读取任何工作区数据、不触发任何下载或注册动作；面板 client 的同源请求必须不受影响'
+    scenarios:
+      unknown-host-rejected:
+        - GIVEN: 插件已加载，宿主监听 127.0.0.1
+        - WHEN: '携带 Host: attacker.example 的 GET 请求访问任一插件路由（模拟 DNS rebinding 或陌生域名）'
+        - THEN: '响应为 403，content-type 为 application/json，带 cache-control: no-store 与可读错误原因，响应体不含任何工作区数据'
+      cross-site-rejected:
+        - GIVEN: 插件已加载，请求 Host 为 127.0.0.1:端口
+        - WHEN: '同一请求携带 sec-fetch-site: cross-site（恶意页面的跨站读取）'
+        - THEN: 响应为 403 JSON 错误体，不返回快照数据
+      cross-origin-marker-rejected:
+        - GIVEN: 插件已加载，请求 Host 为 127.0.0.1:端口
+        - WHEN: '同一请求携带 Origin: http://evil.example 而 Host 不变'
+        - THEN: 响应为 403 JSON 错误体，不返回快照数据
+      same-origin-panel-unaffected:
+        - GIVEN: 插件已装入 web profile，浏览器经宿主页面同源打开面板
+        - WHEN: 面板 client 以相对路径 fetch 全部插件路由（加载、刷新、路径切换、设置区状态与启用动作）
+        - THEN: 请求照常返回 200 与原有响应结构，面板行为与本变更之前一致
+      allowed-hosts-config:
+        - GIVEN: 插件配置 allowedHosts 含 gamepc.example.net:13080（bare host:port 权威）
+        - WHEN: '携带 Host: gamepc.example.net:13080 的请求访问任一路由'
+        - THEN: 请求按原有行为处理（200），未被 403 拒绝
+      bind-literal-accepted:
+        - GIVEN: 宿主以 --host 192.168.1.10 绑定非回环接口
+        - WHEN: 浏览器经 http://192.168.1.10:端口/ 打开面板并同源访问插件路由
+        - THEN: Host 命中监听绑定地址字面量，请求照常处理，面板可用
+      setup-action-guarded:
+        - GIVEN: 插件已加载且 enableSetup 开启
+        - WHEN: 携带伪造 Host 的 POST 请求访问设置动作路由
+        - THEN: 响应为 403 JSON 错误体，不触发任何下载、技能注册或环境修改
+  queue-views:
+    strength: MUST
+    statement: 面板必须提供两个只读的作者行动队列清单视图：总览的「待决决策」计数磁贴可点开决策队列（Decision Queue）清单，逐条展示每条决策的 id、status、question、options（id 与 text，recommendation 指向的选项带可辨识标记）、rationale、blocking 标记与关联 units；「待复核」计数磁贴可点开作者复核清单，逐条展示 kind、work、ref、channel、confirmed_at 与 reviewed_at。两个清单只消费快照已携带的 decisions.yaml 与 author-reviews.yaml 全文；文件缺失时显示空态提示、YAML 解析失败时显示可读错误提示，均不得空白或崩溃；清单视图不得出现任何编辑、写入或确认控件，作者操作仍走 wa-cli
+    scenarios:
+      decisions-list:
+        - GIVEN: 工作区 decisions.yaml 含一条 open 决策：id dec-1、question、options a/b、recommendation b、rationale、blocking true、units [my-post]
+        - WHEN: 点击总览「待决决策」磁贴
+        - THEN: 决策清单逐条显示上述全部字段，推荐选项 b 带可辨识标记，清单内没有任何编辑或确认控件，返回总览入口可用
+      reviews-list:
+        - GIVEN: 工作区 author-reviews.yaml 含一条 kind acceptance、work/ref my-post、channel preview、confirmed_at 与 reviewed_at 的复核记录
+        - WHEN: 点击总览「待复核」磁贴
+        - THEN: 复核清单逐条显示全部字段，无编辑控件，返回总览入口可用
+      missing-and-malformed:
+        - GIVEN: 快照中 decisions 为 null（文件缺失），或 decisions.yaml 文本语法损坏无法解析
+        - WHEN: 打开决策清单
+        - THEN: 分别显示空态提示或可读的解析错误提示，不空白、不崩溃；解析失败分支的计数磁贴显示「—」而不是 0（文件缺失分支的计数仍按既有语义为 0）
+  setup-switch-gate:
+    strength: MUST
+    statement: 插件配置的启用开关 enableSetup 默认关闭；未开启时，插件不得注册任何设置（Setup）路由、不得向 DSH 注册任何技能、不得修改宿主环境、不得发起任何网络请求，面板不出现设置区，插件全部行为与本变更之前的规格一致
+    scenarios:
+      switch-off-inert:
+        - GIVEN: 插件已装入 web profile，配置未开启 enableSetup（默认）
+        - WHEN: 宿主启动并打开插件面板
+        - THEN: 面板与既有规格一致且没有设置区；host 未注册设置路由，进程环境与网络行为与未装本能力力的插件一致
+  setup-panel-section:
+    strength: MUST
+    statement: enableSetup 开启时，面板必须出现「内置技能与 CLI」设置区：显示内置 CLI 就绪状态（版本与路径）、已注册的内置技能清单、外部优先与内置后备的解析情况（外部版本实际生效时如实标明，内置为后备）与进行中提示；尚未启用时提供「启用内置技能与 CLI」的显式入口，该区不得出现任何其他写入控件
+    scenarios:
+      status-unenabled:
+        - GIVEN: 开关已开启，启用动作尚未完成
+        - WHEN: 作者打开插件面板
+        - THEN: 设置区显示未启用状态与「启用内置技能与 CLI」入口，不报错不空白
+      status-enabled:
+        - GIVEN: 启用动作已完成，内置 CLI 就绪且技能已注册
+        - WHEN: 打开插件面板
+        - THEN: 设置区列出已注册技能清单与内置 CLI 的版本和路径；存在实际生效的外部 wa-cli 时如实显示外部版本生效、内置为后备，不显示与当前解析结果矛盾的生效声明
+  setup-action:
+    strength: MUST
+    statement: 点击「启用内置技能与 CLI」必须触发一次完整启用：确保内置 CLI 就绪、注册全部内置技能（外部同名优先、内置后备）、把内置二进制目录幂等追加到宿主 PATH 末尾（既有顺序的外部 wa-cli 保持优先）、随后刷新设置区状态；同一时间至多存在一个进行中的启用动作，进行中时不得重复触发并显示提示；任一步失败时设置区显示可读原因、不进入已启用状态且可重试
+    scenarios:
+      enable-completes:
+        - GIVEN: 开关已开启且本机尚无 wa-cli
+        - WHEN: 作者点击「启用内置技能与 CLI」并等待完成
+        - THEN: 设置区进入已启用状态：技能清单与内置 CLI 版本路径齐备，内置目录位于 PATH 末尾作后备，过程中显示进行中提示
+      concurrent-click-ignored:
+        - GIVEN: 一次启用动作正在进行
+        - WHEN: 再次点击启用入口
+        - THEN: 不发起第二次启用动作，显示进行中提示，完成后状态区只反映这一次动作的结果
+      failure-readable:
+        - GIVEN: 启用动作中某一步失败（如下载失败）
+        - WHEN: 动作结束
+        - THEN: 设置区显示可读的失败原因，状态不是已启用，启用入口可再次使用
+  setup-cli-download:
+    strength: MUST
+    statement: 内置 CLI 不就绪（缺失或版本与配置不符）时，启用动作必须从配置的发布地址下载对应平台的发布产物（Release Asset），按发布方的 SHA256SUMS 记录校验通过后原子安装到配置目录（默认 ~/.local/bin，可配置）；下载或校验失败时不得留下任何部分写入的可执行文件并显示可读原因；配置目录已存在同版本二进制时跳过下载
+    scenarios:
+      fresh-download-install:
+        - GIVEN: 开关已开启，配置目录没有 wa-cli
+        - WHEN: 启用动作完成
+        - THEN: 配置目录出现可执行的内置 wa-cli，版本与配置一致，设置区显示其版本与路径
+      checksum-mismatch-refused:
+        - GIVEN: 下载到的发布产物内容与 SHA256SUMS 记录不符
+        - WHEN: 启用动作执行
+        - THEN: 安装不发生，配置目录没有新增或被改写的可执行文件，设置区显示校验失败的可读原因
+      existing-same-version-skip:
+        - GIVEN: 配置目录已存在与配置版本一致的 wa-cli
+        - WHEN: 点击启用
+        - THEN: 跳过下载直接完成注册与状态刷新，不发起对发布地址的产物下载请求
+  setup-skills-registered:
+    strength: MUST
+    statement: 启用完成后，全部内置技能（wa-* Skills）必须注册进 DSH 可调用的技能清单；存在同名外部技能（来自用户级或项目级技能目录）时，同名技能必须解析为外部版本，内置版本仅在不存在同名外部技能时提供（后备）；启用过程不得向用户级或项目级技能目录写入任何文件
+    scenarios:
+      builtin-listed:
+        - GIVEN: 启用动作已完成，不存在同名外部技能
+        - WHEN: 查看 DSH 的技能清单
+        - THEN: 全部内置 wa-* 技能出现且可加载，内容与内置版本一致
+      external-name-wins:
+        - GIVEN: 用户级或项目级技能目录已存在同名 wa-* 技能
+        - WHEN: 启用完成后解析该同名技能
+        - THEN: 解析结果为外部技能目录中的版本，内置版本保留为后备（外部技能移除后内置随即生效）
+      no-skill-dir-writes:
+        - GIVEN: 已记录用户级与项目级技能目录的文件清单
+        - WHEN: 完成一次启用
+        - THEN: 这些目录的清单、内容与修改时间不变
+  setup-cli-precedence:
+    strength: MUST
+    statement: 启用完成后，宿主会话的 shell 工具中 wa-cli 必须按既有 PATH 顺序优先解析外部版本；不存在外部 wa-cli 时必须解析到内置二进制（内置目录幂等追加到 PATH 末尾实现后备）；插件自身的快照命令调用遵循同一解析顺序；设置区必须如实显示当前解析到的二进制与内置后备路径（如存在外部版本则一并显示）
+    scenarios:
+      shell-resolves-external-first:
+        - GIVEN: PATH 上已能解析到外部 wa-cli
+        - WHEN: 启用完成后在 Agent 的 shell 工具中运行 wa-cli version
+        - THEN: 输出版本为外部二进制的版本，内置目录位于 PATH 末尾仅作后备
+      shell-falls-back-to-builtin:
+        - GIVEN: PATH 上没有任何 wa-cli
+        - WHEN: 启用完成后在 Agent 的 shell 工具中运行 wa-cli version
+        - THEN: 输出为内置二进制的版本（内置目录追加到 PATH 末尾被解析到）
+      snapshot-follows-path:
+        - GIVEN: 启用完成且 PATH 上存在外部 wa-cli
+        - WHEN: 请求一次完整快照
+        - THEN: 快照的结构状态来自按 PATH 顺序解析到的二进制的命令输出，与设置区显示的解析路径一致
+      status-reports-both:
+        - GIVEN: 存在外部 wa-cli 且内置二进制已就绪
+        - WHEN: 查看设置区状态
+        - THEN: 状态同时显示当前生效的外部路径与内置后备路径
+  setup-workspace-untouched:
+    strength: MUST
+    statement: 启用动作（含下载、技能物化与注册）与设置区状态查询的全过程不得创建、修改或删除 .writing-anything/ 工作区内的任何文件（含审计日志 audit.log）
+    scenarios:
+      workspace-untouched:
+        - GIVEN: 已记录定位项目 .writing-anything/ 内全部文件（含 audit.log）的清单、内容与修改时间
+        - WHEN: 完成一次启用并查看设置区状态
+        - THEN: 这些文件的清单、内容与修改时间逐项一致，audit.log 没有新增行
+  setup-provenance:
+    strength: MUST
+    statement: enableSetup 开启且启用完成后，设置区必须回答「内置还是外置」：为内置名单中的每个技能按序探测标准技能目录（项目的 .dsh/skills 与 .agents/skills、用户的 ~/.dsh/skills 与 ~/.agents/skills，用户目录随 DSH_HOME / DSH_AGENTS_HOME 环境覆盖）下是否存在同名 SKILL.md——存在即显示外部胜出（来源标签 project-dsh、project-agents、user-dsh 或 user-agents 与该文件路径）并标明内置后备就绪，全部不存在则显示内置（dsh-writing-viewer）；项目目录取 setup 状态请求的 root 参数（与面板当前定位一致，经与快照路由相同的路径校验，非法取值按未提供处理），未提供时仅比对用户级目录；对照表是文件存在性比对，自定义技能目录、其他技能提供者与深层嵌套工作区的仓库根推导不在比对之列（加载时的技能包裹层仍是权威）；CLI 状态必须依据溯源标记如实分类：插件安装的 wa-cli（同目录存在插件写入的标记且其记录的 SHA-256 与磁盘二进制一致）显示为插件安装，其余（含操作者经 waCliPath 指定的路径、标记缺失或与磁盘不符）如实显示为非插件安装
+    scenarios:
+      external-in-user-dir:
+        - GIVEN: 用户 ~/.agents/skills 下存在同名 wa-* 技能的 SKILL.md
+        - WHEN: 查看设置区的技能来源对照表
+        - THEN: 该技能显示外部 user-agents 与该文件路径并标明内置后备就绪
+      external-in-project-dir:
+        - GIVEN: 面板定位的项目 .agents/skills 下存在同名技能
+        - WHEN: 携带该项目目录请求 setup 状态
+        - THEN: 该技能显示外部 project-agents 与路径；未携带 root 时该行按用户级目录与内置判定
+      builtin-when-absent:
+        - GIVEN: 全部标准技能目录均无同名外部技能
+        - WHEN: 查看对照表
+        - THEN: 该技能显示内置（dsh-writing-viewer）
+      cli-plugin-installed:
+        - GIVEN: 插件刚下载安装了 wa-cli（标记写入成功且 sha256 一致）
+        - WHEN: 查看设置区 CLI 状态
+        - THEN: 显示为插件安装
+      cli-not-plugin-installed:
+        - GIVEN: CLI 路径来自操作者配置的 waCliPath，或路径上二进制被手动更换导致标记 sha256 不符，或无标记
+        - WHEN: 查看设置区 CLI 状态
+        - THEN: 如实显示为非插件安装

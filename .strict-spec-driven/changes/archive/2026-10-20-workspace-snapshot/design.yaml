@@ -1,0 +1,38 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: workspace-snapshot
+approach:
+  - 在 plugins/dsh-writing-viewer 包内新增 host 侧快照（Snapshot）模块：复用现有 root.ts 的定位结果，先经 wa-cli status --json 与 validate --json 取结构状态（单元树、阶段、阻塞项、诊断），再按 JSON Schema 只读解析各产物文件全文（YAML 与 Markdown），聚合成按作品组织的结构化 JSON，经新增只读 GET 路由 /dsh-writing-viewer/snapshot 提供给 client。聚合逻辑写成注入式读取器的纯函数：node:fs 与子进程调用都从参数注入，与 root.ts 的可测性约定一致。
+decisions:
+  hybrid-data-source:
+    decision: 结构状态走 wa-cli status --json 与 validate --json 的只读输出，产物全文按 JSON Schema 在插件内只读解析文件
+    rationale: 里程碑 intake 已定案：wa-cli 是唯一真相来源，status/validate 已覆盖单元树与诊断；全部自行解析会在 CLI 0.x 字段演进时形成第二真相源，全部走 CLI 又会因部分产物没有对应只读命令而拿不到全文
+  separate-snapshot-route:
+    decision: 新增独立只读 GET 路由 /dsh-writing-viewer/snapshot，现有 /dsh-writing-viewer/workspace 路由保持不变
+    rationale: 面板启动只需轻量的定位状态；快照体积大且随产物增长，独立路由让两侧契约独立演进，workspace 路由既有 additive-only 字段语义不被打破
+  manual-fresh-read:
+    decision: 首版每次快照请求都重新读取工作区当前内容，无缓存、无文件监听
+    rationale: 刷新策略已定案为首版手动刷新（面板刷新按钮与面板重新打开时重读）；无缓存保证两次请求之间的文件修改立刻可见，也免去文件监听器的跨平台差异
+  cli-degradation:
+    decision: wa-cli 不可用或 --json 输出缺字段时，快照降级为文件可直接解析的部分并在响应中标注 degraded 与缺失原因，不整体失败
+    rationale: 里程碑风险定案：快照层隔离 CLI 输出映射、缺字段时容错降级而不是失败；DSH 宿主环境未必装有 wa-cli，降级保证面板仍能展示文件可解析的内容
+  injected-readers:
+    decision: 快照聚合逻辑与 node:fs、子进程调用解耦：文件读取器与 CLI 执行器都经参数注入
+    rationale: 与既有 root.ts 同样的可测性约定：纯函数加注入探针，单元测试用夹具目录与桩执行器驱动，不需要真实 wa-cli 进程
+  wa-cli-path-config:
+    decision: 插件配置新增可选的 waCliPath（非空白字符串生效，默认 wa-cli），覆盖结构状态桥调用的可执行文件路径
+    rationale: DSH 宿主进程的 PATH 未必包含 wa-cli（GUI 常从用户主目录启动）；没有该配置时这类环境永远进入降级路径，而实际存在可用的二进制。配置归一复用 normalizePathInput，与 workspaceRoot 同一语义
+  audit-log-exception:
+    decision: 快照经子进程调用 wa-cli 只读命令视为只读访问，唯一例外是 wa-cli 按其审计契约向 .writing-anything/audit.log 追加运维痕迹；插件在每次快照请求内有界调用命令（status、validate、next 与每个长篇作品一次 timeline），不做轮询式反复调用，delta 规格显式写明该例外
+    rationale: 实测 wa-cli 每次调用（含只读命令）都追加 audit.log，且无外部抑制手段（runQuiet 仅供进程内 MCP）；仓库在 cli-contract 的 precheck-before-side-effects 与 workspace-artifacts 的 atomic-writes 中已有同款审计例外先例。与其宣称会被实测推翻的绝对零写入，不如把例外、边界与调用上限写进规格并用写入型假二进制测试钉住
+alternatives:
+  - option: 全部数据直接解析工作区文件，完全不调用 wa-cli
+    reason: 要在插件内重复实现单元树汇总与校验逻辑，违反「wa-cli 是唯一真相来源」的仓库约定，且 CLI 0.x 字段演进时两处逻辑必然漂移
+  - option: 把快照数据扩展进现有 /dsh-writing-viewer/workspace 路由的响应体
+    reason: 把轻量定位状态与大体积快照耦合进同一个响应，面板启动被迫等待全量数据，两侧契约也无法独立演进
+risks:
+  - wa-cli --json 输出字段在 0.x 版本仍可能演进：CLI 输出映射单列成独立模块，缺字段时容错降级并在快照中标注 degraded
+  - 长篇（novel）大工作区的快照体积与刷新开销：快照按作品与单元组织数据，后续视图类计划变更可按此结构分片按需拉取
+  - TypeScript 侧解析 YAML 需引入运行时依赖（如 yaml 包）：属插件包自身依赖、在包内锁定版本，不影响 Go 回归与仓库根无 Node 清单的约定
