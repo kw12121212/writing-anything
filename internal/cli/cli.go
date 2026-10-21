@@ -38,6 +38,15 @@ func (s commandSet) runQuiet(args []string, stdin io.Reader, stdout, stderr io.W
 	return s.run(args, stdin, stdout, stderr)
 }
 
+// rootVersionAlias 把第一个参数位置的 --version 改写为 version，作为根参数（Root Flag）：wa-cli --version [...] 等同 wa-cli version [...]。
+// 只在第一个参数位置生效；审计日志用它求 command 名，args 仍记录原始参数。
+func rootVersionAlias(args []string) []string {
+	if len(args) > 0 && args[0] == "--version" {
+		return append([]string{versionCommand.name}, args[1:]...)
+	}
+	return args
+}
+
 func (s commandSet) dispatch(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	// 只要出现 --json，用法错误也以 JSON 信封写到标准输出，便于 Agent 解析。
 	asJSON := slices.Contains(args, "--json")
@@ -45,6 +54,7 @@ func (s commandSet) dispatch(args []string, stdin io.Reader, stdout, stderr io.W
 		// wa-cli --help [...] 等同 wa-cli help [...]。
 		args = append([]string{helpCommand.name}, args[1:]...)
 	}
+	args = rootVersionAlias(args)
 	if len(args) == 0 || strings.HasPrefix(args[0], "-") {
 		return usageError(stdout, stderr, asJSON, usageDiagnostic(nil, codeMissingCommand, "缺少命令"), s.overview())
 	}

@@ -139,6 +139,12 @@ func TestUsageErrorsJSON(t *testing.T) {
 		{[]string{"help", "nope", "--json"}, "usage.unknown-command", "未知命令：nope", "wa-cli help --json"},
 		{[]string{"help", "nope", "--help", "--json"}, "usage.unknown-command", "未知命令：nope", "wa-cli help --json"},
 		{[]string{"--help", "--unknown", "--json"}, "usage.unknown-flag", "未知参数：--unknown", "wa-cli help help --json"},
+		// --version 只在第一个参数位置、只以完整写法作为 version 的别名。
+		{[]string{"-v", "--json"}, "usage.missing-command", "缺少命令", "wa-cli help --json"},
+		{[]string{"-V", "--json"}, "usage.missing-command", "缺少命令", "wa-cli help --json"},
+		{[]string{"--version=x", "--json"}, "usage.missing-command", "缺少命令", "wa-cli help --json"},
+		{[]string{"--json", "--version"}, "usage.missing-command", "缺少命令", "wa-cli help --json"},
+		{[]string{"help", "--version", "--json"}, "usage.unknown-flag", "未知参数：--version", "wa-cli help help --json"},
 	}
 	for _, tt := range tests {
 		t.Run(strings.Join(tt.args, " "), func(t *testing.T) {
@@ -926,6 +932,35 @@ func TestRootHelpFlag(t *testing.T) {
 		_, want, _ := run(t, tt[1]...)
 		if code != 0 || stderr != "" || got != want {
 			t.Errorf("%v: exit code = %d, stderr = %q, stdout = %q; want 0, empty, output of %v", tt[0], code, stderr, got, tt[1])
+		}
+	}
+}
+
+// wa-cli --version [...] 等同 wa-cli version [...]：输出、退出码与用法错误都相同（cli 主规格 version-command）。
+func TestRootVersionFlag(t *testing.T) {
+	for _, tt := range [][2][]string{
+		{{"--version"}, {"version"}},
+		{{"--version", "--json"}, {"version", "--json"}},
+		{{"--version", "extra"}, {"version", "extra"}},
+		{{"--version", "--unknown", "--json"}, {"version", "--unknown", "--json"}},
+		{{"--version", "--help"}, {"version", "--help"}},
+	} {
+		code, got, stderr := run(t, tt[0]...)
+		wantCode, want, wantErr := run(t, tt[1]...)
+		if code != wantCode || stderr != wantErr || got != want {
+			t.Errorf("%v: exit code = %d, stdout = %q, stderr = %q; want %d, %q, %q (output of %v)", tt[0], code, got, stderr, wantCode, want, wantErr, tt[1])
+		}
+	}
+	if code, out, _ := run(t, "--version"); code != 0 || !strings.HasPrefix(out, "wa-cli ") || !strings.Contains(out, "(commit ") {
+		t.Fatalf("--version: exit code = %d, stdout = %q", code, out)
+	}
+	if code, out, _ := run(t, "--version", "extra"); code != 2 || out != "" {
+		t.Fatalf("--version extra: exit code = %d, stdout = %q; want 2 and usage on stderr", code, out)
+	}
+	// --version 不作为命令出现在 help 中；其他位置与写法的用法错误见 TestUsageErrorsJSON。
+	for _, d := range helpDocs(t, "help", "--json") {
+		if d.Name == "--version" {
+			t.Fatalf("help --json lists --version as a command")
 		}
 	}
 }

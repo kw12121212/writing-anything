@@ -82,9 +82,9 @@ func appendAudit(stderr io.Writer, s commandSet, args []string, exit int, now ti
 		return
 	}
 	name := ""
-	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
-		name = args[0]
-		if c, _ := s.find(args); c != nil {
+	if named := rootVersionAlias(args); len(named) > 0 && !strings.HasPrefix(named[0], "-") {
+		name = named[0]
+		if c, _ := s.find(named); c != nil {
 			name = c.name
 		}
 	}

@@ -1,0 +1,24 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: cli-root-version-flag
+approach:
+  - 沿用 dispatch 中 --help 的根参数别名做法：第一个参数是 --version 时把它替换成 version，其余参数原样保留，之后走同一条命令查找、参数解析与执行路径，因此文本输出、--json 信封、多余参数与未知参数的用法错误都与 wa-cli version 完全一致。审计日志在 appendAudit 中用同一个改写函数求 command 名，args 仍记录调用时的原始参数。
+decisions:
+  registry-alias-not-command:
+    decision: 把 --version 作为根参数别名实现，不在命令注册表中注册新命令。
+    rationale: 技术标准 cli-contract/registry-declared 要求参数解析与 help 只从注册表派生；别名改写发生在查找命令之前，解析仍由 version 的注册表声明完成，help 列表、sampleArgs 与 MCP tools 都不受影响，满足作者「--version 不出现在 help 中」的要求。
+  audit-name-version:
+    decision: wa-cli --version 的审计记录 command 为 version，args 为原始参数（含 --version）；--help 的审计记录保持现状不改。
+    rationale: 作者要求审计日志中仍记作 version；args 保留原始参数符合 audit-log 需求「参数数组」的语义；--help 的审计行为在本变更范围之外，改动它会违反「其余全不变」。
+  new-cli-scene:
+    decision: 新建 cli 区域场景 cli-version-check 描述发布者核对版本的流程，而不是复用已有场景。
+    rationale: 已记录的两个场景分属 dsh-plugin 与 lint 区域，均不描述 CLI 版本核对。
+alternatives:
+  - option: 在命令注册表里注册名为 --version 的隐藏命令
+    reason: 注册表要求每条命令出现在 help 与 sampleArgs 中，并会被 MCP 生成 tool，违反作者的不变项。
+  - option: 同时支持 -v/-V 短参数
+    reason: 作者明确只要 --version；CLI 目前没有任何短参数约定。
+risks:
+  - 别名只在第一个参数位置生效；wa-cli help --version 等其他位置仍按原规则报告未知参数，需要在规格中写明，避免误解为全局参数。

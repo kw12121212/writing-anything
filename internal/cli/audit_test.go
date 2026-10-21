@@ -103,6 +103,29 @@ func TestAuditLog(t *testing.T) {
 	}
 }
 
+// wa-cli --version 的审计记录：command 为 version，args 为原始参数（cli 主规格 version-command）。
+func TestAuditRootVersionFlag(t *testing.T) {
+	dir := newWork(t)
+	t.Chdir(dir)
+	if code, _, _ := run(t, "--version"); code != 0 {
+		t.Fatalf("--version: exit = %d", code)
+	}
+	entries := readAudit(".")
+	last := entries[len(entries)-1]
+	if last.Command != "version" || strings.Join(last.Args, " ") != "--version" || last.Exit != 0 {
+		t.Fatalf("audit entry = %+v, want command version, args [--version], exit 0", last.auditRecord)
+	}
+	// 用法错误同样记作 version。
+	if code, _, _ := run(t, "--version", "extra"); code != 2 {
+		t.Fatalf("--version extra: exit = %d", code)
+	}
+	entries = readAudit(".")
+	last = entries[len(entries)-1]
+	if last.Command != "version" || strings.Join(last.Args, " ") != "--version extra" || last.Exit != 2 || !strings.Contains(strings.Join(last.Codes, ","), "usage.unexpected-argument") {
+		t.Fatalf("audit entry = %+v, want command version, args [--version extra], exit 2, usage.unexpected-argument", last.auditRecord)
+	}
+}
+
 // 轮转：audit.log 超过 1 MiB 时轮转为 audit.log.1（替换旧备份），新行写进新文件。
 func TestAuditRotation(t *testing.T) {
 	dir := newWork(t)

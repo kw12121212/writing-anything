@@ -1,0 +1,29 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: cli-root-version-flag
+  status: proposed
+summary:
+  what:
+    - 新增根参数 --version：wa-cli --version [...] 与 wa-cli version [...] 完全等价，处理方式与现有 wa-cli --help 等同 wa-cli help 一致。
+    - 发布技能第 10 步冒烟验证补充用 wa-cli --version 核对安装的版本。
+  why:
+    - v0.4.1 发布冒烟验证时 wa-cli --version 得到「缺少命令」用法错误（退出码 2），无法按 CLI 常见习惯核对安装版本，只能改用 wa-cli version。
+scope:
+  in:
+    - internal/cli/cli.go 的 dispatch 把第一个参数位置的 --version 改写为 version；审计日志按改写后的命令记 command 名 version，args 仍记录原始参数。
+    - cli 主规格 version-command 需求补充 wa-cli --version 等价调用及场景。
+    - internal/cli 回归测试：--version 与 version 的等价表（文本、--json、多余参数、未知参数）以及审计日志的 command 名。
+    - .agents/skills/release/SKILL.md 第 10 步冒烟验证加入 wa-cli --version 核对版本。
+  out:
+    - 短参数 -v、-V 不在本变更范围内。
+    - wa-cli --help 的任何行为（包括其审计日志记录）都不改变。
+    - help 命令列表、help --json 的 commands 与 MCP tools 中不出现 --version。
+unchanged_behavior:
+  - wa-cli version 与 wa-cli version --json 的输出、退出码与用法错误不变。
+  - wa-cli help、wa-cli --help 与 help --json 的输出不变。
+  - 不带参数、只带 --json 或以其他 - 开头的第一个参数（--version、--help 除外）仍报告 usage.missing-command。
+  - MCP 服务的 tools/list 与 tools/call 行为不变。
+  - version 子命令写入审计日志的 command 名与 args 不变。
