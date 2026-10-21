@@ -178,9 +178,17 @@ pnpm run perf:check     # 大工作区性能检查：构建 wa-cli → 生成 3 
 6. **空态与路径切换**（`panel-empty.png`、`panel-switch-invalid.png`）：定位不到工作区显示 `wa-cli init` 指引；工具栏可输入另一个项目目录的绝对路径切换查看，或恢复默认定位。
 7. **加载与键盘**（`polish-first-load.png`、`polish-keyboard-tree.png`、`polish-large-workspace.png`）：首次打开显示加载提示（无数据、非空态、非错误态）；↑/↓/←/→ 在单元树内导航（含收起/展开，截图摄于键盘把选中移到 ch-1-1 并收起其 8 个场景后）；`polish-large-workspace.png` 为 3 卷×8 章×8 场景（220 单元）合成长篇的实测面板。
 
-## 装入本机 DSH web profile
+## 安装
 
-以 link: 依赖安装（改动源码后重新 `pnpm run build`，无需重装）：
+公开渠道（推荐）：从本仓库的 GitHub Release 安装插件包（Plugin Package）tarball——它与同版本的 wa-cli 发布产物（Release Asset）一同发布，一条命令完成依赖与 bundle 登记：
+
+```sh
+dsh plugin --profile web add https://github.com/kw12121212/writing-anything/releases/latest/download/dsh-writing-viewer-0.1.0.tgz
+```
+
+URL 固定用 `latest/download`，升级时先 `dsh plugin --profile web remove dsh-writing-viewer` 再以新版本文件名重新 add。
+
+开发模式：以 link: 依赖安装本仓库内的插件（改动源码后重新 `pnpm run build`，无需重装）：
 
 ```sh
 pnpm --dir plugins/dsh-writing-viewer run build

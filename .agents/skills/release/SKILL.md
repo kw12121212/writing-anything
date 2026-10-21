@@ -19,10 +19,10 @@ description: 对 writing-anything 仓库执行一次正式发布（Release）：
 4. 确定版本号：用 `git tag --list 'v*' --sort=-v:refname` 找最新标签（Tag）。没有任何标签时建议 `v0.1.0`；已有标签 `vX.Y.Z` 时按语义化版本（Semantic Versioning）建议下一个：破坏性变更升 X，新功能升 Y，缺陷修复升 Z。建议值必须经发布者确认，不要代替发布者选号。
 5. 合并：`git switch main && git merge --no-ff dev -m "chore: release <版本号>"`。出现冲突时停止，把冲突交给发布者处理，不要自行取舍。
 6. 打标签：`git tag -a <版本号> -m "wa-cli <版本号>"`。
-7. 本地构建发布产物：`go run ./internal/tools/release -version <版本号> -out dist`，生成六个平台（linux、darwin、windows 各 amd64 与 arm64）的 `wa-cli-<os>-<arch>` 二进制与校验文件（Checksum File）`SHA256SUMS`。构建失败时不要推送：用 `git tag -d <版本号>` 删除本地标签、`git switch dev`，在 `main` 上执行 `git reset --hard origin/main` 复位后回 `dev` 修复，再从头发布。
+7. 本地构建发布产物：`go run ./internal/tools/release -version <版本号> -out dist`，生成六个平台（linux、darwin、windows 各 amd64 与 arm64）的 `wa-cli-<os>-<arch>` 二进制与校验文件（Checksum File）`SHA256SUMS`；随后构建并打包 dsh-writing-viewer 插件包（Plugin Package）：`pnpm --dir plugins/dsh-writing-viewer run build && pnpm --dir plugins/dsh-writing-viewer pack --pack-destination ../../dist`，在仓库根的 `dist/` 生成 `dsh-writing-viewer-<插件版本>.tgz`（插件版本取自其 package.json，独立于发布 tag）。注意 `--pack-destination` 的相对路径以 `--dir` 指定的插件目录为基准解析，必须写 `../../dist` 才会落进仓库根的 `dist/`（写成 `dist` 会落进插件自身被 git 忽略的构建目录，第 10 步核对会失败）。缺少 pnpm 或任一构建失败时不要推送：用 `git tag -d <版本号>` 删除本地标签、`git switch dev`，在 `main` 上执行 `git reset --hard origin/main` 复位后回 `dev` 修复，再从头发布。
 8. 推送：`git push origin main dev && git push origin <版本号>`。推送前向发布者做最后一次对外发布确认（见下节）。
 9. 创建 GitHub Release：`gh release create <版本号> dist/* --title <版本号> --generate-notes`；版本号带连字符（预发布版（Prerelease），如 `v0.1.0-rc1`）时加 `--prerelease`。
-10. 核对：`gh release view <版本号>` 确认产物齐全（六个平台二进制 + `SHA256SUMS`）；发布者愿意时，可用安装脚本冒烟验证：`curl -fsSL https://raw.githubusercontent.com/kw12121212/writing-anything/main/install.sh | sh`，安装的应为新版本；Windows 上可用 `irm https://raw.githubusercontent.com/kw12121212/writing-anything/main/install.ps1 | iex` 做同样的验证。`dist/` 已被 git 忽略，核对后可删除。
+10. 核对：`gh release view <版本号>` 确认产物齐全（六个平台二进制 + `SHA256SUMS` + `dsh-writing-viewer-<插件版本>.tgz`，tarball 以 dist/ 内实际文件名为准）；发布者愿意时，可用安装脚本冒烟验证：`curl -fsSL https://raw.githubusercontent.com/kw12121212/writing-anything/main/install.sh | sh`，安装的应为新版本；Windows 上可用 `irm https://raw.githubusercontent.com/kw12121212/writing-anything/main/install.ps1 | iex` 做同样的验证。`dist/` 已被 git 忽略，核对后可删除。
 
 ## 必须停下来问发布者
 

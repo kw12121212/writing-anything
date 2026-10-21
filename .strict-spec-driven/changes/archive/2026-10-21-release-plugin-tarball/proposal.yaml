@@ -1,0 +1,19 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: release-plugin-tarball
+  status: proposed
+summary:
+  what:
+    - '正式发布（Release）流程纳入 dsh-writing-viewer 插件包（Plugin Package）tarball：release 技能第 7 步在构建 wa-cli 发布产物（Release Asset）时同时构建并打包插件（pnpm build + pack，产物落 dist/，随第 9 步 gh release 的 dist/* 一并上传），第 10 步核对清单加入 tarball；插件 README 安装章节改为以 Release tarball URL 为主渠道（releases/latest/download/…），link: 降为开发模式说明'
+  why:
+    - 仓库已转 public，dsh plugin 需要可公开安装的分发渠道；经比选定 Release tarball：与 wa-cli 同 tag 同源、全本地发布无新凭证依赖、已实测可安装，npm 留作日后增量
+scope:
+  in:
+    - .agents/skills/release/SKILL.md（构建与核对步骤）、plugins/dsh-writing-viewer/README.md（安装章节）、对既有 v0.3.0 Release 的补传与匿名 URL 验证证据
+  out:
+    - 插件代码与构建逻辑的任何改变；npm 发布；CI/CD；wa-cli 发布产物形态改变
+unchanged_behavior:
+  - '发布流程既有步骤与顺序（前置检查、回归、Windows 校验、版本号确认、合并、打标签、推送确认）不变；wa-cli 六平台二进制与 SHA256SUMS 不变；dist/* 上传机制不变（tarball 只是新增成员）；插件 link: 安装方式继续可用'

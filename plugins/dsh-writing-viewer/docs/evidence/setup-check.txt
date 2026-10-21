@@ -78,3 +78,11 @@ fetch 覆盖：篡改字节拒绝安装、缺记录拒绝安装、HTTP 失败可
      结果仍全部 user-agents；项目级目录命中形态由单元测试覆盖：project-dsh 优先于 user-agents）。
    - 标记链路（下载→写标记→sha256 一致判定 / 无标记、标记不符、写入失败不阻塞）由单元测试
      覆盖（src/setup.test.ts provenance marker 组）；本机 CLI 为操作者自装，走「非插件安装」分支。
+
+8. 公开分发渠道（release-plugin-tarball，2026-10-21）：
+   dsh-writing-viewer-0.1.0.tgz（pnpm pack 产物，含 dist/、cordis.patch.yml、README，1,833,517 B）
+   补传至 v0.3.0 Release；匿名 URL 验证：
+   https://github.com/kw12121212/writing-anything/releases/latest/download/dsh-writing-viewer-0.1.0.tgz
+   → HTTP 200（1,833,517 bytes）。tarball 安装机制另经克隆 web profile 实测（file: 安装 92ms、
+   bundles 自动登记、启动后 workspace/setup 路由 200，测试 profile 已清理）。
+   release 技能自本变更起在每次正式发布的构建步骤打包插件 tarball 随 dist/* 一并上传（--pack-destination 须写 ../../dist：pnpm 的相对目的地以 --dir 为基准解析，评审实测纠正）。
