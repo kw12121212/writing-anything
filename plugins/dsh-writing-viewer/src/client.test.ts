@@ -80,7 +80,7 @@ describe('client bundle definition', () => {
     const plugin = await loadClientPlugin();
     expect(captured?.definition.id).toBe('dsh-writing-viewer');
     expect(typeof plugin['apply']).toBe('function');
-    expect(plugin['inject']).toEqual(['slots']);
+    expect(plugin['inject']).toEqual(['slots', 'sidebarRightTabs']);
   });
 
   it('registers the main global panel and the sidebar entry under one panel id', async () => {
@@ -96,6 +96,49 @@ describe('client bundle definition', () => {
     expect(sidebar?.options['id']).toBe('dsh-writing-viewer');
     expect(typeof sidebar?.options['label'] === 'function' ? (sidebar.options['label'] as () => string)() : null).toBeTruthy();
     expect(typeof sidebar?.component).toBe('function');
+  });
+
+  it('registers a per-conversation right-sidebar pane when the host provides the service', async () => {
+    const plugin = await loadClientPlugin();
+    const { slots, registrations } = slotCollector();
+    const tabDefinitions: Record<string, unknown>[] = [];
+    const sidebarRightTabs = {
+      register: (definition: Record<string, unknown>) => {
+        tabDefinitions.push(definition);
+      },
+    };
+    (plugin['apply'] as (ctx: { slots: unknown; sidebarRightTabs?: unknown }) => void)({ slots, sidebarRightTabs });
+    // Static page-type registration: id, kind, thunked title, guide entry box.
+    expect(tabDefinitions).toHaveLength(1);
+    const tab = tabDefinitions[0]!;
+    expect(tab['id']).toBe('dsh-writing-viewer');
+    expect(tab['kind']).toBe('writing-workspace');
+    // The host passes the page address to title; the thunk ignores it but must
+    // still answer (a page type's address is sidebar://<kind>).
+    expect((tab['title'] as (address: string) => string)('sidebar://writing-workspace')).toBeTruthy();
+    const guide = tab['guide'] as { id: string; order: number; title: () => string }[];
+    expect(guide[0]!.id).toBe('open');
+    expect(guide[0]!.order).toBe(90);
+    expect(guide[0]!.title()).toBeTruthy();
+    // The pane body registers under the same id in the right-pane seat and is
+    // the SAME panel component the left main seat registered (design: reuse).
+    const pane = registrations.find((r) => r.slot === 'sidebar.right.pane.tab');
+    expect(pane).toBeDefined();
+    expect(pane?.options['key']).toBe('dsh-writing-viewer');
+    expect(pane?.component).toBe(registrations.find((r) => r.slot === 'main')?.component);
+  });
+
+  it('keeps the left entries when a directly-driven ctx provides no sidebarRightTabs', async () => {
+    // Unit-level ctx-shape tolerance only: in a real host, exports.inject is a
+    // hard activation gate, so a composition without the service never reaches
+    // apply at all (documented in README) — this test covers the defensive
+    // branch for direct callers and future host shapes.
+    const plugin = await loadClientPlugin();
+    const { slots, registrations } = slotCollector();
+    (plugin['apply'] as (ctx: { slots: unknown }) => void)({ slots });
+    expect(registrations.some((r) => r.slot === 'sidebar.right.pane.tab')).toBe(false);
+    expect(registrations.find((r) => r.slot === 'main')).toBeDefined();
+    expect(registrations.find((r) => r.slot === 'sidebar.panellist')).toBeDefined();
   });
 
   it('stays inert with an empty export set when the host has no react', async () => {

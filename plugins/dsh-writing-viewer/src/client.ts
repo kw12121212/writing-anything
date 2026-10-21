@@ -1457,7 +1457,10 @@ window.__ModuleLoader__?.load({
         renderPanel(react.createElement, state, actions));
     }
 
-    function apply(ctx: { slots?: any }): void {
+    /** Right-sidebar tab kind: a page type opened by kind, no address. */
+    const RIGHT_PANE_KIND = 'writing-workspace';
+
+    function apply(ctx: { slots?: any; sidebarRightTabs?: any }): void {
       const slots = ctx?.slots;
       if (slots === null || slots === undefined) {
         console.error('[dsh-writing-viewer] panel skipped: host declares no slots service');
@@ -1472,10 +1475,58 @@ window.__ModuleLoader__?.load({
           ViewerPanelIcon,
         );
       });
+      // Per-conversation right sidebar pane, the same interaction the strict-spec
+      // plugin uses: a static page-type registration (its guide entry opens it),
+      // plus the pane body under the same id in the sidebar.right.pane.tab seat.
+      // NOTE: `sidebarRightTabs` in exports.inject is a HARD activation gate —
+      // on a host whose client composition never provides the service, this
+      // whole plugin (left panel included) stays inactive; every host in the
+      // declared engines range ships the sidebar-right module. The tab-type
+      // registration is effect-scoped so teardown (e.g. HMR replacement)
+      // disposes it instead of leaking an id that re-registration cannot take.
+      const tabs = ctx?.sidebarRightTabs;
+      if (tabs !== null && tabs !== undefined && typeof tabs.register === 'function') {
+        const registerTabType = (): (() => void) | undefined => {
+          try {
+            const dispose = tabs.register({
+              id: PACKAGE_NAME,
+              kind: RIGHT_PANE_KIND,
+              title: () => labelsFor().panelTitle,
+              guide: [
+                {
+                  id: 'open',
+                  order: 90,
+                  title: () => labelsFor().panelTitle,
+                  description: () => labelsFor().subtitle,
+                },
+              ],
+            });
+            return typeof dispose === 'function' ? dispose : undefined;
+          } catch (error) {
+            console.error(`[dsh-writing-viewer] right pane tab skipped: ${String(error)}`);
+            return undefined;
+          }
+        };
+        const effect = (ctx as { effect?: (fn: () => (() => void) | undefined, label?: string) => unknown }).effect;
+        if (typeof effect === 'function') {
+          effect(registerTabType, 'dsh-writing-viewer: sidebar-right tab type');
+        } else {
+          registerTabType();
+        }
+        try {
+          slots.inject('sidebar.right.pane.tab', () => {
+            slots.register({ name: 'sidebar.right.pane.tab', key: PACKAGE_NAME }, ViewerPanel);
+          });
+        } catch (error) {
+          console.error(`[dsh-writing-viewer] right pane body skipped: ${String(error)}`);
+        }
+      } else {
+        console.error('[dsh-writing-viewer] right pane unavailable: this host provides no sidebarRightTabs service');
+      }
     }
 
     exports.apply = apply;
-    exports.inject = ['slots'];
+    exports.inject = ['slots', 'sidebarRightTabs'];
     // Exposed for the package's tests only; not part of the plugin contract.
     exports.__test = testHooks;
     return module.exports;

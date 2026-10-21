@@ -1,0 +1,42 @@
+schema: strict-spec-driven/question-list/v1
+schema_version: 1
+artifact_type: question_list
+schema_file: templates/strict-spec-driven/schemas/question-list.yaml
+change: plugin-right-pane
+open: []
+resolved:
+  - id: requirement-problem
+    question: 缺什么？
+    context: 需求拷问
+    answer: 写作工作区只在左侧全局面板可开；作者要像 strict-spec 插件那样在每个对话的右侧边栏直接打开
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-outcome
+    question: 完成判据？
+    context: 需求拷问
+    answer: 每个会话的右侧边栏出现「写作工作区」页入口，点开即见与左侧面板相同的查看内容（窄容器堆叠布局），左侧入口不受影响
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-trigger
+    question: 为什么？
+    context: 需求拷问
+    answer: 作者日常在会话中工作，右侧栏一步可达；strict-spec 插件已验证该交互可行
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-non-goals
+    question: 什么不变？
+    context: 需求拷问
+    answer: 左侧面板、host 侧、路由与快照结构、面板渲染逻辑
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-interpretation
+    question: 实现读法？
+    context: 需求拷问
+    answer: 镜像 strict-spec 的两段注册：sidebarRightTabs.register 静态类型 + sidebar.right.pane.tab 插槽正文（key=类型 id）；dsh.client.inject 声明宿主 sidebar-right 模块；全程容错
+    status: resolved
+    kind: requirement
+    answered_by: human

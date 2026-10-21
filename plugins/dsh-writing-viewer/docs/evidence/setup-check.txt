@@ -86,3 +86,9 @@ fetch 覆盖：篡改字节拒绝安装、缺记录拒绝安装、HTTP 失败可
    → HTTP 200（1,833,517 bytes）。tarball 安装机制另经克隆 web profile 实测（file: 安装 92ms、
    bundles 自动登记、启动后 workspace/setup 路由 200，测试 profile 已清理）。
    release 技能自本变更起在每次正式发布的构建步骤打包插件 tarball 随 dist/* 一并上传（--pack-destination 须写 ../../dist：pnpm 的相对目的地以 --dir 为基准解析，评审实测纠正）。
+
+9. 会话右侧栏页（plugin-right-pane，2026-10-21，agent-browser 真浏览器实测 13099）：
+   右侧栏 guide 页出现「Writing Workspace — writing-anything workspace overview (read-only panel)」
+   入口盒（与 Workspace files、Strict documents 并列）；点开后右侧栏出现 Writing Workspace 标签页，
+   正文（575px 容器）含目录栏与「内置技能与 CLI」设置区（截图 docs/evidence/rightpane-open.png，
+   中栏的 Chat/Trajectory 属会话标签、非右侧栏；堆叠布局区在截图裁切线之下，未入图）。

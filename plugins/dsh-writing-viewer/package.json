@@ -4,7 +4,7 @@
   "description": "Read-only DeepSeek Harness (DSH) panel for writing-anything workspaces (.writing-anything/): overview dashboard, unit tree, artifact semantic-card and source-highlight views, sources list.",
   "type": "module",
   "private": true,
-  "license": "MIT",
+  "license": "Apache-2.0",
   "files": [
     "dist",
     "docs",
@@ -25,7 +25,9 @@
       "patch": "./cordis.patch.yml"
     },
     "client": {
-      "inject": [],
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-sidebar-right"
+      ],
       "platform": "web",
       "immediately": true
     }

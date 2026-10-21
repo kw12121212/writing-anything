@@ -39,6 +39,11 @@ categories:
       status: active
       occurrences: 1
       path: .strict-spec-driven/lessons/architecture/scope-b5e87e.yaml
+    client-exports-inject-0822d2:
+      title: client 服务的 exports.inject 是硬激活门：容错声明必须对照宿主协议验证
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/architecture/client-exports-inject-0822d2.yaml
   coding:
     go-flag-bd930f:
       title: Go flag 包的默认报错不符合中文术语约定

@@ -36,7 +36,7 @@ dist/client.js     构建产物：client 入口（package.json 的 "./client" �
 package.json 声明：
 
 - `dsh.bundle.patch` → `./cordis.patch.yml`（insert 一个插件行）；
-- `dsh.client` → `{ inject: [], platform: "web", immediately: true }`；
+- `dsh.client` → `{ inject: ["@deepseek-ai/dsh-client-ui-sidebar-right"], platform: "web", immediately: true }`（先载入宿主右侧栏模块，其 client 提供 `sidebarRightTabs` 服务）；
 - `engines.dsh` → `>=0.2.1-rc.2 <0.3.0`（实测验证用的宿主为 DSH 0.2.1-rc.2）。
 
 ## host 侧行为
@@ -135,7 +135,8 @@ host 启动且开关开启、内置二进制已存在时，自动重做第 2、3
 以 lazy-CJS 协议（`window.__ModuleLoader__.load`，factory 返回 `{ apply, inject }`）注册两个插槽（slot）条目：
 
 - root-scoped `main` keyed 面板，key 为 `dsh-writing-viewer`（`ctx.layout.selectPanel('dsh-writing-viewer')` 可选中）；
-- `sidebar.panellist` 列表条目，id 同为 `dsh-writing-viewer`，侧栏按钮由宿主渲染并在点击时选中面板。
+- `sidebar.panellist` 列表条目，id 同为 `dsh-writing-viewer`，侧栏按钮由宿主渲染并在点击时选中面板；
+- 每个会话右侧边栏的「写作工作区」页（与 dsh-plugin-strict-spec 同款交互）：经宿主 `sidebarRightTabs` 服务注册静态页面类型（kind `writing-workspace`，guide 入口盒），并在 `sidebar.right.pane.tab` 插槽以同 id 注册正文（复用同一面板组件，窄容器自动上下堆叠）。依赖 `package.json` 的 `dsh.client.inject` 声明 `@deepseek-ai/dsh-client-ui-sidebar-right`（宿主模块先载入、提供该服务与插槽）——注意 `sidebarRightTabs` 是 client 激活硬依赖（声明于 exports.inject）：宿主 client 组合若不提供该服务，本插件的 client 整体（含左侧入口）不会激活；声明引擎范围内的宿主均随带该模块。该宿主模块不属于对第三方承诺的契约（见「发现的 DSH API 约束」第 7 条），升级宿主后需实测。
 
 面板拉取快照路由，按写作概念（而非目录树）组织：
 
@@ -237,7 +238,7 @@ dsh plugin --profile web add link:/home/wx766/Code/writing-anything/plugins/dsh-
 
 1. **项目目录来源**：宿主进程 `process.cwd()` 是启动目录（本机为用户主目录），不是工作区根；DSH 工作区注册表（`ctx.workspaceRegistry.list()`，@deepseek-ai/dsh-workspace）才是 GUI 语义下的项目目录清单，root 作用域可注入，`list()` 同步返回带 `path` 的实体。
 2. **`workspaceController` 不可静态注入**：`follow()` 基线流挂在按连接的 remotes API 组合上，静态插件行的 `ctx.inject(['workspaceController'])` 闭包不触发（实测路由只回退 `process-cwd`）；读注册表用 `workspaceRegistry`。
-3. **client 半区协议**：`window.__ModuleLoader__.load({ id, factory })`，factory 返回 `{ apply, inject }`；`react` 经 factory 的 `require` 获得；`exports.inject` 声明 client 服务（本插件 `['slots']`）。package.json 的 `dsh.client.inject` 是 client 侧 bundle 依赖（包名），不是服务名；`immediately: true` 使页面加载即执行。
+3. **client 半区协议**：`window.__ModuleLoader__.load({ id, factory })`，factory 返回 `{ apply, inject }`；`react` 经 factory 的 `require` 获得；`exports.inject` 声明 client 服务（本插件 `['slots', 'sidebarRightTabs']`）——注意这是硬激活门：任一声明服务未提供时整个 client 插件不激活，`engines.dsh` 范围内的宿主均随带 sidebar-right 模块，老宿主装本插件需版本豁免并自担风险。package.json 的 `dsh.client.inject` 是 client 侧 bundle 依赖（包名），不是服务名；`immediately: true` 使页面加载即执行。
 4. **全局面板注册**：root-scoped `main` keyed 插槽（`{ name: 'main', key: <面板 id> }` + 组件）+ `sidebar.panellist` 列表条目（同 id，宿主渲染按钮并 `ctx.layout.selectPanel(id)` 选中）；`selectPanel` 对未注册 key 抛错。
 5. **profile 补丁行即插件配置**：与插件 insert 行同 id 的 `- id: …, name: …, config: …` 行提供 `apply(ctx, config)` 的 config；`dsh web --patch <overlay.yml>` 可不改 profile 文件叠加配置。
 6. **host 路由即同源数据通道**：`ctx.inject(['webServer'], scope => scope.webServer.register({ name, kind: 'exact', path, handler }))` 注册的路由可被 client 以相对路径 `fetch` 访问（沿用 modsearch 模式，实测可用）。
