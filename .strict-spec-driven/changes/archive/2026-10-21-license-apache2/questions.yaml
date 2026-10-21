@@ -1,0 +1,42 @@
+schema: strict-spec-driven/question-list/v1
+schema_version: 1
+artifact_type: question_list
+schema_file: templates/strict-spec-driven/schemas/question-list.yaml
+change: license-apache2
+open: []
+resolved:
+  - id: requirement-problem
+    question: 现状问题？
+    context: 需求拷问
+    answer: 仓库 public 但无 LICENSE 文件（法律上无人有权使用）；插件 package.json 声明 MIT 与待选协议不一致
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-outcome
+    question: 完成判据？
+    context: 需求拷问
+    answer: 根目录有 Apache-2.0 完整协议文本，GitHub 识别并显示 Apache-2.0；全仓协议声明统一
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-trigger
+    question: 为什么？
+    context: 需求拷问
+    answer: 作者比选后选定 Apache-2.0（宽松 + 显式专利授权 + 贡献条款）
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-non-goals
+    question: 什么不变？
+    context: 需求拷问
+    answer: 一切代码、测试、构建与文档语义
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-interpretation
+    question: 实现读法？
+    context: 需求拷问
+    answer: 标准 Apache-2.0 全文 LICENSE + package.json SPDX 字段 Apache-2.0，版权行 kw12121212
+    status: resolved
+    kind: requirement
+    answered_by: human

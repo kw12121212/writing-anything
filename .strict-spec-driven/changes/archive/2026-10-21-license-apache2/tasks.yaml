@@ -1,0 +1,23 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: license-apache2
+sections:
+  Implementation:
+    add-license:
+      text: 根目录新增 Apache-2.0 完整协议文本（附录版权行 Copyright 2026 kw12121212）；plugins/dsh-writing-viewer/package.json license 字段 MIT → Apache-2.0；检查全仓无残留 MIT 声明
+      status: complete
+  Testing:
+    full-regression:
+      text: 完整项目回归（协议变更不应影响任何结果）
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    strict-verify:
+      text: strict 变更工件结构校验
+      status: complete
+      command: strict-spec-cli verify license-apache2
+testing_gates:
+  validation_task: full-regression
+  unit_test_task: full-regression
