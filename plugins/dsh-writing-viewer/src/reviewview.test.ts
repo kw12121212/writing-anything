@@ -58,8 +58,18 @@ describe('review view model', () => {
     expect(reviewAfterStart('u', 500, null)).toMatchObject({ phase: 'error', error: 'HTTP 500', forbidden: false });
   });
 
+  it('ends a review whose session was replaced for another unit (panel-session-replaced-on-focus)', () => {
+    const active = reviewAfterStart('my-post', 200, { ok: true, session: { unit: 'my-post', startedAt: 't1' } });
+    // Another tab started my-post/intro: the one session now belongs to it.
+    const replaced = reviewAfterStatus(active, { ok: true, session: { unit: 'my-post/intro', startedAt: 't2' } });
+    expect(replaced.phase).toBe('ended');
+    expect(reviewViewModel(replaced, 'my-post', zh, 'h').endedText).toContain('审阅已结束');
+    // A malformed summary without a unit degrades the same safe way.
+    expect(reviewAfterStatus(active, { ok: true, session: {} }).phase).toBe('ended');
+  });
+
   it('turns an active review whose session is gone into an ended notice (session-gone)', () => {
-    const active = reviewAfterStart('my-post', 200, { ok: true, session: { startedAt: 't1' } });
+    const active = reviewAfterStart('my-post', 200, { ok: true, session: { unit: 'my-post', root: '/r', startedAt: 't1' } });
     expect(reviewAfterStatus(active, { ok: true, session: { unit: 'my-post' } })).toBe(active);
     const ended = reviewAfterStatus(active, { ok: true, session: null });
     expect(ended.phase).toBe('ended');

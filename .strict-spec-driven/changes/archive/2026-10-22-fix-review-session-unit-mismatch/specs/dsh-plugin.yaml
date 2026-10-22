@@ -1,0 +1,33 @@
+schema: strict-spec-driven/delta-spec/v1
+schema_version: 1
+artifact_type: delta_spec
+schema_file: templates/strict-spec-driven/schemas/delta-spec.yaml
+target_spec: dsh-plugin
+operations:
+  ADDED: {}
+  MODIFIED:
+    review-panel-embed:
+      strength: MUST
+      statement: 面板的单元详情必须提供「审阅」按钮；点击后启动该单元的审阅会话（项目目录取面板当前显示的目录，含路径切换所选目录），成功后在详情区以 iframe 内嵌同源代理阅读页并提供「结束审阅」按钮，结束后移除 iframe 并刷新快照。启动进行中显示可读的进行中提示；启动失败、审阅路由被请求来源校验拒绝（提示在插件配置 allowedHosts 中放行当前访问的权威，如 Tailscale MagicDNS 名与端口）或会话已结束时，显示可读原因与重新审阅入口，不显示空白 iframe；会话是否已结束由面板在 iframe 每次加载、窗口重新获得焦点或页面重新可见时查询会话状态路由判定（不调用 wa-cli），判定不仅看会话是否存在，还比对会话摘要的 unit 与面板所审单元——会话不存在、属于其他单元（如另一浏览器标签页启动了别的单元的审阅）或载荷缺失 unit 时，同样按已结束处理并给出重新审阅入口。「审阅」与「结束审阅」必须可经键盘激活
+      scenarios:
+        panel-embed:
+          - GIVEN: 面板定位到项目目录 D，单元树选中 my-post
+          - WHEN: 作者点「审阅」
+          - THEN: 详情区出现 iframe，其中显示 my-post 的阅读页，并出现「结束审阅」按钮
+        panel-origin-rejected:
+          - GIVEN: 作者经 http://gamepc.tail1234.ts.net:13080 访问，allowedHosts 未放行该权威
+          - WHEN: 作者点「审阅」
+          - THEN: 面板显示来源校验拒绝的原因与在 allowedHosts 中放行该权威的提示，没有空白 iframe
+        panel-end-refresh:
+          - GIVEN: 详情区正显示 my-post 的阅读页，作者已在其中提交一条反馈
+          - WHEN: 作者点「结束审阅」
+          - THEN: iframe 被移除，面板重新拉取快照
+        panel-session-gone-on-focus:
+          - GIVEN: 详情区正显示 my-post 的阅读页，之后会话因空闲超时结束
+          - WHEN: 作者切回该浏览器窗口（窗口获得焦点）
+          - THEN: iframe 被移除，面板显示「审阅已结束」与「重新审阅」入口
+        panel-session-replaced-on-focus:
+          - GIVEN: 详情区正显示 my-post 的阅读页，另一浏览器标签页为 my-post/intro 启动了审阅（唯一会话被替换）
+          - WHEN: 作者切回该浏览器窗口（窗口获得焦点）
+          - THEN: iframe 被移除，面板显示「审阅已结束」与「重新审阅」入口，不显示 my-post/intro 的阅读页
+  REMOVED: {}

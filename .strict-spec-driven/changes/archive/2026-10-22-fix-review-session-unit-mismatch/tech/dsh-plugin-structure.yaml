@@ -1,0 +1,33 @@
+schema: strict-spec-driven/delta-tech/v1
+schema_version: 1
+artifact_type: delta_tech
+schema_file: templates/strict-spec-driven/schemas/delta-tech.yaml
+target_standard: dsh-plugin-structure
+operations:
+  ADDED:
+    host-route-dispatch-harness:
+      strength: SHOULD
+      statement: 验证 DSH 插件经 webServer 注册路由的行为（状态码、响应头、来源校验拒绝、代理转发）的集成测试，应经真实 node:http 服务器按宿主分发语义驱动注册好的路由——exact 路由先匹配、其次最长 prefix、handler 收原生 req/res——而不是只直接调用注册表里的 handler；直接调用 handler 仅用于纯逻辑单元测试
+      rationale: 分发形状本身是插件依赖的契约（exact 与 prefix 的取舍、exact 路径不得带结尾斜杠、原生流与任意响应头），绕过分发直调 handler 测不到路由匹配与守卫次序；reviewe2e.test.ts 已确立该 harness 模式（dsh-review-proxy 评审沉淀）
+      enforcement:
+        method: test
+        detail: 端到端用例经 createServer 加 exact-先-最长-prefix 的分发器驱动注册路由（见 reviewe2e.test.ts 的 routes 分发器），以 fetch 驱动并断言状态码、头与正文；新增路由级行为断言遵循同一 harness，而不是对注册表中的 handler 直调后宣称路由行为已验证
+      examples:
+        good:
+          - reviewe2e.test.ts：把注册路由装进 node:http 服务器，按宿主语义分发后用 fetch 驱动并断言代理响应
+        bad:
+          - 对 routes 数组里的 handler 直调 req/res 假件，然后宣称来源校验与代理的路由行为已被集成测试覆盖
+    client-route-stub-fidelity:
+      strength: SHOULD
+      statement: client 侧测试为插件路由构造的应答桩应镜像真实路由契约的完整载荷形状（如会话摘要的 unit、root、startedAt），不从契约中删减字段；桩与契约漂移会让视图模型的判定测试给出与真实路由不符的假结果
+      rationale: dsh-review-proxy 评审发现三处会话状态桩缺 unit 字段：修复按 unit 比对会话归属时，这类省略会让桩在修复后静默翻转断言结果；桩少一字段，测试证明的就不是路由实际返回的形状
+      enforcement:
+        method: review
+        detail: 评审新增或修改的 client 路由桩时，对照 host 路由实现与会话等数据结构的完整字段清单核对桩的载荷形状；允许省略的只有与被测判定明确无关且在测试中注明原因的字段
+      examples:
+        good:
+          - 会话状态桩返回 { unit, root, startedAt } 完整摘要，null 会话返回 null
+        bad:
+          - 会话状态桩只返回 {}，视图模型新增按 unit 判定的逻辑时该桩静默翻转结果
+  MODIFIED: {}
+  REMOVED: {}

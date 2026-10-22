@@ -131,6 +131,10 @@ export function registerReviewRoutes(server: { register(route: unknown): unknown
     handler: guarded(async (req, res) => {
       const method = req.method ?? 'GET';
       const target = reviewTargetOf(pathnameOf(req.url));
+      // Only page and submit targets can ever reach the upstream, so only
+      // they refresh the idle deadline (upstream() re-arms it). A 405 method
+      // mismatch on one of those targets still counts as session activity;
+      // 404 and 308 answers never do. That asymmetry is deliberate.
       const body = target.kind === 'submit' && method === 'POST' ? await readBody(req) : null;
       const upstream = target.kind === 'page' || target.kind === 'submit' ? deps.sessions.upstream() : null;
       const answer = await proxyReview(method, target, upstream, body, deps.fetchLike);

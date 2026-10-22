@@ -1127,15 +1127,17 @@ describe('ViewerPanel wiring (runnable react)', () => {
     const fixture = await fixtureBody();
     const requests: { url: string; method: string; body: string | null }[] = [];
     let sessionLive = true;
+    let startedUnit: string | null = null;
     const stub = (async (input: unknown, init?: { method?: string; body?: string }) => {
       const url = String(input);
       const method = init?.method ?? 'GET';
       requests.push({ url, method, body: init?.body ?? null });
       if (url === '/dsh-writing-viewer/review-session' && method === 'POST') {
-        return { ok: true, status: 200, json: async () => ({ ok: true, session: { unit: 'my-novel', root: fixture.root, startedAt: 't' + requests.length } }) };
+        startedUnit = (JSON.parse(init?.body ?? '{}') as { unit: string }).unit;
+        return { ok: true, status: 200, json: async () => ({ ok: true, session: { unit: startedUnit, root: fixture.root, startedAt: 't' + requests.length } }) };
       }
       if (url === '/dsh-writing-viewer/review-session') {
-        return { ok: true, status: 200, json: async () => ({ ok: true, session: sessionLive ? { unit: 'my-novel' } : null }) };
+        return { ok: true, status: 200, json: async () => ({ ok: true, session: sessionLive ? { unit: startedUnit, root: fixture.root, startedAt: 't1' } : null }) };
       }
       if (url === '/dsh-writing-viewer/review-session/end') return { ok: true, status: 200, json: async () => ({ ok: true, session: null }) };
       if (url.includes('/dsh-writing-viewer/setup')) return { ok: false, status: 404, json: async () => ({}) };
@@ -1175,6 +1177,43 @@ describe('ViewerPanel wiring (runnable react)', () => {
     panel.restore();
   });
 
+  it('removes the iframe when the session was replaced for another unit (panel-session-replaced-on-focus)', async () => {
+    const fixture = await fixtureBody();
+    let startedUnit: string | null = null;
+    const stub = (async (input: unknown, init?: { method?: string; body?: string }) => {
+      const url = String(input);
+      const method = init?.method ?? 'GET';
+      if (url === '/dsh-writing-viewer/review-session' && method === 'POST') {
+        startedUnit = (JSON.parse(init?.body ?? '{}') as { unit: string }).unit;
+        return { ok: true, status: 200, json: async () => ({ ok: true, session: { unit: startedUnit, root: fixture.root, startedAt: 't1' } }) };
+      }
+      // A second tab replaced the session for another unit: the summary is
+      // non-null but names that unit, not the one this panel is reviewing.
+      if (url === '/dsh-writing-viewer/review-session') {
+        return { ok: true, status: 200, json: async () => ({ ok: true, session: { unit: 'my-novel/vol-1/scene-9', root: fixture.root, startedAt: 't2' } }) };
+      }
+      if (url === '/dsh-writing-viewer/review-session/end') return { ok: true, status: 200, json: async () => ({ ok: true, session: null }) };
+      if (url.includes('/dsh-writing-viewer/setup')) return { ok: false, status: 404, json: async () => ({}) };
+      return { ok: true, status: 200, json: async () => fixture };
+    }) as unknown as typeof fetch;
+    const panel = await mountPanel(fixture, stub);
+    await settle();
+    click(panel, (b) => b.props?.['data-review-start'] !== undefined);
+    await settle();
+    expect(startedUnit).toBeTruthy();
+    expect(startedUnit).not.toBe('my-novel/vol-1/scene-9');
+    let tree = toNode(panel.tree()) as Node;
+    const frame = elements(tree, 'iframe')[0];
+    expect(frame?.props?.['src']).toBe('/dsh-writing-viewer/review/');
+    (frame!.props?.['onLoad'] as () => void)();
+    await settle();
+    tree = toNode(panel.tree()) as Node;
+    expect(elements(tree, 'iframe')).toHaveLength(0);
+    expect(elements(tree, 'p').some((p) => p.props?.['data-review-ended'] === 'true')).toBe(true);
+    expect(elements(tree, 'button').some((b) => b.props?.['data-review-start'] !== undefined)).toBe(true);
+    panel.restore();
+  });
+
   it('re-checks the session when the window regains focus and shows the ended notice', async () => {
     const fixture = await fixtureBody();
     const win = (globalThis as unknown as { window: Record<string, unknown> }).window;
@@ -1184,12 +1223,14 @@ describe('ViewerPanel wiring (runnable react)', () => {
       listeners[name] = (listeners[name] ?? []).filter((f) => f !== fn);
     };
     let live = true;
-    const stub = (async (input: unknown, init?: { method?: string }) => {
+    let startedUnit: string | null = null;
+    const stub = (async (input: unknown, init?: { method?: string; body?: string }) => {
       const url = String(input);
       if (url === '/dsh-writing-viewer/review-session' && init?.method === 'POST') {
-        return { ok: true, status: 200, json: async () => ({ ok: true, session: { startedAt: 't1' } }) };
+        startedUnit = (JSON.parse(init?.body ?? '{}') as { unit: string }).unit;
+        return { ok: true, status: 200, json: async () => ({ ok: true, session: { unit: startedUnit, startedAt: 't1' } }) };
       }
-      if (url === '/dsh-writing-viewer/review-session') return { ok: true, status: 200, json: async () => ({ ok: true, session: live ? {} : null }) };
+      if (url === '/dsh-writing-viewer/review-session') return { ok: true, status: 200, json: async () => ({ ok: true, session: live ? { unit: startedUnit, root: fixture.root, startedAt: 't1' } : null }) };
       if (url.includes('/dsh-writing-viewer/setup')) return { ok: false, status: 404, json: async () => ({}) };
       return { ok: true, status: 200, json: async () => fixture };
     }) as unknown as typeof fetch;

@@ -1,0 +1,48 @@
+schema: strict-spec-driven/question-list/v1
+schema_version: 1
+artifact_type: question_list
+schema_file: templates/strict-spec-driven/schemas/question-list.yaml
+change: fix-review-session-unit-mismatch
+open: []
+resolved:
+  - id: requirement-problem
+    question: 现在具体哪里错了，谁受影响？
+    context: 评审发现项须先钉住缺陷本体：可观察的错误行为、受影响路径与后果。
+    answer: 作者在多个浏览器标签页使用面板时，第二个标签页为别的单元启动审阅会替换唯一会话；第一个标签页的会话状态轮询只判空，不比对 unit，iframe 继续活跃并显示另一个单元的阅读页，作者可能对着错误单元的正文提交反馈
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-outcome
+    question: 什么可观察差异证明修好了？
+    context: 验收证据要能从外部核对，不依赖读代码。
+    answer: 会话被别的单元替换后，原标签页在 iframe 加载、窗口获得焦点或页面重新可见时查询会话状态，iframe 被移除并显示「审阅已结束」与「重新审阅」入口
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-trigger
+    question: 为什么现在修？
+    context: 无驱动的工作最易被丢弃。
+    answer: dsh-review-proxy 的 strict-spec-review 刚把它列为 SHOULD FIX（S1），作者确认进行后续修复
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-non-goals
+    question: 哪些相邻行为必须不动？
+    context: 请求者知道哪些附近行为被依赖。
+    answer: host 侧会话与代理行为、wa-cli、README 登记的跨标签页替换语义（旧页提交被 wa-cli 可读拒绝）都不动；不加新轮询时机
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-interpretation
+    question: unit 缺失的畸形载荷按什么读法处理？
+    context: 比对语义有两种读法：仅显式不一致才结束，或非同 unit 即结束。
+    answer: 非同 unit 即结束：真实路由的会话摘要恒含 unit，缺字段只可能来自畸形载荷，按已结束降级并给重新审阅入口比按活跃继续安全
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: repro-locally
+    question: 缺陷能否在本地确定性复现？
+    context: bugfix 要求先复现后修复。
+    answer: 可以：reviewAfterStatus 是纯函数，用「unit 不一致的非空会话」载荷断言 ended 即当前失败；client 测试桩可模拟跨标签页替换
+    status: resolved
+    answered_by: human
