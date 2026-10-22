@@ -1,0 +1,19 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: fix-review-session-unit-mismatch
+approach:
+  - 在纯函数视图模型层收口（遵循 dsh-plugin-structure/client-view-model-module）：reviewAfterStatus 把「非空会话但 unit 与面板所审单元不一致」并入 ended，payload 中两者都已存在，不新增任何请求；client.test.ts 的会话状态桩补齐 unit 字段，使其镜像真实路由载荷（真实路由恒返回完整摘要）
+  - 两处注释只澄清现有行为的边界与读法：reviewproxy.ts 的上游头透传注明假想 3xx Location 会原样回传且当前阅读页无重定向；reviewroutes.ts 注明 405 也会刷新空闲计时（只有 page 与 submit 目标调用 upstream），404 与 308 不会
+decisions:
+  minimal-client-fold:
+    decision: 修复放在 client 视图模型层，不触碰 host：会话状态响应已含 unit，比对在面板侧即可完成，host 侧任何改动都会扩大影响面
+    rationale: 最小修复原则；单一真相仍在会话状态路由，面板只是消费方
+  carry-dispatch-convention:
+    decision: 评审提出的路由集成测试约定作为本 change 的 delta tech（ADDED host-route-dispatch-harness，SHOULD），随归档并入主标准
+    rationale: strict-spec-review 步骤 11 的沉淀路径：约定在 change 内携带 delta tech，归档时合并；参考实现即 reviewe2e.test.ts 的分发 harness
+alternatives: []
+risks:
+  - 测试桩若缺 unit 字段会被判 ended：既有桩须对齐真实载荷，这本身也修正了桩与契约的偏差
+  - unit 比对放宽到「缺 unit 即视为已结束」的读法：真实路由的会话摘要恒含 unit，缺字段只可能来自畸形载荷，按已结束降级比按活跃继续安全

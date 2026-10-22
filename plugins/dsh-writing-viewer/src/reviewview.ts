@@ -93,11 +93,15 @@ export function reviewAfterStart(unit: string, status: number, body: unknown): R
   return { unit, phase: 'error', error, forbidden: false, startedAt: null };
 }
 
-/** Fold a status poll after the iframe loaded: no session means it ended. */
+/** Fold a status poll after the iframe loaded: the review has ended when
+ * there is no session at all or the one session belongs to another unit
+ * (another tab started a different review; a summary without a unit is a
+ * malformed payload and degrades the same safe way). */
 export function reviewAfterStatus(state: ReviewPanelState, body: unknown): ReviewPanelState {
   if (state.phase !== 'active') return state;
   const session = (body as { session?: unknown } | null)?.session;
-  return session === null || session === undefined ? { ...state, phase: 'ended' } : state;
+  const ours = session !== null && session !== undefined && (session as { unit?: unknown }).unit === state.unit;
+  return ours ? state : { ...state, phase: 'ended' };
 }
 
 export interface ReviewViewModel {

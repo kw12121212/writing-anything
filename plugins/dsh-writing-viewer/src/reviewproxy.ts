@@ -58,6 +58,12 @@ const HOP_HEADERS = new Set(['content-length', 'content-encoding', 'transfer-enc
  * is left exactly as wa-cli sent it.
  */
 export function proxiedHeaders(upstream: Iterable<[string, string]>): Record<string, string> {
+  // Only the headers named below are touched. Anything else upstream sends
+  // passes through verbatim — including a hypothetical 3xx `location`, which
+  // could one day carry a tokenized loopback URL. wa-cli's reading view never
+  // redirects (every endpoint answers the page, 200 JSON, or a 4xx envelope),
+  // so this is unreachable today; if wa-cli ever grows redirects, `location`
+  // must join the drop list before this proxy forwards one.
   const out: Record<string, string> = {};
   for (const [rawName, value] of upstream) {
     const name = rawName.toLowerCase();

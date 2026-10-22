@@ -1,0 +1,37 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: fix-review-session-unit-mismatch
+sections:
+  Implementation:
+    repro-unit-mismatch-fail:
+      text: 先写失败回归测试：reviewview.test.ts 为 reviewAfterStatus 增加「unit 不一致的非空会话应返回 ended」断言，client.test.ts 增加跨标签页替换场景（iframe 加载后会话已换成别的单元）；运行确认当前实现失败
+      status: complete
+      command: cd plugins/dsh-writing-viewer && pnpm vitest run src/reviewview.test.ts src/client.test.ts
+    implement-unit-fold:
+      text: 最小修复：reviewview.ts 的 reviewAfterStatus 把「会话存在但 unit 与面板所审单元不一致（含缺 unit 的畸形载荷）」并入 ended；client.test.ts 既有会话状态桩补齐 unit 字段镜像真实载荷
+      status: complete
+    clarify-comments:
+      text: 两处注释澄清（不改行为）：reviewproxy.ts 注明上游头透传对假想 3xx Location 的现状与边界，reviewroutes.ts 注明 405 请求也会刷新空闲计时而 404/308 不会的读法
+      status: complete
+  Testing:
+    plugin-tests:
+      text: 插件完整检查：构建、类型与全部单测（含真实 wa-cli 端到端，需 go 在 PATH 上）
+      status: complete
+      command: cd plugins/dsh-writing-viewer && pnpm run check
+    full-go-regression:
+      text: 运行完整 Go 回归与覆盖率关卡（配置声明的 complete_project_regression）
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    strict-ready-verify:
+      text: 运行 strict-spec-cli ready 与 verify，确认 delta 规格、delta 技术标准与场景覆盖通过
+      status: complete
+      command: strict-spec-cli ready fix-review-session-unit-mismatch && strict-spec-cli verify fix-review-session-unit-mismatch
+    scope-review:
+      text: 对照 proposal 的 unchanged_behavior 核对：host 与代理行为不变、快照与其余面板视图不变、Go 回归命令与覆盖率范围不变
+      status: complete
+testing_gates:
+  validation_task: plugin-tests
+  unit_test_task: plugin-tests
