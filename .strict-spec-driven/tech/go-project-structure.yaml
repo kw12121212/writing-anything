@@ -168,3 +168,15 @@ rules:
         - runWS(t, dir, "handoff", "write", "--file", "h1.yaml")（助手已附 --dir 与 --json）
       bad:
         - runWSIn(t, dir, input, "handoff", "write", "--dir", dir)（--dir 重传）
+  env-read-in-cli:
+    strength: SHOULD
+    statement: wa-cli 按取值读取进程环境变量（os.Getenv、os.LookupEnv）应只出现在 internal/cli（与开发工具 internal/tools）中，经包级 getenv 统一读取，再把结果作为参数传给领域包；领域包不得据环境变量改变行为。把整个环境原样传给子进程（os.Environ）不在此列。依赖环境变量的测试用 t.Setenv 显式设定取值（含设为空），不得受开发者本机环境影响。
+    rationale: review-surface-auto 第一次让命令输出依赖环境（DSH_WEB_URL）；集中在 cli 层便于看清 wa-cli 对环境的全部依赖，领域包保持可预测，测试不因开发者恰好在 DSH 中运行而随机失败。
+    enforcement:
+      method: test
+      detail: internal/cli/env_scan_test.go 的 TestEnvReadOnlyInCLI 扫描 internal 下非测试 Go 文件，并自测模式认出 Getenv 与 LookupEnv、放过 os.Environ；TestStatus 与 TestConfigReviewSurface 以 t.Setenv 控制 DSH_WEB_URL
+    examples:
+      good:
+        - internal/cli/workspace.go 的 resolveReviewSurface 经 getenv(dshWebURLEnv) 读取
+      bad:
+        - internal/workspace 的 summarize 中直接 os.Getenv("DSH_WEB_URL")

@@ -1,0 +1,42 @@
+schema: strict-spec-driven/question-list/v1
+schema_version: 1
+artifact_type: question_list
+schema_file: templates/strict-spec-driven/schemas/question-list.yaml
+change: review-surface-auto
+open: []
+resolved:
+  - id: requirement-problem
+    question: 现在具体出了什么问题？
+    context: 作者原话
+    answer: 作者原话：「但这个配置为什么要执行呢？应该默认就是」——v0.7.0 需要手动 config set review_surface dsh 才走 DSH 审阅。
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-outcome
+    question: 什么可观察的变化说明问题已解决？
+    context: 向作者说明方案后作者回复「确认」
+    answer: 作者确认的方案：不设置 review_surface 时，在 DSH 中运行的 Agent 自动走 DSH 面板审阅，在终端中自动给浏览器链接；显式配置仍可覆盖；status 输出生效值与来源。
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-trigger
+    question: 为什么是现在？
+    context: v0.7.0 发布后在 writing-desk 需要手动设置配置
+    answer: 作者在 v0.7.0 安装后被要求为 writing-desk 手动设置 review_surface，认为这一步不应存在。
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-non-goals
+    question: 哪些行为必须保持不变？
+    context: 方案说明中列出、作者确认
+    answer: 作者确认的方案：显式 browser/dsh 配置仍以配置为准；终端环境未设置时仍为 browser；不让插件写工作区；新版装好后删除 writing-desk 中手动写入的 review_surface。
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-interpretation
+    question: 「默认就是」指什么？
+    context: 可理解为默认改成 dsh，或按运行环境自动判断
+    answer: 作者确认按运行环境自动判断（DSH_WEB_URL），而不是把默认值改成 dsh。
+    status: resolved
+    kind: requirement
+    answered_by: human

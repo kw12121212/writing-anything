@@ -182,7 +182,7 @@
 | 令牌 | Token | 令牌 | `wa-cli preview --serve` 每次运行生成的随机字符串，访问本地阅读页必须携带，防止本机其他网页或程序冒用 |
 | 审阅会话 | Review Session | 审阅会话 | DSH 插件 dsh-writing-viewer 按作者在面板点「审阅」或「待审阅」标记启动的一次 `wa-cli preview --serve`：插件经同源路由只代理其 page.json 与提交接口，供面板的审阅视图使用，令牌只留在宿主机；同一宿主同一时间至多一个，结束审阅、空闲 30 分钟或启动另一单元时结束 |
 | 审阅视图 | Review View | 审阅视图 | dsh-writing-viewer 面板以原生组件呈现阅读页数据的视图：逐段正文与出处、发现项、待作者确认区与待作者复核区，作者在其中提交的反馈、确认与复核由 wa-cli 写入，确认渠道为 `preview` |
-| 审阅位置 | Review Surface | 审阅位置 | 工作区配置 `review_surface`：`browser`（默认）时内置技能交出浏览器阅读页地址，`dsh` 时请作者到 DSH 插件面板的「待审阅」入口审阅 |
+| 审阅位置 | Review Surface | 审阅位置 | 作者在哪里审阅阅读页：`browser` 时内置技能交出浏览器阅读页地址，`dsh` 时请作者到 DSH 插件面板的「待审阅」入口审阅；工作区配置 `review_surface` 显式设置时以它为准，未设置时由 wa-cli 按运行环境判断（环境变量 `DSH_WEB_URL` 非空即在 DSH Web 中，为 `dsh`），`wa-cli status` 输出生效值与来源 |
 | 安全上下文 | Secure Context | 安全上下文 | 浏览器把 https 页面与本机回环地址视为安全上下文，只有在其中才开放部分 Web API；经纯 http 的 tailnet 地址打开的 DSH 页面不是安全上下文，dsh-writing-viewer 的面板与审阅视图因此不依赖这类 API |
 | 人工编辑保护 | Human Edit Protection | 人工编辑保护 | 人改过的正文不被 Agent 覆盖 |
 | 上下文包 | Context Pack | 上下文包 | 只包含当前单元所需信息的输入集合 |

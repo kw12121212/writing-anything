@@ -58,7 +58,7 @@ func TestInitFresh(t *testing.T) {
 	if len(ps) > 0 {
 		t.Fatalf("Load problems = %+v", ps)
 	}
-	if want := (&Config{Language: "zh-CN", Packs: []string{}, GateLevel: "standard", ReviewSurface: "browser"}); !reflect.DeepEqual(cfg, want) {
+	if want := (&Config{Language: "zh-CN", Packs: []string{}, GateLevel: "standard", ReviewSurface: "browser", ReviewSurfaceSource: "default"}); !reflect.DeepEqual(cfg, want) {
 		t.Fatalf("config = %+v, want %+v", cfg, want)
 	}
 	if strings.Contains(readConfig(t, dir), "default_genre") {

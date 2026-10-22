@@ -1,0 +1,19 @@
+schema: strict-spec-driven/lesson/v1
+schema_version: 1
+artifact_type: lesson
+schema_file: templates/strict-spec-driven/schemas/lesson.yaml
+lesson:
+  id: agent-4b6591
+  title: 让作者手动声明 Agent 的运行位置之前，先查宿主是否已经注入环境信号
+category: architecture
+status: active
+created_at: '2026-10-22T12:45:10.588Z'
+updated_at: '2026-10-22T12:45:10.588Z'
+context: dsh-native-review 用工作区配置 review_surface（默认 browser）决定技能把作者指向浏览器阅读页还是 DSH 面板，设计时以「不探测环境、同一工作区结果一致」为由排除了环境探测
+observation: v0.7.0 发布后作者质疑为什么要手动配置；查 DSH 源码发现 DSH Web 经 shellEnv 向模型 shell 注入 DSH_WEB_URL，审阅位置本就取决于 Agent 在哪里运行而不是工作区——配置反而让同一工作区在终端中被指向不存在的面板，只得用 review-surface-auto 推翻原决策并再发一版
+takeaway: 需要知道「Agent 运行在哪个宿主/界面」的行为，先查宿主（DSH、IDE、终端客户端）是否已经向子进程注入可识别的环境变量或运行时上下文，以它作为默认判断、配置只作覆盖；判断集中在 CLI 一层并输出来源，技能不自行探测
+applies_when: 设计依赖调用方所处宿主或界面的行为（指引作者去哪里操作、选择交互方式）并打算用配置项让作者声明时
+occurrences:
+  - origin: review-surface-auto
+    date: '2026-10-22'
+    evidence: dsh-web-app 的 index.js 以 runtimeCtx.shellEnv.register 发布 DSH_WEB_URL（surfaceContext 默认开启）；internal/cli/workspace.go 的 resolveReviewSurface；推翻 dsh-native-review design 的 review-surface-config 决策

@@ -49,6 +49,11 @@ categories:
       status: active
       occurrences: 1
       path: .strict-spec-driven/lessons/architecture/dsh-host-ctx-effect-disposer-cordis-4-dispose-ct-5fa2a3.yaml
+    agent-4b6591:
+      title: 让作者手动声明 Agent 的运行位置之前，先查宿主是否已经注入环境信号
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/architecture/agent-4b6591.yaml
   coding:
     go-flag-bd930f:
       title: Go flag 包的默认报错不符合中文术语约定
