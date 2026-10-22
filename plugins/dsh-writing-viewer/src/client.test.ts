@@ -265,7 +265,7 @@ async function fixtureBody(): Promise<SnapshotRouteBody> {
  * fixture workspace (wa-cli preview my-post --serve, GET /page.json). */
 const PAGE_STRICT = {
   title: 'my-post', strict: true, confirms: [], failures: [],
-  units: [{ ref: 'my-post', stage: 'review', hasDraft: true, notes: [], global: [], paragraphs: [{ index: 1, line: 1, text: '正文', origin: 'human', findings: [] }] }],
+  units: [{ ref: 'my-post', stage: 'review', hasDraft: true, notes: [], global: [], paragraphs: [{ index: 1, line: 1, text: '正文', origin: 'human', findings: [], illustrations: [] }], illustrations: [] }],
 };
 
 async function pageFixture(): Promise<Record<string, unknown>> {
@@ -1828,8 +1828,8 @@ describe('unit review controls', () => {
     const page = {
       title: 'my-post', strict: false, reviews: [], failures: [], confirms: [],
       units: [{ ref: 'my-post', stage: 'draft', hasDraft: true, notes: [], global: [], paragraphs: [
-        { index: 1, line: 1, text: '<script>alert(1)</script><b>粗</b>', origin: 'human', findings: [{ kind: 'review', label: '<i>x</i>', severity: '', message: '<img src=x>', suggestion: '' }] },
-      ] }],
+        { index: 1, line: 1, text: '<script>alert(1)</script><b>粗</b>', origin: 'human', findings: [{ kind: 'review', label: '<i>x</i>', severity: '', message: '<img src=x>', suggestion: '' }], illustrations: [] },
+      ], illustrations: [] }],
     };
     const tree = t.renderPanel(h, { ...(await reviewState(ACTIVE)), reviewData: activeData(page) }, reviewActions().actions);
     const para = elements(tree, 'p').find((p) => p.props?.['data-review-para'] === 'my-post#1');
@@ -1837,6 +1837,69 @@ describe('unit review controls', () => {
     for (const type of ['script', 'b', 'i', 'img']) expect(elements(tree, type)).toHaveLength(0);
     walk(tree, (n) => expect(n.props?.['dangerouslySetInnerHTML']).toBeUndefined());
     expect(textOf(tree)).toContain('<img src=x>');
+  });
+
+  it('shows the cover, paragraph illustrations and unreferenced ones through the fixed proxy route (native-illustrations)', async () => {
+    const t = await hooks();
+    const page = {
+      title: 'my-post', strict: false, reviews: [], failures: [], confirms: [],
+      units: [{ ref: 'my-post', stage: 'review', hasDraft: true, notes: [], global: [], paragraphs: [
+        { index: 1, line: 1, text: '第一段', origin: 'human', findings: [], illustrations: [] },
+        { index: 2, line: 3, text: '第二段', origin: 'agent', findings: [], illustrations: ['fig-1'] },
+      ], illustrations: [
+        { id: 'cover', role: 'cover', alt: '周六的店', title: null, content: 'mood', origin: 'agent', width: 1800, height: 766, claims: [], sources: [], referenced: false, available: true, url: 'illustration?unit=my-post&id=cover' },
+        { id: 'fig-1', role: 'body', alt: '<b>延迟对比</b>', title: null, content: 'infographic', origin: 'agent', width: 1600, height: 900, claims: ['c1'], sources: [], referenced: true, available: true, url: 'http://evil.example/x.png' },
+        { id: 'fig-2', role: 'body', alt: '未用的图', title: null, content: 'mood', origin: 'author', width: 10, height: 10, claims: [], sources: [], referenced: false, available: true, url: 'illustration?unit=my-post&id=fig-2' },
+      ] }],
+    };
+    const tree = t.renderPanel(h, { ...(await reviewState(ACTIVE)), reviewData: activeData(page) }, reviewActions().actions);
+    expect(elements(tree, 'iframe')).toHaveLength(0);
+    const section = elements(tree, 'section').find((n) => n.props?.['data-review-unit-section'] === 'my-post')!;
+    const figures = elements(section, 'figure');
+    expect(figures.map((f) => [f.props?.['data-review-illustration'], f.props?.['data-review-illustration-role']])).toEqual([['cover', 'cover'], ['fig-1', 'body'], ['fig-2', 'body']]);
+    const imgs = elements(section, 'img');
+    expect(imgs.map((i) => i.props?.['src'])).toEqual([
+      '/dsh-writing-viewer/review/illustration?unit=my-post&id=cover',
+      '/dsh-writing-viewer/review/illustration?unit=my-post&id=fig-1',
+      '/dsh-writing-viewer/review/illustration?unit=my-post&id=fig-2',
+    ]);
+    expect(imgs[1]!.props?.['alt']).toBe('<b>延迟对比</b>');
+    expect(textOf(figures[0])).toContain('Cover');
+    expect(textOf(figures[1])).toContain('Infographic');
+    expect(textOf(figures[1])).toContain('origin agent');
+    expect(textOf(figures[1])).toContain('c1');
+    expect(textOf(figures[2])).toContain('Not referenced');
+    expect(elements(section, 'b')).toHaveLength(0);
+    // The paragraph image sits in the second paragraph's block, after its text.
+    const blocks = elements(section, 'div').filter((d) => elements(d, 'p').some((p) => p.props?.['data-review-para'] === 'my-post#2') && elements(d, 'figure').length > 0);
+    expect(blocks.length).toBeGreaterThan(0);
+    // Selectable paragraph text never contains image nodes.
+    const para2 = elements(section, 'p').find((p) => p.props?.['data-review-para'] === 'my-post#2')!;
+    expect(elements(para2, 'img')).toHaveLength(0);
+  });
+
+  it('shows an unavailable notice instead of loading the image (native-illustration-unavailable)', async () => {
+    const t = await hooks();
+    const page = {
+      title: 'my-post', strict: false, reviews: [], failures: [], confirms: [],
+      units: [{ ref: 'my-post', stage: 'review', hasDraft: true, notes: [], global: [], paragraphs: [
+        { index: 1, line: 1, text: '正文', origin: 'human', findings: [], illustrations: ['fig-1'] },
+      ], illustrations: [
+        { id: 'fig-1', role: 'body', alt: '图', title: null, content: 'mood', origin: 'agent', width: 4, height: 4, claims: [], sources: [], referenced: true, available: false, url: null },
+      ] }],
+    };
+    const tree = t.renderPanel(h, { ...(await reviewState(ACTIVE)), reviewData: activeData(page) }, reviewActions().actions);
+    expect(elements(tree, 'img')).toHaveLength(0);
+    const note = elements(tree, 'div').find((n) => n.props?.['data-review-illustration-unavailable'] === 'true');
+    expect(textOf(note)).toContain('Illustration unavailable');
+    expect(textOf(note)).toContain('fig-1');
+  });
+
+  it('renders no image nodes when the page has no illustrations (native-no-illustrations)', async () => {
+    const t = await hooks();
+    const tree = t.renderPanel(h, { ...(await reviewState(ACTIVE)), reviewData: activeData(await pageFixture()) }, reviewActions().actions);
+    expect(elements(tree, 'img')).toHaveLength(0);
+    expect(elements(tree, 'figure')).toHaveLength(0);
   });
 
   it('lists recent failures, a strict review queue, and keeps notices and the invalid-selection hint visible', async () => {
@@ -1855,7 +1918,7 @@ describe('unit review controls', () => {
       failures: [{ at: '2026-10-22T06:47:38Z', command: 'review record', exit: 1 }],
       confirms: [{ kind: 'state', unit: '', id: 'state-1', label: '状态变更提议', detail: '', options: [], recommend: '', needsAnswer: false, canReject: true },
         { kind: 'decision', unit: '', id: 'dec-2', label: '开放问题', detail: '', options: [], recommend: '', needsAnswer: true, canReject: false }],
-      units: [{ ref: 'my-post', stage: 'draft', hasDraft: false, notes: [], global: [], paragraphs: [] }],
+      units: [{ ref: 'my-post', stage: 'draft', hasDraft: false, notes: [], global: [], paragraphs: [], illustrations: [] }],
     };
     const data = activeData(page, {
       unticked: { 'volume:my-novel/part-1': true },

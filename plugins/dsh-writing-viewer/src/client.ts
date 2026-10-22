@@ -78,6 +78,8 @@ import {
   feedbackAfterSelection,
   feedbackRequest,
   initialConfirmDraft,
+  illustrationLayout,
+  illustrationSrc,
   initialFeedback,
   parseReviewPage,
   pendingCountOf,
@@ -89,6 +91,7 @@ import {
   type FeedbackDraft,
   type PageConfirm,
   type PageFinding,
+  type PageIllustration,
   type ParagraphAnchor,
   type PendingIndex,
   type ReviewPage,
@@ -1225,6 +1228,25 @@ function findingList(h: H, key: string, items: PageFinding[]): unknown {
     items.map((f, i) => renderFinding(h, f, key + '-' + i)));
 }
 
+/** One illustration (配图) or cover image (封面图): an img node whose src is
+ * the fixed proxy route built from the unit and id (never an address from the
+ * draft or page.json), or an unavailable notice when wa-cli reports the image
+ * unusable, so no request is made. Labels and ids are plain text. */
+function renderIllustration(h: H, unit: string, ill: PageIllustration, labels: ReviewLabels, tag: string | null): unknown {
+  const meta: string[] = [];
+  if (tag !== null) meta.push(tag);
+  meta.push(ill.content === 'infographic' ? labels.infographic : labels.mood);
+  if (ill.origin !== '') meta.push(labels.illustrationOrigin + ' ' + ill.origin);
+  if (ill.claims.length > 0) meta.push(labels.illustrationClaims + ' ' + ill.claims.join(', '));
+  if (ill.sources.length > 0) meta.push(labels.illustrationSources + ' ' + ill.sources.join(', '));
+  return h('figure', { key: 'ill-' + ill.id, 'data-review-illustration': ill.id, 'data-review-illustration-role': ill.role, style: { margin: 0, display: 'flex', flexDirection: 'column', gap: '2px' } },
+    ill.available
+      ? h('img', { key: 'img', src: illustrationSrc(unit, ill.id), alt: ill.alt, loading: 'lazy', style: { maxWidth: '100%', height: 'auto', borderRadius: '6px', border: '1px solid ' + COLOR.border } })
+      : h('div', { key: 'na', role: 'note', 'data-review-illustration-unavailable': 'true', style: { color: COLOR.warn, overflowWrap: 'anywhere' } }, labels.illustrationUnavailable + '（' + ill.id + '）'),
+    h('figcaption', { key: 'cap', style: { fontSize: '12px', color: COLOR.secondary, overflowWrap: 'anywhere' } },
+      h('span', { key: 'alt' }, ill.title ?? ill.alt), ' · ', h('span', { key: 'meta', 'data-review-illustration-meta': 'true' }, meta.join(' · '))));
+}
+
 /** The units, paragraphs and findings of the page. The paragraph text
  * element carries the data attributes the selection capture reads; the
  * index and origin label sit outside it so a selection never includes them. */
@@ -1232,11 +1254,13 @@ function renderReviewUnits(h: H, page: ReviewPage, d: ReviewDataState, labels: R
   return h(
     'div',
     { key: 'units', 'data-review-units': 'true', onMouseUp: a.captureSelection, onKeyUp: a.captureSelection, style: { display: 'flex', flexDirection: 'column', gap: '12px' } },
-    page.units.map((u) =>
-      h('section', { key: 'u-' + u.ref, 'data-review-unit-section': u.ref, style: { display: 'flex', flexDirection: 'column', gap: '6px' } },
+    page.units.map((u) => {
+      const layout = illustrationLayout(u);
+      return h('section', { key: 'u-' + u.ref, 'data-review-unit-section': u.ref, style: { display: 'flex', flexDirection: 'column', gap: '6px' } },
         h('div', { key: 'head', style: { display: 'flex', flexWrap: 'wrap', gap: '4px 10px', alignItems: 'baseline' } },
           h('code', { key: 'ref', style: { ...codeStyle(), fontSize: '13px', fontWeight: '600' } }, u.ref),
           h('span', { key: 'stage', style: { color: COLOR.tertiary } }, stageTitle(u.stage) + ' (' + u.stage + ')')),
+        ...layout.covers.map((ill) => renderIllustration(h, u.ref, ill, labels, labels.cover)),
         u.notes.length === 0 ? null : h('ul', { key: 'notes', style: { margin: 0, paddingLeft: '18px', color: COLOR.warn } }, u.notes.map((n, i) => h('li', { key: 'n' + i, style: { overflowWrap: 'anywhere' } }, n))),
         findingList(h, 'global', u.global),
         !u.hasDraft ? h('p', { key: 'no-draft', style: { margin: 0, color: COLOR.tertiary } }, labels.noDraft) : null,
@@ -1253,9 +1277,11 @@ function renderReviewUnits(h: H, page: ReviewPage, d: ReviewDataState, labels: R
               'data-review-index': String(p.index),
               style: { margin: 0, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' },
             }, p.text),
-            findingList(h, 'f', p.findings));
-        })),
-    ),
+            findingList(h, 'f', p.findings),
+            ...(layout.byParagraph[p.index] ?? []).map((ill) => renderIllustration(h, u.ref, ill, labels, null)));
+        }),
+        ...layout.unreferenced.map((ill) => renderIllustration(h, u.ref, ill, labels, labels.unreferenced)));
+    }),
   );
 }
 

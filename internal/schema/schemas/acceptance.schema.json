@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "验收",
-  "description": "单元的验收（Acceptance）记录：关卡强度、验收时的正文 SHA-256、是否经作者确认与作者确认原话摘要（确认记录（Confirmation Record））。请用 wa-cli accept 写入。",
+  "description": "单元的验收（Acceptance）记录：关卡强度、验收时的正文 SHA-256、配图摘要、是否经作者确认与作者确认原话摘要（确认记录（Confirmation Record））。请用 wa-cli accept 写入。",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema_version", "gate_level", "draft_sha256", "confirmed_by_author", "accepted_at"],
@@ -9,6 +9,7 @@
     "schema_version": {"const": 1},
     "gate_level": {"enum": ["strict", "standard", "fast"]},
     "draft_sha256": {"$ref": "common.schema.json#/$defs/sha256"},
+    "illustrations_sha256": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$", "description": "验收时单元的配图摘要；单元没有配图时缺省"},
     "confirmed_by_author": {"type": "boolean"},
     "confirmation": {"type": "string", "pattern": "\\S"},
     "channel": {"$ref": "common.schema.json#/$defs/channel"},

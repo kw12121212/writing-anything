@@ -188,6 +188,15 @@
         "pattern": "^\\s*$"
       },
       "maxLength": 500
+    },
+    "ai_disclosure_image_template": {
+      "type": "string",
+      "description": "AI 参与说明中配图说明的模板：一行、至多 200 个字符，只能含占位符 {ai_images} 与 {images}",
+      "pattern": "^(?:[^{}\\r\\n]|\\{(?:ai_images|images)\\})+$",
+      "not": {
+        "pattern": "^\\s*$"
+      },
+      "maxLength": 200
     }
   },
   "$defs": {

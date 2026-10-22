@@ -75,7 +75,7 @@ const pageHTML = `<!DOCTYPE html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 {{- if not .Serve}}
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'{{if .HasImages}}; img-src data:{{end}}">
 {{- end}}
 <meta name="referrer" content="no-referrer">
 <title>阅读页：{{.Title}}</title>
@@ -113,6 +113,13 @@ h2 small { font-weight: normal; color: #888; margin-left: .5em; }
 .confirm input.summary, .confirm input.answer { width: 60%; }
 .result, #review-result { color: #1565c0; margin-left: .5em; }
 </style>
+{{- if .HasImages}}
+<style>
+figure.ill { margin: .6em 0 .6em 1em; font-size: 14px; color: #555; }
+figure.ill img { display: block; max-width: 100%; height: auto; border: 1px solid #ddd; }
+.tag { display: inline-block; font-size: 12px; padding: 0 .5em; border-radius: 3px; background: #e3f2fd; color: #1565c0; margin-left: 1em; }
+</style>
+{{- end}}
 </head>
 <body>
 <input type="checkbox" id="color" checked>
@@ -151,11 +158,14 @@ h2 small { font-weight: normal; color: #888; margin-left: .5em; }
 </section>
 {{- end}}
 {{- end}}
-{{- range .Units}}
+{{- range $u := .Units}}
 <section class="unit" data-unit="{{.Ref}}">
 <h2>{{.Ref}}<small>阶段：{{.Stage}}</small></h2>
 {{- range .Notes}}
 <p class="note">{{.}}</p>
+{{- end}}
+{{- range $u.Covers}}
+<div class="cover"><span class="tag">封面</span>{{template "image" .}}</div>
 {{- end}}
 {{- if and (not .HasDraft) (not .Notes)}}
 <p class="empty">还没有正文</p>
@@ -166,6 +176,17 @@ h2 small { font-weight: normal; color: #888; margin-left: .5em; }
 <div class="meta">第 {{.Index}} 段 · 第 {{.Line}} 行 · {{originName .Origin}}</div>
 <div class="text">{{.Text}}</div>
 {{- range .Findings}}{{template "finding" .}}{{end}}
+{{- range .ImageNotes}}
+<p class="note">{{.}}</p>
+{{- end}}
+{{- range $u.Images .}}{{template "image" .}}{{end}}
+</div>
+{{- end}}
+{{- with $u.Unreferenced}}
+<div class="unused">
+{{- range .}}
+<div><span class="tag">未引用</span>{{template "image" .}}</div>
+{{- end}}
 </div>
 {{- end}}
 </section>
@@ -183,7 +204,15 @@ h2 small { font-weight: normal; color: #888; margin-left: .5em; }
 {{- end}}
 </body>
 </html>
-{{define "finding"}}
+{{define "image"}}
+<figure class="ill" data-id="{{.ID}}">
+{{- if .Src}}<img src="{{.Src}}" alt="{{.Alt}}" width="{{.Width}}" height="{{.Height}}">
+{{- else if .Skipped}}<p class="note">配图过大，未内嵌：{{.Path}}</p>
+{{- else if not .Available}}<p class="note">配图不可用（{{.Reason}}）：{{.Path}}</p>
+{{- end}}
+<figcaption>{{.ID}} · {{.Alt}} · {{.ContentName}} · 出处 {{.Origin}}{{with .Title}} · {{deref .}}{{end}}{{if .Claims}} · 论断 {{join .Claims}}{{end}}{{if .Sources}} · 素材 {{join .Sources}}{{end}}</figcaption>
+</figure>
+{{- end}}{{define "finding"}}
 <div class="finding {{.Kind}} {{.Severity}}"><span class="label">{{.Label}}</span>{{.Message}}{{if .Suggestion}}<span class="suggestion">建议：{{.Suggestion}}</span>{{end}}</div>
 {{- end}}
 `

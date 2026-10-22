@@ -1,0 +1,129 @@
+schema: strict-spec-driven/delta-spec/v1
+schema_version: 1
+artifact_type: delta_spec
+schema_file: templates/strict-spec-driven/schemas/delta-spec.yaml
+target_spec: preview
+operations:
+  ADDED:
+    preview-illustration:
+      strength: MUST
+      statement: 'wa-cli preview <unit> --serve 必须提供 GET /illustration?unit=<单元引用>&id=<配图 id>&token=<令牌>（HEAD 同样允许，其他方法返回 405）：Host 与令牌校验与 GET / 相同，不符合时返回 403 且不读取配图。unit 必须是当前阅读页所列的单元之一，id 必须是该单元配图登记（Illustration Registry，见 illustrations 主规格的 illustration-validation）中的配图（Illustration）或封面图（Cover Image），且该配图可用（图片文件存在、不途经符号链接、SHA-256 与登记一致、格式为 PNG 或 JPEG）；任何一项不满足（含缺少 unit 或 id、单元引用无法解析、illustrations.yaml 不通过校验）时返回 404 与简短的纯文字说明，不返回任何图片数据。通过时返回 200，Content-Type 按登记的格式为 image/png 或 image/jpeg，带 Cache-Control: no-store、X-Content-Type-Options: nosniff 与 Referrer-Policy: no-referrer，正文为图片文件的原始字节（HEAD 不带正文）。每次请求按当前工作区状态重新读取与检查，不缓存；该接口只读，不创建也不修改任何产物。'
+      scenarios:
+        illustration-ok:
+          - GIVEN: 作品 my-post 登记了可用的 JPEG 配图 fig-1，preview my-post --serve 正在运行
+          - WHEN: 带令牌 GET /illustration?unit=my-post&id=fig-1
+          - THEN: '返回 200，Content-Type 为 image/jpeg，带 Cache-Control: no-store 与 X-Content-Type-Options: nosniff，正文与 illustrations/fig-1.jpg 的字节完全相同；工作区文件不变'
+        illustration-rejected:
+          - GIVEN: preview my-post --serve 正在运行
+          - WHEN: GET /illustration?unit=my-post&id=fig-1 不带 token、令牌错误或 Host 头为 evil.example:<port>
+          - THEN: 都返回 403，响应中不含图片数据
+        illustration-not-available:
+          - GIVEN: preview my-post --serve 正在运行，my-post 没有 id 为 ghost 的配图，fig-2 已登记但文件的 SHA-256 与登记不符，other-post 不在阅读页所列单元中
+          - WHEN: 带令牌分别 GET /illustration?unit=my-post&id=ghost、?unit=my-post&id=fig-2 与 ?unit=other-post&id=fig-1
+          - THEN: 都返回 404，响应中不含图片数据
+        illustration-method:
+          - GIVEN: preview my-post --serve 正在运行
+          - WHEN: 带令牌 POST /illustration?unit=my-post&id=fig-1
+          - THEN: 返回 405，工作区文件不变
+  MODIFIED:
+    preview-static:
+      strength: MUST
+      statement: wa-cli preview <unit> 必须把该单元及其后代（单元树先序）的阅读页（Reading View）写成一个自包含的静态 HTML 文件：--output 为相对项目目录的文件路径，省略时为 .writing-anything/exports/<work>.preview.html（子单元为 <work>.<unit-id>.preview.html）；输出路径的规则与 export 主规格的 export-output 相同，违反时报告 preview.invalid-output（field 为 output，next 包含 wa-cli help preview --json），不写文件。文件原子写入，已存在时覆盖；HTML 不含 script 元素，也不引用任何外部资源（样式内联），可以离线打开。配图（Illustration）与封面图（Cover Image）的图像（见 preview-content）以 data:image/png 或 data:image/jpeg 的 data URI 内嵌在 img 元素中，不算外部资源（页面含配图时，阅读页内联的 Content-Security-Policy 另允许 img-src data:，不含配图时 CSP 与原来相同）；内嵌按图片原始字节累计，单个阅读页的内嵌总量不超过 32 MiB，超出后其余配图不再内嵌，改为显示「配图过大，未内嵌」与该配图文件相对项目目录的路径。成功时退出码为 0，changedPaths 为新建的目录与该文件，--json 输出的 preview 字段含 unit、units（按顺序列出的单元引用）、path（文件路径）与 url（null），feedback 为 null。除阅读页文件外不创建或修改任何文件。单元引用无法解析时按 units-and-lifecycle 主规格报告，未找到工作区时报告 workspace.not-found，都以退出码 1 退出。不加 --json 时输出一行说明文件路径。
+      scenarios:
+        static-page:
+          - GIVEN: 作品 my-post 的 draft.md 为「值得注意的是，连接池很重要。」，由 wa-cli draft write 写入
+          - WHEN: 运行 wa-cli preview my-post --dir D --json
+          - THEN: 退出码为 0，changedPaths 含 .writing-anything/exports/my-post.preview.html，preview.path 为该路径、url 为 null、units 为 [my-post]；文件含该段原文、出处 agent 与 ai-cliche 发现项，不含 <script，不含 http:// 或 https:// 的资源引用
+        static-invalid-output:
+          - GIVEN: 已初始化的工作区与作品 my-post
+          - WHEN: 运行 wa-cli preview my-post --output .writing-anything/config.yaml --dir D --json
+          - THEN: diagnostics 中有一条错误码为 preview.invalid-output、field 为 output 的诊断，next 包含 wa-cli help preview --json，config.yaml 不变，退出码为 1
+        static-embedded-illustration:
+          - GIVEN: 作品 my-post 的根单元正文第 2 段为 ![连接池示意](illustrations/fig-1.png)，fig-1 已登记且可用，根单元另登记了封面图 cover
+          - WHEN: 运行 wa-cli preview my-post --dir D --json
+          - THEN: 退出码为 0；阅读页文件含两个 src 以 data:image/ 开头的 img 元素（封面在单元开头并标「封面」，fig-1 在第 2 段之后），不含 http:// 或 https:// 的资源引用，也不含 src 为 illustrations/ 路径的 img 元素
+        static-no-illustrations-unchanged:
+          - GIVEN: 作品 my-post 没有 illustrations.yaml，正文与 static-page 相同
+          - WHEN: 运行 wa-cli preview my-post --dir D --json
+          - THEN: 阅读页文件中没有 img 元素，内容与本变更之前一致
+        static-embed-budget:
+          - GIVEN: 作品 my-post 有四张已登记、可用且都被正文引用的正文配图 fig-1 至 fig-4，各 9 MiB
+          - WHEN: 运行 wa-cli preview my-post --dir D --json
+          - THEN: 退出码为 0；fig-1 至 fig-3（累计 27 MiB）以 data URI 内嵌，fig-4 显示「配图过大，未内嵌」与其相对项目目录的路径
+    preview-content:
+      strength: MUST
+      statement: 阅读页必须按单元树先序列出每个单元的单元引用与阶段（Stage）；有正文时按段落（见 sources-and-provenance 主规格的 paragraph-model）逐段展示原文（HTML 转义、保留换行，不渲染 Markdown），每段标注段落序号与出处（human、agent 或 agent-draft-human-edited，见 provenance-derivation），并提供不依赖脚本的按出处着色开关。文本检查（Lint）的结果与 wa-cli lint 相同：未被豁免的发现项（含 severity、rule、message 与 suggestion）显示在所在段落之后，全文级发现项显示在单元开头；审稿（Review）发现项（review.yaml 中的 id、status、message 与 suggestion）显示在所引段落之后，审稿的 draft_sha256 与当前正文不同时标明审稿基于旧版正文。单元有配图登记（Illustration Registry，见 illustrations 主规格的 illustration-references 与 illustration-validation）时：引用了本地配图的段落仍按原文展示，在该段落及其发现项之后按引用顺序显示每张被引用配图（Illustration）的图像，附替代文字、类型（氛围图（Mood Image）或信息图（Infographic））与出处（agent 或 author），信息图另列出关联的论断与素材 id；作品根单元登记了封面图（Cover Image）时，在该单元开头显示封面图像并标「封面」；已登记但正文未引用的正文配图在单元末尾列出并标「未引用」；正文引用了封面图时，在该段落之后说明封面显示在单元开头、不在正文中显示。只有已登记、图片文件存在、SHA-256 与登记一致且格式为 PNG 或 JPEG 的配图（可用配图）才显示图像；段落引用了未登记的配图或配图不可用时，在该段落之后说明原因（未登记、文件缺失、哈希不符或格式不符——登记的 file 与 <id>.<format 对应扩展名> 不一致）；illustrations.yaml 不通过校验时在单元开头说明原因、不显示该单元的配图。地址不以 illustrations/ 开头的图片只按原文显示，不加载。没有配图登记的单元与没有配图时的显示相同。没有正文的单元显示「还没有正文」；正文超过 2 MiB 时只显示说明；文本检查无法运行、出处无法推导或 review.yaml 不通过校验时在单元开头说明原因；以上配图问题与这些情况都不影响命令的退出码。阅读页不提供编辑正文的功能。
+      scenarios:
+        content-findings:
+          - GIVEN: 作品 my-post 有子单元 intro，根单元正文第 1 段含「值得注意的是」，review.yaml 有一项 paragraph 为 1、id 为 r1 的发现项，intro 没有正文
+          - WHEN: 运行 wa-cli preview my-post --dir D --json
+          - THEN: units 为 [my-post, my-post/intro]；文件中 my-post 第 1 段之后列出 ai-cliche 发现项与审稿发现项 r1，intro 显示「还没有正文」
+        content-escaped:
+          - GIVEN: draft.md 含「<b>粗体</b> & 引号」
+          - WHEN: 运行 wa-cli preview my-post --dir D --json
+          - THEN: 文件中该段落显示为 &lt;b&gt;粗体&lt;/b&gt; &amp; 引号，不含未转义的 <b>
+        content-illustration-after-paragraph:
+          - GIVEN: 作品 my-post 正文第 1 段引用 illustrations/fig-1.jpg（已登记的信息图，origin 为 agent，claims 为 [c1]），第 2 段不引用配图，另有已登记但未被引用的正文配图 fig-2
+          - WHEN: 运行 wa-cli preview my-post --dir D --json
+          - THEN: 第 1 段原文照常显示，其后显示 fig-1 的图像、替代文字、「信息图」、出处 agent 与论断 c1；第 2 段之后没有图像；fig-2 在单元末尾列出并标「未引用」
+        content-cover-first:
+          - GIVEN: 作品 my-post 的根单元登记了 role 为 cover 的封面图 cover
+          - WHEN: 运行 wa-cli preview my-post --dir D --json
+          - THEN: my-post 单元开头显示封面图像并标「封面」，位于第 1 段之前
+        content-illustration-problems:
+          - GIVEN: 正文第 1 段引用未登记的 illustrations/ghost.png，第 2 段引用已登记的 fig-1.png，但该文件已被改写、SHA-256 与登记不符
+          - WHEN: 运行 wa-cli preview my-post --dir D --json
+          - THEN: 退出码为 0；两段原文照常显示，第 1 段之后说明 ghost 未登记，第 2 段之后说明 fig-1 哈希不符，都不显示图像
+        content-external-image-not-loaded:
+          - GIVEN: 正文有一段为 ![图标](https://example.com/icon.png)
+          - WHEN: 运行 wa-cli preview my-post --dir D --json
+          - THEN: 该段按原文显示，阅读页中没有指向 example.com 的 img 元素
+    preview-serve:
+      strength: MUST
+      statement: 'wa-cli preview <unit> --serve 必须启动一个只监听 127.0.0.1 的本地 HTTP 服务（--port 指定端口，省略时由系统分配），并生成至少 128 位的随机令牌（Token），不写阅读页文件。--json 时先输出一行输出信封：preview 含 unit、units、path（null）与 url（http://127.0.0.1:<port>/?token=<令牌>，地址取自实际监听的地址），feedback 为 null，changedPaths 为空数组；之后每保存一条反馈输出一行信封，feedback 为该反馈（字段见 feedback 主规格的 feedback-list），changedPaths 为这次保存变更的路径，preview 同首行；作者每记录一次确认或批量复核也输出一行信封（confirmation 或 authorReview 非 null，见 preview-confirm 与 preview-author-review）；各行信封的 feedback、confirmation 与 authorReview 中不对应的字段为 null。服务对每个请求都校验 Host 头（只接受 127.0.0.1:<port> 与 localhost:<port>；端口为 80 时也接受不带端口的写法）与令牌（GET 用查询参数 token，POST 用请求头 X-WA-Token），不符合时返回 403，不读取也不修改任何产物。GET / 返回按当前工作区状态重新生成的阅读页（内容同 preview-content，配图与封面图的图像以相对页面地址、不以 / 开头的 illustration?unit=<单元引用>&id=<配图 id>&token=<令牌> 加载而不内嵌，另含选中文字后提交意见、作者确认与复核的脚本，以及 preview-confirm-queue 的待作者确认区与待作者复核区）；GET /page.json 返回同一时刻阅读页的结构化数据（见 preview-page-json）；GET /illustration 返回已登记配图的图片（见 preview-illustration）；POST /feedback 见 preview-feedback，POST /confirm 见 preview-confirm，POST /author-review 见 preview-author-review；其他路径返回 404，其他方法返回 405。响应带 Cache-Control: no-store、Referrer-Policy: no-referrer、X-Frame-Options: DENY 与 Content-Security-Policy（只放行哈希与页面内联脚本一致的脚本，图片只放行 img-src ''self'' data:）。给出 --max <n> 时保存 n 条反馈（确认与复核不计数）后关闭服务并以退出码 0 结束，否则一直运行到命令被中断；命令结束即关闭服务。--port 不是 1 到 65535 的整数，--max 不是不超过 86400000 的正整数，未给出 --serve 却给出 --port 或 --max，或给出 --serve 又给出 --output 时报告 input.invalid-value（next 为 wa-cli help preview --json），退出码为 1；端口无法监听时报告 preview.listen-failed，退出码为 1。不加 --json 时首行输出阅读页地址，之后每条反馈输出一行人读文本。 这是可审计的流程约束而非安全隔离：同机同账户的 Agent 能读到令牌，确认渠道（Confirmation Channel）只把经阅读页写入的确认如实记为 preview。'
+      scenarios:
+        serve-url:
+          - GIVEN: 作品 my-post 有正文
+          - WHEN: 运行 wa-cli preview my-post --serve --max 1 --dir D --json
+          - THEN: '首行信封的 preview.url 以 http://127.0.0.1: 开头并含 token=，path 为 null；用该地址 GET 得到 200 与含正文的页面，响应带 Cache-Control: no-store 与 Referrer-Policy: no-referrer'
+        serve-reject-no-token:
+          - GIVEN: preview --serve 正在运行
+          - WHEN: GET / 不带 token，或 POST /feedback、/confirm 或 /author-review 不带 X-WA-Token 或令牌错误，或 Host 头为 evil.example:<port>
+          - THEN: 都返回 403，feedback.yaml、确认记录与 author-reviews.yaml 都不被创建或修改
+        serve-bad-flags:
+          - GIVEN: 已初始化的工作区与作品 my-post
+          - WHEN: 运行 wa-cli preview my-post --port 70000 --serve --dir D --json，或 wa-cli preview my-post --max 1 --dir D --json
+          - THEN: diagnostics 中有一条错误码为 input.invalid-value 的诊断，next 为 wa-cli help preview --json，退出码为 1
+        serve-illustration-relative:
+          - GIVEN: 作品 my-post 正文引用已登记、可用的 illustrations/fig-1.png，preview my-post --serve 正在运行
+          - WHEN: 带令牌 GET / 并读取响应头 Content-Security-Policy
+          - THEN: 页面中 fig-1 的 img 地址为不以 / 开头的 illustration?unit=my-post&id=fig-1&token=<令牌>，页面不含 data:image/ 内嵌；CSP 含 img-src 'self' data:，script-src 仍只放行页面内联脚本的哈希
+    preview-page-json:
+      strength: MUST
+      statement: 'wa-cli preview <unit> --serve 必须提供 GET /page.json（HEAD 同样允许，其他方法返回 405）：Host 与令牌校验与 GET / 相同（令牌用查询参数 token），不符合时返回 403 且不返回任何阅读页数据。通过时返回 200、Content-Type 为 application/json、带 Cache-Control: no-store，正文为按当前工作区状态重新生成、与同一时刻 GET / 内容一致的阅读页数据，符合随 wa-cli 二进制提供的 JSON Schema：title；units（单元树先序，每项含 ref、stage、hasDraft、notes、global、paragraphs 与 illustrations；paragraphs 每项含 index、line、text、origin（human、agent、agent-draft-human-edited，无法推导时为 null）、findings 与 illustrations（该段按首次出现顺序引用的已登记配图 id，同一 id 只列一次；未登记的引用不列入，在该单元 notes 中说明，见 illustrations 主规格的 illustration-references））；单元的 illustrations 为该单元配图登记中的每张配图（Illustration）与封面图（Cover Image），按登记顺序，每项含 id、role（body 或 cover）、alt、title（未设置时为 null）、content（mood 或 infographic）、origin（agent 或 author）、width、height、claims、sources、referenced（正文是否引用；封面图为 false）、available（是否为可用配图，判定同 preview-illustration）与 url（available 为 true 时为相对页面地址、不以 / 开头、不含令牌的 illustration?unit=<URL 编码的单元引用>&id=<配图 id>，否则为 null）；illustrations.yaml 不通过校验时为空数组并在该单元 notes 中说明；发现项含 kind（lint 或 review）、label、severity、message 与 suggestion；confirms（待作者确认区，每项含 kind、unit、id、label、detail、options（id 与 text）、recommend、needsAnswer 与 canReject）；strict 与 reviews（待作者复核区，每项含 key 与 label；strict 为 false 时为空数组）；failures（最近失败的命令，每项含 at、command 与 exit）。随二进制提供的 page.json JSON Schema 同步声明上述 illustrations 字段。任何层级的数组没有元素时为空数组而不是 null；正文等文字按原文给出，不做 HTML 转义。该接口只读，不创建也不修改任何产物'
+      scenarios:
+        page-json-content:
+          - GIVEN: 作品 my-post 正文有两段，第一段由作者写入、第二段由 Agent 经 draft write 写入；决策队列中有关联 my-post 的 open 决策 dec-1（选项 a、b）；preview my-post --serve 正在运行
+          - WHEN: 带令牌 GET /page.json
+          - THEN: 返回 200 与 application/json；units[0].ref 为 my-post，paragraphs 两项的 origin 依次为 human 与 agent；confirms 中有 kind 为 decision、id 为 dec-1、options 含 a 与 b 的一项；输出通过 page.json 的 JSON Schema 校验
+        page-json-rejected:
+          - GIVEN: preview --serve 正在运行
+          - WHEN: GET /page.json 不带 token、令牌错误，或 Host 头为 evil.example:<port>
+          - THEN: 都返回 403，响应中不含任何单元、正文或待确认事项
+        page-json-matches-page:
+          - GIVEN: preview my-post --serve 正在运行，工作区在两次请求之间没有变化
+          - WHEN: 分别带令牌 GET / 与 GET /page.json
+          - THEN: 两者列出的单元引用、各单元段落数、待作者确认事项与待作者复核项一致
+        page-json-empty-arrays:
+          - GIVEN: 作品 my-post 还没有正文，没有待作者确认事项，gate_level 为 standard，audit.log 没有失败记录
+          - WHEN: 带令牌 GET /page.json
+          - THEN: units[0].paragraphs、confirms、reviews 与 failures 均为空数组，strict 为 false
+        page-json-illustrations:
+          - GIVEN: 作品 my-post 正文第 2 段引用已登记、可用的 illustrations/fig-1.png（mood，origin 为 agent），根单元登记了封面图 cover，另有文件缺失的正文配图 fig-2 未被引用；preview my-post --serve 正在运行
+          - WHEN: 带令牌 GET /page.json
+          - THEN: units[0].illustrations 依登记顺序含 fig-1（role 为 body、referenced 为 true、available 为 true、url 为 illustration?unit=my-post&id=fig-1）、cover（role 为 cover、referenced 为 false）与 fig-2（available 为 false、url 为 null）；paragraphs[1].illustrations 为 [fig-1]，paragraphs[0].illustrations 为空数组；任何 url 都不含 token；输出通过 page.json 的 JSON Schema 校验
+        page-json-no-illustrations:
+          - GIVEN: 作品 my-post 没有 illustrations.yaml，正文有两段
+          - WHEN: 带令牌 GET /page.json
+          - THEN: units[0].illustrations 与每段的 illustrations 都为空数组，其余字段与本变更之前一致
+  REMOVED: {}

@@ -13,6 +13,7 @@ import (
 	"github.com/kw12121212/writing-anything/internal/decision"
 	"github.com/kw12121212/writing-anything/internal/draft"
 	"github.com/kw12121212/writing-anything/internal/feedback"
+	"github.com/kw12121212/writing-anything/internal/illustration"
 	"github.com/kw12121212/writing-anything/internal/outline"
 	"github.com/kw12121212/writing-anything/internal/resolve"
 	"github.com/kw12121212/writing-anything/internal/review"
@@ -314,6 +315,7 @@ type gateView struct {
 	Ready                bool              `json:"ready"`
 	ConfirmationRequired bool              `json:"confirmationRequired"`
 	Blockers             []gateBlockerView `json:"blockers"`
+	IllustrationsSHA256  *string           `json:"illustrationsSha256"`
 }
 
 type lintSummary struct {
@@ -327,6 +329,7 @@ type acceptanceView struct {
 	Path              string  `json:"path,omitempty"`
 	GateLevel         string  `json:"gateLevel"`
 	DraftSHA256       string  `json:"draftSha256"`
+	IllustrationsSHA  *string `json:"illustrationsSha256"`
 	ConfirmedByAuthor bool    `json:"confirmedByAuthor"`
 	Confirmation      *string `json:"confirmation"`
 	Channel           *string `json:"channel"`
@@ -367,6 +370,8 @@ type gateState struct {
 	problems  []workspace.Problem  // 无法收集关卡输入的问题（如没有正文、合并失败）以及不影响关卡的 warning
 	changed   []string             // 收集关卡时产生的副作用路径（如连续性豁免决策的决策队列）
 	series    []continuity.Finding // 系列范围的门禁发现（只算一次，accept 生成豁免决策时复用）
+	// illustrations 是单元当前的配图摘要（illustrations_sha256），没有配图时为 nil。
+	illustrations *string
 }
 
 // collectGate 为单元 u 收集验收关卡的输入：文本检查、审稿、未处理的作者反馈、关联的决策与评分标准。
@@ -435,6 +440,11 @@ func collectGate(dir string, w *work.Work, u *work.Unit) *gateState {
 	if g.in.Continuity, cps = continuity.BlockersWith(dir, w, u, g.series); len(cps) > 0 {
 		g.problems = append(g.problems, cps...)
 	}
+	// 配图（Illustration）阻塞项在所有关卡强度下生效（accept-gate）；单元没有配图登记且正文没有本地配图引用时不检查。
+	if c := checkUnitIllustrations(dir, w, u); c != nil {
+		g.in.Illustrations = c.Errors()
+	}
+	g.illustrations = illustration.Digest(dir, unitDir)
 	return g
 }
 
@@ -447,6 +457,9 @@ func continuityCode(code string) bool {
 func gateNext(dir, ref string, b review.Blocker) []string {
 	show := shellCommand("wa-cli", "review", "show", ref, "--dir", dir, "--json")
 	lintCmd := shellCommand("wa-cli", "lint", ref, "--dir", dir, "--json")
+	if strings.HasPrefix(b.Code, "illustration.") || b.Path != "" && schema.KindFor(b.Path) != nil && schema.KindFor(b.Path).Name == "illustrations" {
+		return []string{shellCommand("wa-cli", "illustration", "list", ref, "--dir", dir, "--json"), show}
+	}
 	if continuityCode(b.Code) {
 		return []string{shellCommand("wa-cli", "continuity", ref, "--dir", dir, "--json"),
 			shellCommand("wa-cli", "decisions", "--dir", dir, "--json"), show}
@@ -546,14 +559,15 @@ func runReviewShow(inv *invocation) int {
 			in.Confirmed = true
 			blockers, _ := review.Gate(in)
 			res.Gate.Level, res.Gate.Ready, res.Gate.ConfirmationRequired = in.Level, len(blockers) == 0, in.Level == "strict"
+			res.Gate.IllustrationsSHA256 = g.illustrations
 			for _, b := range blockers {
 				res.Gate.Blockers = append(res.Gate.Blockers, gateBlockerView{Code: b.Code, Path: b.Path, Ref: optional(b.Ref), Message: b.Message})
 			}
 			a, aps := review.LoadAcceptance(dir, unitDir)
 			problems = append(problems, aps...)
 			if a != nil {
-				stale := a.DraftSHA256 != g.in.DraftSHA
-				res.Acceptance = &acceptanceView{GateLevel: a.GateLevel, DraftSHA256: a.DraftSHA256, ConfirmedByAuthor: a.ConfirmedByAuthor,
+				stale := review.Stale(dir, unitDir, a, g.in.DraftSHA)
+				res.Acceptance = &acceptanceView{GateLevel: a.GateLevel, DraftSHA256: a.DraftSHA256, IllustrationsSHA: a.IllustrationsSHA, ConfirmedByAuthor: a.ConfirmedByAuthor,
 					Confirmation: a.Confirmation, Channel: channelView(a.ConfirmedByAuthor, a.Channel), AcceptedAt: a.AcceptedAt, Stale: &stale}
 			}
 			var rps []workspace.Problem
@@ -768,7 +782,7 @@ func acceptVia(dir string, w *work.Work, u *work.Unit, confirmed bool, confirmat
 		return append(problems, ps...), gate
 	}
 	res.Acceptance = &acceptanceView{Unit: u.Ref, Path: review.AcceptancePath(unitDir), GateLevel: a.GateLevel, DraftSHA256: a.DraftSHA256,
-		ConfirmedByAuthor: a.ConfirmedByAuthor, Confirmation: a.Confirmation, Channel: channelView(a.ConfirmedByAuthor, a.Channel), AcceptedAt: a.AcceptedAt}
+		IllustrationsSHA: a.IllustrationsSHA, ConfirmedByAuthor: a.ConfirmedByAuthor, Confirmation: a.Confirmation, Channel: channelView(a.ConfirmedByAuthor, a.Channel), AcceptedAt: a.AcceptedAt}
 	res.ChangedPaths = changed
 	// 部的最后一个场景验收后自动生成卷末检查点（volume 主规格的 checkpoint-on-accept）：只写汇总、不代作者确认；
 	// 生成问题为 warning，不撤销验收。

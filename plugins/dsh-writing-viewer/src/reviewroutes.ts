@@ -1,6 +1,6 @@
 /**
  * Review routes: the session status/start/end routes and the proxy prefix
- * route for the reading view service's data and submit endpoints. Every handler runs the Request Origin Guard first and
+ * route for the reading view service's data, illustration image and submit endpoints. Every handler runs the Request Origin Guard first and
  * a refused request neither starts a session nor reaches the upstream.
  */
 import { guardRequest, type GuardOptions } from './routeguard';
@@ -32,11 +32,12 @@ function json(res: ReviewResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' }).end(JSON.stringify(body));
 }
 
-function pathnameOf(url: string | undefined): string {
+function urlOf(url: string | undefined): { pathname: string; search: URLSearchParams } {
   try {
-    return new URL(url ?? '/', 'http://x').pathname;
+    const parsed = new URL(url ?? '/', 'http://x');
+    return { pathname: parsed.pathname, search: parsed.searchParams };
   } catch {
-    return '/';
+    return { pathname: '/', search: new URLSearchParams() };
   }
 }
 
@@ -130,13 +131,14 @@ export function registerReviewRoutes(server: { register(route: unknown): unknown
     path: REVIEW_PREFIX,
     handler: guarded(async (req, res) => {
       const method = req.method ?? 'GET';
-      const target = reviewTargetOf(pathnameOf(req.url));
-      // Only data and submit targets can ever reach the upstream, so only
+      const { pathname, search } = urlOf(req.url);
+      const target = reviewTargetOf(pathname, search);
+      // Only data, image and submit targets can ever reach the upstream, so only
       // they refresh the idle deadline (upstream() re-arms it). A 405 method
       // mismatch on one of those targets still counts as session activity;
       // 404 answers never do. That asymmetry is deliberate.
       const body = target.kind === 'submit' && method === 'POST' ? await readBody(req) : null;
-      const upstream = target.kind === 'data' || target.kind === 'submit' ? deps.sessions.upstream() : null;
+      const upstream = target.kind !== 'unknown' ? deps.sessions.upstream() : null;
       const answer = await proxyReview(method, target, upstream, body, deps.fetchLike);
       res.writeHead(answer.status, answer.headers).end(answer.body);
     }),

@@ -8,12 +8,14 @@
  * the three submit endpoints to the current review session's loopback server
  * and does nothing else (dsh-plugin-structure/review-proxy-thin):
  *
- * - only GET /page.json and POST /feedback, /confirm, /author-review are
- *   forwarded; the HTML page (GET /) and anything else is a 404;
+ * - only GET /page.json, GET and HEAD /illustration (配图（Illustration）
+ *   images, with just the unit and id query parameters) and POST /feedback,
+ *   /confirm, /author-review are forwarded; the HTML page (GET /) and
+ *   anything else is a 404;
  * - the session token is injected here and whatever token the browser sent
  *   is dropped, so the token never reaches the browser and a forged one is
  *   never forwarded;
- * - the upstream body is passed through byte for byte;
+ * - the upstream body is passed through byte for byte (image bytes too);
  * - response headers pass through except the hop headers the host re-derives.
  *
  * Workspace writes happen only inside the wa-cli child; nothing here touches
@@ -33,17 +35,27 @@ const SUBMIT_PATHS = new Set(['feedback', 'confirm', 'author-review']);
 /** The data endpoint the review view reads, by relative path. */
 export const DATA_PATH = 'page.json';
 
+/** The illustration image endpoint, by relative path. */
+export const IMAGE_PATH = 'illustration';
+
 /** Where one request under the prefix goes. */
 export type ReviewTarget =
   | { kind: 'data' }
+  | { kind: 'image'; unit: string; id: string }
   | { kind: 'submit'; path: string }
   | { kind: 'unknown' };
 
-/** Map a pathname to its target; anything outside the fixed set is unknown. */
-export function reviewTargetOf(pathname: string): ReviewTarget {
+/**
+ * Map a pathname (and, for the image endpoint, its query) to its target;
+ * anything outside the fixed set is unknown. The image target keeps only the
+ * unit and id parameters — every other parameter, including a browser-sent
+ * token, is dropped here.
+ */
+export function reviewTargetOf(pathname: string, search: URLSearchParams = new URLSearchParams()): ReviewTarget {
   if (!pathname.startsWith(REVIEW_PREFIX + '/')) return { kind: 'unknown' };
   const rest = pathname.slice(REVIEW_PREFIX.length + 1);
   if (rest === DATA_PATH) return { kind: 'data' };
+  if (rest === IMAGE_PATH) return { kind: 'image', unit: search.get('unit') ?? '', id: search.get('id') ?? '' };
   return SUBMIT_PATHS.has(rest) ? { kind: 'submit', path: rest } : { kind: 'unknown' };
 }
 
@@ -128,22 +140,25 @@ export async function proxyReview(
   fetchLike: ProxyFetch,
 ): Promise<ProxyAnswer> {
   if (target.kind === 'unknown') return { status: 404, headers: { 'cache-control': 'no-store' }, body: '' };
-  const wanted = target.kind === 'data' ? 'GET' : 'POST';
-  if (method !== wanted) return { status: 405, headers: { allow: wanted, 'cache-control': 'no-store' }, body: '' };
+  const allowed = target.kind === 'data' ? ['GET'] : target.kind === 'image' ? ['GET', 'HEAD'] : ['POST'];
+  if (!allowed.includes(method)) return { status: 405, headers: { allow: allowed.join(', '), 'cache-control': 'no-store' }, body: '' };
   if (upstream === null) return refusal(409, 'review.no-session', NO_SESSION_TITLE + '：' + NO_SESSION_HINT);
   if (target.kind === 'submit' && body === null) {
     return refusal(400, 'input.invalid-value', `请求体超过 ${REVIEW_BODY_LIMIT / 1024} KiB`);
   }
   const base = `http://127.0.0.1:${upstream.port}`;
+  const token = `token=${encodeURIComponent(upstream.token)}`;
   const url = target.kind === 'data'
-    ? `${base}/${DATA_PATH}?token=${encodeURIComponent(upstream.token)}`
-    : `${base}/${target.path}`;
-  const headers: Record<string, string> = target.kind === 'data'
-    ? {}
-    : { 'content-type': 'application/json', 'x-wa-token': upstream.token };
+    ? `${base}/${DATA_PATH}?${token}`
+    : target.kind === 'image'
+      ? `${base}/${IMAGE_PATH}?unit=${encodeURIComponent(target.unit)}&id=${encodeURIComponent(target.id)}&${token}`
+      : `${base}/${target.path}`;
+  const headers: Record<string, string> = target.kind === 'submit'
+    ? { 'content-type': 'application/json', 'x-wa-token': upstream.token }
+    : {};
   try {
     const response = await fetchLike(url, {
-      method: wanted,
+      method,
       headers,
       ...(target.kind === 'submit' && body !== null ? { body: new Uint8Array(body) } : {}),
       redirect: 'manual',

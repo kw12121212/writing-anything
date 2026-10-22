@@ -7,7 +7,9 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/kw12121212/writing-anything/internal/catalog"
 	"github.com/kw12121212/writing-anything/internal/draft"
+	"github.com/kw12121212/writing-anything/internal/illustration"
 	"github.com/kw12121212/writing-anything/internal/work"
 	"github.com/kw12121212/writing-anything/internal/workspace"
 )
@@ -28,6 +30,8 @@ const (
 type DisclosureConfig struct {
 	Placement string
 	Template  string
+	// ImageTemplate 是配图说明的模板；空时用内置模板。
+	ImageTemplate string
 }
 
 // Disclosure 是一次导出生成的 AI 参与说明。
@@ -37,6 +41,8 @@ type Disclosure struct {
 	AIParagraphs int
 	Paragraphs   int
 	AIPercent    int
+	AIImages     int // 导出配图中出处为 agent 的张数
+	Images       int // 导出配图的张数
 }
 
 func (d *Disclosure) footer() bool   { return d != nil && d.Placement != PlacementMetadata }
@@ -46,11 +52,13 @@ func (d *Disclosure) metadata() bool { return d != nil && d.Placement != Placeme
 // warning 并全部算作 AI 参与。没有 AI 参与段落或 cfg 为 nil 时返回 nil。
 // DisclosureOf 是 disclose 的导出包装：供组稿（assembly）等整书交付复用按出处的 AI 参与说明。
 func DisclosureOf(root string, w *work.Work, units []*work.Unit, cfg *DisclosureConfig) *Disclosure {
-	d, _ := disclose(root, w, units, cfg)
+	d, _ := disclose(root, w, units, cfg, 0, 0)
 	return d
 }
 
-func disclose(root string, w *work.Work, units []*work.Unit, cfg *DisclosureConfig) (*Disclosure, []workspace.Problem) {
+// disclose 另按导出配图计入 AI 配图：aiImages 为出处为 agent 的张数，images 为导出配图的张数；aiImages 大于 0 时在正文说明之后
+// 直接追加配图说明（没有 AI 参与段落时只有配图说明）。
+func disclose(root string, w *work.Work, units []*work.Unit, cfg *DisclosureConfig, aiImages, images int) (*Disclosure, []workspace.Problem) {
 	if cfg == nil {
 		return nil, nil
 	}
@@ -62,7 +70,9 @@ func disclose(root string, w *work.Work, units []*work.Unit, cfg *DisclosureConf
 			// 没有写入记录的单元全部出自作者；出处推导的问题（如段落数超过上限）与 AI 参与无关。
 			content, _, _ := draft.Read(root, w, u) // collect 刚读过同一个文件
 			for _, p := range draft.Split(content) {
-				total, chars = total+1, chars+p.Chars
+				if !imageOnly(p.Text) {
+					total, chars = total+1, chars+p.Chars
+				}
 			}
 			continue
 		}
@@ -72,26 +82,58 @@ func disclose(root string, w *work.Work, units []*work.Unit, cfg *DisclosureConf
 				Message: "单元 " + u.Ref + " 的段落出处无法推导（" + ps[0].Message + "），AI 参与说明把它的全部段落算作 AI 参与；请修复写入记录"})
 			content, _, _ := draft.Read(root, w, u) // collect 刚读过同一个文件
 			for _, p := range draft.Split(content) {
-				ai, total, aiChars, chars = ai+1, total+1, aiChars+p.Chars, chars+p.Chars
+				if !imageOnly(p.Text) {
+					ai, total, aiChars, chars = ai+1, total+1, aiChars+p.Chars, chars+p.Chars
+				}
 			}
 			continue
 		}
 		for _, p := range rep.Paragraphs {
+			if imageOnly(p.Text) {
+				continue
+			}
 			total, chars = total+1, chars+p.Chars
 			if p.Origin == draft.OriginAgent || p.Origin == draft.OriginEdited {
 				ai, aiChars = ai+1, aiChars+p.Chars
 			}
 		}
 	}
-	if ai == 0 {
+	if ai == 0 && aiImages == 0 {
 		return nil, problems
 	}
-	percent := 100 // 有 AI 参与段落时字数为 0 只可能是段落全为空白，不会出现；按全部为 AI 参与处理
-	if chars > 0 {
-		percent = int(math.Round(float64(aiChars) * 100 / float64(chars)))
+	percent, text := 0, ""
+	if ai > 0 {
+		percent = 100 // 有 AI 参与段落时字数为 0 只可能是段落全为空白，不会出现；按全部为 AI 参与处理
+		if chars > 0 {
+			percent = int(math.Round(float64(aiChars) * 100 / float64(chars)))
+		}
+		text = strings.TrimSpace(strings.NewReplacer("{ai_percent}", strconv.Itoa(percent), "{ai_paragraphs}", strconv.Itoa(ai), "{paragraphs}", strconv.Itoa(total)).Replace(cfg.Template))
 	}
-	text := strings.NewReplacer("{ai_percent}", strconv.Itoa(percent), "{ai_paragraphs}", strconv.Itoa(ai), "{paragraphs}", strconv.Itoa(total)).Replace(cfg.Template)
-	return &Disclosure{Text: strings.TrimSpace(text), Placement: cfg.Placement, AIParagraphs: ai, Paragraphs: total, AIPercent: percent}, problems
+	if aiImages > 0 {
+		tpl := cfg.ImageTemplate
+		if tpl == "" {
+			tpl = catalog.DefaultDisclosureImageTemplate
+		}
+		text += strings.TrimSpace(strings.NewReplacer("{ai_images}", strconv.Itoa(aiImages), "{images}", strconv.Itoa(images)).Replace(tpl))
+	}
+	return &Disclosure{Text: text, Placement: cfg.Placement, AIParagraphs: ai, Paragraphs: total, AIPercent: percent, AIImages: aiImages, Images: images}, problems
+}
+
+// imageOnly 报告段落是否只由本地配图引用（地址以 illustrations/ 开头的图片）与空白组成：这类段落是插入的配图位置，
+// 不算正文段落，不计入段落数与字数；配图本身按导出配图计入配图说明。
+func imageOnly(text string) bool {
+	refs := illustration.Refs([]byte(text))
+	if len(refs) == 0 {
+		return false
+	}
+	var b strings.Builder
+	last := 0
+	for _, r := range refs {
+		b.WriteString(text[last:r.Start])
+		last = r.End
+	}
+	b.WriteString(text[last:])
+	return strings.TrimSpace(b.String()) == ""
 }
 
 // hasRecord 报告单元目录 dir 下是否有写入记录 provenance.yaml（任何类型的文件都算，途经符号链接等问题由出处推导报告）。

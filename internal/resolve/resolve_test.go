@@ -473,3 +473,17 @@ func TestStyleAppliesToSchema(t *testing.T) {
 		}
 	}
 }
+
+// 配图说明模板：默认为内置模板；后面的规范包覆盖前面的，来源记为该规范包。
+func TestDisclosureImageTemplate(t *testing.T) {
+	if r := mustResolve(t, setup(t, "", nil)); r.AIDisclosure.ImageTemplate != (Value{"文中 {ai_images} 张配图由 AI 生成。", "default"}) {
+		t.Fatalf("default = %+v", r.AIDisclosure.ImageTemplate)
+	}
+	r := mustResolve(t, setup(t, config("", "[a, b]", ""), map[string]string{
+		"a": "schema_version: 1\nid: a\ntitle: a\nai_disclosure_image_template: \"甲 {ai_images}\"\n",
+		"b": "schema_version: 1\nid: b\ntitle: b\nai_disclosure_image_template: \"乙 {images}\"\n",
+	}))
+	if r.AIDisclosure.ImageTemplate != (Value{"乙 {images}", "pack:b"}) {
+		t.Fatalf("declared = %+v", r.AIDisclosure.ImageTemplate)
+	}
+}

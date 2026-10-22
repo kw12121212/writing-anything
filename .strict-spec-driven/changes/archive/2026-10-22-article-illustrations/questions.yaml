@@ -1,0 +1,119 @@
+schema: strict-spec-driven/question-list/v1
+schema_version: 1
+artifact_type: question_list
+schema_file: templates/strict-spec-driven/schemas/question-list.yaml
+change: article-illustrations
+open: []
+resolved:
+  - id: requirement-problem
+    question: What is concretely going wrong today, and for whom?
+    context: 'Why this is asked: the change is planned against a need, and the need lives only with the requester. A "problem" here means what someone does or suffers today — not a feature that is missing. If the answer names a button, a field, a page, or an endpoint, it is a solution, and the underlying problem is still unstated. What a sufficient answer contains: who is affected, what they do today instead, and how often. Worked example: "every Monday one person spends forty minutes copying order rows into a spreadsheet to send the weekly report". What it changes: this becomes the proposal''s why, and it decides whether the change is worth making.'
+    answer: 作者导出后要另找工具配图、做公众号封面：公众号 HTML 只有「【配图 n】」占位，图与文章内容和风格对不上，也没纳入作者确认与 AI 标识，费时易漏。
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-outcome
+    question: What observable difference proves the problem is solved?
+    context: 'Why this is asked: without a success condition, nobody can tell afterwards whether the change worked. "Observable" means someone outside the system can check it without reading the code. What a sufficient answer contains: what a person will see, or no longer have to do, once this is done. Worked example: "the report is in the manager''s inbox on Monday morning without anyone assembling it". What it changes: this becomes the delta spec''s scenarios and the acceptance evidence at review time.'
+    answer: 作者说要配图并选定风格后，不离开 Agent 会话即可在阅读页看到封面与正文配图并一次确认；导出目录直接有 HTML、配图清单与对应图片文件（含公众号尺寸封面），作者按清单上传即可。
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-trigger
+    question: Why now — what forced this?
+    context: 'Why this is asked: work that nothing forced is the work most often thrown away later. This question catches a request that sounds reasonable but has no real driver behind it. What a sufficient answer contains: the concrete event, deadline, incident, or cost that made this surface now, or an honest statement that nothing did. Worked example: "the report was missed last month and it was raised with the team". What it changes: a change with no trigger is a candidate for deferral, and the answer is weighed at review before archive.'
+    answer: 两者都是：作者要用 wechat-marketing 持续发文、每篇都需要封面和配图；同时 lemo-opuscar 风格库已可用。
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-non-goals
+    question: What must explicitly not change?
+    context: 'Why this is asked: the requester knows which nearby behavior other people depend on, and the agent does not. A "non-goal" is something the change must leave alone even though it sits close to the work. What a sufficient answer contains: the behavior, setting, or output that must survive untouched, and who relies on it. Worked example: "do not change the saved filters — several people rely on their own". What it changes: these become the proposal''s unchanged_behavior items, which review checks the finished result against.'
+    answer: wa-cli 不运行 lemo-opuscar/Node、不调用图像模型；不做公众号上传或发布接口；不配图的流程完全不变（验收、导出、AI 参与说明、阅读页一致，旧验收不失效，不新增阶段）；不做图片编辑，纯文本导出不改。
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-interpretation
+    question: Which reading of the request is intended, where more than one is possible?
+    context: 'Why this is asked: a short request usually admits several readings, and building the wrong one is indistinguishable from building nothing. What a sufficient answer contains: the reading that is meant, stated plainly enough to rule the others out — or a statement that only one reading exists and what it is. Worked example: "export means the version sent to the manager, not the one I read myself". What it changes: this fixes the scope boundary before any code is written, and settles disputes about what was asked for.'
+    answer: 两类配图都要：氛围/意象图与信息图（数据、流程、示意）；信息图中的数据或事实必须关联论断或素材，否则阻塞。
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: stage-placement
+    question: 配图环节放在写作生命周期哪一步？
+    context: 验收记录 draft_sha256，验收后改正文会使验收失效。选项：修订后验收前（推荐）、草稿后审稿前、验收后按锚点挂接。
+    answer: 修订后、验收前，经 draft write 插入图片引用，验收时一并确认图文。
+    status: resolved
+    kind: technical
+    answered_by: human
+  - id: integration-depth
+    question: wa-cli 与 lemo-opuscar 集成到什么程度？
+    context: 选项：wa-cli 管产物由 Agent 调 lemo（推荐）、只加技能、wa-cli 直接调用 lemo（破坏单文件二进制）。
+    answer: wa-cli 管产物（登记、校验、导出），Agent 按技能调用 lemo-opuscar 渲染。
+    status: resolved
+    kind: technical
+    answered_by: human
+  - id: export-assets
+    question: 导出时怎么处理配图文件？
+    context: 选项：复制图片到导出目录并改写路径（推荐）、只保留原引用。
+    answer: 复制到导出目录旁的资产目录并改写为相对路径；wechat-html 配图清单列出实际文件路径。
+    status: resolved
+    kind: technical
+    answered_by: human
+  - id: ai-label-images
+    question: Agent 渲染的配图是否计入 AI 参与说明？
+    context: 代码渲染的配图同样是 AI 生成合成内容。选项：计入并标注（推荐）、不计入。
+    answer: 计入：说明追加配图句，配图清单逐张标注；作者提供的图不计入。
+    status: resolved
+    kind: technical
+    answered_by: human
+  - id: disclosure-image-text
+    question: AI 参与说明里配图那句话怎么定？
+    context: 选项：内置一句、规范包可覆盖（推荐）；固定文字不可配置。
+    answer: 内置「文中 {ai_images} 张配图由 AI 生成。」，规范包可用 ai_disclosure_image_template 覆盖；正文无 AI 段落但有 AI 配图时同样生成。
+    status: resolved
+    kind: technical
+    answered_by: human
+  - id: acceptance-lock
+    question: 验收是否锁住配图与封面？
+    context: 现在验收只记录正文哈希，换图不会使验收失效。选项：锁住（推荐）、只锁正文。
+    answer: 锁住：acceptance.yaml 增加 illustrations_sha256，换图按 acceptance.stale 处理；无配图的旧验收仍有效。
+    status: resolved
+    kind: technical
+    answered_by: human
+  - id: review-display
+    question: 作者在哪里看到配图并完成图文确认？
+    context: 阅读页目前只显示段落原文。选项：阅读页与 DSH 面板都显示（推荐）、只改阅读页、都不改。
+    answer: 阅读页（静态与 --serve、page.json）与 DSH 插件审阅视图都显示。
+    status: resolved
+    kind: technical
+    answered_by: human
+  - id: genre-scope
+    question: 配图环节对哪些文体开放？
+    context: 选项：所有文体，封面不限（推荐）；只对 tech-blog 与 wechat-marketing。
+    answer: 配图登记属于内核，所有文体可用；技能默认只在 tech-blog 与 wechat-marketing 主动询问。
+    status: resolved
+    kind: technical
+    answered_by: human
+  - id: plan-confirmation
+    question: 渲染前作者是否先确认配图计划？
+    context: 选项：先确认计划并经决策队列登记（推荐）、直接出图、计划登记为产物。
+    answer: 渲染前作者确认配图计划，经决策队列登记。
+    status: resolved
+    kind: technical
+    answered_by: human
+  - id: change-split
+    question: DSH 插件显示是否拆成后续变更？
+    context: 推荐拆分以控制范围；DSH 需修改 review-proxy-thin MUST 规则。
+    answer: 合成一个变更 article-illustrations。
+    status: resolved
+    kind: technical
+    answered_by: human
+  - id: cover-image
+    question: 是否支持公众号封面图？
+    context: 作者在讨论中追加：还需要一个用于公众号的封面配图。
+    answer: 支持：封面登记在作品根单元、每个作品至多一张，不进正文，随导出元数据与配图清单交付，技能按公众号尺寸渲染。
+    status: resolved
+    kind: technical
+    answered_by: human

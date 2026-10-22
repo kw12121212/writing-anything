@@ -50,3 +50,6 @@ func SafeCSS(v string) bool { return cssRE.MatchString(v) && !unsafeCSSRE.MatchS
 // DefaultDisclosureTemplate 是内置的 AI 参与说明（AI-generated Content Label）模板；规范包可以用 ai_disclosure_template 覆盖。
 // 占位符：{ai_percent} 为 AI 参与段落的字数占比，{ai_paragraphs} 与 {paragraphs} 为 AI 参与段落数与全部段落数。
 const DefaultDisclosureTemplate = "本文在 AI 辅助下完成：约 {ai_percent}% 的内容由 AI 起草，均经作者审阅确认。"
+
+// DefaultDisclosureImageTemplate 是内置的 AI 参与说明中配图说明的模板；规范包可以用 ai_disclosure_image_template 覆盖。
+const DefaultDisclosureImageTemplate = "文中 {ai_images} 张配图由 AI 生成。"

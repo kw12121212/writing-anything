@@ -54,6 +54,7 @@ var kinds = []*Kind{
 	newKind("source", "source.schema.json", ".writing-anything/sources/*/source.yaml"),
 	newKind("provenance", "provenance.schema.json", ".writing-anything/works/*/provenance.yaml", ".writing-anything/works/*/units/*/provenance.yaml"),
 	newKind("claims", "claims.schema.json", ".writing-anything/works/*/claims.yaml", ".writing-anything/works/*/units/*/claims.yaml"),
+	newKind("illustrations", "illustrations.schema.json", ".writing-anything/works/*/illustrations.yaml", ".writing-anything/works/*/units/*/illustrations.yaml"),
 	// canon、threads、state 与 knowledge 只在作品根单元目录（作品目录）中识别；子单元目录下的 canon.yaml、
 	// threads.yaml、state.yaml 与 knowledge.yaml 不属于任何产物类型。
 	newKind("canon", "canon.schema.json", ".writing-anything/works/*/canon.yaml"),

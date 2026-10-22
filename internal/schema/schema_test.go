@@ -326,20 +326,22 @@ func TestSharedDefinitions(t *testing.T) {
 
 func TestKindForSourcesAndUnitArtifacts(t *testing.T) {
 	for rel, want := range map[string]string{
-		".writing-anything/decisions.yaml":                            "decisions",
-		".writing-anything/sources/src-1/source.yaml":                 "source",
-		".writing-anything/works/my-post/provenance.yaml":             "provenance",
-		".writing-anything/works/my-post/units/intro/provenance.yaml": "provenance",
-		".writing-anything/works/my-post/claims.yaml":                 "claims",
-		".writing-anything/works/my-post/units/intro/claims.yaml":     "claims",
-		".writing-anything/works/my-post/brief.yaml":                  "brief",
-		".writing-anything/works/my-post/units/intro/brief.yaml":      "brief",
-		".writing-anything/works/my-post/outline.yaml":                "outline",
-		".writing-anything/works/my-post/units/intro/outline.yaml":    "outline",
-		".writing-anything/works/my-post/marketing.yaml":              "marketing",
-		".writing-anything/works/my-post/units/intro/marketing.yaml":  "marketing",
-		".writing-anything/works/my-post/canon.yaml":                  "canon",
-		".writing-anything/works/my-post/threads.yaml":                "threads",
+		".writing-anything/decisions.yaml":                               "decisions",
+		".writing-anything/sources/src-1/source.yaml":                    "source",
+		".writing-anything/works/my-post/provenance.yaml":                "provenance",
+		".writing-anything/works/my-post/units/intro/provenance.yaml":    "provenance",
+		".writing-anything/works/my-post/claims.yaml":                    "claims",
+		".writing-anything/works/my-post/units/intro/claims.yaml":        "claims",
+		".writing-anything/works/my-post/illustrations.yaml":             "illustrations",
+		".writing-anything/works/my-post/units/intro/illustrations.yaml": "illustrations",
+		".writing-anything/works/my-post/brief.yaml":                     "brief",
+		".writing-anything/works/my-post/units/intro/brief.yaml":         "brief",
+		".writing-anything/works/my-post/outline.yaml":                   "outline",
+		".writing-anything/works/my-post/units/intro/outline.yaml":       "outline",
+		".writing-anything/works/my-post/marketing.yaml":                 "marketing",
+		".writing-anything/works/my-post/units/intro/marketing.yaml":     "marketing",
+		".writing-anything/works/my-post/canon.yaml":                     "canon",
+		".writing-anything/works/my-post/threads.yaml":                   "threads",
 	} {
 		if k := KindFor(rel); k == nil || k.Name != want {
 			t.Errorf("KindFor(%q) = %+v, want %s", rel, k, want)

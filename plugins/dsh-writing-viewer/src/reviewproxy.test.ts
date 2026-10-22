@@ -44,6 +44,9 @@ describe('review proxy targets', () => {
     expect(reviewTargetOf('/dsh-writing-viewer/review/feedback')).toEqual({ kind: 'submit', path: 'feedback' });
     expect(reviewTargetOf('/dsh-writing-viewer/review/confirm')).toEqual({ kind: 'submit', path: 'confirm' });
     expect(reviewTargetOf('/dsh-writing-viewer/review/author-review')).toEqual({ kind: 'submit', path: 'author-review' });
+    expect(reviewTargetOf('/dsh-writing-viewer/review/illustration', new URLSearchParams('unit=my-post&id=fig-1&token=forged&x=1'))).toEqual({ kind: 'image', unit: 'my-post', id: 'fig-1' });
+    expect(reviewTargetOf('/dsh-writing-viewer/review/illustration')).toEqual({ kind: 'image', unit: '', id: '' });
+    expect(reviewTargetOf('/dsh-writing-viewer/review/illustration/x')).toEqual({ kind: 'unknown' });
     for (const other of ['/dsh-writing-viewer/review/../setup', '/dsh-writing-viewer/review/feedback/x', '/dsh-writing-viewer/review/favicon.ico', '/dsh-writing-viewer/reviewx', '/']) {
       expect(reviewTargetOf(other), other).toEqual({ kind: 'unknown' });
     }
@@ -145,6 +148,81 @@ describe('review proxy forwarding', () => {
     expect(String(page.body)).not.toContain(UP.token);
     const submit = await proxyReview('POST', { kind: 'submit', path: 'confirm' }, UP, Buffer.from('{}'), failing);
     expect(JSON.parse(String(submit.body)).diagnostics[0].code).toBe('review.upstream-unavailable');
+  });
+});
+
+describe('review proxy illustrations', () => {
+  /** An upstream answering an image with arbitrary (non-UTF-8) bytes. */
+  function imageUpstream(status = 200, bytes = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0xff, 0xfe, 0x80])) {
+    const calls: { url: string; init: Parameters<ProxyFetch>[1] }[] = [];
+    const fetchLike: ProxyFetch = async (url, init) => {
+      calls.push({ url, init });
+      return {
+        status,
+        headers: [
+          ['Content-Type', status === 200 ? 'image/png' : 'text/plain; charset=utf-8'],
+          ['Cache-Control', 'no-store'],
+          ['X-Content-Type-Options', 'nosniff'],
+          ['Content-Length', String(bytes.length)],
+        ] as [string, string][],
+        arrayBuffer: async () => bytes.slice().buffer as ArrayBuffer,
+      };
+    };
+    return { fetchLike, calls, bytes };
+  }
+
+  it('forwards only unit and id with the session token and returns the image bytes unchanged (proxy-illustration)', async () => {
+    const { fetchLike, calls, bytes } = imageUpstream();
+    const target = reviewTargetOf('/dsh-writing-viewer/review/illustration', new URLSearchParams('unit=my-post&id=fig-1&token=forged'));
+    const answer = await proxyReview('GET', target, UP, null, fetchLike);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.url).toBe('http://127.0.0.1:41234/illustration?unit=my-post&id=fig-1&token=session-token-0123456789abcdef');
+    expect(calls[0]!.url).not.toContain('forged');
+    expect(calls[0]!.init.method).toBe('GET');
+    expect(calls[0]!.init.headers).toEqual({});
+    expect(answer.status).toBe(200);
+    expect(answer.headers['content-type']).toBe('image/png');
+    expect(answer.headers['x-content-type-options']).toBe('nosniff');
+    expect(answer.headers['content-length']).toBeUndefined();
+    expect(Array.from(answer.body as Uint8Array)).toEqual(Array.from(bytes));
+    expect(JSON.stringify(answer.headers)).not.toContain(UP.token);
+    expect(JSON.stringify(answer.headers)).not.toContain('127.0.0.1');
+  });
+
+  it('URL-encodes unit and id, and forwards HEAD as HEAD', async () => {
+    const { fetchLike, calls } = imageUpstream();
+    await proxyReview('HEAD', { kind: 'image', unit: 'my-post/s 1', id: 'a&b' }, UP, null, fetchLike);
+    expect(calls[0]!.url).toBe('http://127.0.0.1:41234/illustration?unit=my-post%2Fs%201&id=a%26b&token=session-token-0123456789abcdef');
+    expect(calls[0]!.init.method).toBe('HEAD');
+  });
+
+  it('passes an upstream 404 through unchanged (proxy-illustration-not-found)', async () => {
+    const { fetchLike } = imageUpstream(404, new TextEncoder().encode('配图不存在'));
+    const answer = await proxyReview('GET', { kind: 'image', unit: 'my-post', id: 'ghost' }, UP, null, fetchLike);
+    expect(answer.status).toBe(404);
+    expect(Buffer.from(answer.body as Uint8Array).toString('utf8')).toBe('配图不存在');
+  });
+
+  it('answers the no-session notice without any upstream call, and refuses POST (proxy-illustration-no-session)', async () => {
+    const { fetchLike, calls } = imageUpstream();
+    const none = await proxyReview('GET', { kind: 'image', unit: 'my-post', id: 'fig-1' }, null, null, fetchLike);
+    expect(none.status).toBe(409);
+    expect(JSON.parse(String(none.body)).diagnostics[0].code).toBe('review.no-session');
+    expect(String(none.body)).toContain('没有进行中的审阅');
+    const post = await proxyReview('POST', { kind: 'image', unit: 'my-post', id: 'fig-1' }, UP, Buffer.from('{}'), fetchLike);
+    expect(post.status).toBe(405);
+    expect(post.headers['allow']).toBe('GET, HEAD');
+    expect(calls).toHaveLength(0);
+  });
+
+  it('reports an unreachable upstream readably for images too', async () => {
+    const failing: ProxyFetch = async () => {
+      throw new Error('connect ECONNREFUSED 127.0.0.1');
+    };
+    const answer = await proxyReview('GET', { kind: 'image', unit: 'my-post', id: 'fig-1' }, UP, null, failing);
+    expect(answer.status).toBe(502);
+    expect(String(answer.body)).not.toContain('127.0.0.1');
+    expect(String(answer.body)).not.toContain(UP.token);
   });
 });
 

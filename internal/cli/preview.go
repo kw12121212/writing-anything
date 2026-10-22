@@ -20,6 +20,7 @@ import (
 	"github.com/kw12121212/writing-anything/internal/draft"
 	"github.com/kw12121212/writing-anything/internal/export"
 	"github.com/kw12121212/writing-anything/internal/feedback"
+	"github.com/kw12121212/writing-anything/internal/illustration"
 	"github.com/kw12121212/writing-anything/internal/lint"
 	"github.com/kw12121212/writing-anything/internal/preview"
 	"github.com/kw12121212/writing-anything/internal/work"
@@ -264,6 +265,12 @@ func (s *previewServer) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.page(rw, r.URL.Path == "/page.json")
+	case "/illustration":
+		if r.Method != http.MethodGet && r.Method != http.MethodHead {
+			http.Error(rw, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		s.illustration(rw, r)
 	case "/feedback", "/confirm", "/author-review":
 		if r.Method != http.MethodPost {
 			http.Error(rw, "method not allowed", http.StatusMethodNotAllowed)
@@ -291,6 +298,7 @@ func (s *previewServer) page(rw http.ResponseWriter, asJSON bool) {
 	}
 	p := preview.Build(s.dir, w, preview.Subtree(u), unitLint(s.dir, w))
 	p.Serve = true
+	p.Token = s.token
 	p.Confirms = confirmQueue(s.dir, w)
 	p.Strict, p.Reviews = reviewQueue(s.dir, w)
 	p.Failures = auditFailureSummary(s.dir)
@@ -305,6 +313,51 @@ func (s *previewServer) page(rw http.ResponseWriter, asJSON bool) {
 	}
 	rw.Header().Set("Content-Type", ctype)
 	rw.Write(data)
+}
+
+// illustration 返回阅读页所列单元中一张可用配图的图片字节（GET /illustration，preview-illustration）：按当前工作区状态重新
+// 解析单元与配图登记，unit 不在阅读页所列单元中、id 未登记或图片不可用时返回 404，不返回任何图片数据。
+func (s *previewServer) illustration(rw http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	ref, id := q.Get("unit"), q.Get("id")
+	notFound := func(msg string) {
+		rw.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		rw.WriteHeader(http.StatusNotFound)
+		io.WriteString(rw, msg+"\n")
+	}
+	w, u, _ := work.Resolve(s.dir, s.ref)
+	if u == nil || ref == "" || id == "" || !slices.Contains(refs(preview.Subtree(u)), ref) {
+		notFound("配图不存在：单元不在阅读页中或缺少 unit、id")
+		return
+	}
+	_, target, _ := work.Resolve(s.dir, ref)
+	if target == nil {
+		notFound("配图不存在：单元无法解析")
+		return
+	}
+	unitDir := w.UnitDir(target)
+	items, _, ps := illustration.Load(s.dir, unitDir)
+	if len(ps) > 0 {
+		notFound("配图不存在：配图登记不通过校验")
+		return
+	}
+	for _, it := range items {
+		if it.ID != id {
+			continue
+		}
+		data, ok := illustration.ReadImage(s.dir, unitDir, it)
+		if !ok {
+			break
+		}
+		rw.Header().Set("Content-Type", illustration.MIME(it.Format))
+		rw.Header().Set("Content-Length", strconv.Itoa(len(data)))
+		if r.Method == http.MethodHead {
+			return
+		}
+		rw.Write(data)
+		return
+	}
+	notFound("配图不存在或不可用：" + id)
 }
 
 // previewRequest 是 POST /feedback 的请求体。

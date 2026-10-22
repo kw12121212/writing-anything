@@ -23,8 +23,9 @@ var exportCommand = &command{
 		{"output", flagString, "输出文件，相对 --dir；省略时为 .writing-anything/exports/<work>.md（wechat-html 为 <work>.html，text 为 <work>.txt）"},
 		{"front-matter", flagBool, "在开头附带 YAML front matter：title、description、genre、units 与 accepted_at；只用于 markdown"}},
 	outputKeys: []outputKey{{"export", "导出结果：work、format、path、units（导出的单元，按顺序）、skipped（没有导出的单元，每项含 unit 与 reason）、chars、" +
-		"images（wechat-html 的配图（Illustration），每项含 index、alt、src 与 title；markdown 与 text 为空数组）、imageList（配图清单的路径，没有时为 null）与 " +
-		"disclosure（AI 参与说明（AI-generated Content Label）：text、placement、aiParagraphs、paragraphs 与 aiPercent；没有 AI 参与的段落时为 null）；失败时为 null"}},
+		"images（wechat-html 的配图（Illustration），每项含 index、alt、src 与 title；markdown 与 text 为空数组）、imageList（配图清单的路径，没有时为 null）、" +
+		"assets（复制到资产目录（Asset Directory）的配图与封面图（Cover Image），封面在前，每项含 unit、id、role、origin、source 与 path；没有时为空数组）与 " +
+		"disclosure（AI 参与说明（AI-generated Content Label）：text、placement、aiParagraphs、paragraphs、aiPercent、aiImages 与 images；没有 AI 参与的段落与 AI 配图时为 null）；失败时为 null"}},
 	exitCodes: standardExitCodes,
 	run:       runExport,
 }
@@ -50,7 +51,17 @@ type exportView struct {
 	Chars      int             `json:"chars"`
 	Images     []imageView     `json:"images"`
 	ImageList  *string         `json:"imageList"`
+	Assets     []assetView     `json:"assets"`
 	Disclosure *disclosureView `json:"disclosure"`
+}
+
+type assetView struct {
+	Unit   string `json:"unit"`
+	ID     string `json:"id"`
+	Role   string `json:"role"`
+	Origin string `json:"origin"`
+	Source string `json:"source"`
+	Path   string `json:"path"`
 }
 
 type disclosureView struct {
@@ -59,10 +70,13 @@ type disclosureView struct {
 	AIParagraphs int    `json:"aiParagraphs"`
 	Paragraphs   int    `json:"paragraphs"`
 	AIPercent    int    `json:"aiPercent"`
+	AIImages     int    `json:"aiImages"`
+	Images       int    `json:"images"`
 }
 
 func disclosureConfig(r *resolve.Resolved) *export.DisclosureConfig {
-	return &export.DisclosureConfig{Placement: fmt.Sprint(r.AIDisclosure.Placement.Value), Template: fmt.Sprint(r.AIDisclosure.Template.Value)}
+	return &export.DisclosureConfig{Placement: fmt.Sprint(r.AIDisclosure.Placement.Value), Template: fmt.Sprint(r.AIDisclosure.Template.Value),
+		ImageTemplate: fmt.Sprint(r.AIDisclosure.ImageTemplate.Value)}
 }
 
 type exportResult struct {
@@ -127,12 +141,16 @@ func runExport(inv *invocation) int {
 					r, changed, problems = export.Markdown(dir, w, opt)
 				}
 				if r != nil {
-					v := &exportView{Work: w.ID, Format: format, Path: r.Path, Units: r.Units, Skipped: []skippedView{}, Chars: r.Chars, Images: []imageView{}, ImageList: optional(r.ImageList)}
+					v := &exportView{Work: w.ID, Format: format, Path: r.Path, Units: r.Units, Skipped: []skippedView{}, Chars: r.Chars, Images: []imageView{}, ImageList: optional(r.ImageList), Assets: []assetView{}}
+					for _, a := range r.Assets {
+						v.Assets = append(v.Assets, assetView{Unit: a.Unit, ID: a.ID, Role: a.Role, Origin: a.Origin, Source: a.Source, Path: a.Path})
+					}
 					for _, s := range r.Skipped {
 						v.Skipped = append(v.Skipped, skippedView(s))
 					}
 					if d := r.Disclosure; d != nil {
-						v.Disclosure = &disclosureView{Text: d.Text, Placement: d.Placement, AIParagraphs: d.AIParagraphs, Paragraphs: d.Paragraphs, AIPercent: d.AIPercent}
+						v.Disclosure = &disclosureView{Text: d.Text, Placement: d.Placement, AIParagraphs: d.AIParagraphs, Paragraphs: d.Paragraphs, AIPercent: d.AIPercent,
+							AIImages: d.AIImages, Images: d.Images}
 					}
 					for _, img := range r.Images {
 						v.Images = append(v.Images, imageView{Index: img.Index, Alt: img.Alt, Src: img.Src, Title: optional(img.Title)})
@@ -174,6 +192,9 @@ func runExport(inv *invocation) int {
 		}
 		if res.Export.ImageList != nil {
 			text += fmt.Sprintf("配图清单（%d 张）：%s\n", len(res.Export.Images), *res.Export.ImageList)
+		}
+		if n := len(res.Export.Assets); n > 0 {
+			text += fmt.Sprintf("已复制 %d 张配图到资产目录 %s\n", n, export.AssetDir(res.Export.Path))
 		}
 		_, err := io.WriteString(w, text)
 		return err

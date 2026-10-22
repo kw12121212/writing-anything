@@ -15,6 +15,7 @@ import (
 
 	"github.com/kw12121212/writing-anything/internal/brief"
 	"github.com/kw12121212/writing-anything/internal/draft"
+	"github.com/kw12121212/writing-anything/internal/illustration"
 	"github.com/kw12121212/writing-anything/internal/review"
 	"github.com/kw12121212/writing-anything/internal/work"
 	"github.com/kw12121212/writing-anything/internal/workspace"
@@ -61,6 +62,7 @@ type Result struct {
 	Chars      int
 	Images     []Image     // wechat-html 的配图；Markdown 为空
 	ImageList  string      // 配图清单的路径；没有配图时为空
+	Assets     []Asset     // 复制到资产目录的配图与封面（封面在前）；没有时为空
 	Disclosure *Disclosure // AI 参与说明；没有 AI 参与时为 nil
 }
 
@@ -88,7 +90,8 @@ func Markdown(root string, w *work.Work, opt Options) (*Result, []string, []work
 		return nil, nil, problems
 	}
 	res.Path = rel
-	d, ps := disclose(root, w, units, opt.Disclosure)
+	parts, res.Assets, _ = planAssets(root, w, units, parts, rel)
+	d, ps := disclose(root, w, units, opt.Disclosure, countAI(res.Assets), len(res.Assets))
 	problems, res.Disclosure = append(problems, ps...), d
 	doc := strings.Join(parts, "\n\n") + "\n"
 	if d.footer() {
@@ -99,15 +102,29 @@ func Markdown(root string, w *work.Work, opt Options) (*Result, []string, []work
 		if d.metadata() {
 			label = d.Text
 		}
-		fm, err := frontMatter(root, w, parts[0], res.Units, accepted, label)
+		coverPath := ""
+		if c := cover(res.Assets); c != nil {
+			coverPath = relToExport(*c)
+		}
+		fm, err := frontMatter(root, w, parts[0], res.Units, accepted, label, coverPath)
 		if err != nil {
 			return nil, nil, append(problems, workspace.Problem{Code: workspace.CodeWriteFailed, Severity: workspace.SeverityError, Path: rel, Message: "生成 front matter 失败：" + err.Error()})
 		}
 		doc = fm + doc
 	}
+	// 导出文件与全部资产文件的路径都在写入任何文件之前检查（export-output）。
+	if len(res.Assets) > 0 {
+		if ps := slices.Concat(checkParents(root, rel, CodeInvalidOutput), checkAssets(root, res.Assets, CodeInvalidOutput)); len(ps) > 0 {
+			return nil, nil, append(problems, ps...)
+		}
+	}
 	changed, ps := write(root, rel, []byte(doc), CodeInvalidOutput)
 	if len(ps) > 0 {
 		return nil, nil, append(problems, ps...)
+	}
+	more, ps := writeAssets(root, res.Assets, CodeInvalidOutput)
+	if changed = append(changed, more...); len(ps) > 0 {
+		return nil, changed, append(problems, ps...)
 	}
 	res.Chars = len([]rune(doc))
 	return res, changed, problems
@@ -129,7 +146,9 @@ func WechatHTML(root string, w *work.Work, opt Options, theme map[string]string)
 		return nil, nil, problems
 	}
 	res.Path = rel
-	d, ps := disclose(root, w, units, opt.Disclosure)
+	var occ []occurrence
+	_, res.Assets, occ = planAssets(root, w, units, parts, rel)
+	d, ps := disclose(root, w, units, opt.Disclosure, countAI(res.Assets), len(res.Assets))
 	problems, res.Disclosure = append(problems, ps...), d
 	footer := ""
 	if d.footer() {
@@ -138,26 +157,24 @@ func WechatHTML(root string, w *work.Work, opt Options, theme map[string]string)
 	doc, images := RenderWechat(strings.Join(parts, "\n\n"), theme, footer)
 	res.Images = images
 	var list []byte
-	if len(images) > 0 {
+	c := cover(res.Assets)
+	if len(images) > 0 || c != nil {
 		lp, p := cleanOutput(ImageListPath(rel), CodeInvalidOutput)
 		if p != nil {
 			return nil, nil, append(problems, *p)
 		}
-		// 先不带副作用地检查两个路径，导出文件与清单要么都写，要么都不写。
-		if ps := slices.Concat(checkParents(root, rel, CodeInvalidOutput), checkParents(root, lp, CodeInvalidOutput)); len(ps) > 0 {
+		res.ImageList = lp
+		list = []byte(imageList(images, res.Assets, occ, c))
+	}
+	// 先不带副作用地检查导出文件、配图清单与全部资产文件的路径：要么都写，要么都不写（export-output）。
+	if list != nil || len(res.Assets) > 0 {
+		ps := slices.Concat(checkParents(root, rel, CodeInvalidOutput), checkAssets(root, res.Assets, CodeInvalidOutput))
+		if list != nil {
+			ps = append(ps, checkParents(root, res.ImageList, CodeInvalidOutput)...)
+		}
+		if len(ps) > 0 {
 			return nil, nil, append(problems, ps...)
 		}
-		res.ImageList = lp
-		var b strings.Builder
-		b.WriteString("# 配图清单\n\n")
-		for _, img := range images {
-			fmt.Fprintf(&b, "%d. %s：%s", img.Index, img.Alt, img.Src)
-			if img.Title != "" {
-				fmt.Fprintf(&b, "（%s）", img.Title)
-			}
-			b.WriteString("\n")
-		}
-		list = []byte(b.String())
 	}
 	changed, ps := write(root, rel, []byte(doc), CodeInvalidOutput)
 	if len(ps) > 0 {
@@ -174,8 +191,56 @@ func WechatHTML(root string, w *work.Work, opt Options, theme map[string]string)
 			}
 		}
 	}
+	more, ps := writeAssets(root, res.Assets, CodeInvalidOutput)
+	if changed = append(changed, more...); len(ps) > 0 {
+		return nil, changed, append(problems, ps...)
+	}
 	res.Chars = len([]rune(doc))
 	return res, changed, problems
+}
+
+// imageList 生成配图清单（Image List）：标题「配图清单」，有导出封面时先列「封面」项，再按编号列出正文配图的替代文字、地址与标题；
+// 已复制到资产目录的配图另列资产文件相对清单的路径，出处为 agent 的另标注「AI 生成」。没有配图登记时与只有替代文字、地址与标题时相同。
+func imageList(images []Image, assets []Asset, occ []occurrence, c *Asset) string {
+	var b strings.Builder
+	b.WriteString("# 配图清单\n\n")
+	asset := func(a Asset) {
+		fmt.Fprintf(&b, "；文件：%s", relToExport(a))
+		if a.Origin == illustration.OriginAgent {
+			b.WriteString("；AI 生成")
+		}
+	}
+	if c != nil {
+		fmt.Fprintf(&b, "- 封面：%s", c.Alt)
+		asset(*c)
+		b.WriteString("\n")
+		if len(images) > 0 {
+			b.WriteString("\n")
+		}
+	}
+	// 公众号 HTML 的配图按出现顺序编号；按地址依次对应到正文中的图片，得到已复制的资产。
+	cursor := 0
+	for _, img := range images {
+		fmt.Fprintf(&b, "%d. %s：%s", img.Index, img.Alt, img.Src)
+		if img.Title != "" {
+			fmt.Fprintf(&b, "（%s）", img.Title)
+		}
+		src := img.Src
+		if strings.HasPrefix(src, "<") && strings.HasSuffix(src, ">") {
+			src = src[1 : len(src)-1] // 公众号渲染保留尖括号包住的地址
+		}
+		for j := cursor; j < len(occ); j++ {
+			if occ[j].src == src {
+				if occ[j].asset >= 0 {
+					asset(assets[occ[j].asset])
+				}
+				cursor = j + 1
+				break
+			}
+		}
+		b.WriteString("\n")
+	}
+	return b.String()
 }
 
 // ImageListPath 返回导出文件 rel 的配图清单路径：去掉 .html 后缀（没有时为整个文件名）加 .images.md。
@@ -198,7 +263,8 @@ func PlainText(root string, w *work.Work, opt Options) (*Result, []string, []wor
 		return nil, nil, problems
 	}
 	res.Path = rel
-	d, ps := disclose(root, w, units, opt.Disclosure)
+	// 纯文本不复制配图与封面，AI 参与说明不计配图（plain-text-export）。
+	d, ps := disclose(root, w, units, opt.Disclosure, 0, 0)
 	problems, res.Disclosure = append(problems, ps...), d
 	doc := RenderPlainText(strings.Join(parts, "\n\n")) + "\n"
 	if d != nil {
@@ -368,7 +434,8 @@ func parents(root, rel, code string, create bool) ([]string, []workspace.Problem
 
 // frontMatter 生成 front matter：title（第一个导出单元正文中的第一个一级标题，没有时为作品 id）、description（根单元写作简报的
 // purpose，没有时省略）、genre、units 与 accepted_at（导出单元中最晚的验收时间）。
-func frontMatter(root string, w *work.Work, first string, units []string, accepted []*review.Acceptance, label string) (string, error) {
+// coverPath 非空时另含 cover（封面在资产目录中的路径，相对导出文件）。
+func frontMatter(root string, w *work.Work, first string, units []string, accepted []*review.Acceptance, label, coverPath string) (string, error) {
 	title := w.ID
 	if h := FirstHeading(first); h != "" {
 		title = h
@@ -385,9 +452,10 @@ func frontMatter(root string, w *work.Work, first string, units []string, accept
 		Genre       string   `yaml:"genre"`
 		Units       []string `yaml:"units,flow"`
 		AcceptedAt  string   `yaml:"accepted_at"`
+		Cover       string   `yaml:"cover,omitempty"`
 		Disclosure  string   `yaml:"ai_disclosure,omitempty"`
 	}
-	v := fm{Title: title, Genre: w.Genre.ID, Units: units, AcceptedAt: latest, Disclosure: label}
+	v := fm{Title: title, Genre: w.Genre.ID, Units: units, AcceptedAt: latest, Cover: coverPath, Disclosure: label}
 	if b, _ := brief.Load(root, w.UnitDir(w.Root), brief.Queue{Invalid: true}); b != nil {
 		v.Description = b.Purpose
 	}

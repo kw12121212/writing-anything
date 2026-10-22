@@ -190,6 +190,8 @@ func runValidate(inv *invocation) int {
 					problems = append(problems, source.CheckArtifact(dir, checked[0])...)
 				case "claims":
 					problems = append(problems, draft.CheckArtifact(dir, checked[0])...)
+				case "illustrations":
+					problems = append(problems, illustrationArtifact(dir, checked[0])...)
 				case "canon":
 					problems = append(problems, canon.CheckArtifact(dir, checked[0])...)
 				case "threads":
@@ -392,8 +394,8 @@ func resolvedText(r *resolve.Resolved) string {
 		fmt.Fprintf(&b, "  %s（%s）\n", p.ID, where)
 	}
 	fmt.Fprintf(&b, "上下文预算（Context Budget）：%v 字符%s\n", r.ContextBudget.Value, from(r.ContextBudget.Source))
-	fmt.Fprintf(&b, "AI 参与说明（AI-generated Content Label）：放在 %v%s；模板：%v%s\n", r.AIDisclosure.Placement.Value, from(r.AIDisclosure.Placement.Source),
-		r.AIDisclosure.Template.Value, from(r.AIDisclosure.Template.Source))
+	fmt.Fprintf(&b, "AI 参与说明（AI-generated Content Label）：放在 %v%s；模板：%v%s；配图模板：%v%s\n", r.AIDisclosure.Placement.Value, from(r.AIDisclosure.Placement.Source),
+		r.AIDisclosure.Template.Value, from(r.AIDisclosure.Template.Source), r.AIDisclosure.ImageTemplate.Value, from(r.AIDisclosure.ImageTemplate.Source))
 	b.WriteString("样式主题（HTML Theme）：\n")
 	for _, k := range catalog.HTMLThemeKeys {
 		if v, ok := r.HTMLTheme[k]; ok {
@@ -542,8 +544,9 @@ func checkWorkspace(dir string) (checked []string, works []*work.Work, problems 
 	imchecked, imps := impact.CheckWorks(dir, works)
 	plchecked, plps := plan.CheckUnitArtifacts(dir, works, catalog.LoadMethods(dir), unitDefaultMethod)
 	archecked, arps := authorreview.Check(dir)
-	checked = slices.Concat(checked, more, wchecked, schecked, uchecked, bchecked, ochecked, fchecked, rchecked, mchecked, dchecked, lchecked, xchecked, cchecked, pchecked, echecked, tchecked, ychecked, kchecked, thchecked, stchecked, knchecked, cochecked, vpchecked, rpchecked, imchecked, plchecked, archecked)
-	return checked, works, slices.Concat(problems, ps, wps, sps, ups, bps, ops, fps, rps, mps, dps, lps, xps, cps, pps, eps, tps, yps, kps, thps, stps, knps, cops, vpps, rpps, imps, plps, arps)
+	ilchecked, ilps := checkIllustrations(dir, works)
+	checked = slices.Concat(checked, more, wchecked, schecked, uchecked, bchecked, ochecked, fchecked, rchecked, mchecked, dchecked, lchecked, xchecked, cchecked, pchecked, echecked, tchecked, ychecked, kchecked, thchecked, stchecked, knchecked, cochecked, vpchecked, rpchecked, imchecked, plchecked, archecked, ilchecked)
+	return checked, works, slices.Concat(problems, ps, wps, sps, ups, bps, ops, fps, rps, mps, dps, lps, xps, cps, pps, eps, tps, yps, kps, thps, stps, knps, cops, vpps, rpps, imps, plps, arps, ilps)
 }
 
 // defaultMethodOf 返回单元产物 rel 适用的文体默认写作法：只有作品的根单元适用，子单元不继承；
@@ -681,6 +684,10 @@ func next(p workspace.Problem, dir string) []string {
 	if n := feedbackNext(p, dir); n != nil {
 		return n
 	}
+	if strings.HasPrefix(p.Code, "illustration.") && p.Path != "" {
+		// 配图问题：先列出该单元的配图（含每张的问题），再整体校验。
+		return []string{shellCommand("wa-cli", "illustration", "list", illustrationUnitRef(p.Path), "--dir", dir, "--json"), validateAll}
+	}
 	inSources := strings.HasPrefix(p.Path, workspace.SourcesPath+"/")
 	if p.Path == decision.Path && (p.Code == schema.CodeNotFound || p.Code == workspace.CodeReadFailed) {
 		// 决策队列不可读：init 不会修复它，用整体校验复查。
@@ -692,7 +699,7 @@ func next(p workspace.Problem, dir string) []string {
 			// 作品目录中缺少 work.yaml：init 不会补齐它，作品只能用 wa-cli new 创建。
 			return []string{"wa-cli help new --json", validateAll}
 		}
-		if k := schema.KindFor(p.Path); k != nil && (k.Name == "brief" || k.Name == "outline" || k.Name == "review" || k.Name == "acceptance" || k.Name == "marketing" || k.Name == "author-reviews") {
+		if k := schema.KindFor(p.Path); k != nil && (k.Name == "brief" || k.Name == "outline" || k.Name == "review" || k.Name == "acceptance" || k.Name == "marketing" || k.Name == "author-reviews" || k.Name == "illustrations") {
 			// brief.yaml 途经符号链接或不是普通文件：需要作者把它换成普通文件，init 不会修复它。
 			return []string{status, validateAll}
 		}

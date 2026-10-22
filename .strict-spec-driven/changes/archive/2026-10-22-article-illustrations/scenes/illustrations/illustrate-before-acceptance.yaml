@@ -1,0 +1,138 @@
+schema: strict-spec-driven/delta-scene/v1
+schema_version: 1
+artifact_type: delta_scene
+schema_file: templates/strict-spec-driven/schemas/delta-scene.yaml
+target_scene: illustrate-before-acceptance
+scene:
+  title: 作者为定稿配图并验收
+  area: illustrations
+  actors:
+    - name: 作者
+      role: 给出是否配图与风格的意图，确认配图计划，在阅读页或 DSH 面板审看封面与配图并验收图文
+    - name: Agent
+      role: 按内置技能 wa-illustrate 提出配图计划，用 lemo-opuscar 渲染静帧，经 wa-cli 登记配图并插入正文
+    - name: wa-cli
+      role: 登记与校验配图，在验收关卡与验收记录中锁定配图，在阅读页显示配图并随导出交付
+  preconditions:
+    - 单元已完成审稿与修订，当前阶段的必需产物含 acceptance，尚未验收或验收已失效
+    - Agent 所在机器可以定位或安装 lemo-opuscar，并有 Node 20 以上版本
+operations:
+  ADDED:
+    exception_flows:
+      author-declines:
+        trigger: 作者不需要配图
+        steps:
+          skip-illustration:
+            action: 跳过配图环节，按现有流程直接验收与导出
+            covered_by:
+              - spec_id: skills
+                requirement_id: illustrate-skill-prompt
+      renderer-missing:
+        trigger: 本机找不到 lemo-opuscar 或缺少 Node
+        steps:
+          install-or-skip:
+            action: Agent 给出安装方式，作者同意时安装后继续，否则跳过配图环节
+            covered_by:
+              - spec_id: skills
+                requirement_id: illustrate-skill
+      infographic-without-source:
+        trigger: Agent 登记信息图时没有关联论断或素材
+        steps:
+          reject-add:
+            action: wa-cli 拒绝登记并提示先登记论断或素材
+            covered_by:
+              - spec_id: illustrations
+                requirement_id: illustration-infographic-provenance
+      broken-reference:
+        trigger: 正文引用了未登记的配图、图片文件被改动或信息图的出处悬空
+        steps:
+          gate-blocks:
+            action: wa-cli validate 报告问题，验收关卡列出阻塞项并拒绝验收
+            covered_by:
+              - spec_id: illustrations
+                requirement_id: illustration-validation
+              - spec_id: review
+                requirement_id: accept-gate
+      changed-after-accept:
+        trigger: 验收后配图或封面被增删、替换或修改
+        steps:
+          acceptance-stale:
+            action: advance、next 与导出视验收为失效，需要作者重新确认
+            covered_by:
+              - spec_id: units-and-lifecycle
+                requirement_id: advance-stage
+              - spec_id: export
+                requirement_id: export-markdown
+      cover-conflict:
+        trigger: 封面登记到子单元，或作品已有封面时再次登记
+        steps:
+          reject-cover:
+            action: wa-cli 拒绝登记并给出替换现有封面的命令
+            covered_by:
+              - spec_id: illustrations
+                requirement_id: illustration-cover
+    main_flow:
+      offer-illustration:
+        action: wa-publish 或 wa-auto 在请作者验收前询问作者是否需要正文配图与封面图
+        covered_by:
+          - spec_id: skills
+            requirement_id: illustrate-skill-prompt
+      choose-style:
+        action: 作者选定一个 lemo-opuscar 风格（库内风格或作者保存的风格）
+        covered_by:
+          - spec_id: skills
+            requirement_id: illustrate-skill
+      confirm-plan:
+        action: Agent 依据定稿正文提出配图计划（封面构思，每张配图的位置、表现内容、氛围图或信息图及关联出处），作者确认后经决策队列登记
+        covered_by:
+          - spec_id: skills
+            requirement_id: illustrate-skill
+      render-stills:
+        action: Agent 在工作区之外按风格编写渲染页面，用 still.mjs --size 渲染正文配图与公众号尺寸的封面静帧
+        covered_by:
+          - spec_id: skills
+            requirement_id: illustrate-skill
+      register-illustrations:
+        action: Agent 运行 wa-cli illustration add 把每张静帧登记到对应单元，封面登记到作品根单元
+        covered_by:
+          - spec_id: illustrations
+            requirement_id: illustration-add
+          - spec_id: illustrations
+            requirement_id: illustration-cover
+      insert-references:
+        action: Agent 用 wa-cli draft write 在计划的段落之后插入 illustrations/<id> 图片引用
+        covered_by:
+          - spec_id: illustrations
+            requirement_id: illustration-references
+      author-reviews-images:
+        action: 作者在阅读页或 DSH 插件审阅视图中看到封面与各段配图，并可提交反馈
+        covered_by:
+          - spec_id: preview
+            requirement_id: preview-content
+          - spec_id: preview
+            requirement_id: preview-illustration
+          - spec_id: dsh-plugin
+            requirement_id: review-native-view
+      replace-on-feedback:
+        action: 作者对某张配图不满意时，Agent 重新渲染并用 wa-cli illustration add --replace 原位替换，正文引用不变
+        covered_by:
+          - spec_id: illustrations
+            requirement_id: illustration-replace
+      accept-with-images:
+        action: 作者确认图文后验收，验收记录锁定当前配图与封面
+        covered_by:
+          - spec_id: review
+            requirement_id: accept-record
+          - spec_id: illustrations
+            requirement_id: illustration-digest
+      export-package:
+        action: Agent 导出 Markdown 或公众号 HTML，导出目录含成稿、配图清单与图片文件，AI 参与说明标明 AI 配图
+        covered_by:
+          - spec_id: export
+            requirement_id: export-markdown
+          - spec_id: export
+            requirement_id: wechat-html-export
+          - spec_id: export
+            requirement_id: ai-disclosure
+  MODIFIED: {}
+  REMOVED: {}

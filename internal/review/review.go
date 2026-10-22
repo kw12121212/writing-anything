@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/kw12121212/writing-anything/internal/catalog"
+	"github.com/kw12121212/writing-anything/internal/illustration"
 	"github.com/kw12121212/writing-anything/internal/schema"
 	"github.com/kw12121212/writing-anything/internal/workspace"
 	"go.yaml.in/yaml/v3"
@@ -92,17 +93,18 @@ type Review struct {
 
 // Reaffirm 是一次重申（Reaffirm）：小改动后沿用既有结论，记录变化摘要与本次标记的发现项。
 type Reaffirm struct {
-	At         string   `json:"at"`
-	Summary    string   `json:"summary"`
-	DraftSHA256 string  `json:"draft_sha256"`
-	Resolved   []string `json:"resolved"`
-	Waived     []string `json:"waived"`
+	At          string   `json:"at"`
+	Summary     string   `json:"summary"`
+	DraftSHA256 string   `json:"draft_sha256"`
+	Resolved    []string `json:"resolved"`
+	Waived      []string `json:"waived"`
 }
 
 // Acceptance 是 acceptance.yaml 的内容。
 type Acceptance struct {
 	GateLevel         string  `json:"gate_level"`
 	DraftSHA256       string  `json:"draft_sha256"`
+	IllustrationsSHA  *string `json:"illustrations_sha256"` // 验收时的配图摘要；单元没有配图时缺省（nil）
 	ConfirmedByAuthor bool    `json:"confirmed_by_author"`
 	Confirmation      *string `json:"confirmation"`
 	Channel           *string `json:"channel"` // 确认渠道（Confirmation Channel）；只在经作者确认时记录，缺失按 cli 解释
@@ -650,12 +652,16 @@ func Accept(root, dir, level, draftSHA string, confirmed bool, confirmation stri
 }
 
 // AcceptVia 整体替换单元目录 dir 下的 acceptance.yaml，记录关卡强度、正文 SHA-256、是否经作者确认、确认原话摘要与
-// 确认渠道 channel（confirmed 为 false 时都不记录）与验收时间 now（UTC）。返回写入的验收与变更的路径。
+// 确认渠道 channel（confirmed 为 false 时都不记录）与验收时间 now（UTC）；单元有配图时另记录当前配图摘要。返回写入的验收与变更的路径。
 func AcceptVia(root, dir, level, draftSHA string, confirmed bool, confirmation, channel string, now time.Time) (*Acceptance, []string, []workspace.Problem) {
 	rel := AcceptancePath(dir)
-	a := &Acceptance{GateLevel: level, DraftSHA256: draftSHA, ConfirmedByAuthor: confirmed, AcceptedAt: now.UTC().Format("2006-01-02T15:04:05Z")}
-	kv := []any{"schema_version", workspace.Int(1), "gate_level", workspace.Str(level), "draft_sha256", workspace.Str(draftSHA),
-		"confirmed_by_author", &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!bool", Value: fmt.Sprint(confirmed)}}
+	a := &Acceptance{GateLevel: level, DraftSHA256: draftSHA, IllustrationsSHA: illustration.Digest(root, dir), ConfirmedByAuthor: confirmed, AcceptedAt: now.UTC().Format("2006-01-02T15:04:05Z")}
+	kv := []any{"schema_version", workspace.Int(1), "gate_level", workspace.Str(level), "draft_sha256", workspace.Str(draftSHA)}
+	if a.IllustrationsSHA != nil {
+		// 单元有配图时一并锁定配图摘要；没有配图时不写该字段，记录与引入配图前相同。
+		kv = append(kv, "illustrations_sha256", workspace.Str(*a.IllustrationsSHA))
+	}
+	kv = append(kv, "confirmed_by_author", &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!bool", Value: fmt.Sprint(confirmed)})
 	if confirmed {
 		a.Confirmation, a.Channel = &confirmation, &channel
 		kv = append(kv, "confirmation", workspace.Str(confirmation), "channel", workspace.Str(channel))
@@ -696,10 +702,25 @@ func AcceptanceBlockers(root, dir, level string) []Blocker {
 		return nil
 	case a.DraftSHA256 != DraftSHA256(root, dir):
 		return []Blocker{{Code: CodeAcceptanceStale, Path: rel, Message: "验收（Acceptance）之后正文已被修改，原来的验收不再代表当前正文；请重新审稿（Review）并用 wa-cli accept 验收"}}
+	case !sameDigest(a.IllustrationsSHA, illustration.Digest(root, dir)):
+		return []Blocker{{Code: CodeAcceptanceStale, Path: rel, Message: "验收（Acceptance）之后配图（Illustration）或封面图（Cover Image）已被增删、替换或修改，原来的验收不再代表当前图文；请作者重新确认图文后用 wa-cli accept 验收"}}
 	case strictness(level) > strictness(a.GateLevel):
 		return []Blocker{{Code: CodeAcceptanceWeakerGate, Path: rel, Message: fmt.Sprintf("验收（Acceptance）时的关卡强度为 %s，比工作区当前的 %s 宽松；请按当前关卡强度重新用 wa-cli accept 验收", a.GateLevel, level)}}
 	}
 	return nil
+}
+
+// sameDigest 报告验收记录的配图摘要与当前配图摘要是否一致（都没有配图时一致）。
+func sameDigest(recorded, current *string) bool {
+	if recorded == nil || current == nil {
+		return recorded == nil && current == nil
+	}
+	return *recorded == *current
+}
+
+// Stale 报告验收记录 a 是否已过期：正文的 SHA-256 或单元目录 dir 当前的配图摘要与验收时不同。
+func Stale(root, dir string, a *Acceptance, draftSHA string) bool {
+	return a.DraftSHA256 != draftSHA || !sameDigest(a.IllustrationsSHA, illustration.Digest(root, dir))
 }
 
 // strictness 返回关卡强度的严格程度：fast < standard < strict；未知取值按 standard 处理。
@@ -739,7 +760,10 @@ type GateInput struct {
 	Volume []workspace.Problem // 卷末检查点（Volume Checkpoint）阻塞项（更早各部的检查点未确认或失效）：error 级
 	//   // 进入阻塞项、warning 级进入提示，由调用方按关卡强度填充严重级别
 	Continuity []workspace.Problem // 连续性审查（Continuity Review）阻塞项：error 级发现项原样进入阻塞项
-	Confirmed bool // 是否给出了 --confirmed-by-author 与确认原话摘要
+	// Illustrations 是配图（Illustration）阻塞项：illustrations 主规格 illustration-validation 的 error 级问题，所有关卡强度下
+	// 原样进入阻塞项。
+	Illustrations []workspace.Problem
+	Confirmed     bool // 是否给出了 --confirmed-by-author 与确认原话摘要
 }
 
 // Gate 按关卡强度计算验收的阻塞项与 warning（review show 与 accept 共用，只读）：
@@ -770,6 +794,9 @@ func Gate(in GateInput) (blockers, warnings []Blocker) {
 		}
 	}
 	for _, p := range in.Continuity {
+		add(p.Code, p.Path, "", p.Message)
+	}
+	for _, p := range in.Illustrations {
 		add(p.Code, p.Path, "", p.Message)
 	}
 	strict := in.Level == "strict"

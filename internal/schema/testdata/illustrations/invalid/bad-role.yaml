@@ -1,0 +1,15 @@
+schema_version: 1
+illustrations:
+  - id: fig
+    role: banner
+    file: illustrations/fig.webp
+    format: webp
+    sha256: 0a00000000000000000000000000000000000000000000000000000000000000
+    width: 10
+    height: 10
+    alt: 图
+    content: mood
+    origin: agent
+    claims: []
+    sources: []
+    added_at: 2026-10-22T08:00:00Z

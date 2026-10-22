@@ -31,7 +31,7 @@ func TestBuiltinSkills(t *testing.T) {
 		}
 		names = append(names, s.Name)
 	}
-	want := []string{"wa-assemble", "wa-auto", "wa-brief", "wa-continuity", "wa-draft", "wa-init", "wa-outline", "wa-plan", "wa-publish", "wa-review", "wa-revise", "wa-scene"}
+	want := []string{"wa-assemble", "wa-auto", "wa-brief", "wa-continuity", "wa-draft", "wa-illustrate", "wa-init", "wa-outline", "wa-plan", "wa-publish", "wa-review", "wa-revise", "wa-scene"}
 	if !slices.Equal(names, want) || len(All()) != len(want) {
 		t.Fatalf("skills = %v", names)
 	}
@@ -60,8 +60,8 @@ func TestParse(t *testing.T) {
 func TestInstall(t *testing.T) {
 	root := t.TempDir()
 	r, ps := Install(root, ".claude/skills", false)
-	if len(ps) > 0 || len(r.Skills) != 12 || !r.Skills[0].Changed || r.Skills[0].Path != ".claude/skills/wa-assemble/SKILL.md" ||
-		!slices.Equal(r.Created[:2], []string{".claude", ".claude/skills"}) || len(r.Created) != 14 {
+	if len(ps) > 0 || len(r.Skills) != 13 || !r.Skills[0].Changed || r.Skills[0].Path != ".claude/skills/wa-assemble/SKILL.md" ||
+		!slices.Equal(r.Created[:2], []string{".claude", ".claude/skills"}) || len(r.Created) != 15 {
 		t.Fatalf("install: %+v %+v", r, ps)
 	}
 	if r, ps := Install(root, ".claude/skills", false); len(ps) > 0 || len(r.Created) != 0 || slices.ContainsFunc(r.Skills, func(i Installed) bool { return i.Changed }) {
@@ -78,7 +78,7 @@ func TestInstall(t *testing.T) {
 	if _, err := os.Stat(other); err == nil {
 		t.Fatal("a modified skill must stop every write")
 	}
-	if r, ps := Install(root, ".claude/skills", true); len(ps) > 0 || len(r.Skills) != 12 {
+	if r, ps := Install(root, ".claude/skills", true); len(ps) > 0 || len(r.Skills) != 13 {
 		t.Fatalf("force: %+v %+v", r, ps)
 	}
 	if info, _ := os.Stat(file); info.Mode().Perm() != 0o600 {
@@ -302,6 +302,103 @@ func TestPreviewHandoffStepsBranch(t *testing.T) {
 			}
 			if !strings.Contains(line, "面板里没有「待审阅」入口") {
 				t.Errorf("%s 的步骤交出阅读页地址但 dsh 分支没有兜底：%s", s.Name, line)
+			}
+		}
+	}
+}
+
+// wa-illustrate 指导可选的配图环节（illustrate-skill），wa-publish 与 wa-auto 在验收前询问配图（illustrate-skill-prompt）。
+func TestIllustrateSkills(t *testing.T) {
+	byName := map[string]Skill{}
+	for _, s := range All() {
+		byName[s.Name] = s
+	}
+	ill := string(byName["wa-illustrate"].Content)
+	for _, want := range []string{"lemo-opuscar", "LEMO_OPUSCAR_HOME", "~/lemo-opuscar", "setup.sh deps", "~/lemo-my-styles", "STYLE.md", "still.mjs", "--size", "配图计划", "--reaffirm", "必须停下来问作者", "--origin author", ".writing-anything/` 之外"} {
+		if !strings.Contains(ill, want) {
+			t.Errorf("wa-illustrate lacks %q", want)
+		}
+	}
+	cmds := Commands(byName["wa-illustrate"].Content)
+	for _, want := range []string{"illustration add", "illustration list", "illustration remove", "draft write", "review record", "claim list", "source list", "decision add", "decide"} {
+		if !slices.Contains(cmds, want) {
+			t.Errorf("wa-illustrate commands = %v, missing %s", cmds, want)
+		}
+	}
+	for _, name := range []string{"wa-publish", "wa-auto"} {
+		body := string(byName[name].Content)
+		if !strings.Contains(body, "wa-illustrate") || !strings.Contains(body, "不需要时跳过") || !slices.Contains(Commands(byName[name].Content), "illustration list") {
+			t.Errorf("%s lacks the illustration prompt", name)
+		}
+		if i, j := strings.Index(body, "wa-illustrate"), strings.Index(body, "accept <单元>"); name == "wa-publish" && (i < 0 || j < 0 || i > j) {
+			t.Errorf("%s must ask about illustrations before acceptance", name)
+		}
+	}
+	pub := string(byName["wa-publish"].Content)
+	for _, want := range []string{".assets/", "export.assets", "配图清单"} {
+		if !strings.Contains(pub, want) {
+			t.Errorf("wa-publish export step lacks %q", want)
+		}
+	}
+}
+
+// 只有 wa-illustrate 提到 lemo-opuscar：wa-cli 不运行它（illustrate-skill-no-runtime-dependency）。
+func TestOnlyIllustrateMentionsRenderer(t *testing.T) {
+	for _, s := range All() {
+		if s.Name != "wa-illustrate" && strings.Contains(string(s.Content), "lemo-opuscar") {
+			t.Errorf("%s mentions lemo-opuscar", s.Name)
+		}
+	}
+}
+
+// illustrate-skill-no-runtime-dependency 的另一半：wa-cli 非测试源码（cmd/ 与 internal/，不含
+// internal/tools 的开发工具）不得出现渲染器 lemo-opuscar、still.mjs 或其运行时（node、npx）的字面量，
+// 防止未来变更把渲染调用悄悄带进单文件二进制。夹具与测试源码不受此限。
+func TestProductSourceHasNoRenderer(t *testing.T) {
+	var files []string
+	for _, root := range []string{"../..", "../../cmd"} {
+		err := filepath.Walk(root, func(p string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+			if info.IsDir() {
+				if info.Name() == "tools" && strings.HasSuffix(filepath.ToSlash(p), "internal/tools") {
+					return filepath.SkipDir
+				}
+				return nil
+			}
+			name := info.Name()
+			if !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
+				return nil
+			}
+			files = append(files, p)
+			return nil
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(files) < 100 {
+		t.Fatalf("扫描到的源码文件数 = %d，异常", len(files))
+	}
+	for _, p := range files {
+		rel, err := filepath.Rel("../..", p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		data, err := os.ReadFile(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, line := range strings.Split(string(data), "\n") {
+			trimmed := strings.TrimSpace(line)
+			if strings.HasPrefix(trimmed, "//") {
+				continue
+			}
+			for _, banned := range []string{"lemo-opuscar", "still.mjs", `"node"`, `"npx"`} {
+				if strings.Contains(line, banned) {
+					t.Errorf("%s 出现渲染器字面量 %s：%s", rel, banned, trimmed)
+				}
 			}
 		}
 	}

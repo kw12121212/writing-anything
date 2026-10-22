@@ -28,20 +28,38 @@ type findingJSON struct {
 }
 
 type paragraphJSON struct {
-	Index    int           `json:"index"`
-	Line     int           `json:"line"`
-	Text     string        `json:"text"`
-	Origin   *string       `json:"origin"`
-	Findings []findingJSON `json:"findings"`
+	Index         int           `json:"index"`
+	Line          int           `json:"line"`
+	Text          string        `json:"text"`
+	Origin        *string       `json:"origin"`
+	Findings      []findingJSON `json:"findings"`
+	Illustrations []string      `json:"illustrations"`
+}
+
+type illustrationJSON struct {
+	ID         string   `json:"id"`
+	Role       string   `json:"role"`
+	Alt        string   `json:"alt"`
+	Title      *string  `json:"title"`
+	Content    string   `json:"content"`
+	Origin     string   `json:"origin"`
+	Width      int      `json:"width"`
+	Height     int      `json:"height"`
+	Claims     []string `json:"claims"`
+	Sources    []string `json:"sources"`
+	Referenced bool     `json:"referenced"`
+	Available  bool     `json:"available"`
+	URL        *string  `json:"url"`
 }
 
 type unitJSON struct {
-	Ref        string          `json:"ref"`
-	Stage      string          `json:"stage"`
-	HasDraft   bool            `json:"hasDraft"`
-	Notes      []string        `json:"notes"`
-	Global     []findingJSON   `json:"global"`
-	Paragraphs []paragraphJSON `json:"paragraphs"`
+	Ref           string             `json:"ref"`
+	Stage         string             `json:"stage"`
+	HasDraft      bool               `json:"hasDraft"`
+	Notes         []string           `json:"notes"`
+	Global        []findingJSON      `json:"global"`
+	Paragraphs    []paragraphJSON    `json:"paragraphs"`
+	Illustrations []illustrationJSON `json:"illustrations"`
 }
 
 type optionJSON struct {
@@ -94,10 +112,20 @@ func JSON(p *Page) ([]byte, error) {
 	out := pageJSON{Title: p.Title, Units: []unitJSON{}, Confirms: []confirmJSON{}, Strict: p.Strict,
 		Reviews: []reviewJSON{}, Failures: []failureJSON{}}
 	for _, u := range p.Units {
-		uj := unitJSON{Ref: u.Ref, Stage: u.Stage, HasDraft: u.HasDraft, Notes: append([]string{}, u.Notes...),
-			Global: findingsJSON(u.Global), Paragraphs: []paragraphJSON{}}
+		uj := unitJSON{Ref: u.Ref, Stage: u.Stage, HasDraft: u.HasDraft, Notes: append(append([]string{}, u.Notes...), u.ImageNotes...),
+			Global: findingsJSON(u.Global), Paragraphs: []paragraphJSON{}, Illustrations: []illustrationJSON{}}
+		for _, im := range u.Illustrations {
+			ij := illustrationJSON{ID: im.ID, Role: im.Role, Alt: im.Alt, Title: im.Title, Content: im.Content, Origin: im.Origin,
+				Width: im.Width, Height: im.Height, Claims: append([]string{}, im.Claims...), Sources: append([]string{}, im.Sources...),
+				Referenced: im.Referenced, Available: im.Available}
+			if v := im.URL(); v != "" {
+				ij.URL = &v
+			}
+			uj.Illustrations = append(uj.Illustrations, ij)
+		}
 		for _, para := range u.Paragraphs {
-			pj := paragraphJSON{Index: para.Index, Line: para.Line, Text: para.Text, Findings: findingsJSON(para.Findings)}
+			pj := paragraphJSON{Index: para.Index, Line: para.Line, Text: para.Text, Findings: findingsJSON(para.Findings),
+				Illustrations: append([]string{}, para.Illustrations...)}
 			if para.Origin != "" {
 				o := para.Origin
 				pj.Origin = &o

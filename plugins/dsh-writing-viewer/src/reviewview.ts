@@ -78,6 +78,14 @@ export interface ReviewLabels {
   needKeys: string;
   reviewed: string;
   pending: string;
+  cover: string;
+  unreferenced: string;
+  mood: string;
+  infographic: string;
+  illustrationOrigin: string;
+  illustrationClaims: string;
+  illustrationSources: string;
+  illustrationUnavailable: string;
 }
 
 const REVIEW_TEXT: Record<'zh' | 'en', ReviewLabels> = {
@@ -130,6 +138,14 @@ const REVIEW_TEXT: Record<'zh' | 'en', ReviewLabels> = {
     needKeys: '请至少勾选一项',
     reviewed: '已复核（渠道 preview）',
     pending: '待审阅',
+    cover: '封面',
+    unreferenced: '未引用',
+    mood: '氛围图',
+    infographic: '信息图',
+    illustrationOrigin: '出处',
+    illustrationClaims: '论断',
+    illustrationSources: '素材',
+    illustrationUnavailable: '配图不可用：图片缺失、被改动或未通过校验，请运行 wa-cli illustration list 查看',
   },
   en: {
     review: 'Review',
@@ -180,6 +196,14 @@ const REVIEW_TEXT: Record<'zh' | 'en', ReviewLabels> = {
     needKeys: 'Tick at least one item',
     reviewed: 'Reviewed (channel preview)',
     pending: 'Pending review',
+    cover: 'Cover',
+    unreferenced: 'Not referenced',
+    mood: 'Mood image',
+    infographic: 'Infographic',
+    illustrationOrigin: 'origin',
+    illustrationClaims: 'claims',
+    illustrationSources: 'sources',
+    illustrationUnavailable: 'Illustration unavailable: the image is missing, changed or failed validation; run wa-cli illustration list',
   },
 };
 

@@ -1,0 +1,57 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: article-illustrations
+approach:
+  - 图片引用识别放在 internal/mdscan：围栏与行内代码之外、地址以 illustrations/ 开头的 Markdown 图片语法视为本地配图引用；导出、关卡、阅读页共用同一识别。
+  - 验收在 acceptance.yaml 追加可空字段 illustrations_sha256（单元无配图时为 null 或缺省），由 Work.Blockers 与 advance 的验收有效性判断一并比较；旧记录在单元无配图时继续有效。
+  - lemo-opuscar 只出现在内置技能 wa-illustrate 的指引中：技能说明如何定位（LEMO_OPUSCAR_HOME、~/lemo-opuscar 或其插件安装的 setup.sh）、选风格（含 ~/lemo-my-styles）、在工作区之外的临时目录写渲染页面、用 node core/render/still.mjs --size 渲染、再以 wa-cli illustration add --file 登记；wa-cli 代码不引用 lemo-opuscar。
+  - DSH 插件在既有审阅会话代理中增加 GET /dsh-writing-viewer/review/illustration 到阅读页 GET /illustration 的精确路径转发，审阅视图按 page.json 的配图信息以 img 节点显示，src 指向同源代理路由。
+  - 新增领域包 internal/illustration 负责配图登记（illustrations.yaml 与 illustrations/ 目录）的加载、Schema 与领域校验、写入与摘要计算；internal/cli 注册 illustration add/list/remove 三条命令；验收、关卡、导出、阅读页只经该包读取配图，不各自解析 illustrations.yaml。
+decisions:
+  registry-in-unit-dir:
+    decision: 配图文件与 illustrations.yaml 存放在单元目录（根单元为作品目录）下的 illustrations/ 与 illustrations.yaml，id 采用 common.schema.json 的 id 格式，文件名为 <id>.png 或 <id>.jpg。
+    rationale: 与 draft.md、claims.yaml 同处单元目录，正文可用相对路径 illustrations/<id>.jpg 引用，验收、导出与校验都按单元定位；沿用现有 id 校验与符号链接防护。
+  png-jpeg-only:
+    decision: 只接受按文件头识别的 PNG 与 JPEG，单张不超过 10 MiB；宽高经 Go 标准库 image.DecodeConfig 读取，不解码像素、不做任何图像处理。
+    rationale: lemo-opuscar 的 still.mjs 输出 JPEG，公众号与博客都支持 PNG/JPEG；只用标准库符合 stdlib-first，有界输入符合 input-limits。
+  cover-on-root:
+    decision: role 为 cover 的配图只能登记在作品根单元、每个作品至多一张；作品已有封面时 add 报告 illustration.cover-exists，next 给出带 --replace 的命令。封面不进正文，只经导出元数据与配图清单交付。
+    rationale: 封面属于作品级元数据而不是某段正文，单一封面让导出与验收确定。
+  infographic-provenance:
+    decision: content 为 infographic 的配图在 add 时必须给出 --claims 或 --sources 中的至少一个已存在的 id，否则报告 illustration.missing-provenance；之后关联对象被删除导致的悬空引用不阻止 list/remove/--replace，由 validate 与验收关卡报告（遵循 cross-artifact-references）。
+    rationale: 作者要求信息图中的数据与事实必须有出处；登记时拦截、关卡兜底，避免编辑命令因既有悬空引用被锁死。
+  acceptance-locks-illustrations:
+    decision: 单元有配图（正文配图或封面）时 accept 记录 illustrations_sha256：按 id 排序的每项登记字段与图片文件 SHA-256 的规范化摘要；验收后任何增删、替换或元数据修改使摘要不符，报告 acceptance.stale。
+    rationale: 作者选择锁住配图：验收确认的是图文整体，换图必须重新确认。复用 acceptance.stale 让既有恢复路径（review show、reopen）直接适用。
+  export-assets-dir:
+    decision: markdown 与 wechat-html 导出把正文引用的配图与封面复制到导出文件同目录的 <导出文件名去扩展名>.assets/，Markdown 中的引用改写为 <name>.assets/<id>.<ext>；资产目录与其中文件经 internal/export 的输出路径检查与原子写入，列入 changedPaths。
+    rationale: 导出文件移动时图片随目录一起走；遵循 deliverable-outputs 与 export-format-layering。
+  disclosure-image-template:
+    decision: AI 参与说明新增可选的图片句：合并结果中的 ai_disclosure_image_template（规范包可声明，后者覆盖前者；默认「文中 {ai_images} 张配图由 AI 生成。」，占位符只能是 {ai_images} 与 {images}，一行不超过 200 个字符）；有 AI 配图时追加在正文说明之后，正文没有 AI 段落时只输出图片句；export.disclosure 增加 aiImages 与 images。
+    rationale: 作者选择内置一句、规范包可覆盖；遵循 pack-text-in-deliverables 对第三方文字的限制。
+  preview-images:
+    decision: 静态阅读页用 data URI 内嵌配图（img 元素，src 经 html/template 以受信任的 data:image/png 或 data:image/jpeg 输出），内嵌总量超过 32 MiB 时其余配图显示文字说明；--serve 阅读页与 page.json 通过 GET /illustration?unit=<ref>&id=<id>&token=<令牌> 取图（同样的 Host 与令牌校验，CSP 增加 img-src 'self' data:）。
+    rationale: 静态页保持不引用外部资源的约束；serve 模式避免把图片塞进 page.json，DSH 代理可按固定路径转发。
+  skill-plan-confirmation:
+    decision: wa-illustrate 在渲染前把配图计划（封面构思与每张正文配图的位置、内容、类型与关联出处）交作者确认，并经 decision add/decide 登记；作者不要配图或本机缺 lemo-opuscar/Node 且作者不愿安装时跳过环节。
+    rationale: 避免渲染整套作者不要的图；沿用 harness 提问后回写决策队列的既有约定。
+  single-change:
+    decision: DSH 插件显示与 review-proxy-thin 的修改与 wa-cli 侧合并在同一变更中实现。
+    rationale: 作者确认合成一个变更，使图文确认在浏览器阅读页与 DSH 面板同时可用。
+  scene-recorded:
+    decision: '新增场景 illustrate-before-acceptance（area: illustrations），主流程与异常流程的每一步都由本变更的 delta 规格覆盖或写明不覆盖理由。'
+    rationale: 该环节有明确的作者、Agent 与 wa-cli 三方流程，按场景优先的方式推导需求。
+alternatives:
+  - option: wa-cli 直接调用 lemo-opuscar 的 node still.mjs 渲染
+    reason: 破坏单文件二进制定位，要求运行环境有 Node 与 lemo-opuscar，且让 wa-cli 执行第三方代码。
+  - option: 配图单独按锚点挂接、验收后合并进成稿而不改正文
+    reason: 需要新的锚点机制，作者在正文中看不到图；作者选择在验收前插入正文。
+  - option: page.json 直接内嵌 base64 图片
+    reason: 响应体积随配图线性增长，DSH 代理与刷新代价大；改用独立的图片路由。
+risks:
+  - 范围横跨 9 个规格领域与 DSH 插件包，实现与评审量大；任务按领域拆分并逐项测试。
+  - 'html/template 默认会把 data: URL 过滤为 #ZgotmplZ；需要显式构造受信任的 data:image URL 并只对已校验的 PNG/JPEG 字节使用。'
+  - 单元目录写图片时途经符号链接或大小写不敏感文件系统可能写出项目目录（lesson-db34bd、lesson-a9dd44），illustrations/ 与资产目录需按文件身份逐级确认。
+  - 已有作品正文若恰好引用了 illustrations/ 开头的未登记本地图片，升级后 validate 与验收关卡会报告 illustration.unregistered-reference；这是有意的（本地配图必须登记才能随导出交付），技能与诊断 next 指引用 illustration add 登记或改写引用。

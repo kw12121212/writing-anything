@@ -1,0 +1,32 @@
+schema_version: 1
+illustrations:
+  - id: cover
+    role: cover
+    file: illustrations/cover.jpg
+    format: jpeg
+    sha256: 0a00000000000000000000000000000000000000000000000000000000000000
+    width: 1800
+    height: 766
+    alt: 周六的店
+    title: null
+    content: mood
+    origin: agent
+    tool: lemo-opuscar
+    style: watercolor
+    claims: []
+    sources: []
+    added_at: 2026-10-22T08:00:00Z
+  - id: chart
+    role: body
+    file: illustrations/chart.png
+    format: png
+    sha256: 1b11111111111111111111111111111111111111111111111111111111111111
+    width: 1600
+    height: 900
+    alt: 延迟对比
+    title: 优化前后
+    content: infographic
+    origin: author
+    claims: [claim-1]
+    sources: []
+    added_at: 2026-10-22T08:00:00Z

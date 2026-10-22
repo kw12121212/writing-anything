@@ -44,6 +44,9 @@ type Paragraph struct {
 	Text     string
 	Origin   string // human、agent、agent-draft-human-edited；无法推导时为空
 	Findings []Finding
+	// Illustrations 是该段按首次出现顺序引用的已登记正文配图 id；ImageNotes 是该段引用的未登记、不可用配图或封面图的说明。
+	Illustrations []string
+	ImageNotes    []string
 }
 
 // Unit 是阅读页中的一个单元。
@@ -54,6 +57,9 @@ type Unit struct {
 	Notes      []string  // 文本检查无法运行、出处无法推导等说明
 	Global     []Finding // 全文级发现项与无法归入段落的发现项
 	Paragraphs []Paragraph
+	// Illustrations 是单元配图登记中的每张配图与封面图，按登记顺序；ImageNotes 是正文中未登记配图引用的说明（page.json 的 notes）。
+	Illustrations []Image
+	ImageNotes    []string
 }
 
 // Page 是一个阅读页。Serve 为 true 时页面内联提交意见、作者确认与复核的脚本，并列出待作者确认的事项（Confirms）；
@@ -67,6 +73,10 @@ type Page struct {
 	Reviews  []Review
 	// Failures 是最近失败的命令摘要（审计日志（Audit Log）的最近 5 条 exit 非 0 记录），只读展示（preview-audit-summary）。
 	Failures []AuditFailure
+	// Token 是 serve 模式的令牌，用于页面中配图的取图地址；静态页为空。
+	Token string
+	// HasImages 由 Render 填写：页面含配图图像（或未内嵌的说明）时为 true，此时页面另带配图样式，静态页的 CSP 放行 data: 图片。
+	HasImages bool
 }
 
 // AuditFailure 是阅读页最近失败区块中的一项。
@@ -134,6 +144,7 @@ func buildUnit(root string, w *work.Work, u *work.Unit, run LintFunc) Unit {
 		out.Notes = append(out.Notes, messages("无法读取正文：", ps)...)
 		return out
 	case !ok:
+		out.buildIllustrations(root, w.UnitDir(u), nil)
 		return out
 	case len(content) > MaxBytes:
 		out.Notes = append(out.Notes, fmt.Sprintf("正文有 %d 字节，超过阅读页的上限 %d 字节，不展示；请拆分为多个单元", len(content), MaxBytes))
@@ -149,6 +160,7 @@ func buildUnit(root string, w *work.Work, u *work.Unit, run LintFunc) Unit {
 	for i, para := range paras {
 		out.Paragraphs = append(out.Paragraphs, Paragraph{Index: i + 1, Line: para.Line, Text: para.Text, Origin: para.Origin})
 	}
+	out.buildIllustrations(root, w.UnitDir(u), content)
 	if res, ps := run(u); res == nil {
 		out.Notes = append(out.Notes, messages("文本检查没有运行：", ps)...)
 	} else {
@@ -210,15 +222,18 @@ func deref(s *string) string {
 	return *s
 }
 
-// ScriptCSP 是 serve 模式响应头 Content-Security-Policy 的取值：只放行哈希与内联脚本一致的脚本、内联样式与同源请求。
+// ScriptCSP 是 serve 模式响应头 Content-Security-Policy 的取值：只放行哈希与内联脚本一致的脚本、内联样式、同源请求与
+// 同源或 data: 的图片。
 var ScriptCSP = func() string {
 	sum := sha256.Sum256([]byte(pageScript))
-	return "default-src 'none'; style-src 'unsafe-inline'; script-src 'sha256-" + base64.StdEncoding.EncodeToString(sum[:]) +
+	return "default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data:; script-src 'sha256-" + base64.StdEncoding.EncodeToString(sum[:]) +
 		"'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
 }()
 
 var page = template.Must(template.New("page").Funcs(template.FuncMap{
 	"script": func() template.JS { return template.JS(pageScript) },
+	"join":   func(vs []string) string { return strings.Join(vs, "、") },
+	"deref":  deref,
 	"originName": func(o string) string {
 		if n, ok := draft.OriginNames[o]; ok {
 			return n
@@ -227,8 +242,9 @@ var page = template.Must(template.New("page").Funcs(template.FuncMap{
 	},
 }).Parse(pageHTML))
 
-// Render 生成阅读页的 HTML 文档。
+// Render 生成阅读页的 HTML 文档。配图的图像地址按页面模式填写（见 prepareImages）。
 func Render(p *Page) ([]byte, error) {
+	p.HasImages = p.prepareImages()
 	var b bytes.Buffer
 	if err := page.Execute(&b, p); err != nil {
 		return nil, err

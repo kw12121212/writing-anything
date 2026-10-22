@@ -2,6 +2,8 @@ package preview_test
 
 import (
 	"bytes"
+	"image"
+	"image/png"
 	"os"
 	"path/filepath"
 	"strings"
@@ -120,4 +122,127 @@ func TestBuildNotes(t *testing.T) {
 	if root := preview.Build(dir, w, []*work.Unit{u}, notRun).Units[0]; root.HasDraft {
 		t.Fatalf("draft directory treated as draft: %+v", root)
 	}
+}
+
+func writePNG(t *testing.T, path string, pad int, shade byte) {
+	t.Helper()
+	img := image.NewRGBA(image.Rect(0, 0, 8, 4))
+	var b bytes.Buffer
+	if err := png.Encode(&b, img); err != nil {
+		t.Fatal(err)
+	}
+	data := append(b.Bytes(), bytes.Repeat([]byte{shade}, pad)...)
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// illustrated 返回作品 my-post：根单元正文第 2 段引用 fig-1，第 3 段引用未登记的 ghost 与封面，另登记了封面 cover、
+// 未被引用的信息图 chart 与图片文件缺失的 gone。
+func illustrated(t *testing.T) (string, *work.Work, *work.Unit) {
+	t.Helper()
+	dir := t.TempDir()
+	wa(t, "", "init", "--dir", dir)
+	wa(t, "", "new", "minimal", "my-post", "--dir", dir)
+	wa(t, "开头。\n\n![店](illustrations/fig-1.png) ![店](illustrations/fig-1.png)\n\n![鬼](illustrations/ghost.png) ![封](illustrations/cover.png) ![外](https://example.com/a.png)\n", "draft", "write", "my-post", "--dir", dir)
+	wa(t, "", "claim", "add", "my-post", "--kind", "data", "--text", "数据", "--dir", dir)
+	for i, id := range []string{"fig-1", "cover", "chart", "gone"} {
+		writePNG(t, filepath.Join(dir, id+".png"), 0, byte(i))
+		args := []string{"illustration", "add", "my-post", "--id", id, "--file", id + ".png", "--alt", "图 " + id, "--origin", "agent", "--dir", dir}
+		switch id {
+		case "cover":
+			args = append(args, "--role", "cover")
+		case "chart":
+			args = append(args, "--content", "infographic", "--claims", "claim-1", "--title", "对比")
+		}
+		wa(t, "", args...)
+	}
+	os.Remove(filepath.Join(dir, ".writing-anything", "works", "my-post", "illustrations", "gone.png"))
+	w, u, ps := work.Resolve(dir, "my-post")
+	if u == nil {
+		t.Fatal(ps)
+	}
+	return dir, w, u
+}
+
+func noLint(*work.Unit) (*lint.Result, []workspace.Problem) { return &lint.Result{}, nil }
+
+func TestIllustrations(t *testing.T) {
+	dir, w, u := illustrated(t)
+	p := preview.Build(dir, w, []*work.Unit{u}, noLint)
+	pu := p.Units[0]
+	if len(pu.Illustrations) != 4 || len(pu.Covers()) != 1 || len(pu.Unreferenced()) != 2 {
+		t.Fatalf("illustrations = %+v", pu.Illustrations)
+	}
+	if got := pu.Paragraphs[1].Illustrations; len(got) != 1 || got[0] != "fig-1" || len(pu.Images(pu.Paragraphs[1])) != 1 {
+		t.Errorf("paragraph 2 = %+v", pu.Paragraphs[1])
+	}
+	if notes := strings.Join(pu.Paragraphs[2].ImageNotes, "；"); !strings.Contains(notes, "未登记") || !strings.Contains(notes, "封面图") || len(pu.ImageNotes) != 1 {
+		t.Errorf("paragraph 3 notes = %q, unit notes = %v", notes, pu.ImageNotes)
+	}
+	gone := pu.Illustrations[3]
+	if gone.Available || gone.Reason != "文件缺失" || gone.URL() != "" || pu.Illustrations[0].URL() != "illustration?unit=my-post&id=fig-1" {
+		t.Errorf("gone = %+v", gone)
+	}
+	html := render(t, p)
+	if strings.Count(html, `src="data:image/png;base64,`) != 3 || !strings.Contains(html, "配图不可用（文件缺失）") || !strings.Contains(html, "img-src data:") ||
+		!strings.Contains(html, "信息图（Infographic） · 出处 agent · 对比 · 论断 claim-1") {
+		t.Errorf("static html:\n%s", html)
+	}
+	s := preview.Build(dir, w, []*work.Unit{u}, noLint)
+	s.Serve, s.Token = true, "tok"
+	if html := render(t, s); !strings.Contains(html, `src="illustration?unit=my-post&amp;id=cover&amp;token=tok"`) || strings.Contains(html, "data:image/") {
+		t.Errorf("serve html:\n%s", html)
+	}
+	data, err := preview.JSON(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := preview.ValidateJSON(data); err != nil {
+		t.Fatalf("schema: %v", err)
+	}
+	if !strings.Contains(string(data), `"url":"illustration?unit=my-post&id=fig-1"`) || !strings.Contains(string(data), `"illustrations":["fig-1"]`) {
+		t.Errorf("json = %s", data)
+	}
+	// 哈希不符与格式不符：不显示图像并说明原因。
+	writePNG(t, filepath.Join(dir, ".writing-anything", "works", "my-post", "illustrations", "fig-1.png"), 3, 9)
+	reg := filepath.Join(dir, ".writing-anything", "works", "my-post", "illustrations.yaml")
+	b, _ := os.ReadFile(reg)
+	os.WriteFile(reg, bytes.Replace(b, []byte("file: illustrations/chart.png"), []byte("file: illustrations/chart.jpg"), 1), 0o644)
+	p = preview.Build(dir, w, []*work.Unit{u}, noLint)
+	if r := p.Units[0].Illustrations; r[0].Reason != "哈希不符" || r[2].Reason != "格式不符" {
+		t.Errorf("reasons = %q %q", r[0].Reason, r[2].Reason)
+	}
+	if html := render(t, p); !strings.Contains(html, "配图 fig-1 不可用（哈希不符）") {
+		t.Error("hash mismatch note missing")
+	}
+	os.WriteFile(reg, []byte("bogus: 1\n"), 0o644)
+	if p := preview.Build(dir, w, []*work.Unit{u}, noLint); len(p.Units[0].Illustrations) != 0 || !strings.Contains(strings.Join(p.Units[0].Notes, ""), "不通过校验") {
+		t.Errorf("invalid registry = %+v", p.Units[0])
+	}
+}
+
+func TestIllustrationEmbedBudget(t *testing.T) {
+	dir := t.TempDir()
+	wa(t, "", "init", "--dir", dir)
+	wa(t, "", "new", "minimal", "my-post", "--dir", dir)
+	wa(t, "![一](illustrations/a.png)\n\n![二](illustrations/b.png)\n\n![三](illustrations/c.png)\n\n![四](illustrations/d.png)\n", "draft", "write", "my-post", "--dir", dir)
+	for i, id := range []string{"a", "b", "c", "d"} {
+		writePNG(t, filepath.Join(dir, id+".png"), 9<<20-100, byte(i))
+		wa(t, "", "illustration", "add", "my-post", "--id", id, "--file", id+".png", "--alt", id, "--origin", "agent", "--dir", dir)
+	}
+	w, u, _ := work.Resolve(dir, "my-post")
+	html := render(t, preview.Build(dir, w, []*work.Unit{u}, noLint))
+	if strings.Count(html, `src="data:image/png;base64,`) != 3 || !strings.Contains(html, "配图过大，未内嵌：.writing-anything/works/my-post/illustrations/d.png") {
+		t.Error("embed budget not applied")
+	}
+}
+
+func render(t *testing.T, p *preview.Page) string {
+	t.Helper()
+	data, err := preview.Render(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(data)
 }
