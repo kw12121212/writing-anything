@@ -27,9 +27,13 @@
  * - a `sidebar.panellist` list entry with the same id, so the sidebar owns a
  *   button that selects the panel.
  *
- * The panel never writes: its only controls are refresh, path switching,
- * selection and view toggles. Author confirmation and review stay in wa-cli's
- * Reading View.
+ * The panel itself never writes: its controls are refresh, path switching,
+ * selection and view toggles. The one exception is the review view (审阅视图,
+ * Review View) of a review session: it renders wa-cli's reading view data
+ * natively and hands the author's feedback, confirmations and reviews to the
+ * reading view service through the same-origin proxy, so every write comes
+ * from wa-cli with the confirmation channel preview. Works and units with
+ * pending author confirmations carry「待审阅」markers that start a review.
  */
 import {
   overviewModel,
@@ -53,11 +57,43 @@ import {
   REVIEW_SESSION_ROUTE,
   reviewAfterStart,
   reviewAfterStatus,
+  reviewEnded,
   reviewLabelsFor,
   reviewStartBody,
   reviewViewModel,
+  type ReviewLabels,
   type ReviewPanelState,
 } from './reviewview';
+import {
+  FEEDBACK_KINDS,
+  QUICK_MARKS,
+  REVIEW_AUTHOR_REVIEW_ROUTE,
+  REVIEW_CONFIRM_ROUTE,
+  REVIEW_DATA_ROUTE,
+  REVIEW_FEEDBACK_ROUTE,
+  authorReviewRequest,
+  confirmKey,
+  confirmRequest,
+  envelopeMessage,
+  feedbackAfterSelection,
+  feedbackRequest,
+  initialConfirmDraft,
+  initialFeedback,
+  parseReviewPage,
+  pendingCountOf,
+  pendingOf,
+  selectedReviewKeys,
+  selectionOutcome,
+  sessionGone,
+  type ConfirmDraft,
+  type FeedbackDraft,
+  type PageConfirm,
+  type PageFinding,
+  type ParagraphAnchor,
+  type PendingIndex,
+  type ReviewPage,
+  type SubmitPlan,
+} from './reviewmodel';
 import type { ArtifactText } from './artifacts';
 import type { SnapshotRouteBody } from './snapshot';
 
@@ -373,6 +409,37 @@ interface PanelState {
   setupBusy: boolean;
   /** Review (审阅) session state of this panel. */
   review: ReviewPanelState;
+  /** Data and inputs of the review view while a session is active. */
+  reviewData?: ReviewDataState;
+}
+
+/** A readable result line next to one submit area. */
+interface ReviewNotice {
+  text: string;
+  ok: boolean;
+}
+
+/** The review view's data and the author's unsent inputs. */
+export interface ReviewDataState {
+  page: ReviewPage | null;
+  loading: boolean;
+  error: string | null;
+  feedback: FeedbackDraft;
+  confirmDrafts: Record<string, ConfirmDraft>;
+  /** Author-review keys the author unticked (all start ticked). */
+  unticked: Record<string, boolean>;
+  /** Result lines by area: 'feedback', 'review', or a confirm item key. */
+  notices: Record<string, ReviewNotice>;
+  /** In-flight submit area, so a second click does not post twice. */
+  busy: string | null;
+  originColors: boolean;
+}
+
+export function emptyReviewData(unit: string | null): ReviewDataState {
+  return {
+    page: null, loading: false, error: null, feedback: initialFeedback(unit ?? ''), confirmDrafts: {},
+    unticked: {}, notices: {}, busy: null, originColors: true,
+  };
 }
 
 /** Event handlers the rendered tree binds to. */
@@ -395,10 +462,21 @@ interface PanelActions {
   enableSetup(): void;
   /** Start a review session for one unit and embed its reading view. */
   startReview(ref: string): void;
-  /** End the review session, drop the iframe and refresh the snapshot. */
+  /** End the review session, close the review view and refresh the snapshot. */
   endReview(): void;
-  /** The embedded reading view finished loading: check the session still runs. */
-  reviewFrameLoaded(): void;
+  /** Activate a「待审阅」marker: select that unit and start its review. */
+  reviewPending?(ref: string): void;
+  /** Reload the review view's data. */
+  refreshReview?(): void;
+  /** The author released a selection inside the review view's text. */
+  captureSelection?(): void;
+  setFeedback?(patch: Partial<FeedbackDraft>): void;
+  submitFeedback?(mark: string): void;
+  setConfirmDraft?(key: string, patch: Partial<ConfirmDraft>): void;
+  submitConfirm?(key: string, action: 'confirm' | 'reject'): void;
+  toggleReviewKey?(key: string, checked: boolean): void;
+  submitAuthorReview?(): void;
+  toggleOriginColors?(): void;
   /** One key pressed on a tree node: move selection or collapse/expand. */
   treeKey(event: unknown, ref: string): void;
 }
@@ -630,13 +708,38 @@ function renderSummary(h: H, s: PanelState, a: PanelActions): unknown[] {
   return out;
 }
 
-function renderWorkCard(h: H, s: PanelState, a: PanelActions, card: WorkCard): unknown {
+/** The「待审阅」index of the snapshot on screen (null: no markers). */
+function pendingFor(s: PanelState): PendingIndex | null {
+  const snapshot = s.body?.snapshot;
+  if (snapshot === null || snapshot === undefined) return null;
+  return pendingOf(snapshot.cli?.next ?? null, Array.isArray(s.body?.degraded) ? s.body!.degraded : []);
+}
+
+/** A「待审阅」marker: activating it selects the unit and starts its review. */
+function pendingMarker(h: H, key: string, attr: string, ref: string, count: number, a: PanelActions, compact: boolean): unknown {
+  const label = reviewLabelsFor().pending;
+  return h('button', {
+    key,
+    type: 'button',
+    [attr]: ref,
+    'aria-label': label + ' ' + ref + ' (' + count + ')',
+    title: label,
+    onClick: () => a.reviewPending?.(ref),
+    style: {
+      ...buttonStyle(), flex: '0 0 auto', alignSelf: compact ? 'center' : 'flex-start', padding: compact ? '0 6px' : '1px 8px',
+      color: COLOR.warn, borderColor: COLOR.warn, lineHeight: compact ? '18px' : '20px',
+    },
+  }, compact ? '● ' + count : label + ' · ' + count);
+}
+
+function renderWorkCard(h: H, s: PanelState, a: PanelActions, card: WorkCard, pending: PendingIndex | null): unknown {
   const selected = card.id === s.selectedWork;
   const progress = progressText(card.progress);
-  return h(
+  const count = pending?.byWork[card.id] ?? 0;
+  const button = h(
     'button',
     {
-      key: 'work-' + card.id,
+      key: 'card',
       type: 'button',
       'aria-pressed': selected,
       onClick: () => a.selectWork(card.id),
@@ -657,6 +760,9 @@ function renderWorkCard(h: H, s: PanelState, a: PanelActions, card: WorkCard): u
       : h('ul', { key: 'summary', style: { margin: 0, paddingLeft: '16px', color: COLOR.secondary, fontSize: '12px' } },
           card.blockerSummary.map((message, i) => h('li', { key: 'b' + i, style: { overflowWrap: 'anywhere' } }, message))),
   );
+  // The marker sits beside the card button (buttons cannot nest).
+  return h('div', { key: 'work-' + card.id, 'data-work-card': card.id, style: { display: 'flex', flexDirection: 'column', gap: '4px' } },
+    button, count === 0 ? null : pendingMarker(h, 'pending', 'data-review-pending-work', card.id, count, a, false));
 }
 
 function renderTree(h: H, s: PanelState, a: PanelActions): unknown {
@@ -670,6 +776,7 @@ function renderTree(h: H, s: PanelState, a: PanelActions): unknown {
     const next = all[index + 1];
     return node !== undefined && next !== undefined && next.depth > node.depth;
   };
+  const pending = pendingFor(s);
   return h(
     'nav',
     { key: 'tree', 'aria-label': s.labels.unitTree, 'data-tree': 'units', style: { flex: s.stacked ? '0 0 auto' : '0 0 260px', minWidth: '0', display: 'flex', flexDirection: 'column', gap: '2px' } },
@@ -679,10 +786,11 @@ function renderTree(h: H, s: PanelState, a: PanelActions): unknown {
       const expandable = hasChildren(node.ref);
       const nodeCollapsed = (s.treeCollapsed ?? {})[node.ref] === true;
       const progress = progressText(node.progress);
-      return h(
+      const count = pendingCountOf(pending, node.ref);
+      const nodeButton = h(
         'button',
         {
-          key: 'node-' + node.ref,
+          key: 'node',
           type: 'button',
           'data-tree-ref': node.ref,
           tabIndex: selected ? 0 : -1,
@@ -691,6 +799,7 @@ function renderTree(h: H, s: PanelState, a: PanelActions): unknown {
           onClick: () => a.selectUnit(node.ref),
           onKeyDown: (event: unknown) => a.treeKey(event, node.ref),
           style: {
+            flex: '1 1 auto', minWidth: '0',
             display: 'flex', alignItems: 'baseline', gap: '6px', textAlign: 'left', cursor: 'pointer', font: 'inherit',
             padding: '3px 8px', paddingLeft: 8 + node.depth * 16 + 'px', border: 'none', borderRadius: '6px',
             color: COLOR.primary, background: selected ? COLOR.selected : 'transparent',
@@ -702,6 +811,9 @@ function renderTree(h: H, s: PanelState, a: PanelActions): unknown {
         progress === null ? null : h('span', { key: 'progress', title: s.labels.progress, style: { fontSize: '12px', color: COLOR.secondary, fontFamily: MONO } }, progress),
         node.blockerCount === 0 ? null : h('span', { key: 'blockers', title: s.labels.blockers, style: { fontSize: '12px', color: COLOR.error } }, '●' + node.blockerCount),
       );
+      if (count === 0) return h('div', { key: 'node-' + node.ref, style: { display: 'flex' } }, nodeButton);
+      return h('div', { key: 'node-' + node.ref, 'data-tree-pending': node.ref, style: { display: 'flex', gap: '4px', alignItems: 'center' } },
+        nodeButton, pendingMarker(h, 'pending', 'data-review-pending-unit', node.ref, count, a, true));
     }),
   );
 }
@@ -1074,9 +1186,175 @@ function renderSetupSection(h: H, s: PanelState, a: PanelActions): unknown {
   );
 }
 
+/** Color role per paragraph origin (provenance) in the review view. */
+const ORIGIN_COLOR: Record<string, string> = {
+  human: COLOR.success,
+  agent: COLOR.brand,
+  'agent-draft-human-edited': COLOR.warn,
+};
+
+function originLabel(origin: string | null, labels: ReviewLabels): string {
+  if (origin === 'human') return labels.originHuman;
+  if (origin === 'agent') return labels.originAgent;
+  if (origin === 'agent-draft-human-edited') return labels.originEdited;
+  return labels.originUnknown;
+}
+
+function inputStyle(): Record<string, string> {
+  return { minWidth: '0', padding: '3px 8px', fontSize: '12px', lineHeight: '20px', color: COLOR.primary, background: COLOR.card, border: '1px solid ' + COLOR.border, borderRadius: '6px' };
+}
+
+function noticeNode(h: H, key: string, notice: ReviewNotice | undefined): unknown {
+  if (notice === undefined) return null;
+  return h('span', { key, role: notice.ok ? 'status' : 'alert', 'data-review-notice': notice.ok ? 'ok' : 'error', style: { color: notice.ok ? COLOR.success : COLOR.error, overflowWrap: 'anywhere' } }, notice.text);
+}
+
+/** One finding row under a paragraph or at the top of a unit. All text is
+ * workspace content and stays plain text. */
+function renderFinding(h: H, f: PageFinding, key: string): unknown {
+  const tone = f.kind === 'review' ? COLOR.brand : f.severity === 'error' ? COLOR.error : f.severity === 'warning' ? COLOR.warn : COLOR.secondary;
+  return h('li', { key, 'data-review-finding': f.kind, style: { overflowWrap: 'anywhere' } },
+    h('strong', { key: 'l', style: { color: tone, fontWeight: '600' } }, f.label), ' ',
+    h('span', { key: 'm' }, f.message),
+    f.suggestion === '' ? null : h('div', { key: 's', style: { color: COLOR.secondary } }, '→ ' + f.suggestion));
+}
+
+function findingList(h: H, key: string, items: PageFinding[]): unknown {
+  if (items.length === 0) return null;
+  return h('ul', { key, style: { margin: '2px 0 0', paddingLeft: '18px', fontSize: '12px', display: 'flex', flexDirection: 'column', gap: '2px' } },
+    items.map((f, i) => renderFinding(h, f, key + '-' + i)));
+}
+
+/** The units, paragraphs and findings of the page. The paragraph text
+ * element carries the data attributes the selection capture reads; the
+ * index and origin label sit outside it so a selection never includes them. */
+function renderReviewUnits(h: H, page: ReviewPage, d: ReviewDataState, labels: ReviewLabels, a: PanelActions): unknown {
+  return h(
+    'div',
+    { key: 'units', 'data-review-units': 'true', onMouseUp: a.captureSelection, onKeyUp: a.captureSelection, style: { display: 'flex', flexDirection: 'column', gap: '12px' } },
+    page.units.map((u) =>
+      h('section', { key: 'u-' + u.ref, 'data-review-unit-section': u.ref, style: { display: 'flex', flexDirection: 'column', gap: '6px' } },
+        h('div', { key: 'head', style: { display: 'flex', flexWrap: 'wrap', gap: '4px 10px', alignItems: 'baseline' } },
+          h('code', { key: 'ref', style: { ...codeStyle(), fontSize: '13px', fontWeight: '600' } }, u.ref),
+          h('span', { key: 'stage', style: { color: COLOR.tertiary } }, stageTitle(u.stage) + ' (' + u.stage + ')')),
+        u.notes.length === 0 ? null : h('ul', { key: 'notes', style: { margin: 0, paddingLeft: '18px', color: COLOR.warn } }, u.notes.map((n, i) => h('li', { key: 'n' + i, style: { overflowWrap: 'anywhere' } }, n))),
+        findingList(h, 'global', u.global),
+        !u.hasDraft ? h('p', { key: 'no-draft', style: { margin: 0, color: COLOR.tertiary } }, labels.noDraft) : null,
+        ...u.paragraphs.map((p) => {
+          const color = ORIGIN_COLOR[p.origin ?? ''] ?? COLOR.tertiary;
+          return h('div', { key: 'p' + p.index, style: { display: 'flex', flexDirection: 'column', gap: '2px', paddingLeft: '10px', borderLeft: '3px solid ' + (d.originColors ? color : COLOR.border) } },
+            h('div', { key: 'meta', style: { fontSize: '12px', color: COLOR.tertiary } },
+              '¶' + p.index + ' · ',
+              h('span', { key: 'o', 'data-review-origin': p.origin ?? 'unknown', style: { color: d.originColors ? color : COLOR.tertiary } }, originLabel(p.origin, labels))),
+            h('p', {
+              key: 'text',
+              'data-review-para': u.ref + '#' + p.index,
+              'data-review-unit': u.ref,
+              'data-review-index': String(p.index),
+              style: { margin: 0, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' },
+            }, p.text),
+            findingList(h, 'f', p.findings));
+        })),
+    ),
+  );
+}
+
+function renderFeedbackComposer(h: H, page: ReviewPage, d: ReviewDataState, labels: ReviewLabels, a: PanelActions): unknown {
+  const f = d.feedback;
+  const busy = d.busy === 'feedback';
+  return h('section', { key: 'feedback', 'data-review-feedback': 'true', style: { display: 'flex', flexDirection: 'column', gap: '6px', padding: '8px 12px', background: COLOR.subtle, border: '1px solid ' + COLOR.border, borderRadius: '8px' } },
+    sectionTitle(h, 'title', labels.feedbackTitle),
+    h('label', { key: 'unit', style: { display: 'flex', gap: '6px', alignItems: 'baseline' } }, labels.feedbackUnit + ' ',
+      h('select', { key: 's', value: f.unit, 'data-review-feedback-unit': 'true', style: inputStyle(), onChange: (e: { target?: { value?: string } }) => a.setFeedback?.({ unit: String(e?.target?.value ?? ''), quote: '', invalidSelection: false }) },
+        page.units.map((u) => h('option', { key: u.ref, value: u.ref }, u.ref)))),
+    h('div', { key: 'quote', 'data-review-quote': f.quote === '' ? 'none' : 'set', style: { display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'baseline' } },
+      h('strong', { key: 'l' }, labels.feedbackQuote + ':'),
+      h('span', { key: 'q', style: { overflowWrap: 'anywhere', whiteSpace: 'pre-wrap' } }, f.quote === '' ? labels.wholeUnit : '「' + f.quote + '」'),
+      // Also offered after an invalid selection, so the author can always fall back to the whole unit.
+      f.quote === '' && !f.invalidSelection ? null : h('button', { key: 'clear', type: 'button', 'data-review-clear-quote': 'true', style: buttonStyle(), onClick: () => a.setFeedback?.({ quote: '', invalidSelection: false }) }, labels.clearQuote)),
+    f.invalidSelection ? h('p', { key: 'invalid', role: 'alert', 'data-review-selection-invalid': 'true', style: { margin: 0, color: COLOR.warn } }, labels.selectionInvalid) : null,
+    h('textarea', { key: 'text', value: f.text, 'aria-label': labels.feedbackText, placeholder: labels.feedbackText, rows: 3, 'data-review-feedback-text': 'true', style: { ...inputStyle(), resize: 'vertical' }, onChange: (e: { target?: { value?: string } }) => a.setFeedback?.({ text: String(e?.target?.value ?? '') }) }),
+    h('div', { key: 'actions', style: { display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center' } },
+      h('label', { key: 'kind' }, labels.feedbackKind + ' ',
+        h('select', { key: 's', value: f.kind, style: inputStyle(), onChange: (e: { target?: { value?: string } }) => a.setFeedback?.({ kind: String(e?.target?.value ?? 'suggestion') }) },
+          FEEDBACK_KINDS.map((k) => h('option', { key: k, value: k }, labels.kinds[k] ?? k)))),
+      h('button', { key: 'submit', type: 'button', disabled: busy, 'data-review-feedback-submit': '', style: buttonStyle(true), onClick: () => a.submitFeedback?.('') }, labels.submitFeedback),
+      ...QUICK_MARKS.map((m) => h('button', { key: 'mark-' + m, type: 'button', disabled: busy, 'data-review-feedback-submit': m, style: buttonStyle(), onClick: () => a.submitFeedback?.(m) }, labels.marks[m] ?? m)),
+      noticeNode(h, 'notice', d.notices['feedback'])));
+}
+
+function renderConfirmItem(h: H, item: PageConfirm, d: ReviewDataState, labels: ReviewLabels, a: PanelActions): unknown {
+  const key = confirmKey(item);
+  const draft = d.confirmDrafts[key] ?? initialConfirmDraft(item);
+  const busy = d.busy === key;
+  return h('div', { key: 'c-' + key, 'data-review-confirm': key, style: { display: 'flex', flexDirection: 'column', gap: '4px', padding: '8px 12px', background: COLOR.card, border: '1px solid ' + COLOR.border, borderRadius: '8px' } },
+    h('strong', { key: 'label', style: { overflowWrap: 'anywhere' } }, item.label),
+    item.detail === '' ? null : h('p', { key: 'detail', style: { margin: 0, color: COLOR.secondary, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' } }, item.detail),
+    item.options.length === 0 ? null : h('label', { key: 'option', style: { display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'baseline' } }, labels.option + ' ',
+      h('select', { key: 's', value: draft.option, 'data-review-option': key, style: inputStyle(), onChange: (e: { target?: { value?: string } }) => a.setConfirmDraft?.(key, { option: String(e?.target?.value ?? '') }) },
+        item.options.map((o) => h('option', { key: o.id, value: o.id, 'data-recommended': o.id === item.recommend ? 'true' : undefined }, o.id + '. ' + o.text + (o.id === item.recommend ? '（' + labels.recommended + '）' : ''))))),
+    item.needsAnswer ? h('input', { key: 'answer', type: 'text', value: draft.answer, placeholder: labels.answer, 'aria-label': labels.answer, 'data-review-answer': key, style: inputStyle(), onChange: (e: { target?: { value?: string } }) => a.setConfirmDraft?.(key, { answer: String(e?.target?.value ?? '') }) }) : null,
+    h('input', { key: 'confirmation', type: 'text', value: draft.confirmation, placeholder: labels.confirmation, 'aria-label': labels.confirmation, 'data-review-confirmation': key, style: inputStyle(), onChange: (e: { target?: { value?: string } }) => a.setConfirmDraft?.(key, { confirmation: String(e?.target?.value ?? '') }) }),
+    h('div', { key: 'actions', style: { display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center' } },
+      h('button', { key: 'confirm', type: 'button', disabled: busy, 'data-review-confirm-action': 'confirm', style: buttonStyle(true), onClick: () => a.submitConfirm?.(key, 'confirm') }, labels.confirm),
+      item.canReject ? h('button', { key: 'reject', type: 'button', disabled: busy, 'data-review-confirm-action': 'reject', style: buttonStyle(), onClick: () => a.submitConfirm?.(key, 'reject') }, labels.reject) : null,
+      noticeNode(h, 'notice', d.notices[key])));
+}
+
+/** The whole review view of an active session. */
+function renderReviewView(h: H, s: PanelState, a: PanelActions, labels: ReviewLabels): unknown {
+  const d = s.reviewData ?? emptyReviewData(s.review?.unit ?? null);
+  const page = d.page;
+  const children: unknown[] = [
+    h('div', { key: 'head', style: { display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center' } },
+      h('strong', { key: 't' }, labels.viewTitle),
+      h('button', { key: 'refresh', type: 'button', 'data-review-refresh': 'true', disabled: d.loading, style: buttonStyle(), onClick: a.refreshReview }, labels.refresh),
+      h('label', { key: 'colors', style: { display: 'flex', gap: '4px', alignItems: 'center', color: COLOR.secondary } },
+        h('input', { key: 'c', type: 'checkbox', checked: d.originColors, 'data-review-origin-colors': 'true', onChange: a.toggleOriginColors }), labels.originColors),
+      d.loading ? h('span', { key: 'busy', role: 'status', 'aria-busy': 'true', 'data-review-loading': 'true', style: { color: COLOR.brand } }, labels.loadingPage) : null),
+  ];
+  if (d.error !== null) {
+    children.push(h('p', { key: 'error', role: 'alert', 'data-review-page-error': 'true', style: { margin: 0, color: COLOR.error, overflowWrap: 'anywhere' } }, labels.pageFailed + '：' + d.error));
+  }
+  if (page !== null) {
+    if (page.failures.length > 0) {
+      children.push(h('section', { key: 'failures', 'data-review-failures': 'true' },
+        sectionTitle(h, 'title', labels.failuresTitle),
+        h('ul', { key: 'l', style: { margin: 0, paddingLeft: '18px', fontSize: '12px' } },
+          page.failures.map((f, i) => h('li', { key: 'f' + i }, h('code', { key: 'c', style: codeStyle() }, f.command), ' · exit ' + f.exit + ' · ' + f.at)))));
+    }
+    children.push(
+      h('section', { key: 'confirms', 'data-review-confirms': 'true', style: { display: 'flex', flexDirection: 'column', gap: '6px' } },
+        sectionTitle(h, 'title', labels.confirmTitle + ' (' + page.confirms.length + ')'),
+        page.confirms.length === 0
+          ? h('p', { key: 'empty', style: { margin: 0, color: COLOR.tertiary } }, labels.confirmEmpty)
+          : page.confirms.map((item) => renderConfirmItem(h, item, d, labels, a))),
+    );
+    if (page.strict) {
+      const keys = selectedReviewKeys(page, d.unticked);
+      children.push(
+        h('section', { key: 'reviews', 'data-review-author-review': 'true', style: { display: 'flex', flexDirection: 'column', gap: '4px' } },
+          sectionTitle(h, 'title', labels.reviewTitle + ' (' + page.reviews.length + ')'),
+          page.reviews.length === 0
+            ? h('p', { key: 'empty', style: { margin: 0, color: COLOR.tertiary } }, labels.reviewEmpty)
+            : h('div', { key: 'list', style: { display: 'flex', flexDirection: 'column', gap: '2px' } },
+                ...page.reviews.map((r) =>
+                  h('label', { key: 'r-' + r.key, style: { display: 'flex', gap: '6px', alignItems: 'baseline' } },
+                    h('input', { key: 'c', type: 'checkbox', value: r.key, checked: d.unticked[r.key] !== true, 'data-review-key': r.key, onChange: (e: { target?: { checked?: boolean } }) => a.toggleReviewKey?.(r.key, e?.target?.checked !== false) }),
+                    h('span', { key: 'l', style: { overflowWrap: 'anywhere' } }, r.label))),
+                h('div', { key: 'actions', style: { display: 'flex', gap: '6px', alignItems: 'center' } },
+                  h('button', { key: 'submit', type: 'button', disabled: d.busy === 'review' || keys.length === 0, 'data-review-author-review-submit': 'true', style: buttonStyle(true), onClick: a.submitAuthorReview }, labels.reviewSelected),
+                  noticeNode(h, 'notice', d.notices['review'])))),
+      );
+    }
+    children.push(renderFeedbackComposer(h, page, d, labels, a), renderReviewUnits(h, page, d, labels, a));
+  }
+  return h('section', { key: 'review-view', 'data-review-view': s.review?.unit ?? '', 'aria-label': labels.viewTitle, style: { display: 'flex', flexDirection: 'column', gap: '10px' } }, children);
+}
+
 /** The review controls of one unit detail: start / progress / failure /
- * ended notice, and while active the embedded reading view with its end
- * button. Returns whether the iframe is showing so the detail can make room. */
+ * ended notice, and while active the native review view with its end
+ * button. Returns whether the review view is showing so the detail can make room. */
 function renderReviewControls(h: H, s: PanelState, a: PanelActions, ref: string): { nodes: unknown[]; active: boolean } {
   const labels = reviewLabelsFor();
   const host = typeof window !== 'undefined' && window.location ? window.location.host : '';
@@ -1101,17 +1379,8 @@ function renderReviewControls(h: H, s: PanelState, a: PanelActions, ref: string)
   if (model.endedText !== null) {
     nodes.push(h('p', { key: 'review-ended', role: 'status', 'data-review-ended': 'true', style: { margin: 0, color: COLOR.warn } }, model.endedText));
   }
-  if (model.frame !== null) {
-    nodes.push(h('iframe', {
-      key: model.frame.key,
-      src: model.frame.src,
-      title: model.frame.title,
-      'data-review-frame': ref,
-      onLoad: a.reviewFrameLoaded,
-      style: { width: '100%', height: '70vh', minHeight: '360px', border: '1px solid ' + COLOR.border, borderRadius: '8px', background: COLOR.card },
-    }));
-  }
-  return { nodes, active: model.frame !== null };
+  if (model.active) nodes.push(renderReviewView(h, s, a, labels));
+  return { nodes, active: model.active };
 }
 
 function renderDetail(h: H, s: PanelState, a: PanelActions): unknown {
@@ -1122,8 +1391,8 @@ function renderDetail(h: H, s: PanelState, a: PanelActions): unknown {
   if (d === null) {
     children.push(h('p', { key: 'hint', style: { margin: 0, color: COLOR.tertiary } }, labels.selectUnit));
   } else if (review !== null && review.active) {
-    // The embedded reading view takes the detail area; ending the review
-    // brings the unit's rows back.
+    // The review view takes the detail area; ending the review brings the
+    // unit's rows back.
     children.push(h('code', { key: 'ref', style: { ...codeStyle(), fontSize: '13px' } }, d.ref), ...review.nodes);
   } else {
     const progress = progressText(d.progress);
@@ -1204,7 +1473,7 @@ function renderPanel(h: H, s: PanelState, a: PanelActions): unknown {
       children.push(
         sectionTitle(h, 'works-title', labels.works + ' (' + s.model.works.length + ')'),
         h('div', { key: 'works', style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '8px' } },
-          s.model.works.map((card) => renderWorkCard(h, s, a, card))),
+          s.model.works.map((card) => renderWorkCard(h, s, a, card, pendingFor(s)))),
         h('div', {
           key: 'navigation',
           'data-layout': s.stacked ? 'stacked' : 'split',
@@ -1311,6 +1580,7 @@ window.__ModuleLoader__?.load({
       const [treeCollapsed, setTreeCollapsed] = react.useState({} as Record<string, boolean>);
       const [setup, setSetup] = react.useState({ status: null as SetupStatus | null, busy: false });
       const [review, setReview] = react.useState(IDLE_REVIEW as ReviewPanelState);
+      const [reviewData, setReviewData] = react.useState(emptyReviewData(null) as ReviewDataState);
       const containerRef = react.useRef(null);
       // Scroll offset captured before a view toggle, restored after the new
       // view has rendered, so switching never jumps back to the top.
@@ -1410,8 +1680,95 @@ window.__ModuleLoader__?.load({
           .catch(() => undefined);
       };
 
+      // Load the review view's data (the proxied page.json). A gone session
+      // turns into the ended notice; any other failure stays readable with
+      // the author's unsent inputs kept. Every load also re-checks the
+      // session status route, so a review replaced elsewhere ends here too.
+      const loadReviewPage = (): void => {
+        setReviewData((prev: ReviewDataState) => ({ ...prev, loading: true }));
+        fetch(REVIEW_DATA_ROUTE)
+          .then((response: Response) =>
+            response.json().then(
+              (parsed: unknown) => ({ status: response.status, parsed }),
+              () => ({ status: response.status, parsed: null as unknown }),
+            ),
+          )
+          .then(({ status, parsed }: { status: number; parsed: unknown }) => {
+            const page = status === 200 ? parseReviewPage(parsed) : null;
+            if (page === null && sessionGone(status, parsed)) setReview((prev: ReviewPanelState) => reviewEnded(prev));
+            setReviewData((prev: ReviewDataState) => {
+              if (page === null) return { ...prev, loading: false, error: envelopeMessage(status, parsed) };
+              const drafts: Record<string, ConfirmDraft> = {};
+              for (const item of page.confirms) drafts[confirmKey(item)] = prev.confirmDrafts[confirmKey(item)] ?? initialConfirmDraft(item);
+              const unit = page.units.some((u) => u.ref === prev.feedback.unit) ? prev.feedback.unit : (page.units[0]?.ref ?? prev.feedback.unit);
+              return { ...prev, page, loading: false, error: null, confirmDrafts: drafts, feedback: { ...prev.feedback, unit } };
+            });
+            checkReviewStatus();
+          })
+          .catch((cause: unknown) => {
+            setReviewData((prev: ReviewDataState) => ({ ...prev, loading: false, error: String((cause as Error)?.message ?? cause) }));
+          });
+      };
+
+      // A fresh session (each start changes startedAt) starts from clean
+      // inputs and loads its data.
+      react.useEffect(() => {
+        if (review.phase !== 'active') return;
+        setReviewData(emptyReviewData(review.unit));
+        loadReviewPage();
+      }, [review.phase, review.startedAt]);
+
+      // POST one submit through the proxy. Success records a result line and
+      // reloads the data; a refusal shows wa-cli's message and keeps inputs.
+      const submitReview = (area: string, route: string, plan: SubmitPlan, okText: (parsed: unknown) => string, onSaved?: () => void): void => {
+        const labels = reviewLabelsFor();
+        if (!plan.ok) {
+          // The invalid-selection hint already shows as its own alert.
+          if (plan.reason === 'selection') return;
+          const reason = { selection: labels.selectionInvalid, empty: labels.feedbackEmpty, confirmation: labels.needConfirmation, answer: labels.needAnswer, keys: labels.needKeys }[plan.reason];
+          setReviewData((prev: ReviewDataState) => ({ ...prev, notices: { ...prev.notices, [area]: { text: reason, ok: false } } }));
+          return;
+        }
+        if (reviewData.busy !== null) return;
+        setReviewData((prev: ReviewDataState) => ({ ...prev, busy: area }));
+        fetch(route, { method: 'POST', headers: { 'content-type': 'application/json' }, body: plan.body })
+          .then((response: Response) =>
+            response.json().then(
+              (parsed: unknown) => ({ status: response.status, parsed }),
+              () => ({ status: response.status, parsed: null as unknown }),
+            ),
+          )
+          .then(({ status, parsed }: { status: number; parsed: unknown }) => {
+            const saved = status === 200 && (parsed as { valid?: unknown } | null)?.valid === true;
+            if (!saved && sessionGone(status, parsed)) setReview((prev: ReviewPanelState) => reviewEnded(prev));
+            setReviewData((prev: ReviewDataState) => ({
+              ...prev,
+              busy: null,
+              notices: { ...prev.notices, [area]: saved ? { text: okText(parsed), ok: true } : { text: envelopeMessage(status, parsed), ok: false } },
+            }));
+            if (saved) {
+              onSaved?.();
+              loadReviewPage();
+            }
+          })
+          .catch((cause: unknown) => {
+            setReviewData((prev: ReviewDataState) => ({ ...prev, busy: null, notices: { ...prev.notices, [area]: { text: String((cause as Error)?.message ?? cause), ok: false } } }));
+          });
+      };
+
+      // Read the author's selection inside the review view: a quote must
+      // start and end in one paragraph's text element.
+      const anchorOf = (node: Node | null): ParagraphAnchor | null => {
+        let element: Element | null = node === null ? null : node.nodeType === 1 ? (node as Element) : node.parentElement;
+        element = element !== null && typeof element.closest === 'function' ? element.closest('[data-review-para]') : null;
+        if (element === null) return null;
+        const unit = element.getAttribute('data-review-unit');
+        const index = Number(element.getAttribute('data-review-index'));
+        return unit === null || !Number.isFinite(index) ? null : { unit, index };
+      };
+
       // While a review shows, re-check when the author comes back to the page
-      // (window focus or the tab becoming visible), besides every iframe load.
+      // (window focus or the tab becoming visible), besides every data load.
       react.useEffect(() => {
         if (review.phase !== 'active' || typeof window === 'undefined' || typeof window.addEventListener !== 'function') return undefined;
         const onVisible = (): void => {
@@ -1455,6 +1812,7 @@ window.__ModuleLoader__?.load({
         setup: setup.status,
         setupBusy: setup.busy,
         review,
+        reviewData,
       };
       const actions: PanelActions = {
         refresh: () => fetchSnapshot(panelRoot),
@@ -1550,13 +1908,62 @@ window.__ModuleLoader__?.load({
             .then((next: ReviewPanelState) => setReview(next))
             .catch((cause: unknown) => setReview(reviewAfterStart(ref, 0, { ok: false, error: String((cause as Error)?.message ?? cause) })));
         },
+        reviewPending: (ref: string) => {
+          const work = ref.split('/')[0] ?? ref;
+          setView('overview');
+          setOpenArtifact(null);
+          setSelection({ work, unit: ref });
+          actions.startReview(ref);
+        },
+        refreshReview: loadReviewPage,
+        captureSelection: () => {
+          if (typeof window === 'undefined' || typeof window.getSelection !== 'function') return;
+          const selection = window.getSelection();
+          if (selection === null) return;
+          const outcome = selectionOutcome(anchorOf(selection.anchorNode), anchorOf(selection.focusNode), selection.toString());
+          if (outcome.kind === 'none') return;
+          setReviewData((prev: ReviewDataState) => ({ ...prev, feedback: feedbackAfterSelection(prev.feedback, outcome) }));
+        },
+        setFeedback: (patch: Partial<FeedbackDraft>) => {
+          setReviewData((prev: ReviewDataState) => ({ ...prev, feedback: { ...prev.feedback, ...patch } }));
+        },
+        submitFeedback: (mark: string) => {
+          submitReview('feedback', REVIEW_FEEDBACK_ROUTE, feedbackRequest(reviewData.feedback, mark),
+            (parsed: unknown) => reviewLabelsFor().feedbackSaved + ' ' + String((parsed as { feedback?: { id?: unknown } } | null)?.feedback?.id ?? ''),
+            () => setReviewData((prev: ReviewDataState) => ({ ...prev, feedback: { ...prev.feedback, quote: '', text: '', invalidSelection: false } })));
+        },
+        setConfirmDraft: (key: string, patch: Partial<ConfirmDraft>) => {
+          setReviewData((prev: ReviewDataState) => {
+            const item = prev.page?.confirms.find((c) => confirmKey(c) === key);
+            const current = prev.confirmDrafts[key] ?? (item === undefined ? { option: '', answer: '', confirmation: '' } : initialConfirmDraft(item));
+            return { ...prev, confirmDrafts: { ...prev.confirmDrafts, [key]: { ...current, ...patch } } };
+          });
+        },
+        submitConfirm: (key: string, action: 'confirm' | 'reject') => {
+          const item = reviewData.page?.confirms.find((c: PageConfirm) => confirmKey(c) === key);
+          if (item === undefined) return;
+          submitReview(key, REVIEW_CONFIRM_ROUTE, confirmRequest(item, reviewData.confirmDrafts[key] ?? initialConfirmDraft(item), action),
+            () => reviewLabelsFor().confirmed);
+        },
+        toggleReviewKey: (key: string, checked: boolean) => {
+          setReviewData((prev: ReviewDataState) => ({ ...prev, unticked: { ...prev.unticked, [key]: !checked } }));
+        },
+        submitAuthorReview: () => {
+          const page = reviewData.page;
+          if (page === null) return;
+          submitReview('review', REVIEW_AUTHOR_REVIEW_ROUTE, authorReviewRequest(selectedReviewKeys(page, reviewData.unticked)),
+            (parsed: unknown) => reviewLabelsFor().reviewed + ' · ' + String((parsed as { authorReview?: { reviewed?: unknown[] } } | null)?.authorReview?.reviewed?.length ?? 0));
+        },
+        toggleOriginColors: () => {
+          setReviewData((prev: ReviewDataState) => ({ ...prev, originColors: !prev.originColors }));
+        },
         endReview: () => {
           setReview(IDLE_REVIEW);
+          setReviewData(emptyReviewData(null));
           fetch(REVIEW_SESSION_END_ROUTE, { method: 'POST' })
             .catch(() => undefined)
             .then(() => fetchSnapshot(panelRoot));
         },
-        reviewFrameLoaded: checkReviewStatus,
         treeKey: (event: unknown, ref: string) => {
           const decision = treeKeyAction(picked?.tree ?? [], treeCollapsed, ref, String((event as { key?: unknown })?.key ?? ''));
           if (decision.kind === 'none') return;

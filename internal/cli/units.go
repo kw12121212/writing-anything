@@ -97,7 +97,8 @@ var nextCommand = &command{
 	args:    []argSpec{{"unit", "只列出该单元；省略时列出所有未完成的单元。" + unitRefHelp, false}},
 	flags:   []flagSpec{dirFlag},
 	outputKeys: []outputKey{{"steps", "下一步数组，每项含 unit、stage、blockers、action、commands、feedback（未处理完的作者反馈）、progress（汇总单元的进度，其他单元为 null）与 handoff（最近一条交接记录（Handoff Note）的 id、todo 与 instructions，没有时为 null）"},
-		{"pendingAuthorReviews", "给出单元时为其所在作品、省略时为全部作品的" + pendingAuthorReviewsHelp}},
+		{"pendingAuthorReviews", "给出单元时为其所在作品、省略时为全部作品的" + pendingAuthorReviewsHelp},
+		{"pendingConfirmations", "给出单元时为其所在作品、省略时为全部作品的" + pendingConfirmationsHelp}},
 	exitCodes: standardExitCodes,
 	run:       runNext,
 }
@@ -184,6 +185,8 @@ type nextResult struct {
 	Steps []stepView `json:"steps"`
 	// PendingAuthorReviews 是待作者复核（Pending Author Review）的确认（strict 关卡下），组稿前须由作者在阅读页复核。
 	PendingAuthorReviews []pendingReviewView `json:"pendingAuthorReviews"`
+	// PendingConfirmations 是与阅读页待作者确认区同一口径的待作者确认事项。
+	PendingConfirmations []pendingConfirmView `json:"pendingConfirmations"`
 }
 
 // unitView 是 status 输出 units 中的一项。
@@ -403,7 +406,7 @@ func runReopen(inv *invocation) int {
 
 func runNext(inv *invocation) int {
 	dir := projectDir(inv)
-	res := &nextResult{Steps: []stepView{}, PendingAuthorReviews: []pendingReviewView{}}
+	res := &nextResult{Steps: []stepView{}, PendingAuthorReviews: []pendingReviewView{}, PendingConfirmations: []pendingConfirmView{}}
 	problems := workspace.Require(dir)
 	if problems == nil {
 		var works []*work.Work
@@ -433,11 +436,12 @@ func runNext(inv *invocation) int {
 		var rps []workspace.Problem
 		res.PendingAuthorReviews, rps = pendingReviews(dir, works)
 		problems = append(problems, rps...)
+		res.PendingConfirmations = pendingConfirmations(dir, works)
 	}
 	res.Diagnostics = diagnostics(problems, dir)
 	return finish(inv, res, func(w io.Writer) error {
 		var b strings.Builder
-		if len(res.Steps) == 0 && len(res.PendingAuthorReviews) == 0 && !hasError(res.Diagnostics) {
+		if len(res.Steps) == 0 && len(res.PendingAuthorReviews) == 0 && len(res.PendingConfirmations) == 0 && !hasError(res.Diagnostics) {
 			b.WriteString("没有需要推进的单元（Unit）\n")
 		}
 		// 各步骤共享同一条最近交接记录，只在顶部输出一次（与 JSON 的 handoff 字段一致）。
@@ -461,6 +465,7 @@ func runNext(inv *invocation) int {
 			}
 		}
 		b.WriteString(pendingReviewsText(res.PendingAuthorReviews))
+		b.WriteString(pendingConfirmationsText(res.PendingConfirmations))
 		_, err := io.WriteString(w, b.String())
 		return err
 	})

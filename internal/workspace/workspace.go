@@ -73,7 +73,13 @@ func ChannelOr(c *string) string {
 }
 
 // SettableKeys 是 config set 可以设置的配置项，按 config.yaml 中的顺序排列。
-var SettableKeys = []string{"language", "default_genre", "packs", "gate_level", "context_budget", "ai_disclosure"}
+var SettableKeys = []string{"language", "default_genre", "packs", "gate_level", "context_budget", "ai_disclosure", "review_surface"}
+
+// 审阅位置（review_surface）的取值：browser 为在浏览器中打开 wa-cli preview --serve 的地址，dsh 为在 DSH 插件面板中审阅。
+const (
+	ReviewSurfaceBrowser = "browser"
+	ReviewSurfaceDSH     = "dsh"
+)
 
 // Problem 是工作区中的一个问题。Path 相对项目目录、以 / 分隔。
 type Problem struct {
@@ -96,6 +102,8 @@ type Config struct {
 	ContextBudget *int `json:"contextBudget"`
 	// AIDisclosure 是 AI 参与说明的放置位置（footer、metadata 或 both）；未设置时为 nil，即 both。
 	AIDisclosure *string `json:"aiDisclosure"`
+	// ReviewSurface 是作者审阅阅读页的位置（browser 或 dsh）的生效值；未设置时为 browser。
+	ReviewSurface string `json:"reviewSurface"`
 }
 
 func errorAt(code, path, msg string) Problem {
@@ -411,7 +419,7 @@ func summarize(v any) *Config {
 	if !ok {
 		return nil
 	}
-	c := &Config{Packs: []string{}}
+	c := &Config{Packs: []string{}, ReviewSurface: ReviewSurfaceBrowser}
 	c.Language, _ = m["language"].(string)
 	c.GateLevel, _ = m["gate_level"].(string)
 	if g, ok := m["default_genre"].(string); ok {
@@ -419,6 +427,9 @@ func summarize(v any) *Config {
 	}
 	if a, ok := m["ai_disclosure"].(string); ok {
 		c.AIDisclosure = &a
+	}
+	if r, ok := m["review_surface"].(string); ok {
+		c.ReviewSurface = r
 	}
 	switch n := m["context_budget"].(type) {
 	case int:
@@ -589,7 +600,7 @@ func configValue(key, v string) *yaml.Node {
 	switch {
 	case key == "packs":
 		return packs(v)
-	case (key == "default_genre" || key == "context_budget" || key == "ai_disclosure") && v == "":
+	case (key == "default_genre" || key == "context_budget" || key == "ai_disclosure" || key == "review_surface") && v == "":
 		return nil
 	case key == "context_budget":
 		// 十进制整数写为整数，交给 Schema 检查是否为正整数；其他取值写为字符串，由 Schema 报告类型错误。

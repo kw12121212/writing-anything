@@ -1,0 +1,47 @@
+schema: strict-spec-driven/question-list/v1
+schema_version: 1
+artifact_type: question_list
+schema_file: templates/strict-spec-driven/schemas/question-list.yaml
+change: dsh-native-review
+open: []
+resolved:
+  - id: requirement-problem
+    question: 现在具体出了什么问题，影响谁？
+    context: 作者原话与 ../writing-desk 审计日志
+    answer: 作者原话：在 ../writing-desk 最新生成的文章里并没有自动显示到 DSH 里，而是跟以前一样只显示一个 127.0.0.1 的链接。受影响的是经 DSH Web UI（含 Tailscale 远程）审阅的作者。
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-outcome
+    question: 什么可观察的变化说明问题已解决？
+    context: 作者原话
+    answer: 作者原话：需要将这个审核阅读页显示到 DSH Web UI 里；由 wa-cli 提供 API 输出，DSH 插件读出 API 再显示到合理的网页里，比嵌入 iframe 更好用。
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-trigger
+    question: 为什么是现在？
+    context: dsh-review-proxy（0.6.0/0.6.1）发布后首次真实写作即暴露
+    answer: 作者原话：最近的更新 dsh-review-proxy 似乎有问题——发布后在 writing-desk 写的最新文章仍只拿到 127.0.0.1 链接，该更新没有达到在 DSH 中审阅的目的。
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-interpretation
+    question: 「自动显示到 DSH」与 iframe 去留按哪种理解？
+    context: 以 AskUserQuestion 给出选项，作者选择
+    answer: '作者选择：触发方式为「DSH 主动发现 + Skill 改指引」（插件快照列出待确认/待复核单元并在面板给出待审阅入口；工作区配置 review_surface: dsh 时技能与 next 不再让 Agent 起 --serve 交 127.0.0.1 链接，而是告诉作者去 DSH 面板）；iframe「直接替换掉」，代理只放行 JSON 接口。'
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-non-goals
+    question: 哪些行为必须明确保持不变？
+    context: 向作者列出推定清单请其确认
+    answer: 作者接受推定（原话：接受建议）：确认渠道仍为 preview；插件自身不写工作区；静态阅读页与浏览器直接打开 --serve 阅读页的行为不变；review_surface 未设置时一切照旧；不新增 Agent 主动推送审阅请求的机制。
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: discovery-scope
+    question: DSH「待审阅」标记的判定口径包括哪些？
+    context: 选项 A：只算待作者确认区同口径事项加 strict 待作者复核项；选项 B：另含有未处理审稿发现项的审稿/修订阶段单元
+    answer: 作者选择 A（原话：接受建议）：「待审阅」只算阅读页待作者确认区同口径的事项（验收、决策、规划步骤、状态与知情提议、卷末检查点）加 strict 关卡的待作者复核项，由 wa-cli 单一来源计算。
+    status: resolved

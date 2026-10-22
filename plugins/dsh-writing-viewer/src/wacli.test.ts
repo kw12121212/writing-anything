@@ -54,9 +54,16 @@ describe('wa-cli output mappers', () => {
     expect(partial.output?.checked).toEqual([]);
   });
 
-  it('degrades next only for a missing pendingAuthorReviews field', () => {
-    expect(mapNext({ steps: [] }).reason).toContain('pendingAuthorReviews');
-    expect(mapNext({ steps: [{ do: 'it' }], pendingAuthorReviews: [{ unit: 'u' }] }).reason).toBeNull();
+  it('degrades next only for a missing pendingAuthorReviews or pendingConfirmations field', () => {
+    expect(mapNext({ steps: [], pendingConfirmations: [] }).reason).toContain('pendingAuthorReviews');
+    expect(mapNext({ steps: [], pendingConfirmations: [] }).reason).not.toContain('pendingConfirmations');
+    const old = mapNext({ steps: [], pendingAuthorReviews: [] });
+    expect(old.reason).toContain('pendingConfirmations');
+    expect(old.reason).not.toContain('pendingAuthorReviews');
+    expect(old.output?.pendingConfirmations).toEqual([]);
+    const full = mapNext({ steps: [{ do: 'it' }], pendingAuthorReviews: [{ unit: 'u' }], pendingConfirmations: [{ kind: 'decision', work: 'w' }] });
+    expect(full.reason).toBeNull();
+    expect(full.output?.pendingConfirmations).toEqual([{ kind: 'decision', work: 'w' }]);
     expect(mapNext(null).output).toBeNull();
   });
 
@@ -101,7 +108,7 @@ describe('wa-cli collect runners', () => {
     const timeline = await collectTimeline(runner(JSON.stringify({ timeline: [] })), '/w', 'my-novel');
     expect(timeline.reason).toBeNull();
     expect(calls[1]).toEqual(['timeline', 'my-novel', '--dir', '/w', '--json']);
-    const next = await collectNext(runner(JSON.stringify({ pendingAuthorReviews: [] })), '/w');
+    const next = await collectNext(runner(JSON.stringify({ pendingAuthorReviews: [], pendingConfirmations: [] })), '/w');
     expect(next.reason).toBeNull();
     const validate = await collectValidate(runner(JSON.stringify({ valid: true, diagnostics: [] })), '/w');
     expect(validate.reason).toBeNull();

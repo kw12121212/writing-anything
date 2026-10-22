@@ -1,0 +1,25 @@
+schema: strict-spec-driven/delta-spec/v1
+schema_version: 1
+artifact_type: delta_spec
+schema_file: templates/strict-spec-driven/schemas/delta-spec.yaml
+target_spec: skills
+operations:
+  ADDED: {}
+  MODIFIED:
+    preview-serve-guidance:
+      strength: MUST
+      statement: 使用本地阅读页（wa-cli preview <作品> --serve）的内置技能（wa-assemble、wa-auto、wa-publish、wa-revise）在任何交出阅读页地址（preview.url 或 pendingAuthorReviews 的 command 给出的地址）的步骤中，都必须先读取工作区的审阅位置（wa-cli status --json 输出的 config.reviewSurface）再给出指引。为 browser 时必须说明：该命令是作者确认期间持续运行的本地服务，要用客户端的后台任务运行、在作者确认完成前不得停止；读取首行输出的 preview.url 后，先确认该地址可以访问再交给作者；作者说打不开时，重新运行该命令并交出新的地址。为 dsh 时必须说明：不启动 wa-cli preview --serve、不交出 127.0.0.1 地址，而是请作者打开 DSH 插件面板，在标为「待审阅」的作品或单元上点「审阅」完成反馈、确认与复核；作者说完成后，用 wa-cli review show 或 wa-cli next 的 --json 输出复查结果再继续
+      scenarios:
+        serve-guidance-present:
+          - GIVEN: 内置技能中正文含 preview --serve 的技能（wa-assemble、wa-auto、wa-publish、wa-revise）
+          - WHEN: 检查它们的正文
+          - THEN: 每个都说明先读取 config.reviewSurface，并在 browser 分支说明持续运行、后台运行、确认该地址可以访问与作者打不开时重新运行
+        dsh-guidance-present:
+          - GIVEN: 同上四个技能
+          - WHEN: 检查它们的正文
+          - THEN: 每个都说明 reviewSurface 为 dsh 时不启动 --serve、不交出 127.0.0.1 地址，请作者到 DSH 插件面板的「待审阅」入口审阅，并在作者完成后以 wa-cli review show 或 wa-cli next 复查
+        every-handoff-step-branches:
+          - GIVEN: 同上四个技能
+          - WHEN: 逐个检查提到 preview.url 或阅读页地址的步骤
+          - THEN: 每个这样的步骤都写明 reviewSurface 为 dsh 时的做法
+  REMOVED: {}

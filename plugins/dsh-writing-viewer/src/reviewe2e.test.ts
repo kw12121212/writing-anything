@@ -5,7 +5,7 @@
  * creates a workspace with one drafted work, mounts the real review routes on
  * a node:http server that dispatches like the DSH host webServer (exact
  * first, then longest prefix), and drives one full session: start, proxied
- * page, proxied feedback submit, end. The workspace afterwards differs from
+ * page.json, proxied feedback and confirm submits, end. The workspace afterwards differs from
  * its starting state only by the feedback the author submitted and wa-cli's
  * own audit log.
  */
@@ -95,7 +95,7 @@ describe.skipIf(!hasGo())('review proxy end to end (real wa-cli)', () => {
     if (tmp !== '') rmSync(tmp, { recursive: true, force: true });
   });
 
-  it('starts a session, proxies the page and a feedback submit, then ends it', async () => {
+  it('starts a session, proxies page.json and the submits, then ends it', async () => {
     const workspace = join(project, '.writing-anything');
     const before = inventory(workspace);
 
@@ -109,27 +109,28 @@ describe.skipIf(!hasGo())('review proxy end to end (real wa-cli)', () => {
     expect(startBody.session).toMatchObject({ unit: 'my-post', root: project });
     expect(JSON.stringify(startBody)).not.toMatch(/token|127\.0\.0\.1/);
 
-    const page = await fetch(`${base}/dsh-writing-viewer/review/`);
-    const html = await page.text();
+    const page = await fetch(`${base}/dsh-writing-viewer/review/page.json`);
+    const raw = await page.text();
     expect(page.status).toBe(200);
-    expect(html).toContain('连接池很重要');
-    expect(html).toContain("fetch('feedback'");
-    expect(page.headers.get('x-frame-options')).toBeNull();
-    expect(page.headers.get('content-security-policy')).toContain("frame-ancestors 'self'");
-    expect(page.headers.get('content-security-policy')).toContain("script-src 'sha256-");
-    expect(html).not.toContain('127.0.0.1');
+    expect(page.headers.get('content-type')).toContain('application/json');
+    const data = JSON.parse(raw) as { units: { ref: string; paragraphs: { text: string; origin: string | null }[] }[]; confirms: unknown[] };
+    expect(data.units[0]?.ref).toBe('my-post');
+    expect(data.units[0]?.paragraphs[0]?.text).toContain('连接池很重要');
+    expect(data.confirms).toEqual([]);
+    expect(raw).not.toContain('127.0.0.1');
     const token = sessions.upstream()?.token;
     expect(token).toBeTruthy();
-    expect(html).not.toContain(token as string);
+    expect(raw).not.toContain(token as string);
+    // The HTML reading view is not proxied at all.
+    const html = await fetch(`${base}/dsh-writing-viewer/review/`);
+    expect(html.status).toBe(404);
 
     // Browse-only so far: nothing but wa-cli's audit log may have changed.
     const browsed = inventory(workspace);
     for (const [path, stamp] of before) if (path !== 'audit.log') expect(browsed.get(path), path).toBe(stamp);
     expect([...browsed.keys()].filter((p) => !before.has(p) && p !== 'audit.log')).toEqual([]);
 
-    // The page posts by relative path, which resolves under the proxy prefix.
-    const submit = new URL('feedback', `${base}/dsh-writing-viewer/review/`).toString();
-    const saved = await fetch(submit, {
+    const saved = await fetch(`${base}/dsh-writing-viewer/review/feedback`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-wa-token': 'forged' },
       body: JSON.stringify({ unit: 'my-post', quote: '连接池很重要', text: '补一个例子' }),
@@ -143,8 +144,14 @@ describe.skipIf(!hasGo())('review proxy end to end (real wa-cli)', () => {
     // A confirmation through the proxy is recorded exactly like one made on the
     // reading view directly: confirmation channel preview (proxy-confirm-channel).
     execFileSync(waCli, ['decision', 'add', '--question', '标题用哪个？', '--option', '甲', '--option', '乙', '--unit', 'my-post', '--id', 'dec-1', '--dir', project], { stdio: 'ignore' });
-    const confirmUrl = new URL('confirm', `${base}/dsh-writing-viewer/review/`).toString();
-    const confirmed = await fetch(confirmUrl, {
+    // wa-cli next lists the open decision for the panel's「待审阅」marker, and
+    // page.json lists the same item in its pending-confirmation area.
+    const pending = (): { kind: string; id: string | null; units: string[] }[] =>
+      (JSON.parse(execFileSync(waCli, ['next', '--dir', project, '--json'], { encoding: 'utf8' })) as { pendingConfirmations: { kind: string; id: string | null; units: string[] }[] }).pendingConfirmations;
+    expect(pending()).toEqual([expect.objectContaining({ kind: 'decision', id: 'dec-1', units: ['my-post'] })]);
+    const refreshed = (await (await fetch(`${base}/dsh-writing-viewer/review/page.json`)).json()) as { confirms: { kind: string; id: string }[] };
+    expect(refreshed.confirms.map((c) => [c.kind, c.id])).toEqual([['decision', 'dec-1']]);
+    const confirmed = await fetch(`${base}/dsh-writing-viewer/review/confirm`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ kind: 'decision', id: 'dec-1', option: 'a', confirmation: '作者：用甲' }),
@@ -153,10 +160,12 @@ describe.skipIf(!hasGo())('review proxy end to end (real wa-cli)', () => {
     expect(confirmed.status, JSON.stringify(confirmedBody)).toBe(200);
     expect(confirmedBody.confirmation).toMatchObject({ kind: 'decision', id: 'dec-1', channel: 'preview' });
     expect(readFileSync(join(workspace, 'decisions.yaml'), 'utf8')).toContain('channel: preview');
+    // Once confirmed, the marker source no longer lists it.
+    expect(pending()).toEqual([]);
 
     const ended = await fetch(`${base}/dsh-writing-viewer/review-session/end`, { method: 'POST' });
     expect(((await ended.json()) as { session: unknown }).session).toBeNull();
-    const gone = await fetch(`${base}/dsh-writing-viewer/review/`);
+    const gone = await fetch(`${base}/dsh-writing-viewer/review/page.json`);
     expect(gone.status).toBe(409);
     expect(await gone.text()).toContain('没有进行中的审阅');
 

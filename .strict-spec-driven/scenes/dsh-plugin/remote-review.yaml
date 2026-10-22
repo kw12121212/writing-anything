@@ -18,25 +18,13 @@ preconditions:
   - DSH Web GUI 已装入插件并以 http://gamepc.tail1234.ts.net:13080 这类 MagicDNS 地址经 tailnet 可达，插件配置 allowedHosts 已放行该权威
   - 面板已定位到含 .writing-anything/ 的项目目录，宿主机可执行 wa-cli
 main_flow:
-  open-unit:
-    action: 作者在面板单元树选中单元，单元详情出现「审阅」按钮
-    covered_by:
-      - spec_id: dsh-plugin
-        requirement_id: review-panel-embed
   start-session:
     action: 作者点「审阅」，插件 host 结束任何既有会话后以面板当前项目目录启动 wa-cli preview <unit> --serve，取得端口与令牌并只留在服务端
     covered_by:
       - spec_id: dsh-plugin
         requirement_id: review-session-start
-  embed-page:
-    action: 面板详情区以 iframe 内嵌同源代理地址，显示该单元的阅读页
-    covered_by:
-      - spec_id: dsh-plugin
-        requirement_id: review-panel-embed
-      - spec_id: dsh-plugin
-        requirement_id: review-proxy
   submit-feedback:
-    action: 作者在阅读页划词提交反馈或快捷标记，请求以相对路径经代理到达 wa-cli 并保存
+    action: 作者在原生审阅视图中选中某段文字提交反馈或快捷标记，面板经同源代理 POST /feedback 到达 wa-cli 保存，随后重新拉取 page.json 显示最新状态
     covered_by:
       - spec_id: preview
         requirement_id: preview-relative-submit
@@ -44,8 +32,10 @@ main_flow:
         requirement_id: review-proxy
       - spec_id: preview
         requirement_id: preview-feedback
+      - spec_id: dsh-plugin
+        requirement_id: review-native-view
   confirm-and-review:
-    action: 作者在待作者确认区提交验收或决策确认、在待作者复核区批量复核，写入的确认渠道为 preview
+    action: 作者在原生视图的待作者确认区填写原话摘要后确认或拒绝验收、决策等事项，在待作者复核区勾选后批量复核；写入经代理由 wa-cli 完成，确认渠道为 preview，提交后视图刷新
     covered_by:
       - spec_id: preview
         requirement_id: preview-confirm
@@ -53,43 +43,82 @@ main_flow:
         requirement_id: preview-author-review
       - spec_id: dsh-plugin
         requirement_id: review-proxy
-  end-session:
-    action: 作者点「结束审阅」，插件 host 结束子进程，面板移除 iframe 并刷新快照显示新状态
+      - spec_id: dsh-plugin
+        requirement_id: review-native-view
+  agent-handoff:
+    action: Agent 需要作者确认或审阅时读取 wa-cli status 的 config.reviewSurface；为 dsh 时不启动 wa-cli preview --serve、不交出 127.0.0.1 链接，而是请作者到 DSH 插件面板审阅该作品
+    covered_by:
+      - spec_id: skills
+        requirement_id: preview-serve-guidance
+      - spec_id: workspace
+        requirement_id: config-review-surface
+  render-native:
+    action: 面板经同源代理拉取 GET page.json，以 DSH 原生组件呈现该单元及子单元的段落正文、出处着色、文本检查与审稿发现项、最近失败的命令、待作者确认区与待作者复核区，随 DSH 明暗主题与窄屏布局
+    covered_by:
+      - spec_id: dsh-plugin
+        requirement_id: review-native-view
+      - spec_id: dsh-plugin
+        requirement_id: review-proxy
+      - spec_id: preview
+        requirement_id: preview-page-json
+  open-panel:
+    action: 作者打开插件面板，总览作品卡片与单元树中有待作者确认或待作者复核事项的单元带「待审阅」标记与审阅入口；选中单元后详情出现「审阅」按钮
+    covered_by:
+      - spec_id: dsh-plugin
+        requirement_id: review-pending-discovery
+      - spec_id: units-and-lifecycle
+        requirement_id: next-pending-confirmations
+      - spec_id: dsh-plugin
+        requirement_id: unit-tree-navigation
+  end-review:
+    action: 作者点「结束审阅」，插件 host 结束子进程，面板关闭审阅视图并刷新快照，已确认单元的「待审阅」标记随之消失
     covered_by:
       - spec_id: dsh-plugin
         requirement_id: review-session-end
       - spec_id: dsh-plugin
-        requirement_id: review-panel-embed
+        requirement_id: review-native-view
+      - spec_id: dsh-plugin
+        requirement_id: review-pending-discovery
 exception_flows:
   origin-rejected:
     trigger: allowedHosts 未放行作者使用的 Tailscale 权威，插件路由被来源校验拒绝
     steps:
-      report:
-        action: 插件全部路由（快照与审阅路由同一校验）返回 403 且审阅请求不触达 wa-cli；面板在加载快照时即显示被拒原因（指出被拒的 Host）与重试入口，不崩溃也不显示空白；审阅路由单独被拒时，单元详情显示在 allowedHosts 中放行该权威的提示，不显示空白 iframe
+      report-native:
+        action: 插件全部路由（快照与审阅路由同一校验）返回 403 且审阅请求不触达 wa-cli；面板在加载快照时即显示被拒原因（指出被拒的 Host）与重试入口；审阅路由单独被拒时，单元详情显示在 allowedHosts 中放行该权威的提示，不显示空白审阅视图
         covered_by:
           - spec_id: dsh-plugin
             requirement_id: route-origin-guard
           - spec_id: dsh-plugin
             requirement_id: overview-empty-and-error
           - spec_id: dsh-plugin
-            requirement_id: review-panel-embed
+            requirement_id: review-native-view
   start-failed:
     trigger: wa-cli 不可执行、单元引用无法解析或阅读页服务未能在限定时间内给出首行信封
     steps:
-      report:
+      report-native:
         action: 启动路由返回可读失败原因，面板显示原因与重试入口，不留下残留子进程
         covered_by:
           - spec_id: dsh-plugin
             requirement_id: review-session-start
           - spec_id: dsh-plugin
-            requirement_id: review-panel-embed
+            requirement_id: review-native-view
   session-gone:
     trigger: 会话因空闲超时、子进程退出或被另一单元的审阅替换而结束后，iframe 或面板仍发出请求
     steps:
       report:
-        action: 代理路由返回可读的「没有进行中的审阅」提示，面板显示会话已结束并可重新审阅
+        action: 代理路由对 page.json 与 POST 均返回 JSON 形式的「没有进行中的审阅」提示，面板显示会话已结束并可重新审阅
         covered_by:
           - spec_id: dsh-plugin
             requirement_id: review-proxy
           - spec_id: dsh-plugin
             requirement_id: review-session-end
+          - spec_id: dsh-plugin
+            requirement_id: review-native-view
+  selection-invalid:
+    trigger: 作者的选区跨越多个段落、落在正文之外或为空时点击提交反馈
+    steps:
+      report:
+        action: 面板不发出请求，提示作者只在一个段落内选中文字，或改为对整个单元提交反馈
+        covered_by:
+          - spec_id: dsh-plugin
+            requirement_id: review-native-view

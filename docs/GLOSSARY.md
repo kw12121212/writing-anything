@@ -178,10 +178,12 @@
 | 锚点 | Anchor | 锚点 | 反馈指向的原文片段及其前后文，正文修改后用于重新定位 |
 | 失去锚点 | Orphaned Anchor | 失去锚点 | 正文修改后无法重新定位的反馈，需要作者处理 |
 | 阅读卡点 | Sticking Point | 阅读卡点 | 作者阅读时标记的"读不下去"的位置 |
-| 阅读页 | Reading View | 阅读页 | `wa-cli preview` 生成的逐段阅读页面：默认为可离线打开的静态 HTML；加 `--serve` 时为本地服务提供、可以选中文字提交反馈、确认待作者确认的事项与复核待作者复核项的页面 |
+| 阅读页 | Reading View | 阅读页 | `wa-cli preview` 生成的逐段阅读页面：默认为可离线打开的静态 HTML；加 `--serve` 时为本地服务提供、可以选中文字提交反馈、确认待作者确认的事项与复核待作者复核项的页面，服务另以 `GET /page.json` 给出同一时刻的阅读页数据 |
 | 令牌 | Token | 令牌 | `wa-cli preview --serve` 每次运行生成的随机字符串，访问本地阅读页必须携带，防止本机其他网页或程序冒用 |
-| 审阅会话 | Review Session | 审阅会话 | DSH 插件 dsh-writing-viewer 按作者在面板点「审阅」启动的一次 `wa-cli preview --serve`：插件经同源路由代理该阅读页并内嵌到面板，令牌只留在宿主机；同一宿主同一时间至多一个，结束审阅、空闲 30 分钟或启动另一单元时结束 |
-| 安全上下文 | Secure Context | 安全上下文 | 浏览器把 https 页面与本机回环地址视为安全上下文，只有在其中才开放部分 Web API；经纯 http 的 tailnet 地址打开的 DSH 页面不是安全上下文，dsh-writing-viewer 的面板与内嵌阅读页因此不依赖这类 API |
+| 审阅会话 | Review Session | 审阅会话 | DSH 插件 dsh-writing-viewer 按作者在面板点「审阅」或「待审阅」标记启动的一次 `wa-cli preview --serve`：插件经同源路由只代理其 page.json 与提交接口，供面板的审阅视图使用，令牌只留在宿主机；同一宿主同一时间至多一个，结束审阅、空闲 30 分钟或启动另一单元时结束 |
+| 审阅视图 | Review View | 审阅视图 | dsh-writing-viewer 面板以原生组件呈现阅读页数据的视图：逐段正文与出处、发现项、待作者确认区与待作者复核区，作者在其中提交的反馈、确认与复核由 wa-cli 写入，确认渠道为 `preview` |
+| 审阅位置 | Review Surface | 审阅位置 | 工作区配置 `review_surface`：`browser`（默认）时内置技能交出浏览器阅读页地址，`dsh` 时请作者到 DSH 插件面板的「待审阅」入口审阅 |
+| 安全上下文 | Secure Context | 安全上下文 | 浏览器把 https 页面与本机回环地址视为安全上下文，只有在其中才开放部分 Web API；经纯 http 的 tailnet 地址打开的 DSH 页面不是安全上下文，dsh-writing-viewer 的面板与审阅视图因此不依赖这类 API |
 | 人工编辑保护 | Human Edit Protection | 人工编辑保护 | 人改过的正文不被 Agent 覆盖 |
 | 上下文包 | Context Pack | 上下文包 | 只包含当前单元所需信息的输入集合 |
 | 上下文预算 | Context Budget | 上下文预算 | 上下文包的大小上限，以字符数近似度量 |

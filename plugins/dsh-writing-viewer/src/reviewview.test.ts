@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   IDLE_REVIEW,
-  REVIEW_FRAME_SRC,
   reviewAfterStart,
   reviewAfterStatus,
+  reviewEnded,
   reviewLabelsFor,
   reviewStartBody,
   reviewViewModel,
@@ -15,7 +15,7 @@ const en = reviewLabelsFor('en');
 describe('review view model', () => {
   it('offers the Review button while idle', () => {
     const model = reviewViewModel(IDLE_REVIEW, 'my-post', en, 'h:1');
-    expect(model).toMatchObject({ showStart: true, startDisabled: false, frame: null, showEnd: false, errorText: null, endedText: null, busyText: null });
+    expect(model).toMatchObject({ showStart: true, startDisabled: false, active: false, showEnd: false, errorText: null, endedText: null, busyText: null });
   });
 
   it('shows progress while starting and blocks a second start', () => {
@@ -27,16 +27,21 @@ describe('review view model', () => {
     expect(reviewViewModel(state, 'my-novel', zh, 'h:1').startDisabled).toBe(true);
   });
 
-  it('embeds the proxied reading view with an end button once active (panel-embed)', () => {
+  it('shows the review view with an end button once active (native-render)', () => {
     const state = reviewAfterStart('my-post', 200, { ok: true, session: { unit: 'my-post', root: '/r', startedAt: 't1' } });
-    expect(state.phase).toBe('active');
+    expect(state).toMatchObject({ phase: 'active', startedAt: 't1' });
     const model = reviewViewModel(state, 'my-post', en, 'h:1');
-    expect(model.frame).toEqual({ src: REVIEW_FRAME_SRC, key: 'review-t1', title: en.frameTitle });
-    expect(REVIEW_FRAME_SRC.endsWith('/')).toBe(true);
+    expect(model.active).toBe(true);
     expect(model.showEnd).toBe(true);
     expect(model.showStart).toBe(false);
-    // Another unit's detail shows a plain Review button, not this iframe.
-    expect(reviewViewModel(state, 'my-novel', en, 'h:1')).toMatchObject({ frame: null, showStart: true, showEnd: false });
+    // Another unit's detail shows a plain Review button, not this review.
+    expect(reviewViewModel(state, 'my-novel', en, 'h:1')).toMatchObject({ active: false, showStart: true, showEnd: false });
+  });
+
+  it('ends an active review when the data or a submit says the session is gone', () => {
+    const active = reviewAfterStart('my-post', 200, { ok: true, session: { unit: 'my-post', startedAt: 't1' } });
+    expect(reviewEnded(active).phase).toBe('ended');
+    expect(reviewEnded(IDLE_REVIEW)).toBe(IDLE_REVIEW);
   });
 
   it('names the authority to allow when the origin guard refused (panel-origin-rejected)', () => {
@@ -46,7 +51,7 @@ describe('review view model', () => {
     expect(model.errorText).toContain('allowedHosts');
     expect(model.errorText).toContain('gamepc.tail1234.ts.net:13080');
     expect(model.errorText).toContain('Host 不在放行范围');
-    expect(model.frame).toBeNull();
+    expect(model.active).toBe(false);
     expect(model.showStart).toBe(true);
   });
 
@@ -75,7 +80,7 @@ describe('review view model', () => {
     expect(ended.phase).toBe('ended');
     const model = reviewViewModel(ended, 'my-post', zh, 'h');
     expect(model.endedText).toContain('审阅已结束');
-    expect(model.frame).toBeNull();
+    expect(model.active).toBe(false);
     expect(model.showStart).toBe(true);
     expect(reviewAfterStatus(IDLE_REVIEW, { session: null })).toBe(IDLE_REVIEW);
   });

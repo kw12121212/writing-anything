@@ -17,6 +17,7 @@
     "rules": {"$ref": "common.schema.json#/$defs/rules"},
     "waivers": {"$ref": "common.schema.json#/$defs/waivers"},
     "context_budget": {"$ref": "common.schema.json#/$defs/budget"},
-    "ai_disclosure": {"enum": ["footer", "metadata", "both"], "description": "AI 参与说明（AI-generated Content Label）的放置位置：文末、导出元数据或两者；省略时为 both"}
+    "ai_disclosure": {"enum": ["footer", "metadata", "both"], "description": "AI 参与说明（AI-generated Content Label）的放置位置：文末、导出元数据或两者；省略时为 both"},
+    "review_surface": {"enum": ["browser", "dsh"], "description": "作者审阅阅读页（Reading View）的位置：browser 为浏览器打开 wa-cli preview --serve 的地址，dsh 为 DSH 插件面板；省略时为 browser"}
   }
 }

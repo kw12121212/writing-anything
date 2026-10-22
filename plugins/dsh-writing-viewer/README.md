@@ -4,7 +4,7 @@ DSH 插件（DSH Plugin）`dsh-writing-viewer` 是 writing-anything 仓库的 DS
 
 - 默认严格只读：host 侧的全部文件系统操作都是读取（对 `.writing-anything` 的 `stat`、目录列举 `readdir` 与文件读取 `readFile`，均不跟随符号链接）；不提供任何写入工作区的能力。
 - 一个例外要如实说明：快照经子进程调用 wa-cli 只读命令（`status`/`validate`/`next`/`timeline`）取结构状态，而 wa-cli 的审计日志（Audit Log）契约规定每次调用（含只读命令）都向 `.writing-anything/audit.log` 追加一行运维痕迹——该追加出自 wa-cli 而非插件代码，且 audit.log 不是产物（Artifact）；插件在每次快照请求内有界调用这些命令，不做轮询式反复调用。
-- 一个由作者显式触发的工作区写入面：单元审阅（见下文「单元审阅」专节，默认开启）在面板内嵌 wa-cli 阅读页（Reading View），作者在其中提交的反馈、确认与复核由 wa-cli 子进程写入工作区；插件代码只做同源代理，自身不写任何文件，确认渠道（Confirmation Channel）如实记为 `preview`。
+- 一个由作者显式触发的工作区写入面：单元审阅（见下文「单元审阅」专节，默认开启）以审阅视图（Review View）原生呈现 wa-cli 阅读页（Reading View）的数据，作者在其中提交的反馈、确认与复核经同源代理交给 wa-cli 子进程写入工作区；插件代码只做同源代理，自身不写任何文件，确认渠道（Confirmation Channel）如实记为 `preview`。
 - 一个可选的写入面：默认关闭的「内置技能与 CLI」设置能力（`enableSetup`，见下文专节）在作者显式点击启用后，向配置的 CLI 安装目录与操作系统临时目录写入——绝不写入 `.writing-anything/`、用户级或项目级技能目录；静态只读测试把该写入面钉在 setup 三个模块内，viewer 路径保持零写入调用。
 - 不属于产品运行时：wa-cli（Go 内核）、内置技能与 MCP 服务不依赖本包；本包也不进入 Go 模块与覆盖率范围。
 
@@ -28,9 +28,10 @@ src/setuproutes.ts setup 路由与启用动作管线（状态聚合、单飞行�
 src/setupfs.ts     setup 的真实文件系统适配器——包内唯一持有写入型 node:fs 调用的模块之一（与上两个 setup 模块同为静态只读测试声明的写入面）
 src/setupview.ts   client 侧设置区的纯视图模型：状态解析、双语文案、idle/busy/enabled/error 状态机
 src/reviewsession.ts 审阅会话（Review Session）：注入式 spawn 管理唯一的 wa-cli preview --serve 子进程（首行信封取端口与令牌、空闲与替换时终止）
-src/reviewproxy.ts 阅读页同源代理的纯逻辑：子路径白名单、令牌注入、响应头只放宽 frame-ancestors、无会话提示
+src/reviewproxy.ts 阅读页服务同源代理的纯逻辑：只放行 page.json 与三个提交接口、令牌注入、只去掉传输头、JSON 形式的无会话提示
 src/reviewroutes.ts 审阅会话路由与代理 prefix 路由的注册（先过请求来源校验）
 src/reviewview.ts  client 侧审阅控件的纯视图模型：启动/进行中/失败/来源拒绝/已结束状态与双语文案
+src/reviewmodel.ts client 侧审阅视图（Review View）的纯视图模型：page.json 解析、提交请求体、单段选区规则与「待审阅」标记索引
 scripts/gen-large-workspace.mjs  经 wa-cli 生成多卷多场景长篇合成工作区（性能检查夹具）
 scripts/perf-check.mjs           端到端大工作区性能检查并把耗时记录进 docs/evidence/perf-check.txt
 testdata/          测试夹具：真实命令生成的多作品工作区 + 捕获的 --json 输出
@@ -107,14 +108,18 @@ package.json 声明：
 
 ## 单元审阅（Review，默认开启）
 
-审稿环节作者要用的 wa-cli 阅读页（`wa-cli preview <unit> --serve`）只监听宿主机 `127.0.0.1`；经 Tailscale 等网络远程打开 DSH 的浏览器访问不到它。插件因此在 DSH 同源路由下代理阅读页，面板内嵌显示：
+审稿环节作者要用的 wa-cli 阅读页（Reading View，`wa-cli preview <unit> --serve`）只监听宿主机 `127.0.0.1`；经 Tailscale 等网络远程打开 DSH 的浏览器访问不到它。插件因此在 DSH 同源路由下代理阅读页服务的数据与提交接口，由面板以原生组件呈现审阅视图（Review View），不使用 iframe：
 
-1. 单元详情的「审阅」按钮向 `POST /dsh-writing-viewer/review-session`（`{ unit, root }`，root 为面板当前显示的项目目录）发起启动；host 先结束任何既有会话，再执行一次 `wa-cli preview <unit> --serve --json --dir <root>`，10 秒内读到首行输出信封即成功，从中取得端口与令牌——令牌只留在 host 进程内存，不进入任何响应；之后持续读空子进程输出。同一宿主同一时间至多一个会话（审阅会话，Review Session）。`GET` 同一路由返回当前会话摘要（unit、root、开始时间），`POST /dsh-writing-viewer/review-session/end` 显式结束。
-2. 代理是一条 prefix 路由 `/dsh-writing-viewer/review`（宿主 exact 路由不能带结尾斜杠），只放行固定子路径：`GET /dsh-writing-viewer/review/` 对应阅读页 `GET /`，`POST …/review/feedback`、`…/review/confirm`、`…/review/author-review` 对应阅读页同名接口；其他子路径 404、方法不符 405、不带结尾斜杠时 308 跳转。代理丢弃浏览器带来的 `token` 与 `X-WA-Token`、注入会话令牌，上游 Host 为 `127.0.0.1:<port>`，wa-cli 自身的 Host 与令牌校验原样生效；请求体超过 64 KiB 不转发。上游正文逐字节回传（不改写 HTML，否则 CSP 的脚本哈希失配），响应头只去掉 `X-Frame-Options` 并把 CSP 的 `frame-ancestors 'none'` 换成 `'self'`，使面板能同源内嵌。阅读页脚本以相对路径提交（wa-cli 侧的配合改动），因此挂在前缀下也能工作，浏览器始终只请求 DSH 同源地址、看不到 `127.0.0.1`。
-3. 会话在作者点「结束审阅」、30 分钟内没有代理请求、启动另一个单元的审阅、阅读页子进程退出、插件卸载或宿主停止时结束并终止子进程。卸载与停止的清理挂在 cordis 的 `ctx.effect` disposer 上（DSH 0.2.x 的 cordis 4 不发出 `dispose` 事件，`ctx.on('dispose')` 永不触发）；DSH 收到 SIGTERM/SIGINT 时会 dispose 应用 fiber，因此常规停止也会清理，宿主进程退出另有 `exit` 钩子兜底——只有宿主被 SIGKILL 强杀时子进程会残留（`wa-cli preview --serve` 本身不感知父进程退出），需手动结束。会话结束后代理返回可读的「没有进行中的审阅」提示；面板在 iframe 每次加载、窗口重新获得焦点或页面重新可见时查询一次会话状态（只访问插件路由，不调用 wa-cli），发现已结束即显示「审阅已结束」与「重新审阅」入口。结束审阅后面板自动刷新快照。同一宿主只有一个会话：在另一个浏览器标签页启动审阅会替换旧会话，旧标签页 iframe 里的提交会被 wa-cli 以「不属于这个阅读页」可读拒绝。
-4. 写入全部出自 wa-cli 子进程：经代理提交的反馈、确认与复核与直接使用阅读页完全相同，确认渠道记为 `preview`；只浏览不提交时工作区（除 wa-cli 追加的 audit.log 外）不变。
+1. **发现待审阅。** 快照从 `wa-cli next --json` 读取待作者确认事项（`pendingConfirmations`，与阅读页「待作者确认」区同一口径：验收、决策、规划步骤、状态与知情提议、卷末检查点）与待作者复核项（`pendingAuthorReviews`，strict 关卡）。有事项的作品卡片显示「待审阅 · N」，单元树中事项关联的单元带「● N」标记；点它们即选中该单元（作品卡片为作品根单元）并直接开始审阅。next 区域降级时不显示标记，降级原因照常列出。
+2. **启动会话。** 单元详情的「审阅」按钮（或上述标记）向 `POST /dsh-writing-viewer/review-session`（`{ unit, root }`，root 为面板当前显示的项目目录）发起启动；host 先结束任何既有会话，再执行一次 `wa-cli preview <unit> --serve --json --dir <root>`，10 秒内读到首行输出信封即成功，从中取得端口与令牌——令牌只留在 host 进程内存，不进入任何响应；之后持续读空子进程输出。同一宿主同一时间至多一个会话（审阅会话，Review Session）。`GET` 同一路由返回当前会话摘要（unit、root、开始时间），`POST /dsh-writing-viewer/review-session/end` 显式结束。
+3. **只代理 JSON 接口。** 代理是一条 prefix 路由 `/dsh-writing-viewer/review`，只放行 `GET …/review/page.json`（对应阅读页服务的 `GET /page.json`，阅读页数据）与 `POST …/review/feedback`、`…/review/confirm`、`…/review/author-review`；阅读页 HTML（`GET …/review/`）与其他子路径一律 404，方法不符 405。代理丢弃浏览器带来的 `token` 与 `X-WA-Token`、注入会话令牌，上游 Host 为 `127.0.0.1:<port>`，wa-cli 自身的 Host 与令牌校验原样生效；请求体超过 64 KiB 不转发。上游正文逐字节回传，响应头只去掉由宿主重新派生的传输头（content-length、content-encoding 等），安全头原样保留。浏览器始终只请求 DSH 同源地址、看不到 `127.0.0.1`。
+4. **原生审阅视图。** 视图按单元树先序逐段显示正文与段落序号，按出处（作者、Agent、Agent 起草作者修改）标色（可关闭），段落下列出文本检查与审稿发现项，另列最近失败的命令、「待作者确认」区（说明、决策选项与推荐、原话摘要输入、确认与可拒绝事项的拒绝）与 strict 关卡下的「待作者复核」区（默认全选、「复核所选」）。在某一段内选中文字即成为反馈的引用，也可改为针对整个单元；选区跨段落时不提交并提示。每次提交成功后视图重新拉取 page.json；wa-cli 拒绝时显示其诊断并保留已填内容。来自工作区的文字一律作为纯文本显示。
+5. **结束。** 会话在作者点「结束审阅」、30 分钟内没有代理请求、启动另一个单元的审阅、阅读页子进程退出、插件卸载或宿主停止时结束并终止子进程。卸载与停止的清理挂在 cordis 的 `ctx.effect` disposer 上（DSH 0.2.x 的 cordis 4 不发出 `dispose` 事件，`ctx.on('dispose')` 永不触发）；DSH 收到 SIGTERM/SIGINT 时会 dispose 应用 fiber，因此常规停止也会清理，宿主进程退出另有 `exit` 钩子兜底——只有宿主被 SIGKILL 强杀时子进程会残留（`wa-cli preview --serve` 本身不感知父进程退出），需手动结束。会话结束后代理对数据与提交都返回 JSON 形式的「没有进行中的审阅」；面板在每次拉取数据、窗口重新获得焦点或页面重新可见时查询一次会话状态（只访问插件路由，不调用 wa-cli），发现已结束或已被另一单元的审阅替换即显示「审阅已结束」与「重新审阅」入口。结束审阅后面板自动刷新快照，处理完的「待审阅」标记随之消失。
+6. 写入全部出自 wa-cli 子进程：经代理提交的反馈、确认与复核与直接使用阅读页完全相同，确认渠道（Confirmation Channel）记为 `preview`；只浏览不提交时工作区（除 wa-cli 追加的 audit.log 外）不变。
 
-实测证据（2026-10-21，经 Tailscale MagicDNS 名访问隔离的 DSH 0.2.1-rc.2 实例）：`docs/evidence/review-live-check.txt`（路由逐项 curl 结果与浏览器操作记录）、`docs/evidence/review-embedded.png`（面板内嵌阅读页）、`docs/evidence/review-iframe-submitted.png`（iframe 内提交反馈后的保存提示）、`docs/evidence/review-confirm.png`（iframe 内确认决策，渠道 preview）、`docs/evidence/review-denied.png`（未放行 MagicDNS 权威时面板的拒绝原因）。
+**让 Agent 指引作者到 DSH 审阅。** 在工作区执行 `wa-cli config set review_surface dsh --json` 后，内置技能 wa-revise、wa-publish 与 wa-assemble 读到 `wa-cli status --json` 的 `config.reviewSurface` 为 `dsh`，就不再启动 `wa-cli preview --serve` 或交出 `127.0.0.1` 链接，而是请作者打开本面板、在「待审阅」入口完成审阅，作者说完成后再以 `wa-cli review show` 或 `wa-cli next` 复查。默认值 `browser` 保持原来的浏览器阅读页指引。
+
+实测证据（2026-10-21，iframe 版本，经 Tailscale MagicDNS 名访问隔离的 DSH 0.2.1-rc.2 实例）：`docs/evidence/review-live-check.txt`、`docs/evidence/review-*.png`。原生审阅视图的实测证据见 `docs/evidence/native-review-*`。
 
 Tailscale 远程访问：以 `http://<machine>.<tailnet>.ts.net:13080`（`tailscale serve --tcp` 直通）或 `https://<machine>.<tailnet>.ts.net:13080`（`tailscale serve --https`，Tailscale 终止 TLS 并自动签发、续期证书）这类 MagicDNS 地址访问时，Host 不是回环地址也不是宿主监听地址字面量，所以全部插件路由（含审阅）都需要在 `allowedHosts` 中放行该权威，例如：
 
@@ -126,11 +131,11 @@ Tailscale 远程访问：以 `http://<machine>.<tailnet>.ts.net:13080`（`tailsc
       - gamepc.tail1234.ts.net:13080   # 浏览器地址栏里的主机名与端口
 ```
 
-`tailscale serve --https=<port> http://127.0.0.1:<port>` 会把浏览器地址栏里的 Host（`<machine>.<tailnet>.ts.net:<port>`）原样转给 DSH（2026-10-21 实测：同源请求通过，伪造为 `http://127.0.0.1:<port>` 的 Origin 被判为与 Host 不同权威而 403），所以从 http 换成 https 时 `allowedHosts` 与 DSH 的 `--trusted-host` 写法都不变——同一个主机名与端口即可。经 https 访问时审阅 iframe 也无需改动：iframe 地址、阅读页的提交路径与代理跳转都不带协议，随页面走 https，不产生混合内容；代理到 `http://127.0.0.1:<port>` 的那一段只发生在宿主进程内部。证书只签给 MagicDNS 名，按 `https://<tailnet IP>:<port>` 访问会证书不匹配。
+`tailscale serve --https=<port> http://127.0.0.1:<port>` 会把浏览器地址栏里的 Host（`<machine>.<tailnet>.ts.net:<port>`）原样转给 DSH（2026-10-21 实测：同源请求通过，伪造为 `http://127.0.0.1:<port>` 的 Origin 被判为与 Host 不同权威而 403），所以从 http 换成 https 时 `allowedHosts` 与 DSH 的 `--trusted-host` 写法都不变——同一个主机名与端口即可。审阅视图的请求都是不带协议的同源路径，随页面走 https，不产生混合内容；代理到 `http://127.0.0.1:<port>` 的那一段只发生在宿主进程内部。证书只签给 MagicDNS 名，按 `https://<tailnet IP>:<port>` 访问会证书不匹配。
 
-未放行时全部插件路由都被来源校验拒绝：面板在加载快照时即显示被拒原因（指出被拒的 Host）与重试按钮，不崩溃也不空白；若只有审阅路由被拒，单元详情显示在 `allowedHosts` 中放行该权威的提示，不会出现空白 iframe。纯 http 的 tailnet 地址不是安全上下文（Secure Context），https 地址是；面板与阅读页都不依赖仅安全上下文可用的浏览器 API，两种访问方式都可用。
+未放行时全部插件路由都被来源校验拒绝：面板在加载快照时即显示被拒原因（指出被拒的 Host）与重试按钮，不崩溃也不空白；若只有审阅路由被拒，单元详情显示在 `allowedHosts` 中放行该权威的提示，不会出现空白的审阅视图。纯 http 的 tailnet 地址不是安全上下文（Secure Context），https 地址是；面板不依赖仅安全上下文可用的浏览器 API，两种访问方式都可用。
 
-安全边界：审阅默认开启、没有配置开关，凡通过请求来源校验的请求（本机进程、`allowedHosts` 放行的远程权威）都能经代理提交作者确认。内嵌后阅读页运行在 DSH 同源下（可访问父页面），其安全性依赖 wa-cli 的 CSP（`default-src 'none'` 加脚本哈希）与模板转义——代理只放宽 `frame-ancestors`，不改动其他 CSP 指令。安全前提是 tailnet 本身只对作者的设备开放——**不要用 Tailscale Funnel 或其他公网反向代理暴露 DSH**；需要更宽的网络暴露时请置于带认证的反向代理之后。
+安全边界：审阅默认开启、没有配置开关，凡通过请求来源校验的请求（本机进程、`allowedHosts` 放行的远程权威）都能经代理提交作者确认。wa-cli 生成的 HTML 与脚本不再进入 DSH 源：代理只转发 JSON，面板以纯文本节点显示其中的工作区文字。安全前提是 tailnet 本身只对作者的设备开放——**不要用 Tailscale Funnel 或其他公网反向代理暴露 DSH**；需要更宽的网络暴露时请置于带认证的反向代理之后。
 
 ## 内置技能与 CLI 的启用（Setup，默认关闭）
 
@@ -216,7 +221,7 @@ pnpm run perf:check     # 大工作区性能检查：构建 wa-cli → 生成 3 
 公开渠道（推荐）：从本仓库的 GitHub Release 安装插件包（Plugin Package）tarball——它与同版本的 wa-cli 发布产物（Release Asset）一同发布，一条命令完成依赖与 bundle 登记：
 
 ```sh
-dsh plugin --profile web add https://github.com/kw12121212/writing-anything/releases/latest/download/dsh-writing-viewer-0.6.1.tgz
+dsh plugin --profile web add https://github.com/kw12121212/writing-anything/releases/latest/download/dsh-writing-viewer-0.7.0.tgz
 ```
 
 URL 固定用 `latest/download`，升级时先 `dsh plugin --profile web remove dsh-writing-viewer` 再以新版本文件名重新 add。

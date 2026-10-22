@@ -1,6 +1,6 @@
 /**
- * Review routes: the session status/start/end routes and the reading-view
- * proxy prefix route. Every handler runs the Request Origin Guard first and
+ * Review routes: the session status/start/end routes and the proxy prefix
+ * route for the reading view service's data and submit endpoints. Every handler runs the Request Origin Guard first and
  * a refused request neither starts a session nor reaches the upstream.
  */
 import { guardRequest, type GuardOptions } from './routeguard';
@@ -131,12 +131,12 @@ export function registerReviewRoutes(server: { register(route: unknown): unknown
     handler: guarded(async (req, res) => {
       const method = req.method ?? 'GET';
       const target = reviewTargetOf(pathnameOf(req.url));
-      // Only page and submit targets can ever reach the upstream, so only
+      // Only data and submit targets can ever reach the upstream, so only
       // they refresh the idle deadline (upstream() re-arms it). A 405 method
       // mismatch on one of those targets still counts as session activity;
-      // 404 and 308 answers never do. That asymmetry is deliberate.
+      // 404 answers never do. That asymmetry is deliberate.
       const body = target.kind === 'submit' && method === 'POST' ? await readBody(req) : null;
-      const upstream = target.kind === 'page' || target.kind === 'submit' ? deps.sessions.upstream() : null;
+      const upstream = target.kind === 'data' || target.kind === 'submit' ? deps.sessions.upstream() : null;
       const answer = await proxyReview(method, target, upstream, body, deps.fetchLike);
       res.writeHead(answer.status, answer.headers).end(answer.body);
     }),

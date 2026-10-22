@@ -88,6 +88,12 @@ describe('buildSnapshotPayload on the multi-work fixture', () => {
     expect(payload.cli.validate?.valid).toBe(false);
     expect(payload.cli.validate?.diagnostics.length).toBe(5);
     expect(payload.cli.next?.pendingAuthorReviews).toEqual([]);
+    // The pending author confirmations wa-cli next lists (snapshot-pending-items).
+    expect(payload.cli.next?.pendingConfirmations.map((c) => [(c as { kind: string }).kind, (c as { id: string }).id])).toEqual([
+      ['state', 'state-1'],
+      ['knowledge', 'know-1'],
+      ['decision', 'dec-1'],
+    ]);
     expect(payload.cli.status?.sources).toBe(2);
 
     // The bridge always puts the subcommand first and pins --dir and --json.
@@ -120,7 +126,7 @@ describe('buildSnapshotPayload on the multi-work fixture', () => {
         stdout:
           args[0] === 'status'
             ? JSON.stringify({ valid: false, diagnostics: [], changedPaths: [], units: [{ unit: 'my-post', work: 'my-post' }] })
-            : JSON.stringify({ valid: true, diagnostics: [], changedPaths: [], steps: [], pendingAuthorReviews: [] }),
+            : JSON.stringify({ valid: true, diagnostics: [], changedPaths: [], steps: [], pendingAuthorReviews: [], pendingConfirmations: [] }),
       }),
     };
     const { payload, degraded } = await buildSnapshotPayload(realSnapshotFs(), runner, FIXTURE_ROOT);
@@ -137,7 +143,7 @@ describe('buildSnapshotPayload on the multi-work fixture', () => {
         stdout:
           args[0] === 'validate'
             ? JSON.stringify({ valid: true, changedPaths: [] })
-            : JSON.stringify({ valid: true, diagnostics: [], changedPaths: [], units: [], steps: [], pendingAuthorReviews: [] }),
+            : JSON.stringify({ valid: true, diagnostics: [], changedPaths: [], units: [], steps: [], pendingAuthorReviews: [], pendingConfirmations: [] }),
       }),
     };
     const { payload, degraded } = await buildSnapshotPayload(realSnapshotFs(), runner, FIXTURE_ROOT);

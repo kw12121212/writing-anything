@@ -39,7 +39,7 @@ function setup(overrides: Partial<ReviewRouteDeps> = {}, sessions = fakeSessions
   const upstreamCalls: string[] = [];
   const fetchLike: ProxyFetch = async (url) => {
     upstreamCalls.push(url);
-    return { status: 200, headers: [['content-type', 'text/html']], arrayBuffer: async () => new TextEncoder().encode('<html>page</html>').buffer as ArrayBuffer };
+    return { status: 200, headers: [['content-type', 'application/json; charset=utf-8']], arrayBuffer: async () => new TextEncoder().encode('{"units":[]}').buffer as ArrayBuffer };
   };
   registerReviewRoutes({ register: (route) => routes.push(route as Route) }, {
     sessions: sessions.sessions,
@@ -142,15 +142,19 @@ describe('review session routes', () => {
 });
 
 describe('review proxy route', () => {
-  it('proxies the page of the running session and 409s without one', async () => {
+  it('proxies page.json of the running session, 409s without one and 404s the HTML page', async () => {
     const { call, upstreamCalls, sessions } = setup();
-    expect((await call(REVIEW_PREFIX + '/', 'GET')).status).toBe(409);
+    const none = await call(REVIEW_PREFIX + '/page.json', 'GET');
+    expect(none.status).toBe(409);
+    expect(none.json().diagnostics[0].code).toBe('review.no-session');
     sessions.setRunning(true);
-    const page = await call(REVIEW_PREFIX + '/', 'GET', { url: REVIEW_PREFIX + '/?token=browser-forged' });
+    const page = await call(REVIEW_PREFIX + '/page.json', 'GET', { url: REVIEW_PREFIX + '/page.json?token=browser-forged' });
     expect(page.status).toBe(200);
-    expect(page.body).toBe('<html>page</html>');
-    expect(upstreamCalls).toEqual(['http://127.0.0.1:5000/?token=tok']);
+    expect(page.body).toBe('{"units":[]}');
+    expect(upstreamCalls).toEqual(['http://127.0.0.1:5000/page.json?token=tok']);
+    expect((await call(REVIEW_PREFIX + '/', 'GET')).status).toBe(404);
     expect((await call(REVIEW_PREFIX + '/nope', 'GET')).status).toBe(404);
+    expect(upstreamCalls).toHaveLength(1);
   });
 });
 
@@ -163,7 +167,7 @@ describe('review routes origin guard', () => {
       [REVIEW_SESSION_PATH, 'POST'],
       [REVIEW_SESSION_PATH, 'GET'],
       [REVIEW_SESSION_END_PATH, 'POST'],
-      [REVIEW_PREFIX + '/', 'GET'],
+      [REVIEW_PREFIX + '/page.json', 'GET'],
       [REVIEW_PREFIX + '/confirm', 'POST'],
     ] as const) {
       const answer = await call(path, method, { headers: evil, body: '{"unit":"my-post"}' });
@@ -186,7 +190,7 @@ describe('review routes origin guard', () => {
     const started = await call(REVIEW_SESSION_PATH, 'POST', { headers: tailnet, body: JSON.stringify({ unit: 'my-post' }) });
     expect(started.status).toBe(200);
     expect(sessions.calls).toContain('start my-post /default');
-    const page = await call(REVIEW_PREFIX + '/', 'GET', { headers: { host: tailnet.host } });
+    const page = await call(REVIEW_PREFIX + '/page.json', 'GET', { headers: { host: tailnet.host } });
     expect(page.status).toBe(200);
   });
 

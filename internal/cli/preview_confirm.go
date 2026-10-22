@@ -81,15 +81,36 @@ func inWork(w *work.Work, ref string) bool {
 	return ref == w.ID || strings.HasPrefix(ref, w.ID+"/")
 }
 
+// confirmInputs 是待作者确认队列中按工作区只需加载一次的输入：关卡强度与决策队列（workspace-artifacts/load-once-per-command）。
+// decisionsOK 为 false 时决策队列无法加载，跳过决策（其问题由决策命令报告）。
+type confirmInputs struct {
+	level       string
+	decisions   []decision.Decision
+	decisionsOK bool
+}
+
+func loadConfirmInputs(dir string) confirmInputs {
+	in := confirmInputs{level: workspace.DefaultGateLevel}
+	if cfg, _ := workspace.Load(dir); cfg != nil && cfg.GateLevel != "" {
+		in.level = cfg.GateLevel
+	}
+	var ps []workspace.Problem
+	in.decisions, _, ps = decision.Load(dir)
+	in.decisionsOK = len(ps) == 0
+	return in
+}
+
 // confirmQueue 返回作品 w 待作者确认的事项：需要验收且没有有效验收的单元、关联本作品（或不关联任何单元）的 open
 // 决策、待确认的规划步骤、待确认的状态变更提议与知情事件，以及未确认的卷末检查点。无法加载的产物跳过（其问题由
-// 各自的命令报告）。
+// 各自的命令报告）。阅读页（GET / 与 GET /page.json）与 wa-cli next 的 pendingConfirmations 都只通过它得到这些事项。
 func confirmQueue(dir string, w *work.Work) []preview.Confirm {
+	return confirmQueueWith(dir, w, loadConfirmInputs(dir))
+}
+
+// confirmQueueWith 同 confirmQueue，使用已经加载的工作区级输入（逐作品计算时只加载一次）。
+func confirmQueueWith(dir string, w *work.Work, in confirmInputs) []preview.Confirm {
 	out := []preview.Confirm{}
-	level := workspace.DefaultGateLevel
-	if cfg, _ := workspace.Load(dir); cfg != nil && cfg.GateLevel != "" {
-		level = cfg.GateLevel
-	}
+	level := in.level
 	for _, u := range w.Units() {
 		unitDir := w.UnitDir(u)
 		if !acceptsHere(w, u) {
@@ -97,17 +118,21 @@ func confirmQueue(dir string, w *work.Work) []preview.Confirm {
 		}
 		a, ps := review.LoadAcceptance(dir, unitDir)
 		if a == nil || len(ps) > 0 || len(review.AcceptanceBlockers(dir, unitDir, level)) > 0 {
-			out = append(out, preview.Confirm{Kind: confirmAcceptance, Unit: u.Ref, Label: "验收（Acceptance）" + u.Ref,
+			out = append(out, preview.Confirm{Kind: confirmAcceptance, Unit: u.Ref, Units: []string{u.Ref}, Label: "验收（Acceptance）" + u.Ref,
 				Detail: "阶段 " + u.Stage + "；确认后按关卡强度 " + level + " 检查阻塞项，有阻塞项时不写入（可先用 wa-cli review show " + u.Ref + " 查看）"})
 		}
 	}
-	if ds, _, ps := decision.Load(dir); len(ps) == 0 {
-		for _, d := range ds {
+	if in.decisionsOK {
+		for _, d := range in.decisions {
 			if d.Status != decision.StatusOpen || len(d.Units) > 0 && !slices.ContainsFunc(d.Units, func(r string) bool { return inWork(w, r) }) {
 				continue
 			}
 			c := preview.Confirm{Kind: confirmDecision, ID: d.ID, Label: "决策（Decision）" + d.ID + "：" + d.Question,
-				Detail: deref(d.Rationale), Recommend: deref(d.Recommendation), NeedsAnswer: len(d.Options) == 0}
+				Detail: deref(d.Rationale), Recommend: deref(d.Recommendation), NeedsAnswer: len(d.Options) == 0,
+				Units: slices.DeleteFunc(slices.Clone(d.Units), func(r string) bool { return !inWork(w, r) })}
+			if len(c.Units) == 0 {
+				c.Units = []string{w.ID}
+			}
 			if cf := d.Conflict; cf != nil {
 				c.Detail = "冲突（Conflict）「" + cf.About + "」：" + cf.A.Source + " 说「" + cf.A.Quote + "」；" +
 					cf.B.Source + " 说「" + cf.B.Quote + "」。请作者裁定采信哪一方。" + c.Detail
@@ -129,18 +154,18 @@ func confirmQueue(dir string, w *work.Work) []preview.Confirm {
 		}
 		if at := plan.CurrentStep(f, m); at >= 0 && at < len(f.Steps) {
 			s := f.Steps[at]
-			out = append(out, preview.Confirm{Kind: confirmPlan, Unit: u.Ref, ID: s.ID, Label: "规划步骤 " + u.Ref + " / " + s.ID + "（" + s.Title + "）", Detail: s.Text})
+			out = append(out, preview.Confirm{Kind: confirmPlan, Unit: u.Ref, Units: []string{u.Ref}, ID: s.ID, Label: "规划步骤 " + u.Ref + " / " + s.ID + "（" + s.Title + "）", Detail: s.Text})
 		}
 	}
 	if es, ps := state.List(dir, w, false); len(ps) == 0 || es != nil {
 		for _, e := range es {
-			out = append(out, preview.Confirm{Kind: confirmState, ID: e.ID, CanReject: true,
+			out = append(out, preview.Confirm{Kind: confirmState, ID: e.ID, CanReject: true, Units: sceneUnits(w, e.Scene),
 				Label: "状态变更提议 " + e.ID + "（" + e.Scene + "，设定 " + e.Entry + "）", Detail: e.State})
 		}
 	}
 	if es, ps := knowledge.List(dir, w, false); len(ps) == 0 || es != nil {
 		for _, e := range es {
-			out = append(out, preview.Confirm{Kind: confirmKnowledge, ID: e.ID, CanReject: true,
+			out = append(out, preview.Confirm{Kind: confirmKnowledge, ID: e.ID, CanReject: true, Units: sceneUnits(w, e.Scene),
 				Label: "知情事件 " + e.ID + "（" + e.Scene + "，" + knowerText(e.Character) + " 获知 " + e.Entry + "）"})
 		}
 	}
@@ -149,11 +174,19 @@ func confirmQueue(dir string, w *work.Work) []preview.Confirm {
 			continue
 		}
 		if v, ps := volume.Load(dir, w, u); v != nil && len(ps) == 0 && !v.ConfirmedByAuthor {
-			out = append(out, preview.Confirm{Kind: confirmVolume, Unit: u.Ref, Label: "卷末检查点（Volume Checkpoint）" + u.Ref,
+			out = append(out, preview.Confirm{Kind: confirmVolume, Unit: u.Ref, Units: []string{u.Ref}, Label: "卷末检查点（Volume Checkpoint）" + u.Ref,
 				Detail: strings.TrimSuffix(volumeText(v), "\n")})
 		}
 	}
 	return out
+}
+
+// sceneUnits 返回提议绑定场景的单元引用；场景不属于作品 w 时为作品根单元。
+func sceneUnits(w *work.Work, scene string) []string {
+	if scene != "" && inWork(w, scene) {
+		return []string{scene}
+	}
+	return []string{w.ID}
 }
 
 // reviewQueue 返回作品 w 的待作者复核区：strict 关卡下的待复核确认；其他关卡强度为空。

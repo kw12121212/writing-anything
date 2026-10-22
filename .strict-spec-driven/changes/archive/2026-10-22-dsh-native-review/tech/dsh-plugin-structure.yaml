@@ -1,0 +1,21 @@
+schema: strict-spec-driven/delta-tech/v1
+schema_version: 1
+artifact_type: delta_tech
+schema_file: templates/strict-spec-driven/schemas/delta-tech.yaml
+target_standard: dsh-plugin-structure
+operations:
+  ADDED: {}
+  MODIFIED:
+    review-proxy-thin:
+      strength: MUST
+      statement: DSH 插件代理 wa-cli 阅读页服务时只做薄转发：只转发固定的精确路径集合（GET /page.json 与 POST /feedback、/confirm、/author-review），不转发阅读页 HTML（GET /）或任何其他路径；上游只连 127.0.0.1 上本插件启动的会话端口；不得改写上游响应正文；响应头只允许去掉描述传输本身而由宿主重新派生的头（content-length、content-encoding、transfer-encoding、connection、keep-alive），不得增删或改写 CSP、X-Frame-Options 等安全头；会话令牌只存在于 host 进程内存，不得出现在任何插件响应、日志或 client 状态中，代理的错误回显不得包含上游 URL 或原始错误信息；审阅相关模块不得含写入型 node:fs 调用，也不得加入静态只读扫描测试的写入模块名单，工作区写入只能出自 wa-cli 子进程
+      rationale: wa-cli 是唯一真相来源，插件只做薄封装：阅读页数据与写入判定都留在 wa-cli，插件改写正文等于分叉阅读页逻辑；审阅改为原生渲染后，wa-cli 生成的 HTML 与内联脚本不再进入 DSH 源，只放行 JSON 接口即可缩小安全面，也不再需要放宽 frame 相关头；Node fetch 自动解压且宿主可能套 gzip，透传传输头会使正文与长度不符；作者经纯 http 的 Tailscale tailnet 远程访问，令牌不出宿主机可缩小暴露面
+      enforcement:
+        method: test
+        detail: 代理单测以假上游断言：GET / 与未知路径返回 404 且不转发、浏览器 token 与 X-WA-Token 被丢弃并由会话令牌覆盖、page.json 正文逐字节回传、响应头只去掉传输头、全部插件响应不含令牌与上游地址、上游不可达时不回显原始错误；readonly.test.ts 的静态扫描覆盖审阅模块且写入名单不变
+      examples:
+        good:
+          - proxy 对 GET /dsh-writing-viewer/review/page.json 注入会话令牌后转发，把上游 JSON 正文原样回传，只去掉 content-length 等传输头
+        bad:
+          - proxy 继续转发阅读页 HTML 并把 CSP 的 frame-ancestors 改为 'self' 以便 iframe 内嵌
+  REMOVED: {}

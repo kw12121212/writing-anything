@@ -1,0 +1,29 @@
+schema: strict-spec-driven/delta-spec/v1
+schema_version: 1
+artifact_type: delta_spec
+schema_file: templates/strict-spec-driven/schemas/delta-spec.yaml
+target_spec: units-and-lifecycle
+operations:
+  ADDED:
+    next-pending-confirmations:
+      strength: MUST
+      statement: wa-cli next 未给出 unit 时，--json 输出必须含 pendingConfirmations 数组：按作品 id 排序，逐个可加载作品列出与阅读页待作者确认区（见 preview 主规格的 preview-confirm-queue）同一口径的事项，由同一处计算得出；每项含 kind（acceptance、decision、plan、state、knowledge 或 volume）、work、units（事项关联的单元引用数组；作品级事项为作品根单元）、id（只在 decision、plan、state 与 knowledge 出现，为各自的条目 id；acceptance 与 volume 没有条目 id，不含 id 字段）、label（人读说明）与 command（可以直接运行的 wa-cli preview <work> --serve --dir <dir> --json）；没有事项时为空数组。给出 unit 时只列该单元所在作品的事项。该输出只读，不创建或修改任何产物；不加 --json 时在人读输出末尾列出这些事项
+      scenarios:
+        pending-acceptance:
+          - GIVEN: minimal 作品 my-post 已推进到当前阶段必需产物含 acceptance 的阶段，没有 acceptance.yaml
+          - WHEN: 运行 wa-cli next --dir D --json
+          - THEN: pendingConfirmations 中有一项 kind 为 acceptance、work 为 my-post、units 为 [my-post]、不含 id 字段、command 为 wa-cli preview my-post --serve --dir D --json
+        pending-decision:
+          - GIVEN: 决策队列中有 units 为 [my-post] 的 open 决策 dec-1
+          - WHEN: 运行 wa-cli next --dir D --json
+          - THEN: pendingConfirmations 中有一项 kind 为 decision、work 为 my-post、id 为 dec-1
+        pending-none:
+          - GIVEN: 工作区中全部作品已验收完成，没有 open 决策与待确认提议
+          - WHEN: 运行 wa-cli next --dir D --json
+          - THEN: pendingConfirmations 为空数组，工作区文件不变（audit.log 除外）
+        pending-matches-page:
+          - GIVEN: 作品 my-post 有待验收单元与 open 决策 dec-1，preview my-post --serve 正在运行
+          - WHEN: 运行 wa-cli next --dir D --json，并带令牌 GET /page.json
+          - THEN: pendingConfirmations 中 work 为 my-post 的事项与 page.json 的 confirms 在 kind 与 id 上一一对应
+  MODIFIED: {}
+  REMOVED: {}

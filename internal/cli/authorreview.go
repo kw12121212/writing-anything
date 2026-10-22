@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/kw12121212/writing-anything/internal/authorreview"
@@ -69,6 +70,60 @@ func pendingReviewsText(items []pendingReviewView) string {
 		if !seen[it.Command] {
 			seen[it.Command] = true
 			fmt.Fprintf(&b, "  请作者打开阅读页复核：%s\n", it.Command)
+		}
+	}
+	return b.String()
+}
+
+// pendingConfirmationsHelp 是 next 输出 pendingConfirmations 的说明。
+const pendingConfirmationsHelp = "待作者确认事项数组：与阅读页（Reading View）待作者确认区同一口径，按作品 id 排序，每项含 kind（acceptance、decision、plan、state、" +
+	"knowledge 或 volume）、work、units（事项关联的单元引用，作品级事项为作品根单元）、id（只在 decision、plan、state 与 knowledge 出现，" +
+	"为各自的条目 id；acceptance 与 volume 没有条目 id，不含 id 字段）、label 与 command（打开该作品阅读页的命令，作者在页面上确认）；没有事项时为空数组"
+
+// pendingConfirmView 是一项待作者确认事项的输出形态。
+type pendingConfirmView struct {
+	Kind    string   `json:"kind"`
+	Work    string   `json:"work"`
+	Units   []string `json:"units"`
+	ID      *string  `json:"id,omitempty"` // 只在有条目 id 的 kind 出现（enum-scoped-output-fields）
+	Label   string   `json:"label"`
+	Command string   `json:"command"`
+}
+
+// pendingConfirmations 返回 works 中待作者确认的事项，与阅读页的待作者确认区共用 confirmQueue（只读）。
+func pendingConfirmations(dir string, works []*work.Work) []pendingConfirmView {
+	out := []pendingConfirmView{}
+	sorted := slices.SortedFunc(slices.Values(works), func(a, b *work.Work) int { return strings.Compare(a.ID, b.ID) })
+	in := loadConfirmInputs(dir) // 配置与决策队列每条命令只加载一次（load-once-per-command）
+	for _, w := range sorted {
+		for _, c := range confirmQueueWith(dir, w, in) {
+			v := pendingConfirmView{Kind: c.Kind, Work: w.ID, Units: append([]string{}, c.Units...), Label: c.Label,
+				Command: previewServeCommand(dir, w.ID)}
+			if c.ID != "" {
+				id := c.ID
+				v.ID = &id
+			}
+			out = append(out, v)
+		}
+	}
+	return out
+}
+
+// pendingConfirmationsText 返回待作者确认清单的人读文本；清单为空时为空串。
+func pendingConfirmationsText(items []pendingConfirmView) string {
+	if len(items) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "待作者确认：%d 项，须由作者在阅读页（Reading View）确认\n", len(items))
+	seen := map[string]bool{}
+	for _, it := range items {
+		fmt.Fprintf(&b, "  %s\n", it.Label)
+	}
+	for _, it := range items {
+		if !seen[it.Command] {
+			seen[it.Command] = true
+			fmt.Fprintf(&b, "  请作者打开阅读页确认：%s\n", it.Command)
 		}
 	}
 	return b.String()

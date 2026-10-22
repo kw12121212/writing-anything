@@ -183,7 +183,7 @@ describe('overviewModel counts against non-trivial inputs', () => {
   it('counts pending author reviews and groups diagnostics by severity', async () => {
     const body = await snapshotOf(FIXTURE_ROOT);
     const cli = body.snapshot!.cli;
-    cli.next = { steps: [], pendingAuthorReviews: [{ kind: 'acceptance', unit: 'my-post' }, { kind: 'canon', unit: 'my-novel' }] };
+    cli.next = { steps: [], pendingAuthorReviews: [{ kind: 'acceptance', unit: 'my-post' }, { kind: 'canon', unit: 'my-novel' }], pendingConfirmations: [] };
     cli.validate = {
       valid: false,
       checked: [],
@@ -217,6 +217,9 @@ describe('overviewModel counts against non-trivial inputs', () => {
     const model = overviewModel(body);
     expect(model.summary?.pendingReviews).toBeNull();
     expect(model.summary?.diagnostics).toBeNull();
+    // A next note about the pending confirmations only leaves the review count alone.
+    body.degraded = ['next: 缺少字段 pendingConfirmations（待审阅标记），该部分按降级标注呈现'];
+    expect(overviewModel(body).summary?.pendingReviews).toBe(0);
     // A validate note about another field leaves the diagnostics count alone.
     body.degraded = ['validate: 缺少字段 valid，该部分按降级标注呈现'];
     expect(overviewModel(body).summary?.diagnostics).toBe(5);
