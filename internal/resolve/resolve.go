@@ -125,7 +125,7 @@ type Resolved struct {
 	Style       []Style          `json:"style"`
 	// ExcludedStyle 是按作品文体类别排除的文风条目及原因，按配置层顺序排列；没有时为空数组。
 	ExcludedStyle []ExcludedStyle `json:"excludedStyle"`
-	Rubric      []RubricItem     `json:"rubric"`
+	Rubric        []RubricItem    `json:"rubric"`
 	// ContextBudget 是上下文预算（Context Budget）的最终取值与来源；没有配置层声明时为 DefaultContextBudget，来源为 default。
 	ContextBudget Value `json:"contextBudget"`
 	// HTMLTheme 是 HTML 导出的样式主题（HTML Theme）：元素名 → CSS 声明与来源；没有规范包覆盖的元素来自内置默认主题，来源为 default。
@@ -146,6 +146,8 @@ type Resolved struct {
 type Disclosure struct {
 	Placement Value `json:"placement"`
 	Template  Value `json:"template"`
+	// ImageTemplate 是配图说明的模板（规范包的 ai_disclosure_image_template，默认为内置模板）。
+	ImageTemplate Value `json:"imageTemplate"`
 }
 
 // DefaultDisclosurePlacement 是项目配置没有 ai_disclosure 时的放置位置。
@@ -279,9 +281,10 @@ func merge(root string, doc *yaml.Node, genre string, extra *Layer) (*Resolved, 
 	}
 	r := &Resolved{Packs: []Ref{}, UnitTypes: []UnitType{}, Stages: []Stage{}, Rules: map[string]*Rule{},
 		Glossary: []Term{}, BannedTerms: []BannedTerm{}, Style: []Style{}, ExcludedStyle: []ExcludedStyle{}, Rubric: []RubricItem{}, ScoredMetrics: []ScoredMetric{},
-		PacingChecks: []PacingCheck{},
+		PacingChecks:  []PacingCheck{},
 		ContextBudget: Value{DefaultContextBudget, SourceDefault}, HTMLTheme: map[string]Value{}, DriftThreshold: Value{DefaultDriftThreshold, SourceDefault},
-		AIDisclosure: Disclosure{Placement: Value{DefaultDisclosurePlacement, SourceDefault}, Template: Value{catalog.DefaultDisclosureTemplate, SourceDefault}}}
+		AIDisclosure: Disclosure{Placement: Value{DefaultDisclosurePlacement, SourceDefault}, Template: Value{catalog.DefaultDisclosureTemplate, SourceDefault},
+			ImageTemplate: Value{catalog.DefaultDisclosureImageTemplate, SourceDefault}}}
 	for _, k := range catalog.HTMLThemeKeys {
 		r.HTMLTheme[k] = Value{catalog.DefaultHTMLTheme[k], SourceDefault}
 	}
@@ -417,6 +420,9 @@ func merge(root string, doc *yaml.Node, genre string, extra *Layer) (*Resolved, 
 		}
 		if p.DisclosureTemplate != "" {
 			r.AIDisclosure.Template = Value{p.DisclosureTemplate, source}
+		}
+		if p.DisclosureImageTemplate != "" {
+			r.AIDisclosure.ImageTemplate = Value{p.DisclosureImageTemplate, source}
 		}
 		layers = append(layers, layer{source: source, path: p.Path, origin: catalog.ProblemOrigin(p), rules: p.Rules, waivers: p.Waivers})
 	}

@@ -84,6 +84,7 @@ var registry = commandSet{helpCommand, versionCommand, initCommand, validateComm
 	seriesSetCommand, seriesAddCommand, seriesFactCommand, seriesShowCommand, summarySetCommand, summaryShowCommand,
 	metricsPlanCommand, metricsRecordCommand, metricsShowCommand, metricsCalibrateCommand, metricsComputeCommand, curveCommand,
 	sourceAddCommand, sourceListCommand, draftWriteCommand, diffCommand, provenanceCommand, claimAddCommand, claimSetCommand, claimListCommand, claimRemoveCommand,
+	illustrationAddCommand, illustrationListCommand, illustrationRemoveCommand,
 	canonAddCommand, canonSetCommand, canonListCommand, canonRemoveCommand,
 	threadsListCommand, threadsAddCommand, threadsSetCommand,
 	volumeCheckpointCommand, volumeConfirmCommand, continuityCommand, reviewPlanCommand, reviewSubmitCommand, reviewReportCommand, impactCommand, impactMarkCommand, impactClearCommand, impactListCommand, assembleCommand, handoffWriteCommand, handoffShowCommand, timelineCommand,

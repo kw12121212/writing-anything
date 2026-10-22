@@ -109,3 +109,79 @@ func InSpans(spans [][2]int, c int) bool {
 	}
 	return lo > 0 && c < spans[lo-1][1]
 }
+
+// Image 是正文中的一个 Markdown 图片 ![替代文字](地址) 或 ![替代文字](地址 "标题")：Line 从 1 开始，Start 与 End 为它在
+// 整个正文中的字节区间，Src 为去掉尖括号后的地址。
+type Image struct {
+	Line       int
+	Start, End int
+	Alt, Src   string
+	Title      string
+}
+
+// imageAt 在 ![ 处匹配图片；替代文字、标题各至多 1000 个字符，地址至多 1000 字节，可以用尖括号包住。每次只在
+// imageWindow 字节的窗口内尝试，耗时有界（workspace-artifacts/input-limits）。
+var imageAt = regexp.MustCompile(`^!\[((?:\\.|[^\[\]\\\n]){0,1000})\]\((?:<([^<>\n]{0,1000})>|([^()\s<>]{0,1000}))(?:[ \t]+"([^"\n]{0,1000})")?\)`)
+
+const imageWindow = 12100
+
+// Images 按出现顺序返回正文中的图片，跳过围栏代码块、行内代码与已闭合的 HTML 注释中的写法（与文本检查、导出一致）。
+// 耗时与正文长度成线性：每个 ![ 处只在有界窗口内匹配，注释区间一次扫描得到。
+func Images(content string) []Image {
+	comments := closedComments(content)
+	lines := strings.SplitAfter(content, "\n")
+	fence := FenceLines(lines)
+	var out []Image
+	off := 0
+	for i, line := range lines {
+		start := off
+		off += len(line)
+		if fence[i] || !strings.Contains(line, "![") {
+			continue
+		}
+		spans := CodeSpans(line)
+		for j := 0; j < len(line); {
+			k := strings.Index(line[j:], "![")
+			if k < 0 {
+				break
+			}
+			j += k
+			if InSpans(spans, j) || InSpans(comments, start+j) {
+				j += 2
+				continue
+			}
+			m := imageAt.FindStringSubmatch(line[j:min(len(line), j+imageWindow)])
+			if m == nil {
+				j += 2
+				continue
+			}
+			src := m[2]
+			if src == "" {
+				src = m[3]
+			}
+			out = append(out, Image{Line: i + 1, Start: start + j, End: start + j + len(m[0]), Alt: m[1], Src: src, Title: m[4]})
+			j += len(m[0])
+		}
+	}
+	return out
+}
+
+// closedComments 返回已闭合的 HTML 注释 <!-- … --> 的字节区间，按起点升序、互不重叠；没有结束标记的 <!-- 及其之后
+// 不再有已闭合的注释。只扫描一遍，耗时与正文长度成线性。
+func closedComments(s string) [][2]int {
+	var out [][2]int
+	for i := 0; ; {
+		k := strings.Index(s[i:], "<!--")
+		if k < 0 {
+			return out
+		}
+		open := i + k
+		e := strings.Index(s[open+4:], "-->")
+		if e < 0 {
+			return out
+		}
+		end := open + 4 + e + 3
+		out = append(out, [2]int{open, end})
+		i = end
+	}
+}

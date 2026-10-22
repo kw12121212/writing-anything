@@ -9,7 +9,7 @@ description: 用 wa-cli next 驱动整篇文章或整部长篇从写作简报走
 
 1. 运行 `wa-cli next --json`。没有工作区时先用 wa-init。`steps` 中条目的 `handoff` 不为 null 时，说明有上一次会话的交接记录（Handoff Note），该字段只含 id、todo 与作者指示（instructions），不加 --json 时同样内容显示在 next 文本输出顶部；运行 `wa-cli handoff show --json` 读取完整的最近一条，按其中的 done、todo、instructions 与风险（risks）接续，不要重做已完成的事项。`steps` 为空时也运行一次 handoff show，确认没有遗留的待办。
 2. 按作品的文体（Genre）选择路径：在 `wa-cli status --json` 的 units 中，作品根单元的 type 为 novel、或作品下有 part、chapter 类型的单元时按小说路径处理，其余按文章路径处理（config.defaultGenre 只是新建作品时的默认文体）：
-   - 文章路径（如 tech-blog、wechat-marketing、short-story）：对每个单元（Unit），按阶段（Stage）字段 `stage` 选择技能：brief 即写作简报（Brief）→ wa-brief，outline → wa-outline，draft → wa-draft，review → wa-review、wa-revise 与 wa-publish。
+   - 文章路径（如 tech-blog、wechat-marketing、short-story）：对每个单元（Unit），按阶段（Stage）字段 `stage` 选择技能：brief 即写作简报（Brief）→ wa-brief，outline → wa-outline，draft → wa-draft，review → wa-review、wa-revise 与 wa-publish。请作者验收之前加入可选的配图（Illustration）询问：文体为 tech-blog 或 wechat-marketing、且 `wa-cli illustration list <单元> --json` 显示单元还没有配图时，询问作者是否需要正文配图与封面图（Cover Image），作者需要时转到 wa-illustrate，完成后回到 wa-publish 验收；作者不需要时跳过，按原有步骤验收与导出；其他文体只在作者提出时进入配图环节。
    - 小说路径（novel）：动笔前先用 wa-plan 逐步规划并经作者确认（`wa-cli plan show <作品> --json` 的 `currentStep` 为 null 表示规划完成）；之后按单元树顺序逐场景用 wa-scene 推进（场景契约、起草、写后收口、作者确认状态与知情），review 阶段用 wa-review 记录审稿、用 wa-continuity 做连续性审查与审查任务包，再按 wa-publish 请作者验收；一部的最后一个场景验收后用 wa-assemble 请作者确认卷末检查点；全书场景都验收后用 wa-assemble 组稿，再用 wa-publish 导出。修改已验收内容时先用 wa-continuity 做影响传播。
    按 `commands` 运行可以直接运行的命令，按 `action` 与 `blockers` 判断还缺什么。stage 为 done 的条目表示已完成单元的验收（Acceptance）已失效（正文在验收后被修改、验收记录无效或关卡强度调高），其 commands 为 `wa-cli reopen <单元> --json`：先告诉作者哪些单元要退回并征得同意，再运行 reopen，之后按 wa-review、wa-publish 重新审稿并请作者重新验收。
 3. 单元有未处理的作者反馈（Feedback，见输出的 `feedback`）时先用 wa-revise 处理。

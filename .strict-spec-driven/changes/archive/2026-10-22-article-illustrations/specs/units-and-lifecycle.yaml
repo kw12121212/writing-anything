@@ -1,0 +1,77 @@
+schema: strict-spec-driven/delta-spec/v1
+schema_version: 1
+artifact_type: delta_spec
+schema_file: templates/strict-spec-driven/schemas/delta-spec.yaml
+target_spec: units-and-lifecycle
+operations:
+  ADDED: {}
+  MODIFIED:
+    advance-stage:
+      strength: MUST
+      statement: wa-cli advance <unit> 必须按作品文体声明的阶段序列推进单元。当前阶段的每个必需产物（Required Artifact）a 都要求单元目录下存在 a.yaml 或 a.md；根单元的单元目录为 .writing-anything/works/<work>/，其他单元为 .writing-anything/works/<work>/units/<unit-id>/。全部存在且没有其他阻塞项时把该单元的 stage 改为下一阶段，当前为最后一个阶段时改为保留的终点 done；只修改该单元的 stage，保留 work.yaml 的其他内容与 YAML 注释；changedPaths 为该 work.yaml，--json 输出的 unit 字段含 unit、type、previousStage 与 stage，退出码为 0。有必需产物缺失时必须拒绝推进、不修改文件，为每个缺失的产物给出一条错误码为 lifecycle.missing-artifact 的诊断（path 为单元目录，message 列出 a.yaml 与 a.md，next 包含 wa-cli next <unit> --dir <dir> --json），退出码为 1。单元有写作简报阻塞项（见 brief 主规格的 brief-gate）、大纲阻塞项（见 outline 主规格的 outline-gate）或营销要素阻塞项（见 marketing 主规格的 marketing-gate）时同样拒绝推进、不修改文件，为每个阻塞项给出一条错误码为其 code 的诊断，path 与 next 见 brief-gate、outline-gate 与 marketing-gate，退出码为 1。单元有决策阻塞项（见 decisions 主规格的 decision-blocking）时同样拒绝推进、不修改文件，为每个阻塞项给出一条错误码为该阻塞项 code（decision.blocking 或 decision.invalid-queue）的诊断，path 为 .writing-anything/decisions.yaml，next 包含 wa-cli decisions --dir <dir> --json，退出码为 1。当前阶段的必需产物含 acceptance 且单元目录下的 acceptance.yaml 不通过校验（含途经符号链接或不是普通文件）、或只有 acceptance.md 时报告 acceptance.invalid，acceptance.yaml 的 draft_sha256 与当前 draft.md 的 SHA-256 不同、或单元当前的配图摘要（见 illustrations 主规格的 illustration-digest，没有配图时为 null）与 acceptance.yaml 的 illustrations_sha256（缺省视为 null）不同时报告 acceptance.stale，acceptance.yaml 的 gate_level 比工作区当前配置的关卡强度宽松（fast < standard < strict）时报告 acceptance.weaker-gate（见 review 主规格的 accept-record），这些情况都拒绝推进、不修改文件，path 为该验收产物，next 包含 wa-cli review show <unit> --dir <dir> --json，退出码为 1。单元的 stage 已是 done 时报告 lifecycle.already-done，退出码为 1。work.yaml 不通过作品校验时报告其诊断且不修改文件；目标单元或其 stage 经由 YAML 锚点、别名或合并键得到时报告 work.anchored-value，不修改文件，退出码为 1。文体不得声明 id 为 done 的阶段。
+      scenarios:
+        advance-to-done:
+          - GIVEN: 作品 my-post 的 stage 为 review（minimal 的最后一个阶段，必需产物为 review 与 acceptance），review.yaml 存在，acceptance.yaml 的 draft_sha256 与当前正文一致、gate_level 不比工作区当前的关卡强度宽松
+          - WHEN: 运行 wa-cli advance my-post --dir D --json
+          - THEN: work.yaml 的 stage 为 done，unit.stage 为 done，退出码为 0
+        advance-to-next:
+          - GIVEN: 已用 wa-cli new minimal my-post --dir D 创建作品，D/.writing-anything/works/my-post/brief.yaml 存在且含 audience 与 purpose
+          - WHEN: 运行 wa-cli advance my-post --dir D --json
+          - THEN: work.yaml 的 stage 为 draft；unit.previousStage 为 brief，unit.stage 为 draft；changedPaths 为 [.writing-anything/works/my-post/work.yaml]，退出码为 0
+        already-done:
+          - GIVEN: 作品 my-post 的 stage 为 done
+          - WHEN: 运行 wa-cli advance my-post --dir D --json
+          - THEN: diagnostics 中有一条错误码为 lifecycle.already-done 的诊断，work.yaml 不变，退出码为 1
+        blocked-by-brief:
+          - GIVEN: 作品 my-post 的 brief.yaml 只有 audience
+          - WHEN: 运行 wa-cli advance my-post --dir D --json
+          - THEN: diagnostics 中有一条错误码为 brief.missing-field 的诊断，message 含 purpose；work.yaml 与运行前逐字节相同，退出码为 1
+        blocked-by-decision:
+          - GIVEN: 作品 my-post 的 brief.yaml 存在且含 audience 与 purpose，决策队列有关联 my-post 的 open 阻塞决策 dec-1
+          - WHEN: 运行 wa-cli advance my-post --dir D --json
+          - THEN: diagnostics 中有一条错误码为 decision.blocking 的诊断，其 next 包含 wa-cli decisions 命令；work.yaml 与运行前逐字节相同，退出码为 1
+        child-unit-directory:
+          - GIVEN: 作品 my-post 有子单元 intro，D/.writing-anything/works/my-post/brief.yaml 存在，但 D/.writing-anything/works/my-post/units/intro/ 下没有 brief 产物
+          - WHEN: 运行 wa-cli advance my-post/intro --dir D --json
+          - THEN: diagnostics 中有一条错误码为 lifecycle.missing-artifact、path 为 .writing-anything/works/my-post/units/intro 的诊断，退出码为 1
+        handwritten-acceptance:
+          - GIVEN: 作品 my-post 的 stage 为 review，单元目录下只有 acceptance.md 而没有 acceptance.yaml
+          - WHEN: 运行 wa-cli advance my-post --dir D --json
+          - THEN: diagnostics 中有一条错误码为 acceptance.invalid、path 为 .writing-anything/works/my-post/acceptance.md 的诊断，退出码为 1
+        invalid-work:
+          - GIVEN: 作品 my-post 的 work.yaml 中 stage 为 bogus
+          - WHEN: 运行 wa-cli advance my-post --dir D --json
+          - THEN: diagnostics 中有一条错误码为 work.unknown-stage 的诊断，work.yaml 不变，退出码为 1
+        markdown-artifact:
+          - GIVEN: 作品 my-post 的 stage 为 draft，D/.writing-anything/works/my-post/draft.md 存在
+          - WHEN: 运行 wa-cli advance my-post --dir D --json
+          - THEN: work.yaml 的 stage 为 review，退出码为 0
+        missing-artifact:
+          - GIVEN: 刚用 wa-cli new minimal my-post --dir D 创建的作品，没有 brief.yaml 与 brief.md
+          - WHEN: 运行 wa-cli advance my-post --dir D --json
+          - THEN: valid 为 false，diagnostics 中有一条错误码为 lifecycle.missing-artifact、path 为 .writing-anything/works/my-post 的诊断，message 含 brief.yaml 与 brief.md，next 包含 wa-cli next my-post 命令；work.yaml 与运行前逐字节相同，退出码为 1
+        preserves-comments:
+          - GIVEN: 作品 my-post 的 work.yaml 中有作者写的注释，brief.yaml 存在且含 audience 与 purpose
+          - WHEN: 运行 wa-cli advance my-post --dir D --json
+          - THEN: 注释与除 stage 以外的字段不变，退出码为 0
+        stale-acceptance:
+          - GIVEN: 作品 my-post 已用 wa-cli accept 验收，之后正文被修改
+          - WHEN: 运行 wa-cli advance my-post --dir D --json
+          - THEN: diagnostics 中有一条错误码为 acceptance.stale、path 为 .writing-anything/works/my-post/acceptance.yaml 的诊断，其 next 包含 wa-cli review show my-post 命令；work.yaml 不变，退出码为 1
+        weaker-gate:
+          - GIVEN: 作品 my-post 在 gate_level 为 fast 时用 wa-cli accept 验收，之后工作区的 gate_level 改为 strict
+          - WHEN: 运行 wa-cli advance my-post --dir D --json
+          - THEN: diagnostics 中有一条错误码为 acceptance.weaker-gate 的诊断，其 next 包含 wa-cli review show my-post 命令；work.yaml 不变，退出码为 1
+        stale-after-illustration-change:
+          - GIVEN: 作品 post 带封面与配图验收后，用 wa-cli illustration add --replace 替换了封面
+          - WHEN: 运行 wa-cli advance post --dir D --json
+          - THEN: diagnostics 中有一条错误码为 acceptance.stale、path 为 .writing-anything/works/post/acceptance.yaml 的诊断，work.yaml 不变，退出码为 1
+        stale-after-first-illustration:
+          - GIVEN: 作品 my-post 没有配图时验收，之后登记了一张配图
+          - WHEN: 运行 wa-cli advance my-post --dir D --json
+          - THEN: diagnostics 中有一条错误码为 acceptance.stale 的诊断，退出码为 1
+        legacy-acceptance-valid:
+          - GIVEN: 作品 my-post 的 acceptance.yaml 没有 illustrations_sha256 字段，单元没有 illustrations.yaml，其余验收条件满足
+          - WHEN: 运行 wa-cli advance my-post --dir D --json
+          - THEN: work.yaml 的 stage 为 done，退出码为 0
+  REMOVED: {}

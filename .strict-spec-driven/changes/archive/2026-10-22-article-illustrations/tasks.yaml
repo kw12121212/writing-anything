@@ -1,0 +1,74 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: article-illustrations
+sections:
+  Implementation:
+    schemas:
+      text: 在 internal/schema 登记 illustrations.yaml 产物类型（根单元与子单元两个路径模式）并新增其 JSON Schema；acceptance.yaml 的 Schema 增加可空的 illustrations_sha256；规范包 Schema 增加 ai_disclosure_image_template（一行、不超过 200 个字符、只含 {ai_images} 与 {images}）；阅读页 page.json 的 JSON Schema 增加 units[].illustrations 与 paragraphs[].illustrations。字段名避开 schema.ExecutableKeys。
+      status: complete
+    mdscan-image-refs:
+      text: 在 internal/mdscan 增加本地配图引用识别：围栏代码块、行内代码与已闭合 HTML 注释之外、地址以 illustrations/ 开头的 Markdown 图片（含尖括号地址与标题），返回地址、替代文字、标题、行号与偏移；线性时间、有输入上限；供 validate、关卡、导出与阅读页共用。
+      status: complete
+    illustration-domain:
+      text: 新增 internal/illustration 领域包：加载与 Schema、领域校验（id 唯一、file 与 format 一致、文件存在且为普通文件、哈希、论断与素材存在、信息图出处、封面位置与数量、未登记引用、未引用与多余文件 warning），按文件头识别 PNG/JPEG 并用 image.DecodeConfig 读宽高（10 MiB 上限），计算 illustrations_sha256 摘要，以及 add/replace/remove 的结构化编辑（保留注释，经 internal/workspace 原子写入，按文件身份逐级确认 units/、单元目录、illustrations/ 与目标文件不途经符号链接，大小写不敏感文件系统下同样成立）；时间经注入的时钟传入。
+      status: complete
+    cli-commands:
+      text: 在 internal/cli 命令注册表声明 illustration add、illustration list 与 illustration remove（flags：--id、--file、--alt、--origin、--role、--content、--title、--tool、--style、--claims、--sources、--replace、--dir；outputKeys illustration 与 illustrations；exitCodes 0/1/2），诊断带可直接运行的 next，在 sampleArgs 与 mutatingSamples 登记样例调用；MCP tools/list 随注册表自动包含新命令。
+      status: complete
+    validate-integration:
+      text: wa-cli validate 整体校验与 validate <path> 识别并检查每个单元的 illustrations.yaml 与正文中的本地配图引用，计入 checked；illustration list 在有悬空引用时照常输出 problems。
+      status: complete
+    gate-and-acceptance:
+      text: 在 internal/work 的 Work.Blockers 追加配图阻塞项（accept-gate，只在单元有 illustrations.yaml 或正文有本地配图引用时检查）；accept 写入 illustrations_sha256 并在输出中给出 illustrationsSha256；advance、next、reopen 与 export 的验收有效性判断比较配图摘要（没有字段的旧记录在无配图时有效）；review show 的 gate 与 acceptance 增加 illustrationsSha256 与 stale 判定。
+      status: complete
+    export-assets:
+      text: 在 internal/export 为 markdown 与 wechat-html 复制本地配图与根单元封面到 <导出名>.assets/（命名 <work>.<配图id>.<ext> 与 <work>.<单元id>.<配图id>.<ext>），改写 Markdown 引用地址，--front-matter 写 cover，wechat 配图清单加入封面、资产路径与「AI 生成」标注，--json 增加 export.assets；全部路径在写入前经 WriteOutput 同组检查，资产目录不途经符号链接；纯文本导出不复制、assets 为空数组。
+      status: complete
+    ai-disclosure-images:
+      text: internal/resolve 合并 ai_disclosure_image_template（默认「文中 {ai_images} 张配图由 AI 生成。」，来源层记录到 resolved.aiDisclosure.imageTemplate）；导出按 export.assets 计算 aiImages 与 images，按规格拼接正文说明与配图说明，export.disclosure 增加 aiImages 与 images；占位符纯文字替换，写进 YAML 只经编码器、写进 HTML 只经模板。
+      status: complete
+    preview-images:
+      text: 阅读页：静态页以 html/template 受信任的 data:image/png 或 data:image/jpeg（只用于已校验的字节）内嵌配图，32 MiB 预算外改为文字说明；封面显示在根单元开头，未引用配图列在单元末尾；--serve 增加 GET/HEAD /illustration（Host 与令牌校验、unit 与 id 校验、nosniff、no-store、Referrer-Policy），CSP 增加 img-src 'self' data:，图片地址相对页面；page.json 增加配图字段。
+      status: complete
+    dsh-plugin:
+      text: plugins/dsh-writing-viewer：host 审阅代理增加 GET/HEAD /dsh-writing-viewer/review/illustration 到阅读页 GET /illustration 的精确转发（只转发 unit 与 id，附加会话令牌，原样回传），客户端视图模型从 page.json 推导配图显示，审阅视图以 img 节点（src 为同源代理路由，alt 为替代文字）显示封面与段落配图，available 为 false 时显示说明；更新插件 README 与 dist 构建产物。
+      status: complete
+    skills:
+      text: 新增内置技能 internal/skills/skills/wa-illustrate/SKILL.md（lemo-opuscar 定位与安装、风格选择、配图计划经决策队列确认、工作区外渲染与 still.mjs --size、illustration add 与 draft write、--replace、必须停下来问作者、会话协议）；修改 wa-publish 与 wa-auto 在验收前询问配图、导出后交出资产目录与配图清单；更新 history.txt 保留旧版本哈希以便 skills install 识别旧版。
+      status: complete
+    glossary-docs:
+      text: docs/GLOSSARY.md 加入配图登记（Illustration Registry）、配图计划（Illustration Plan）、信息图（Infographic）、氛围图（Mood Image）、配图摘要与资产目录等新术语及 lemo-opuscar；按需更新 docs/INSTALL.md 或 README 中的命令说明。
+      status: complete
+  Testing:
+    unit-tests:
+      text: 为 internal/mdscan、internal/illustration、internal/export、internal/preview、internal/work 与 internal/cli 的新行为编写单元测试，断言规格中的错误码、path、field 字面量；夹具（小 PNG/JPEG、伪装扩展名的非图片、符号链接目录）放在各包 testdata/ 或用 t.TempDir() 生成，覆盖符号链接与大小写变体的写入防护、悬空引用不锁死编辑命令、无配图作品输出不变。
+      status: complete
+      command: go test ./internal/...
+    e2e-illustrated-article:
+      text: 新增端到端语料：wechat-marketing 作品经 init、new、source add、claim add、draft write、illustration add（封面、氛围图、信息图）、draft write 插入引用、review record、accept、export --format wechat-html 与 markdown --front-matter，断言资产目录、配图清单、AI 参与说明与验收后 --replace 导致 acceptance.stale；复用 internal/cli 共享语料助手。
+      status: complete
+      command: go test ./internal/cli -run 'Illustrat|E2E'
+    dsh-plugin-tests:
+      text: 插件包测试：代理新路由经真实 node:http 分发驱动（成功、404 透传、无会话、来源校验拒绝），视图模型与渲染器对配图的纯文本与 img 节点输出，桩载荷镜像 page.json 新字段；构建与类型检查通过。
+      status: complete
+      command: cd plugins/dsh-writing-viewer && pnpm run check
+    full-regression:
+      text: 运行完整回归命令（vet、build、测试与覆盖率不低于 80% 的门槛）。
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    verify-unchanged:
+      text: 确认没有配图的作品：既有黄金文件与端到端语料无需更新即通过，导出文件、阅读页 HTML 与 AI 参与说明文字逐字节不变，--json 只多出取空数组或 null 的新键，已有验收记录仍有效。
+      status: complete
+    verify-runtime-boundary:
+      text: 检查 wa-cli 非测试源码不调用 node、lemo-opuscar 或图像服务，lemo-opuscar 只出现在 wa-illustrate 正文；产品运行时不依赖 strict-spec-driven 与 DSH 插件。
+      status: complete
+    verify-strict:
+      text: 运行 strict-spec-cli ready article-illustrations 与 strict-spec-cli verify article-illustrations，确认场景每一步都有覆盖、delta 规格与实际构建一致，归档会新建 illustrations 主规格并合并 dsh-plugin-structure 的 review-proxy-thin。
+      status: complete
+      command: strict-spec-cli ready article-illustrations && strict-spec-cli verify article-illustrations
+testing_gates:
+  validation_task: full-regression
+  unit_test_task: unit-tests

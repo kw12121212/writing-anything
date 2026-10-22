@@ -152,6 +152,10 @@ describe('review proxy route', () => {
     expect(page.status).toBe(200);
     expect(page.body).toBe('{"units":[]}');
     expect(upstreamCalls).toEqual(['http://127.0.0.1:5000/page.json?token=tok']);
+    const image = await call(REVIEW_PREFIX + '/illustration', 'GET', { url: REVIEW_PREFIX + '/illustration?unit=my-post&id=fig-1&token=browser-forged' });
+    expect(image.status).toBe(200);
+    expect(upstreamCalls[1]).toBe('http://127.0.0.1:5000/illustration?unit=my-post&id=fig-1&token=tok');
+    upstreamCalls.splice(1, 1);
     expect((await call(REVIEW_PREFIX + '/', 'GET')).status).toBe(404);
     expect((await call(REVIEW_PREFIX + '/nope', 'GET')).status).toBe(404);
     expect(upstreamCalls).toHaveLength(1);
@@ -168,6 +172,7 @@ describe('review routes origin guard', () => {
       [REVIEW_SESSION_PATH, 'GET'],
       [REVIEW_SESSION_END_PATH, 'POST'],
       [REVIEW_PREFIX + '/page.json', 'GET'],
+      [REVIEW_PREFIX + '/illustration', 'GET'],
       [REVIEW_PREFIX + '/confirm', 'POST'],
     ] as const) {
       const answer = await call(path, method, { headers: evil, body: '{"unit":"my-post"}' });

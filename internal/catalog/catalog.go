@@ -182,6 +182,8 @@ type Pack struct {
 	HTMLTheme map[string]string
 	// DisclosureTemplate 是规范包声明的 AI 参与说明模板；空表示未声明。
 	DisclosureTemplate string
+	// DisclosureImageTemplate 是规范包声明的 AI 参与说明中配图说明的模板；空表示未声明。
+	DisclosureImageTemplate string
 	// ScoredMetrics 是规范包声明的 AI 评分指标（Metric）。
 	ScoredMetrics []ScoredMetric
 	// StyleProfile 是规范包声明的文风画像（Style Profile）：与 style_profile 字段相同的结构；nil 表示未声明。
@@ -220,22 +222,23 @@ type (
 		Category    string             `json:"category"`
 	}
 	packFile struct {
-		ID          string             `json:"id"`
-		Title       string             `json:"title"`
-		Description string             `json:"description"`
-		Style       []StyleEntry       `json:"style"`
-		Glossary    []Term             `json:"glossary"`
-		BannedTerms []BannedTerm       `json:"banned_terms"`
-		Rules       map[string]Rule    `json:"rules"`
-		Waivers     []Waiver           `json:"waivers"`
-		Rubric      []RubricItem       `json:"rubric"`
-		Methods     []Method           `json:"methods"`
-		Budget      int                `json:"context_budget"`
-		Theme       map[string]string  `json:"html_theme"`
-		Disclosure  string             `json:"ai_disclosure_template"`
-		Metrics     []scoredMetricFile `json:"scored_metrics"`
-		Profile     map[string]any     `json:"style_profile"`
-		Drift       float64            `json:"drift_threshold"`
+		ID              string             `json:"id"`
+		Title           string             `json:"title"`
+		Description     string             `json:"description"`
+		Style           []StyleEntry       `json:"style"`
+		Glossary        []Term             `json:"glossary"`
+		BannedTerms     []BannedTerm       `json:"banned_terms"`
+		Rules           map[string]Rule    `json:"rules"`
+		Waivers         []Waiver           `json:"waivers"`
+		Rubric          []RubricItem       `json:"rubric"`
+		Methods         []Method           `json:"methods"`
+		Budget          int                `json:"context_budget"`
+		Theme           map[string]string  `json:"html_theme"`
+		Disclosure      string             `json:"ai_disclosure_template"`
+		ImageDisclosure string             `json:"ai_disclosure_image_template"`
+		Metrics         []scoredMetricFile `json:"scored_metrics"`
+		Profile         map[string]any     `json:"style_profile"`
+		Drift           float64            `json:"drift_threshold"`
 	}
 )
 
@@ -437,7 +440,7 @@ func loadPack(doc *yaml.Node, origin, rel string) (*Pack, []workspace.Problem) {
 	var f packFile
 	Decode(doc, &f)
 	p := &Pack{ID: f.ID, Title: f.Title, Description: f.Description, Style: f.Style, Glossary: f.Glossary, BannedTerms: f.BannedTerms,
-		Rules: f.Rules, Waivers: f.Waivers, Rubric: f.Rubric, Methods: f.Methods, Origin: origin, Path: rel, ContextBudget: f.Budget, HTMLTheme: f.Theme, DisclosureTemplate: f.Disclosure,
+		Rules: f.Rules, Waivers: f.Waivers, Rubric: f.Rubric, Methods: f.Methods, Origin: origin, Path: rel, ContextBudget: f.Budget, HTMLTheme: f.Theme, DisclosureTemplate: f.Disclosure, DisclosureImageTemplate: f.ImageDisclosure,
 		ScoredMetrics: scoredMetrics(f.Metrics), StyleProfile: f.Profile, DriftThreshold: f.Drift}
 	return p, checkPack(p)
 }

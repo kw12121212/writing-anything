@@ -28,26 +28,48 @@
     "paragraph": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["index", "line", "text", "origin", "findings"],
+      "required": ["index", "line", "text", "origin", "findings", "illustrations"],
       "properties": {
         "index": {"type": "integer", "minimum": 1},
         "line": {"type": "integer", "minimum": 1},
         "text": {"type": "string"},
         "origin": {"enum": ["human", "agent", "agent-draft-human-edited", null]},
-        "findings": {"type": "array", "items": {"$ref": "#/$defs/finding"}}
+        "findings": {"type": "array", "items": {"$ref": "#/$defs/finding"}},
+        "illustrations": {"type": "array", "items": {"type": "string"}, "description": "该段按首次出现顺序引用的已登记正文配图 id"}
+      }
+    },
+    "illustration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "role", "alt", "title", "content", "origin", "width", "height", "claims", "sources", "referenced", "available", "url"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "role": {"enum": ["body", "cover"]},
+        "alt": {"type": "string"},
+        "title": {"type": ["string", "null"]},
+        "content": {"enum": ["mood", "infographic"]},
+        "origin": {"enum": ["agent", "author"]},
+        "width": {"type": "integer", "minimum": 1},
+        "height": {"type": "integer", "minimum": 1},
+        "claims": {"type": "array", "items": {"type": "string"}},
+        "sources": {"type": "array", "items": {"type": "string"}},
+        "referenced": {"type": "boolean"},
+        "available": {"type": "boolean"},
+        "url": {"type": ["string", "null"], "pattern": "^illustration\\?unit=[^&]*&id=[^&]*$", "description": "相对页面、不含令牌的取图地址；不可用时为 null"}
       }
     },
     "unit": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["ref", "stage", "hasDraft", "notes", "global", "paragraphs"],
+      "required": ["ref", "stage", "hasDraft", "notes", "global", "paragraphs", "illustrations"],
       "properties": {
         "ref": {"type": "string", "minLength": 1},
         "stage": {"type": "string"},
         "hasDraft": {"type": "boolean"},
         "notes": {"type": "array", "items": {"type": "string"}},
         "global": {"type": "array", "items": {"$ref": "#/$defs/finding"}},
-        "paragraphs": {"type": "array", "items": {"$ref": "#/$defs/paragraph"}}
+        "paragraphs": {"type": "array", "items": {"$ref": "#/$defs/paragraph"}},
+        "illustrations": {"type": "array", "items": {"$ref": "#/$defs/illustration"}}
       }
     },
     "confirm": {

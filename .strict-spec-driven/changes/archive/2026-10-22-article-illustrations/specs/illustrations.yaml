@@ -1,0 +1,140 @@
+schema: strict-spec-driven/delta-spec/v1
+schema_version: 1
+artifact_type: delta_spec
+schema_file: templates/strict-spec-driven/schemas/delta-spec.yaml
+target_spec: illustrations
+spec:
+  title: 配图（Illustration）
+  path: .strict-spec-driven/specs/illustrations.yaml
+operations:
+  ADDED:
+    illustration-add:
+      strength: MUST
+      statement: wa-cli illustration add <unit> --id <id> --file <path> --alt <text> --origin <origin> 必须把配图（Illustration）登记到单元的配图登记（Illustration Registry）：从 --file（相对 --dir，也可以是绝对路径）读取图片（省略 --file 时从标准输入读取；标准输入可以是图片的原始字节，也可以是其 base64 文本，允许带 data:image/png;base64, 或 data:image/jpeg;base64, 前缀，经 MCP 服务调用时的 input 即按此传入），原样复制到单元目录（见 units-and-lifecycle 主规格的 advance-stage）下的 illustrations/<id>.png（PNG）或 illustrations/<id>.jpg（JPEG），并在单元目录的 illustrations.yaml（不存在时创建，含 schema_version 1 与 illustrations 数组；子单元目录不存在时先创建）的 illustrations 末尾追加一项：id、role（--role，取值 body 或 cover，省略时为 body；cover 见 illustration-cover）、file（图片相对单元目录的路径）、format（png 或 jpeg）、sha256（图片原始字节的 SHA-256）、width 与 height（像素）、alt（--alt）、title（--title，省略时为 null）、content（--content，取值 mood 即氛围图（Mood Image）或 infographic 即信息图（Infographic），省略时为 mood；infographic 见 illustration-infographic-provenance）、origin（--origin，取值 agent 或 author，必须给出）、tool 与 style（--tool、--style，如 lemo-opuscar 与 watercolor，省略时为 null）、claims 与 sources（--claims、--sources，逗号分隔的论断 id 与素材 id，省略时为空数组）以及 added_at（UTC 时间，格式 YYYY-MM-DDTHH:MM:SSZ）。格式只按文件开头的字节识别（PNG 签名或 JPEG 的 SOI 标记），与扩展名无关；宽高从文件头读取，不解码像素，不裁剪、压缩或转换图片。已有 illustrations.yaml 时只追加该项，保留其他内容与 YAML 注释。成功时退出码为 0，changedPaths 列出新建的单元目录、illustrations/ 目录、图片文件与 illustrations.yaml；--json 输出的 illustration 字段含 unit、id、role、path（图片的工作区路径）、format、sha256、width、height、content、origin、referenced（当前正文是否引用该配图，见 illustration-references）与 markdown（role 为 body 时为可插入正文的引用文字 ![<alt>](illustrations/<id>.<ext>)，cover 时为 null）。illustration add 不修改 draft.md、写入记录与验收记录。图片不是 PNG 或 JPEG、或无法从文件头读出宽高时报告 illustration.unsupported-format（field 为 file）；超过 10 MiB 时报告 illustration.too-large（field 为 file）；--file 或标准输入无法读取时报告 input.read-failed；--id 不符合 id 格式，alt 为空白、含换行或超过 200 个字符，title 含换行或超过 200 个字符，tool 或 style 含换行或超过 100 个字符，role、content 或 origin 不在取值范围内或未给出 --origin 时报告 artifact.schema-violation（field 为对应字段）；没有 --replace 而 id 与该单元已登记的配图相同时报告 artifact.duplicate-id（field 为 id，next 包含加上 --replace 的同一命令）；这些由参数引起的诊断的 next 包含 wa-cli help illustration add --json。已有 illustrations.yaml 不通过校验时报告其诊断；单元目录途经的 units/、单元目录、illustrations/ 或目标图片不是真实目录或普通文件（如符号链接）时报告 workspace.write-failed；单元引用无法解析时按 units-and-lifecycle 主规格的 unit-reference 处理；这些情况都不修改任何文件，退出码为 1。
+      scenarios:
+        add-body:
+          - GIVEN: 作品 post 的根单元已有正文，fig.jpg 是 1600×900 的 JPEG
+          - WHEN: 运行 wa-cli illustration add post --id fig-1 --file fig.jpg --alt 店内一角 --origin agent --tool lemo-opuscar --style watercolor --dir D --json
+          - THEN: works/post/illustrations/fig-1.jpg 与 fig.jpg 字节相同，illustrations.yaml 有一项 id 为 fig-1、role 为 body、format 为 jpeg、width 为 1600、height 为 900、content 为 mood、origin 为 agent；illustration.markdown 为 ![店内一角](illustrations/fig-1.jpg)，referenced 为 false，draft.md 不变，退出码为 0
+        reject-format:
+          - GIVEN: logo.webp 是 WebP 图片，文件名改为 logo.png
+          - WHEN: 运行 wa-cli illustration add post --id logo --file logo.png --alt 标志 --origin author --dir D --json
+          - THEN: diagnostics 中有一条错误码为 illustration.unsupported-format、field 为 file 的诊断，不创建 illustrations/ 与 illustrations.yaml，退出码为 1
+        duplicate-id:
+          - GIVEN: post 已登记配图 fig-1
+          - WHEN: 不加 --replace 再次运行 wa-cli illustration add post --id fig-1 --file other.jpg --alt 另一张 --origin agent --dir D --json
+          - THEN: diagnostics 中有一条错误码为 artifact.duplicate-id、field 为 id 的诊断，next 含带 --replace 的同一命令，fig-1.jpg 与 illustrations.yaml 不变，退出码为 1
+        add-stdin-base64:
+          - GIVEN: fig.png 是一张 PNG
+          - WHEN: 把 fig.png 的 base64 文本加上 data:image/png;base64, 前缀作为标准输入，运行 wa-cli illustration add post --id fig-1 --alt 图 --origin agent --dir D --json
+          - THEN: works/post/illustrations/fig-1.png 与 fig.png 字节相同，illustration.format 为 png，退出码为 0
+    illustration-replace:
+      strength: MUST
+      statement: wa-cli illustration add 给出 --replace 时，id 必须是该单元已登记的配图，否则报告 illustration.not-found（field 为 id，next 包含 wa-cli illustration list <unit> --dir <dir> --json）；通过与 illustration-add 相同的检查后，用新图片替换该配图：图片写到 illustrations/<id>.<新格式的扩展名>，格式变化时删除旧扩展名的文件；登记项保持在 illustrations 中的原位置，按本次参数重写 role 之外的全部字段（未给出的可选参数取默认值），added_at 为本次时间；role 必须与原登记相同，不同时报告 artifact.schema-violation（field 为 role），需要改变用途时先 remove 再 add。格式不变时文件路径不变，正文中的引用无需修改；格式变化时 --json 输出的 illustration 另含 previousPath（原图片路径），不加 --json 的文本输出提示用 wa-cli draft write 更新正文中的引用。changedPaths 列出写入或删除的图片文件与 illustrations.yaml。替换后配图摘要改变（见 illustration-digest），已有验收随之失效。
+      scenarios:
+        replace-in-place:
+          - GIVEN: post 已登记 fig-1（JPEG），正文引用 illustrations/fig-1.jpg，new.jpg 为另一张 JPEG
+          - WHEN: 运行 wa-cli illustration add post --id fig-1 --file new.jpg --alt 店内一角 --origin agent --replace --dir D --json
+          - THEN: fig-1.jpg 的内容与 new.jpg 相同，illustrations.yaml 中 fig-1 仍在原位置且 sha256 为新值，draft.md 不变，illustration.referenced 为 true，退出码为 0
+        replace-missing:
+          - GIVEN: post 没有登记 fig-9
+          - WHEN: 运行 wa-cli illustration add post --id fig-9 --file new.jpg --alt 图 --origin agent --replace --dir D --json
+          - THEN: diagnostics 中有一条错误码为 illustration.not-found、field 为 id 的诊断，不写任何文件，退出码为 1
+    illustration-cover:
+      strength: MUST
+      statement: role 为 cover 的配图即作品的封面图（Cover Image）：只能登记在作品的根单元，<unit> 是子单元时 wa-cli illustration add 报告 illustration.cover-not-root（field 为 role，next 包含 wa-cli illustration add <work> 加原参数的命令）；作品根单元已登记封面且本次没有 --replace 该封面时报告 illustration.cover-exists（field 为 role，message 给出现有封面的 id，next 包含以现有封面 id 加 --replace 的命令与 wa-cli illustration remove <work> <封面 id> --dir <dir> --json）；这些情况都不修改文件，退出码为 1。封面不在正文中引用：正文引用了封面的图片时 wa-cli validate 报告 illustration.cover-referenced（warning，path 为 draft.md），导出按 export 主规格放入文件头元数据（Front Matter）与配图清单（Image List），不作为正文配图。wa-cli validate 整体校验时，子单元的 illustrations.yaml 中出现 cover、或根单元有多于一张封面时同样报告 illustration.cover-not-root 与 illustration.cover-exists（error，path 为该 illustrations.yaml，field 为 illustrations[i].role）。
+      scenarios:
+        cover-on-root:
+          - GIVEN: 作品 post 的根单元没有封面，cover.jpg 为 1800×766 的 JPEG
+          - WHEN: 运行 wa-cli illustration add post --id cover --role cover --file cover.jpg --alt 周六的店 --origin agent --dir D --json
+          - THEN: works/post/illustrations.yaml 有一项 role 为 cover，illustration.markdown 为 null，退出码为 0
+        cover-on-child:
+          - GIVEN: 作品 book 有子单元 ch1
+          - WHEN: 运行 wa-cli illustration add book/ch1 --id cover --role cover --file cover.jpg --alt 封面 --origin agent --dir D --json
+          - THEN: diagnostics 中有一条错误码为 illustration.cover-not-root 的诊断，不写任何文件，退出码为 1
+        second-cover:
+          - GIVEN: post 的根单元已登记封面 cover
+          - WHEN: 运行 wa-cli illustration add post --id cover-2 --role cover --file c2.jpg --alt 新封面 --origin agent --dir D --json
+          - THEN: diagnostics 中有一条错误码为 illustration.cover-exists 的诊断，next 含 wa-cli illustration add post --id cover 加 --replace 的命令，不写任何文件，退出码为 1
+    illustration-infographic-provenance:
+      strength: MUST
+      statement: content 为 infographic 的配图表达数据、流程或事实，必须关联出处：wa-cli illustration add 在 content 为 infographic 且 --claims 与 --sources 都没有给出任何 id 时报告 illustration.missing-provenance（field 为 content，message 说明先用 wa-cli claim add <unit> 或 wa-cli source add 登记论断或素材再关联，next 包含 wa-cli claim list <unit> --dir <dir> --json 与 wa-cli source list --dir <dir> --json）；--claims 中的 id 不是该单元 claims.yaml 中的论断时报告 illustration.unknown-claim（field 为 claims[i]），--sources 中的 id 不是已登记素材时报告 illustration.unknown-source（field 为 sources[i]）；content 为 mood 时也可以关联论断与素材，同样检查存在性。这些情况都不修改文件，退出码为 1。登记之后关联的论断或素材被删除时，illustration list、illustration remove 与 --replace 不因已有的悬空引用拒绝（只检查本次参数），由 wa-cli validate 与验收关卡报告（见 illustration-validation 与 review 主规格的 accept-gate）。
+      scenarios:
+        infographic-needs-source:
+          - GIVEN: post 的 claims.yaml 为空
+          - WHEN: 运行 wa-cli illustration add post --id chart --content infographic --file chart.png --alt 延迟对比 --origin agent --dir D --json
+          - THEN: diagnostics 中有一条错误码为 illustration.missing-provenance、field 为 content 的诊断，不写任何文件，退出码为 1
+        infographic-with-claim:
+          - GIVEN: post 的 claims.yaml 有论断 claim-1（kind 为 data，关联素材 bench）
+          - WHEN: 运行 wa-cli illustration add post --id chart --content infographic --claims claim-1 --file chart.png --alt 延迟对比 --origin agent --dir D --json
+          - THEN: illustrations.yaml 中 chart 的 content 为 infographic、claims 为 [claim-1]，退出码为 0
+    illustration-list:
+      strength: MUST
+      statement: wa-cli illustration list <unit> 必须只读地列出单元的配图：--json 输出的 illustrations 为数组，按 illustrations.yaml 中的顺序，每项含 unit、id、role、path、format、sha256、width、height、alt、title、content、origin、tool、style、claims、sources、addedAt、referenced（见 illustration-references）与 problems（该项在 illustration-validation 中的问题错误码数组，没有时为空数组）；单元没有 illustrations.yaml 时为空数组；changedPaths 为空数组，退出码为 0。illustrations.yaml 不通过 Schema 校验时报告其诊断，illustrations 为空数组，退出码为 1；条目引用的论断或素材悬空、图片文件缺失或哈希不符时照常列出并在 problems 中标明，不因此失败。单元引用无法解析时按 units-and-lifecycle 主规格的 unit-reference 处理。
+      scenarios:
+        list-with-problem:
+          - GIVEN: post 登记了 fig-1 与 fig-2，作者用其他图片覆盖了 illustrations/fig-2.jpg
+          - WHEN: 运行 wa-cli illustration list post --dir D --json
+          - THEN: illustrations 有两项，fig-2 的 problems 为 [illustration.hash-mismatch]，changedPaths 为空数组，退出码为 0
+    illustration-remove:
+      strength: MUST
+      statement: wa-cli illustration remove <unit> <id> 必须从单元的 illustrations.yaml 删除该配图的登记项并删除其图片文件，保留其他内容与 YAML 注释；删除后 illustrations 为空时保留只含空数组的 illustrations.yaml。id 未登记时报告 illustration.not-found（next 包含 wa-cli illustration list <unit> --dir <dir> --json），不修改文件，退出码为 1。成功时 changedPaths 列出 illustrations.yaml 与删除的图片文件，--json 输出的 illustration 字段含 unit、id、role 与 path，退出码为 0；当前正文仍引用该配图时另给出一条 warning 级 illustration.unregistered-reference（path 为 draft.md，message 给出引用所在行，next 包含 wa-cli illustration list <unit> --dir <dir> --json），提示用 wa-cli draft write 去掉引用。图片文件途经符号链接或不是普通文件时报告 workspace.write-failed，不修改文件。
+      scenarios:
+        remove-referenced:
+          - GIVEN: post 登记了 fig-1，正文引用 illustrations/fig-1.jpg
+          - WHEN: 运行 wa-cli illustration remove post fig-1 --dir D --json
+          - THEN: illustrations.yaml 不再含 fig-1，illustrations/fig-1.jpg 已删除，diagnostics 中有一条 warning 级 illustration.unregistered-reference，退出码为 0
+    illustration-references:
+      strength: MUST
+      statement: 正文中的本地配图引用必须按以下规则识别：Markdown 图片 ![替代文字](地址) 或 ![替代文字](地址 "标题")（地址可以用尖括号包住），位于围栏代码块、行内代码与已闭合的 HTML 注释之外（识别与文本检查（Lint）、导出一致），且地址以 illustrations/ 开头（区分大小写）。地址与单元某项登记的 file 完全相同时，该引用指向这张配图，该配图的 referenced 为 true；引用所在的段落（见 sources-and-provenance 主规格的 paragraph-model）为配图所在段落。地址以 illustrations/ 开头但没有对应的登记项时为未登记引用（illustration.unregistered-reference）；指向 role 为 cover 的登记项时为封面引用（illustration.cover-referenced，见 illustration-cover）。地址不以 illustrations/ 开头的图片（如 http/https 地址或其他相对路径）不是本地配图引用，不需要登记，wa-cli 对它们的处理与现在相同。同一配图可以被引用多次。
+      scenarios:
+        code-not-reference:
+          - GIVEN: post 的正文在围栏代码块中有 ![示例](illustrations/x.png)，没有登记 x
+          - WHEN: 运行 wa-cli validate --dir D --json
+          - THEN: diagnostics 中没有 illustration.unregistered-reference，退出码为 0
+        external-untouched:
+          - GIVEN: post 的正文只有 ![图标](https://example.com/icon.png)，没有 illustrations.yaml
+          - WHEN: 运行 wa-cli validate --dir D --json
+          - THEN: diagnostics 中没有 illustration.* 诊断
+    illustration-validation:
+      strength: MUST
+      statement: wa-cli validate 整体校验时，必须对每个可加载作品的每个单元目录中存在的 illustrations.yaml 做 Schema 校验并计入 checked，且满足：配图 id 在文件内唯一（否则 artifact.duplicate-id，field 为 illustrations[i].id）；file 等于 illustrations/<id>.png（format 为 png）或 illustrations/<id>.jpg（format 为 jpeg）（否则 illustration.file-mismatch，field 为 illustrations[i].file）；图片文件存在、是普通文件且不途经符号链接（否则 illustration.file-missing，path 为该图片路径）；图片文件原始字节的 SHA-256 等于 sha256（否则 illustration.hash-mismatch，path 为该图片路径）；claims 中的每个 id 是同一单元 claims.yaml 中的论断（否则 illustration.unknown-claim，field 为 illustrations[i].claims[j]）；sources 中的每个 id 是已登记素材（否则 illustration.unknown-source，field 为 illustrations[i].sources[j]）；content 为 infographic 的项 claims 与 sources 不都为空（否则 illustration.missing-provenance，field 为 illustrations[i].content）；封面的位置与数量见 illustration-cover。单元正文中的每个未登记引用报告 error 级 illustration.unregistered-reference（path 为 draft.md，message 给出所在行与地址，next 包含 wa-cli illustration list <unit> --dir <dir> --json）；role 为 body 而正文没有引用的登记项报告 warning 级 illustration.unreferenced（path 为该 illustrations.yaml，field 为 illustrations[i].id）；illustrations/ 目录中没有登记项对应的文件报告 warning 级 illustration.orphan-file（path 为该文件）。除特别说明外这些诊断为 error，next 包含 wa-cli validate --dir <dir> --json。没有 illustrations.yaml 的单元正文中出现未登记引用时同样报告。wa-cli validate <path> 按产物所在位置识别 illustrations.yaml，执行与整体校验相同的检查。这些 error 级问题（不含 warning）也是该单元的配图阻塞项，见 review 主规格的 accept-gate。
+      scenarios:
+        hash-mismatch:
+          - GIVEN: post 登记了 fig-1，之后 illustrations/fig-1.jpg 被另一张图片覆盖
+          - WHEN: 运行 wa-cli validate --dir D --json
+          - THEN: diagnostics 中有一条错误码为 illustration.hash-mismatch、path 为 .writing-anything/works/post/illustrations/fig-1.jpg 的诊断，退出码为 1
+        unregistered-reference:
+          - GIVEN: post 的正文有 ![图](illustrations/missing.jpg)，没有登记 missing
+          - WHEN: 运行 wa-cli validate --dir D --json
+          - THEN: diagnostics 中有一条错误码为 illustration.unregistered-reference、path 为 .writing-anything/works/post/draft.md 的诊断，退出码为 1
+        dangling-claim:
+          - GIVEN: post 的信息图 chart 关联论断 claim-1，之后 claim-1 被删除
+          - WHEN: 运行 wa-cli validate --dir D --json
+          - THEN: diagnostics 中有一条错误码为 illustration.unknown-claim、field 为 illustrations[0].claims[0] 的诊断，退出码为 1；wa-cli illustration list post --json 照常列出 chart 且 problems 含 illustration.unknown-claim，退出码为 0
+        unreferenced-warning:
+          - GIVEN: post 登记了 role 为 body 的 fig-2，正文没有引用它
+          - WHEN: 运行 wa-cli validate --dir D --json
+          - THEN: diagnostics 中有一条 warning 级 illustration.unreferenced，没有其他问题时退出码为 0
+    illustration-digest:
+      strength: MUST
+      statement: 单元的配图摘要（illustrations_sha256）必须由该单元 illustrations.yaml 的全部登记项（含封面）与图片文件的实际字节决定：按 id 的字节序排列登记项，对每项取 id、role、format、图片文件实际字节的 SHA-256（文件不存在或不可读时为固定的 missing）、alt、title、content、origin、tool、style、claims 与 sources，按固定的无歧义编码拼接后取 SHA-256，以 64 位小写十六进制表示；added_at、width、height、条目在文件中的顺序、YAML 格式与注释不影响摘要，其余任何字段或图片字节的改变、增加或删除登记项都使摘要改变。单元没有 illustrations.yaml 或 illustrations 为空时，单元没有配图，摘要为 null。illustrations.yaml 存在但不通过解析或校验时，摘要为固定前缀与该文件原始字节拼接后的 SHA-256（与任何合法登记的摘要都不同，已有验收因此失效），该文件自身的问题仍由 wa-cli validate 与验收关卡报告。wa-cli review show <unit> --json 的 gate 增加 illustrationsSha256（当前配图摘要，没有配图时为 null）；验收记录如何使用摘要见 review 主规格的 accept-record 与 units-and-lifecycle 主规格的 advance-stage。
+      scenarios:
+        digest-ignores-order:
+          - GIVEN: post 登记了 fig-1 与 fig-2
+          - WHEN: 把 illustrations.yaml 中两项的顺序对调并加一行注释后运行 wa-cli review show post --dir D --json
+          - THEN: gate.illustrationsSha256 与对调前相同
+        digest-changes-on-image:
+          - GIVEN: post 登记了 fig-1
+          - WHEN: 用 --replace 把 fig-1 替换为内容不同的同格式图片后运行 wa-cli review show post --dir D --json
+          - THEN: gate.illustrationsSha256 与替换前不同
+        digest-null:
+          - GIVEN: post 没有 illustrations.yaml
+          - WHEN: 运行 wa-cli review show post --dir D --json
+          - THEN: gate.illustrationsSha256 为 null
+        digest-invalid-registry:
+          - GIVEN: post 带配图验收后，illustrations.yaml 被改坏为不通过 Schema 校验的内容
+          - WHEN: 运行 wa-cli review show post --dir D --json
+          - THEN: gate.illustrationsSha256 不为 null 且与 acceptance.illustrationsSha256 不同，acceptance.stale 为 true，退出码为 0
+  MODIFIED: {}
+  REMOVED: {}

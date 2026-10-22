@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bufio"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -12,6 +13,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 )
 
 const mcpMeta = `"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}}`
@@ -374,7 +376,12 @@ func mcpSampleArgs(t *testing.T, c *command, inv *invocation, dir string) map[st
 			if !filepath.IsAbs(path) {
 				path = filepath.Join(dir, path)
 			}
-			args["input"] = readFile(t, path)
+			input := readFile(t, path)
+			if !utf8.ValidString(input) {
+				// 二进制输入（如 illustration add 的图片）经 MCP 的字符串参数以 base64 传入。
+				input = base64.StdEncoding.EncodeToString([]byte(input))
+			}
+			args["input"] = input
 		case spec.Type == flagBool:
 			args[name] = true
 		case spec.Type == flagList:
@@ -393,7 +400,7 @@ func mcpSampleArgs(t *testing.T, c *command, inv *invocation, dir string) map[st
 // mcpReadOnlyKnown 是必须被识别为只读的命令：样例调用不改变工作区。防止只读判定因样例变化静默丢失覆盖。
 var mcpReadOnlyKnown = []string{"help", "version", "validate", "status", "config resolved", "pack list", "source list", "next",
 	"decisions", "feedback list", "continuity", "context", "threads", "timeline", "skills list", "brief show", "outline show",
-	"plan show", "canon list", "claim list", "state list", "state at", "knowledge list", "knowledge at", "method list", "method show",
+	"plan show", "canon list", "claim list", "illustration list", "state list", "state at", "knowledge list", "knowledge at", "method list", "method show",
 	"review show", "review report", "handoff show", "metrics show", "series show", "summary show", "marketing show", "impact list",
 	"recall", "lint", "diff", "provenance", "curve"}
 

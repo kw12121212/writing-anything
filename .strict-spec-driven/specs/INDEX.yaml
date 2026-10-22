@@ -39,6 +39,9 @@ specs:
   - id: handoff
     title: 交接记录（Handoff Note）
     path: .strict-spec-driven/specs/handoff.yaml
+  - id: illustrations
+    title: 配图（Illustration）
+    path: .strict-spec-driven/specs/illustrations.yaml
   - id: impact
     title: 影响传播（Ripple Analysis）
     path: .strict-spec-driven/specs/impact.yaml

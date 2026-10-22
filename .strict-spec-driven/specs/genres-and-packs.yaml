@@ -16,7 +16,7 @@ requirements:
         - THEN: valid 为 true，resolved.genre.id 为 minimal，resolved.unitTypes 与 resolved.stages 非空且每项的 source 为 genre:minimal，退出码为 0
   config-resolved:
     strength: MUST
-    statement: wa-cli config resolved 必须按 文体默认 → 规范包（按 config.yaml 中 packs 的顺序）→ 项目配置 的顺序合并 --dir 下工作区生效的设置，只读取、不修改任何产物，changedPaths 为空数组。--json 输出的 resolved 字段包含 genre（生效文体的 id 与 origin；未设置 default_genre 时为 null）、packs（按应用顺序的规范包，每项含 id、origin（builtin 或 workspace），工作区规范包另含 path）、unitTypes、stages、rules、glossary、bannedTerms、style、rubric、contextBudget（见 context 主规格的 context-budget）、htmlTheme（见 pack-html-theme：每个元素名对应 value 与 source，没有规范包覆盖的元素来源为 default）与 aiDisclosure（placement 与 template 各含 value 与 source，见 export 主规格的 ai-disclosure）。每项设置都必须带 source 字段，取值为 genre:<id>、pack:<id> 或 project（没有任何配置层给出 contextBudget 时，其来源为 default），指明最终值来自哪个配置层（Config Layer）；rules 以规则 id 为键，其中 type、severity 与 params 的每个顶层键都各自带 value 与 source，任何配置层都没有给出 severity 时为 warning，来源为定义该规则的配置层。glossary 与 bannedTerms 按 term、rubric 按 id 合并，后面的配置层整项替换前面的同名项并保留其位置；style 按配置层顺序追加。存在 error 级诊断时 resolved 为 null，退出码为 1。未加 --json 时以人读文本输出同样的信息。未找到工作区时按 workspace-not-found 处理。
+    statement: wa-cli config resolved 必须按 文体默认 → 规范包（按 config.yaml 中 packs 的顺序）→ 项目配置 的顺序合并 --dir 下工作区生效的设置，只读取、不修改任何产物，changedPaths 为空数组。--json 输出的 resolved 字段包含 genre（生效文体的 id 与 origin；未设置 default_genre 时为 null）、packs（按应用顺序的规范包，每项含 id、origin（builtin 或 workspace），工作区规范包另含 path）、unitTypes、stages、rules、glossary、bannedTerms、style、rubric、contextBudget（见 context 主规格的 context-budget）、htmlTheme（见 pack-html-theme：每个元素名对应 value 与 source，没有规范包覆盖的元素来源为 default）与 aiDisclosure（placement、template 与 imageTemplate 各含 value 与 source，见 export 主规格的 ai-disclosure；imageTemplate 为配图（Illustration）说明句的模板 ai_disclosure_image_template，没有规范包声明时为内置模板，来源为 default）。每项设置都必须带 source 字段，取值为 genre:<id>、pack:<id> 或 project（没有任何配置层给出 contextBudget 时，其来源为 default），指明最终值来自哪个配置层（Config Layer）；rules 以规则 id 为键，其中 type、severity 与 params 的每个顶层键都各自带 value 与 source，任何配置层都没有给出 severity 时为 warning，来源为定义该规则的配置层。glossary 与 bannedTerms 按 term、rubric 按 id 合并，后面的配置层整项替换前面的同名项并保留其位置；style 按配置层顺序追加。存在 error 级诊断时 resolved 为 null，退出码为 1。未加 --json 时以人读文本输出同样的信息。未找到工作区时按 workspace-not-found 处理。
     scenarios:
       later-pack-wins:
         - GIVEN: packs 为 [a, b]，a 与 b 都在 glossary 中定义词条「规范包」但写法不同
@@ -42,6 +42,10 @@ requirements:
         - GIVEN: config.yaml 的 ai_disclosure 为 metadata，packs 为 [default, brand]，brand 声明了 ai_disclosure_template
         - WHEN: 运行 wa-cli config resolved --dir D --json
         - THEN: 'resolved.aiDisclosure.placement 为 {value: metadata, source: project}，template 的 source 为 pack:brand；没有这些配置时 placement 为 {value: both, source: default}、template 的 source 为 default'
+      resolved-ai-image-template:
+        - GIVEN: packs 为 [default, brand]，brand 声明了 ai_disclosure_image_template「{ai_images} 张图由 AI 绘制」
+        - WHEN: 运行 wa-cli config resolved --dir D --json
+        - THEN: 'resolved.aiDisclosure.imageTemplate 为 {value: {ai_images} 张图由 AI 绘制, source: pack:brand}；没有规范包声明时 imageTemplate 的 value 为「文中 {ai_images} 张配图由 AI 生成。」、source 为 default，退出码为 0'
   rule-merge:
     strength: MUST
     statement: 合并规则（Rule）时，首次定义某个规则 id 的配置层必须给出 type，否则报告错误码 rule.missing-type（field 为 rules.<id>）；后续配置层给出与已有值不同的 type 时报告错误码 rule.type-conflict（field 为 rules.<id>.type）。两种情况下 wa-cli config resolved 与 wa-cli validate 都以退出码 1 退出，诊断的 path 为出问题的配置层的产物路径；内置文体或规范包不填 path，message 以「内置文体 <id>：」或「内置规范包 <id>：」开头指明出处。

@@ -17,6 +17,11 @@ areas:
       title: 作者经 Tailscale 远程在 DSH 内审阅单元
       status: draft
       path: .strict-spec-driven/scenes/dsh-plugin/remote-review.yaml
+  illustrations:
+    illustrate-before-acceptance:
+      title: 作者为定稿配图并验收
+      status: draft
+      path: .strict-spec-driven/scenes/illustrations/illustrate-before-acceptance.yaml
   lint:
     claim-candidates-coverage:
       title: 疑似论断（Claim Candidate）的登记与覆盖检查

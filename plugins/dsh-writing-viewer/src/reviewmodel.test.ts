@@ -9,12 +9,15 @@ import {
   envelopeMessage,
   feedbackAfterSelection,
   feedbackRequest,
+  illustrationLayout,
+  illustrationSrc,
   initialConfirmDraft,
   initialFeedback,
   parseReviewPage,
   pendingCountOf,
   pendingIndex,
   pendingOf,
+  REVIEW_ILLUSTRATION_ROUTE,
   selectedReviewKeys,
   selectionOutcome,
   sessionGone,
@@ -64,12 +67,56 @@ describe('page.json parsing', () => {
       failures: [{ command: 'c' }],
     });
     expect(page!.units).toHaveLength(1);
-    expect(page!.units[0]!.paragraphs).toEqual([{ index: 1, line: 0, text: 't', origin: null, findings: [] }]);
+    expect(page!.units[0]!.paragraphs).toEqual([{ index: 1, line: 0, text: 't', origin: null, findings: [], illustrations: [] }]);
+    expect(page!.units[0]!.illustrations).toEqual([]);
     expect(page!.units[0]!.global).toEqual([{ kind: 'review', label: 'x', severity: '', message: '', suggestion: '' }]);
     expect(page!.confirms[0]!.options).toEqual([{ id: 'a', text: 'A' }]);
     // A non-strict page never shows the review queue.
     expect(page!.reviews).toEqual([]);
     expect(page!.failures).toEqual([{ at: '', command: 'c', exit: 0 }]);
+  });
+});
+
+describe('illustrations', () => {
+  const page = () => parseReviewPage({
+    units: [{
+      ref: 'my-post',
+      paragraphs: [
+        { index: 1, text: '第一段', illustrations: [] },
+        { index: 2, text: '第二段', illustrations: ['fig-1', 'ghost', 7] },
+      ],
+      illustrations: [
+        { id: 'cover', role: 'cover', alt: '周六的店', title: null, content: 'mood', origin: 'agent', width: 1800, height: 766, claims: [], sources: [], referenced: false, available: true, url: 'illustration?unit=my-post&id=cover' },
+        { id: 'fig-1', role: 'body', alt: '延迟对比', title: '优化前后', content: 'infographic', origin: 'agent', width: 1600, height: 900, claims: ['c1'], sources: [], referenced: true, available: true, url: 'http://evil.example/x.png' },
+        { id: 'fig-2', role: 'body', alt: '未用', title: null, content: 'mood', origin: 'author', width: 10, height: 10, claims: [], sources: ['s1'], referenced: false, available: false, url: null },
+        { role: 'body' },
+      ],
+    }],
+  })!;
+
+  it('parses units[].illustrations and paragraphs[].illustrations (preview-page-json)', () => {
+    const u = page().units[0]!;
+    expect(u.illustrations.map((i) => i.id)).toEqual(['cover', 'fig-1', 'fig-2']);
+    expect(u.illustrations[1]).toEqual({ id: 'fig-1', role: 'body', alt: '延迟对比', title: '优化前后', content: 'infographic', origin: 'agent', width: 1600, height: 900, claims: ['c1'], sources: [], referenced: true, available: true });
+    expect(u.paragraphs[1]!.illustrations).toEqual(['fig-1', 'ghost']);
+  });
+
+  it('lays out covers first, body images after their paragraph and unreferenced ones last (native-illustrations)', () => {
+    const layout = illustrationLayout(page().units[0]!);
+    expect(layout.covers.map((i) => i.id)).toEqual(['cover']);
+    expect(Object.keys(layout.byParagraph)).toEqual(['2']);
+    expect(layout.byParagraph[2]!.map((i) => i.id)).toEqual(['fig-1']);
+    expect(layout.unreferenced.map((i) => i.id)).toEqual(['fig-2']);
+  });
+
+  it('builds the image address from the fixed proxy route only, never from page.json', () => {
+    expect(illustrationSrc('my-post', 'fig-1')).toBe(REVIEW_ILLUSTRATION_ROUTE + '?unit=my-post&id=fig-1');
+    expect(illustrationSrc('my-post/s 1', 'a&b')).toBe('/dsh-writing-viewer/review/illustration?unit=my-post%2Fs%201&id=a%26b');
+  });
+
+  it('lays out nothing for a unit without illustrations (native-no-illustrations)', () => {
+    const layout = illustrationLayout(parseReviewPage({ units: [{ ref: 'u', paragraphs: [{ text: 't' }] }] })!.units[0]!);
+    expect(layout).toEqual({ covers: [], byParagraph: {}, unreferenced: [] });
   });
 });
 

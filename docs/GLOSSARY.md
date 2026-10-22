@@ -264,8 +264,15 @@
 | 爆款 | Viral Hit | 爆款 | 传播量远超平均的内容 |
 | 阅读量 | Page Views / Reads | 阅读量 | |
 | 完读率 | Read-through Rate | 完读率 | 读完全文的读者比例 |
-| 封面图 | Cover Image | 封面图 | |
-| 配图 | Illustration | 配图 | 正文中的图片 |
+| 封面图 | Cover Image | 封面图 | 作品的封面图片，登记在作品根单元、每个作品至多一张，不进正文；随导出的文件头元数据与配图清单交付 |
+| 配图 | Illustration | 配图 | 正文中的图片；本地配图引用地址以 `illustrations/` 开头，必须先用 `wa-cli illustration add` 登记 |
+| 配图登记 | Illustration Registry | 配图登记 | 单元目录下的 `illustrations.yaml` 与 `illustrations/`：记录每张配图与封面图的用途、图片文件、替代文字、内容类型、出处与关联的论断和素材 |
+| 配图计划 | Illustration Plan | 配图计划 | 渲染前请作者确认的方案：封面构思与每张正文配图的位置、表现内容、氛围图或信息图及其出处 |
+| 氛围图 | Mood Image | 氛围图 | 表现段落场景与情绪、不承载数据或事实的配图（`content: mood`） |
+| 信息图 | Infographic | 信息图 | 呈现数据、流程或事实的配图（`content: infographic`），必须关联论断或素材 |
+| 配图摘要 | Illustrations Digest | 配图摘要 | 由单元全部配图登记与图片字节得出的 SHA-256（`illustrations_sha256`）；验收时记录，配图改变后验收失效 |
+| 资产目录 | Asset Directory | 资产目录 | 导出时与导出文件同目录的 `<导出名>.assets/`，存放复制出的配图与封面 |
+| lemo-opuscar | lemo-opuscar | lemo-opuscar | 外部的代码渲染风格库：Agent 按其风格写页面并渲染静帧作为配图，wa-cli 不运行它 |
 | 内联样式 | Inline Style | 内联样式 | 直接写在 HTML 标签上的样式，公众号编辑器要求 |
 | 样式主题 | HTML Theme | 样式主题 | HTML 导出时各元素的内联样式，规范包用 `html_theme` 覆盖内置默认主题 |
 | 配图清单 | Image List | 配图清单 | 公众号 HTML 导出时与导出文件一起写出的配图列表，供作者按编号替换配图占位 |

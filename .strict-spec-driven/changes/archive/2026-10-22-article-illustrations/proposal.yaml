@@ -1,0 +1,34 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: article-illustrations
+  status: proposed
+summary:
+  what:
+    - 新增可选的配图（Illustration）环节：修订之后、验收之前，Agent 按内置技能 wa-illustrate 使用外部风格库 lemo-opuscar 依据定稿正文渲染封面图（Cover Image）与正文配图，经 wa-cli 登记、校验、随验收锁定，在阅读页与 DSH 插件审阅视图中供作者确认，并随导出交付，形成可直接上传的图文成稿。
+    - wa-cli 新增配图登记（Illustration Registry）命令 illustration add、list 与 remove：图片复制到单元目录 illustrations/ 并在 illustrations.yaml 记录用途（body 或 cover）、替代文字、内容类型（mood 氛围图或 infographic 信息图）、出处（agent 或 author）、工具与风格、SHA-256、宽高与关联的论断和素材。
+  why:
+    - 作者现在导出后要另找工具配图、做公众号封面：导出的公众号 HTML 只有「【配图 n】」占位，图与文章内容、风格对不上，也没有纳入作者确认与 AI 标识，费时且容易遗漏。
+    - 作者接下来要用 wechat-marketing 持续发文，每篇都要封面和配图；同时 lemo-opuscar 的代码渲染风格库已可用，可以在不调用图像模型的前提下产出风格统一的配图。不做的话最后一公里一直在工具链之外。
+scope:
+  in:
+    - 配图登记：wa-cli illustration add/list/remove <unit>，只接受 PNG 与 JPEG（按文件头识别），单张不超过 10 MiB；--replace 原位替换同 id 配图，路径不变；封面只能登记在作品根单元，每个作品至多一张；内容类型为 infographic 的配图必须关联至少一个论断或素材。
+    - 校验与关卡：illustrations.yaml 的 Schema 与领域校验；正文引用未登记的 illustrations/ 图片、图片文件哈希与登记不符、信息图的关联论断或素材悬空时成为验收关卡阻塞项；已登记但正文未引用的正文配图给出 warning。
+    - 验收锁定配图：单元有配图时 acceptance.yaml 记录 illustrations_sha256，验收后增删或替换配图与封面按 acceptance.stale 处理。
+    - 导出：Markdown 导出把引用的配图与封面复制到导出文件旁的 <导出名>.assets/ 并改写为相对路径，封面写入文件头元数据（Front Matter）的 cover；wechat-html 导出也复制图片，配图清单（Image List）加入封面、列出图片文件路径并逐张标注是否由 AI 生成；export.images 列出配图与封面。
+    - AI 参与说明（AI-generated Content Label）计入 Agent 配图：存在出处为 agent 的导出配图时追加内置文字「文中 {ai_images} 张配图由 AI 生成。」，规范包可用 ai_disclosure_image_template 覆盖；正文没有 AI 段落但有 AI 配图时同样生成说明。
+    - 阅读页（Reading View）显示配图：静态阅读页把配图以 data URI 内嵌在引用它的段落之后、封面在作品开头（内嵌总量超过 32 MiB 时改为文字说明）；--serve 新增带令牌的 GET /illustration，GET /page.json 增加配图信息。
+    - DSH 插件（DSH Plugin）审阅视图显示封面与配图：插件代理新增 GET /illustration 的固定路径转发，相应修改技术标准 review-proxy-thin。
+    - 内置技能：新增 wa-illustrate（内置技能由 12 个变为 13 个），指导 Agent 定位或安装 lemo-opuscar、请作者选风格、提出配图计划（Illustration Plan）经决策队列确认、用 still.mjs --size 渲染静帧（封面按公众号尺寸）、登记与插入正文；wa-publish 与 wa-auto 在验收前询问作者是否配图。
+    - 场景、术语与测试：新增场景「作者为定稿配图并验收」；术语表加入配图登记、配图计划、信息图（Infographic）、氛围图（Mood Image）与 lemo-opuscar；单元测试、端到端测试与完整回归。
+  out:
+    - wa-cli 运行 lemo-opuscar、Node 或任何图像生成模型；渲染全部由 Agent 在会话中完成，wa-cli 保持不依赖外部运行时的单文件二进制。
+    - 公众号上传或发布接口；作者仍按配图清单手工上传。
+    - 图片裁剪、压缩、缩放或格式转换；PNG 与 JPEG 之外的格式（如 WebP、SVG、GIF）。
+    - 纯文本导出（format 为 text）的改动；配图登记作为新的生命周期阶段或文体必需产物。
+unchanged_behavior:
+  - 纯文本导出的图片仍输出「【图：替代文字】」，没有配图清单；正文中引用外部地址（http/https）的图片不需要登记，导出保持原样。
+  - 文体阶段序列与必需产物不变；配图是可选环节，作者不要配图时整个流程与现在相同。
+  - 没有登记任何配图的作品：验收记录、验收关卡、导出文件、AI 参与说明文字、阅读页与 DSH 审阅视图的呈现都与现在一致，--json 输出与 page.json 只多出取空数组或 null 的新键；已有验收记录不因本变更失效。
