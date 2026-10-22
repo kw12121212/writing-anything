@@ -322,7 +322,7 @@ func TestStatus(t *testing.T) {
 	dir := newWorkspace(t, "--genre", "minimal")
 	code, res := runWS(t, dir, "status")
 	cfg := res.config(t)
-	if code != 0 || !res.Valid || res.Workspace != ".writing-anything" || cfg["defaultGenre"] != "minimal" || cfg["gateLevel"] != "standard" || res.Sources != 0 || res.Works != 0 {
+	if code != 0 || !res.Valid || res.Workspace != ".writing-anything" || cfg["defaultGenre"] != "minimal" || cfg["gateLevel"] != "standard" || cfg["reviewSurface"] != "browser" || res.Sources != 0 || res.Works != 0 {
 		t.Fatalf("status-fresh: exit code = %d, result = %+v, config = %v", code, res, cfg)
 	}
 	ws := filepath.Join(dir, ".writing-anything")
@@ -550,5 +550,42 @@ func TestValidateAliasExpansionLimit(t *testing.T) {
 	code, res := runWS(t, dir, "validate")
 	if d := diag(t, res, "artifact.parse-error"); code != 1 || !strings.Contains(d.Message, "展开别名后超过") {
 		t.Fatalf("exit code = %d, diagnostic = %+v", code, d)
+	}
+}
+
+// config-review-surface：review_surface 缺省为 browser，可设为 dsh、清除，非法取值按 Schema 拒绝；status 与 config set
+// 的 config 输出生效值。
+func TestConfigReviewSurface(t *testing.T) {
+	dir := newWorkspace(t, "--genre", "minimal")
+	// surface-default：init 不写出该字段，status 报告 browser。
+	code, res := runWS(t, dir, "status")
+	if code != 0 || res.config(t)["reviewSurface"] != "browser" || strings.Contains(readFile(t, configPath(dir)), "review_surface") {
+		t.Fatalf("surface-default: exit code = %d, result = %+v", code, res)
+	}
+	// surface-set-dsh。
+	code, res = runWS(t, dir, "config", "set", "review_surface", "dsh")
+	if code != 0 || res.config(t)["reviewSurface"] != "dsh" || !strings.Contains(readFile(t, configPath(dir)), "review_surface: dsh\n") {
+		t.Fatalf("surface-set-dsh: exit code = %d, result = %+v", code, res)
+	}
+	if code, res = runWS(t, dir, "status"); code != 0 || res.config(t)["reviewSurface"] != "dsh" {
+		t.Fatalf("status after set: exit code = %d, result = %+v", code, res)
+	}
+	if code, _ := runWS(t, dir, "validate"); code != 0 {
+		t.Fatal("validate rejected review_surface: dsh")
+	}
+	// surface-invalid：文件不变。
+	before := readFile(t, configPath(dir))
+	code, res = runWS(t, dir, "config", "set", "review_surface", "web")
+	if d := diag(t, res, "artifact.schema-violation"); code != 1 || d.Field != "review_surface" || readFile(t, configPath(dir)) != before {
+		t.Fatalf("surface-invalid: exit code = %d, result = %+v", code, res)
+	}
+	// surface-clear：删除字段，生效值回到 browser。
+	code, res = runWS(t, dir, "config", "set", "review_surface", "")
+	if code != 0 || res.config(t)["reviewSurface"] != "browser" || strings.Contains(readFile(t, configPath(dir)), "review_surface") {
+		t.Fatalf("surface-clear: exit code = %d, result = %+v", code, res)
+	}
+	// 人读的 status 输出审阅位置。
+	if code, stdout, _ := runIn(t, "", "status", "--dir", dir); code != 0 || !strings.Contains(stdout, "审阅位置（Review Surface）：browser") {
+		t.Fatalf("status text: %q", stdout)
 	}
 }

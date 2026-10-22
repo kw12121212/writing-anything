@@ -396,7 +396,7 @@ export function overviewModel(body: SnapshotRouteBody): OverviewModel {
   const summary: WorkspaceSummary = {
     sources: snapshot.sources.length,
     pendingDecisions: pendingDecisionCount(snapshot.decisions?.text),
-    pendingReviews: next === null || fieldDegraded(degraded, 'next') ? null : next.pendingAuthorReviews.length,
+    pendingReviews: next === null || fieldDegraded(degraded, 'next', 'pendingAuthorReviews') ? null : next.pendingAuthorReviews.length,
     diagnostics: diagnosticsKnown ? diagnostics.length : null,
     diagnosticsBySeverity: bySeverity,
   };

@@ -1,0 +1,21 @@
+schema: strict-spec-driven/delta-tech/v1
+schema_version: 1
+artifact_type: delta_tech
+schema_file: templates/strict-spec-driven/schemas/delta-tech.yaml
+target_standard: cli-contract
+operations:
+  ADDED:
+    served-json-contract:
+      strength: SHOULD
+      statement: wa-cli 服务给其他界面消费的 JSON 接口（不是命令的输出信封，如阅读页服务的 GET /page.json）应当：字段名用 camelCase；任何层级的数组没有元素时为空数组而不是 null；正文等文字按原文输出（关闭 HTML 转义），由消费方负责安全显示；结构以随二进制嵌入的 JSON Schema 描述，Go 测试校验真实输出符合 Schema，消费方以真实 wa-cli 输出的夹具或端到端测试约束字段漂移。
+      rationale: 这类接口没有输出信封与注册表 outputKeys 的约束，却成为跨包契约（DSH 插件按字段渲染）；字段改名或 null 化会静默破坏消费方，Schema 加真实输出测试让漂移在 wa-cli 一侧就失败。
+      enforcement:
+        method: test
+        detail: internal/preview/json_test.go 与 internal/cli/preview_page_test.go 以 preview.ValidateJSON 校验输出；插件 testdata/cli/page-my-post.json 取自真实 wa-cli，reviewe2e.test.ts 对真实二进制断言字段
+      examples:
+        good:
+          - preview.JSON 用 json.Encoder 且 SetEscapeHTML(false)，所有切片先初始化为空切片再编码
+        bad:
+          - 直接 json.Marshal 一个含 nil 切片的结构体，消费方收到 "paragraphs":null
+  MODIFIED: {}
+  REMOVED: {}

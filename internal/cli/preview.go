@@ -29,7 +29,7 @@ import (
 var previewCommand = &command{
 	name: "preview",
 	summary: "生成单元（Unit）及其子单元的阅读页（Reading View）：逐段展示正文与出处（Provenance）、文本检查（Lint）与审稿（Review）发现项；" +
-		"默认写出可离线打开的静态 HTML，加 --serve 时在 127.0.0.1 上启动需要随机令牌（Token）才能访问的本地阅读页，作者选中文字提交的意见即时保存为作者反馈（Feedback）；" +
+		"默认写出可离线打开的静态 HTML，加 --serve 时在 127.0.0.1 上启动需要随机令牌（Token）才能访问的本地阅读页，作者选中文字提交的意见即时保存为作者反馈（Feedback），GET /page.json 以 JSON 给出同一时刻的阅读页数据，供其他界面经同源代理呈现；" +
 		"本地阅读页另列出该作品待作者确认的验收、决策、规划步骤、状态与知情提议和卷末检查点，作者在页面上确认即写入确认渠道（Confirmation Channel）为 preview 的确认记录；" +
 		"strict 关卡下还列出待作者复核（Pending Author Review）的命令行渠道确认，供作者组稿前批量复核。这是可审计的流程约束而非安全隔离：同机同账户的 Agent 能读到令牌",
 	args: []argSpec{{"unit", unitRefHelp, true}},
@@ -258,12 +258,12 @@ func (s *previewServer) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 	switch r.URL.Path {
-	case "/":
+	case "/", "/page.json":
 		if r.Method != http.MethodGet && r.Method != http.MethodHead {
 			http.Error(rw, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		s.page(rw)
+		s.page(rw, r.URL.Path == "/page.json")
 	case "/feedback", "/confirm", "/author-review":
 		if r.Method != http.MethodPost {
 			http.Error(rw, "method not allowed", http.StatusMethodNotAllowed)
@@ -282,8 +282,8 @@ func (s *previewServer) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// page 按当前工作区状态重新生成阅读页。
-func (s *previewServer) page(rw http.ResponseWriter) {
+// page 按当前工作区状态重新生成阅读页；asJSON 为 true 时输出阅读页数据（GET /page.json，preview-page-json），否则输出 HTML。
+func (s *previewServer) page(rw http.ResponseWriter, asJSON bool) {
 	w, u, ps := work.Resolve(s.dir, s.ref)
 	if u == nil {
 		http.Error(rw, "单元 "+s.ref+" 无法加载："+ps[0].Message, http.StatusInternalServerError)
@@ -294,12 +294,16 @@ func (s *previewServer) page(rw http.ResponseWriter) {
 	p.Confirms = confirmQueue(s.dir, w)
 	p.Strict, p.Reviews = reviewQueue(s.dir, w)
 	p.Failures = auditFailureSummary(s.dir)
-	data, err := preview.Render(p)
+	render, ctype := preview.Render, "text/html; charset=utf-8"
+	if asJSON {
+		render, ctype = preview.JSON, "application/json; charset=utf-8"
+	}
+	data, err := render(p)
 	if err != nil {
 		http.Error(rw, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	rw.Header().Set("Content-Type", "text/html; charset=utf-8")
+	rw.Header().Set("Content-Type", ctype)
 	rw.Write(data)
 }
 

@@ -261,8 +261,9 @@ func TestInstallOutdatedEdgeCases(t *testing.T) {
 	})
 }
 
-// cx-tb-2：使用阅读页（preview --serve）的内置技能必须说明它是作者确认期间持续运行的服务——在后台运行、交出地址前确认可以
-// 访问、作者打不开时重新运行（preview-serve-guidance）。
+// cx-tb-2：使用阅读页（preview --serve）的内置技能必须先读取 config.reviewSurface：browser 时说明它是作者确认期间持续运行的
+// 服务——在后台运行、交出地址前确认可以访问、作者打不开时重新运行；dsh 时不启动 --serve、请作者到 DSH 面板的「待审阅」入口审阅
+// 并在完成后复查（preview-serve-guidance）。
 func TestPreviewServeGuidance(t *testing.T) {
 	var using []string
 	for _, s := range All() {
@@ -271,13 +272,33 @@ func TestPreviewServeGuidance(t *testing.T) {
 			continue
 		}
 		using = append(using, s.Name)
-		for _, want := range []string{"持续运行", "后台", "确认该地址可以访问", "打不开"} {
+		for _, want := range []string{"config.reviewSurface", "为 browser 时", "持续运行", "后台", "确认该地址可以访问", "打不开",
+			"为 dsh 时", "不要启动 `wa-cli preview --serve`", "127.0.0.1", "DSH 插件", "「待审阅」", "复查"} {
 			if !strings.Contains(body, want) {
 				t.Errorf("%s 使用 preview --serve 但没有说明「%s」", s.Name, want)
 			}
 		}
+		if !strings.Contains(body, "wa-cli review show") && !strings.Contains(body, "wa-cli next --json") {
+			t.Errorf("%s 没有给出作者在 DSH 审阅完成后的复查命令（wa-cli review show 或 wa-cli next）", s.Name)
+		}
 	}
-	if !slices.Equal(using, []string{"wa-assemble", "wa-publish", "wa-revise"}) {
+	if !slices.Equal(using, []string{"wa-assemble", "wa-auto", "wa-publish", "wa-revise"}) {
 		t.Errorf("使用 preview --serve 的技能 = %v", using)
+	}
+}
+
+// every-handoff-step-branches：任何交出阅读页地址（preview.url、pendingAuthorReviews 的 command、「阅读页地址」）的编号步骤都必须
+// 写明审阅位置为 dsh 时的做法，否则 review_surface 为 dsh 时 Agent 仍会交出 127.0.0.1 链接（preview-serve-guidance）。
+func TestPreviewHandoffStepsBranch(t *testing.T) {
+	step := regexp.MustCompile(`^\d+\. `)
+	for _, s := range All() {
+		for _, line := range strings.Split(string(s.Content), "\n") {
+			if !step.MatchString(line) || !(strings.Contains(line, "preview.url") || strings.Contains(line, "阅读页地址")) {
+				continue
+			}
+			if !strings.Contains(line, "为 dsh 时") && !strings.Contains(line, "reviewSurface 为 dsh") {
+				t.Errorf("%s 的步骤交出阅读页地址但没有 dsh 分支：%s", s.Name, line)
+			}
+		}
 	}
 }

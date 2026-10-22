@@ -70,7 +70,7 @@ var statusCommand = &command{
 	flags:   []flagSpec{dirFlag},
 	outputKeys: []outputKey{
 		{"workspace", "相对项目目录的工作区路径"},
-		{"config", "配置摘要，含 language、defaultGenre、packs、gateLevel；配置无法解析时为 null"},
+		{"config", "配置摘要，含 language、defaultGenre、packs、gateLevel、contextBudget、aiDisclosure 与 reviewSurface（审阅位置（Review Surface）：browser 或 dsh，未设置时为 browser）；配置无法解析时为 null"},
 		{"sources", "sources/ 下的直接条目数，不含隐藏条目"},
 		{"works", "works/ 下的直接条目数，不含隐藏条目"},
 		{"units", "按作品与单元树先序列出的单元，每项含 unit、work、type、parent、stage、blockers、commands 与 progress（汇总单元（Aggregated Unit）的进度，其他单元为 null）；汇总单元的 stage 与 blockers 由子单元汇总"},
@@ -81,10 +81,10 @@ var statusCommand = &command{
 
 var configSetCommand = &command{
 	name:    "config set",
-	summary: "修改工作区配置中的一项：language、default_genre、packs、gate_level、context_budget 或 ai_disclosure",
+	summary: "修改工作区配置中的一项：language、default_genre、packs、gate_level、context_budget、ai_disclosure 或 review_surface",
 	args: []argSpec{
-		{"key", "配置项：language、default_genre、packs、gate_level、context_budget（上下文预算（Context Budget），字符数）或 ai_disclosure（AI 参与说明（AI-generated Content Label）的放置位置：footer、metadata 或 both）", true},
-		{"value", "新取值；packs 用逗号分隔，空字符串表示清空；default_genre、context_budget 与 ai_disclosure 为空字符串时删除该项", true},
+		{"key", "配置项：language、default_genre、packs、gate_level、context_budget（上下文预算（Context Budget），字符数）、ai_disclosure（AI 参与说明（AI-generated Content Label）的放置位置：footer、metadata 或 both）或 review_surface（审阅位置（Review Surface），作者审阅阅读页（Reading View）的位置：browser 为浏览器打开 wa-cli preview --serve 的地址，dsh 为 DSH 插件面板）", true},
+		{"value", "新取值；packs 用逗号分隔，空字符串表示清空；default_genre、context_budget、ai_disclosure 与 review_surface 为空字符串时删除该项", true},
 	},
 	flags:      []flagSpec{dirFlag},
 	outputKeys: []outputKey{{"config", "修改后（未修改时为当前）的配置摘要；配置无法解析时为 null"}},
@@ -279,6 +279,7 @@ func runStatus(inv *invocation) int {
 			if c.AIDisclosure != nil {
 				fmt.Fprintf(&b, "AI 参与说明（AI-generated Content Label）：%s\n", *c.AIDisclosure)
 			}
+			fmt.Fprintf(&b, "审阅位置（Review Surface）：%s\n", c.ReviewSurface)
 		}
 		fmt.Fprintf(&b, "素材（Source）：%d\n作品（Work）：%d\n", res.Sources, res.Works)
 		if len(res.Units) > 0 {

@@ -1,0 +1,50 @@
+单元审阅原生视图（dsh-native-review）真实环境实测 — 2026-10-22，GAMEPC（Tailscale 节点 gamepc）
+
+环境
+- DSH 0.2.1-rc.2 web profile；为不影响正在使用的 GUI，另起隔离实例：
+  DSH_HOME=<临时目录> dsh plugin --profile web add link:<repo>/plugins/dsh-writing-viewer
+  DSH_HOME=<临时目录> dsh --profile web --patch overlay.yml --host <tailnet-ip> --port 13099 --no-open --trusted-host gamepc.<tailnet>.ts.net:13099
+- overlay.yml 为插件行配置 waCliPath（本仓库当前构建的 wa-cli，含 GET /page.json 与 next 的 pendingConfirmations）、
+  workspaceRoot（临时工作区：作品 my-post 有两段 Agent 正文与关联 my-post 的 open 决策 dec-1，另有作品 other-post）与
+  allowedHosts: [gamepc.<tailnet>.ts.net:13099]
+- 浏览器与 curl 都以 MagicDNS 名 http://gamepc.<tailnet>.ts.net:13099 访问（--host-resolver-rules / --resolve 映射到 tailnet 地址），即纯 http、非安全上下文。
+
+一、HTTP 层（curl，Host 与 Origin 均为 MagicDNS 权威）
+== 1. snapshot：待审阅来源（next.pendingConfirmations）
+[{"kind":"decision","work":"my-post","units":["my-post"],"id":"dec-1"}]
+== 2. 经 MagicDNS 权威启动会话
+{"ok":true,"session":{"unit":"my-post","root":"<tmp>/book","startedAt":"2026-10-22T07:53:54.975Z"}}
+== 3. 代理 page.json（响应头与内容摘要）
+HTTP/1.1 200 OK
+cache-control: no-store
+content-security-policy: default-src 'none'; style-src 'unsafe-inline'; script-src 'sha256-IrAZsV3hlHAc6Nf+Ijka7LsOGMKo7bpACRHiBZ9kr7Q='; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'
+content-type: application/json; charset=utf-8
+x-content-type-options: nosniff
+x-frame-options: DENY
+{"title":"my-post","units":[{"ref":"my-post","paragraphs":[{"index":1,"origin":"agent"},{"index":2,"origin":"agent"}]}],"confirms":[{"kind":"decision","id":"dec-1","recommend":""}],"strict":false}
+token/loopback leak: 0
+== 4. 阅读页 HTML 不再代理
+404
+== 5. 未放行的 tailnet 权威
+{"ok":false,"error":"Host 不在允许的来源内：other.<tailnet>.ts.net:13099（回环、监听地址或 allowedHosts 之外的权威）"} 403
+== 6. 异源 Origin
+403
+
+二、浏览器（headless Chrome，经 MagicDNS 名打开 DSH Web GUI）
+- 打开 Writing Workspace 面板：my-post 作品卡片下出现「Pending review · 1」，单元树 my-post 节点旁出现「● 1」；other-post 没有标记
+  （review-pending-discovery，截图 native-review-pending.png）。
+- 点作品卡片的「Pending review · 1」：直接启动 my-post 的审阅会话，详情区出现审阅视图（Review View）——页面中没有 iframe；
+  「Pending author confirmation (1)」列出 dec-1 与两个选项、原话摘要输入框，Feedback 区，正文两段带「¶n · Agent」与出处色条，
+  单元级 lint 发现项在正文前列出（截图 native-review-view.png）。
+- 在第一段中以 DOM Range 选中「连接池很重要」并触发 mouseup，填写意见后点「Submit feedback」：面板显示「Feedback saved fb-1」，
+  引用复位为「整个单元」；wa-cli feedback list 列出 fb-1：text「补一个连接池耗尽的例子」，anchor.quote「连接池很重要」，state located。
+- 选区跨第一、二段后提交：面板提示「Select text inside a single paragraph, or submit about the whole unit」，不发请求，
+  feedback.yaml 仍只有 1 条（截图 native-review-view.png 为修复前状态：该提示当时重复显示两次，已改为只显示一次并补单测）。
+- dec-1 选 b、填写「作者：标题用乙」后点「Confirm」：视图刷新为「Pending author confirmation (0)」；decisions.yaml 中 dec-1 为
+  status: decided、choice: b、channel: preview。
+- 点「End review」：审阅视图关闭，快照刷新后作品卡片与单元树的待审阅标记都消失（截图 native-review-ended.png），宿主上 wa-cli 进程数为 0。
+- 暗色主题、900px 视口（单元树与详情上下堆叠）下审阅视图可读（截图 native-review-dark-narrow.png）。
+
+三、宿主停止时的子进程清理（review-session-end / host-resource-teardown-effect）
+审阅进行中 wa-cli 进程数：1
+SIGTERM 6 秒后：dsh 进程 已退出，wa-cli 进程数：0

@@ -1,0 +1,46 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: dsh-native-review
+approach:
+  - 插件 host 复用现有审阅会话（子进程、令牌注入、单例、空闲回收、ctx.effect 清理），代理改为只放行 GET /dsh-writing-viewer/review/page.json 与三个 POST，转发 JSON 原样回传；不再代理 HTML、不再改写 X-Frame-Options 与 frame-ancestors。快照的 next 区域多读 pendingConfirmations，并与 pendingAuthorReviews 一起按作品与单元归并为「待审阅」标记。
+  - client 新增纯函数视图模型 reviewmodel（page.json → 段落、出处着色、发现项分组、确认项表单、复核勾选），渲染只经注入的 createElement 输出纯文本节点；划词反馈用 window.getSelection 取得选中文本并限定在段落节点内，提交后重新拉取 page.json；总览卡片与单元树节点显示「待审阅」徽标，点击直接启动该单元的审阅会话并打开原生审阅视图。
+  - review_surface 只是 wa-cli 的配置数据（browser|dsh），wa-cli 自身不感知 DSH：status 与 config 输出该值，技能按值分支给出指引；next 的 command 保持可运行的 wa-cli 命令不变。
+  - 数据与写入都留在 wa-cli：阅读页服务新增 GET /page.json，把现有 preview.Page（经 Build、confirmQueue、reviewQueue、auditFailureSummary 组装，与 GET / 同源同时刻）编码为稳定的 JSON 契约；编码层（internal/preview/json.go）输出 camelCase 字段、数组不为 null、正文不做 HTML 转义，契约以嵌入 internal/preview 的 page.schema.json 描述并在 Go 测试中校验真实输出——不登记到 internal/schema，因为那里的产物类型会做可执行内容字段名检查，而 failures[].command 是合法的输出字段。待作者确认区的计算仍是 confirmQueue 单一函数（工作区级输入每条命令只加载一次），GET /、/page.json 与 wa-cli next 的 pendingConfirmations 共用，避免口径分叉。
+decisions:
+  json-endpoint-on-serve:
+    decision: 数据接口挂在 preview --serve 服务上（GET /page.json），而不是新增一次性的只读命令
+    rationale: 确认、反馈与复核的写入必须继续经令牌保护的阅读页服务并记为 preview 渠道；把读接口放在同一服务上，读写同源、同一令牌与 Host 校验，插件只需管理一个子进程；一次性命令会让每次刷新都启动 wa-cli，且无法与写入共用会话
+  shared-confirm-queue:
+    decision: 待作者确认事项抽为 wa-cli 内单一来源，被阅读页 HTML、page.json 与 next --json 的 pendingConfirmations 共用
+    rationale: 遵循项目约定「wa-cli 是唯一真相来源」与 single-blocker-source 的同类精神：插件只读 next 输出即可发现待审阅单元，无需为每个单元启动服务，也不在 TypeScript 中复制判定逻辑
+  proxy-json-only:
+    decision: 修订技术标准 review-proxy-thin：代理的精确路径集合改为 GET /page.json 与 POST /feedback、/confirm、/author-review，不再转发 HTML 页面、不再改写 frame 相关响应头
+    rationale: iframe 移除后 HTML 与内联脚本不再进入 DSH 源，安全面缩小；作者已决定直接替换 iframe，不保留备用入口，因此按 delta tech 修订该 MUST 规则而不是违背它
+  native-render-safety:
+    decision: 原生审阅视图遵守 client-content-rendering-safety 与 client-view-model-module：page.json 中的正文、发现项与确认说明全部作为纯文本节点渲染，推导逻辑放在无 DOM 的纯函数模块
+    rationale: 两条既有标准分别为 MUST 与 SHOULD；page.json 的正文来自工作区，可能含 HTML 或脚本片段，纯文本渲染是唯一允许的方式
+  review-surface-config:
+    decision: 以工作区配置 review_surface（browser|dsh，缺省视为 browser）驱动技能指引，而不是由 wa-cli 探测 DSH 环境
+    rationale: runtime-plugin-independence 要求 wa-cli 不依赖 DSH 插件；配置是作者显式声明的数据，Agent 通过 wa-cli status/config 读取即可，跨 Agent 客户端一致；探测环境变量会让同一工作区在不同终端下得到不同指引
+  next-command-unchanged:
+    decision: pendingAuthorReviews 与 pendingConfirmations 的 command 仍给出可运行的 wa-cli preview <作品> --serve --json，review_surface 不改变 wa-cli 的输出命令，只改变技能对作者说什么
+    rationale: cli-contract 的 runnable-next 要求 next 中每条都是可直接运行的命令，「到 DSH 面板审阅」不是命令；把分支放在技能中符合「MCP 与 Skills 只做薄封装」
+  next-id-omitted:
+    decision: pendingConfirmations 的 id 只在 decision、plan、state、knowledge 出现，acceptance 与 volume 省略该键而不是输出 null
+    rationale: 遵循 cli-contract/enum-scoped-output-fields（SHOULD）：只对部分 kind 有意义的字段对不适用的取值省略，与阅读页确认事件 confirmedView 的 id 处理一致；评审中由最初的 null 方案改正
+alternatives:
+  - option: 插件直接读工作区文件并在 TypeScript 中重算阅读页与待确认队列
+    reason: 复制 wa-cli 的出处推导、lint 与确认队列逻辑，必然与 wa-cli 漂移，违背 wa-cli 是唯一真相来源
+  - option: 插件通过 wa-cli accept / decide 等命令写入确认
+    reason: 这些命令记为 cli 渠道，strict 关卡下会进入待作者复核，等于把作者在 DSH 中的确认降级为 Agent 代写，破坏确认渠道语义
+  - option: 新增 wa-cli review request 让 Agent 显式推送审阅请求
+    reason: 作者选择了 DSH 主动发现 + 技能改指引；推送队列需要新增产物与生命周期，超出本次需要
+  - option: 保留 iframe 作为备用入口
+    reason: 作者选择直接替换；保留会让代理继续放行 HTML 并改写 frame 头，维持更大的安全面与两套界面
+risks:
+  - page.json 契约一旦被插件消费即成为跨包接口，字段改名会静默破坏 DSH 视图；以 JSON Schema 与 wa-cli 侧契约测试、插件侧以真实 wa-cli 端到端测试共同约束
+  - 原生划词在 DSH 面板中的选区可能跨段落或落在非正文节点；视图模型需把选区限定在单段并在跨段时给出可读提示
+  - next --json 新增输出会让每次快照多做一次确认队列计算；大工作区下需沿用 plugin-perf-evidence 的计时探针确认没有不可交互级卡顿
+  - 移除 iframe 后，已按旧 README 配置 tailscale serve 的作者需要了解界面变化；README 审阅专节需同步说明

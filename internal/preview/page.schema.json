@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "阅读页数据（Reading View Data，GET /page.json）",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["title", "units", "confirms", "strict", "reviews", "failures"],
+  "properties": {
+    "title": {"type": "string"},
+    "units": {"type": "array", "items": {"$ref": "#/$defs/unit"}},
+    "confirms": {"type": "array", "items": {"$ref": "#/$defs/confirm"}},
+    "strict": {"type": "boolean"},
+    "reviews": {"type": "array", "items": {"$ref": "#/$defs/review"}},
+    "failures": {"type": "array", "items": {"$ref": "#/$defs/failure"}}
+  },
+  "$defs": {
+    "finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "label", "severity", "message", "suggestion"],
+      "properties": {
+        "kind": {"enum": ["lint", "review"]},
+        "label": {"type": "string"},
+        "severity": {"type": "string"},
+        "message": {"type": "string"},
+        "suggestion": {"type": "string"}
+      }
+    },
+    "paragraph": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["index", "line", "text", "origin", "findings"],
+      "properties": {
+        "index": {"type": "integer", "minimum": 1},
+        "line": {"type": "integer", "minimum": 1},
+        "text": {"type": "string"},
+        "origin": {"enum": ["human", "agent", "agent-draft-human-edited", null]},
+        "findings": {"type": "array", "items": {"$ref": "#/$defs/finding"}}
+      }
+    },
+    "unit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ref", "stage", "hasDraft", "notes", "global", "paragraphs"],
+      "properties": {
+        "ref": {"type": "string", "minLength": 1},
+        "stage": {"type": "string"},
+        "hasDraft": {"type": "boolean"},
+        "notes": {"type": "array", "items": {"type": "string"}},
+        "global": {"type": "array", "items": {"$ref": "#/$defs/finding"}},
+        "paragraphs": {"type": "array", "items": {"$ref": "#/$defs/paragraph"}}
+      }
+    },
+    "confirm": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "unit", "id", "label", "detail", "options", "recommend", "needsAnswer", "canReject"],
+      "properties": {
+        "kind": {"enum": ["acceptance", "decision", "plan", "state", "knowledge", "volume"]},
+        "unit": {"type": "string"},
+        "id": {"type": "string"},
+        "label": {"type": "string"},
+        "detail": {"type": "string"},
+        "options": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "text"],
+            "properties": {"id": {"type": "string"}, "text": {"type": "string"}}
+          }
+        },
+        "recommend": {"type": "string"},
+        "needsAnswer": {"type": "boolean"},
+        "canReject": {"type": "boolean"}
+      }
+    },
+    "review": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key", "label"],
+      "properties": {"key": {"type": "string"}, "label": {"type": "string"}}
+    },
+    "failure": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["at", "command", "exit"],
+      "properties": {"at": {"type": "string"}, "command": {"type": "string"}, "exit": {"type": "integer"}}
+    }
+  }
+}

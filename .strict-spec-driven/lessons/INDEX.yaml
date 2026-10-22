@@ -452,7 +452,7 @@ categories:
     lesson-2a8b24:
       title: 源码扫描只认字面量，会漏掉经辅助函数展开构造的同类位置
       status: active
-      occurrences: 2
+      occurrences: 3
       path: .strict-spec-driven/lessons/testing/lesson-2a8b24.yaml
     yaml-0dfb79:
       title: 只用手写 YAML 夹具测试的写入路径，真实命令序列第一次跑就会暴露缺陷

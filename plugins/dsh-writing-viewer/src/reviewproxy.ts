@@ -1,21 +1,20 @@
 /**
- * Same-origin proxy for the wa-cli reading view (阅读页, Reading View).
+ * Same-origin proxy for the wa-cli reading view (阅读页, Reading View) service.
  *
  * The reading view listens on 127.0.0.1 only, so an author reaching DSH over
  * the network (for example a Tailscale MagicDNS name over plain http) cannot
- * open it. This module forwards a fixed set of paths under one prefix route
- * to the current review session's loopback server and does nothing else
- * (dsh-plugin-structure/review-proxy-thin):
+ * open it. The panel renders the review view (审阅视图, Review View) natively
+ * from the service's data, so this module forwards only the data endpoint and
+ * the three submit endpoints to the current review session's loopback server
+ * and does nothing else (dsh-plugin-structure/review-proxy-thin):
  *
- * - only the page (GET /) and the three submit endpoints are forwarded;
+ * - only GET /page.json and POST /feedback, /confirm, /author-review are
+ *   forwarded; the HTML page (GET /) and anything else is a 404;
  * - the session token is injected here and whatever token the browser sent
  *   is dropped, so the token never reaches the browser and a forged one is
  *   never forwarded;
- * - the upstream body is passed through byte for byte (rewriting the inline
- *   script would break the CSP hash wa-cli computes for it);
- * - response headers pass through except X-Frame-Options, which is dropped,
- *   and the CSP `frame-ancestors 'none'`, which becomes `'self'` so the panel
- *   can embed the page from the same origin.
+ * - the upstream body is passed through byte for byte;
+ * - response headers pass through except the hop headers the host re-derives.
  *
  * Workspace writes happen only inside the wa-cli child; nothing here touches
  * the filesystem.
@@ -28,22 +27,23 @@ export const REVIEW_PREFIX = '/dsh-writing-viewer/review';
 /** Request bodies above this are refused before forwarding (wa-cli's own limit). */
 export const REVIEW_BODY_LIMIT = 64 * 1024;
 
-/** The submit endpoints the reading view posts to, by relative path. */
+/** The submit endpoints the review view posts to, by relative path. */
 const SUBMIT_PATHS = new Set(['feedback', 'confirm', 'author-review']);
+
+/** The data endpoint the review view reads, by relative path. */
+export const DATA_PATH = 'page.json';
 
 /** Where one request under the prefix goes. */
 export type ReviewTarget =
-  | { kind: 'redirect' }
-  | { kind: 'page' }
+  | { kind: 'data' }
   | { kind: 'submit'; path: string }
   | { kind: 'unknown' };
 
 /** Map a pathname to its target; anything outside the fixed set is unknown. */
 export function reviewTargetOf(pathname: string): ReviewTarget {
-  if (pathname === REVIEW_PREFIX) return { kind: 'redirect' };
-  if (pathname === REVIEW_PREFIX + '/') return { kind: 'page' };
   if (!pathname.startsWith(REVIEW_PREFIX + '/')) return { kind: 'unknown' };
   const rest = pathname.slice(REVIEW_PREFIX.length + 1);
+  if (rest === DATA_PATH) return { kind: 'data' };
   return SUBMIT_PATHS.has(rest) ? { kind: 'submit', path: rest } : { kind: 'unknown' };
 }
 
@@ -53,22 +53,19 @@ const HOP_HEADERS = new Set(['content-length', 'content-encoding', 'transfer-enc
 
 /**
  * The response headers the browser receives: the upstream set minus hop
- * headers and X-Frame-Options, with the CSP's frame-ancestors relaxed from
- * 'none' to 'self'. Every other directive (script hash, connect-src 'self')
- * is left exactly as wa-cli sent it.
+ * headers. Security headers (CSP, X-Frame-Options) pass through unchanged.
  */
 export function proxiedHeaders(upstream: Iterable<[string, string]>): Record<string, string> {
-  // Only the headers named below are touched. Anything else upstream sends
-  // passes through verbatim — including a hypothetical 3xx `location`, which
-  // could one day carry a tokenized loopback URL. wa-cli's reading view never
-  // redirects (every endpoint answers the page, 200 JSON, or a 4xx envelope),
-  // so this is unreachable today; if wa-cli ever grows redirects, `location`
-  // must join the drop list before this proxy forwards one.
+  // Only hop headers are dropped. Anything else upstream sends passes through
+  // verbatim — including a hypothetical 3xx `location`, which could one day
+  // carry a tokenized loopback URL. wa-cli's reading view service never
+  // redirects (every endpoint answers 200 data or JSON, or a 4xx envelope), so
+  // this is unreachable today; if wa-cli ever grows redirects, `location` must
+  // join the drop list before this proxy forwards one.
   const out: Record<string, string> = {};
   for (const [rawName, value] of upstream) {
     const name = rawName.toLowerCase();
-    if (HOP_HEADERS.has(name) || name === 'x-frame-options') continue;
-    out[name] = name === 'content-security-policy' ? value.replace(/frame-ancestors\s+'none'/i, "frame-ancestors 'self'") : value;
+    if (!HOP_HEADERS.has(name)) out[name] = value;
   }
   return out;
 }
@@ -104,28 +101,14 @@ export interface ProxyAnswer {
   body: Uint8Array | string;
 }
 
-/** Readable answer for a submit the reading view's script can display: it
- * shows `diagnostics[].message` when `valid` is false. */
-function submitRefusal(status: number, code: string, message: string): ProxyAnswer {
+/** Readable JSON answer when the request cannot reach wa-cli. It mirrors
+ * wa-cli's envelope (`valid` false with `diagnostics[].message`) so the
+ * panel shows the message the same way it shows wa-cli's own refusals. */
+function refusal(status: number, code: string, message: string): ProxyAnswer {
   return {
     status,
     headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' },
-    body: JSON.stringify({ valid: false, diagnostics: [{ severity: 'error', code, message }], feedback: null }),
-  };
-}
-
-/** Readable page when there is nothing to show inside the iframe. */
-function pageNotice(status: number, title: string, hint: string): ProxyAnswer {
-  const escape = (text: string): string => text.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c] as string);
-  return {
-    status,
-    headers: {
-      'content-type': 'text/html; charset=utf-8',
-      'cache-control': 'no-store',
-      'content-security-policy': "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'self'",
-    },
-    body: `<!doctype html><html lang="zh"><meta charset="utf-8"><title>${escape(title)}</title>` +
-      `<body style="font:14px/1.6 system-ui,sans-serif;padding:16px"><p><strong>${escape(title)}</strong></p><p>${escape(hint)}</p></body></html>`,
+    body: JSON.stringify({ valid: false, diagnostics: [{ severity: 'error', code, message }] }),
   };
 }
 
@@ -145,22 +128,17 @@ export async function proxyReview(
   fetchLike: ProxyFetch,
 ): Promise<ProxyAnswer> {
   if (target.kind === 'unknown') return { status: 404, headers: { 'cache-control': 'no-store' }, body: '' };
-  if (target.kind === 'redirect') {
-    return { status: 308, headers: { location: REVIEW_PREFIX + '/', 'cache-control': 'no-store' }, body: '' };
-  }
-  const wanted = target.kind === 'page' ? 'GET' : 'POST';
+  const wanted = target.kind === 'data' ? 'GET' : 'POST';
   if (method !== wanted) return { status: 405, headers: { allow: wanted, 'cache-control': 'no-store' }, body: '' };
-  if (upstream === null) {
-    return target.kind === 'page'
-      ? pageNotice(409, NO_SESSION_TITLE, NO_SESSION_HINT)
-      : submitRefusal(409, 'review.no-session', NO_SESSION_TITLE + '：' + NO_SESSION_HINT);
-  }
+  if (upstream === null) return refusal(409, 'review.no-session', NO_SESSION_TITLE + '：' + NO_SESSION_HINT);
   if (target.kind === 'submit' && body === null) {
-    return submitRefusal(400, 'input.invalid-value', `请求体超过 ${REVIEW_BODY_LIMIT / 1024} KiB`);
+    return refusal(400, 'input.invalid-value', `请求体超过 ${REVIEW_BODY_LIMIT / 1024} KiB`);
   }
   const base = `http://127.0.0.1:${upstream.port}`;
-  const url = target.kind === 'page' ? `${base}/?token=${encodeURIComponent(upstream.token)}` : `${base}/${target.path}`;
-  const headers: Record<string, string> = target.kind === 'page'
+  const url = target.kind === 'data'
+    ? `${base}/${DATA_PATH}?token=${encodeURIComponent(upstream.token)}`
+    : `${base}/${target.path}`;
+  const headers: Record<string, string> = target.kind === 'data'
     ? {}
     : { 'content-type': 'application/json', 'x-wa-token': upstream.token };
   try {
@@ -173,10 +151,7 @@ export async function proxyReview(
     return { status: response.status, headers: proxiedHeaders(response.headers), body: new Uint8Array(await response.arrayBuffer()) };
   } catch {
     // No raw error text: a fetch failure message could one day carry the
-    // upstream URL, and the page URL holds the session token.
-    const reason = '阅读页服务无法访问（可能已退出或超时），请结束审阅后重新审阅';
-    return target.kind === 'page'
-      ? pageNotice(502, NO_SESSION_TITLE, reason)
-      : submitRefusal(502, 'review.upstream-unavailable', reason);
+    // upstream URL, and the data URL holds the session token.
+    return refusal(502, 'review.upstream-unavailable', '阅读页服务无法访问（可能已退出或超时），请结束审阅后重新审阅');
   }
 }

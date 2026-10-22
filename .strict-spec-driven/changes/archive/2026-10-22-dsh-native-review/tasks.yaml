@@ -1,0 +1,85 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: dsh-native-review
+sections:
+  Implementation:
+    wa-page-json-contract:
+      text: internal/preview：为 Page 及子结构加 camelCase json 标签（数组不为 null，origin 无法推导时为 null），新增随二进制嵌入的 page.json JSON Schema（不登记为工作区产物类型，遵守 embedded-schemas 与 artifact-field-names）
+      status: complete
+    wa-shared-confirm-queue:
+      text: internal/cli：把 confirmQueue/reviewQueue 的组装抽为单一函数，供 GET /、GET /page.json 与 next 共用，避免口径分叉（preview-confirm-queue 行为不变）
+      status: complete
+    wa-page-json-route:
+      text: 'preview --serve 新增 GET/HEAD /page.json：同一 Host 与令牌校验、application/json、Cache-Control: no-store，其他方法 405；更新 preview 命令 summary 与 help 文本（preview-page-json、preview-serve）'
+      status: complete
+    wa-next-pending:
+      text: wa-cli next --json 新增 pendingConfirmations（kind、work、units、id、label、command），在 outputKeys 声明、数组不为 null，人读输出末尾列出；给出 unit 时只列该作品（next-pending-confirmations）
+      status: complete
+    wa-review-surface:
+      text: config.schema.json 新增可选 review_surface（browser|dsh）；config set 接受并可清除该 key；status 与 config set 的 config 输出 reviewSurface 生效值（config-review-surface、config-set、status-summary）
+      status: complete
+    skills-review-surface:
+      text: 内置技能 wa-revise、wa-publish、wa-assemble：先读 wa-cli status --json 的 config.reviewSurface，browser 保持原 --serve 指引，dsh 时请作者到 DSH 面板「待审阅」入口审阅并在完成后用 review show 或 next 复查（preview-serve-guidance）
+      status: complete
+    plugin-proxy-json-only:
+      text: plugins/dsh-writing-viewer reviewproxy/reviewroutes：白名单改为 GET page.json 与三个 POST，GET / 与其他路径 404，移除 X-Frame-Options 与 frame-ancestors 改写，无会话与上游错误一律 JSON 提示（review-proxy、review-session-end、delta tech review-proxy-thin）
+      status: complete
+    plugin-snapshot-pending:
+      text: 插件 host 快照映射 next 的 pendingConfirmations 与 pendingAuthorReviews，next 区域降级时按降级标注（snapshot-aggregation、plugin-cli-json-bridge）
+      status: complete
+    plugin-review-model:
+      text: client 新增无 DOM 的纯函数视图模型：page.json → 单元与段落、出处标记、发现项分组、确认项表单状态、复核勾选、选区校验（单段内）与待审阅徽标推导（client-view-model-module）
+      status: complete
+    plugin-native-view:
+      text: client 以注入的 createElement 原生渲染审阅视图并删除 iframe：划词反馈与快捷标记、确认/拒绝/答复、批量复核、提交后重新拉取 page.json、失败保留输入、刷新与结束审阅、会话状态焦点判定、主题与窄屏、键盘可达；全部工作区文字作纯文本（review-native-view、client-content-rendering-safety）
+      status: complete
+    plugin-pending-discovery:
+      text: 总览作品卡片与单元树显示「待审阅」徽标与事项数，激活即选中单元并启动审阅会话；next 降级时不显示徽标（review-pending-discovery、unit-tree-navigation）
+      status: complete
+    docs-glossary-readme:
+      text: docs/GLOSSARY.md 新增「审阅视图（Review View）」、修订「审阅会话」词条（不再内嵌 iframe）；插件 README 审阅专节改写为原生视图、待审阅徽标与 review_surface 配置说明；同步 wa-cli help 中的术语
+      status: complete
+  Testing:
+    test-wa-page-json:
+      text: Go 测试：page.json 内容与出处、令牌与 Host 拒绝、与 GET / 一致、空数组、输出通过 JSON Schema、405（preview-page-json）
+      status: complete
+      command: go test ./internal/preview/... ./internal/cli/... -run 'Preview|PageJSON|JSON'
+    test-wa-next-pending:
+      text: Go 测试：pendingConfirmations 的验收、决策、无事项与和 page.json 对应（next-pending-confirmations）
+      status: complete
+      command: go test ./internal/cli/... -run 'Next'
+    test-wa-review-surface:
+      text: Go 测试：review_surface 缺省、设置、非法值与清除，status-fresh 的 reviewSurface，config set 既有场景回归
+      status: complete
+      command: go test ./internal/cli/... ./internal/workspace/... -run 'Config|Status'
+    test-skills-guidance:
+      text: internal/skills 结构测试：三个技能含 reviewSurface 两个分支的指引（preview-serve-guidance）
+      status: complete
+      command: go test ./internal/skills/...
+    test-plugin-units:
+      text: 插件单测：代理白名单与头处理、无会话 JSON、快照 pending 映射与降级、视图模型（选区、徽标、表单）、原生视图渲染安全与无 iframe、焦点会话判定；路由测试经真实 node:http 分发（host-route-dispatch-harness），桩镜像 page.json 完整载荷（client-route-stub-fidelity）
+      status: complete
+      command: cd plugins/dsh-writing-viewer && pnpm run check
+    test-plugin-e2e:
+      text: 插件端到端：真实 wa-cli 启动会话、代理 page.json、反馈与决策确认记为 preview、结束后快照徽标消失
+      status: complete
+      command: cd plugins/dsh-writing-viewer && pnpm exec vitest run src/reviewe2e.test.ts
+    test-regression:
+      text: 完整 Go 回归与覆盖率阈值
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    verify-live-dsh:
+      text: '在隔离 DSH 实例经 Tailscale MagicDNS 实测：待审阅徽标、原生视图渲染、划词反馈、决策确认（channel: preview）、结束审阅与 403 提示；证据写入 plugins/dsh-writing-viewer/docs/evidence/'
+      status: complete
+    verify-writing-desk:
+      text: 在 ../writing-desk 工作区的副本上验证（不改动原工作区）：wa-cli config set review_surface dsh 生效且 validate 通过，status 与 next 输出 reviewSurface 与 pendingConfirmations，skills install 写出的 wa-publish 含 dsh 分支指引；真实 Agent 与作者的端到端走查依赖发布新版 wa-cli 并重新物化内置技能，留待发布后由作者执行
+      status: complete
+    verify-strict:
+      text: strict-spec-cli ready 与 verify 通过，场景 remote-review 全部步骤有覆盖，archive 前无合并冲突
+      status: complete
+testing_gates:
+  validation_task: test-regression
+  unit_test_task: test-plugin-units

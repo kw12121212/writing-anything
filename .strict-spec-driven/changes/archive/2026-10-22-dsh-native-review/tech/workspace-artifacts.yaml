@@ -1,0 +1,21 @@
+schema: strict-spec-driven/delta-tech/v1
+schema_version: 1
+artifact_type: delta_tech
+schema_file: templates/strict-spec-driven/schemas/delta-tech.yaml
+target_standard: workspace-artifacts
+operations:
+  ADDED:
+    single-confirm-queue-source:
+      strength: MUST
+      statement: 待作者确认的事项（验收、决策、规划步骤、状态与知情提议、卷末检查点）只能由 internal/cli 的 confirmQueue（及其接收预加载输入的 confirmQueueWith）计算；阅读页 HTML、GET /page.json 与 wa-cli next 的 pendingConfirmations 都必须通过它得到这些事项，不得在命令或其他消费方（含 DSH 插件）中另行判断；新增待确认来源时在 confirmQueue 中追加。
+      rationale: 与 single-blocker-source 同理：同一口径有多处判断就会分叉——插件靠 next 的 pendingConfirmations 标出「待审阅」，阅读页靠同一队列列出可确认事项，两者不一致会让作者看到徽标却在审阅视图里找不到事项；逐作品计算时工作区级输入只加载一次（load-once-per-command）。
+      enforcement:
+        method: test
+        detail: internal/cli/preview_page_test.go 的 pending-matches-page 断言 next 的 pendingConfirmations 与同一时刻 page.json 的 confirms 在 kind 与 id 上一一对应；插件 reviewe2e.test.ts 以真实 wa-cli 断言 next 与 page.json 同时列出同一决策
+      examples:
+        good:
+          - pendingConfirmations 逐作品调用 confirmQueueWith(dir, w, loadConfirmInputs(dir))
+        bad:
+          - 在 next 中按 stage 与 acceptance.yaml 是否存在自行判断哪些单元待验收
+  MODIFIED: {}
+  REMOVED: {}

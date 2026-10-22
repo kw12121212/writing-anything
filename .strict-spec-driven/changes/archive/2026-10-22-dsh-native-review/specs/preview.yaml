@@ -1,0 +1,45 @@
+schema: strict-spec-driven/delta-spec/v1
+schema_version: 1
+artifact_type: delta_spec
+schema_file: templates/strict-spec-driven/schemas/delta-spec.yaml
+target_spec: preview
+operations:
+  ADDED:
+    preview-page-json:
+      strength: MUST
+      statement: 'wa-cli preview <unit> --serve 必须提供 GET /page.json（HEAD 同样允许，其他方法返回 405）：Host 与令牌校验与 GET / 相同（令牌用查询参数 token），不符合时返回 403 且不返回任何阅读页数据。通过时返回 200、Content-Type 为 application/json、带 Cache-Control: no-store，正文为按当前工作区状态重新生成、与同一时刻 GET / 内容一致的阅读页数据，符合随 wa-cli 二进制提供的 JSON Schema：title；units（单元树先序，每项含 ref、stage、hasDraft、notes、global 与 paragraphs；paragraphs 每项含 index、line、text、origin（human、agent、agent-draft-human-edited，无法推导时为 null）与 findings）；发现项含 kind（lint 或 review）、label、severity、message 与 suggestion；confirms（待作者确认区，每项含 kind、unit、id、label、detail、options（id 与 text）、recommend、needsAnswer 与 canReject）；strict 与 reviews（待作者复核区，每项含 key 与 label；strict 为 false 时为空数组）；failures（最近失败的命令，每项含 at、command 与 exit）。任何层级的数组没有元素时为空数组而不是 null；正文等文字按原文给出，不做 HTML 转义。该接口只读，不创建也不修改任何产物'
+      scenarios:
+        page-json-content:
+          - GIVEN: 作品 my-post 正文有两段，第一段由作者写入、第二段由 Agent 经 draft write 写入；决策队列中有关联 my-post 的 open 决策 dec-1（选项 a、b）；preview my-post --serve 正在运行
+          - WHEN: 带令牌 GET /page.json
+          - THEN: 返回 200 与 application/json；units[0].ref 为 my-post，paragraphs 两项的 origin 依次为 human 与 agent；confirms 中有 kind 为 decision、id 为 dec-1、options 含 a 与 b 的一项；输出通过 page.json 的 JSON Schema 校验
+        page-json-rejected:
+          - GIVEN: preview --serve 正在运行
+          - WHEN: GET /page.json 不带 token、令牌错误，或 Host 头为 evil.example:<port>
+          - THEN: 都返回 403，响应中不含任何单元、正文或待确认事项
+        page-json-matches-page:
+          - GIVEN: preview my-post --serve 正在运行，工作区在两次请求之间没有变化
+          - WHEN: 分别带令牌 GET / 与 GET /page.json
+          - THEN: 两者列出的单元引用、各单元段落数、待作者确认事项与待作者复核项一致
+        page-json-empty-arrays:
+          - GIVEN: 作品 my-post 还没有正文，没有待作者确认事项，gate_level 为 standard，audit.log 没有失败记录
+          - WHEN: 带令牌 GET /page.json
+          - THEN: units[0].paragraphs、confirms、reviews 与 failures 均为空数组，strict 为 false
+  MODIFIED:
+    preview-serve:
+      strength: MUST
+      statement: 'wa-cli preview <unit> --serve 必须启动一个只监听 127.0.0.1 的本地 HTTP 服务（--port 指定端口，省略时由系统分配），并生成至少 128 位的随机令牌（Token），不写阅读页文件。--json 时先输出一行输出信封：preview 含 unit、units、path（null）与 url（http://127.0.0.1:<port>/?token=<令牌>，地址取自实际监听的地址），feedback 为 null，changedPaths 为空数组；之后每保存一条反馈输出一行信封，feedback 为该反馈（字段见 feedback 主规格的 feedback-list），changedPaths 为这次保存变更的路径，preview 同首行；作者每记录一次确认或批量复核也输出一行信封（confirmation 或 authorReview 非 null，见 preview-confirm 与 preview-author-review）；各行信封的 feedback、confirmation 与 authorReview 中不对应的字段为 null。服务对每个请求都校验 Host 头（只接受 127.0.0.1:<port> 与 localhost:<port>；端口为 80 时也接受不带端口的写法）与令牌（GET 用查询参数 token，POST 用请求头 X-WA-Token），不符合时返回 403，不读取也不修改任何产物。GET / 返回按当前工作区状态重新生成的阅读页（内容同 preview-content，另含选中文字后提交意见、作者确认与复核的脚本，以及 preview-confirm-queue 的待作者确认区与待作者复核区）；GET /page.json 返回同一时刻阅读页的结构化数据（见 preview-page-json）；POST /feedback 见 preview-feedback，POST /confirm 见 preview-confirm，POST /author-review 见 preview-author-review；其他路径返回 404，其他方法返回 405。响应带 Cache-Control: no-store、Referrer-Policy: no-referrer、X-Frame-Options: DENY 与 Content-Security-Policy（只放行哈希与页面内联脚本一致的脚本）。给出 --max <n> 时保存 n 条反馈（确认与复核不计数）后关闭服务并以退出码 0 结束，否则一直运行到命令被中断；命令结束即关闭服务。--port 不是 1 到 65535 的整数，--max 不是不超过 86400000 的正整数，未给出 --serve 却给出 --port 或 --max，或给出 --serve 又给出 --output 时报告 input.invalid-value（next 为 wa-cli help preview --json），退出码为 1；端口无法监听时报告 preview.listen-failed，退出码为 1。不加 --json 时首行输出阅读页地址，之后每条反馈输出一行人读文本。 这是可审计的流程约束而非安全隔离：同机同账户的 Agent 能读到令牌，确认渠道（Confirmation Channel）只把经阅读页写入的确认如实记为 preview。'
+      scenarios:
+        serve-url:
+          - GIVEN: 作品 my-post 有正文
+          - WHEN: 运行 wa-cli preview my-post --serve --max 1 --dir D --json
+          - THEN: '首行信封的 preview.url 以 http://127.0.0.1: 开头并含 token=，path 为 null；用该地址 GET 得到 200 与含正文的页面，响应带 Cache-Control: no-store 与 Referrer-Policy: no-referrer'
+        serve-reject-no-token:
+          - GIVEN: preview --serve 正在运行
+          - WHEN: GET / 不带 token，或 POST /feedback、/confirm 或 /author-review 不带 X-WA-Token 或令牌错误，或 Host 头为 evil.example:<port>
+          - THEN: 都返回 403，feedback.yaml、确认记录与 author-reviews.yaml 都不被创建或修改
+        serve-bad-flags:
+          - GIVEN: 已初始化的工作区与作品 my-post
+          - WHEN: 运行 wa-cli preview my-post --port 70000 --serve --dir D --json，或 wa-cli preview my-post --max 1 --dir D --json
+          - THEN: diagnostics 中有一条错误码为 input.invalid-value 的诊断，next 为 wa-cli help preview --json，退出码为 1
+  REMOVED: {}

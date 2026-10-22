@@ -1,0 +1,159 @@
+schema: strict-spec-driven/delta-spec/v1
+schema_version: 1
+artifact_type: delta_spec
+schema_file: templates/strict-spec-driven/schemas/delta-spec.yaml
+target_spec: dsh-plugin
+operations:
+  ADDED:
+    review-pending-discovery:
+      strength: MUST
+      statement: 快照中的待作者确认事项（pendingConfirmations）或待作者复核项（pendingAuthorReviews）非空时，面板必须主动标出待审阅位置：总览中对应作品卡片显示「待审阅」徽标与事项数，单元树中事项关联的单元显示「待审阅」标记；徽标与标记可经鼠标与键盘激活，激活后选中该单元（作品级事项选中作品根单元）并直接启动其审阅会话、打开审阅视图（Review View）。判定只使用快照中 wa-cli 给出的事项，面板不自行推导；next 区域降级时不显示徽标，并在降级列表中说明原因。审阅结束刷新快照后，已处理完的事项对应的徽标与标记随之消失
+      scenarios:
+        discovery-badge:
+          - GIVEN: 作品 my-post 需要验收且没有验收记录，没有其他待确认事项
+          - WHEN: 打开插件面板
+          - THEN: my-post 的作品卡片显示「待审阅」徽标与事项数 1，单元树中 my-post 带「待审阅」标记
+        discovery-open:
+          - GIVEN: 同上
+          - WHEN: 作者用键盘激活 my-post 卡片上的「待审阅」徽标
+          - THEN: 插件 host 只调用一次 wa-cli preview my-post --serve 启动会话，详情区显示 my-post 的审阅视图
+        discovery-cleared:
+          - GIVEN: 作者在审阅视图中确认了 my-post 的验收
+          - WHEN: 作者点「结束审阅」
+          - THEN: 快照刷新后 my-post 卡片与单元树中不再显示「待审阅」
+        discovery-degraded:
+          - GIVEN: wa-cli next 执行失败，快照的 next 区域降级
+          - WHEN: 打开插件面板
+          - THEN: 不显示任何「待审阅」徽标，降级列表说明 next 区域降级的原因，面板不崩溃
+    review-native-view:
+      strength: MUST
+      statement: 面板的单元详情必须提供「审阅」按钮；点击它或经 review-pending-discovery 的入口激活后，启动该单元的审阅会话（项目目录取面板当前显示的目录，含路径切换所选目录），成功后在详情区以 DSH 面板原生组件呈现审阅视图（Review View），不使用 iframe。视图内容取自同源代理的 page.json：按单元树先序列出单元引用与阶段，逐段显示正文与段落序号，按出处（human、agent、agent-draft-human-edited）区分标记并可切换着色，段落下列出文本检查与审稿发现项（标签、severity、说明与建议），全文级发现项、说明与最近失败的命令单列；待作者确认区逐项显示说明、决策选项与推荐、原话摘要输入框与确认控件（可拒绝的事项另有拒绝控件，需要答复的决策提供答复输入）；strict 关卡下另显示待作者复核区（默认勾选的复选框与「复核所选」）；没有事项时显示与阅读页相同的空提示。作者在单个段落内选中文字后可提交反馈（文字与可选快捷标记 stuck、good、question），也可对整个单元提交反馈；选区为空、跨段落或在正文之外时不发出请求并提示。每次提交经代理 POST 到 wa-cli，成功后重新拉取 page.json 刷新视图；失败时显示 wa-cli 诊断的可读信息并保留作者已填写的内容。来自工作区的全部文字一律以纯文本显示，不解释其中的 HTML 或脚本。审阅视图随 DSH 明暗主题切换保持可读，并遵守 overview-theme-and-narrow 的窄屏布局。视图提供「刷新」与「结束审阅」按钮，结束后关闭视图并刷新快照。启动进行中显示可读提示；启动失败、审阅路由被请求来源校验拒绝（提示在插件配置 allowedHosts 中放行当前访问的权威，如 Tailscale MagicDNS 名与端口）或会话已结束时，显示可读原因与重新审阅入口，不显示空白视图。会话是否已结束由面板在每次拉取 page.json、窗口重新获得焦点或页面重新可见时查询会话状态路由判定（不调用 wa-cli），并比对会话摘要的 unit 与所审单元——会话不存在、属于其他单元或载荷缺失 unit 时按已结束处理。全部控件必须可经键盘激活
+      scenarios:
+        native-render:
+          - GIVEN: 作品 my-post 正文两段（第一段出处 human、第二段 agent），第二段有一条 warning 级文本检查发现项，决策队列中有关联 my-post 的 open 决策 dec-1（选项 a、b，推荐 a）
+          - WHEN: 作者在单元详情点「审阅」
+          - THEN: 详情区出现审阅视图且页面中没有 iframe 元素；两段正文带不同的出处标记，第二段下列出该发现项；待作者确认区列出 dec-1、两个选项（a 带推荐标记）与原话摘要输入框
+        native-feedback:
+          - GIVEN: 同上，第一段含「连接池很重要」一次
+          - WHEN: 作者在第一段选中「连接池很重要」，填写「补一个例子」并提交
+          - THEN: wa-cli feedback list my-post --json 列出 quote 为「连接池很重要」、text 为「补一个例子」的反馈；视图随后重新拉取了 page.json
+        native-confirm-decision:
+          - GIVEN: 同 native-render
+          - WHEN: 作者为 dec-1 选 a、填写原话摘要「作者：用甲」并确认
+          - THEN: 'decisions.yaml 中 dec-1 已决定且记录 channel: preview；刷新后的待作者确认区不再列出 dec-1'
+        native-author-review:
+          - GIVEN: gate_level 为 strict，my-post 有一条经 cli 渠道写入的验收待作者复核
+          - WHEN: 作者在审阅视图的待作者复核区保持默认勾选并点「复核所选」
+          - THEN: author-reviews.yaml 记录该项、渠道为 preview；刷新后待作者复核区显示「没有待作者复核的确认」
+        native-text-safety:
+          - GIVEN: my-post 的一段正文为 <script>alert(1)</script><b>粗</b>
+          - WHEN: 打开 my-post 的审阅视图
+          - THEN: 该段按原文字符显示，脚本不执行，页面中不生成来自正文的 script 或 b 元素
+        native-selection-invalid:
+          - GIVEN: my-post 的审阅视图已打开
+          - WHEN: 作者选中跨越第一段与第二段的文字后提交反馈
+          - THEN: 面板不发出反馈请求，提示只在一个段落内选中文字或改为对整个单元提交，feedback.yaml 不变
+        native-submit-failed:
+          - GIVEN: my-post 的审阅视图已打开，作者为需要答复的决策填写了答复
+          - WHEN: 提交时 wa-cli 返回 400 诊断
+          - THEN: 视图显示诊断的可读信息，作者填写的答复仍保留在输入框中
+        native-session-replaced:
+          - GIVEN: 本标签页正在审阅 my-post，另一浏览器标签页随后启动了 other-post 的审阅
+          - WHEN: 本标签页窗口重新获得焦点
+          - THEN: 本标签页显示审阅已结束与重新审阅入口，不显示 other-post 的内容
+        native-origin-rejected:
+          - GIVEN: 作者经未在 allowedHosts 放行的权威访问，快照路由已放行而审阅路由被拒
+          - WHEN: 作者点「审阅」
+          - THEN: 单元详情显示在 allowedHosts 中放行当前权威的提示，不显示空白审阅视图
+        native-end:
+          - GIVEN: my-post 的审阅视图已打开
+          - WHEN: 作者用键盘激活「结束审阅」
+          - THEN: 审阅视图关闭，GET /dsh-writing-viewer/review-session 报告没有会话，快照已刷新
+  MODIFIED:
+    read-only-workspace:
+      strength: MUST
+      statement: 插件在加载、定位与展示工作区的全过程中不得创建、修改或删除 .writing-anything/ 工作区内的任何产物；唯一例外是审阅会话中作者在审阅视图（Review View）显式提交的反馈、确认与复核（经同源代理交给阅读页服务），由 wa-cli preview 子进程按 preview 主规格写入，插件代码自身不写入任何工作区文件
+      scenarios:
+        no-workspace-writes:
+          - GIVEN: 插件已装入 web profile，面板尚未打开，.writing-anything/ 内文件清单、内容与修改时间已记录
+          - WHEN: 在 Web GUI 中打开插件面板并完成工作区定位与展示
+          - THEN: .writing-anything/ 内文件的清单、内容与修改时间与打开面板前一致
+        review-open-no-writes:
+          - GIVEN: 已记录 .writing-anything/ 内除 audit.log 外全部文件的清单、内容与修改时间
+          - WHEN: 作者启动审阅会话并在审阅视图中只浏览、刷新，不提交任何反馈、确认或复核，然后结束审阅
+          - THEN: 这些文件的清单、内容与修改时间与审阅前一致；新增或发生变化的文件至多为 wa-cli 追加的 audit.log
+    unit-tree-navigation:
+      strength: MUST
+      statement: 面板必须为选中的作品提供单元（Unit）树导航：按层级缩进展示单元，汇总单元带进度标记，有待作者确认或待作者复核事项的单元带「待审阅」标记（见 review-pending-discovery）；选中某个单元后详情区显示该单元的阶段、进度、阻塞项、下一步命令与产物清单，面板自身不提供任何编辑、写入或确认控件；唯一例外是详情区的「审阅」入口与审阅视图（Review View）中的反馈、确认与复核控件，这些控件只把作者的输入经同源代理交给 wa-cli 阅读页服务写入（见 review-native-view）
+      scenarios:
+        tree-hierarchy:
+          - GIVEN: novel 作品含卷、章、场景三级单元
+          - WHEN: 在总览中选中该作品
+          - THEN: 单元树按卷、章、场景的层级缩进展示全部单元，卷与章节点显示 done/total 进度标记
+        unit-detail:
+          - GIVEN: 单元树已展示
+          - WHEN: 选中某个场景单元
+          - THEN: 详情区显示该单元的阶段、进度、阻塞项列表、下一步命令与产物清单；除「审阅」按钮外，面板中没有编辑、写入或确认控件
+    snapshot-aggregation:
+      strength: MUST
+      statement: 插件的 host 侧必须提供只读的工作区快照（Workspace Snapshot）服务：按定位到的项目目录聚合 .writing-anything/ 的配置、素材（Source）清单、规范包（Pack）清单、决策（含待决）与待复核摘要，以及每个作品（Work）的 work.yaml、单元（Unit）树（阶段、进度、阻塞项）与各单元目录产物全文——写作简报（Brief）、大纲（Outline）、出处（Provenance）、论断（Claim）、作者反馈（Feedback）、草稿（Draft）正文（Markdown 全文）、审稿与验收证据；长篇（novel）文体按文体存在的产物（如场景契约、伏笔台账（Foreshadowing Ledger）、时间线（Timeline）、知情表（Knowledge State））同样纳入；快照必须内嵌 wa-cli validate 的诊断作为错误态数据；快照还必须透出 wa-cli next 的待作者确认事项（pendingConfirmations）与待作者复核项（pendingAuthorReviews），next 区域降级时两者按降级标注呈现，不得当作没有事项
+      scenarios:
+        multi-work-snapshot:
+          - GIVEN: 一个工作区含 tech-blog 文章与 novel 作品（含卷、章、场景层级，场景带场景契约与伏笔台账条目）
+          - WHEN: 通过插件的只读快照路由请求快照
+          - THEN: 响应为结构化 JSON，包含两个作品各自的单元树（阶段、进度、阻塞项）、各类产物全文、素材与决策（含待决）及待复核摘要，并内嵌 validate 诊断
+        novel-genre-artifacts:
+          - GIVEN: novel 作品某场景单元目录下存在场景契约与伏笔台账产物
+          - WHEN: 请求快照
+          - THEN: 快照包含这些按文体存在的产物全文
+        snapshot-pending-items:
+          - GIVEN: 作品 my-post 需要验收且没有验收记录，决策队列中有关联 my-post 的 open 决策 dec-1
+          - WHEN: 请求快照
+          - THEN: 快照中的待作者确认事项含 my-post 的 acceptance 与 dec-1 两项，与 wa-cli next --json 的 pendingConfirmations 一致
+    review-proxy:
+      strength: MUST
+      statement: 插件 host 必须以固定同源路由代理当前会话阅读页服务的数据与提交接口：GET /dsh-writing-viewer/review/page.json 对应阅读页服务的 GET /page.json，POST /dsh-writing-viewer/review/feedback、/dsh-writing-viewer/review/confirm 与 /dsh-writing-viewer/review/author-review 对应同名 POST；其他子路径（含 GET /dsh-writing-viewer/review/ 与阅读页 HTML）返回 404，不访问上游。代理向上游请求时由 host 注入会话令牌（GET 的 token 查询参数、POST 的 X-WA-Token 头），丢弃浏览器带来的 token 查询参数与 X-WA-Token 头，上游 Host 为 127.0.0.1:<port>；请求体超过 64 KiB 时返回 400 且不转发。上游响应的状态码与正文原样回传，响应头原样保留，只去掉描述传输本身而由宿主重新派生的头（content-length、content-encoding、transfer-encoding、connection、keep-alive）。没有进行中的会话时返回可读的「没有进行中的审阅」JSON 提示（GET 与 POST 相同），不访问任何上游；上游不可达或超时时返回可读的 JSON 提示，不回显原始错误信息。经代理写入的结果与直接使用阅读页完全相同，确认渠道（Confirmation Channel）仍为 preview；代理接口与面板不得依赖仅安全上下文（Secure Context）可用的浏览器 API，使作者经 http 的 Tailscale MagicDNS 地址访问时可用
+      scenarios:
+        proxy-page-json:
+          - GIVEN: 有 my-post 的会话，作者浏览器经 http://gamepc.tail1234.ts.net:13080 访问且该权威已在 allowedHosts 放行
+          - WHEN: 同源 GET /dsh-writing-viewer/review/page.json
+          - THEN: 返回 200 与 application/json，units[0].ref 为 my-post 且含正文段落；响应中不出现阅读页令牌或 127.0.0.1 地址
+        proxy-html-gone:
+          - GIVEN: 有 my-post 的会话
+          - WHEN: 同源 GET /dsh-writing-viewer/review/ 或 GET /dsh-writing-viewer/review/index.html
+          - THEN: 返回 404，上游阅读页服务没有收到请求
+        proxy-feedback:
+          - GIVEN: 同上，draft.md 含「连接池很重要」一次
+          - WHEN: '同源 POST /dsh-writing-viewer/review/feedback（不带 X-WA-Token）：{unit: my-post, quote: 连接池很重要, text: 补一个例子}'
+          - THEN: 返回 200，feedback.id 为 fb-1；wa-cli feedback list my-post --json 列出这条反馈
+        proxy-no-session:
+          - GIVEN: 没有进行中的会话
+          - WHEN: 同源 GET /dsh-writing-viewer/review/page.json 或 POST /dsh-writing-viewer/review/feedback
+          - THEN: 都返回可读的「没有进行中的审阅」JSON 提示，feedback.yaml 不被创建
+        proxy-forged-token-ignored:
+          - GIVEN: 有进行中的会话
+          - WHEN: '同源 POST /dsh-writing-viewer/review/feedback 携带 X-WA-Token: forged'
+          - THEN: 上游收到的是会话令牌而非 forged，请求按正常反馈处理
+        proxy-confirm-decision-channel:
+          - GIVEN: 作品 my-post 的决策队列中有关联 my-post 的 open 决策 dec-1（选项 a、b），有 my-post 的审阅会话
+          - WHEN: '同源 POST /dsh-writing-viewer/review/confirm：{kind: decision, id: dec-1, option: a, confirmation: 作者：用甲}'
+          - THEN: '返回 200，confirmation 的 kind 为 decision、id 为 dec-1、channel 为 preview；decisions.yaml 中该决策记录 channel: preview'
+    review-session-end:
+      strength: MUST
+      statement: 审阅会话必须在以下任一情形结束并终止对应的 wa-cli preview 子进程：作者经 POST /dsh-writing-viewer/review-session/end 显式结束、30 分钟内没有任何代理请求、子进程自行退出、启动另一会话、插件卸载或宿主停止（含宿主收到 SIGTERM/SIGINT 后的正常停止）；结束后 GET /dsh-writing-viewer/review-session 报告没有会话，代理路由按「没有进行中的审阅」处理
+      scenarios:
+        end-explicit:
+          - GIVEN: 有 my-post 的会话
+          - WHEN: 同源 POST /dsh-writing-viewer/review-session/end
+          - THEN: 返回 200，preview 子进程已结束，GET /dsh-writing-viewer/review/page.json 返回「没有进行中的审阅」JSON 提示
+        end-idle:
+          - GIVEN: 有 my-post 的会话，之后 30 分钟没有任何代理请求
+          - WHEN: 空闲时限到达
+          - THEN: preview 子进程已结束，GET /dsh-writing-viewer/review-session 报告没有会话
+        end-dispose:
+          - GIVEN: 有进行中的会话
+          - WHEN: 插件被卸载或宿主停止该插件
+          - THEN: preview 子进程已结束，不残留监听端口
+  REMOVED:
+    review-panel-embed:
+      reason: iframe 内嵌被审阅视图（Review View）原生渲染取代，作者决定直接替换、不保留 iframe 备用入口；其行为由 review-native-view 承接

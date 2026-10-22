@@ -95,6 +95,8 @@ type Confirm struct {
 	Recommend   string
 	NeedsAnswer bool
 	CanReject   bool
+	// Units 是事项关联的单元引用（作品级事项为作品根单元），供 wa-cli next 的 pendingConfirmations 使用，不进入阅读页。
+	Units []string
 }
 
 // Review 是阅读页待作者复核区的一项：Key 为待复核确认的键，Label 为人读说明。

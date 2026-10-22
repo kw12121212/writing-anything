@@ -54,10 +54,12 @@ export interface ValidateOutput {
   checked: string[];
 }
 
-/** A wa-cli next --json envelope (pending author-review summary). */
+/** A wa-cli next --json envelope (pending author-review summary and the
+ * pending author confirmations the panel marks as「待审阅」). */
 export interface NextOutput {
   steps: unknown[];
   pendingAuthorReviews: unknown[];
+  pendingConfirmations: unknown[];
 }
 
 /** A wa-cli timeline --json envelope. */
@@ -160,13 +162,16 @@ export function mapValidate(raw: unknown): CliOutcome<ValidateOutput> {
 /** Map a raw next envelope onto the consumed shape. */
 export function mapNext(raw: unknown): CliOutcome<NextOutput> {
   if (!isRecord(raw)) return { output: null, reason: 'next: 输出不是对象，该部分数据降级' };
-  const pending = asArray(raw.pendingAuthorReviews);
+  const missing: string[] = [];
+  if (raw.pendingAuthorReviews === undefined) missing.push('pendingAuthorReviews（待复核摘要）');
+  if (raw.pendingConfirmations === undefined) missing.push('pendingConfirmations（待审阅标记）');
   return {
     output: {
       steps: asArray(raw.steps),
-      pendingAuthorReviews: pending,
+      pendingAuthorReviews: asArray(raw.pendingAuthorReviews),
+      pendingConfirmations: asArray(raw.pendingConfirmations),
     },
-    reason: raw.pendingAuthorReviews === undefined ? 'next: 缺少字段 pendingAuthorReviews，待复核摘要按降级标注呈现' : null,
+    reason: missing.length === 0 ? null : `next: 缺少字段 ${missing.join('、')}，该部分按降级标注呈现`,
   };
 }
 

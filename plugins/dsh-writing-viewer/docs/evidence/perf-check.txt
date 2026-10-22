@@ -6,3 +6,11 @@ perf: first-screen renderPanel 2ms (1188 nodes)
 perf: unit switching 192 renders 77ms (~0.4ms/switch)
 perf: large YAML source view (folded, 1242 lines) 20ms
 perf: large YAML semantic view 0ms
+# 2026-10-22T08:13:38.861Z — volumes=3 chapters=8 scenes=8 (generated via wa-cli, node v24.22.0)
+perf: buildSnapshot(220 units, real wa-cli) 301ms
+perf: overviewModel+workCards 38ms
+perf: unitTree(220 nodes) 0ms
+perf: first-screen renderPanel 4ms (1413 nodes)
+perf: unit switching 192 renders 157ms (~0.8ms/switch)
+perf: large YAML source view (folded, 1242 lines) 20ms
+perf: large YAML semantic view 0ms

@@ -1,0 +1,34 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: dsh-native-review
+  status: proposed
+summary:
+  what:
+    - 把 DSH 插件的单元审阅从 iframe 内嵌改为 JSON 接口 + 面板原生渲染：wa-cli preview --serve 新增带令牌的 GET /page.json 输出阅读页（Reading View）数据，插件 host 只代理 /page.json 与三个 POST 接口，client 以 DSH 面板原生组件呈现正文、出处、发现项、待作者确认区与待作者复核区，并在其中提交反馈、确认与复核
+    - 让 DSH 主动发现待审阅的单元：wa-cli next --json 新增 pendingConfirmations（与阅读页待作者确认区同一口径），插件快照随之透出，总览与单元树标出「待审阅」并直接给出审阅入口
+    - 新增工作区配置 review_surface（browser 或 dsh，默认 browser）；为 dsh 时，wa-revise、wa-publish 与 wa-assemble 技能（Skill）不再让 Agent 启动 --serve 并交出 127.0.0.1 链接，而是请作者到 DSH 面板审阅
+  why:
+    - 作者在 ../writing-desk 用 Agent 完成 gongwei-fei-3000 后只拿到一个 127.0.0.1 的阅读页链接，经 Tailscale 远程使用 DSH 时打不开；DSH 面板里的审阅只能靠作者自己找到单元再点「审阅」，Agent 一侧的技能完全不知道 DSH，甚至自行编写了 drafts/preview-proxy.cjs 转发 Tailscale 流量
+    - iframe 内嵌的阅读页是一张独立网页：样式与 DSH 不一致、不随明暗主题与窄屏布局、需要放宽 frame-ancestors 等响应头；作者明确希望由 wa-cli 提供数据接口、插件原生显示，比 iframe 更好用
+scope:
+  in:
+    - wa-cli preview --serve：新增 GET /page.json（同一 Host 与令牌校验），输出 JSON Schema 约束、camelCase 字段的阅读页数据契约；GET / 的 HTML 阅读页与 POST /feedback、/confirm、/author-review 保持不变
+    - wa-cli next --json：新增 pendingConfirmations 数组，逐作品列出与阅读页待作者确认区同口径的事项（kind、work、unit、id、label）
+    - workspace：config.yaml 新增可选字段 review_surface（browser|dsh），config set 可设置与清除，status 的 config 输出 reviewSurface
+    - DSH 插件 host：审阅代理白名单收窄为 GET /page.json 与三个 POST，移除 HTML 阅读页代理与 frame 相关响应头改写；快照透出 pendingConfirmations；会话生命周期、来源校验与清理不变
+    - DSH 插件 client：原生审阅视图（正文按段落与出处着色、发现项、待作者确认区、待作者复核区、划词反馈与快捷标记、提交后刷新）；总览与单元树的「待审阅」标记与入口；移除 iframe
+    - 技术标准 dsh-plugin-structure 的 review-proxy-thin 修订为只代理 JSON 接口；docs/GLOSSARY.md、插件 README 审阅专节与 wa-cli help 文本同步
+    - 内置技能 wa-revise、wa-publish、wa-assemble 与 wa-auto：凡交出阅读页地址（preview.url、pendingAuthorReviews 的 command）的步骤都按 review_surface 分支给出指引；skills 主规格 preview-serve-guidance 相应修订（wa-auto 在评审中补入：其待作者复核步骤同样会交出 127.0.0.1 链接）
+  out:
+    - 不改变确认渠道（Confirmation Channel）语义：DSH 内的确认仍由 wa-cli 阅读页服务写入并记为 preview，不新增 dsh 渠道
+    - 不让插件直接写工作区或调用 wa-cli 写入命令；不新增审阅请求队列等 Agent 主动推送机制
+    - 不改变 wa-cli 静态阅读页与浏览器直接打开 --serve 阅读页的行为；不提供 iframe 备用入口
+    - 不引入文件监听或轮询式快照刷新；不支持多会话并行审阅
+unchanged_behavior:
+  - review_surface 未设置或为 browser 时，技能指引、wa-cli 输出与现状一致；pendingAuthorReviews 的 command 仍为可直接运行的 wa-cli preview <作品> --serve --json
+  - 阅读页服务只监听 127.0.0.1、令牌至少 128 位且只留在插件 host 内存，浏览器带来的令牌一律丢弃；审阅会话单例、10 秒启动时限、30 分钟空闲回收、ctx.effect 清理与全部路由的来源校验保持不变
+  - 插件的快照、总览、产物视图与素材视图仍为只读；工作区写入只出自 wa-cli 子进程
+  - wa-cli 不依赖、不引用 DSH 插件包；完整 Go 回归命令与覆盖率阈值不变
