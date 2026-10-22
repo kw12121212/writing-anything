@@ -1,0 +1,19 @@
+schema: strict-spec-driven/delta-scene/v1
+schema_version: 1
+artifact_type: delta_scene
+schema_file: templates/strict-spec-driven/schemas/delta-scene.yaml
+target_scene: remote-review
+operations:
+  ADDED: {}
+  MODIFIED:
+    main_flow:
+      render-native:
+        action: 面板经同源代理拉取 GET page.json，以 DSH 原生组件呈现该单元及子单元的段落正文、出处着色、文本检查与审稿发现项、最近失败的命令、待作者确认区与待作者复核区，随 DSH 明暗主题与窄屏布局；正文与配图在窄的详情列里看不清时，作者点「放大」把同一审阅视图铺满面板区域阅读与确认，「还原」或 Esc 退出后回到详情区，会话与已填写内容不变
+        covered_by:
+          - spec_id: dsh-plugin
+            requirement_id: review-native-view
+          - spec_id: dsh-plugin
+            requirement_id: review-proxy
+          - spec_id: preview
+            requirement_id: preview-page-json
+  REMOVED: {}

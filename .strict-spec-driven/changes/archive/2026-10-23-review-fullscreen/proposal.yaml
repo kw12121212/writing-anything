@@ -1,0 +1,19 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: review-fullscreen
+  status: proposed
+summary:
+  what:
+    - DSH 插件审阅视图（Review View）新增「放大」模式：审阅视图头部提供「放大」按钮，点击后同一套原生审阅视图（段落正文、配图与封面、发现项、待作者确认区与待作者复核区）以铺满整个面板区域的覆盖层显示，盖住单元树与详情列，正文与配图按放大后的宽度显示；覆盖层提供「还原」按钮与 Esc 键，退出后回到详情区显示，审阅会话不结束、已填写的原话摘要与答复保留。
+  why:
+    - 作者在 DSH 面板里审阅时，审阅视图钉在单元详情列中：正文换行密集、刚上线的配图（Illustration）被压得很小，正文与配图都看不清（作者实际使用后提出）；不放大就只能离开面板去浏览器阅读页，图文确认流程被打断。
+scope:
+  in:
+    - 视图模型（reviewmodel 纯函数）增加放大状态推导与放大布局；渲染器与 client 入口以覆盖层渲染同一审阅视图，「放大/还原」按钮与 Esc 退出；覆盖层随 DSH 明暗主题保持可读并在窄屏下可用；视图模型与渲染器的纯函数测试（含键盘激活与输入内容保留断言）。
+  out:
+    - 独立浏览器窗口或新标签页整页审阅；审阅视图激活时自动全宽切换面板布局；审阅内容与交互的任何变化（段落显示、确认、反馈、复核、会话生命周期）；wa-cli 的任何改动；插件 host 侧路由与代理的变化。
+unchanged_behavior:
+  - 不点「放大」时详情区审阅视图与现在完全一致；放大只改变显示位置与宽度，不结束会话、不重新拉取数据、不丢失已填写的原话摘要与答复；审阅视图仍全部为 DSH 面板原生组件，不使用 iframe；host 侧与 wa-cli 行为不变。

@@ -211,3 +211,15 @@ rules:
         - 会话状态桩返回 { unit, root, startedAt } 完整摘要，null 会话返回 null
       bad:
         - 会话状态桩只返回 {}，视图模型新增按 unit 判定的逻辑时该桩静默翻转结果
+  client-overlay-keyboard-dismiss:
+    strength: SHOULD
+    statement: DSH 插件 client 侧新增以 Esc 关闭的覆盖层或浮层时，挂载时必须把 DOM 焦点移入浮层（或以文档级监听承接 Esc），并在处理关闭键时阻止事件冒泡与默认行为影响宿主；对应测试必须经 definition.factory 注入可运行 react 的真实状态路径驱动打开与关闭，不得只直接调用浮层 props 上的事件回调。
+    rationale: 事件处理器只挂在浮层节点上而打开时不移焦点，真实 DOM 中焦点仍在被盖住的元素上，Esc 根本到不了浮层；测试若直调 props 上的事件回调，会把这条不可达路径掩蔽成通过。review-fullscreen 的评审正好同时踩中这两点。
+    enforcement:
+      method: test
+      detail: 浮层打开→关闭的集成用例经 definition.factory 可运行 react 驱动（挂载断言浮层出现、还原与结束审阅断言消失）；Esc 处理断言 stopPropagation 与 preventDefault 被调用、其他键不触发。
+    examples:
+      good:
+        - 打开浮层的 effect 查询 [data-...] 节点并 focus，关闭时把焦点还给作者离开的控件；Esc 处理先 stopPropagation/preventDefault 再收起。
+      bad:
+        - 只在浮层节点上挂 onKeyDown 且不聚焦它，靠测试直调 props.onKeyDown 断言退出。

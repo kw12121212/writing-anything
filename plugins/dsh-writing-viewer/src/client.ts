@@ -59,6 +59,8 @@ import {
   reviewAfterStatus,
   reviewEnded,
   reviewLabelsFor,
+  overlayDismissKey,
+  reviewOverlayShown,
   reviewStartBody,
   reviewViewModel,
   type ReviewLabels,
@@ -414,6 +416,8 @@ interface PanelState {
   review: ReviewPanelState;
   /** Data and inputs of the review view while a session is active. */
   reviewData?: ReviewDataState;
+  /** The author enlarged the review view to cover the whole panel area. */
+  reviewEnlarged: boolean;
 }
 
 /** A readable result line next to one submit area. */
@@ -480,6 +484,8 @@ interface PanelActions {
   toggleReviewKey?(key: string, checked: boolean): void;
   submitAuthorReview?(): void;
   toggleOriginColors?(): void;
+  /** Switch the review view between the detail area and the enlarged overlay. */
+  setReviewEnlarged?(open: boolean): void;
   /** One key pressed on a tree node: move selection or collapse/expand. */
   treeKey(event: unknown, ref: string): void;
 }
@@ -1335,6 +1341,7 @@ function renderReviewView(h: H, s: PanelState, a: PanelActions, labels: ReviewLa
     h('div', { key: 'head', style: { display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center' } },
       h('strong', { key: 't' }, labels.viewTitle),
       h('button', { key: 'refresh', type: 'button', 'data-review-refresh': 'true', disabled: d.loading, style: buttonStyle(), onClick: a.refreshReview }, labels.refresh),
+      h('button', { key: 'size', type: 'button', 'data-review-size': s.reviewEnlarged ? 'restore' : 'enlarge', style: buttonStyle(), onClick: () => a.setReviewEnlarged?.(!s.reviewEnlarged) }, s.reviewEnlarged ? labels.restore : labels.enlarge),
       h('label', { key: 'colors', style: { display: 'flex', gap: '4px', alignItems: 'center', color: COLOR.secondary } },
         h('input', { key: 'c', type: 'checkbox', checked: d.originColors, 'data-review-origin-colors': 'true', onChange: a.toggleOriginColors }), labels.originColors),
       d.loading ? h('span', { key: 'busy', role: 'status', 'aria-busy': 'true', 'data-review-loading': 'true', style: { color: COLOR.brand } }, labels.loadingPage) : null),
@@ -1376,6 +1383,41 @@ function renderReviewView(h: H, s: PanelState, a: PanelActions, labels: ReviewLa
     children.push(renderFeedbackComposer(h, page, d, labels, a), renderReviewUnits(h, page, d, labels, a));
   }
   return h('section', { key: 'review-view', 'data-review-view': s.review?.unit ?? '', 'aria-label': labels.viewTitle, style: { display: 'flex', flexDirection: 'column', gap: '10px' } }, children);
+}
+
+/** The enlarged review view: the same native review view rendered as an
+ * overlay covering the whole panel area (the tree and the detail column stay
+ * underneath), for reading long paragraphs and illustrations at a readable
+ * width. Null unless its session is active and the author enlarged it, so
+ * the panel renders exactly as before otherwise. Esc and「还原」collapse it
+ * without ending the session or touching the author's unsent inputs. */
+function renderReviewOverlay(h: H, s: PanelState, a: PanelActions): unknown {
+  if (!reviewOverlayShown(s.review ?? IDLE_REVIEW, s.reviewEnlarged)) return null;
+  const labels = reviewLabelsFor();
+  return h(
+    'div',
+    {
+      key: 'review-overlay',
+      role: 'dialog',
+      'aria-modal': 'true',
+      'aria-label': labels.viewTitle,
+      'data-review-overlay': s.review?.unit ?? '',
+      tabIndex: -1,
+      onKeyDown: (event: unknown) => {
+        if (!overlayDismissKey(event)) return;
+        // Consume the key here so the host underneath never reacts to it.
+        (event as { stopPropagation?: () => void })?.stopPropagation?.();
+        (event as { preventDefault?: () => void })?.preventDefault?.();
+        a.setReviewEnlarged?.(false);
+      },
+      style: {
+        position: 'absolute', inset: '0', zIndex: '40', background: COLOR.card, overflow: 'auto',
+        padding: '16px 20px', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', gap: '10px',
+        color: COLOR.primary, fontSize: '14px', lineHeight: '22px',
+      },
+    },
+    renderReviewView(h, s, a, labels),
+  );
 }
 
 /** The review controls of one unit detail: start / progress / failure /
@@ -1564,7 +1606,7 @@ window.__ModuleLoader__?.load({
       latestGate, overviewModel, reconcileSelection, renderPanel, routeUrl, shouldStack, labelsFor, stageTitle,
       nextViewMode, nextReadingMode, artifactTextOf, sourceEntriesOf, PANEL_ID, ROUTE_PATH, FOLD_LINE_THRESHOLD,
       SETUP_ROUTE, parseSetupStatus, setupViewModel, setupLabelsFor,
-      REVIEW_SESSION_ROUTE, REVIEW_SESSION_END_ROUTE, reviewViewModel, reviewLabelsFor,
+      REVIEW_SESSION_ROUTE, REVIEW_SESSION_END_ROUTE, reviewViewModel, reviewLabelsFor, renderReviewOverlay,
     };
 
     let react: any;
@@ -1607,6 +1649,7 @@ window.__ModuleLoader__?.load({
       const [setup, setSetup] = react.useState({ status: null as SetupStatus | null, busy: false });
       const [review, setReview] = react.useState(IDLE_REVIEW as ReviewPanelState);
       const [reviewData, setReviewData] = react.useState(emptyReviewData(null) as ReviewDataState);
+      const [reviewEnlarged, setReviewEnlarged] = react.useState(false);
       const containerRef = react.useRef(null);
       // Scroll offset captured before a view toggle, restored after the new
       // view has rendered, so switching never jumps back to the top.
@@ -1839,7 +1882,28 @@ window.__ModuleLoader__?.load({
         setupBusy: setup.busy,
         review,
         reviewData,
+        reviewEnlarged,
       };
+      // The enlarged overlay is keyboard-dismissable: opening it moves DOM
+      // focus into it (its tabIndex is -1), so the Escape key on the overlay
+      // itself is reachable from wherever the author was — clicking 放大
+      // leaves focus on the covered button underneath — and closing it
+      // returns focus to the control the author left. Without a DOM (plain
+      // render tests) this effect is a no-op.
+      const reviewOverlay = reviewOverlayShown(review, reviewEnlarged);
+      const reviewReturnFocus = react.useRef(null as HTMLElement | null);
+      react.useEffect(() => {
+        if (typeof document === 'undefined' || typeof document.querySelector !== 'function') return;
+        if (reviewOverlay) {
+          reviewReturnFocus.current = (document.activeElement as HTMLElement | null) ?? null;
+          const node = document.querySelector('[data-review-overlay]');
+          if (node !== null && typeof (node as HTMLElement).focus === 'function') (node as HTMLElement).focus();
+        } else {
+          const back = reviewReturnFocus.current;
+          reviewReturnFocus.current = null;
+          if (back !== null && typeof back.focus === 'function') back.focus();
+        }
+      }, [reviewOverlay]);
       const actions: PanelActions = {
         refresh: () => fetchSnapshot(panelRoot),
         setPathInput,
@@ -1921,6 +1985,8 @@ window.__ModuleLoader__?.load({
         startReview: (ref: string) => {
           if (review.phase === 'starting') return;
           setReview({ ...IDLE_REVIEW, unit: ref, phase: 'starting' });
+          // A new session opens in the detail column, never enlarged.
+          setReviewEnlarged(false);
           // The session starts in the directory the panel is showing, so the
           // reading view always matches the snapshot on screen.
           const root = body?.root ?? panelRoot;
@@ -1983,9 +2049,13 @@ window.__ModuleLoader__?.load({
         toggleOriginColors: () => {
           setReviewData((prev: ReviewDataState) => ({ ...prev, originColors: !prev.originColors }));
         },
+        setReviewEnlarged: (open: boolean) => {
+          setReviewEnlarged(open);
+        },
         endReview: () => {
           setReview(IDLE_REVIEW);
           setReviewData(emptyReviewData(null));
+          setReviewEnlarged(false);
           fetch(REVIEW_SESSION_END_ROUTE, { method: 'POST' })
             .catch(() => undefined)
             .then(() => fetchSnapshot(panelRoot));
@@ -2004,8 +2074,16 @@ window.__ModuleLoader__?.load({
           (event as { preventDefault?: () => void })?.preventDefault?.();
         },
       };
-      return react.createElement('div', { ref: containerRef, style: { width: '100%', height: '100%', overflow: 'auto' } },
-        renderPanel(react.createElement, state, actions));
+      // The panel content scrolls in its own layer; the enlarged review view
+      // overlays the whole panel box (relative wrapper = the panel area), so
+      // the overlay stays put no matter how far the content below is scrolled.
+      return react.createElement(
+        'div',
+        { style: { position: 'relative', width: '100%', height: '100%' } },
+        react.createElement('div', { ref: containerRef, style: { width: '100%', height: '100%', overflow: 'auto' } },
+          renderPanel(react.createElement, state, actions)),
+        renderReviewOverlay(react.createElement, state, actions),
+      );
     }
 
     /** Right-sidebar tab kind: a page type opened by kind, no address. */

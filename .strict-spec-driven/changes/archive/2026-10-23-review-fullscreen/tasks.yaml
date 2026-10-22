@@ -1,0 +1,30 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: review-fullscreen
+sections:
+  Implementation:
+    enlarge-ui:
+      text: 插件 client 侧实现放大模式：reviewmodel 纯函数推导放大状态与布局切换（详情区视图或铺满面板的覆盖层）、「放大/还原」按钮与 Esc 退出；client 入口把同一 renderReviewView 挂到覆盖层节点（高 z-index、自身滚动、明暗主题变量、窄屏铺满），放大状态不结束会话、不重拉数据、保留已填写的原话摘要与答复，全部控件键盘可激活。
+      status: complete
+  Testing:
+    plugin-tests:
+      text: 插件包测试：视图模型对放大状态与布局的纯函数断言，渲染器与 client 测试（假 react 经 definition.factory 驱动状态切换：放大铺满与还原、Esc 退出、输入内容保留、不触发会话结束、无 iframe、主题与窄屏类名）；既有测试不经修改通过。
+      status: complete
+      command: cd plugins/dsh-writing-viewer && pnpm run check
+    full-regression:
+      text: 运行完整回归命令（vet、build、测试与覆盖率不低于 80% 的门槛），确认插件改动不影响 Go 侧。
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    verify-unchanged:
+      text: 确认不点「放大」时详情区审阅视图行为与现在完全一致：既有插件测试（配图显示、确认、反馈、会话结束）不经修改通过（341 项全过），完整 Go 回归通过且覆盖率 88.45%。
+      status: complete
+    verify-strict:
+      text: 运行 strict-spec-cli ready review-fullscreen 与 strict-spec-cli verify review-fullscreen，确认场景覆盖与 delta 规格与实际构建一致；归档合并 dsh-plugin 的 review-native-view。
+      status: complete
+      command: strict-spec-cli ready review-fullscreen && strict-spec-cli verify review-fullscreen
+testing_gates:
+  validation_task: full-regression
+  unit_test_task: plugin-tests

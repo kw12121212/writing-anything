@@ -227,6 +227,7 @@ interface TestHooks {
   overviewModel: (body: SnapshotRouteBody) => any;
   reconcileSelection: (body: SnapshotRouteBody, model: any, work: string | null, unit: string | null) => any;
   renderPanel: (h: unknown, state: Record<string, unknown>, actions: Record<string, unknown>) => unknown;
+  renderReviewOverlay: (h: unknown, state: Record<string, unknown>, actions: Record<string, unknown>) => any;
   routeUrl: (root: string | null) => string;
   shouldStack: (container: number | null, viewport: number | null) => boolean;
   labelsFor: (active?: string | null) => Record<string, string>;
@@ -1196,6 +1197,49 @@ describe('ViewerPanel wiring (runnable react)', () => {
     panel.restore();
   });
 
+  it('enlarges the review view over the panel and collapses it through the real wiring (native-enlarge)', async () => {
+    const fixture = await fixtureBody();
+    const page = await pageFixture();
+    let startedUnit: string | null = null;
+    const stub = (async (input: unknown, init?: { method?: string; body?: string }) => {
+      const url = String(input);
+      const method = init?.method ?? 'GET';
+      if (url === '/dsh-writing-viewer/review-session' && method === 'POST') {
+        startedUnit = (JSON.parse(init?.body ?? '{}') as { unit: string }).unit;
+        return { ok: true, status: 200, json: async () => ({ ok: true, session: { unit: startedUnit, root: fixture.root, startedAt: 't1' } }) };
+      }
+      if (url === '/dsh-writing-viewer/review-session') return { ok: true, status: 200, json: async () => ({ ok: true, session: startedUnit === null ? null : { unit: startedUnit, root: fixture.root, startedAt: 't1' } }) };
+      if (url === '/dsh-writing-viewer/review/page.json') return { ok: true, status: 200, json: async () => page };
+      if (url === '/dsh-writing-viewer/review-session/end') return { ok: true, status: 200, json: async () => ({ ok: true, session: null }) };
+      if (url.includes('/dsh-writing-viewer/setup')) return { ok: false, status: 404, json: async () => ({}) };
+      return { ok: true, status: 200, json: async () => fixture };
+    }) as unknown as typeof fetch;
+    const panel = await mountPanel(fixture, stub);
+    await settle();
+    const selected = (elements(toNode(panel.tree()), 'button').find((b) => b.props?.['data-review-start'] !== undefined)?.props?.['data-review-start']) as string;
+    expect(selected).toBeTruthy();
+    const overlayShown = (): boolean => elements(toNode(panel.tree()), 'div').some((n) => n.props?.['data-review-overlay'] === selected);
+    click(panel, (b) => b.props?.['data-review-start'] === selected);
+    await settle();
+    // Enlarge through the wired action: the overlay mounts over the panel.
+    click(panel, (b) => b.props?.['data-review-size'] === 'enlarge');
+    await settle();
+    expect(overlayShown()).toBe(true);
+    // Restore collapses it back to the detail column.
+    click(panel, (b) => b.props?.['data-review-size'] === 'restore');
+    await settle();
+    expect(overlayShown()).toBe(false);
+    // Enlarge again, then end the review: the overlay collapses with it.
+    click(panel, (b) => b.props?.['data-review-size'] === 'enlarge');
+    await settle();
+    expect(overlayShown()).toBe(true);
+    click(panel, (b) => b.props?.['data-review-end'] === selected);
+    await settle();
+    expect(overlayShown()).toBe(false);
+    expect(elements(toNode(panel.tree()), 'section').some((n) => n.props?.['data-review-view'] !== undefined)).toBe(false);
+    panel.restore();
+  });
+
   it('ends the review view when the session was replaced for another unit (native-session-replaced)', async () => {
     const fixture = await fixtureBody();
     const page = await pageFixture();
@@ -1900,6 +1944,79 @@ describe('unit review controls', () => {
     const tree = t.renderPanel(h, { ...(await reviewState(ACTIVE)), reviewData: activeData(await pageFixture()) }, reviewActions().actions);
     expect(elements(tree, 'img')).toHaveLength(0);
     expect(elements(tree, 'figure')).toHaveLength(0);
+  });
+
+  it('covers the panel with the enlarged review view through the overlay (native-enlarge)', async () => {
+    const t = await hooks();
+    const page = {
+      title: 'my-post', strict: false, reviews: [], failures: [], confirms: [],
+      units: [{ ref: 'my-post', stage: 'review', hasDraft: true, notes: [], global: [], paragraphs: [
+        { index: 1, line: 1, text: '一段很长的正文', origin: 'human', findings: [], illustrations: ['fig-1'] },
+      ], illustrations: [
+        { id: 'fig-1', role: 'body', alt: '店内一角', title: null, content: 'mood', origin: 'agent', width: 1600, height: 900, claims: [], sources: [], referenced: true, available: true, url: 'illustration?unit=my-post&id=fig-1' },
+      ] }],
+    };
+    const overlay = t.renderReviewOverlay(h, { ...(await reviewState(ACTIVE)), reviewData: activeData(page), reviewEnlarged: true }, reviewActions().actions);
+    expect(overlay).not.toBeNull();
+    expect(overlay.props?.['data-review-overlay']).toBe('my-post');
+    expect(overlay.props?.['role']).toBe('dialog');
+    expect(elements(overlay, 'iframe')).toHaveLength(0);
+    // The overlay fills the panel (absolute, inset 0) with theme variables,
+    // never hardcoded colors, so light and dark stay readable.
+    expect(overlay.props?.['style']?.position).toBe('absolute');
+    expect(overlay.props?.['style']?.inset).toBe('0');
+    expect(String(overlay.props?.['style']?.background)).toContain('var(--dsw-alias-bg-layer-1');
+    expect(String(overlay.props?.['style']?.color)).toContain('var(--dsw-alias-label-primary');
+    // The same native review view renders inside, at the enlarged width.
+    expect(elements(overlay, 'section').some((n) => n.props?.['data-review-view'] === 'my-post')).toBe(true);
+    const img = elements(overlay, 'img')[0]!;
+    expect(img.props?.['src']).toBe('/dsh-writing-viewer/review/illustration?unit=my-post&id=fig-1');
+    // The overlay header offers restore; the detail-area copy offers enlarge.
+    expect(elements(overlay, 'button').some((b) => b.props?.['data-review-size'] === 'restore')).toBe(true);
+    const detail = t.renderPanel(h, { ...(await reviewState(ACTIVE)), reviewData: activeData(page) }, reviewActions().actions);
+    expect(elements(detail, 'button').some((b) => b.props?.['data-review-size'] === 'enlarge')).toBe(true);
+  });
+
+  it('collapses the overlay without ending the session or losing inputs (native-enlarge-exit)', async () => {
+    const t = await hooks();
+    const calls: string[] = [];
+    const bound = { ...reviewActions().actions, setReviewEnlarged: (open: boolean) => calls.push('size ' + open) };
+    const page = {
+      title: 'my-post', strict: false, reviews: [], failures: [],
+      confirms: [{ kind: 'decision', unit: 'my-post', id: 'dec-1', label: '选风格', detail: '', options: [{ id: 'a', text: '甲', recommend: true }], recommend: 'a', needsAnswer: false, canReject: false }],
+      units: [{ ref: 'my-post', stage: 'review', hasDraft: true, notes: [], global: [], paragraphs: [
+        { index: 1, line: 1, text: '正文', origin: 'human', findings: [], illustrations: [] },
+      ], illustrations: [] }],
+    };
+    const state = {
+      ...(await reviewState(ACTIVE)),
+      reviewData: activeData(page, { confirmDrafts: { 'decision:my-post:dec-1': { option: 'a', answer: '', confirmation: '作者：用甲' } } }),
+      reviewEnlarged: true,
+    };
+    const overlay = t.renderReviewOverlay(h, state, bound);
+    // The author's unsent summary renders inside the overlay.
+    const input = elements(overlay, 'input').find((i) => i.props?.['data-review-confirmation'] === 'decision:my-post:dec-1');
+    expect(input?.props?.['value']).toBe('作者：用甲');
+    // Esc collapses the overlay and consumes the key; the restore button does the same.
+    const consumed: string[] = [];
+    (overlay.props?.['onKeyDown'] as (e: unknown) => void)({ key: 'Escape', stopPropagation: () => consumed.push('stop'), preventDefault: () => consumed.push('prevent') });
+    expect(calls).toEqual(['size false']);
+    expect(consumed).toEqual(['stop', 'prevent']);
+    // Other keys pass through untouched.
+    (overlay.props?.['onKeyDown'] as (e: unknown) => void)({ key: 'Tab' });
+    expect(calls).toEqual(['size false']);
+    expect(consumed).toEqual(['stop', 'prevent']);
+    const restore = elements(overlay, 'button').find((b) => b.props?.['data-review-size'] === 'restore')!;
+    (restore.props?.['onClick'] as () => void)();
+    expect(calls).toEqual(['size false', 'size false']);
+    // Collapsing never ends the review session.
+    expect(calls.some((c) => c === 'end')).toBe(false);
+  });
+
+  it('renders no overlay when the review is not enlarged', async () => {
+    const t = await hooks();
+    const state = { ...(await reviewState(ACTIVE)), reviewData: activeData(await pageFixture()) };
+    expect(t.renderReviewOverlay(h, state, reviewActions().actions)).toBeNull();
   });
 
   it('lists recent failures, a strict review queue, and keeps notices and the invalid-selection hint visible', async () => {

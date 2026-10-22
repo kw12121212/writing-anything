@@ -1,0 +1,25 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: review-fullscreen
+approach:
+  - 放大模式完全在插件 client 侧实现：reviewmodel 以纯函数把面板状态推导为「详情区审阅视图或铺满面板的放大视图」，client 入口把同一个 renderReviewView 挂到覆盖层节点；不新增 host 路由、不用 iframe、不触碰会话生命周期。
+decisions:
+  overlay-in-panel:
+    decision: 「放大」渲染为面板内的固定覆盖层（铺满面板视口，高 z-index，带自身滚动），复用同一套审阅视图渲染函数与同一份 page.json 数据；「还原」与 Esc 只切换显示状态，不结束会话、不重新拉取数据。
+    rationale: 作者选择面板内全屏放大而非独立窗口：client-content-rendering-safety 与 review-native-view 既有约束要求原生组件、不使用 iframe，覆盖层完全满足；复用同一渲染函数避免详情区与放大模式行为分叉（client-view-model-module）。
+  esc-and-state-retained:
+    decision: Esc 键与「还原」按钮都退出放大模式；放大状态只是显示状态，原话摘要输入框与答复输入的内容保留，会话继续。
+    rationale: 放大是阅读辅助而非流程步骤：不触碰 review-child-lifecycle 管理的会话生命周期，输入内容经面板状态保留，退出后作者可继续在详情区确认。
+  theme-and-narrow:
+    decision: 覆盖层样式随 DSH 明暗主题保持可读（沿用面板主题变量），窄屏（面板宽度低于 640px）下覆盖层同样铺满可用区域并保持可操作；「放大」按钮与覆盖层内全部控件可经键盘激活。
+    rationale: review-native-view 的主题与窄屏约束对放大模式同样适用；overview-theme-and-narrow 的窄屏堆叠不因覆盖层失效。
+alternatives:
+  - option: 审阅视图激活时自动把单元树收成窄轨、详情区占满面板宽度
+    reason: 收益受浏览器窗口总宽限制，窗口本身不大时正文与配图仍然小；作者实测两者都挤，需要的是尽量大的固定空间。
+  - option: window.open 打开插件自带的整页审阅页（独立浏览器窗口）
+    reason: 需要 host 新增 HTML 页面路由与独立的 client bundle 加载，改动面与安全面最大，且与既有「面板原生组件呈现」的约束冲突最大。
+risks:
+  - 覆盖层遮挡宿主 UI 后的焦点与滚动管理：需要正确的层级与自身滚动，Esc 只退出放大而不冒泡影响宿主；键盘可达性须逐控件可激活。
+  - 放大状态挂在面板状态里，测试须经 definition.factory 注入可运行 hooks 的假 react 驱动（lesson dsh-client-definition-factory-hooks-react），否则状态切换断言会静默失效。
