@@ -81,6 +81,13 @@ const (
 	ReviewSurfaceDSH     = "dsh"
 )
 
+// 审阅位置生效值的来源（Config.ReviewSurfaceSource）。
+const (
+	ReviewSurfaceFromConfig  = "config"
+	ReviewSurfaceFromEnv     = "env"
+	ReviewSurfaceFromDefault = "default"
+)
+
 // Problem 是工作区中的一个问题。Path 相对项目目录、以 / 分隔。
 type Problem struct {
 	Code     string
@@ -102,8 +109,11 @@ type Config struct {
 	ContextBudget *int `json:"contextBudget"`
 	// AIDisclosure 是 AI 参与说明的放置位置（footer、metadata 或 both）；未设置时为 nil，即 both。
 	AIDisclosure *string `json:"aiDisclosure"`
-	// ReviewSurface 是作者审阅阅读页的位置（browser 或 dsh）的生效值；未设置时为 browser。
+	// ReviewSurface 是作者审阅阅读页的位置（browser 或 dsh）；本包只按 config.yaml 给出，未设置时为 browser。
+	// 未设置时按调用环境改为 dsh 的判断在 internal/cli 中完成（ReviewSurfaceSource 随之变为 env）。
 	ReviewSurface string `json:"reviewSurface"`
+	// ReviewSurfaceSource 是 ReviewSurface 的来源：config（config.yaml 显式设置）、env（按环境判断）或 default。
+	ReviewSurfaceSource string `json:"reviewSurfaceSource"`
 }
 
 func errorAt(code, path, msg string) Problem {
@@ -419,7 +429,7 @@ func summarize(v any) *Config {
 	if !ok {
 		return nil
 	}
-	c := &Config{Packs: []string{}, ReviewSurface: ReviewSurfaceBrowser}
+	c := &Config{Packs: []string{}, ReviewSurface: ReviewSurfaceBrowser, ReviewSurfaceSource: ReviewSurfaceFromDefault}
 	c.Language, _ = m["language"].(string)
 	c.GateLevel, _ = m["gate_level"].(string)
 	if g, ok := m["default_genre"].(string); ok {
@@ -429,7 +439,7 @@ func summarize(v any) *Config {
 		c.AIDisclosure = &a
 	}
 	if r, ok := m["review_surface"].(string); ok {
-		c.ReviewSurface = r
+		c.ReviewSurface, c.ReviewSurfaceSource = r, ReviewSurfaceFromConfig
 	}
 	switch n := m["context_budget"].(type) {
 	case int:

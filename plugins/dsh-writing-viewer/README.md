@@ -117,7 +117,7 @@ package.json 声明：
 5. **结束。** 会话在作者点「结束审阅」、30 分钟内没有代理请求、启动另一个单元的审阅、阅读页子进程退出、插件卸载或宿主停止时结束并终止子进程。卸载与停止的清理挂在 cordis 的 `ctx.effect` disposer 上（DSH 0.2.x 的 cordis 4 不发出 `dispose` 事件，`ctx.on('dispose')` 永不触发）；DSH 收到 SIGTERM/SIGINT 时会 dispose 应用 fiber，因此常规停止也会清理，宿主进程退出另有 `exit` 钩子兜底——只有宿主被 SIGKILL 强杀时子进程会残留（`wa-cli preview --serve` 本身不感知父进程退出），需手动结束。会话结束后代理对数据与提交都返回 JSON 形式的「没有进行中的审阅」；面板在每次拉取数据、窗口重新获得焦点或页面重新可见时查询一次会话状态（只访问插件路由，不调用 wa-cli），发现已结束或已被另一单元的审阅替换即显示「审阅已结束」与「重新审阅」入口。结束审阅后面板自动刷新快照，处理完的「待审阅」标记随之消失。
 6. 写入全部出自 wa-cli 子进程：经代理提交的反馈、确认与复核与直接使用阅读页完全相同，确认渠道（Confirmation Channel）记为 `preview`；只浏览不提交时工作区（除 wa-cli 追加的 audit.log 外）不变。
 
-**让 Agent 指引作者到 DSH 审阅。** 在工作区执行 `wa-cli config set review_surface dsh --json` 后，内置技能 wa-revise、wa-publish 与 wa-assemble 读到 `wa-cli status --json` 的 `config.reviewSurface` 为 `dsh`，就不再启动 `wa-cli preview --serve` 或交出 `127.0.0.1` 链接，而是请作者打开本面板、在「待审阅」入口完成审阅，作者说完成后再以 `wa-cli review show` 或 `wa-cli next` 复查。默认值 `browser` 保持原来的浏览器阅读页指引。
+**让 Agent 指引作者到 DSH 审阅（无需配置）。** DSH Web 会向模型的 shell 注入环境变量 `DSH_WEB_URL`；工作区没有设置 `review_surface` 时，wa-cli 据此判断 Agent 运行在 DSH 中，`wa-cli status --json` 的 `config.reviewSurface` 即为 `dsh`（`reviewSurfaceSource` 为 `env`）。内置技能 wa-revise、wa-publish、wa-assemble 与 wa-auto 读到 `dsh` 就不再启动 `wa-cli preview --serve` 或交出 `127.0.0.1` 链接，而是请作者打开本面板、在「待审阅」入口完成审阅，作者说完成后再以 `wa-cli review show` 或 `wa-cli next` 复查；作者说面板里没有「待审阅」入口时改给浏览器阅读页。同一工作区在终端中的 Agent（没有 `DSH_WEB_URL`）仍得到 `browser`。需要固定某一种时用 `wa-cli config set review_surface browser|dsh --json` 显式设置，设为空字符串即恢复自动判断。
 
 实测证据（2026-10-21，iframe 版本，经 Tailscale MagicDNS 名访问隔离的 DSH 0.2.1-rc.2 实例）：`docs/evidence/review-live-check.txt`、`docs/evidence/review-*.png`。原生审阅视图的实测证据见 `docs/evidence/native-review-*`。
 

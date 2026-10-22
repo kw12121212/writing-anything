@@ -1,0 +1,43 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: review-surface-auto
+sections:
+  Implementation:
+    workspace-source:
+      text: internal/workspace：Config 增加 ReviewSurfaceSource（json reviewSurfaceSource）；显式值来源 config，未设置为 browser、来源 default
+      status: complete
+    cli-env-resolve:
+      text: internal/cli：包级 getenv = os.Getenv；status 与 config set 输出 config 前，来源为 default 且 DSH_WEB_URL 非空时生效值改为 dsh、来源 env；人读 status 显示来源；outputKeys 与 config set 参数说明更新
+      status: complete
+    skills-fallback:
+      text: wa-revise、wa-publish、wa-assemble、wa-auto 的 dsh 分支补兜底：作者说面板里没有「待审阅」入口时改按 browser；history.txt 追加新哈希
+      status: complete
+    docs-sync:
+      text: docs/GLOSSARY.md 审阅位置词条、插件 README「让 Agent 指引作者到 DSH 审阅」段落改为自动判断说明
+      status: complete
+  Testing:
+    test-surface:
+      text: Go 测试：surface-default、surface-env-dsh、surface-config-wins、surface-set-dsh、surface-clear、status-fresh（t.Setenv 控制 DSH_WEB_URL）
+      status: complete
+      command: go test ./internal/cli/... ./internal/workspace/... -run 'Config|Status' -count=1
+    test-skills:
+      text: skills 结构测试：dsh 分支含兜底说明（dsh-fallback-present）
+      status: complete
+      command: go test ./internal/skills/... -count=1
+    test-env-scan:
+      text: 静态扫描：internal 下非测试代码只在 internal/cli 与 internal/tools 中按取值读取环境变量（env-read-in-cli）
+      status: complete
+      command: go test ./internal/cli/ -run EnvReadOnlyInCLI -count=1
+    test-regression:
+      text: 完整 Go 回归与覆盖率阈值
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    verify-env:
+      text: 以构建出的 wa-cli 在带与不带 DSH_WEB_URL 的环境中分别运行 status，确认生效值与来源；strict ready 与 verify 通过
+      status: complete
+testing_gates:
+  validation_task: test-regression
+  unit_test_task: test-surface

@@ -1,0 +1,26 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: review-surface-auto
+  status: proposed
+summary:
+  what:
+    - review_surface 未设置时自动判断审阅位置：wa-cli 进程环境中有非空的 DSH_WEB_URL（DSH Web 注入给模型 shell 的变量）时生效值为 dsh，否则为 browser；显式设置 browser 或 dsh 时以配置为准。status 与 config set 输出的 config 增加 reviewSurfaceSource（config、env 或 default）
+    - 内置技能的 dsh 分支补一条兜底：作者说 DSH 面板里没有「待审阅」入口（未安装 dsh-writing-viewer 插件）时改按 browser 的做法
+  why:
+    - 作者原话：「但这个配置为什么要执行呢？应该默认就是」。v0.7.0 要求作者手动 wa-cli config set review_surface dsh 才会改走 DSH 审阅；而且配置写在工作区上，同一工作区换到终端里的 Agent 使用时反而会把作者指向不存在的面板
+    - DSH Web 会经 shell-env 向模型的 shell 注入 DSH_WEB_URL 与 DSH_WEB_MODE，wa-cli 可以据此知道调用方是否运行在 DSH 中，无需任何配置
+scope:
+  in:
+    - internal/workspace：Config 增加 reviewSurfaceSource；未设置时生效值 browser、来源 default
+    - internal/cli：包级 getenv（测试可替换）；status 与 config set 输出前按 DSH_WEB_URL 解析生效值；help 文本更新
+    - workspace 主规格 config-review-surface、config-set、status-summary 修订；skills 主规格 preview-serve-guidance 修订（兜底）；场景 remote-review 的 agent-handoff 步骤修订
+    - 内置技能 wa-revise、wa-publish、wa-assemble、wa-auto 的 dsh 分支兜底说明；docs/GLOSSARY.md 审阅位置词条与插件 README 同步
+  out:
+    - 不改 DSH 插件代码，不让插件写工作区配置；不探测插件是否安装；不新增 auto 之类的配置取值
+unchanged_behavior:
+  - 显式设置 review_surface 为 browser 或 dsh 时行为与 v0.7.0 相同；next 与 pendingAuthorReviews 的 command 不变
+  - 没有 DSH_WEB_URL 的环境（终端中的 Claude Code、Codex 等）未设置时仍为 browser，与 v0.7.0 一致
+  - wa-cli 不依赖、不引用 DSH 插件包；完整回归命令与覆盖率阈值不变

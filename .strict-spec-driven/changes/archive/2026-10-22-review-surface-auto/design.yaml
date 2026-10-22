@@ -1,0 +1,27 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: review-surface-auto
+approach:
+  - 审阅位置的生效值分两层：internal/workspace 只按 config.yaml 给出 reviewSurface（显式值，来源 config；未设置为 browser，来源 default）；internal/cli 在 status 与 config set 输出前用包级 getenv（默认 os.Getenv，测试以 t.Setenv 控制）解析——来源为 default 且 DSH_WEB_URL 非空时改为 dsh、来源 env。技能继续只读 wa-cli status --json 的 config.reviewSurface，不自行探测环境，判断集中在 wa-cli。
+decisions:
+  env-detect:
+    decision: 以 DSH_WEB_URL 是否非空作为「调用方运行在 DSH Web 中」的判据，只在 review_surface 未设置时生效
+    rationale: DSH Web 的 shell-env 行在宿主平面向模型 shell 发布 DSH_WEB_URL/DSH_WEB_MODE（dsh-web-app 的 cordis.patch.yml 有说明），终端中的 Agent 没有该变量；只读一个环境变量名不依赖插件包，符合 runtime-plugin-independence。推翻 dsh-native-review 的 review-surface-config 中「不探测环境」的取舍：作者指出手动配置不应是必需步骤，且审阅位置本就取决于 Agent 在哪里运行而不是工作区
+  source-field:
+    decision: config 输出新增 reviewSurfaceSource（config、env、default），人读 status 同时显示来源
+    rationale: 生效值可能来自环境而非文件，输出来源便于作者与 Agent 理解为什么是 dsh，并为以后排查提供依据；字段始终有值，不引入 null
+  cli-layer-env:
+    decision: 环境读取放在 internal/cli 的包级 getenv，internal/workspace 不读环境
+    rationale: 与 injectable-clock 的包级 now() 同一做法；领域包保持纯粹（domain-problems 的精神），config set 写入的仍只是文件中的值
+alternatives:
+  - option: 默认值改为 dsh
+    reason: 终端中的 Claude Code、Codex 会被指向不存在的面板
+  - option: 由 DSH 插件在工作区写入 review_surface
+    reason: 插件必须只读工作区；写入后工作区在终端中也会被当作 dsh
+  - option: '新增 review_surface: auto 取值'
+    reason: 未设置即自动判断已足够，多一个取值只增加配置面
+risks:
+  - 某个 DSH 没有安装 dsh-writing-viewer 插件时会被判为 dsh；技能兜底：作者说面板里没有「待审阅」入口时改按 browser
+  - DSH 若将来改名或停止注入 DSH_WEB_URL，会静默退回 browser（与 v0.7.0 行为一致，不会更坏）

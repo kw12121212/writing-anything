@@ -46,7 +46,7 @@ main_flow:
       - spec_id: dsh-plugin
         requirement_id: review-native-view
   agent-handoff:
-    action: Agent 需要作者确认或审阅时读取 wa-cli status 的 config.reviewSurface；为 dsh 时不启动 wa-cli preview --serve、不交出 127.0.0.1 链接，而是请作者到 DSH 插件面板审阅该作品
+    action: Agent 需要作者确认或审阅时读取 wa-cli status 的 config.reviewSurface：未设置 review_surface 时 wa-cli 按环境自动判断——在 DSH Web 中运行（DSH_WEB_URL 非空）即为 dsh；为 dsh 时 Agent 不启动 wa-cli preview --serve、不交出 127.0.0.1 链接，而是请作者到 DSH 插件面板审阅该作品，作者说面板里没有「待审阅」入口时改给浏览器阅读页
     covered_by:
       - spec_id: skills
         requirement_id: preview-serve-guidance

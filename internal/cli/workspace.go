@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"maps"
+	"os"
 	"slices"
 	"strconv"
 	"strings"
@@ -70,7 +71,7 @@ var statusCommand = &command{
 	flags:   []flagSpec{dirFlag},
 	outputKeys: []outputKey{
 		{"workspace", "相对项目目录的工作区路径"},
-		{"config", "配置摘要，含 language、defaultGenre、packs、gateLevel、contextBudget、aiDisclosure 与 reviewSurface（审阅位置（Review Surface）：browser 或 dsh，未设置时为 browser）；配置无法解析时为 null"},
+		{"config", "配置摘要，含 language、defaultGenre、packs、gateLevel、contextBudget、aiDisclosure 与 reviewSurface（审阅位置（Review Surface）的生效值：browser 或 dsh）与 reviewSurfaceSource（其来源：config 为 config.yaml 显式设置；未设置时环境变量 DSH_WEB_URL 非空即 Agent 运行在 DSH Web 中为 dsh、来源 env，否则为 browser、来源 default）；配置无法解析时为 null"},
 		{"sources", "sources/ 下的直接条目数，不含隐藏条目"},
 		{"works", "works/ 下的直接条目数，不含隐藏条目"},
 		{"units", "按作品与单元树先序列出的单元，每项含 unit、work、type、parent、stage、blockers、commands 与 progress（汇总单元（Aggregated Unit）的进度，其他单元为 null）；汇总单元的 stage 与 blockers 由子单元汇总"},
@@ -83,7 +84,7 @@ var configSetCommand = &command{
 	name:    "config set",
 	summary: "修改工作区配置中的一项：language、default_genre、packs、gate_level、context_budget、ai_disclosure 或 review_surface",
 	args: []argSpec{
-		{"key", "配置项：language、default_genre、packs、gate_level、context_budget（上下文预算（Context Budget），字符数）、ai_disclosure（AI 参与说明（AI-generated Content Label）的放置位置：footer、metadata 或 both）或 review_surface（审阅位置（Review Surface），作者审阅阅读页（Reading View）的位置：browser 为浏览器打开 wa-cli preview --serve 的地址，dsh 为 DSH 插件面板）", true},
+		{"key", "配置项：language、default_genre、packs、gate_level、context_budget（上下文预算（Context Budget），字符数）、ai_disclosure（AI 参与说明（AI-generated Content Label）的放置位置：footer、metadata 或 both）或 review_surface（审阅位置（Review Surface），作者审阅阅读页（Reading View）的位置：browser 为浏览器打开 wa-cli preview --serve 的地址，dsh 为 DSH 插件面板；不设置时按环境自动判断，DSH Web 中为 dsh）", true},
 		{"value", "新取值；packs 用逗号分隔，空字符串表示清空；default_genre、context_budget、ai_disclosure 与 review_surface 为空字符串时删除该项", true},
 	},
 	flags:      []flagSpec{dirFlag},
@@ -246,12 +247,27 @@ func runValidate(inv *invocation) int {
 	})
 }
 
+// getenv 读取环境变量；集中在一处便于找到 wa-cli 对环境的全部依赖，测试以 t.Setenv 控制取值。
+var getenv = os.Getenv
+
+// dshWebURLEnv 是 DSH Web 向模型 shell 注入的环境变量：非空表示调用 wa-cli 的 Agent 运行在 DSH Web 中。
+const dshWebURLEnv = "DSH_WEB_URL"
+
+// resolveReviewSurface 解析审阅位置（Review Surface）的生效值：config.yaml 未设置 review_surface 且环境中
+// DSH_WEB_URL 非空时为 dsh、来源 env；显式设置时以配置为准（config-review-surface）。
+func resolveReviewSurface(c *workspace.Config) {
+	if c != nil && c.ReviewSurfaceSource == workspace.ReviewSurfaceFromDefault && getenv(dshWebURLEnv) != "" {
+		c.ReviewSurface, c.ReviewSurfaceSource = workspace.ReviewSurfaceDSH, workspace.ReviewSurfaceFromEnv
+	}
+}
+
 func runStatus(inv *invocation) int {
 	dir := projectDir(inv)
 	res := &statusResult{Workspace: workspace.Dir, Units: []unitView{}}
 	problems := workspace.Require(dir)
 	if problems == nil {
 		res.Config, _ = workspace.Load(dir)
+		resolveReviewSurface(res.Config)
 		var works []*work.Work
 		_, works, problems = checkWorkspace(dir)
 		res.Sources, res.Works = workspace.Summary(dir)
@@ -279,7 +295,7 @@ func runStatus(inv *invocation) int {
 			if c.AIDisclosure != nil {
 				fmt.Fprintf(&b, "AI 参与说明（AI-generated Content Label）：%s\n", *c.AIDisclosure)
 			}
-			fmt.Fprintf(&b, "审阅位置（Review Surface）：%s\n", c.ReviewSurface)
+			fmt.Fprintf(&b, "审阅位置（Review Surface）：%s（来源 %s）\n", c.ReviewSurface, c.ReviewSurfaceSource)
 		}
 		fmt.Fprintf(&b, "素材（Source）：%d\n作品（Work）：%d\n", res.Sources, res.Works)
 		if len(res.Units) > 0 {
@@ -319,6 +335,7 @@ func runConfigSet(inv *invocation) int {
 	var changed bool
 	if problems == nil {
 		res.Config, changed, problems = workspace.SetConfig(dir, key, value)
+		resolveReviewSurface(res.Config)
 	}
 	if changed {
 		res.ChangedPaths = []string{workspace.ConfigPath}
