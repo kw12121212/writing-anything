@@ -1,0 +1,68 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: zcode-writing-viewer
+sections:
+  Implementation:
+    plugin-scaffold:
+      text: 搭插件包脚手架：plugins/zcode-writing-viewer/ 的 package.json（scripts：build/test/check）、tsconfig、tsdown 与 vitest 配置、.zcode-plugin/plugin.json（mcpServers 指向 node dist/server.mjs 用 ${ZCODE_PLUGIN_ROOT} 与 cwd ${ZCODE_PROJECT_DIR}、ui.surfaces 注册写作工作区面板 availability session、userConfig 声明 workspaceRoot/waCliPath/enableSetup/waVersion/cliInstallDir/waBaseUrl、skills 字段）、本地市场 plugins/marketplace.json 条目
+      status: complete
+    host-port-modules:
+      text: 移植 host 侧纯逻辑模块并适配单测：root.ts（项目目录定位顺序：userConfig workspaceRoot 排他 → server cwd → process.cwd()；面板路径校验纯函数：绝对路径、拒 NUL/超长/UNC 与设备路径，注入 isAbsolute/resolve）、wacli.ts（--json 输出映射与按区域容错降级、spawnCliRunner 无 shell/超时/stdout 上限）、snapshot.ts（快照聚合类型与注入式入口，每次请求重读）、artifacts.ts（按 JSON Schema 约束路径的产物清单与全文读取，跳过符号链接）、queueview.ts（决策队列与复核记录视图模型）
+      status: complete
+    mcp-server:
+      text: 实现 MCP server 入口（官方 @modelcontextprotocol/sdk，stdio）：注册工具 workspace_status、workspace_snapshot（含 root 参数与 rootError 语义）、open_workspace（_meta.ui.surface 打开面板）、show_in_viewer（定位单元/清单视图）、get_view、report_view/release_view（面板报告所见）；注册 ui://zcode-writing-viewer/panel.html 资源（text/html;profile=mcp-app）与 ui://zcode-writing-viewer/review-illustration 资源模板；fs/spawn 注入式适配器；静态只读扫描测试（写入面名单钉在 setup 模块）
+      status: complete
+    review-session-tools:
+      text: 移植审阅会话与代理为 MCP 工具面：reviewsession.ts（唯一 wa-cli preview <unit> --serve 子进程、首行信封取端口与令牌、令牌只留 server 内存、10 秒启动时限、空闲 30 分钟、替换与退出终止、持续读空 stdout）、reviewproxy.ts（白名单转发 page.json、illustration 只 unit+id、feedback/confirm/author-review 三提交接口、请求体 64 KiB 上限、上游不可达不回显原始错误）；工具 review_start/review_status/review_end/review_page/review_submit；unit 引用参数校验（拒 - 开头/控制字符/超长）
+      status: complete
+    panel-shell:
+      text: 实现面板壳与总览视图：src/app.ts 以官方 @modelcontextprotocol/ext-apps 的 App 连接（connect 前注册全部 handler）、getHostContext 主题/语言并随 onhostcontextchanged 切换（ZCode 主题令牌映射 + 回退值）、callServerTool 桥接层（请求序号丢弃迟到响应）；overview.ts/treekeys.ts 纯函数移植（作品卡片、工作区计数与降级「—」、单元树缩进与 done/total、去重阻塞项、详情区）；键盘导航（roving tabindex、↑↓←→、Enter）、加载/空/错误态、工具栏刷新与路径切换（含 rootError 呈现与恢复默认）、窄宽度堆叠
+      status: complete
+    panel-views:
+      text: 实现产物与清单视图：artifactview.ts（YAML 产物语义卡片：brief/outline/claims 定制布局、其余通用卡片化）、yamlhighlight.ts（键/标量/结构/注释/锚点别名着色、大 YAML 顶层键折叠、解析失败降级源码视图）、markdownview.ts（draft 渲染阅读视图与源码高亮切换、滚动位置保持、HTML 转义）、视图切换控件全键盘可达；素材清单（source.yaml 卡片 + 原文 Markdown、claims 素材引用点击跳转）；决策队列与复核记录清单（queueview 消费、文件缺失空态/解析失败错误态）
+      status: complete
+    panel-review-view:
+      text: 实现审阅视图：reviewModel.ts 纯函数移植（page.json 解析含配图、段落先序、出处着色可关、文本检查与审稿发现项、待作者确认区含选项/推荐/原话摘要/拒绝、待作者复核区默认全选、单段选区规则与跨段拒绝、提交请求体、配图布局与 ui:// 取图地址构造、封面/未引用/不可用配图规则）；待审阅发现（快照 pendingConfirmations/pendingAuthorReviews → 卡片徽标与树标记、激活即选中并启动审阅、next 降级不显示）；提交成功重拉 page.json、失败保留已填内容；会话状态轮询时机（拉数据/重新可见）；结束审阅刷新快照；放大覆盖层（铺满面板、Esc/还原退出、输入保留、焦点移入）
+      status: complete
+    setup-capability:
+      text: 移植 setup 能力：setup.ts 纯逻辑（配置解析、发布产物下载与 SHA256SUMS 校验、原子安装、版本比对：latest 视为就绪、具体版本不符重下）、setupfs.ts 唯一写入模块（CLI 溯源标记 wa-cli.zcode-writing-viewer.json）、setup_status/setup_enable 工具（userConfig enableSetup 默认 false：未开启不注册下载动作、无网络请求、单飞行）、面板设置区（setupview.ts 状态机 idle/busy/enabled/error、双语文案、CLI 版本路径与溯源分类、技能来源对照表：捆绑 vs ~/.agents/skills 与项目 .agents/skills 存在性比对、无 wa-cli 时如实降级说明）
+      status: complete
+    skills-bundle:
+      text: 技能捆绑与插件技能：构建脚本从 internal/skills/skills/ 复制 13 个 wa-* 技能到插件 skills/（构建时核对名单完整、缺失失败）；插件自带 writing-workspace 技能（SKILL.md：指引 Agent 用 workspace_snapshot/get_view 工具与面板，reviewSurface 为 zcode 时请作者打开面板审阅）；清单 skills 字段指向
+      status: complete
+    wacli-zcode-surface:
+      text: wa-cli 的 zcode 审阅位置检测：internal/cli/workspace.go 的 resolveReviewSurface 增加 ZCODE_APP_VERSION 非空即 zcode（来源 env，与 DSH_WEB_URL 并列、DSH 优先）；internal/workspace 的 review_surface 取值集合扩为 browser|dsh|zcode（Schema 与 config set 校验同步，zcode 为合法值、空字符串删除字段语义不变）；internal/skills/skills/ 的 wa-revise/wa-publish/wa-assemble/wa-auto 四个 SKILL.md 在 dsh 分支旁加 zcode 分支（不启动 --serve、不交 127.0.0.1 地址，请作者打开 ZCode 插件面板「待审阅」入口完成审阅，作者说没有入口时改按 browser 做法，完成后用 wa-cli review show/next 复查）；补齐 internal/cli 与 internal/skills 的 Go 测试（env 检测、config set zcode、技能文本分支）
+      status: complete
+    release-packaging:
+      text: 发行接入：scripts/package.mjs 构建插件并产出 zcode-writing-viewer-<version>.tgz（含 dist、skills、manifest、README、LICENSE、THIRD_PARTY 说明）；.agents/skills/release 流程纳入 zcode tarball（与 dsh tarball 同批随 GitHub Release 发布、版本号对齐 wa-cli 版本策略与既有 plugin-version 约定）；plugins/marketplace.json 本地市场条目（displayName、双语 description、category）
+      status: complete
+    docs-glossary:
+      text: 文档与术语：plugins/zcode-writing-viewer/README.md（定位、结构、server 侧行为与工具面、审阅会话与代理边界、setup 开关与安全边界、技能捆绑与来源对照、面板行为、安装：本地 marketplace 与 GitHub Release tarball、与 wa-cli 版本兼容说明、实测证据索引）；docs/GLOSSARY.md 增补新术语（ZCode 插件（ZCode Plugin）、MCP Apps 等按首次出现规则）
+      status: complete
+  Testing:
+    test-plugin:
+      text: 插件完整检查：安装依赖后运行类型检查（tsc --noEmit）、构建（tsdown + 产物归一）与全部 vitest 单测（定位、路径校验、快照聚合与降级、CLI 桥、产物视图、高亮、键盘、队列、审阅会话与代理、setup 全链路、只读约束静态扫描、技能捆绑核对）
+      status: complete
+      command: pnpm --dir plugins/zcode-writing-viewer install && pnpm --dir plugins/zcode-writing-viewer run check
+    test-wacli-surface:
+      text: 聚焦 Go 测试：review_surface 的 zcode 环境检测、config set 取值与 Schema、四个技能文本分支
+      status: complete
+      command: go test ./internal/cli/... ./internal/skills/... ./internal/workspace/...
+    test-regression:
+      text: 完整项目回归：go vet、go build、全部 go test 与覆盖率检查（阈值 80%，范围 internal/** 不含 internal/tools/**），确认插件包不影响 Go 树
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    verify-server-smoke:
+      text: server 冒烟验证：以 stdio JSON-RPC 驱动构建产物 dist/server.mjs（initialize、tools/list 断言工具清单与 app/model 可见性、workspace_status/workspace_snapshot 对 testdata 夹具的输出、ui:// panel.html 资源读取为 HTML、review-illustration 资源模板），把命令输出与结论记入 plugins/zcode-writing-viewer/docs/evidence/server-smoke.txt
+      status: complete
+      command: node plugins/zcode-writing-viewer/scripts/server-smoke.mjs
+    verify-strict:
+      text: strict 校验：ready 与 verify 通过，delta 规格覆盖 delta 场景全部步骤
+      status: complete
+      command: strict-spec-cli ready zcode-writing-viewer && strict-spec-cli verify zcode-writing-viewer
+testing_gates:
+  validation_task: test-plugin
+  unit_test_task: test-regression

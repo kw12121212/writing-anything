@@ -1,0 +1,19 @@
+schema: strict-spec-driven/lesson/v1
+schema_version: 1
+artifact_type: lesson
+schema_file: templates/strict-spec-driven/schemas/lesson.yaml
+lesson:
+  id: windows-crlf-linux-5567a9
+  title: 共享测试夹具按平台检出换行符：Windows 检出的 CRLF 会让 Linux 语义的测试在两边都翻车
+category: testing
+status: active
+created_at: '2026-10-23T06:13:40.927Z'
+updated_at: '2026-10-23T06:13:40.927Z'
+context: 插件包从 dsh-writing-viewer 复制 testdata 夹具并在 vitest 中断言产物逐字一致；作者日常在 Linux 开发，本变更在 Windows 检出的工作树上开发
+observation: Windows 检出把 testdata 的 YAML/Markdown 换成 CRLF，yamlhighlight 的逐字回环、foldYaml 的头部断言等按 LF 写的测试立即失败；同时 48 个依赖 Unix 文件权限（chmod 0600）的 Go 测试在 Windows 必然失败且与本变更无关（干净 HEAD 同样失败）。规范化 testdata 为 LF 并在 .gitattributes 钉住 eol=lf 后，插件测试在 Windows 全绿；完整 Go 回归在 WSL 的 Linux 文件系统副本上真实通过（覆盖率 88.45%）
+takeaway: 跨平台开发时：①新包共享夹具一律 .gitattributes 钉 text eol=lf 并在写入时归一 LF；②判断 Go 测试失败是否环境性，先对干净 HEAD 跑同一命令对比失败集合，零新增即与本变更无关；③需要 Unix 权限语义的完整回归，把工作树复制进 WSL 原生文件系统（/mnt/c 上 chmod 依旧无效）运行同一条命令取证
+applies_when: 在 Windows 检出上开发本仓库（插件夹具、逐字断言、chmod/mode 类 Go 测试），或需要在本机为完整回归命令取得 Linux 语义的通过证据时
+occurrences:
+  - origin: zcode-writing-viewer
+    date: '2026-10-23'
+    evidence: 干净 HEAD Windows 失败 48 项 vs 本变更 49 项（唯一新增为技能历史哈希，登记后归零）；testdata 归一 LF 前 vitest 4 项失败、归一后全绿；WSL ~/wa-regression 完整回归 REGRESSION-EXIT=0（2026-10-23）

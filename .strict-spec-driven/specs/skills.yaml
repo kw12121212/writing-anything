@@ -72,7 +72,7 @@ requirements:
         - THEN: 正文按文体分出文章路径与 novel 路径，novel 路径引用 wa-plan、wa-scene、wa-continuity 与 wa-assemble，并写明 wa-cli handoff write 与新会话读取 wa-cli next 中的 handoff
   preview-serve-guidance:
     strength: MUST
-    statement: 使用本地阅读页（wa-cli preview <作品> --serve）的内置技能（wa-assemble、wa-auto、wa-publish、wa-revise）在任何交出阅读页地址（preview.url 或 pendingAuthorReviews 的 command 给出的地址）的步骤中，都必须先读取工作区的审阅位置（wa-cli status --json 输出的 config.reviewSurface）再给出指引。为 browser 时必须说明：该命令是作者确认期间持续运行的本地服务，要用客户端的后台任务运行、在作者确认完成前不得停止；读取首行输出的 preview.url 后，先确认该地址可以访问再交给作者；作者说打不开时，重新运行该命令并交出新的地址。为 dsh 时必须说明：不启动 wa-cli preview --serve、不交出 127.0.0.1 地址，而是请作者打开 DSH 插件面板，在标为「待审阅」的作品或单元上点「审阅」完成反馈、确认与复核；作者说完成后，用 wa-cli review show 或 wa-cli next 的 --json 输出复查结果再继续；作者说 DSH 面板里没有「待审阅」入口（DSH 未安装 dsh-writing-viewer 插件）时，改按 browser 的做法交出浏览器阅读页。技能不得自行探测运行环境，只以 config.reviewSurface 为准（未设置 review_surface 时由 wa-cli 按环境判断）
+    statement: 使用本地阅读页（wa-cli preview <作品> --serve）的内置技能（wa-assemble、wa-auto、wa-publish、wa-revise）在任何交出阅读页地址（preview.url 或 pendingAuthorReviews 的 command 给出的地址）的步骤中，都必须先读取工作区的审阅位置（wa-cli status --json 输出的 config.reviewSurface）再给出指引。为 browser 时必须说明：该命令是作者确认期间持续运行的本地服务，要用客户端的后台任务运行、在作者确认完成前不得停止；读取首行输出的 preview.url 后，先确认该地址可以访问再交给作者；作者说打不开时，重新运行该命令并交出新的地址。为 dsh 时必须说明：不启动 wa-cli preview --serve、不交出 127.0.0.1 地址，而是请作者打开 DSH 插件面板，在标为「待审阅」的作品或单元上点「审阅」完成反馈、确认与复核；作者说完成后，用 wa-cli review show 或 wa-cli next 的 --json 输出复查结果再继续；作者说 DSH 面板里没有「待审阅」入口（DSH 未安装 dsh-writing-viewer 插件）时，改按 browser 的做法交出浏览器阅读页。为 zcode 时必须说明：不启动 wa-cli preview --serve、不交出 127.0.0.1 地址，而是请作者打开 ZCode 插件（zcode-writing-viewer）面板，在标为「待审阅」的作品或单元上点「审阅」完成反馈、确认与复核；作者说完成后，用 wa-cli review show 或 wa-cli next 的 --json 输出复查结果再继续；作者说 ZCode 面板里没有「待审阅」入口（ZCode 未安装 zcode-writing-viewer 插件）时，改按 browser 的做法交出浏览器阅读页。技能不得自行探测运行环境，只以 config.reviewSurface 为准（未设置 review_surface 时由 wa-cli 按环境判断）
     scenarios:
       serve-guidance-present:
         - GIVEN: 内置技能中正文含 preview --serve 的技能（wa-assemble、wa-auto、wa-publish、wa-revise）
@@ -82,14 +82,22 @@ requirements:
         - GIVEN: 同上四个技能
         - WHEN: 检查它们的正文
         - THEN: 每个都说明 reviewSurface 为 dsh 时不启动 --serve、不交出 127.0.0.1 地址，请作者到 DSH 插件面板的「待审阅」入口审阅，并在作者完成后以 wa-cli review show 或 wa-cli next 复查
+      zcode-guidance-present:
+        - GIVEN: 同上四个技能
+        - WHEN: 检查它们的正文
+        - THEN: 每个都说明 reviewSurface 为 zcode 时不启动 --serve、不交出 127.0.0.1 地址，请作者到 ZCode 插件面板的「待审阅」入口审阅，并在作者完成后以 wa-cli review show 或 wa-cli next 复查
       every-handoff-step-branches:
         - GIVEN: 同上四个技能
         - WHEN: 逐个检查提到 preview.url 或阅读页地址的步骤
-        - THEN: 每个这样的步骤都写明 reviewSurface 为 dsh 时的做法
+        - THEN: 每个这样的步骤都写明 reviewSurface 为 dsh 与 zcode 时的做法
       dsh-fallback-present:
         - GIVEN: 内置技能中正文含 preview --serve 的技能
         - WHEN: 检查它们的 dsh 分支
         - THEN: 每个都说明作者说面板里没有「待审阅」入口时改按 browser 的做法
+      zcode-fallback-present:
+        - GIVEN: 内置技能中正文含 preview --serve 的技能
+        - WHEN: 检查它们的 zcode 分支
+        - THEN: 每个都说明作者说 ZCode 面板里没有「待审阅」入口时改按 browser 的做法
   illustrate-skill:
     strength: MUST
     statement: 内置技能 wa-illustrate 必须指导 Agent 完成可选的配图（Illustration）环节，只说明何时调用哪些 wa-cli 命令与外部步骤，不实现业务逻辑；其 commands 必须包含 illustration add、illustration list、illustration remove、draft write、review record、claim list、source list、decision add 与 decide。正文必须写明：（1）渲染工具为外部风格库 lemo-opuscar，由 Agent 在会话中运行，wa-cli 不运行它：按环境变量 LEMO_OPUSCAR_HOME、默认位置 ~/lemo-opuscar 的顺序定位库，需要 Node 20 以上版本；找不到时给出安装方式（克隆其仓库或安装其 Claude Code 插件后运行 setup.sh deps）并询问作者，作者不同意安装时跳过整个配图环节；（2）风格从 lemo-opuscar 的风格索引（styles/README.md）与作者保存的风格（~/lemo-my-styles/README.md）中由作者选定，渲染遵守所选风格的 STYLE.md；（3）渲染前提出配图计划（Illustration Plan）：封面构思，以及每张正文配图所在段落、表现内容、氛围图（Mood Image）或信息图（Infographic）与信息图关联的论断或素材，经作者确认后用 decision add 与 decide 回写；（4）信息图只能呈现已登记论断或素材中的数据与事实，登记时用 --claims 或 --sources 关联；（5）渲染页面与中间文件放在工作区 .writing-anything/ 之外，用 lemo-opuscar 的 node core/render/still.mjs 加 --size 渲染静帧，封面按公众号封面比例（如 1800×766，主体居中以便裁出方形分享图）；（6）用 wa-cli illustration add 登记，Agent 渲染的图 --origin 为 agent，只有作者亲自提供的图片 --origin 为 author，封面用 --role cover 登记在作品根单元；（7）用 add 输出的 markdown 字段与 wa-cli draft write 把引用插入计划的段落之后，作者改过正文时按人工编辑保护处理；只插入了配图引用时用 wa-cli review record --reaffirm 沿用原来的审稿结论，改动了文字时重新审稿；（8）作者对某张图不满意时重新渲染并用 --replace 替换；（9）图文审看与验收交回 wa-publish。「必须停下来问作者」一节必须写明：风格选择、配图计划、安装 lemo-opuscar，以及以作者名义（--origin author）登记任何图片，都只能在作者明确同意后进行，不能由 Agent 代为决定。

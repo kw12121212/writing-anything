@@ -71,7 +71,7 @@ var statusCommand = &command{
 	flags:   []flagSpec{dirFlag},
 	outputKeys: []outputKey{
 		{"workspace", "相对项目目录的工作区路径"},
-		{"config", "配置摘要，含 language、defaultGenre、packs、gateLevel、contextBudget、aiDisclosure 与 reviewSurface（审阅位置（Review Surface）的生效值：browser 或 dsh）与 reviewSurfaceSource（其来源：config 为 config.yaml 显式设置；未设置时环境变量 DSH_WEB_URL 非空即 Agent 运行在 DSH Web 中为 dsh、来源 env，否则为 browser、来源 default）；配置无法解析时为 null"},
+		{"config", "配置摘要，含 language、defaultGenre、packs、gateLevel、contextBudget、aiDisclosure 与 reviewSurface（审阅位置（Review Surface）的生效值：browser、dsh 或 zcode）与 reviewSurfaceSource（其来源：config 为 config.yaml 显式设置；未设置时环境变量 DSH_WEB_URL 非空即 Agent 运行在 DSH Web 中为 dsh、否则 ZCODE_APP_VERSION 非空即 Agent 运行在 ZCode 中为 zcode，来源 env；再否则为 browser、来源 default）；配置无法解析时为 null"},
 		{"sources", "sources/ 下的直接条目数，不含隐藏条目"},
 		{"works", "works/ 下的直接条目数，不含隐藏条目"},
 		{"units", "按作品与单元树先序列出的单元，每项含 unit、work、type、parent、stage、blockers、commands 与 progress（汇总单元（Aggregated Unit）的进度，其他单元为 null）；汇总单元的 stage 与 blockers 由子单元汇总"},

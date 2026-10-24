@@ -402,6 +402,11 @@ categories:
       status: active
       occurrences: 1
       path: .strict-spec-driven/lessons/operations/pr-gh-generate-notes-8e86ae.yaml
+    delta-7b0f06:
+      title: 同变更新增主规格时不能同时携带引用它的 delta 场景
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/operations/delta-7b0f06.yaml
   performance:
     lesson-d20dc5:
       title: 按词表计数复用已有匹配器
@@ -489,6 +494,11 @@ categories:
       status: active
       occurrences: 1
       path: .strict-spec-driven/lessons/testing/lesson-971ba4.yaml
+    windows-crlf-linux-5567a9:
+      title: 共享测试夹具按平台检出换行符：Windows 检出的 CRLF 会让 Linux 语义的测试在两边都翻车
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/testing/windows-crlf-linux-5567a9.yaml
   ui:
     html-dom-copy-clipboarddata-ccfa90:
       title: 富文本剪贴板的退回复制不需要把 HTML 插入 DOM：用 copy 事件写 clipboardData

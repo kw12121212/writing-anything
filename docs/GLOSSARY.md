@@ -182,7 +182,7 @@
 | 令牌 | Token | 令牌 | `wa-cli preview --serve` 每次运行生成的随机字符串，访问本地阅读页必须携带，防止本机其他网页或程序冒用 |
 | 审阅会话 | Review Session | 审阅会话 | DSH 插件 dsh-writing-viewer 按作者在面板点「审阅」或「待审阅」标记启动的一次 `wa-cli preview --serve`：插件经同源路由只代理其 page.json 与提交接口，供面板的审阅视图使用，令牌只留在宿主机；同一宿主同一时间至多一个，结束审阅、空闲 30 分钟或启动另一单元时结束 |
 | 审阅视图 | Review View | 审阅视图 | dsh-writing-viewer 面板以原生组件呈现阅读页数据的视图：逐段正文与出处、发现项、待作者确认区与待作者复核区，作者在其中提交的反馈、确认与复核由 wa-cli 写入，确认渠道为 `preview` |
-| 审阅位置 | Review Surface | 审阅位置 | 作者在哪里审阅阅读页：`browser` 时内置技能交出浏览器阅读页地址，`dsh` 时请作者到 DSH 插件面板的「待审阅」入口审阅；工作区配置 `review_surface` 显式设置时以它为准，未设置时由 wa-cli 按运行环境判断（环境变量 `DSH_WEB_URL` 非空即在 DSH Web 中，为 `dsh`），`wa-cli status` 输出生效值与来源 |
+| 审阅位置 | Review Surface | 审阅位置 | 作者在哪里审阅阅读页：`browser` 时内置技能交出浏览器阅读页地址，`dsh` 时请作者到 DSH 插件面板的「待审阅」入口审阅，`zcode` 时请作者到 ZCode 插件面板审阅；工作区配置 `review_surface` 显式设置时以它为准，未设置时由 wa-cli 按运行环境判断（环境变量 `DSH_WEB_URL` 非空即在 DSH Web 中，为 `dsh`；否则 `ZCODE_APP_VERSION` 非空即在 ZCode 中，为 `zcode`），`wa-cli status` 输出生效值与来源 |
 | 安全上下文 | Secure Context | 安全上下文 | 浏览器把 https 页面与本机回环地址视为安全上下文，只有在其中才开放部分 Web API；经纯 http 的 tailnet 地址打开的 DSH 页面不是安全上下文，dsh-writing-viewer 的面板与审阅视图因此不依赖这类 API |
 | 人工编辑保护 | Human Edit Protection | 人工编辑保护 | 人改过的正文不被 Agent 覆盖 |
 | 上下文包 | Context Pack | 上下文包 | 只包含当前单元所需信息的输入集合 |
@@ -381,6 +381,8 @@
 | 语义卡片视图 | Semantic Card View | 语义卡片 | DSH 插件产物视图的两种呈现之一：把 YAML 产物（Artifact）按其 JSON Schema 字段组织成卡片（写作简报的受众/目的/核心观点、大纲的层级与覆盖、论断的论断-素材关联，其余产物按字段通用卡片化），而非展示文件原文；与「源码高亮视图（Source Highlight View）」一键切换 |
 | 源码高亮视图 | Source Highlight View | 源码视图 | DSH 插件产物视图的两种呈现之一：YAML 与 Markdown 产物原文的只读着色展示（YAML 着色键、标量、结构、注释、锚点与别名，Markdown 着色标题、列表、代码块、引用、表格等结构）；大 YAML 按顶层键折叠，高亮实现打包进客户端 bundle 不依赖网络 |
 | 请求来源校验 | Request Origin Guard | 来源校验 | DSH 插件在自注册 host 路由 handler 内做的请求来源判定，与 DSH 宿主 `/api` 浏览器信任栅栏（api-request-trust）同构：Host 头须为回环字面量、宿主监听地址字面量或插件配置 `allowedHosts` 显式放行的权威；`sec-fetch-site: cross-site` 拒绝；带 Origin 头时须与 Host 同权威；不满足返回 403（`cache-control: no-store`）。针对浏览器载体攻击（跨站读取、DNS rebinding），不是身份认证——本机进程访问与直接读文件等价，不在其威胁模型内 |
+| ZCode 插件 | ZCode Plugin | ZCode 插件 | ZCode（Z.ai 的 Agent 宿主，运行交互面板的桌面应用）的插件包：以插件清单（`.zcode-plugin/plugin.json`）声明 MCP 服务（MCP Server）、`ui.surfaces` 交互面板、捆绑技能与 userConfig 配置（如本仓库 `plugins/zcode-writing-viewer` 的写作工作区面板插件）；与规范包（Pack）是不同概念——规范包是纯数据的写作规范，ZCode 插件是宿主扩展，二者互不相关 |
+| MCP Apps | MCP Apps | MCP Apps | ZCode 面板与宿主、面板与插件 MCP 服务通信所依据的官方协议（`@modelcontextprotocol/ext-apps`）：页面经 `ui/initialize` 握手后用 `callServerTool`/`readServerResource` 访问本插件的 MCP 服务，主题与语言由宿主上下文下发；插件面板不得混用 `window.zcode` 遗留桥 |
 | 技能 | Skill | 技能 | Agent Skills 格式的操作说明包；wa-cli 内置的技能用 wa-cli skills install 安装 |
 | 技能提供者 | Skill Provider | 技能提供者 | DSH 技能注册表（`@deepseek-ai/dsh-skill` 的 SkillRegistry）的技能来源接口；各来源以 rank 升序竞争同名技能，rank 越小优先级越高；dsh-writing-viewer 插件以 rank 650 的提供者注册内置技能作为后备——高于全部技能层级（project 100/200、custom 300、user 400/500、运行时注册 250、bundled 600），任何同名外部技能优先，内置仅在无同名外部技能时提供 |
 | 模型上下文协议 | Model Context Protocol | MCP | Agent 调用外部工具的开放协议 |

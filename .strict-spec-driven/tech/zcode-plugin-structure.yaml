@@ -1,0 +1,157 @@
+schema: strict-spec-driven/main-tech/v1
+schema_version: 1
+artifact_type: main_tech
+schema_file: templates/strict-spec-driven/schemas/main-tech.yaml
+standard:
+  id: zcode-plugin-structure
+  title: ZCode 插件（ZCode Plugin）包结构与隔离
+  category: architecture
+rules:
+  plugin-package-isolation:
+    strength: MUST
+    statement: ZCode 插件源码位于 plugins/<name>/ 独立 TypeScript 包：自带 package.json（清单 .zcode-plugin/plugin.json 声明 mcpServers、ui.surfaces、skills 与 userConfig）、构建与测试脚本；不得放入 cmd/ 或 internal/，不得加入 Go 模块
+    rationale: 产品运行时是 Go 单文件 wa-cli 二进制，覆盖率与回归关卡都以 internal/** 为范围；插件是 ZCode 宿主的扩展，混入 Go 树会污染统计并使产品运行时不依赖插件失去结构保证（沿用 dsh-plugin-structure 同名规则的隔离方向）
+    enforcement:
+      method: review
+    examples:
+      good:
+        - plugins/zcode-writing-viewer/.zcode-plugin/plugin.json 声明 mcpServers 与 ui.surfaces，构建测试脚本都在包内
+      bad:
+        - 把插件 server 入口放进 internal/zcodeviewer/ 并由 internal 包引用
+  runtime-plugin-independence:
+    strength: MUST
+    statement: wa-cli、内置技能与 MCP 服务不得依赖、引用或调用 ZCode 插件包；完整 Go 回归命令保持不变并仍通过，插件包不改变其结果
+    rationale: 插件属 ZCode 宿主扩展而非产品运行时；两侧互不牵连让单文件二进制分发与 Go 回归语义保持不变（与 dsh-plugin-structure 同名规则同构）
+    enforcement:
+      method: test
+      detail: 完整回归命令原样通过即强制；评审核对 plugins/ 下无 .go 文件、无 Go import 指向插件目录
+  plugin-toolchain-self-contained:
+    strength: SHOULD
+    statement: 插件包的构建、类型检查与单元测试在包内 package.json scripts 声明并可在包目录独立运行；不在仓库根新增共享 Node 工作区或根 package.json
+    rationale: 仓库主体是 Go 工程；插件工具链自包含使 Go 回归与插件回归互不牵连（沿用 dsh-plugin-structure 既定约定）
+    enforcement:
+      method: review
+  plugin-cli-audit-exception:
+    strength: MUST
+    statement: ZCode 插件以子进程调用 wa-cli 只读命令（status、validate 等带 --json 的查看命令）视为只读访问，但必须在自己的 delta 规格中显式写明审计日志（Audit Log）例外：wa-cli 每次调用（含只读命令）都会向 .writing-anything/audit.log 追加一行运维痕迹，插件不得宣称绝对零写入；插件在一次用户动作内对 wa-cli 的调用次数必须有界并可在规格中枚举，不得以轮询或监听名义反复调用
+    rationale: 与 dsh-plugin-structure 的 plugin-cli-audit-exception 同一实测事实：外部子进程调用无抑制手段，调用无界会灌满审计日志
+    enforcement:
+      method: test
+      detail: 测试用写入型假二进制（模拟 wa-cli：输出罐装 --json 并向 audit.log 追加行）驱动一次完整快照，断言追加的审计行与规格枚举的有界命令集合一一对应，且除 audit.log 外工作区逐字节不变
+  plugin-cli-json-bridge:
+    strength: SHOULD
+    statement: 插件消费 wa-cli 的 --json 输出时：输出映射单列为独立模块；每个命令区域（status、validate、next、timeline 等）独立降级——二进制不可用、执行失败、超时、stdout 无法解析或缺少所需字段时，该区域按降级标注呈现（原因写入响应的 degraded 数组），文件可直接解析的数据照常返回，不得整体失败；子进程以参数列表直接 spawn（不经 shell、设超时、有界累积 stdout），文件读取器与执行器经参数注入以便单元测试用罐装输出驱动
+    rationale: 与 dsh-plugin-structure 的 plugin-cli-json-bridge 同构：字段演进只改一处，缺角环境下面板仍有内容可看
+    enforcement:
+      method: review
+      detail: 评审核对：映射与聚合分离、每个 CLI 区域有降级路径与测试覆盖、spawn 无 shell 且有超时与 stdout 上限
+  tool-path-input-guard:
+    strength: MUST
+    statement: 插件 MCP 工具接受调用方提供的本机路径（如快照与审阅会话的 root 参数）时，必须先经纯函数校验：非空、不含 NUL、有长度上限、为绝对路径，并拒绝以两个斜杠或反斜杠开头的网络与设备路径（UNC 等），通过后规范化；该路径只作用于单次工具调用、server 不保存状态——唯一例外是审阅会话（Review Session）：启动请求所选的项目目录在该会话生命周期内保存（作为 wa-cli preview --dir 的取值并在会话摘要中回显），会话结束即释放；路径无效或其下没有工作区时返回带可读原因的空态或错误，不得回退到默认定位；读取范围限于所选目录的 .writing-anything/ 且不跟随其下的符号链接，传给 wa-cli 时只作为 --dir 的取值
+    rationale: 与 dsh-plugin-structure 的 host-route-path-input 同构：面板路径切换语义原样移植，只是入口从路由参数变为工具参数；相对路径漂移、UNC 触发网络访问、静默回退误导作者的问题是宿主无关的
+    enforcement:
+      method: test
+      detail: 单测断言相对、NUL、超长、UNC 与设备路径被拒且返回空态与原因、不回退默认定位、不带参数时行为不变；用写入型假 wa-cli 断言 --dir 取值为所选路径且调用集合有界
+    examples:
+      good:
+        - src/root.ts 的 parsePanelRoot：注入 isAbsolute/resolve，拒绝相对、NUL、超长与 // 或反斜杠开头的路径
+      bad:
+        - 工具直接 join(process.cwd(), args.root) 后读取，无工作区时静默回退显示另一个项目
+  client-view-model-module:
+    strength: SHOULD
+    statement: 面板侧从快照等工具数据推导显示内容（计数、树、卡片、详情）的逻辑应单列为无 DOM、无网络请求的纯函数模块，由面板入口导入并打包进同一面板资源；面板入口只负责状态、事件绑定与以 createElement 渲染，渲染函数对 createElement 保持纯，以便测试用记录型 createElement 断言渲染结构
+    rationale: 与 dsh-plugin-structure 的 client-view-model-module 同构：面板入口经官方 SDK 连接宿主，逻辑若混在入口里就无法表驱动测试（可从 dsh 包的 overview.ts/treekeys.ts 直接移植）
+    enforcement:
+      method: review
+    examples:
+      good:
+        - src/overview.ts 的 overviewModel/unitTree/unitDetail 纯函数，app.test.ts 以记录型 h 断言渲染结构
+      bad:
+        - 在面板事件回调里直接遍历快照计算阻塞项去重与树缩进
+  client-content-rendering-safety:
+    strength: MUST
+    statement: 面板渲染来自工作区（Workspace）的内容（Markdown 正文、YAML 源码、产物字段值）时，渲染器必须只产出结构化节点树（块类型与纯文本子节点）或带类别的 token 序列，经 createElement 以纯文本子节点输出；不得拼接 HTML 字符串，不得使用 innerHTML，不得把产物内容交给 eval 或 new Function；高亮器与渲染器为零依赖纯模块，打包进面板资源，渲染过程不得发起任何网络请求（面板全部资源经 ui:// 资源由本插件 server 提供，不引用外部 CDN）
+    rationale: 面板渲染的是作者的产物原文，可含任意 HTML 与脚本字样；结构化节点 + 纯文本子节点从根上排除执行面（沿用 dsh-plugin-structure 的 client-content-rendering-safety 形态，网络面在 ZCode 收紧为全部资源 ui:// 自供）
+    enforcement:
+      method: test
+      detail: vitest 断言渲染器输出仅为允许的块类型与纯文本、token 拼接逐字还原原文，并核查构建出的面板资源无外部 URL 引用
+    examples:
+      bad:
+        - 渲染器返回 HTML 字符串并经 innerHTML 注入，或从 CDN 加载 highlight.js
+  mcp-app-official-sdk:
+    strength: MUST
+    statement: 面板与宿主、面板与 server 的通信必须走官方 MCP Apps 协议：页面以 @modelcontextprotocol/ext-apps 的 App 连接（connect 前注册全部 handler，主题与语言取 getHostContext 并响应 onhostcontextchanged），server 以官方 MCP SDK 注册工具与 ui:// 资源；SDK 版本在构建锁文件钉住；面板资源自包含（HTML 资源不超过宿主上限，超限拆分）、不访问 window.zcode 兼容桥（同一页面不得建立第二条连接）；server 工具按消费者声明可见性（模型与面板共用的工具默认两者可见，仅面板使用的工具声明为 app）
+    rationale: 官方 ZCode 文档把 MCP Apps 定为 UI 插件契约；协议含握手、能力协商与上下文通知，手写或混用遗留桥会在宿主升级时漂移（design 决策 official-mcp-apps-protocol）
+    enforcement:
+      method: review
+      detail: 评审核对：App 单例、handler 先于 connect 注册、锁文件钉版本、面板资源无外部引用、工具可见性声明与用途一致
+  opt-in-setup-actions:
+    strength: MUST
+    statement: 插件的安装类能力（下载可执行文件）必须整体置于默认关闭的 userConfig 开关（enableSetup）之后：开关未开启时不提供设置动作、不修改进程环境、不发起网络请求。下载只由面板显式动作触发，且只允许从插件配置的发布地址下载固定命名的发布产物（Release Asset 与 SHA256SUMS），必须先按 SHA256SUMS 记录校验再原子落盘（临时文件加 rename、可执行权限），下载与校验失败不得留下部分文件；下载体积必须有界；不做 PATH 追加或任何宿主进程环境修改
+    rationale: 下载可执行文件是插件最高风险的动作，必须默认关闭、显式触发、来源与校验固定（沿用 dsh-plugin-structure 的 opt-in-setup-actions）；ZCode 插件进程无法回写宿主 env，PATH 追加无等价机制，禁止尝试
+    enforcement:
+      method: test
+      detail: 单测以注入式 fetch、文件适配器驱动：校验失败断言无落盘、开关关闭断言无网络调用与动作行为
+  plugin-write-surface-declaration:
+    strength: SHOULD
+    statement: 插件新增可选写入能力时，应把全部写入型 node:fs 调用收拢到该能力专用的独立模块（含其真实适配器），并在包内静态只读扫描测试中以显式名单声明这些模块：名单外模块出现任何写入型调用即测试失败，名单内文件名必须存在（防止改名后静默扩大豁免）。查看路径（快照、工具读取、审阅代理）保持零写入调用，不因新能力放宽
+    rationale: 沿用 dsh-plugin-structure 的 plugin-write-surface-declaration 结构：写入面集中一处并由静态测试钉住名单，viewer 路径的只读保证不被稀释
+    enforcement:
+      method: test
+      detail: 见 src/readonly.test.ts 的 SETUP_WRITE_MODULES 与存在性检查；setupfs.ts 是唯一持有写入型 node:fs 调用的适配器模块
+  review-proxy-thin:
+    strength: MUST
+    statement: 插件代理 wa-cli 阅读页服务时只做薄转发：只转发固定的接口集合（page.json 数据、配图取图的 unit 与 id、feedback、confirm、author-review 三个提交接口），不转发阅读页 HTML 或任何其他路径；配图只接受 unit 与 id 两个取值；上游只连 127.0.0.1 上本插件启动的会话端口；不得改写上游响应正文（含配图图片字节）；会话令牌只存在于 server 进程内存，由 server 注入上游请求，不得出现在任何工具响应、资源内容或面板状态中，不得接受调用方提供的令牌；错误回显不得包含上游 URL 或原始错误信息；审阅相关模块不得含写入型 node:fs 调用，也不得加入静态只读扫描测试的写入模块名单，工作区写入只能出自 wa-cli 子进程
+    rationale: 与 dsh-plugin-structure 的 review-proxy-thin 同构：wa-cli 是唯一真相来源，插件只做薄封装；令牌不出 server 进程缩小暴露面（入口从 HTTP 代理路由变为 MCP 工具与 ui:// 资源，白名单语义不变）
+    enforcement:
+      method: test
+      detail: 代理单测以假上游断言：未知 action 与路径不转发、调用方令牌被丢弃并由会话令牌覆盖、page.json 正文与配图图片字节逐字节转达、配图只接受 unit 与 id、全部工具响应不含令牌与上游地址、上游不可达时不回显原始错误
+  review-child-lifecycle:
+    strength: MUST
+    statement: 插件启动的 wa-cli preview --serve 子进程必须有界：同一 server 至多一个；启动在固定时限内未读到首行信封即终止子进程并报告失败；会话结束（显式结束、空闲时限、启动另一会话、子进程退出、server 进程退出）时必须终止子进程并释放会话状态；必须持续读空子进程 stdout 防止管道阻塞；一次作者动作只调用一次 wa-cli，不得以轮询或健康检查名义反复调用 wa-cli
+    rationale: 长驻子进程是插件引入的资源，泄漏会残留监听端口与进程（沿用 dsh-plugin-structure 的 review-child-lifecycle；server 进程退出对应 ZCode 停止插件进程）
+    enforcement:
+      method: test
+      detail: 会话单测以注入式 spawn 假件驱动：启动超时、非零退出、替换与空闲到期都断言 kill 被调用且状态清空；server 退出钩子断言子进程被终止；断言一次启动只 spawn 一次
+  host-cli-arg-guard:
+    strength: MUST
+    statement: 插件把调用方提供的非路径值（如单元引用）作为 wa-cli 位置参数传入前，必须经纯函数校验：非空、有长度上限、不以 - 开头、不含控制字符，并且只经参数列表传递、从不经 shell
+    rationale: 以 - 开头的值会被 wa-cli 当作参数解析，形成参数注入（沿用 dsh-plugin-structure 的 host-cli-arg-guard）
+    enforcement:
+      method: test
+      detail: 单测断言 validReviewUnit 拒绝 --output=x、-x、含换行与超长输入，工具在校验失败时返回可读错误且不 spawn
+  tool-stub-fidelity:
+    strength: SHOULD
+    statement: 面板侧测试为插件工具构造的应答桩应镜像真实工具契约的完整载荷形状（如会话摘要的 unit、root、startedAt），不从契约中删减字段；桩与契约漂移会让视图模型的判定测试给出与真实工具不符的假结果
+    rationale: 与 dsh-plugin-structure 的 client-route-stub-fidelity 同一教训：桩少一字段，测试证明的就不是工具实际返回的形状
+    enforcement:
+      method: review
+      detail: 评审新增或修改的面板工具桩时，对照 server 工具实现的完整字段清单核对桩的载荷形状
+  overlay-keyboard-dismiss:
+    strength: SHOULD
+    statement: 面板新增以 Esc 关闭的覆盖层或浮层（如审阅放大视图）时，挂载时必须把 DOM 焦点移入浮层（或以文档级监听承接 Esc），并在处理关闭键时阻止事件冒泡与默认行为影响宿主；对应测试必须经真实 DOM 或可运行的真实状态路径驱动打开与关闭，不得只直接调用浮层 props 上的事件回调
+    rationale: 与 dsh-plugin-structure 的 client-overlay-keyboard-dismiss 同一教训：焦点不进浮层则 Esc 不可达，直调回调的测试会把不可达路径掩蔽成通过
+    enforcement:
+      method: test
+      detail: 浮层打开→关闭的集成用例经真实 DOM 驱动；Esc 处理断言 stopPropagation 与 preventDefault 被调用、其他键不触发
+  skills-bundle-sync:
+    strength: MUST
+    statement: 插件捆绑的 wa-* 技能必须构建时从仓库 internal/skills/skills/ 原样复制：构建脚本持有技能名单并核对完整（缺失或多出即构建失败），复制内容逐字一致（不做改写）；插件的运行时代码不得读取或解析技能目录之外的用户技能目录来做注册，来源对照只做存在性探测
+    rationale: 作者选择静态捆绑技能（design 决策 skills-static-bundling）：双份维护的唯一防漂移手段是构建时从唯一真相来源复制并以名单核对；改写复制内容会造成两套真相
+    enforcement:
+      method: test
+      detail: 构建脚本核对名单与内容；vitest 或构建后校验比对插件 skills/ 与 internal/skills/skills/ 的同名 SKILL.md 逐字一致
+  plugin-perf-evidence:
+    strength: SHOULD
+    statement: 插件包含规模敏感路径（快照聚合、大工作区的树与产物渲染）时，应以包内脚本生成合成夹具（经 wa-cli 真实命令创建、结构合法）并用计时探针实测关键阶段，把带日期与参数的记录追加到 docs/evidence/；性能检查是证据而非数值门槛；计时探针经环境变量门控，未提供夹具时默认测试套件跳过它
+    rationale: 沿用 dsh-plugin-structure 的 plugin-perf-evidence：证据优先于门槛、探针不拖慢默认套件、夹具必须真实合法
+    enforcement:
+      method: review
+      detail: 评审核对 docs/evidence 存在且带日期与规模参数、package.json 声明 perf 脚本、探针测试在无环境变量时按设计跳过
+  fixture-line-endings:
+    strength: MUST
+    statement: 插件包携带或复用的测试夹具（testdata）必须以 LF 行尾入库并在仓库 .gitattributes 中以 eol=lf 钉住（如 plugins/*/testdata/** text eol=lf）；从既有包复制夹具时必须先归一为 LF 再提交
+    rationale: 夹具被逐字断言（高亮回环、折叠头部、注释保留）消费；Windows 检出把夹具换成 CRLF 时这些测试在 Windows 与 Linux 两侧都会失败，且失败面目与被测代码缺陷相同（2026-10-23 实测：归一前 vitest 4 项失败，归一并钉住后全绿）
+    enforcement:
+      method: review
+      detail: 评审核对 .gitattributes 含 plugins/*/testdata/** text eol=lf，且新入库夹具文件不含 CR

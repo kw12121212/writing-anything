@@ -1,0 +1,19 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: zcode-plugin-userconfig-strings
+  status: proposed
+summary:
+  what:
+    - 修复 plugins/zcode-writing-viewer/.zcode-plugin/plugin.json 的 userConfig 字段格式：ZCode 清单校验要求每个配置项的 title 与 description 为纯字符串，原清单写成中英双语对象导致整个本地市场加载被校验拒绝（Zod 报 expected string, received object，12 条）；改为纯字符串（中文，含配置键名以便辨识），并新增 manifest.test.ts 静态守护测试钉住该格式与清单关键结构（面板 surface 指向自身 server、ZCODE_PLUGIN_ROOT/ZCODE_PROJECT_DIR 变量、userConfig 到 ZCODE_WV_* 环境注入的对应、skills 目录）
+  why:
+    - 首次在 ZCode 安装本地市场时清单校验失败，插件无法安装——panel-visible 需求的前置被破坏，属上一变更（zcode-writing-viewer）交付缺陷
+scope:
+  in:
+    - plugins/zcode-writing-viewer/.zcode-plugin/plugin.json（userConfig 六个条目的 title/description 改为纯字符串）；plugins/zcode-writing-viewer/src/manifest.test.ts（新增清单格式守护测试）
+  out:
+    - 不改动任何运行时行为（server、面板、技能、清单其余字段不变）；不修改规格与技术标准
+unchanged_behavior:
+  - 除清单 userConfig 字段格式外，插件全部行为与上一变更一致；Go 侧与回归不受影响（清单不参与 Go 构建）

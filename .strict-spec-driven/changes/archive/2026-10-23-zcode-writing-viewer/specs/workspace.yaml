@@ -1,0 +1,97 @@
+schema: strict-spec-driven/delta-spec/v1
+schema_version: 1
+artifact_type: delta_spec
+schema_file: templates/strict-spec-driven/schemas/delta-spec.yaml
+target_spec: workspace
+operations:
+  ADDED: {}
+  MODIFIED:
+    config-set:
+      strength: MUST
+      statement: wa-cli config set <key> <value> 必须把工作区 config.yaml 中的 key 设为 value，并保留其他字段与 YAML 注释。key 只能是 language、default_genre、packs、gate_level、context_budget、ai_disclosure、review_surface；review_surface 的 value 为 browser、dsh 或 zcode（见 config-review-surface），为空字符串时删除该字段（即按 config-review-surface 自动判断）；ai_disclosure 的 value 为 footer、metadata 或 both（见 export 主规格的 ai-disclosure），为空字符串时删除该字段（即默认的 both）；packs 的 value 按逗号分隔，空字符串表示空数组；default_genre 与 context_budget 的 value 为空字符串时删除该字段；context_budget 的 value 为十进制整数时写为整数，不是正整数时按 Schema 报告 artifact.schema-violation（field 为 context_budget）。写入成功时退出码为 0，changedPaths 为 .writing-anything/config.yaml，--json 输出的 config 字段为修改后的配置；新值与原值相同时不写文件，changedPaths 为空数组。新值不符合 Schema 时必须报告 artifact.schema-violation 并保持文件不变，退出码为 1；key 不在上述范围内时必须报告错误码 config.unknown-key，退出码为 1；key 当前的值带有 YAML 锚点时必须报告错误码 config.anchored-value 并保持文件不变，退出码为 1；修改后的文档无法重新解析时不得写入；未找到工作区时按 workspace-not-found 处理。
+      scenarios:
+        set-gate-level:
+          - GIVEN: 刚初始化的工作区 D，作者在 config.yaml 中加了一行注释
+          - WHEN: 运行 wa-cli config set gate_level strict --dir D --json
+          - THEN: config.yaml 的 gate_level 为 strict，注释与其他字段不变；changedPaths 为 [.writing-anything/config.yaml]，config.gateLevel 为 strict，退出码为 0
+        set-packs:
+          - GIVEN: 刚初始化的工作区 D
+          - WHEN: 运行 wa-cli config set packs "house-style, glossary-zh" --dir D --json
+          - THEN: config.yaml 的 packs 为 [house-style, glossary-zh]，退出码为 0
+        clear-default-genre:
+          - GIVEN: 用 wa-cli init --dir D --genre tech-blog 创建的工作区
+          - WHEN: 运行 wa-cli config set default_genre "" --dir D --json
+          - THEN: config.yaml 不再含 default_genre，config.defaultGenre 为 null，退出码为 0
+        set-invalid-value:
+          - GIVEN: 刚初始化的工作区 D
+          - WHEN: 运行 wa-cli config set gate_level bogus --dir D --json
+          - THEN: valid 为 false，diagnostics 中有一条错误码为 artifact.schema-violation、field 为 gate_level 的诊断，config.yaml 与运行前逐字节相同，退出码为 1
+        set-unknown-key:
+          - GIVEN: 刚初始化的工作区 D
+          - WHEN: 运行 wa-cli config set schema_version 2 --dir D --json
+          - THEN: valid 为 false，diagnostics 中有一条错误码为 config.unknown-key 的诊断，config.yaml 不变，退出码为 1
+        set-same-value:
+          - GIVEN: 刚初始化的工作区 D，gate_level 为 standard
+          - WHEN: 运行 wa-cli config set gate_level standard --dir D --json
+          - THEN: changedPaths 为空数组，config.yaml 不变，退出码为 0
+        repair-broken-field:
+          - GIVEN: 工作区 D 的 config.yaml 中 gate_level 为 bogus
+          - WHEN: 运行 wa-cli config set gate_level fast --dir D --json
+          - THEN: config.yaml 的 gate_level 变为 fast，valid 为 true，退出码为 0；此后 wa-cli validate --dir D 通过
+        set-anchored-value:
+          - GIVEN: '工作区 D 的 config.yaml 为 default_genre: &genre tech-blog 且 packs: [*genre]'
+          - WHEN: 运行 wa-cli config set default_genre "" --dir D --json
+          - THEN: valid 为 false，diagnostics 中有一条错误码为 config.anchored-value、field 为 default_genre 的诊断，config.yaml 与运行前逐字节相同，退出码为 1
+        set-context-budget:
+          - GIVEN: 刚初始化的工作区 D
+          - WHEN: 运行 wa-cli config set context_budget 5000 --dir D --json
+          - THEN: config.yaml 的 context_budget 为整数 5000，config.contextBudget 为 5000，退出码为 0
+        set-bad-context-budget:
+          - GIVEN: 刚初始化的工作区 D
+          - WHEN: 运行 wa-cli config set context_budget 0 --dir D --json
+          - THEN: diagnostics 中有一条错误码为 artifact.schema-violation、field 为 context_budget 的诊断，config.yaml 不变，退出码为 1
+        set-ai-disclosure:
+          - GIVEN: 已初始化的工作区
+          - WHEN: 运行 wa-cli config set ai_disclosure footer --dir D --json，再运行 wa-cli config set ai_disclosure never --dir D --json
+          - THEN: 第一次 config.yaml 的 ai_disclosure 为 footer、退出码为 0；第二次报告 artifact.schema-violation（field 为 ai_disclosure），文件不变，退出码为 1
+        set-review-surface-zcode:
+          - GIVEN: 刚初始化的工作区 D
+          - WHEN: 运行 wa-cli config set review_surface zcode --dir D --json，再运行 wa-cli status --dir D --json
+          - THEN: config.yaml 的 review_surface 为 zcode，两次输出的 config.reviewSurface 都为 zcode、reviewSurfaceSource 为 config，退出码为 0；此后 wa-cli validate --dir D 通过
+    config-review-surface:
+      strength: MUST
+      statement: config.yaml 可以含可选字段 review_surface，取值 browser、dsh 或 zcode；它声明作者在哪里审阅阅读页（Reading View）：browser 为在浏览器中打开 wa-cli preview --serve 给出的地址，dsh 为在 DSH 插件面板中审阅，zcode 为在 ZCode 插件面板中审阅。设置了该字段时生效值即为它（来源 config）；未设置时按调用 wa-cli 的进程环境自动判断：环境变量 DSH_WEB_URL 非空（DSH Web 向模型 shell 注入的变量，表示 Agent 运行在 DSH Web 中）时生效值为 dsh（来源 env），否则环境变量 ZCODE_APP_VERSION 非空（ZCode 向模型 shell 注入的变量，表示 Agent 运行在 ZCode 中）时生效值为 zcode（来源 env），否则为 browser（来源 default）。wa-cli 的命令行为与诊断中的 next 命令不因它改变，只在 status 与 config set 输出的 config 中以 reviewSurface（生效值）与 reviewSurfaceSource（config、env 或 default）透出；init 不写出该字段；取值不合法时按 Schema 报告 artifact.schema-violation（field 为 review_surface）
+      scenarios:
+        surface-default:
+          - GIVEN: 刚初始化的工作区 D，环境变量 DSH_WEB_URL 与 ZCODE_APP_VERSION 均未设置或为空
+          - WHEN: 运行 wa-cli status --dir D --json
+          - THEN: config.yaml 不含 review_surface，config.reviewSurface 为 browser，config.reviewSurfaceSource 为 default
+        surface-set-dsh:
+          - GIVEN: 刚初始化的工作区 D
+          - WHEN: 运行 wa-cli config set review_surface dsh --dir D --json，再运行 wa-cli status --dir D --json
+          - THEN: config.yaml 的 review_surface 为 dsh，两次输出的 config.reviewSurface 都为 dsh、reviewSurfaceSource 为 config，退出码为 0；此后 wa-cli validate --dir D 通过
+        surface-set-zcode:
+          - GIVEN: 刚初始化的工作区 D，环境变量 DSH_WEB_URL 未设置、ZCODE_APP_VERSION 为 3.16.2
+          - WHEN: 运行 wa-cli status --dir D --json
+          - THEN: config.yaml 仍不含 review_surface，config.reviewSurface 为 zcode、reviewSurfaceSource 为 env，工作区文件不变（audit.log 除外）
+        surface-env-dsh-wins:
+          - GIVEN: 刚初始化的工作区 D，环境变量 DSH_WEB_URL 非空且 ZCODE_APP_VERSION 非空
+          - WHEN: 运行 wa-cli status --dir D --json
+          - THEN: config.reviewSurface 为 dsh、reviewSurfaceSource 为 env（DSH 判断先于 zcode）
+        surface-invalid:
+          - GIVEN: 刚初始化的工作区 D
+          - WHEN: 运行 wa-cli config set review_surface web --dir D --json
+          - THEN: diagnostics 中有一条错误码为 artifact.schema-violation、field 为 review_surface 的诊断，config.yaml 不变，退出码为 1
+        surface-clear:
+          - GIVEN: 工作区 D 的 review_surface 为 dsh，环境变量 DSH_WEB_URL 未设置
+          - WHEN: 运行 wa-cli config set review_surface "" --dir D --json
+          - THEN: config.yaml 不再含 review_surface，config.reviewSurface 为 browser、reviewSurfaceSource 为 default，退出码为 0
+        surface-env-dsh:
+          - GIVEN: 刚初始化的工作区 D，环境变量 DSH_WEB_URL 为 http://127.0.0.1:13080/
+          - WHEN: 运行 wa-cli status --dir D --json
+          - THEN: config.yaml 仍不含 review_surface，config.reviewSurface 为 dsh、reviewSurfaceSource 为 env，工作区文件不变（audit.log 除外）
+        surface-config-wins:
+          - GIVEN: 工作区 D 的 review_surface 为 browser，环境变量 DSH_WEB_URL 非空
+          - WHEN: 运行 wa-cli status --dir D --json
+          - THEN: config.reviewSurface 为 browser、reviewSurfaceSource 为 config
+  REMOVED: {}

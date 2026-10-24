@@ -1,0 +1,60 @@
+schema: strict-spec-driven/question-list/v1
+schema_version: 1
+artifact_type: question_list
+schema_file: templates/strict-spec-driven/schemas/question-list.yaml
+change: zcode-writing-viewer
+open: []
+resolved:
+  - id: requirement-problem
+    question: 今天具体哪里不对、对谁不对？
+    context: writing-anything 已有 DSH 工作区查看插件（dsh-writing-viewer），作者的另一日常宿主 ZCode 没有对应插件
+    answer: 在 ZCode 中使用 writing-anything 的作者无法在宿主面板内总览工作区、浏览产物与素材，单元审阅只能开浏览器阅读页；Agent 也无法被指引到面板完成审阅闭环
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-outcome
+    question: 什么可观察差异证明问题解决了？
+    context: 插件装进 ZCode 后应达到与 DSH 版对齐的体验
+    answer: 安装 zcode-writing-viewer 后，ZCode 出现「写作工作区」面板：总览仪表盘、单元树与详情、产物语义/源码视图、素材清单、决策与复核清单、路径切换、键盘导航、待审阅标记与原生审阅视图（含配图与放大）；Agent 在 ZCode 中运行时 wa-cli status 报 reviewSurface=zcode，内置技能指引作者到面板审阅
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-trigger
+    question: 为什么是现在？
+    context: DSH 插件已迭代到 0.8.0，功能成熟；用户当前会话即运行在 ZCode
+    answer: 用户当前提出：DSH 版已成熟，要求仿照它把全部功能尽量移植到 ZCode（本会话即 ZCode 宿主）
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-non-goals
+    question: 什么必须明确不变？
+    context: 移植不等于改写既有产品
+    answer: dsh-writing-viewer 行为与结构不变；wa-cli 除 review_surface 检测与四个技能文本外不变；产品运行时不依赖插件；Go 回归与覆盖率范围不变；不做 DSH 专属机制（origin guard、注册表、动态技能注册、PATH 追加）在 ZCode 的等价物
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-interpretation
+    question: 「尽量移植所有功能」取哪种读法？
+    context: 宿主机制差异使三项 DSH 功能无直接等价物，需作者定夺取舍
+    answer: 作者已裁定：wa-cli zcode 集成一并移植；setup 完整照搬（捆绑 13 个 wa-* 技能 + CLI 下载）；一并接入 GitHub Release tarball 发行
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: scope-wacli-integration
+    question: 是否本次一并移植 wa-cli 的 review_surface=zcode 检测与四个内置技能的 zcode 分支？
+    context: 影响范围：internal/cli/workspace.go、internal/workspace 取值集合、internal/skills/skills 四个 SKILL.md、workspace/skills 主规格与术语表；不移植则 Agent 仍按 browser 指引
+    answer: 一并移植（推荐项）：完整对齐 DSH 版体验
+    status: resolved
+    answered_by: human
+  - id: scope-setup-port
+    question: setup（内置技能与 CLI）如何移植？
+    context: ZCode 无动态技能注册 API，技能只能静态随插件分发；wa-cli skills install 装入 ~/.agents/skills 后 ZCode 亦可读取
+    answer: 完整照搬：构建时把 13 个 wa-* 技能从 internal/skills/skills 复制进插件随包分发，另移植 wa-cli 下载/校验/安装工具；优先级由 ZCode 决定，设置区如实显示来源
+    status: resolved
+    answered_by: human
+  - id: scope-release-channel
+    question: 发行到什么程度？
+    context: DSH 插件随 GitHub Release 发 tarball；ZCode 本地开发用 plugins/marketplace.json
+    answer: 一并接入 release：打包脚本产出 zcode-writing-viewer-<version>.tgz 并纳入 .agents/skills/release 流程，与 dsh tarball 同批发布；本地 marketplace 同步交付
+    status: resolved
+    answered_by: human

@@ -1,0 +1,13 @@
+# 大纲（Outline）；请用 wa-cli outline set、wa-cli outline remove 与 wa-cli scene contract 修改。
+
+schema_version: 1
+sections:
+  - id: intro
+    title: 引入
+    role: situation
+    covers: [msg-boundary]
+    uses: [src-migration]
+  - id: contract
+    title: 契约测试长什么样
+    role: answer
+    covers: [msg-boundary]
