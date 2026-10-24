@@ -1,0 +1,9 @@
+schema_version: 1
+id: lean-style
+title: 精简文风示范
+description: 精简文风示范规范包（Pack）
+banned_terms:
+  - term: 赋能
+    reason: 空泛动词
+  - term: 抓手
+    reason: 空泛名词

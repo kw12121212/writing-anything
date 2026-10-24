@@ -4,3 +4,7 @@ coverage.out
 /wa-cli.exe
 /dist/
 *.test
+
+# 插件包的依赖与构建产物（源码、清单与捆绑技能除外）
+plugins/*/node_modules/
+plugins/*/dist/

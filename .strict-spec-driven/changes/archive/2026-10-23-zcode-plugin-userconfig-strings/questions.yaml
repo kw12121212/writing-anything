@@ -1,0 +1,42 @@
+schema: strict-spec-driven/question-list/v1
+schema_version: 1
+artifact_type: question_list
+schema_file: templates/strict-spec-driven/schemas/question-list.yaml
+change: zcode-plugin-userconfig-strings
+open: []
+resolved:
+  - id: requirement-problem
+    question: 今天具体哪里不对、对谁不对？
+    context: 用户在 ZCode 中添加本地市场时收到 Zod 校验错误清单
+    answer: 本地市场加载被整包拒绝：userConfig 的 title/description 是对象而校验要求字符串，插件无法安装
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-outcome
+    question: 什么可观察差异证明问题解决了？
+    context: 修复以 ZCode 实际接受为准
+    answer: 市场加载通过、插件可安装；manifest.test.ts 钉住格式防回归
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-trigger
+    question: 为什么是现在？
+    context: 安装尝试即时暴露
+    answer: 用户首次安装即触发，直接粘贴了校验错误
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-non-goals
+    question: 什么必须明确不变？
+    context: 格式修复不得牵连行为
+    answer: server、面板、技能与清单其余字段不变；不借机改功能
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-interpretation
+    question: 是否存在多种读法？
+    context: 错误信息明确指向字段类型
+    answer: 唯一读法：title/description 必须为纯字符串；i18n 对象不被该字段接受（顶层 description_i18n 未报错，保留）
+    status: resolved
+    kind: requirement
+    answered_by: human

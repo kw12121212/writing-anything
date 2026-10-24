@@ -1,0 +1,24 @@
+# 作品（Work）；请用 wa-cli new、wa-cli unit add 与 wa-cli advance 修改。
+
+schema_version: 1
+id: my-novel
+genre: novel
+type: novel
+stage: brief
+units:
+  - id: part-1
+    type: part
+    stage: brief
+    units:
+      - id: ch-1
+        type: chapter
+        stage: brief
+        units:
+          - id: scene-1
+            type: scene
+            stage: brief
+            units: []
+          - id: scene-2
+            type: scene
+            stage: brief
+            units: []

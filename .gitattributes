@@ -1,2 +1,6 @@
 # 内置技能与其历史哈希清单按字节比较：任何平台检出都保持 LF。
 internal/skills/** -text
+plugins/*/testdata/** text eol=lf
+plugins/*/src/panel-template.html text eol=lf
+# 插件捆绑的内置技能与 internal/skills 按字节比较，同样不做任何行尾转换。
+plugins/zcode-writing-viewer/skills/** -text

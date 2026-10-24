@@ -1,0 +1,13 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: zcode-plugin-userconfig-strings
+approach:
+  - 把 userConfig 六个条目的 title 与 description 从中英对象改为纯中文字符串（保留顶层 description_i18n——校验未拒绝且属另一字段），新增 manifest.test.ts：断言 userConfig 键集合与 title/description 均为非空字符串、面板 surface 指向自身 server 与 ui:// 资源、server 以 ${ZCODE_PLUGIN_ROOT} 启动且 userConfig 每键都有 ${user_config.*} 环境注入对应、skills 字段指向捆绑目录
+decisions:
+  userconfig-plain-strings:
+    decision: userConfig 的 title/description 使用纯字符串（中文，内嵌配置键名），不使用对象
+    rationale: ZCode 清单校验（Zod）要求该两字段为字符串；对象使整个市场条目被拒。官方公开插件清单亦未见 userConfig 用例，以宿主校验为准
+alternatives: []
+risks: []

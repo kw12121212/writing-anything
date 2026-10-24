@@ -1,0 +1,19 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: zcode-writing-viewer
+  status: proposed
+summary:
+  what:
+    - 新增 ZCode 插件（ZCode Plugin）plugins/zcode-writing-viewer/：以 MCP 服务（MCP Server，经官方 @modelcontextprotocol/sdk）提供写作工作区（.writing-anything/）的只读快照（Workspace Snapshot）工具与 ui:// 面板资源，面板以官方 MCP Apps 协议（@modelcontextprotocol/ext-apps 的 App）呈现与 DSH 插件对齐的全部功能——总览仪表盘、单元（Unit）树与详情、产物（Artifact）语义卡片与源码高亮视图、素材（Source）清单、决策队列（Decision Queue）与复核记录清单、路径切换、键盘导航、待审阅发现与原生审阅视图（Review View，MCP server 持有 wa-cli preview --serve 会话并只代理 page.json、配图与三个提交接口）；内置技能与 CLI 设置区（默认关）移植 wa-cli 下载校验安装，并把 13 个 wa-* 内置技能静态捆绑进插件分发；同时 wa-cli 按宿主环境变量自动给出 review_surface=zcode（Agent shell 中 ZCODE_APP_VERSION 非空即 zcode），wa-revise/wa-publish/wa-assemble/wa-auto 四个内置技能加 zcode 分支指引作者到本插件面板审阅；接入 release 打包流程随 GitHub Release 发布 tarball
+  why:
+    - writing-anything 已有成熟的 DSH 工作区查看插件（plugins/dsh-writing-viewer 0.8.0），但作者的另一日常宿主 ZCode 没有对应插件：ZCode 用户无法在宿主面板内总览工作区、浏览产物与素材，审阅只能开浏览器阅读页（Reading View），Agent 也无法被指引到面板。作者要求仿照 dsh-writing-viewer 尽量移植全部功能到 ZCode，使两个宿主具备对齐的查看与审阅体验
+scope:
+  in:
+    - 新增独立 TypeScript 包 plugins/zcode-writing-viewer/（.zcode-plugin/plugin.json 清单、MCP server、面板、技能、测试、构建脚本与 README，加入本地 marketplace plugins/marketplace.json）；wa-cli 侧修改 internal/cli/workspace.go 的 resolveReviewSurface（新增 ZCODE_APP_VERSION 环境检测为 zcode）与 internal/workspace 的 review_surface 取值集合，internal/skills/skills/ 四个技能的 SKILL.md 加 zcode 分支；新增主规格 zcode-plugin 与技术标准 zcode-plugin-structure；修改 .agents/skills/release 打包流程纳入 zcode 插件 tarball；docs/GLOSSARY.md 增补新术语
+  out:
+    - 不修改 dsh-writing-viewer 插件的任何行为与结构；不改 wa-cli 除 review_surface 检测与技能文本外的任何内核行为；不引入 Go 对插件的依赖（插件不进 Go 模块与覆盖率范围）；不做公网 marketplace 发布（仅本地 marketplace 与 GitHub Release tarball）；不实现 DSH 专属机制在 ZCode 的等价物：请求来源校验（ZCode 面板无 HTTP 路由，走宿主沙箱与 MCP 通道）、工作区注册表定位（ZCode 以 cwd 即 ZCODE_PROJECT_DIR 与 userConfig 固定目录定位）、动态技能提供者注册与 PATH 追加（改为静态捆绑技能，ZCode 插件无此 API）
+unchanged_behavior:
+  - dsh-writing-viewer 的面板、路由、审阅会话与 setup 行为全部不变；wa-cli 其余命令、JSON Schema、内核与 MCP 服务不变；wa-cli skills install 的 agent 目标集合不变；DSH 环境下 review_surface 仍按 DSH_WEB_URL 判定为 dsh，显式配置优先的语义不变；完整 Go 回归命令与覆盖率范围不变（internal/**，不含 internal/tools/**，阈值 80%）

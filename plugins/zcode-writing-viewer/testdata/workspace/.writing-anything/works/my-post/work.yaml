@@ -1,0 +1,8 @@
+# 作品（Work）；请用 wa-cli new、wa-cli unit add 与 wa-cli advance 修改。
+
+schema_version: 1
+id: my-post
+genre: tech-blog
+type: article
+stage: brief
+units: []

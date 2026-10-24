@@ -1,0 +1,44 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: zcode-writing-viewer
+approach:
+  - 以独立 TypeScript 包 plugins/zcode-writing-viewer/ 移植 dsh-writing-viewer：host 侧逻辑（定位 root.ts、快照 snapshot.ts、CLI 桥 wacli.ts、产物 artifacts.ts、队列 queueview.ts、审阅会话 reviewsession.ts、setup setup.ts）按注入式适配器模式近乎原样移植为 Node MCP server（官方 @modelcontextprotocol/sdk，stdio），DSH 的 webServer 路由改写为 MCP 工具：workspace_status、workspace_snapshot、open_workspace（_meta.ui.surface 打开面板）、show_in_viewer、get_view、review_start/review_status/review_end/review_page/review_illustration/review_submit、setup_status/setup_enable（app 可见性按需声明）；server 注册 ui://zcode-writing-viewer/panel.html 资源（text/html;profile=mcp-app）。client 侧视图模型（overview/treekeys/markdownview/yamlhighlight/reviewmodel/queueview/setupview）纯函数移植，面板入口改写为单页 app.ts：经官方 @modelcontextprotocol/ext-apps 的 App 连接宿主（connect 后 callServerTool/readServerResource），主题与语言取 getHostContext 并随 onhostcontextchanged 切换，不用 React、渲染只用 createElement 纯文本子节点（沿用 dsh 的内容渲染安全形态）；审阅视图不取 HTTP 代理路由，img 改用 MCP readServerResource 的 ui://zcode-writing-viewer/review-illustration/<unit>/<id> 资源由 server 注入会话令牌转发图片字节。wa-cli 侧：resolveReviewSurface 增加 ZCODE_APP_VERSION 非空即 zcode（来源 env），review_surface 取值集合与 config set 校验扩为 browser|dsh|zcode，四个内置技能 SKILL.md 的 dsh 分支旁加 zcode 分支（不启动 --serve、请作者打开 ZCode 插件面板的「待审阅」入口、完成后用 wa-cli review show/next 复查）。release：打包脚本产出 zcode-writing-viewer-<version>.tgz 并写入 .agents/skills/release 流程，与 dsh tarball 同批随 GitHub Release 发布
+decisions:
+  official-mcp-apps-protocol:
+    decision: 面板与宿主、面板与 server 的全部通信走官方 MCP Apps 协议：页面用 @modelcontextprotocol/ext-apps 的 App（connect 前注册全部 handler），server 用官方 @modelcontextprotocol/sdk 并以 registerResource 提供 ui:// 面板资源，SDK 版本在构建锁文件钉住；不使用 window.zcode 兼容桥、不手写 postMessage 协议
+    rationale: 官方 ZCode 文档（UI_PLUGIN 与 zcode-host 参考）把 MCP Apps 定为 UI 插件契约；协议含 initialize 握手、能力协商、主题/语言上下文与 tool-input 通知，手写或走遗留桥都会在宿主升级时漂移。官方插件仓库以锁文件钉版本，是可复现构建的既有形态
+  review-proxy-as-mcp-tools:
+    decision: 审阅会话与阅读页代理移植为 server 内会话对象 + MCP 工具面：server 以子进程持有唯一 wa-cli preview <unit> --serve 会话（首行信封取端口与令牌，令牌只留 server 进程内存），review_page/review_illustration/review_submit 三个工具做白名单转发（page.json、配图 unit+id、feedback/confirm/author-review），配图经 ui://zcode-writing-viewer/review-illustration 资源模板按 base64 字节回传；不再有 HTTP 路由与请求来源校验（Request Origin Guard）
+    rationale: ZCode 面板没有同源 HTTP 通道，浏览器到不了插件进程；MCP 工具调用天然在宿主信任通道内且只有本面板会调用，DSH 的 origin guard 针对的浏览器载体攻击面在 ZCode 不存在。转发白名单、令牌不出进程、请求体上限与 DSH 版一致，薄代理语义不变（wa-cli 是唯一真相来源）
+  skills-static-bundling:
+    decision: 13 个 wa-* 内置技能构建时从 internal/skills/skills/ 原样复制进插件 skills/ 目录随包分发（清单 skills 字段声明），不做动态注册、不写任何用户技能目录；设置区技能来源对照表按标准技能目录存在性比对如实显示（外部存在同名即标外部，与 DSH 版同口径）
+    rationale: 作者选择完整照搬 setup：ZCode 插件没有技能提供者 API，静态捆绑是唯一分发面；从仓库源复制保证内容与 wa-cli 版本同源，构建脚本核对清单防漂移。优先级由 ZCode 决定不可控，如实显示来源并在 README 说明
+  setup-optin-userconfig:
+    decision: wa-cli 下载/SHA256SUMS 校验/原子安装移植为 setup_status 与 setup_enable 两个工具 + 面板设置区，置于 userConfig enableSetup（默认 false）之后：未开启时不注册任何下载动作、不发起网络请求；不做 PATH 追加（ZCode 插件进程无法回写宿主 env），改由设置区如实显示当前解析到的 wa-cli 路径
+    rationale: 沿用 dsh-plugin-structure 的 opt-in-setup-actions MUST 规则；PATH 追加在 ZCode 无等价机制（子进程 env 不回传宿主），server 自身按 userConfig waCliPath 或 PATH 解析，快照与审阅共用同一解析
+  workspace-location-order:
+    decision: 项目目录定位顺序：userConfig workspaceRoot（配置即排他固定）→ server 启动 cwd（manifest 定为 ZCODE_PROJECT_DIR）→ process.cwd()；面板路径切换按 DSH 同款校验（绝对路径、拒 NUL/超长/UNC 与设备路径、无 .writing-anything 返回空态与原因不回退），所选路径只存面板状态，工具按 root 参数单次生效
+    rationale: ZCode 以 ZCODE_PROJECT_DIR 打开工作区（官方清单约定 cwd），等价于 DSH 的注册表首选来源；路径校验沿用 host-route-path-input MUST 规则的纯函数移植
+  zcode-surface-env-detection:
+    decision: wa-cli 在 review_surface 未显式设置时按环境自动判断：Agent shell 注入的 ZCODE_APP_VERSION 非空即 zcode（来源 env），与既有 DSH_WEB_URL→dsh 并列（同时存在时 dsh 优先，DSH Web 内嵌场景优先命中）；config set review_surface 接受 browser|dsh|zcode；四个内置技能在 dsh 分支旁增加 zcode 分支，指引作者打开 ZCode 插件面板「待审阅」入口审阅，作者说没有入口时回退 browser 做法
+    rationale: 完整移植「无需配置让 Agent 指引作者到面板审阅」；ZCODE_APP_VERSION 是 ZCode 在 Agent shell 实测注入的稳定变量（本会话实证），检测顺序与显式配置优先语义沿用 config-review-surface 既有结构
+  panel-vanilla-view-models:
+    decision: 面板不引入 UI 框架：视图模型（计数、树、卡片、降级呈现、审阅解析）为无 DOM、无 fetch 的纯函数模块（从 dsh 包移植），入口 app.ts 持状态与事件并以 createElement 渲染纯文本子节点；Markdown 渲染与 YAML 高亮为零依赖纯模块打包进面板资源
+    rationale: DSH 版因宿主提供 react 而 React 化；ZCode 面板自持全量代码，vanilla 使面板资源小且离线（HTML 资源上限 4 MiB），内容渲染安全形态（结构化节点 + 纯文本子节点，禁 innerHTML）沿用 client-content-rendering-safety MUST 规则
+  scenes-deferred:
+    decision: 本变更创建全新主规格 zcode-plugin，不带 delta 场景：场景的 covered_by 契约要求引用能对已记录（recorded）主规格解析，而新规格要到归档时才记录，ready 与 verify 会在归档前拦截一切对 zcode-plugin:<需求> 的引用（scene-edit 契约 crossFileEffects 明文）。场景先行盘问的四问已答并记录如下——actors：作者（查看/审阅）、Agent（按 reviewSurface 指引）；preconditions：ZCode 打开含 .writing-anything/ 的项目目录并安装插件、宿主可执行 wa-cli（审阅）、enableSetup 开启（设置区）；主流程：打开面板→定位→总览/队列/单元树/产物/素材→（审阅）发现待审阅→启动会话→阅读→反馈/确认/复核→结束→刷新；异常流：无工作区空态、CLI 降级、启动失败、提交失败、会话被替换/空闲结束、校验和不符、重复点击。三个场景（panel-overview、panel-review、setup-enable，区 zcode-plugin）在 zcode-plugin 规格记录后的后续变更中按上述已答内容补上——与 dsh-plugin 的既有先例一致（2026-10-19-plugin-scaffold 建规格无场景，场景由后续变更补）
+    rationale: CLI 的场景覆盖闸门只认已记录规格（loadSpecRequirements 只读 specs/INDEX.yaml 及其指向文件）；归档前无法满足，且 CLI 未提供删除变更内新建场景的命令（--delete 只认 live 场景），故本变更按先例不带场景，场景随规格记录后补
+alternatives:
+  - option: 在面板中以 iframe 内嵌 wa-cli 阅读页 HTML
+    reason: ZCode 面板无同源 HTTP 通道可达插件进程，且 DSH 版已从 iframe 迁移到原生视图以缩小安全面（只转发 JSON 与已登记配图）
+  - option: 使用宿主注入的 window.zcode 兼容桥而非官方 ext-apps SDK
+    reason: 兼容桥是遗留机制，官方文档指明新建 App 的页面不得混用；SDK 钉版本可随官方协议演进
+  - option: 不捆绑技能，仅移植 CLI 下载（盘问备选 A）
+    reason: 作者明确选择完整照搬：静态捆绑使未装 wa-cli 的作者开箱即得全套 wa-* 技能
+risks:
+  - ZCode 宿主对 MCP Apps 协议与 ui:// 资源的解释可能随版本演进（面板协议版本、HTML 资源上限、能力集）：以锁文件钉 SDK 版本、面板不依赖未在 getHostCapabilities 声明的能力，README 写明实测的 ZCode 版本区间
+  - 捆绑的 wa-* 技能与 wa-cli 内置版本可能漂移：构建脚本从 internal/skills/skills 复制并核对 13 个技能清单，缺失即构建失败；升级 wa-cli 技能需随版本重新构建插件
+  - ZCODE_APP_VERSION 不是 ZCode 对外承诺的公开契约变量，未来可能更名：检测仅作为未显式配置时的提示（config 显式设置优先），出现失效时行为回退 browser，不产生错误
+  - 插件捆绑技能与用户自装同名 wa-* 技能的优先级由 ZCode 决定，不受插件控制：设置区如实显示来源对照并在 README 说明，不宣称「外部优先」

@@ -114,3 +114,6 @@ specs:
   - id: workspace
     title: 工作区（Workspace）
     path: .strict-spec-driven/specs/workspace.yaml
+  - id: zcode-plugin
+    title: ZCode 插件（ZCode Plugin）
+    path: .strict-spec-driven/specs/zcode-plugin.yaml
