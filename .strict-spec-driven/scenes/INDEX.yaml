@@ -18,6 +18,10 @@ areas:
       status: draft
       path: .strict-spec-driven/scenes/dsh-plugin/remote-review.yaml
   illustrations:
+    copy-out-illustrated:
+      title: 作者把定稿图文复制到公众号或在线文档
+      status: draft
+      path: .strict-spec-driven/scenes/illustrations/copy-out-illustrated.yaml
     illustrate-before-acceptance:
       title: 作者为定稿配图并验收
       status: draft

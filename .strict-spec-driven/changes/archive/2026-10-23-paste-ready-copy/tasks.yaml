@@ -1,0 +1,91 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: paste-ready-copy
+sections:
+  Implementation:
+    export-paste-render:
+      text: 在 internal/export 新增 paste-html 格式：复用 wechat-html 节点树与样式主题，独占一段的可用本地配图输出 img（src 只对经文件头与 SHA-256 校验的 PNG/JPEG 字节以 template.URL 构造 data URI，遵守 workspace-artifacts/trusted-data-uri）加图说段落，32 MiB 内嵌预算外与其他图片保留「【配图 n】」占位；封面不进正文；始终不追加 AI 参与说明但照常计算 disclosure；页面外壳用 html/template 输出完整文档、固定内容的复制脚本（ClipboardItem 写 text/html 与 text/plain，失败退回选区 + execCommand）与按脚本 SHA-256 放行的 CSP（default-src 'none'; style-src 'unsafe-inline'; img-src data:）；照常复制资产目录并写出配图清单。export.Formats 加入 paste-html。
+      status: complete
+    cli-export-flags:
+      text: internal/cli 的 export 命令：--format 帮助与默认输出路径说明加入 paste-html（<work>.paste.html），新增 bool 参数 print（只对 paste-html 有效，与 output 互斥，其他格式报告 input.invalid-value field print），--front-matter 对 paste-html 报告 input.invalid-value；只读模式不写任何文件、changedPaths 为空，--json 输出 export.html（只在 --print 时出现），export.path 与 imageList 为 null、assets 为空数组；export --print 的审计行不含 unit（不参与回捞配对）；outputKeys 说明同步，原有 sampleArgs 样例不变；MCP tools/list 随注册表自动更新。
+      status: complete
+    plugin-copy-route:
+      text: plugins/dsh-writing-viewer host：新增只读路由 GET /dsh-writing-viewer/copy（先过 routeguard 来源校验，作品引用经 host-cli-arg-guard 纯函数校验且不得含 /），经 CliRunner 以参数列表在面板当前项目目录调用一次 wa-cli export <work> --format paste-html --print --json --dir <dir>，子进程输出按字节收集后统一解码、上限 128 MiB（按两份 base64 载荷加转义计算）、时限 120 秒，只回传 export.html、export.segments、配图数与诊断（code、severity、message、next）；不新增任何写入型 node:fs 调用（readonly.test.ts 名单不变）。
+      status: complete
+    plugin-copy-button:
+      text: plugins/dsh-writing-viewer client：在作品根单元详情区与审阅视图头部（含放大覆盖层）渲染「复制图文」按钮，点击后请求 copy 路由；安全上下文中在点击时同步创建 ClipboardItem（promise blob）写入 text/html 与 text/plain，不可用或被拒时退回为离屏 textarea 选区加 copy 事件写入 clipboardData（不把片段插入 DOM），两种都失败时保留片段供下次点击同步复制；成功显示「已复制」与内嵌配图张数、有占位时提示按配图清单补传，失败显示第一条 error 级诊断的错误码、message 与 next，不影响审阅会话状态；中英文文案；更新插件 README 与 dist 构建产物。
+      status: complete
+    publish-skill:
+      text: 修改内置技能 internal/skills/skills/wa-publish/SKILL.md 导出步骤：说明 paste-html 可粘贴页、浏览器与 DSH 面板两种「复制图文」入口、页面不含 AI 参与说明与封面（需要时在平台自行声明、单独上传封面）、编辑器不认内嵌图片时按配图清单补传；在 history.txt 保留旧版本哈希以便 skills install 识别旧版。
+      status: complete
+    glossary-docs:
+      text: docs/GLOSSARY.md 加入可粘贴页（Paste-ready Page）；按需更新 README 或 docs 中 wa-cli export 的格式列表说明。
+      status: complete
+    paste-reencode:
+      text: internal/export：embedder 对原始字节超过 1 MiB 的可用配图为粘贴重新编码——DecodeConfig 读宽高、超过 4000 万像素不内嵌；解码后按面积平均缩到最长边 ≤1600、白底合成、JPEG 质量 85/75/65/55 逐档编码，取第一个 ≤1 MiB 的结果，仍超过时最长边降到 1200、900 重试，都不行改占位；以 data:image/jpeg 受信构造，内嵌预算按内嵌后字节累计，同一张图只编码一次；资产目录仍为原图。
+      status: complete
+    paste-segments:
+      text: internal/export 与 internal/cli：按顶层块把正文切成每段至多 7 张内嵌图的分段（单块超过 7 张独占一段），每段一个根 section，参考链接在最后一段；页面多段时给出「复制第 n 段（图 a–b）」与「复制全文」按钮（脚本仍为固定内容，按 data 属性定位段落容器），一段时与之前相同；--print 输出 export.segments（omitempty，只在 --print 时出现），outputKeys 同步。
+      status: complete
+    plugin-segments:
+      text: plugins/dsh-writing-viewer：copy 路由回传 export.segments；client 多段时不自动复制，列出「复制第 n 段（图 a–b）」与「复制全文」按钮并提示分段粘贴，每次点击只复制对应内容、不再调用 wa-cli，各自保留待重试片段；中英文文案；README 与 dist 同步。
+      status: complete
+    publish-skill-limits:
+      text: wa-publish 技能补充公众号粘贴限制（2026-10-23 实测：单张约 1 MiB、每次 7 张，超限整次丢图）与 wa-cli 的处理（大图自动压缩、超过 7 张分段复制、「复制全文」用于飞书等），history.txt 追加新哈希。
+      status: complete
+  Testing:
+    go-unit-tests:
+      text: '为 internal/export 与 internal/cli 编写单元测试，用规格字面量断言：paste-embedded（data URI img 与图说、无封面、无 AI 说明、disclosure 非空、资产目录与 .paste.images.md）、paste-safe-page（转义、唯一且内容固定的 script、CSP 含 default-src ''none'' / img-src data: / script-src ''sha256-、无外部资源、外链图片占位与脚注）、paste-embed-budget（4×9 MiB 时第 4 张为占位）、paste-front-matter、paste-nothing-accepted、print-readonly（changedPaths 为空、exports/ 无新文件、html 无 <script 与 <html）、print-wrong-format、print-nothing-accepted；渲染器允许列表测试覆盖对抗性样式取值，2 MiB 对抗性输入耗时测试覆盖 paste-html；夹具在 testdata/ 或 t.TempDir() 中生成。'
+      status: complete
+      command: go test ./internal/export/... ./internal/cli/...
+    go-unchanged-formats:
+      text: 回归断言 paste-other-formats-unchanged：markdown、wechat-html、text 导出的文件内容、资产目录、配图清单与 --json 输出与变更前的金样一致（含已有 testdata/e2e/export.md 与 wechat 测试）。
+      status: complete
+      command: go test ./internal/export/... ./internal/cli/... -run 'Export|Wechat|PlainText'
+    plugin-tests:
+      text: 插件测试：copy 路由经真实 node:http 按宿主分发语义驱动（host-route-dispatch-harness），断言来源校验 403 且不调用 wa-cli、坏作品引用不调用 wa-cli、一次点击只调用一次 wa-cli 且参数为 export <work> --format paste-html --print --json --dir、超出体积上界返回可读错误；client 经 definition.factory 真实路径断言根单元详情与审阅视图（含放大覆盖层）的按钮、ClipboardItem 写入 text/html 与 text/plain、非安全上下文退回 execCommand、nothing-accepted 显示 message 与 next 且不写剪贴板、审阅会话与已填内容保留；readonly.test.ts 写入名单不变。
+      status: complete
+      command: cd plugins/dsh-writing-viewer && pnpm run check
+    skills-tests:
+      text: 技能测试：wa-publish 正文包含 --format paste-html、「复制图文」、不含 AI 参与说明与封面的说明与配图清单兜底，commands 包含 export，正文中的 wa-cli 命令与参数都在注册表中（既有 skills 测试覆盖）；history.txt 含旧版本哈希。
+      status: complete
+      command: go test ./internal/skills/...
+    go-paste-limits-tests:
+      text: Go 测试：重新编码（3 MiB 2000×1500 PNG → ≤1 MiB 的 1600 宽 JPEG、小图原样、资产目录为原图、透明填白、4000 万像素以上改占位、预算按内嵌后字节）与分段（9 张 → 7+2、7 张单段与之前逐字节相同、单块超过 7 张独占一段、参考链接在最后一段、export.segments 与 export.html 一致、页面分段按钮与「复制全文」、脚本在 node 沙箱中按 data 属性复制对应段）。
+      status: complete
+      command: go test ./internal/export/... ./internal/cli/... -run 'Paste|Embed|Segment'
+    plugin-segments-tests:
+      text: 插件测试：路由回传 segments；client 多段时第一次点击不写剪贴板并列出分段按钮，逐段点击写入对应段且不再调用 wa-cli，「复制全文」写入全文，单段时行为不变。
+      status: complete
+      command: cd plugins/dsh-writing-viewer && pnpm run check
+    skills-limits-tests:
+      text: 技能测试：wa-publish 含公众号单张约 1 MiB 与每次 7 张的限制、「复制第 n 段」与「复制全文」。
+      status: complete
+      command: go test ./internal/skills/...
+    full-regression:
+      text: 运行完整项目回归（含 80% 覆盖率门槛）。
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+    full-regression-final:
+      text: 扩大范围后重跑完整项目回归（含 80% 覆盖率门槛）。
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    browser-copy-check:
+      text: 在真实浏览器中打开导出的 <work>.paste.html 与 DSH 面板（本机与经 http 远程两种访问），点「复制图文」后粘贴到一个富文本编辑器，确认配图随正文出现、没有 AI 参与说明与封面；全选复制只得到正文。
+      status: complete
+    wechat-paste-trial:
+      text: 作者在 mp.weixin.qq.com 图文编辑器经 Tailscale HTTPS 实测：原样内嵌时校准出单张约 1 MiB、每次 7 张的限制（超限整次丢图，无总量限制），据此扩大范围实现大图重新编码与分段；新版本经 DSH 面板复制含 9.7 MiB 大图的三图作品，粘贴后三张图都在。超过 7 张的分段粘贴与飞书未在作者环境实测，已写入 docs/evidence/copy-live-check.txt；wa-publish 已按实测结论写明限制与做法。
+      status: complete
+    scope-check:
+      text: 逐条核对 proposal 的 unchanged_behavior：三种既有导出、阅读页、不点按钮时的面板与 ai_disclosure 取值集合都未变化；插件没有新增写入型调用。
+      status: complete
+    strict-checks:
+      text: 运行 strict ready 与 verify，确认场景 copy-out-illustrated 每一步都有覆盖或不覆盖理由，delta 规格可以归档合并。
+      status: complete
+      command: strict-spec-cli ready paste-ready-copy && strict-spec-cli verify paste-ready-copy
+testing_gates:
+  validation_task: full-regression-final
+  unit_test_task: go-unit-tests

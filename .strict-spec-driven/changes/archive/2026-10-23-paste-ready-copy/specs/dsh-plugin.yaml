@@ -1,0 +1,41 @@
+schema: strict-spec-driven/delta-spec/v1
+schema_version: 1
+artifact_type: delta_spec
+schema_file: templates/strict-spec-driven/schemas/delta-spec.yaml
+target_spec: dsh-plugin
+operations:
+  ADDED:
+    copy-illustrated:
+      strength: MUST
+      statement: 面板必须在作品根单元的单元详情区（「审阅」旁）与审阅视图（Review View）头部（含放大后的覆盖层）提供「复制图文」按钮，复制对象为该单元所属的整篇作品。点击后面板经插件 host 的只读路由 /dsh-writing-viewer/copy（与其他路由一样先做 route-origin-guard 的请求来源校验；作品引用经与审阅相同的参数校验且不得含 /，只经参数列表传给 wa-cli）在面板当前显示的项目目录下调用一次 wa-cli export <work> --format paste-html --print --json，只把 export.html、export.segments、配图数（export.images 的项数）与诊断（code、severity、message、next）回给面板；该调用的输出有体积上限与时限。面板不自行渲染正文、不判断验收有效性，复制的内容与 paste-html 导出一致：只含验收记录有效的单元，可用配图以 data URI 内嵌，不含封面图（Cover Image）与 AI 参与说明。export.segments 只有一段时面板直接复制；有多段时（公众号每次粘贴最多 7 张图）面板不自动复制，而是在按钮旁列出「复制第 n 段（图 a–b）」与「复制全文」按钮并提示分段粘贴，作者逐个点击，每次点击只复制对应段（或全文），不再调用 wa-cli，直到作者再次点「复制图文」。复制时面板把片段以 text/html 与 text/plain 两种格式写入剪贴板：安全上下文中使用异步剪贴板接口，剪贴板项在点击时同步创建以保留点击授权；接口不可用（如经 http 远程访问的非安全上下文）或被拒绝时退回为在离屏容器中选中片段后复制；两种方式都被浏览器拒绝时保留已取得的片段并提示再点一次（仍不行时改用 wa-cli export --format paste-html 导出的可粘贴页复制），下一次点击直接复制该片段、不再调用 wa-cli；退回方式只在剪贴板事件中写入两种格式，不把片段插入 DOM。成功时显示「已复制」与内嵌配图张数，存在未能内嵌的配图（「【配图 n】」占位）时提示按配图清单补传。wa-cli 报告 export.nothing-accepted 等错误、wa-cli 不可用、超时或输出超过体积上限时，面板显示可读原因（有诊断时显示第一条 error 级诊断——没有时为第一条有说明的诊断——的错误码、message 与 next；wa-cli 在 error 之前列出的 export.unaccepted 等 warning 不作为原因），不写剪贴板，不影响面板其余部分与进行中的审阅会话。复制过程不创建、修改或删除项目目录中的任何文件（wa-cli 只读命令按审计日志契约追加的运维痕迹除外，同 snapshot-no-writes）；除新增的按钮外，不点按钮时面板与审阅视图的显示和行为不变。
+      scenarios:
+        copy-accepted-work:
+          - GIVEN: 面板显示的项目中作品 post 已验收，正文引用了已登记且可用的配图 fig-1，根单元登记了封面 cover
+          - WHEN: 作者在 post 根单元的详情区点「复制图文」
+          - THEN: 插件只调用一次 wa-cli export post --format paste-html --print --json；剪贴板的 text/html 含 src 以 data:image/ 开头的 img 元素、不含封面图像与 AI 参与说明，text/plain 含正文文字；面板显示「已复制」与内嵌 1 张配图；项目目录中没有新增或改动的文件
+        copy-from-review-view:
+          - GIVEN: 作者正在审阅视图中审阅 post 的子单元 intro，post 根单元验收有效
+          - WHEN: 作者在审阅视图头部点「复制图文」
+          - THEN: 复制的是整篇作品 post 中验收有效的单元，与 wa-cli export post --format paste-html --print 的 export.html 相同；审阅会话不结束，已填写的原话摘要与答复保留
+        copy-route-origin-guard:
+          - GIVEN: '请求带 sec-fetch-site: cross-site 或 Host 不在允许范围内'
+          - WHEN: 请求访问 /dsh-writing-viewer/copy
+          - THEN: '返回 403 与 cache-control: no-store 的 JSON 错误体，不调用 wa-cli'
+        copy-insecure-context:
+          - GIVEN: 作者经 Tailscale 或局域网地址以 http 访问 DSH，页面不是安全上下文，异步剪贴板接口不可用
+          - WHEN: 作者点「复制图文」
+          - THEN: 面板退回为选中离屏片段后复制，剪贴板得到含内嵌配图的 HTML；浏览器拒绝这次复制时面板提示再点一次，再次点击直接复制已取得的片段，wa-cli 只被调用一次
+        copy-bad-work-ref:
+          - GIVEN: 客户端提交的作品引用以 - 开头、含控制字符或是含 / 的子单元引用
+          - WHEN: 请求访问 /dsh-writing-viewer/copy
+          - THEN: 插件返回可读的参数错误，不调用 wa-cli
+        copy-nothing-accepted:
+          - GIVEN: 作品 post 没有验收记录有效的单元（wa-cli 先列出 warning 级 export.unaccepted，再列出 error 级 export.nothing-accepted）
+          - WHEN: 作者点「复制图文」
+          - THEN: 面板显示 export.nothing-accepted 诊断的错误码、message 与 next，不显示 export.unaccepted 作为原因，剪贴板内容不变
+        copy-segments:
+          - GIVEN: 作品 post 已验收，正文有 9 张独占一段的已登记小配图
+          - WHEN: 作者点「复制图文」，再依次点「复制第 1 段（图 1–7）」与「复制第 2 段（图 8–9）」
+          - THEN: 第一次点击只调用一次 wa-cli 且不写剪贴板，面板列出两个分段按钮与「复制全文」；之后每次点击分别把对应段的 text/html（7 与 2 个 img 元素）写入剪贴板，不再调用 wa-cli
+  MODIFIED: {}
+  REMOVED: {}

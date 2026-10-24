@@ -223,3 +223,10 @@ rules:
         - 打开浮层的 effect 查询 [data-...] 节点并 focus，关闭时把焦点还给作者离开的控件；Esc 处理先 stopPropagation/preventDefault 再收起。
       bad:
         - 只在浮层节点上挂 onKeyDown 且不聚焦它，靠测试直调 props.onKeyDown 断言退出。
+  plugin-cli-diagnostic-selection:
+    strength: SHOULD
+    statement: DSH 插件转述 wa-cli 诊断时应保留 severity，失败提示取第一条 error 级诊断（没有时取第一条有 message 的诊断）并显示其 code、message 与 next；路由与 client 测试桩应按 wa-cli 的真实顺序构造诊断（warning 在决定结果的 error 之前），而不是只放一条 error。
+    rationale: wa-cli 常在 error 之前列出 warning（如 export 为每个跳过的单元列出 export.unaccepted，最后才是 export.nothing-accepted）；按「第一条诊断」转述会显示错误的原因与下一步命令。paste-ready-copy 评审发现面板因此把 export.unaccepted 当作失败原因，而只含一条 error 的测试桩没有发现它。
+    enforcement:
+      method: test
+      detail: copyview.test.ts 的 primaryDiagnostic 与 copy-nothing-accepted 用例、copyroutes.test.ts 与 client.test.ts 的 nothing-accepted 用例都以 warning 在前、error 在后的诊断驱动，并断言显示的是 error 级诊断。

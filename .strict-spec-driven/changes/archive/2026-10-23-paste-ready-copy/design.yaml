@@ -1,0 +1,66 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: paste-ready-copy
+approach:
+  - 在 internal/export 增加 paste-html 格式：复用 wechat-html 的节点树渲染与样式主题，只在图片节点上分叉——独占一段、地址为已登记且可用（存在、SHA-256 与登记一致、文件头为 PNG/JPEG）的本地配图时输出带 style 的 img（src 为受信 data:image/png 或 data:image/jpeg）加图说段落，其余图片（外链、未登记、不可用、超出内嵌预算、行内图片）仍按 wechat-html 输出「【配图 n】」占位；内嵌按原始字节累计，总量上限 32 MiB（与阅读页一致）。正文片段外包一个完整 HTML 文档：内联 CSP（default-src 'none'; style-src 'unsafe-inline'; img-src data:; script-src 'sha256-…'）、一个复制按钮与一段固定内容的内联脚本（不内插数据），脚本把正文容器的 innerHTML 与 innerText 以 ClipboardItem 写入剪贴板，API 不可用或被拒绝时退回为选中正文容器并 execCommand('copy')。导出照常把正文引用的配图与封面复制到 <导出名>.assets/ 并写出配图清单（文件名同 wechat-html 规则，导出文件去掉 .html 加 .images.md），作为公众号不认 base64 图片时的兜底；AI 参与说明照常计算并在 --json 的 export.disclosure 中报告，但不写进页面。
+  - 只读模式（print 参数）只对 paste-html 有效：走同一渲染路径，但不检查也不写输出路径、资产目录与配图清单，把正文片段（不含页面外壳与脚本）放在 --json 的 export.html，changedPaths 为空数组；不加 --json 时把片段写到标准输出。其他格式带 print 参数时报告 input.invalid-value（field 为 print）。
+  - 为粘贴重新编码：embedder 对原始字节超过 1 MiB（PasteImageMaxBytes）的可用配图先用 image.DecodeConfig 读宽高，像素数超过 4000 万（防解码炸弹）时不内嵌、改为占位；否则解码，按面积平均缩到最长边不超过 1600 像素，在白底上合成（去掉透明），依次以 JPEG 质量 85、75、65、55 编码，取第一个不超过 1 MiB 的结果；仍超过时最长边降到 1200、再到 900 重试，都不行则改为占位。重新编码的结果以 data:image/jpeg 内嵌，内嵌预算按内嵌后的字节累计；同一张图只编码一次。资产目录与配图清单照常复制原图。
+  - 分段：渲染树根 section 的顶层块按顺序累计其子树中的内嵌图像节点数，加入下一块会使当前段超过 7 张（PasteSegmentImages）时在此开新段；单个顶层块自身超过 7 张时独占一段。每段输出为一个独立的根 section（同样的 wrapper 样式），参考链接段落放在最后一段。只有一段时页面与 export.html 与之前完全相同；多段时页面正文容器内按段放置各段，工具栏给出「复制第 n 段（图 a–b）」按钮与「复制全文」按钮，复制脚本仍为固定内容，按按钮上的 data 属性找到对应段落容器。--print 的 export.html 为全文片段（各段依次拼接），另输出 export.segments（各段片段，至少一项）。面板多段时按段渲染按钮，每段独立取用同一次 wa-cli 输出、独立保留待重试片段。
+  - DSH 插件：host 新增一条只读路由 /dsh-writing-viewer/copy（经既有 route-origin 来源校验），作品引用经 host-cli-arg-guard 校验（另不得含 /）后以参数列表调用一次 wa-cli export <work> --format paste-html --print --json --dir <项目目录>（输出上限 128 MiB、时限 120 秒，按两份 base64 载荷加转义计算），只把 export.html、export.segments、配图数与诊断（code、severity、message、next）回给客户端；客户端在作品根单元详情区与审阅视图头部渲染「复制图文」按钮。安全上下文中在点击时同步创建以 promise blob 填充的 ClipboardItem 写入 text/html 与 text/plain；接口不可用或被拒时退回为离屏 textarea（只放纯文本）选区加 copy 事件监听器，在 clipboardData 中写入两种格式后 execCommand('copy')，片段从不插入 DOM；两种都失败时保留片段，下次点击同步复制。多段时第一次点击不写剪贴板，列出分段与「复制全文」按钮。失败时显示第一条 error 级诊断的错误码、message 与 next。
+decisions:
+  paste-html-separate-format:
+    decision: 新增独立格式 paste-html，而不是给 wechat-html 加开关。
+    rationale: wechat-html 的规格承诺输出只含固定标签、不含 src，配图清单与占位是其契约，且已有作者按它上传；独立格式让既有三种导出逐字节不变（unchanged_behavior），也让 img 与页面外壳只出现在新格式的允许列表中。
+  no-disclosure-in-paste:
+    decision: 可粘贴页与只读片段始终不含 AI 参与说明，不受 ai_disclosure 影响；export.disclosure 仍在 JSON 输出中报告。
+    rationale: 作者明确要求复制出的内容只是纯内容；保留 JSON 中的统计让 Agent 能提醒作者在发布平台自行声明，同时不改 ai_disclosure 的取值集合与其他格式的行为。
+  cover-not-in-body:
+    decision: 封面图不进入可粘贴正文，只复制到资产目录并列在配图清单首项。
+    rationale: 公众号封面在后台单独设置，正文放封面会重复；作者确认不放入正文。与 wechat-html 的封面处理一致。
+  print-mode-for-plugin:
+    decision: 插件取用经 wa-cli export --format paste-html --print 的只读模式，而不是让插件调用写文件的导出或自行渲染。
+    rationale: dsh-plugin 的 snapshot-no-writes 禁止插件向项目目录写文件；wa-cli 是唯一真相来源，插件不得自行实现 Markdown 渲染或验收筛选（MCP 与插件只做薄封装）。
+  button-always-visible:
+    decision: 「复制图文」按钮始终显示；没有可导出单元时点击后显示 wa-cli 的 export.nothing-accepted 等诊断原因，不写剪贴板，而不是预先置灰。
+    rationale: 预先置灰需要插件自行判断各单元验收有效性（含正文与配图摘要比对），这是 wa-cli 的业务逻辑；点击时以一次 wa-cli 调用得到权威结论，符合 review-child-lifecycle「一次作者动作只调用一次 wa-cli」的精神。
+  scene-new-copy-out:
+    decision: 新增场景 illustrations/copy-out-illustrated，描述作者把已验收的配图文章复制到公众号或在线文档的主流程与异常流。
+    rationale: 这是一个作者可观察的新流程，横跨 export、dsh-plugin 与 skills 三个主规格，需要场景把需求从流程推导出来。
+  fallback-copy-event:
+    decision: 非安全上下文的退回复制用 copy 事件的 clipboardData 写入 HTML，不把 wa-cli 片段经 innerHTML 插入离屏容器。
+    rationale: dsh-plugin-structure/client-content-rendering-safety（MUST）禁止 client 使用 innerHTML 渲染来自工作区的内容；copy 事件方式不需要把片段放进 DOM，同样在 http 远程访问时可用（评审 MF-2）。
+  error-diagnostic-first:
+    decision: 面板与路由的失败原因取第一条 error 级诊断，没有时取第一条有说明的诊断。
+    rationale: wa-cli 在 export.nothing-accepted 之前为每个跳过的单元列出 warning 级 export.unaccepted；取第一条会显示错误的原因与下一步（评审 MF-1）。
+  print-not-paired:
+    decision: export --print 的审计行不含 unit，不参与 next 的回捞配对；同步修订 cli 主规格 audit-log。
+    rationale: 面板复制是只读取用、不交付文件：若参与配对，复制失败会给 Agent 错误的「export 尚未成功重试」提示，复制成功又会消掉真实导出失败的提示（评审 SF-1）。
+  wechat-empirical-limits:
+    decision: 单张内嵌上限 1 MiB、每段至多 7 张，取自作者 2026-10-23 在公众号图文编辑器的实测，以常量定义并在技能中注明来源。
+    rationale: 实测：1 MiB 单张与 2 张各 1 MiB 成功、1.8 MiB 单张失败；7 张成功、8 张（合计 0.8 MiB 与 2 MiB 两组）失败；超限时整次粘贴的图片全部丢失。取已验证成功的边界值，留出余量。
+  compress-always:
+    decision: 压缩与分段对可粘贴页与面板复制一律生效，不按目标平台区分；多段时另给「复制全文」供不限张数的目标（如飞书）使用。
+    rationale: 作者选择自动压缩与分段复制；按平台切换会增加参数与说明负担，而 1 MiB、1600 像素的 JPEG 对正文阅读足够清晰，原图仍在资产目录中。
+  reencode-trusted:
+    decision: 修订 workspace-artifacts/trusted-data-uri：wa-cli 自身从已校验图片解码并重新编码得到的 JPEG 字节同样可以构造受信 data URI（MIME 固定为 image/jpeg）。
+    rationale: 重新编码的字节来自标准库编码器而不是产物原文，内容可信；原规则只列出「已通过内容校验的字节」，不明确覆盖这种派生字节，需要在标准中写明边界。
+  tech-standards-comply:
+    decision: 技术标准按需修订，均以 delta tech 随归档合并：workspace-artifacts/trusted-data-uri 修订为允许 wa-cli 重新编码得到的 JPEG 字节（见 reencode-trusted）；dsh-plugin-structure 新增 plugin-cli-diagnostic-selection（见 error-diagnostic-first）；cli-contract 新增 print-payload-size-budget（消费方上限按实际 JSON 体积计算）。其余照既有标准实现：可粘贴页按 generated-html 中「完整文档的固定脚本由 CSP 按哈希放行」，插件新路由遵守 route-origin 校验、host-cli-arg-guard 与 host-route-dispatch-harness。
+    rationale: 最初判断只需遵守既有标准；实现与两轮评审中出现了重新编码的派生字节、诊断顺序与载荷副本三处标准未覆盖的情况，按项目规则以 delta tech 写入标准，而不是直接改动现行标准。
+alternatives:
+  - option: 插件客户端把审阅视图中的 img 取回后转 base64，自行拼出 HTML 写入剪贴板
+    reason: 需要在插件里实现正文渲染与验收筛选，违反 wa-cli 唯一真相来源，且审阅视图带出处着色与发现项，不是成品。
+  - option: 接入图床：Agent 上传配图并把正文改写为 https 地址
+    reason: 需要作者的图床凭据与联网，超出本变更；作者选择以配图清单兜底。
+  - option: 给 ai_disclosure 增加 none 取值
+    reason: 会改变既有导出的合规默认与 workspace 规格中拒绝 never 的场景；作者选择只让可粘贴页始终不带说明。
+  - option: 只给提示、不处理超限
+    reason: 作者实测中超限会让整次粘贴一张图都没有，只提示不能解决公众号的主要场景。
+risks:
+  - 公众号编辑器对粘贴的 base64 图片是否接受说法不一，若不接受，作者仍需按配图清单手动上传；需在实现阶段实测并写入 wa-publish。
+  - 多张大图内嵌后只读模式的 JSON 可达数十 MiB，插件 host 读取子进程输出需提高缓冲上限并设置体积上界，避免内存与超时问题。
+  - 经 Tailscale 以 http 访问 DSH 时不是安全上下文，navigator.clipboard 不可用，只能走 execCommand 退回路径，部分浏览器可能对大体积选区复制失败，需给出可读提示。
+  - 公众号的粘贴限制是经验值，平台调整后可能失效；技能中写明实测日期与回退做法（按配图清单上传）。
+  - 解码与重新编码大图会增加导出耗时与内存；以像素上限与每图只编码一次控制。

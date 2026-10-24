@@ -40,7 +40,7 @@ const (
 )
 
 // Formats 是支持的导出格式。
-var Formats = []string{FormatMarkdown, FormatWechat, FormatText}
+var Formats = []string{FormatMarkdown, FormatWechat, FormatText, FormatPaste}
 
 // ExportsDir 是工作区中存放导出文件的目录。
 const ExportsDir = workspace.Dir + "/exports"
@@ -64,6 +64,8 @@ type Result struct {
 	ImageList  string      // 配图清单的路径；没有配图时为空
 	Assets     []Asset     // 复制到资产目录的配图与封面（封面在前）；没有时为空
 	Disclosure *Disclosure // AI 参与说明；没有 AI 参与时为 nil
+	HTML       string      // 可粘贴页只读模式（Print）的全文片段；其他情况为空
+	Segments   []string    // 可粘贴页只读模式（Print）的分段片段（至少一项）；其他情况为 nil
 }
 
 // Options 是导出的选项：FrontMatter 为 true 时附带 front matter；Output 为相对项目目录的输出路径，空时为 DefaultPath。
@@ -72,6 +74,7 @@ type Options struct {
 	Output      string
 	Level       string            // 工作区配置的关卡强度，用于判断验收是否仍然有效
 	Disclosure  *DisclosureConfig // AI 参与说明的配置；nil 时不生成说明
+	Print       bool              // 只用于 paste-html：只读，不写任何文件，正文片段放在 Result.HTML
 }
 
 // Markdown 把作品 w 中已验收的单元导出为一个 Markdown 文件。没有可导出的单元时报告 export.nothing-accepted，不写文件；
@@ -156,34 +159,45 @@ func WechatHTML(root string, w *work.Work, opt Options, theme map[string]string)
 	}
 	doc, images := RenderWechat(strings.Join(parts, "\n\n"), theme, footer)
 	res.Images = images
+	changed, ps, ok := writeWithImages(root, rel, []byte(doc), res, occ)
+	if problems = append(problems, ps...); !ok {
+		return nil, changed, problems
+	}
+	res.Chars = len([]rune(doc))
+	return res, changed, problems
+}
+
+// writeWithImages 写出带配图的导出文件 rel（内容 doc，res.Images 与 res.Assets 已填写）：有正文图片或导出封面时在同目录写出配图清单
+// （ImageListPath，填写 res.ImageList），并把资产复制到资产目录。先不带副作用地检查导出文件、配图清单与全部资产文件的路径，
+// 要么都写，要么都不写（export-output）。返回变更的路径、问题与是否成功。
+func writeWithImages(root, rel string, doc []byte, res *Result, occ []occurrence) ([]string, []workspace.Problem, bool) {
 	var list []byte
 	c := cover(res.Assets)
-	if len(images) > 0 || c != nil {
+	if len(res.Images) > 0 || c != nil {
 		lp, p := cleanOutput(ImageListPath(rel), CodeInvalidOutput)
 		if p != nil {
-			return nil, nil, append(problems, *p)
+			return nil, []workspace.Problem{*p}, false
 		}
 		res.ImageList = lp
-		list = []byte(imageList(images, res.Assets, occ, c))
+		list = []byte(imageList(res.Images, res.Assets, occ, c))
 	}
-	// 先不带副作用地检查导出文件、配图清单与全部资产文件的路径：要么都写，要么都不写（export-output）。
 	if list != nil || len(res.Assets) > 0 {
 		ps := slices.Concat(checkParents(root, rel, CodeInvalidOutput), checkAssets(root, res.Assets, CodeInvalidOutput))
 		if list != nil {
 			ps = append(ps, checkParents(root, res.ImageList, CodeInvalidOutput)...)
 		}
 		if len(ps) > 0 {
-			return nil, nil, append(problems, ps...)
+			return nil, ps, false
 		}
 	}
-	changed, ps := write(root, rel, []byte(doc), CodeInvalidOutput)
+	changed, ps := write(root, rel, doc, CodeInvalidOutput)
 	if len(ps) > 0 {
-		return nil, nil, append(problems, ps...)
+		return nil, ps, false
 	}
 	if list != nil {
 		more, ps := write(root, res.ImageList, list, CodeInvalidOutput)
 		if len(ps) > 0 {
-			return nil, changed, append(problems, ps...)
+			return changed, ps, false
 		}
 		for _, c := range more {
 			if !slices.Contains(changed, c) {
@@ -193,10 +207,9 @@ func WechatHTML(root string, w *work.Work, opt Options, theme map[string]string)
 	}
 	more, ps := writeAssets(root, res.Assets, CodeInvalidOutput)
 	if changed = append(changed, more...); len(ps) > 0 {
-		return nil, changed, append(problems, ps...)
+		return changed, ps, false
 	}
-	res.Chars = len([]rune(doc))
-	return res, changed, problems
+	return changed, nil, true
 }
 
 // imageList 生成配图清单（Image List）：标题「配图清单」，有导出封面时先列「封面」项，再按编号列出正文配图的替代文字、地址与标题；

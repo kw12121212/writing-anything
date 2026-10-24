@@ -1,0 +1,17 @@
+schema: strict-spec-driven/delta-spec/v1
+schema_version: 1
+artifact_type: delta_spec
+schema_file: templates/strict-spec-driven/schemas/delta-spec.yaml
+target_spec: skills
+operations:
+  ADDED:
+    publish-copy-guidance:
+      strength: MUST
+      statement: 内置技能 wa-publish 的导出步骤必须说明连图带文复制的方式：作品有正文配图（Illustration）且作者要把文章粘贴到公众号编辑器或在线文档时，运行 wa-cli export <作品> --format paste-html --json，把可粘贴页（Paste-ready Page）路径交给作者，说明在浏览器打开后点「复制图文」或全选复制即可得到连同配图的正文，在 DSH 面板中也可以用作品详情或审阅视图的「复制图文」按钮；说明可粘贴页不含 AI 参与说明（AI-generated Content Label）与封面图（Cover Image），作者需要时在发布平台自行声明 AI 参与（可引用 export.disclosure 的统计）并单独上传封面；说明公众号的粘贴限制（2026-10-23 实测：单张超过约 1 MiB 或一次超过 7 张图时整次粘贴的图片全部丢失）以及 wa-cli 的对应处理：超过 1 MiB 的图在可粘贴正文中自动压缩、资产目录仍为原图，超过 7 张时按「复制第 n 段」分段复制、逐段粘贴，「复制全文」用于飞书等不限张数的目标；说明目标编辑器不接受内嵌图片或出现「【配图 n】」占位时，按导出的配图清单与资产目录上传对应配图。技能只说明何时调用哪些 wa-cli 命令，不实现业务逻辑；wa-publish 的 commands 必须包含 export。
+      scenarios:
+        publish-mentions-paste:
+          - GIVEN: 内置技能 wa-publish（wa-cli skills install 物化的 SKILL.md）
+          - WHEN: 运行 wa-cli skills list --json 并读取 wa-publish 的 SKILL.md 正文
+          - THEN: 正文的导出步骤包含 --format paste-html、「复制图文」、可粘贴页不含 AI 参与说明与封面的说明、公众号单张约 1 MiB 与每次 7 张的限制、「复制第 n 段」与「复制全文」，以及按配图清单补传配图的兜底；skills list 中 wa-publish 的 commands 包含 export
+  MODIFIED: {}
+  REMOVED: {}

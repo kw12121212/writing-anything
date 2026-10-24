@@ -1,0 +1,19 @@
+schema: strict-spec-driven/lesson/v1
+schema_version: 1
+artifact_type: lesson
+schema_file: templates/strict-spec-driven/schemas/lesson.yaml
+lesson:
+  id: html-dom-copy-clipboarddata-ccfa90
+  title: 富文本剪贴板的退回复制不需要把 HTML 插入 DOM：用 copy 事件写 clipboardData
+category: ui
+status: active
+created_at: '2026-10-23T09:54:50.545Z'
+updated_at: '2026-10-23T09:54:50.545Z'
+context: DSH 插件要在非安全上下文（经 Tailscale 或局域网以 http 访问）把 wa-cli 生成的 HTML 片段连同 data URI 图片写入剪贴板，异步剪贴板接口不可用。
+observation: 最初的退回实现把片段经 innerHTML 放进离屏容器再选中复制，违反 dsh-plugin-structure/client-content-rendering-safety（MUST，禁止 innerHTML），评审才发现；改为离屏 textarea 只放纯文本作选区、copy 事件监听器向 clipboardData 写入 text/html 与 text/plain 后 execCommand('copy')，真实 Chrome 的 http 页面粘贴结果同样带图。
+takeaway: 需要退回到 execCommand 复制富文本时，先用 copy 事件的 clipboardData.setData 写入各格式，选区只承载纯文本；不要为了产生选区把来自工作区的 HTML 插进 DOM。异步剪贴板路径则在点击中同步创建以 promise blob 填充的 ClipboardItem，保住点击授权。
+applies_when: 插件 client 或生成的页面要把 HTML（尤其是由工作区内容派生的 HTML）写入剪贴板，且需要支持非安全上下文或剪贴板接口被拒时的退回路径
+occurrences:
+  - origin: paste-ready-copy
+    date: '2026-10-23'
+    evidence: plugins/dsh-writing-viewer/src/copyview.ts browserClipboardEnv.selectAndCopy；copyview.test.ts「copies both flavours through a copy event without putting the fragment into the DOM」；docs/evidence/copy-live-check.txt 第三节。

@@ -54,6 +54,11 @@ categories:
       status: active
       occurrences: 1
       path: .strict-spec-driven/lessons/architecture/agent-4b6591.yaml
+    base64-fbf53f:
+      title: 第三方编辑器的粘贴限制要在设计前用校准页实测，公众号对 base64 图片有张数与单张上限
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/architecture/base64-fbf53f.yaml
   coding:
     go-flag-bd930f:
       title: Go flag 包的默认报错不符合中文术语约定
@@ -338,7 +343,7 @@ categories:
     wa-cli-42ec4e:
       title: 外部工具把调用 wa-cli 当只读访问前，先实测一次完整调用：审计日志每次都追加，假执行器测试会把它完全掩盖
       status: active
-      occurrences: 2
+      occurrences: 3
       path: .strict-spec-driven/lessons/coding/wa-cli-42ec4e.yaml
     wa-cli-path-wa-cli-wa-cli-134c20:
       title: 测试「wa-cli 不可用」时依赖开发机 PATH 上没有 wa-cli，装上 wa-cli 后就失败
@@ -484,3 +489,9 @@ categories:
       status: active
       occurrences: 1
       path: .strict-spec-driven/lessons/testing/lesson-971ba4.yaml
+  ui:
+    html-dom-copy-clipboarddata-ccfa90:
+      title: 富文本剪贴板的退回复制不需要把 HTML 插入 DOM：用 copy 事件写 clipboardData
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/ui/html-dom-copy-clipboarddata-ccfa90.yaml

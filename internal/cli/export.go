@@ -16,16 +16,20 @@ import (
 var exportCommand = &command{
 	name: "export",
 	summary: "导出（Export）作品中已验收（Acceptance）的单元：按单元树先序拼接正文，去掉批注与单处豁免注释；markdown 可选附带文件头元数据（Front Matter），" +
-		"wechat-html 输出只含内联样式（Inline Style）的公众号 HTML，配图导出为占位并附配图清单，text 输出去掉 Markdown 标记的纯文本（Plain Text）",
+		"wechat-html 输出只含内联样式（Inline Style）的公众号 HTML，配图导出为占位并附配图清单，text 输出去掉 Markdown 标记的纯文本（Plain Text），" +
+		"paste-html 输出配图内嵌、带「复制图文」按钮、不含 AI 参与说明与封面的可粘贴页（Paste-ready Page）",
 	args: []argSpec{{"work", "作品 id", true}},
 	flags: []flagSpec{dirFlag,
 		{"format", flagString, "导出格式：" + strings.Join(export.Formats, "、") + "；省略时为 markdown"},
-		{"output", flagString, "输出文件，相对 --dir；省略时为 .writing-anything/exports/<work>.md（wechat-html 为 <work>.html，text 为 <work>.txt）"},
-		{"front-matter", flagBool, "在开头附带 YAML front matter：title、description、genre、units 与 accepted_at；只用于 markdown"}},
-	outputKeys: []outputKey{{"export", "导出结果：work、format、path、units（导出的单元，按顺序）、skipped（没有导出的单元，每项含 unit 与 reason）、chars、" +
-		"images（wechat-html 的配图（Illustration），每项含 index、alt、src 与 title；markdown 与 text 为空数组）、imageList（配图清单的路径，没有时为 null）、" +
-		"assets（复制到资产目录（Asset Directory）的配图与封面图（Cover Image），封面在前，每项含 unit、id、role、origin、source 与 path；没有时为空数组）与 " +
-		"disclosure（AI 参与说明（AI-generated Content Label）：text、placement、aiParagraphs、paragraphs、aiPercent、aiImages 与 images；没有 AI 参与的段落与 AI 配图时为 null）；失败时为 null"}},
+		{"output", flagString, "输出文件，相对 --dir；省略时为 .writing-anything/exports/<work>.md（wechat-html 为 <work>.html，text 为 <work>.txt，paste-html 为 <work>.paste.html）"},
+		{"front-matter", flagBool, "在开头附带 YAML front matter：title、description、genre、units 与 accepted_at；只用于 markdown"},
+		{"print", flagBool, "只用于 paste-html：只读，不写任何文件，把可粘贴正文片段放在 export.html（不加 --json 时写到标准输出）；不能与 --output 同时使用"}},
+	outputKeys: []outputKey{{"export", "导出结果：work、format、path（--print 时为 null）、units（导出的单元，按顺序）、skipped（没有导出的单元，每项含 unit 与 reason）、chars（写出文件的字符数，paste-html 含内嵌图片与页面外壳；--print 时为片段的字符数）、" +
+		"images（wechat-html 与 paste-html 的配图（Illustration），每项含 index、alt、src 与 title；markdown 与 text 为空数组）、imageList（配图清单的路径，没有时或 --print 时为 null）、" +
+		"assets（复制到资产目录（Asset Directory）的配图与封面图（Cover Image），封面在前，每项含 unit、id、role、origin、source 与 path；没有时或 --print 时为空数组）与 " +
+		"disclosure（AI 参与说明（AI-generated Content Label）：text、placement、aiParagraphs、paragraphs、aiPercent、aiImages 与 images；没有 AI 参与的段落与 AI 配图时为 null；" +
+		"paste-html 照常报告，但页面不含说明）、html（paste-html --print 的全文片段，只在 --print 时出现）与 segments（paste-html --print 的分段片段：公众号每次粘贴最多 7 张图，" +
+		"内嵌图超过 7 张时按段落边界分段，每段至多 7 张；至少一项，只在 --print 时出现）；失败时为 null"}},
 	exitCodes: standardExitCodes,
 	run:       runExport,
 }
@@ -45,7 +49,7 @@ type imageView struct {
 type exportView struct {
 	Work       string          `json:"work"`
 	Format     string          `json:"format"`
-	Path       string          `json:"path"`
+	Path       *string         `json:"path"`
 	Units      []string        `json:"units"`
 	Skipped    []skippedView   `json:"skipped"`
 	Chars      int             `json:"chars"`
@@ -53,6 +57,8 @@ type exportView struct {
 	ImageList  *string         `json:"imageList"`
 	Assets     []assetView     `json:"assets"`
 	Disclosure *disclosureView `json:"disclosure"`
+	HTML       *string         `json:"html,omitempty"`
+	Segments   []string        `json:"segments,omitempty"`
 }
 
 type assetView struct {
@@ -93,13 +99,24 @@ func runExport(inv *invocation) int {
 		format = "markdown"
 	}
 	_, frontMatter := inv.values["front-matter"]
+	_, printOnly := inv.values["print"]
+	output, hasOutput := inv.values["output"]
 	switch {
 	case problems != nil:
 	case !slices.Contains(export.Formats, format):
 		problems = []workspace.Problem{invalidValue("format", format, "支持的导出格式为 "+strings.Join(export.Formats, "、"))}
-	case (format == export.FormatWechat || format == export.FormatText) && frontMatter:
-		p := invalidValue("front-matter", "true", "--front-matter 只用于 markdown 格式；"+map[string]string{export.FormatWechat: "公众号 HTML", export.FormatText: "纯文本"}[format]+"没有文件头元数据")
+	case format != export.FormatMarkdown && frontMatter:
+		name := map[string]string{export.FormatWechat: "公众号 HTML", export.FormatText: "纯文本", export.FormatPaste: "可粘贴页"}[format]
+		p := invalidValue("front-matter", "true", "--front-matter 只用于 markdown 格式；"+name+"没有文件头元数据")
 		p.Field = "front-matter"
+		problems = []workspace.Problem{p}
+	case printOnly && format != export.FormatPaste:
+		p := invalidValue("print", "true", "--print 只用于 paste-html 格式")
+		p.Field = "print"
+		problems = []workspace.Problem{p}
+	case printOnly && hasOutput:
+		p := invalidValue("output", output, "--print 不写文件，不能与 --output 同时使用")
+		p.Field = "output"
 		problems = []workspace.Problem{p}
 	}
 	reopenable := map[string]bool{} // wa-cli reopen 接受的单元：export.unaccepted 先给出 reopen（export-reopen-next）
@@ -120,19 +137,23 @@ func runExport(inv *invocation) int {
 				}
 				var r *export.Result
 				var changed []string
-				opt := export.Options{FrontMatter: frontMatter, Output: inv.values["output"], Level: level}
+				opt := export.Options{FrontMatter: frontMatter, Output: output, Level: level, Print: printOnly}
 				// 样式主题与 AI 参与说明的配置取自按作品文体合并的结果（workspace-artifacts/resolved-sources）。
 				resolved, ps := series.Resolve(dir, w)
 				switch {
 				case resolved == nil:
 					problems = ps
-				case format == export.FormatWechat:
+				case format == export.FormatWechat || format == export.FormatPaste:
 					opt.Disclosure = disclosureConfig(resolved)
 					theme := map[string]string{}
 					for k, v := range resolved.HTMLTheme {
 						theme[k] = fmt.Sprint(v.Value)
 					}
-					r, changed, problems = export.WechatHTML(dir, w, opt, theme)
+					if format == export.FormatPaste {
+						r, changed, problems = export.PasteHTML(dir, w, opt, theme)
+					} else {
+						r, changed, problems = export.WechatHTML(dir, w, opt, theme)
+					}
 				case format == export.FormatText:
 					opt.Disclosure = disclosureConfig(resolved)
 					r, changed, problems = export.PlainText(dir, w, opt)
@@ -141,7 +162,7 @@ func runExport(inv *invocation) int {
 					r, changed, problems = export.Markdown(dir, w, opt)
 				}
 				if r != nil {
-					v := &exportView{Work: w.ID, Format: format, Path: r.Path, Units: r.Units, Skipped: []skippedView{}, Chars: r.Chars, Images: []imageView{}, ImageList: optional(r.ImageList), Assets: []assetView{}}
+					v := &exportView{Work: w.ID, Format: format, Path: optional(r.Path), Units: r.Units, Skipped: []skippedView{}, Chars: r.Chars, Images: []imageView{}, ImageList: optional(r.ImageList), Assets: []assetView{}}
 					for _, a := range r.Assets {
 						v.Assets = append(v.Assets, assetView{Unit: a.Unit, ID: a.ID, Role: a.Role, Origin: a.Origin, Source: a.Source, Path: a.Path})
 					}
@@ -154,6 +175,9 @@ func runExport(inv *invocation) int {
 					}
 					for _, img := range r.Images {
 						v.Images = append(v.Images, imageView{Index: img.Index, Alt: img.Alt, Src: img.Src, Title: optional(img.Title)})
+					}
+					if printOnly {
+						v.HTML, v.Segments = &r.HTML, r.Segments
 					}
 					res.Export, res.ChangedPaths = v, changed
 				}
@@ -185,16 +209,24 @@ func runExport(inv *invocation) int {
 		if res.Export == nil {
 			return nil
 		}
+		if res.Export.HTML != nil {
+			_, err := io.WriteString(w, *res.Export.HTML+"\n")
+			return err
+		}
 		text := fmt.Sprintf("已导出作品 %s 的 %d 个已验收单元到 %s（%d 字符）；%d 个单元没有导出\n",
-			res.Export.Work, len(res.Export.Units), res.Export.Path, res.Export.Chars, len(res.Export.Skipped))
+			res.Export.Work, len(res.Export.Units), *res.Export.Path, res.Export.Chars, len(res.Export.Skipped))
 		if d := res.Export.Disclosure; d != nil {
-			text += fmt.Sprintf("AI 参与说明（%s）：%s\n", d.Placement, d.Text)
+			if res.Export.Format == export.FormatPaste {
+				text += fmt.Sprintf("AI 参与说明（可粘贴页不含，需要时在发布平台自行声明）：%s\n", d.Text)
+			} else {
+				text += fmt.Sprintf("AI 参与说明（%s）：%s\n", d.Placement, d.Text)
+			}
 		}
 		if res.Export.ImageList != nil {
 			text += fmt.Sprintf("配图清单（%d 张）：%s\n", len(res.Export.Images), *res.Export.ImageList)
 		}
 		if n := len(res.Export.Assets); n > 0 {
-			text += fmt.Sprintf("已复制 %d 张配图到资产目录 %s\n", n, export.AssetDir(res.Export.Path))
+			text += fmt.Sprintf("已复制 %d 张配图到资产目录 %s\n", n, export.AssetDir(*res.Export.Path))
 		}
 		_, err := io.WriteString(w, text)
 		return err

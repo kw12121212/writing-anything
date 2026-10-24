@@ -9,7 +9,9 @@
  *
  * - `webServer` (web profile): registers two read-only GET routes, plus the
  *   review routes (session start/status/end and the same-origin proxy of the
- *   wa-cli reading view, see reviewroutes.ts).
+ *   wa-cli reading view, see reviewroutes.ts) and the read-only copy route
+ *   behind「复制图文」(wa-cli export --format paste-html --print, see
+ *   copyroutes.ts).
  *   `/dsh-writing-viewer/workspace` returns the located project directory,
  *   whether `.writing-anything/` exists under it, and every candidate probed
  *   on the way. `/dsh-writing-viewer/snapshot` aggregates the whole workspace
@@ -55,6 +57,7 @@ import { createSetupState, registerSetupRoutes, startupSetup, type SetupDeps, ty
 import { createReviewSessions, type ReviewChild, type ReviewSessions } from './reviewsession';
 import { registerReviewRoutes, type ReviewRootResolver } from './reviewroutes';
 import type { ProxyFetch } from './reviewproxy';
+import { registerCopyRoute } from './copyroutes';
 
 // Re-exported so the live evidence harness can drive the exact provider the
 // host registers against the real DSH skill registry (docs/evidence).
@@ -73,6 +76,18 @@ const REVIEW_UPSTREAM_TIMEOUT_MS = 30_000;
 
 /** Upper bound on captured wa-cli stdout; real envelopes are far smaller. */
 const CLI_STDOUT_CAP = 8 * 1024 * 1024;
+
+/** The copy route's wa-cli limits. wa-cli inlines up to 32 MiB of image
+ * bytes (export.PasteEmbedBudget); as base64 that is about 42.7 MiB, and the
+ * --print --json envelope carries the payload twice (export.html and
+ * export.segments). JSON escaping grows it further: html/template writes "+"
+ * as "&#43;", which encoding/json turns into "\u0026#43;" (10 bytes for 1,
+ * one in 64 base64 characters, about +15 %). Worst case ≈ 2 × 42.7 × 1.15 ≈
+ * 98 MiB plus markup, so the cap is 128 MiB — larger than the snapshot's, still
+ * bounded. Re-encoding large images takes about a second each, hence the
+ * longer timeout. */
+export const COPY_STDOUT_CAP = 128 * 1024 * 1024;
+export const COPY_TIMEOUT_MS = 120_000;
 
 /**
  * Read-only filesystem adapter for the snapshot: listing and reading only.
@@ -116,7 +131,9 @@ export function realSnapshotFs(): SnapshotFs {
  * how the setup path keeps `wa-cli skills install` inside a workspace-free
  * temporary directory, so no audit line is ever appended to a workspace.
  */
-export function spawnCliRunner(binary: string): CliRunner {
+export function spawnCliRunner(binary: string, limits: { timeoutMs?: number; stdoutCap?: number } = {}): CliRunner {
+  const timeoutMs = limits.timeoutMs ?? CLI_TIMEOUT_MS;
+  const stdoutCap = limits.stdoutCap ?? CLI_STDOUT_CAP;
   return {
     run(args: readonly string[], options?: { cwd?: string }): Promise<{ stdout: string } | null> {
       return new Promise((resolve) => {
@@ -127,7 +144,10 @@ export function spawnCliRunner(binary: string): CliRunner {
           resolve(null);
           return;
         }
-        let stdout = '';
+        // Raw bytes are collected and decoded once at the end, so a multi-byte
+        // character split across two chunks is never garbled.
+        const chunks: Buffer[] = [];
+        let size = 0;
         let settled = false;
         const finish = (value: { stdout: string } | null): void => {
           if (settled) return;
@@ -138,21 +158,22 @@ export function spawnCliRunner(binary: string): CliRunner {
         const timer = setTimeout(() => {
           child.kill();
           finish(null);
-        }, CLI_TIMEOUT_MS);
+        }, timeoutMs);
         child.stdout?.on('data', (chunk: Buffer) => {
           // Bounded accumulation: an output stream larger than any legitimate
           // envelope stops growing and the oversized result parses as a
           // degradation instead of exhausting memory.
-          if (stdout.length > CLI_STDOUT_CAP) return;
-          stdout += chunk.toString('utf8');
-          if (stdout.length > CLI_STDOUT_CAP) stdout = stdout.slice(0, CLI_STDOUT_CAP);
+          if (size >= stdoutCap) return;
+          const kept = chunk.length > stdoutCap - size ? chunk.subarray(0, stdoutCap - size) : chunk;
+          chunks.push(kept);
+          size += kept.length;
         });
         child.on('error', () => finish(null));
         child.on('close', (code: number | null) => {
           // Exit code is not failure: status/validate legitimately exit 1 on
           // an invalid workspace while still printing a full JSON envelope.
           if (code === null) finish(null);
-          else finish({ stdout });
+          else finish({ stdout: Buffer.concat(chunks, size).toString('utf8') });
         });
       });
     },
@@ -548,6 +569,16 @@ export function apply(ctx: {
       });
     } catch (error) {
       console.error(`[dsh-writing-viewer] review routes skipped: ${String(error)}`);
+    }
+    try {
+      const server = ((scope as { webServer?: unknown }).webServer ?? scope) as { register(route: unknown): unknown };
+      registerCopyRoute(server, {
+        runner: spawnCliRunner(normalizePathInput(config?.waCliPath) ?? 'wa-cli', { timeoutMs: COPY_TIMEOUT_MS, stdoutCap: COPY_STDOUT_CAP }),
+        resolveRoot: reviewRootResolver(() => registry, config, () => process.cwd()),
+        guardOptions,
+      });
+    } catch (error) {
+      console.error(`[dsh-writing-viewer] copy route skipped: ${String(error)}`);
     }
     if (setupDeps !== null && setupState !== null) {
       try {

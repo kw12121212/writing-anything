@@ -1,0 +1,49 @@
+「复制图文」（paste-ready-copy）真实环境实测 — 2026-10-23，本机 WSL2，headless Chrome（agent-browser）
+
+环境
+- 工作区：临时目录，作品 my-post 已验收；正文含标题、加粗、链接、独占一段的已登记配图 shop（PNG，origin agent）与行内外链图片，
+  根单元另登记封面 cover；正文由 wa-cli draft write 写入（有 AI 参与段落）。wa-cli 为本仓库当前构建。
+- DSH 0.2.1-rc.2 web profile，隔离实例（临时 DSH_HOME，dsh plugin --profile web add link:<repo>/plugins/dsh-writing-viewer，
+  overlay 配置 workspaceRoot 与 waCliPath）：
+  A. --host 127.0.0.1 --port 13111（安全上下文：isSecureContext=true，有 navigator.clipboard）
+  B. --host <局域网 IP> --port 13112（纯 http 非安全上下文：isSecureContext=false，没有 navigator.clipboard）
+- 粘贴目标：本机另一页面中的 contenteditable 编辑区，Ctrl+V 后检查 DOM。
+
+一、导出的可粘贴页（wa-cli export my-post --format paste-html）
+- 127.0.0.1 打开：点「复制图文」显示「已复制…」；粘贴后编辑区有 1 个 img（src 为 data:image/png;base64,…，naturalWidth 16，alt「店门口」），
+  正文、脚注与参考链接完整，行内外链为「【配图 2：图标】」；不含 AI 参与说明、不含封面、不含按钮与说明文字。
+- 局域网 IP 打开（非安全上下文）：同一按钮走 execCommand 退回路径，显示「已复制…」，粘贴结果同上（1 个 data URI 图片）。
+- Ctrl+A、Ctrl+C 全选复制：粘贴结果以「周六的店」开头，含 1 个图片，不含「复制图文」按钮与操作说明（工具栏 user-select: none）。
+
+二、DSH 面板
+- 路由：curl GET /dsh-writing-viewer/copy?work=my-post → {"ok":true,"html":"<section …"}（wa-cli export --format paste-html --print）。
+- 实例 A：作品根单元详情「Review」旁有「Copy with images」；点击后提示
+  「Copied … · images embedded 1 · 1 image(s) not embedded（【配图 n】 placeholders）…」；粘贴结果 1 个 data URI 图片，无封面、无 AI 参与说明。
+- 实例 B：点「Review」启动审阅，审阅视图头部（Refresh、Enlarge 旁）有「Copy with images」；点击后同样提示已复制（截图 copy-review-insecure.png），
+  审阅会话未结束（End review 仍在）；粘贴结果 1 个 data URI 图片。
+- 两次面板复制后，工作区中没有任何文件被创建或修改（find -newer，排除 audit.log）。
+
+未覆盖：公众号编辑器（mp.weixin.qq.com）与飞书文档的实际粘贴表现，需作者登录后实测（验证任务 wechat-paste-trial）。
+
+三、评审修复后复测（同日，实例 C：--host <局域网 IP> --port 13113，非安全上下文）
+- 退回路径改为 copy 事件写入 clipboardData（片段不经 innerHTML 进入 DOM）：点「Copy with images」提示已复制，粘贴结果 1 个 data URI 图片
+  （naturalWidth 16），无 AI 参与说明；复制后页面中没有残留的 textarea 或离屏容器。
+- 未验收作品 other-post 点「Copy with images」：提示「Copy failed：export.nothing-accepted … 没有已验收的单元」与 next 命令
+  wa-cli next、wa-cli status（截图 copy-nothing-accepted.png），不再显示 export.unaccepted。
+- 该次失败的 export --print 审计行不含 unit，wa-cli next 中没有「export 在本单元失败后尚未成功重试」的回捞提示。
+
+四、经 Tailscale HTTPS 访问（同日，tailscale serve --https 终止 TLS，MagicDNS 名 + 有效证书）
+- 工作区：作品 my-post 三张正文配图（640×360、900×500、1800×1800 约 9.7 MiB 的 PNG）与封面，已验收。
+- 可粘贴页 https://<machine>.<tailnet>.ts.net:18801/my-post.paste.html：isSecureContext=true，三张图全部加载；点「复制图文」提示已复制，
+  粘贴后编辑区三张 data URI 图片（大图 data URI 约 12.4 MiB，naturalWidth 1800），无 AI 参与说明、无封面。
+- DSH 隔离实例（--host 127.0.0.1 --port 13114 --trusted-host 与 allowedHosts 放行该权威，tailscale serve --https=13114 转发）：
+  isSecureContext=true、有 navigator.clipboard；启动审阅后在审阅视图头部点「Copy with images」提示「images embedded 3」，
+  粘贴结果同上三张图；审阅会话未结束。
+
+五、公众号图文编辑器实测（作者，同日，经 Tailscale HTTPS 访问）
+- 原样内嵌时：两张小图（合计约 0.45 MiB）成功；含 9.7 MiB 大图的页面一张图都没有（文字保留）。逐页校准：1 张 1 MiB 成功、
+  1 张 1.8 MiB 失败、2 张各 1 MiB 成功；6 张各 250 KB 与 7 张各 50 KB 成功，8 张（各 100 KB 合计 0.8 MiB、各 250 KB 合计 2 MiB）失败；
+  超限时整次粘贴的图片全部丢失。结论：单张约 1 MiB、每次 7 张，无总量限制。
+- 按此实现大图重新编码（≤1 MiB 的 JPEG）与每段至多 7 张的分段后：在 DSH 面板（实例经 tailscale serve --https 访问）点「复制图文」，
+  三张图的作品（含 9.7 MiB 大图，已重新编码）粘贴到公众号后三张图都在。
+- 未实测：超过 7 张时「复制第 n 段」逐段粘贴到公众号的效果（按上面的校准规律推断可用）；飞书文档的粘贴表现。

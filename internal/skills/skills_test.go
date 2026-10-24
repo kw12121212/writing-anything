@@ -342,6 +342,28 @@ func TestIllustrateSkills(t *testing.T) {
 	}
 }
 
+// wa-publish 说明连图带文复制：可粘贴页、两种「复制图文」入口、不含 AI 参与说明与封面、按配图清单补传（publish-copy-guidance）。
+func TestPublishCopyGuidance(t *testing.T) {
+	for _, s := range All() {
+		if s.Name != "wa-publish" {
+			continue
+		}
+		body := string(s.Content)
+		export := body[strings.Index(body, "wa-cli export <作品> --format markdown"):]
+		for _, want := range []string{"--format paste-html", "可粘贴页（Paste-ready Page）", "「复制图文」", "DSH 插件面板", "不含 AI 参与说明与封面图",
+			"export.disclosure", "「【配图 n】」", "配图清单（export.imageList）", "约 1 MiB", "7 张", "「复制第 n 段」", "「复制全文」"} {
+			if !strings.Contains(export, want) {
+				t.Errorf("wa-publish export step lacks %q", want)
+			}
+		}
+		if !slices.Contains(Commands(s.Content), "export") {
+			t.Errorf("wa-publish commands lack export")
+		}
+		return
+	}
+	t.Fatal("wa-publish not found")
+}
+
 // 只有 wa-illustrate 提到 lemo-opuscar：wa-cli 不运行它（illustrate-skill-no-runtime-dependency）。
 func TestOnlyIllustrateMentionsRenderer(t *testing.T) {
 	for _, s := range All() {

@@ -275,7 +275,8 @@
 | lemo-opuscar | lemo-opuscar | lemo-opuscar | 外部的代码渲染风格库：Agent 按其风格写页面并渲染静帧作为配图，wa-cli 不运行它 |
 | 内联样式 | Inline Style | 内联样式 | 直接写在 HTML 标签上的样式，公众号编辑器要求 |
 | 样式主题 | HTML Theme | 样式主题 | HTML 导出时各元素的内联样式，规范包用 `html_theme` 覆盖内置默认主题 |
-| 配图清单 | Image List | 配图清单 | 公众号 HTML 导出时与导出文件一起写出的配图列表，供作者按编号替换配图占位 |
+| 配图清单 | Image List | 配图清单 | 公众号 HTML 与可粘贴页导出时与导出文件一起写出的配图列表，供作者按编号替换配图占位或补传配图 |
+| 可粘贴页 | Paste-ready Page | 可粘贴页 | `wa-cli export --format paste-html` 写出的完整 HTML 页面：正文按公众号 HTML 渲染、可用配图以 data URI 内嵌，带「复制图文」按钮，不含 AI 参与说明与封面图，供作者连图带文粘贴到公众号编辑器或在线文档 |
 | 原创声明 | Originality Declaration | 原创声明 | 公众号对原创内容的标注 |
 | 敏感词 | Sensitive Words | 敏感词 | 平台限制或需谨慎使用的词语 |
 

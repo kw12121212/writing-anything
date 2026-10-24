@@ -1,0 +1,16 @@
+schema: strict-spec-driven/delta-tech/v1
+schema_version: 1
+artifact_type: delta_tech
+schema_file: templates/strict-spec-driven/schemas/delta-tech.yaml
+target_standard: cli-contract
+operations:
+  ADDED:
+    print-payload-size-budget:
+      strength: SHOULD
+      statement: 命令在 --json 中输出大体积内嵌载荷（如 base64 图片）时，注册表的输出说明与消费方（DSH 插件等）的输出上限应按实际 JSON 体积计算：计入同一载荷在信封中的每一份副本与转义膨胀（html/template 的 &#43;、encoding/json 的 \u0026 等），消费方的上限不得低于生产方允许的最大载荷。
+      rationale: paste-ready-copy 的 export --print 在 export.html 与 export.segments 中各带一份 base64 正文，最初按单份估算的 64 MiB 插件上限装不下 wa-cli 允许的 32 MiB 内嵌量（评审黑盒实测 26 张约 1 MiB 的图输出 72.7 MB），面板只能报「输出无法解析」。
+      enforcement:
+        method: test
+        detail: plugins/dsh-writing-viewer/src/copyroutes.test.ts 的 copy route output budget 用例按 32 MiB 内嵌预算、两份副本与转义膨胀计算最坏体积，断言 COPY_STDOUT_CAP 大于它。
+  MODIFIED: {}
+  REMOVED: {}

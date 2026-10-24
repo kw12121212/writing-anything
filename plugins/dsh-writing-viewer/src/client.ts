@@ -67,6 +67,22 @@ import {
   type ReviewPanelState,
 } from './reviewview';
 import {
+  IDLE_COPY,
+  browserClipboardEnv,
+  copyLabelsFor,
+  copyPart,
+  copyPending,
+  copyRouteUrl,
+  embeddedCount,
+  copyStateAfter,
+  parseCopyBody,
+  runCopy,
+  segmentLabel,
+  workOf,
+  type CopyResult,
+  type CopyState,
+} from './copyview';
+import {
   FEEDBACK_KINDS,
   QUICK_MARKS,
   REVIEW_AUTHOR_REVIEW_ROUTE,
@@ -418,6 +434,8 @@ interface PanelState {
   reviewData?: ReviewDataState;
   /** The author enlarged the review view to cover the whole panel area. */
   reviewEnlarged: boolean;
+  /** 「复制图文」 state (absent = idle). */
+  copy?: CopyState;
 }
 
 /** A readable result line next to one submit area. */
@@ -486,6 +504,10 @@ interface PanelActions {
   toggleOriginColors?(): void;
   /** Switch the review view between the detail area and the enlarged overlay. */
   setReviewEnlarged?(open: boolean): void;
+  /** Copy one whole work as rich text (「复制图文」). */
+  copyWork?(work: string): void;
+  /** Copy one segment (0-based) or the whole text ('all') of a multi-part work. */
+  copySegment?(work: string, part: number | 'all'): void;
   /** One key pressed on a tree node: move selection or collapse/expand. */
   treeKey(event: unknown, ref: string): void;
 }
@@ -1333,6 +1355,33 @@ function renderConfirmItem(h: H, item: PageConfirm, d: ReviewDataState, labels: 
       noticeNode(h, 'notice', d.notices[key])));
 }
 
+/** The「复制图文」button of one work plus its result line. Copies the whole
+ * work's accepted units through wa-cli; never renders the body itself. */
+function renderCopyControl(h: H, s: PanelState, a: PanelActions, work: string): unknown[] {
+  const labels = copyLabelsFor();
+  const copy = s.copy ?? IDLE_COPY;
+  const mine = copy.work === work;
+  const nodes: unknown[] = [
+    h('button', { key: 'copy', type: 'button', 'data-copy-work': work, disabled: copy.busy, style: buttonStyle(), onClick: () => a.copyWork?.(work) },
+      mine && copy.busy ? labels.copying : labels.copy),
+  ];
+  if (mine && copy.segments !== null && copy.segments.work === work) {
+    const parts = copy.segments.parts;
+    parts.forEach((_, i) => {
+      nodes.push(h('button', { key: 'part-' + i, type: 'button', 'data-copy-segment': String(i), style: buttonStyle(true), onClick: () => a.copySegment?.(work, i) },
+        segmentLabel(parts, i)));
+    });
+    nodes.push(h('button', { key: 'part-all', type: 'button', 'data-copy-segment': 'all', style: buttonStyle(), onClick: () => a.copySegment?.(work, 'all') }, labels.copyAll));
+  }
+  if (mine && copy.notice !== null) {
+    nodes.push(h('span', { key: 'copy-notice', role: copy.notice.ok ? 'status' : 'alert', 'data-copy-notice': copy.notice.ok ? 'ok' : 'failed',
+      style: { color: copy.notice.ok ? COLOR.success : COLOR.error, overflowWrap: 'anywhere' } },
+      copy.notice.text,
+      ...copy.notice.next.map((n, i) => h('code', { key: 'n' + i, style: { ...codeStyle(), marginLeft: '6px' } }, n))));
+  }
+  return nodes;
+}
+
 /** The whole review view of an active session. */
 function renderReviewView(h: H, s: PanelState, a: PanelActions, labels: ReviewLabels): unknown {
   const d = s.reviewData ?? emptyReviewData(s.review?.unit ?? null);
@@ -1342,6 +1391,7 @@ function renderReviewView(h: H, s: PanelState, a: PanelActions, labels: ReviewLa
       h('strong', { key: 't' }, labels.viewTitle),
       h('button', { key: 'refresh', type: 'button', 'data-review-refresh': 'true', disabled: d.loading, style: buttonStyle(), onClick: a.refreshReview }, labels.refresh),
       h('button', { key: 'size', type: 'button', 'data-review-size': s.reviewEnlarged ? 'restore' : 'enlarge', style: buttonStyle(), onClick: () => a.setReviewEnlarged?.(!s.reviewEnlarged) }, s.reviewEnlarged ? labels.restore : labels.enlarge),
+      ...(s.review?.unit ? renderCopyControl(h, s, a, workOf(s.review.unit)) : []),
       h('label', { key: 'colors', style: { display: 'flex', gap: '4px', alignItems: 'center', color: COLOR.secondary } },
         h('input', { key: 'c', type: 'checkbox', checked: d.originColors, 'data-review-origin-colors': 'true', onChange: a.toggleOriginColors }), labels.originColors),
       d.loading ? h('span', { key: 'busy', role: 'status', 'aria-busy': 'true', 'data-review-loading': 'true', style: { color: COLOR.brand } }, labels.loadingPage) : null),
@@ -1437,6 +1487,9 @@ function renderReviewControls(h: H, s: PanelState, a: PanelActions, ref: string)
   if (model.showEnd) {
     row.push(h('button', { key: 'end', type: 'button', 'data-review-end': ref, style: buttonStyle(), onClick: a.endReview }, labels.end));
   }
+  // A work's root unit offers「复制图文」beside 审阅; while its review view is
+  // showing, the button lives in the review view's head instead.
+  if (!model.active && workOf(ref) === ref) row.push(...renderCopyControl(h, s, a, ref));
   if (model.busyText !== null) {
     row.push(h('span', { key: 'busy', role: 'status', 'aria-busy': 'true', 'data-review-busy': 'true', style: { color: COLOR.secondary } }, model.busyText));
   }
@@ -1607,6 +1660,7 @@ window.__ModuleLoader__?.load({
       nextViewMode, nextReadingMode, artifactTextOf, sourceEntriesOf, PANEL_ID, ROUTE_PATH, FOLD_LINE_THRESHOLD,
       SETUP_ROUTE, parseSetupStatus, setupViewModel, setupLabelsFor,
       REVIEW_SESSION_ROUTE, REVIEW_SESSION_END_ROUTE, reviewViewModel, reviewLabelsFor, renderReviewOverlay,
+      copyLabelsFor,
     };
 
     let react: any;
@@ -1650,6 +1704,7 @@ window.__ModuleLoader__?.load({
       const [review, setReview] = react.useState(IDLE_REVIEW as ReviewPanelState);
       const [reviewData, setReviewData] = react.useState(emptyReviewData(null) as ReviewDataState);
       const [reviewEnlarged, setReviewEnlarged] = react.useState(false);
+      const [copy, setCopy] = react.useState(IDLE_COPY as CopyState);
       const containerRef = react.useRef(null);
       // Scroll offset captured before a view toggle, restored after the new
       // view has rendered, so switching never jumps back to the top.
@@ -1883,6 +1938,7 @@ window.__ModuleLoader__?.load({
         review,
         reviewData,
         reviewEnlarged,
+        copy,
       };
       // The enlarged overlay is keyboard-dismissable: opening it moves DOM
       // focus into it (its tabIndex is -1), so the Escape key on the overlay
@@ -2051,6 +2107,44 @@ window.__ModuleLoader__?.load({
         },
         setReviewEnlarged: (open: boolean) => {
           setReviewEnlarged(open);
+        },
+        copyWork: (work: string) => {
+          if (copy.busy) return;
+          const labels = copyLabelsFor();
+          const env = browserClipboardEnv(globalThis as unknown as Parameters<typeof browserClipboardEnv>[0]);
+          // A fragment the browser refused last time is copied synchronously
+          // in this new click, so the write has a fresh user activation.
+          if (copy.pending !== null && copy.pending.work === work) {
+            setCopy(copyStateAfter(work, copyPending(copy.pending, env), labels));
+            return;
+          }
+          setCopy({ work, busy: true, notice: null, pending: null, segments: null });
+          // The fetch starts inside the click; runCopy builds the clipboard
+          // item before its first await so the activation carries over.
+          const request: Promise<CopyResult> = fetch(copyRouteUrl(work, body?.root ?? panelRoot))
+            .then((response: Response) =>
+              response.json().then(
+                (parsed: unknown) => parseCopyBody(parsed, response.status),
+                () => parseCopyBody(null, response.status),
+              ),
+            )
+            .catch((cause: unknown) => ({ ok: false as const, error: String((cause as Error)?.message ?? cause), diagnostics: [] }));
+          runCopy(request, env)
+            .then((outcome) => setCopy(copyStateAfter(work, outcome, labels)))
+            .catch((cause: unknown) => setCopy(copyStateAfter(work, { kind: 'refused', error: String((cause as Error)?.message ?? cause), diagnostics: [] }, labels)));
+        },
+        copySegment: (work: string, part: number | 'all') => {
+          const held = copy.segments;
+          if (held === null || held.work !== work) return;
+          const labels = copyLabelsFor();
+          const env = browserClipboardEnv(globalThis as unknown as Parameters<typeof browserClipboardEnv>[0]);
+          // The part is already here: copyPart builds the clipboard write inside this click.
+          const html = part === 'all' ? held.html : held.parts[part] ?? '';
+          const images = part === 'all' ? held.images : embeddedCount(html);
+          const name = part === 'all' ? labels.copyAll : segmentLabel(held.parts, part);
+          copyPart(html, images, env)
+            .then((outcome) => setCopy(copyStateAfter(work, outcome, labels, held, name)))
+            .catch((cause: unknown) => setCopy(copyStateAfter(work, { kind: 'refused', error: String((cause as Error)?.message ?? cause), diagnostics: [] }, labels, held)));
         },
         endReview: () => {
           setReview(IDLE_REVIEW);
