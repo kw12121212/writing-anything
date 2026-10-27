@@ -33,6 +33,19 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.release.tag_name }}
+          fetch-depth: 0 # 需要历史来判断发布提交是否在 main 上
+
+      - name: 校验发布提交来自 main
+        # 发布标签只允许指向 main 上的提交：仓库约定是「main 只接收从 dev 合并的稳定版本」，
+        # 在 dev 或功能分支上打的标签即使版本号对得上也不许发到 npm。
+        run: |
+          set -euo pipefail
+          git fetch -q origin main
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::发布标签指向的提交 $GITHUB_SHA 不在 main 上，拒绝发布"
+            exit 1
+          fi
+          echo "发布提交 $GITHUB_SHA 在 main 上（祖先关系校验通过）"
 
       - uses: actions/setup-node@v4
         with:
