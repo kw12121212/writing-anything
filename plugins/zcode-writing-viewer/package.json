@@ -1,6 +1,6 @@
 {
   "name": "zcode-writing-viewer",
-  "version": "0.1.0",
+  "version": "0.9.0",
   "description": "ZCode plugin for writing-anything workspaces (.writing-anything/): read-only overview dashboard, unit tree, artifact semantic-card and source-highlight views, sources list, plus MCP-held review sessions that proxy the wa-cli reading view for unit review.",
   "type": "module",
   "private": true,
