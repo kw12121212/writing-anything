@@ -1,11 +1,11 @@
 ---
 name: release
-description: 对 writing-anything 仓库执行一次正式发布（Release）：完整回归、把 dev 合并到 main、确定版本号、本地构建发布产物、用 gh CLI 创建 GitHub Release，最后提交推送。用户要求「正式发布」「发版」「发布新版本」时使用。本项目不使用 CI/CD，发布全部在本地完成。
+description: 对 writing-anything 仓库执行一次正式发布（Release）：完整回归、把 dev 合并到 main、确定版本号、本地构建发布产物、用 gh CLI 创建 GitHub Release，最后提交推送。用户要求「正式发布」「发版」「发布新版本」时使用。构建与 GitHub Release 在本地完成；npm 包在 Release 发布后由仓库唯一的 GitHub Actions 工作流自动发布。
 ---
 
 # release：正式发布
 
-对 writing-anything 仓库执行一次正式发布（Release）。本项目不使用持续集成与持续交付（CI/CD）：仓库中没有任何工作流文件，发布全部在本地完成。发布产物（Release Asset）由 `internal/tools/release` 交叉编译（Cross-compilation），GitHub Release 用 gh CLI 创建。本技能只执行发布，不在发布过程中修改规格或代码；发现缺陷时停止发布，先走正常开发流程修复。
+对 writing-anything 仓库执行一次正式发布（Release）。本项目除 npm 发布外不使用持续集成与持续交付（CI/CD）：仓库中只有 `.github/workflows/publish-npm.yml` 一个工作流，它在 GitHub Release 发布后经 npm Trusted Publishing（OIDC）把 `plugins/dsh-writing-viewer` 发布到 npm；构建与 GitHub Release 全部在本地完成。发布产物（Release Asset）由 `internal/tools/release` 交叉编译（Cross-compilation），GitHub Release 用 gh CLI 创建。本技能只执行发布，不在发布过程中修改规格或代码；发现缺陷时停止发布，先走正常开发流程修复。
 
 ## 步骤
 
@@ -22,12 +22,12 @@ description: 对 writing-anything 仓库执行一次正式发布（Release）：
 6. 打标签：`git tag -a <版本号> -m "wa-cli <版本号>"`。
 7. 本地构建发布产物：`go run ./internal/tools/release -version <版本号> -out dist`，生成六个平台（linux、darwin、windows 各 amd64 与 arm64）的 `wa-cli-<os>-<arch>` 二进制与校验文件（Checksum File）`SHA256SUMS`；随后构建并打包 dsh-writing-viewer 插件包（Plugin Package）：`pnpm --dir plugins/dsh-writing-viewer run build && pnpm --dir plugins/dsh-writing-viewer pack --pack-destination ../../dist`，在仓库根的 `dist/` 生成 `dsh-writing-viewer-<插件版本>.tgz`（插件版本与发布 tag 对齐，第 4 步已校验）；再构建并打包 zcode-writing-viewer 插件包：`pnpm --dir plugins/zcode-writing-viewer run build && pnpm --dir plugins/zcode-writing-viewer pack --pack-destination ../../dist`，其构建会从 `internal/skills/skills` 原样捆绑全部内置 wa-* 技能并核对名单，在 `dist/` 生成 `zcode-writing-viewer-<插件版本>.tgz`。注意 `--pack-destination` 的相对路径以 `--dir` 指定的插件目录为基准解析，必须写 `../../dist` 才会落进仓库根的 `dist/`（写成 `dist` 会落进插件自身被 git 忽略的构建目录，第 10 步核对会失败）。缺少 pnpm 或任一构建失败时不要推送：仍在 `main` 上依次执行 `git tag -d <版本号>`（删除本地标签）、`git reset --hard origin/main`（撤销本地合并），再 `git switch dev` 回 `dev` 修复，然后从头发布。注意必须先复位再切换分支：切到 `dev` 后再执行 `git reset --hard` 复位的是 `dev`，会丢失 `dev` 上的提交。
 8. 推送：`git push --atomic origin main <版本号>`，`main` 与标签要么一起推送成功，要么都不推送；`dev` 在发布过程中没有变化，不需要推送。推送前向发布者做最后一次对外发布确认（见下节）。
-9. 创建 GitHub Release：`gh release create <版本号> dist/* --title <版本号> --generate-notes`；版本号带连字符（预发布版（Prerelease），如 `v0.1.0-rc1`）时加 `--prerelease`。
-10. 核对：`gh release view <版本号>` 确认产物齐全（六个平台二进制 + `SHA256SUMS` + `dsh-writing-viewer-<插件版本>.tgz` + `zcode-writing-viewer-<插件版本>.tgz`，tarball 以 dist/ 内实际文件名为准）；发布者愿意时，可用安装脚本冒烟验证：`curl -fsSL https://raw.githubusercontent.com/kw12121212/writing-anything/main/install.sh | sh`，再运行安装脚本输出的路径（默认 `"$HOME/.local/bin/wa-cli" --version`，避免 PATH 中更靠前的旧 wa-cli 干扰），输出应为 `wa-cli <版本号> (commit <提交>)`；Windows 上可用 `irm https://raw.githubusercontent.com/kw12121212/writing-anything/main/install.ps1 | iex` 做同样的验证。`dist/` 已被 git 忽略，核对后可删除。
+9. 创建 GitHub Release：`gh release create <版本号> dist/* --title <版本号> --generate-notes`；版本号带连字符（预发布版（Prerelease），如 `v0.1.0-rc1`）时加 `--prerelease`。这一步同时触发仓库唯一的 GitHub Actions 工作流 `.github/workflows/publish-npm.yml`：它在 GitHub 托管 runner 上校验插件版本与发布标签一致、安装插件依赖、跑插件回归，然后经 npm Trusted Publishing（OIDC）把 `plugins/dsh-writing-viewer` 发布到 npm（稳定版发到 `latest` 标签，预发布版发到 `next`，不覆盖 `latest`；溯源（Provenance）声明由 npm 自动生成）。仓库里没有任何 npm token，也不需要提供；认证依据是 npm 侧一次性配置的 Trusted Publisher（GitHub Actions、用户 `kw12121212`、仓库 `writing-anything`、工作流文件名 `publish-npm.yml`，并允许直接 `npm publish` 而不只是 `npm stage publish`）。
+10. 核对：`gh release view <版本号>` 确认产物齐全（六个平台二进制 + `SHA256SUMS` + `dsh-writing-viewer-<插件版本>.tgz` + `zcode-writing-viewer-<插件版本>.tgz`，tarball 以 dist/ 内实际文件名为准）；再核对 npm 发布：`gh run list --workflow publish-npm.yml --limit 1` 确认这次 Release 触发的运行成功，`npm view dsh-writing-viewer version` 与 `npm view dsh-writing-viewer dist-tags --json` 确认版本与标签（稳定版为 `latest`，预发布版为 `next`），`npm view dsh-writing-viewer repository.url` 应指回 `github.com/kw12121212/writing-anything`（awesome-dsh-plugin 的 npm 映射校验依赖这一条）。发布者愿意时，可用安装脚本冒烟验证：`curl -fsSL https://raw.githubusercontent.com/kw12121212/writing-anything/main/install.sh | sh`，再运行安装脚本输出的路径（默认 `"$HOME/.local/bin/wa-cli" --version`，避免 PATH 中更靠前的旧 wa-cli 干扰），输出应为 `wa-cli <版本号> (commit <提交>)`；Windows 上可用 `irm https://raw.githubusercontent.com/kw12121212/writing-anything/main/install.ps1 | iex` 做同样的验证。`dist/` 已被 git 忽略，核对后可删除。
 
 ## 已发布版本不可改写
 
-GitHub Release 的产物必须由对应标签在 `main` 上的源码构建。发布后发现缺陷（包括产物命名、版本号、文档错误）时，不要在已发布的 Release 上补传、替换或删除产物，也不要移动或重建已推送的标签：先在 `dev` 按正常开发流程修复，再用本技能发布一个修订版本（如 v0.4.0 → v0.4.1）。唯一例外是上传中断导致产物缺失：可以从同一标签重新构建（`git switch --detach <版本号>` 后按第 7 步构建）并补传缺失的产物，其余产物保持不变。
+GitHub Release 的产物必须由对应标签在 `main` 上的源码构建。发布后发现缺陷（包括产物命名、版本号、文档错误）时，不要在已发布的 Release 上补传、替换或删除产物，也不要移动或重建已推送的标签：先在 `dev` 按正常开发流程修复，再用本技能发布一个修订版本（如 v0.4.0 → v0.4.1）。唯一例外是上传中断导致产物缺失：可以从同一标签重新构建（`git switch --detach <版本号>` 后按第 7 步构建）并补传缺失的产物，其余产物保持不变。npm 上已发布的版本同理不可改写：同一版本号不能再发一次，发布出问题时发修订版本。
 
 ## 必须停下来问发布者
 

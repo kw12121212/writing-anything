@@ -88,7 +88,7 @@ wa-cli skills install --target ~/.claude/skills   # 安装到其他目录（如�
 
 ## 发布新版本（维护者）
 
-正式发布（Release）通过项目技能（Project Skill）`.agents/skills/release` 执行：完整回归通过后把 `dev` 合并到 `main`，打新的 `v*` 标签（Tag），在本地用发布工具构建发布产物并创建 GitHub Release；本项目不使用持续集成与持续交付（CI/CD）。单独在本地生成产物可以用同一发布工具：
+正式发布（Release）通过项目技能（Project Skill）`.agents/skills/release` 执行：完整回归通过后把 `dev` 合并到 `main`，打新的 `v*` 标签（Tag），在本地用发布工具构建发布产物并创建 GitHub Release；npm 包由仓库唯一的 GitHub Actions 工作流在 Release 发布后经 Trusted Publishing（OIDC）自动发布，其余不使用持续集成与持续交付（CI/CD）。单独在本地生成产物可以用同一发布工具：
 
 ```sh
 go run ./internal/tools/release -version v1.2.3 -out dist
