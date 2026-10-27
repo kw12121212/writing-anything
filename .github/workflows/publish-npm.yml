@@ -1,29 +1,33 @@
 name: Publish npm
 
-# 仓库里唯一的持续集成工作流：GitHub Release 发布后，把 DSH 插件（DSH Plugin）
-# `plugins/dsh-writing-viewer` 发布到 npm。
+# 仓库里唯一的持续集成工作流：把 DSH 插件（DSH Plugin）`plugins/dsh-writing-viewer` 发布到 npm。
+#
+# 触发：任何进入 main 的提交，外加 GitHub Release 发布与手动重试。合并进 main 即发布，
+# 不必等 Release 建好；同一个版本已经发过时自动跳过，所以重复触发不会报错。
 #
 # 认证走 npm Trusted Publishing（OIDC）：工作流向 GitHub 换取短期令牌，npm 侧按
 # 「发布者 = GitHub Actions、用户 kw12121212、仓库 writing-anything、工作流文件名
-# publish-npm.yml」校验来源。仓库里不存放任何 npm token，也不存在需要轮换的长期凭据。
-# 使用 Trusted Publishing 时 npm 自动生成溯源（Provenance）声明，不需要 --provenance。
+# publish-npm.yml」校验来源。仓库里不存放任何 npm token，也没有需要轮换的长期凭据。
+# Trusted Publishing 下 npm 自动生成溯源（Provenance）声明，不需要 --provenance。
 #
-# 前置条件（npm 侧一次性配置，不在此仓库）：npmjs.com 上 dsh-writing-viewer 的
-# 包设置 → Trusted Publisher → GitHub Actions，填 workflow filename 为
-# publish-npm.yml，并勾选允许直接 `npm publish`（默认只允许 `npm stage publish`）。
-#
-# 首次发布必须在本地手动完成：npm 只在包已存在时才提供 Trusted Publisher 配置入口。
+# npm 侧配置（一次性，不在此仓库）：npmjs.com → dsh-writing-viewer → Settings →
+# Trusted publishing → GitHub Actions，workflow filename 填 publish-npm.yml，并允许
+# 直接 `npm publish`（默认只允许 `npm stage publish`）。新建的配置必须在 2 天内完成
+# 首次成功发布才算验证通过，否则过期作废，需要删掉重建。
 
 on:
+  push:
+    branches: [main]
   release:
     types: [published]
+  workflow_dispatch:
 
 permissions:
   contents: read
   id-token: write # OIDC，Trusted Publishing 必需
 
 concurrency:
-  group: npm-publish-${{ github.event.release.tag_name }}
+  group: npm-publish-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -32,20 +36,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.release.tag_name }}
-          fetch-depth: 0 # 需要历史来判断发布提交是否在 main 上
-
-      - name: 校验发布提交来自 main
-        # 发布标签只允许指向 main 上的提交：仓库约定是「main 只接收从 dev 合并的稳定版本」，
-        # 在 dev 或功能分支上打的标签即使版本号对得上也不许发到 npm。
-        run: |
-          set -euo pipefail
-          git fetch -q origin main
-          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
-            echo "::error::发布标签指向的提交 $GITHUB_SHA 不在 main 上，拒绝发布"
-            exit 1
-          fi
-          echo "发布提交 $GITHUB_SHA 在 main 上（祖先关系校验通过）"
+          # Release 触发时签出标签指向的提交，push 与手动触发时签出触发的那次提交。
+          ref: ${{ github.event.release.tag_name || github.ref }}
+          fetch-depth: 0 # 需要历史与标签，用来校验发布提交来自 main 且已打对应标签
 
       - uses: actions/setup-node@v4
         with:
@@ -57,39 +50,65 @@ jobs:
         with:
           version: 12
 
-      - name: 校验插件版本与发布标签一致
+      - name: 读取版本并判断是否需要发布
         id: version
-        env:
-          TAG_NAME: ${{ github.event.release.tag_name }}
         run: |
           set -euo pipefail
-          tag="${TAG_NAME#v}"
           version=$(node -p "require('./plugins/dsh-writing-viewer/package.json').version")
-          echo "发布标签 ${tag} / 插件版本 ${version}"
-          if [ "$tag" != "$version" ]; then
-            echo "::error::插件版本 ${version} 与发布标签 ${tag} 不一致，拒绝发布"
-            exit 1
+          echo "插件版本 ${version}"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          if npm view "dsh-writing-viewer@${version}" version >/dev/null 2>&1; then
+            echo "::notice::npm 上已存在 ${version}，本次跳过发布"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
           fi
-          # 预发布版（版本号带连字符）发布到 next 标签，稳定版的 latest 不被覆盖。
+          # 预发布版（版本号带连字符）发到 next 标签，稳定版的 latest 不被覆盖。
           case "$version" in
             *-*) echo "dist_tag=next" >> "$GITHUB_OUTPUT" ;;
             *) echo "dist_tag=latest" >> "$GITHUB_OUTPUT" ;;
           esac
 
+      - name: 校验发布提交来自 main 且已打对应标签
+        if: steps.version.outputs.skip == 'false'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          git fetch -q origin main --tags
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::发布提交 $GITHUB_SHA 不在 main 上，拒绝发布"
+            exit 1
+          fi
+          tag="v${VERSION}"
+          if ! git rev-parse -q --verify "refs/tags/${tag}" >/dev/null; then
+            echo "::error::找不到标签 ${tag}：版本号变了却没有打标签，拒绝发布"
+            exit 1
+          fi
+          if [ "$(git rev-list -n 1 "refs/tags/${tag}")" != "$GITHUB_SHA" ]; then
+            echo "::error::标签 ${tag} 不指向当前提交 $GITHUB_SHA，拒绝发布"
+            exit 1
+          fi
+          echo "提交 $GITHUB_SHA 在 main 上，且标签 ${tag} 指向它"
+
       - name: 安装依赖
+        if: steps.version.outputs.skip == 'false'
         run: pnpm install --frozen-lockfile
         working-directory: plugins/dsh-writing-viewer
 
       - name: 回归测试
+        if: steps.version.outputs.skip == 'false'
         run: pnpm test
         working-directory: plugins/dsh-writing-viewer
 
       - name: 发布到 npm
-        # prepublishOnly 会先重新构建（npm run build），发布的产物与源代码同源。
+        if: steps.version.outputs.skip == 'false'
+        # prepublishOnly 会先重新构建（npm run build），发布的产物由该提交的源码构建。
         run: npm publish --access public --tag "${{ steps.version.outputs.dist_tag }}"
         working-directory: plugins/dsh-writing-viewer
 
       - name: 核对发布结果
+        if: steps.version.outputs.skip == 'false'
         run: |
           set -euo pipefail
           echo "latest 版本：$(npm view dsh-writing-viewer version)"
