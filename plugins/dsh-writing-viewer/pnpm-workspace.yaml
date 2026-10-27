@@ -1,0 +1,7 @@
+# pnpm 配置（settings 只从这里读，package.json 的 `pnpm` 字段从 pnpm 12 起不再被读取）。
+#
+# tsdown 依赖 esbuild，esbuild 的 install 脚本必须在安装时执行；未列入白名单时
+# pnpm 直接以 ERR_PNPM_IGNORED_BUILDS 失败（CI 的 `pnpm install --frozen-lockfile` 会因此中断）。
+# 该文件只影响开发与 CI 的依赖安装，不进发布包（package.json 的 files 不含它）。
+allowBuilds:
+  esbuild: true

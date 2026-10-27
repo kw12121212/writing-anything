@@ -1,6 +1,6 @@
 {
   "name": "zcode-writing-viewer",
-  "version": "0.9.1",
+  "version": "0.9.2",
   "description": "ZCode panel for writing-anything workspaces (.writing-anything/): read-only overview dashboard, unit tree, artifact semantic-card and source-highlight views, sources list, plus MCP-held review sessions that proxy the wa-cli reading view for unit review. Bundles the 13 built-in wa-* skills.",
   "description_i18n": {
     "en": "ZCode panel for writing-anything workspaces: read-only overview dashboard, unit tree, artifact views, sources and decision queues, plus in-panel unit review through a proxied wa-cli reading view. Bundles the built-in wa-* skills.",
