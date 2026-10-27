@@ -1,0 +1,23 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: zcode-plugin-userconfig-strings
+sections:
+  Implementation:
+    fix-manifest:
+      text: 修复清单 userConfig 字段为纯字符串并新增 manifest.test.ts 守护测试
+      status: complete
+  Testing:
+    test-plugin:
+      text: 插件完整检查（含新 manifest.test.ts）
+      status: complete
+      command: pnpm --dir plugins/zcode-writing-viewer install && pnpm --dir plugins/zcode-writing-viewer run check
+  Verification:
+    verify-strict:
+      text: strict 校验通过
+      status: complete
+      command: strict-spec-cli ready zcode-plugin-userconfig-strings && strict-spec-cli verify zcode-plugin-userconfig-strings
+testing_gates:
+  validation_task: test-plugin
+  unit_test_task: test-plugin

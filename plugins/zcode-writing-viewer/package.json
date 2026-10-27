@@ -1,0 +1,36 @@
+{
+  "name": "zcode-writing-viewer",
+  "version": "0.9.0",
+  "description": "ZCode plugin for writing-anything workspaces (.writing-anything/): read-only overview dashboard, unit tree, artifact semantic-card and source-highlight views, sources list, plus MCP-held review sessions that proxy the wa-cli reading view for unit review.",
+  "type": "module",
+  "private": true,
+  "license": "Apache-2.0",
+  "files": [
+    "dist",
+    "skills",
+    "docs",
+    ".zcode-plugin",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc --noEmit && tsdown && node scripts/normalize-outputs.mjs && node scripts/stage-skills.mjs",
+    "test": "vitest run",
+    "check": "pnpm run build && pnpm test",
+    "smoke": "node scripts/server-smoke.mjs"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/ext-apps": "2.0.0",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@types/node": "^24.0.0",
+    "jsdom": "^30.1.3",
+    "tsdown": "^0.23.1",
+    "typescript": "^5.9.0",
+    "vitest": "^3.2.0",
+    "yaml": "^2.9.1"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
+  }
+}

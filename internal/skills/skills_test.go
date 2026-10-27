@@ -274,6 +274,7 @@ func TestPreviewServeGuidance(t *testing.T) {
 		using = append(using, s.Name)
 		for _, want := range []string{"config.reviewSurface", "为 browser 时", "持续运行", "后台", "确认该地址可以访问", "打不开",
 			"为 dsh 时", "不要启动 `wa-cli preview --serve`", "127.0.0.1", "DSH 插件", "「待审阅」", "复查",
+			"为 zcode 时", "ZCode 插件",
 			"面板里没有「待审阅」入口", "按运行环境自动给出", "不要自己判断"} {
 			if !strings.Contains(body, want) {
 				t.Errorf("%s 使用 preview --serve 但没有说明「%s」", s.Name, want)
@@ -299,6 +300,9 @@ func TestPreviewHandoffStepsBranch(t *testing.T) {
 			}
 			if !strings.Contains(line, "为 dsh 时") && !strings.Contains(line, "reviewSurface 为 dsh") {
 				t.Errorf("%s 的步骤交出阅读页地址但没有 dsh 分支：%s", s.Name, line)
+			}
+			if !strings.Contains(line, "为 zcode 时") && !strings.Contains(line, "reviewSurface 为 zcode") {
+				t.Errorf("%s 的步骤交出阅读页地址但没有 zcode 分支：%s", s.Name, line)
 			}
 			if !strings.Contains(line, "面板里没有「待审阅」入口") {
 				t.Errorf("%s 的步骤交出阅读页地址但 dsh 分支没有兜底：%s", s.Name, line)
@@ -340,6 +344,28 @@ func TestIllustrateSkills(t *testing.T) {
 			t.Errorf("wa-publish export step lacks %q", want)
 		}
 	}
+}
+
+// wa-publish 说明连图带文复制：可粘贴页、两种「复制图文」入口、不含 AI 参与说明与封面、按配图清单补传（publish-copy-guidance）。
+func TestPublishCopyGuidance(t *testing.T) {
+	for _, s := range All() {
+		if s.Name != "wa-publish" {
+			continue
+		}
+		body := string(s.Content)
+		export := body[strings.Index(body, "wa-cli export <作品> --format markdown"):]
+		for _, want := range []string{"--format paste-html", "可粘贴页（Paste-ready Page）", "「复制图文」", "DSH 插件面板", "不含 AI 参与说明与封面图",
+			"export.disclosure", "「【配图 n】」", "配图清单（export.imageList）", "约 1 MiB", "7 张", "「复制第 n 段」", "「复制全文」"} {
+			if !strings.Contains(export, want) {
+				t.Errorf("wa-publish export step lacks %q", want)
+			}
+		}
+		if !slices.Contains(Commands(s.Content), "export") {
+			t.Errorf("wa-publish commands lack export")
+		}
+		return
+	}
+	t.Fatal("wa-publish not found")
 }
 
 // 只有 wa-illustrate 提到 lemo-opuscar：wa-cli 不运行它（illustrate-skill-no-runtime-dependency）。

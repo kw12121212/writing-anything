@@ -75,7 +75,7 @@ func TestExportWechatHTML(t *testing.T) {
 	// only-inline-styles 与 image-placeholders
 	code, res := runExportJSON(t, dir, "my-post", "--format", "wechat-html")
 	const rel, list = ".writing-anything/exports/my-post.html", ".writing-anything/exports/my-post.images.md"
-	if code != 0 || res.Export.Format != "wechat-html" || res.Export.Path != rel || res.Export.ImageList == nil || *res.Export.ImageList != list ||
+	if code != 0 || res.Export.Format != "wechat-html" || res.Export.Path == nil || *res.Export.Path != rel || res.Export.ImageList == nil || *res.Export.ImageList != list ||
 		len(res.Export.Images) != 2 || res.Export.Images[0].Alt != "店内实拍" || *res.Export.Images[0].Title != "周六的店" || res.Export.Images[1].Title != nil ||
 		!slices.Contains(res.ChangedPaths, rel) || !slices.Contains(res.ChangedPaths, list) {
 		t.Fatalf("export: %d %+v", code, res)

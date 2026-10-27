@@ -212,6 +212,7 @@ describe('apply wiring', () => {
       '/dsh-writing-viewer/review-session',
       '/dsh-writing-viewer/review-session/end',
       '/dsh-writing-viewer/review',
+      '/dsh-writing-viewer/copy',
     ]);
     const written: { status: number; body?: string }[] = [];
     const res = {
@@ -261,8 +262,8 @@ describe('apply wiring', () => {
     };
     apply(ctx, {});
     expect(seen).toEqual([['workspaceRegistry'], ['webServer']]);
-    // Two viewer routes plus the three default-on review routes.
-    expect(routes).toHaveLength(5);
+    // Two viewer routes, the three default-on review routes and the copy route.
+    expect(routes).toHaveLength(6);
     // A ctx without inject (older host shapes) must not throw.
     expect(() => apply({}, {})).not.toThrow();
   });

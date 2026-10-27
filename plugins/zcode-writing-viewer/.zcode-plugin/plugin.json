@@ -1,0 +1,79 @@
+{
+  "name": "zcode-writing-viewer",
+  "version": "0.9.0",
+  "description": "ZCode panel for writing-anything workspaces (.writing-anything/): read-only overview dashboard, unit tree, artifact semantic-card and source-highlight views, sources list, plus MCP-held review sessions that proxy the wa-cli reading view for unit review. Bundles the 13 built-in wa-* skills.",
+  "description_i18n": {
+    "en": "ZCode panel for writing-anything workspaces: read-only overview dashboard, unit tree, artifact views, sources and decision queues, plus in-panel unit review through a proxied wa-cli reading view. Bundles the built-in wa-* skills.",
+    "zh-CN": "writing-anything 工作区（.writing-anything/）的 ZCode 面板：只读总览仪表盘、单元树、产物语义卡片与源码高亮视图、素材与决策/复核清单，并经 MCP 审阅会话在面板内完成单元审阅；随包捆绑内置 wa-* 技能。"
+  },
+  "author": {
+    "name": "kw12121212"
+  },
+  "license": "Apache-2.0",
+  "skills": "skills",
+  "mcpServers": {
+    "zcode-writing-viewer": {
+      "type": "stdio",
+      "command": "node",
+      "args": [
+        "${ZCODE_PLUGIN_ROOT}/dist/server.js"
+      ],
+      "cwd": "${ZCODE_PROJECT_DIR}",
+      "env": {
+        "ZCODE_WV_WORKSPACE_ROOT": "${user_config.workspaceRoot}",
+        "ZCODE_WV_WA_CLI_PATH": "${user_config.waCliPath}",
+        "ZCODE_WV_ENABLE_SETUP": "${user_config.enableSetup}",
+        "ZCODE_WV_WA_VERSION": "${user_config.waVersion}",
+        "ZCODE_WV_CLI_INSTALL_DIR": "${user_config.cliInstallDir}",
+        "ZCODE_WV_WA_BASE_URL": "${user_config.waBaseUrl}"
+      }
+    }
+  },
+  "ui": {
+    "surfaces": [
+      {
+        "id": "writing-workspace",
+        "title": {
+          "zh-CN": "写作工作区",
+          "en-US": "Writing Workspace"
+        },
+        "icon": "book",
+        "server": "zcode-writing-viewer",
+        "resourceUri": "ui://zcode-writing-viewer/panel.html",
+        "availability": "session"
+      }
+    ]
+  },
+  "userConfig": {
+    "workspaceRoot": {
+      "type": "string",
+      "title": "固定的项目目录（workspaceRoot）",
+      "description": "插件的默认项目目录（绝对路径）。设置后只探测该目录，目录下没有 .writing-anything/ 即显示空态，不再回退其他来源。"
+    },
+    "waCliPath": {
+      "type": "string",
+      "title": "wa-cli 可执行文件路径（waCliPath）",
+      "description": "覆盖 wa-cli 可执行文件路径（默认解析 PATH 上的 wa-cli）。"
+    },
+    "enableSetup": {
+      "type": "boolean",
+      "title": "启用「内置技能与 CLI」设置区（enableSetup）",
+      "description": "默认关闭。开启后面板出现设置区，可一键下载安装内置 wa-cli（经 SHA256SUMS 校验、原子安装）；未开启时不发生任何网络请求或下载。"
+    },
+    "waVersion": {
+      "type": "string",
+      "title": "内置 wa-cli 版本（waVersion）",
+      "description": "默认 latest：现存内置二进制视为就绪。填具体版本号（如 v0.3.0）时版本不符会重新下载。"
+    },
+    "cliInstallDir": {
+      "type": "string",
+      "title": "内置 wa-cli 安装目录（cliInstallDir）",
+      "description": "默认 ~/.local/bin，支持 ~ 前缀。"
+    },
+    "waBaseUrl": {
+      "type": "string",
+      "title": "发布地址（waBaseUrl）",
+      "description": "下载内置 wa-cli 的发布地址，默认本项目的 GitHub Releases。"
+    }
+  }
+}

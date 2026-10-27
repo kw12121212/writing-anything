@@ -1,0 +1,21 @@
+schema: strict-spec-driven/delta-tech/v1
+schema_version: 1
+artifact_type: delta_tech
+schema_file: templates/strict-spec-driven/schemas/delta-tech.yaml
+target_standard: workspace-artifacts
+operations:
+  ADDED: {}
+  MODIFIED:
+    trusted-data-uri:
+      strength: SHOULD
+      statement: '在 html/template 输出中构造 data: URL 必须显式使用 template.URL，且只允许对已通过内容校验（文件头识别、与登记哈希一致等）的字节，或 wa-cli 自身用标准库从这类已校验图片解码后重新编码得到的字节（如可粘贴页为粘贴压缩的 JPEG），与固定的 MIME 白名单（data:image/png、data:image/jpeg）构造；重新编码的 MIME 取编码器的输出格式，不取产物中的任何字符串；不得对未经校验的字节、来自产物的任意字符串或白名单之外的 MIME 使用 template.URL 这类转义豁免。'
+      rationale: 'html/template 默认把 data: URL 过滤为 #ZgotmplZ 是防止内联任意内容的安全特性；绕过它必须以内容校验与固定 MIME 为前提，否则等于向页面打开内联任意内容的通道。article-illustrations 的静态阅读页内嵌配图即按此构造；paste-ready-copy 为公众号粘贴限制把大图重新编码为 JPEG，派生字节由标准库编码器产生、来源图片已校验，同样可信，需要在规则中写明这一边界。'
+      enforcement:
+        method: test
+        detail: '渲染测试断言输出不含 #ZgotmplZ，且全部 data URI 的前缀属于固定白名单；以对抗性取值（伪装扩展名、非图片字节、像素过多的图片）覆盖校验或重新编码失败的路径不产生 data URI。'
+      examples:
+        good:
+          - 对已通过文件头识别且 SHA-256 与登记一致的 PNG 字节，以 template.URL 构造 data:image/png;base64,… 内嵌进阅读页；或把这张 PNG 解码、缩放后用 image/jpeg 编码，以 data:image/jpeg;base64,… 内嵌进可粘贴页。
+        bad:
+          - '把产物或规范包中未经校验的字符串直接包成 template.URL 输出，或对白名单之外的 MIME 构造 data: URL。'
+  REMOVED: {}

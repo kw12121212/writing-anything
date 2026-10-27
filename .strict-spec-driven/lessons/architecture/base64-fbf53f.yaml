@@ -1,0 +1,19 @@
+schema: strict-spec-driven/lesson/v1
+schema_version: 1
+artifact_type: lesson
+schema_file: templates/strict-spec-driven/schemas/lesson.yaml
+lesson:
+  id: base64-fbf53f
+  title: 第三方编辑器的粘贴限制要在设计前用校准页实测，公众号对 base64 图片有张数与单张上限
+category: architecture
+status: active
+created_at: '2026-10-23T11:28:28.644Z'
+updated_at: '2026-10-23T11:28:28.644Z'
+context: 可粘贴页把配图以 base64 data URI 内嵌，供作者复制后粘贴到公众号图文编辑器；最初的设计只依据网上「转 base64 即可」的说法，把公众号是否接受列为待实测问题，没有在设计阶段测限制。
+observation: 作者实测后才发现：公众号接受 base64 图片，但单张超过约 1 MiB（1.8 MiB 失败、1 MiB 成功）或一次超过 7 张（8 张即使合计 0.8 MiB 也失败）时，整次粘贴的图片全部丢失、文字保留，没有总量限制。变更因此中途扩大范围，加入大图重新编码与每段至多 7 张的分段复制。逐项分离变量的校准页（单张大小、张数、合计体积各自变化）几轮就定出了规律。
+takeaway: 设计面向第三方编辑器（公众号、飞书等）的复制粘贴功能时，先做一组只变一个变量的校准页（单张大小、张数、合计体积分开变化）请作者在真实编辑器中粘贴，定出限制与超限后果（是丢单张还是整次丢弃），再决定压缩、分段等处理；不要把「能否粘贴」只当作实现后的验证项。公众号的经验值（2026-10-23）：单张 ≤1 MiB、每次 ≤7 张，超限整次丢图。
+applies_when: 要让作者把 wa-cli 或插件生成的富文本（含内嵌图片）复制粘贴到公众号、飞书等第三方在线编辑器，或调整可粘贴页的内嵌、压缩、分段策略
+occurrences:
+  - origin: paste-ready-copy
+    date: '2026-10-23'
+    evidence: plugins/dsh-writing-viewer/docs/evidence/copy-live-check.txt 第五节；internal/export/reencode.go 的 PasteImageMaxBytes 与 internal/export/paste.go 的 PasteSegmentImages。

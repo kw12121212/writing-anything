@@ -46,14 +46,15 @@ var (
 	linkAt = regexp.MustCompile(`^(!?)\[((?:\\.|[^\[\]\\]){0,1000})\]\(([^()\s]{0,1000})(?:[ \t]+"([^"]{0,1000})")?\)`)
 )
 
-// node 是渲染树中的一个节点。Kind 决定输出的标签：块为 section、h1–h4、p、pre、blockquote、ul、ol、li、hr、figure 与 references，
-// 行内为 text、code、strong、em、br 与 sup。
+// node 是渲染树中的一个节点。Kind 决定输出的标签：块为 section、h1–h4、p、pre、blockquote、ul、ol、li、hr、figure、image 与
+// references，行内为 text、code、strong、em、br 与 sup。
 type node struct {
 	Kind     string
 	Style    template.CSS
-	Text     string   // text、code、pre、sup 的文字与 figure 的占位文字
-	Caption  string   // figure 的说明
-	Lines    []string // references 的各行
+	Text     string       // text、code、pre、sup 的文字，figure 的占位文字与 image 的替代文字
+	Caption  string       // figure 与 image 的说明
+	Src      template.URL // image 的受信 data URI
+	Lines    []string     // references 的各行
 	Children []*node
 }
 
@@ -62,6 +63,9 @@ type wechat struct {
 	images []Image
 	links  []string
 	index  map[string]int // 链接地址 → 编号
+	// embed 只用于可粘贴页（paste-html）：按出现顺序为正文中的每张图片调用一次（block 为独占一段），返回可内嵌的受信 data URI；
+	// 为 nil 或返回 false 时按公众号 HTML 输出占位。
+	embed func(src string, block bool) (template.URL, bool)
 }
 
 // style 返回元素 key 的样式；不通过 catalog.SafeCSS 的取值不输出（合并结果已经过 Schema 校验，这里再挡一层）。
@@ -79,7 +83,17 @@ func (r *wechat) el(kind, key string, children ...*node) *node {
 // RenderWechat 把 Markdown 正文 md（换行为 LF）按样式主题 theme（元素名 → CSS 声明）渲染为公众号 HTML，返回 HTML 与配图。footer 非空时
 // 作为 AI 参与说明追加在文末（样式同参考链接）。
 func RenderWechat(md string, theme map[string]string, footer string) (string, []Image) {
-	r := &wechat{theme: theme, index: map[string]int{}}
+	root, images := renderTree(md, theme, footer, nil)
+	var b bytes.Buffer
+	if err := page.ExecuteTemplate(&b, "block", root); err != nil {
+		panic(err) // 模板与节点种类是固定的，执行不会失败
+	}
+	return b.String() + "\n", images
+}
+
+// renderTree 把正文解析为渲染树，返回根节点与配图；embed 见 wechat.embed。
+func renderTree(md string, theme map[string]string, footer string, embed func(string, bool) (template.URL, bool)) (*node, []Image) {
+	r := &wechat{theme: theme, index: map[string]int{}, embed: embed}
 	root := r.el("section", "wrapper", r.blocks(strings.Split(md, "\n"), 0)...)
 	if len(r.links) > 0 {
 		ref := r.el("references", "references")
@@ -91,11 +105,7 @@ func RenderWechat(md string, theme map[string]string, footer string) (string, []
 	if footer != "" {
 		root.Children = append(root.Children, r.el("p", "references", &node{Kind: "text", Text: footer}))
 	}
-	var b bytes.Buffer
-	if err := page.ExecuteTemplate(&b, "block", root); err != nil {
-		panic(err) // 模板与节点种类是固定的，执行不会失败
-	}
-	return b.String() + "\n", r.images
+	return root, r.images
 }
 
 func itoa(n int) string {
@@ -239,7 +249,16 @@ func (r *wechat) paragraph(lines []string) *node {
 		return nil
 	}
 	if m := linkAt.FindStringSubmatch(text); m != nil && m[1] == "!" && len(m[0]) == len(text) {
-		img := r.image(m)
+		img, src := r.image(m, true)
+		if src != "" {
+			// 可粘贴页：可用的本地配图内嵌为图像，说明为标题，没有标题时为替代文字（paste-html-export）。
+			caption := img.Title
+			if caption == "" {
+				caption = img.Alt
+			}
+			return &node{Kind: "image", Style: imageBoxStyle, Text: img.Alt, Src: src,
+				Children: []*node{{Style: imageStyle}, {Style: r.style("caption")}}, Caption: caption}
+		}
 		caption := img.Title
 		if caption == "" {
 			caption = img.Src
@@ -251,11 +270,23 @@ func (r *wechat) paragraph(lines []string) *node {
 	return r.el("p", "p", r.inline(text)...)
 }
 
-func (r *wechat) image(m []string) Image {
+// image 登记第 n 张图片；有 embed 时一并取得可内嵌的地址（block 为独占一段，行内图片不内嵌但同样计入顺序）。
+func (r *wechat) image(m []string, block bool) (Image, template.URL) {
 	img := Image{Index: len(r.images) + 1, Alt: plain(m[2]), Src: unescapeMD(m[3]), Title: plain(m[4])}
 	r.images = append(r.images, img)
-	return img
+	if r.embed != nil {
+		if src, ok := r.embed(img.Src, block); ok && block {
+			return img, src
+		}
+	}
+	return img, ""
 }
+
+// 可粘贴页中内嵌图像的容器与图像样式：固定取值，不来自规范包。
+const (
+	imageBoxStyle template.CSS = "margin: 16px 0; text-align: center"
+	imageStyle    template.CSS = "display: block; max-width: 100%; height: auto; margin: 0 auto"
+)
 
 // plain 把可能跨行的文字（图片的替代文字与标题）变成一行，并去掉反斜杠转义。
 func plain(s string) string { return unescapeMD(strings.Join(strings.Fields(s), " ")) }
@@ -311,7 +342,7 @@ func (r *wechat) text(s string) []*node {
 			}
 			out = append(out, r.emphasis(s[start:i], 0)...)
 			if m[1] == "!" {
-				img := r.image(m)
+				img, _ := r.image(m, false)
 				out = append(out, &node{Kind: "text", Text: "【配图 " + itoa(img.Index) + "：" + img.Alt + "】"})
 			} else {
 				out = append(out, r.emphasis(m[2], 0)...)
@@ -518,6 +549,7 @@ var page = template.Must(template.New("wechat").Parse(`
 {{- else if eq .Kind "ul"}}<ul style="{{.Style}}">{{range .Children}}<li style="{{.Style}}">{{template "inline" .Children}}</li>{{end}}</ul>
 {{- else if eq .Kind "ol"}}<ol style="{{.Style}}">{{range .Children}}<li style="{{.Style}}">{{template "inline" .Children}}</li>{{end}}</ol>
 {{- else if eq .Kind "hr"}}<hr style="{{.Style}}">
+{{- else if eq .Kind "image"}}<section style="{{.Style}}"><img src="{{.Src}}" alt="{{.Text}}" style="{{(index .Children 0).Style}}"><p style="{{(index .Children 1).Style}}">{{.Caption}}</p></section>
 {{- else if eq .Kind "figure"}}<section style="{{.Style}}"><p style="{{(index .Children 0).Style}}">{{.Text}}</p><p style="{{(index .Children 1).Style}}">{{.Caption}}</p></section>
 {{- else if eq .Kind "references"}}<p style="{{.Style}}">参考链接{{range .Lines}}<br>{{.}}{{end}}</p>
 {{- end -}}

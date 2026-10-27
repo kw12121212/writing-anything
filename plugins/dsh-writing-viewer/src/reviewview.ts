@@ -39,6 +39,8 @@ export interface ReviewLabels {
   ended: string;
   viewTitle: string;
   refresh: string;
+  enlarge: string;
+  restore: string;
   loadingPage: string;
   pageFailed: string;
   originHuman: string;
@@ -99,6 +101,8 @@ const REVIEW_TEXT: Record<'zh' | 'en', ReviewLabels> = {
     ended: '审阅已结束（结束审阅、空闲超时、被另一单元的审阅替换或阅读页服务退出）',
     viewTitle: '审阅视图（Review View）',
     refresh: '刷新',
+    enlarge: '放大',
+    restore: '还原',
     loadingPage: '正在读取阅读页数据…',
     pageFailed: '阅读页数据读取失败',
     originHuman: '作者',
@@ -157,6 +161,8 @@ const REVIEW_TEXT: Record<'zh' | 'en', ReviewLabels> = {
     ended: 'The review has ended (ended explicitly, idle timeout, replaced by another unit\'s review, or the reading view exited)',
     viewTitle: 'Review view',
     refresh: 'Refresh',
+    enlarge: 'Enlarge',
+    restore: 'Restore',
     loadingPage: 'Loading the reading view data…',
     pageFailed: 'Could not load the reading view data',
     originHuman: 'Author',
@@ -282,4 +288,18 @@ export function reviewViewModel(state: ReviewPanelState, ref: string, labels: Re
  * notice with a restart entry. */
 export function reviewEnded(state: ReviewPanelState): ReviewPanelState {
   return state.phase === 'active' ? { ...state, phase: 'ended' } : state;
+}
+
+/** Whether the enlarged overlay covers the panel: only while its own review
+ * session is still active. A session that ends anywhere — explicit end, idle
+ * timeout, replacement by another unit — collapses the overlay on its own;
+ * starting a review resets the flag so a new session opens in the detail. */
+export function reviewOverlayShown(state: ReviewPanelState, enlarged: boolean): boolean {
+  return enlarged && state.phase === 'active';
+}
+
+/** Whether a keydown collapses the enlarged overlay: the Escape key. Pure so
+ * the dismiss decision and the event bookkeeping stay testable without a DOM. */
+export function overlayDismissKey(event: unknown): boolean {
+  return String((event as { key?: unknown })?.key ?? '') === 'Escape';
 }

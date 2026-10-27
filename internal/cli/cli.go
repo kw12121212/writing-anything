@@ -67,7 +67,9 @@ func (s commandSet) dispatch(args []string, stdin io.Reader, stdout, stderr io.W
 		return usageError(stdout, stderr, asJSON, d, c.helpText())
 	}
 	inv.all, inv.stdin, inv.stdout, inv.stderr = s, stdin, stdout, stderr
-	if criticalCommands[c.name] && len(inv.args) > 0 {
+	// export --print（可粘贴正文的只读取用，如 DSH 插件的「复制图文」）不交付文件，不参与回捞配对：既不留下待回捞的失败，
+	// 也不消掉真实导出失败的提示（audit-log）。
+	if criticalCommands[c.name] && len(inv.args) > 0 && !(c == exportCommand && inv.flag("print")) {
 		auditMu.Lock()
 		auditUnit = inv.args[0] // 回捞配对用的单元引用取已解析的位置参数，不受 flag 顺序影响
 		auditMu.Unlock()

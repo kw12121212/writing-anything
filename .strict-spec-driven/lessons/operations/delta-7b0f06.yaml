@@ -1,0 +1,19 @@
+schema: strict-spec-driven/lesson/v1
+schema_version: 1
+artifact_type: lesson
+schema_file: templates/strict-spec-driven/schemas/lesson.yaml
+lesson:
+  id: delta-7b0f06
+  title: 同变更新增主规格时不能同时携带引用它的 delta 场景
+category: operations
+status: active
+created_at: '2026-10-23T06:13:10.657Z'
+updated_at: '2026-10-23T06:13:10.657Z'
+context: strict 工作流中为全新主规格（如 zcode-plugin）同时生成 delta 规格与 delta 场景，场景步骤的 covered_by 指向本变更新增的 zcode-plugin:<需求>
+observation: strict-spec-cli 的场景覆盖解析（loadSpecRequirements）只读 .strict-spec-driven/specs/INDEX.yaml 已记录的主规格，不合并变更自身的 delta 规格；新规格要到归档时才记录，因此 ready 与 verify 会在归档前拦截一切对它的引用，变更被卡死。CLI 也没有删除变更内新建场景文件的命令（--delete 只认 live 场景）。仓库先例（2026-10-19-plugin-scaffold）正是新规格变更不带场景、场景由规格记录后的后续变更补上
+takeaway: 创建全新主规格的变更不要携带引用该规格的 delta 场景：把场景先行盘问的四问答案记进 design 决策，场景留给规格记录后的后续变更；修改既有规格需求的变更若场景引用同变更新增的需求 id，同样如此
+applies_when: 任何变更要创建新的主规格（--title/--new-spec-path）或新增需求 id，同时又想写 delta 场景覆盖这些新需求时
+occurrences:
+  - origin: zcode-writing-viewer
+    date: '2026-10-23'
+    evidence: 本变先生成 3 个 zcode-plugin 场景后 ready/verify 各报 25 条 covered-by 不解析诊断；删除场景并记录 design 决策 scenes-deferred 后 ready/verify 即通过（2026-10-23）

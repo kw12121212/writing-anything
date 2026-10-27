@@ -1,0 +1,12 @@
+# 大纲（Outline）；请用 wa-cli outline set、wa-cli outline remove 与 wa-cli scene contract 修改。
+
+schema_version: 1
+sections:
+  - id: s2
+    title: 黎明
+    characters: [lin-che]
+    pov: lin-che
+    location: lighthouse
+    recovers: [log-thread]
+    time: 第 2 天
+    after: [my-novel/scene-1]

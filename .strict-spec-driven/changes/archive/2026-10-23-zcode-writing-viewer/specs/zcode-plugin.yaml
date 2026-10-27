@@ -1,0 +1,512 @@
+schema: strict-spec-driven/delta-spec/v1
+schema_version: 1
+artifact_type: delta_spec
+schema_file: templates/strict-spec-driven/schemas/delta-spec.yaml
+target_spec: zcode-plugin
+spec:
+  title: ZCode 插件（ZCode Plugin）
+  path: .strict-spec-driven/specs/zcode-plugin.yaml
+operations:
+  ADDED:
+    panel-visible:
+      strength: MUST
+      statement: 插件（zcode-writing-viewer）装入 ZCode 后，ZCode 必须提供「写作工作区」面板入口：清单 ui.surfaces 注册的面板可从 ZCode 侧栏打开，选中后加载出面板内容，不报错、不空白崩溃
+      scenarios:
+        gui-entry-load:
+          - GIVEN: 插件已装入 ZCode（本地 marketplace 安装或 Release tarball 安装）
+          - WHEN: 从 ZCode 侧栏打开「写作工作区」面板
+          - THEN: 面板入口出现，面板完成加载并显示内容（定位状态、空态或错误态任一），不报错、不空白崩溃
+    workspace-root-status:
+      strength: MUST
+      statement: 插件必须默认定位项目目录并显示 .writing-anything/ 工作区（Workspace）的存在状态：未配置时按顺序探测 MCP server 启动工作目录（清单声明为 ZCODE_PROJECT_DIR）与 process.cwd()，第一个探测到 .writing-anything/ 的候选胜出；配置了 workspaceRoot（userConfig）时为排他固定，目录下没有工作区即进入空态、不回退其他来源；定位不到时显示空态指引（wa-cli init）而不是报错。candidates 按实际探测顺序记录轨迹
+      scenarios:
+        workspace-found:
+          - GIVEN: server 启动工作目录下存在 .writing-anything/ 工作区
+          - WHEN: 打开插件面板
+          - THEN: 面板显示定位到的项目目录与来源（server-cwd），工作区存在状态为真
+        workspace-missing:
+          - GIVEN: 各候选目录下均没有 .writing-anything/ 工作区
+          - WHEN: 打开插件面板
+          - THEN: 面板显示空态指引，提示可用 wa-cli init 创建工作区，插件不报错崩溃
+        fixed-root-exclusive:
+          - GIVEN: userConfig 配置了 workspaceRoot 指向没有工作区的目录
+          - WHEN: 打开插件面板
+          - THEN: 面板显示空态，不回退探测其他来源，不显示其他项目数据
+    read-only-workspace:
+      strength: MUST
+      statement: 插件在加载、定位与展示工作区的全过程中不得创建、修改或删除 .writing-anything/ 工作区内的任何产物（Artifact）；唯一例外是审阅会话中作者在审阅视图（Review View）显式提交的反馈（Feedback）、确认与复核（经 MCP 工具交给阅读页服务），由 wa-cli preview 子进程按 preview 主规格写入，插件代码自身不写入任何工作区文件
+      scenarios:
+        no-workspace-writes:
+          - GIVEN: 插件已装入，面板尚未打开，.writing-anything/ 内文件清单、内容与修改时间已记录
+          - WHEN: 打开面板并完成工作区定位与展示
+          - THEN: .writing-anything/ 内文件的清单、内容与修改时间与打开前一致
+        review-open-no-writes:
+          - GIVEN: 已记录 .writing-anything/ 内除 audit.log 外全部文件的清单、内容与修改时间
+          - WHEN: 作者启动审阅会话并在审阅视图中只浏览、刷新，不提交任何反馈、确认与复核，然后结束审阅
+          - THEN: 这些文件不变；新增或变化的文件至多为 wa-cli 追加的 audit.log
+    snapshot-aggregation:
+      strength: MUST
+      statement: 插件的 MCP server 必须提供只读的工作区快照（Workspace Snapshot）工具（workspace_snapshot）：按定位到的项目目录聚合 .writing-anything/ 的配置、素材（Source）清单、规范包（Pack）清单、决策（含待决）与待复核摘要，以及每个作品（Work）的 work.yaml、单元（Unit）树（阶段、进度、阻塞项）与各单元目录产物全文——写作简报（Brief）、大纲（Outline）、出处（Provenance）、论断（Claim）、作者反馈、草稿（Draft）正文（Markdown 全文）、审稿与验收证据；长篇（novel）文体按文体存在的产物（如场景契约、伏笔台账（Foreshadowing Ledger）、时间线（Timeline）、知情表（Knowledge State））同样纳入；快照必须内嵌 wa-cli validate 的诊断作为错误态数据；快照还必须透出 wa-cli next 的待作者确认事项（pendingConfirmations）与待作者复核项（pendingAuthorReviews），next 区域降级时两者按降级标注呈现，不得当作没有事项
+      scenarios:
+        multi-work-snapshot:
+          - GIVEN: 一个工作区含 tech-blog 文章与 novel 作品（含卷、章、场景层级，场景带场景契约与伏笔台账条目）
+          - WHEN: 调用 workspace_snapshot 工具
+          - THEN: 返回结构化 JSON，包含两个作品各自的单元树（阶段、进度、阻塞项）、各类产物全文、素材与决策（含待决）及待复核摘要，并内嵌 validate 诊断
+        snapshot-pending-items:
+          - GIVEN: 作品 my-post 需要验收且没有验收记录，决策队列中有关联 my-post 的 open 决策 dec-1
+          - WHEN: 调用 workspace_snapshot
+          - THEN: 待作者确认事项含 my-post 的 acceptance 与 dec-1 两项，与 wa-cli next --json 的 pendingConfirmations 一致
+    snapshot-fresh-read:
+      strength: MUST
+      statement: 每次快照请求必须重新读取工作区当前内容，不得返回跨请求的缓存数据；不得引入文件监听，数据刷新由面板的手动刷新（刷新按钮或重新打开面板）触发
+      scenarios:
+        fresh-reread:
+          - GIVEN: 已获得一次快照响应
+          - WHEN: 修改工作区内某单元的草稿正文后再次请求快照
+          - THEN: 新响应包含修改后的正文而非旧内容
+    snapshot-missing-workspace:
+      strength: MUST
+      statement: 定位不到 .writing-anything/ 工作区时，快照工具必须返回可读的缺失状态与空态指引（提示可用 wa-cli init 创建工作区），不得以未处理错误或空响应失败
+      scenarios:
+        missing-workspace-readable:
+          - GIVEN: 插件定位不到任何含 .writing-anything/ 的项目目录
+          - WHEN: 调用 workspace_snapshot
+          - THEN: 返回正常结构，含可读的缺失状态与空态指引，而非未处理错误
+    snapshot-cli-degradation:
+      strength: MUST
+      statement: wa-cli 只读命令不可用或其 --json 输出缺少快照所需字段时，快照必须降级：返回文件可直接解析的部分数据，并在快照中明确标注降级状态与原因（degraded 数组），不得整体失败
+      scenarios:
+        cli-unavailable:
+          - GIVEN: 宿主环境找不到可执行的 wa-cli
+          - WHEN: 调用 workspace_snapshot
+          - THEN: 响应仍包含按 JSON Schema 只读解析的产物全文数据，并标注降级与原因，不整体失败
+        missing-field:
+          - GIVEN: wa-cli status --json 输出缺少快照所需的部分字段
+          - WHEN: 调用 workspace_snapshot
+          - THEN: 缺失部分按降级标注呈现，其余数据照常返回
+    snapshot-no-writes:
+      strength: MUST
+      statement: 快照的生成与提供过程不得创建、修改或删除 .writing-anything/ 工作区内的任何产物（Artifact），插件自身代码不得向项目目录写入任何文件；快照的唯一例外是经子进程调用的 wa-cli 只读命令按其审计日志（Audit Log）契约向 .writing-anything/audit.log 追加运维痕迹——审计日志不是产物、追加出自 wa-cli，且每次快照请求的 wa-cli 调用必须限定在有界命令集合内（status、validate、next 各一次，每个长篇（novel）作品 timeline 一次），不得轮询式反复调用。审阅会话的 wa-cli 调用不属于快照，见 review-session-start
+      scenarios:
+        audit-log-bounded:
+          - GIVEN: 宿主环境可执行 wa-cli 且快照完整可用（未降级）
+          - WHEN: 请求一次快照后读取 audit.log
+          - THEN: 本次快照追加的审计行与有界命令集合一一对应，无多余调用
+        snapshot-no-writes:
+          - GIVEN: 已记录 .writing-anything/ 内除 audit.log 外全部文件的清单、内容与修改时间
+          - WHEN: 请求一次完整快照
+          - THEN: 这些文件不变；新增或变化的文件至多为 wa-cli 追加的 audit.log
+    unit-tree-navigation:
+      strength: MUST
+      statement: 面板必须为选中的作品提供单元（Unit）树导航：按层级缩进展示单元，汇总单元带进度标记，有待作者确认或待作者复核事项的单元带「待审阅」标记（见 review-pending-discovery）；选中某个单元后详情区显示该单元的阶段、进度、阻塞项、下一步命令与产物清单，面板自身不提供任何编辑、写入或确认控件；唯一例外是详情区的「审阅」入口与审阅视图（Review View）中的反馈、确认与复核控件，这些控件只把作者的输入经 MCP 工具交给 wa-cli 阅读页服务写入（见 review-native-view）
+      scenarios:
+        tree-hierarchy:
+          - GIVEN: novel 作品含卷、章、场景三级单元
+          - WHEN: 在总览中选中该作品
+          - THEN: 单元树按卷、章、场景的层级缩进展示全部单元，卷与章节点显示 done/total 进度标记
+        unit-detail:
+          - GIVEN: 单元树已展示
+          - WHEN: 选中某个场景单元
+          - THEN: 详情区显示该单元的阶段、进度、阻塞项列表、下一步命令与产物清单；除「审阅」按钮外，面板中没有编辑、写入或确认控件
+    overview-dashboard:
+      strength: MUST
+      statement: 定位到工作区时，面板必须以总览仪表盘（Overview Dashboard）呈现：每个作品（Work）一张卡片，显示作品 id、文体（Genre）、当前生命周期（Lifecycle）阶段、汇总单元进度（done/total）、阻塞项（Blocker）数量与摘要；阻塞项数量按作品内各单元阻塞项去重计数（汇总单元重复列出的子孙阻塞项只计一次）；工作区级汇总显示素材（Source）数、待决决策数、待复核数与 validate 诊断数，提供该数的 wa-cli 区域降级时显示为不可用而不是 0；信息按写作概念组织，不平铺目录文件
+      scenarios:
+        work-cards:
+          - GIVEN: 工作区含 tech-blog 文章 my-post 与 novel 作品 my-novel，my-novel 有阻塞项与多层级单元
+          - WHEN: 打开插件面板
+          - THEN: 面板为两个作品各显示一张卡片：文体与 work.yaml 一致，阶段与进度与 wa-cli status --json 对同一作品的结果一致，阻塞项数量等于该作品各单元阻塞项去重后的数量并附前两条摘要
+        workspace-summary:
+          - GIVEN: 工作区登记了素材、存在 status 为 open 的决策与待作者复核条目，validate 报告诊断
+          - WHEN: 打开插件面板
+          - THEN: 总览汇总区显示的素材数、待决决策数、待复核数与诊断数分别与素材目录、decisions.yaml、wa-cli next、wa-cli validate 的结果一致
+    overview-empty-and-error:
+      strength: MUST
+      statement: 面板在空态与错误态下必须可读：定位不到 .writing-anything/ 时显示 wa-cli init 指引；工作区内没有作品时显示创建作品的指引；validate 诊断与快照降级（degraded）原因必须以列表透出；取数失败时显示原因与重试，不得空白或崩溃；面板必须提供手动刷新入口
+      scenarios:
+        empty-workspace:
+          - GIVEN: 工作区已初始化但没有任何作品
+          - WHEN: 打开插件面板
+          - THEN: 面板显示没有作品的空态与创建作品的指引，不报错
+        diagnostics-and-degraded:
+          - GIVEN: validate 报告诊断，且快照的某个 wa-cli 区域（如 next）降级并在 degraded 中给出原因
+          - WHEN: 打开插件面板
+          - THEN: 面板列出诊断（严重级别、消息、路径）与降级原因，其余可用数据照常显示
+        manual-refresh:
+          - GIVEN: 面板已显示总览
+          - WHEN: 修改工作区内某单元阶段后点击刷新
+          - THEN: 总览与单元树显示修改后的阶段
+    overview-theme-and-narrow:
+      strength: MUST
+      statement: 总览与单元树必须随 ZCode 明暗主题切换保持可读（主题与语言取自宿主下发的上下文，样式只用宿主主题令牌并带回退值），并在面板容器宽度低于 640px 时把单元树与详情改为上下堆叠
+      scenarios:
+        theme-switch:
+          - GIVEN: 面板显示总览与单元树
+          - WHEN: 在 ZCode 中切换明暗主题
+          - THEN: 文字、卡片边框与状态色随主题切换，文字与背景保持可读对比
+        narrow-stack:
+          - GIVEN: 面板容器宽度低于 640px
+          - WHEN: 在面板中选中作品查看单元树
+          - THEN: 单元树与详情上下堆叠展示，内容不被截断且可点击选中单元
+    panel-path-switch:
+      strength: MUST
+      statement: 面板必须允许作者切换到显式输入的项目目录绝对路径查看其工作区，并可恢复默认定位；所选路径只作用于面板本次查看（作为快照工具的 root 参数单次生效，server 不保存状态），优先于 userConfig 的固定目录；路径不是绝对路径、含 NUL、超长、是网络或设备路径（以两个斜杠或反斜杠开头），或其下没有 .writing-anything/ 时，面板必须显示空态与可读原因（rootError），不得静默改显示其他项目；切换或刷新进行中面板必须给出可见提示，较早请求的响应不得覆盖较新的选择；切换后插件仍只读取所选目录的 .writing-anything/，且除 wa-cli 追加的 audit.log 外不改变其中任何文件
+      scenarios:
+        switch-to-path:
+          - GIVEN: 插件默认定位到项目 A，本机另有含 .writing-anything/ 的项目 B
+          - WHEN: 在面板输入项目 B 的绝对路径并切换
+          - THEN: 面板显示项目 B 的总览，工具栏标明当前路径为项目 B、来源为面板输入；项目 B 的 .writing-anything/ 除 audit.log 外文件清单、内容与修改时间不变
+        restore-default:
+          - GIVEN: 面板正在查看手动切换的项目 B
+          - WHEN: 选择恢复默认
+          - THEN: 面板回到按默认定位顺序找到的项目 A
+        invalid-path:
+          - GIVEN: 作者输入相对路径、网络路径（如 //server/share），或一个没有 .writing-anything/ 的目录绝对路径
+          - WHEN: 切换
+          - THEN: 面板显示空态与说明原因，不显示其他项目的数据
+        superseded-request:
+          - GIVEN: 作者切换到项目 B 后、B 的快照返回之前又选择恢复默认
+          - WHEN: B 的快照晚于默认项目的快照返回
+          - THEN: 面板保持显示默认项目，迟到的 B 响应被丢弃
+    artifact-semantic-view:
+      strength: MUST
+      statement: 面板必须为选中单元（Unit）产物清单中的每个 YAML 产物（Artifact）提供语义卡片视图（Semantic Card View）：按产物的 Schema 字段组织成卡片而非平铺文件——写作简报（Brief）展示受众、目的、前提、核心观点等字段，大纲（Outline）展示层级结构与核心观点覆盖，论断（Claim）展示论断与素材（Source）关联；其余产物（出处（Provenance）、作者反馈（Feedback）、审稿、验收、规划（Plan）等）按字段通用卡片化；整个产物视图不得出现任何编辑、写入或确认控件
+      scenarios:
+        brief-cards:
+          - GIVEN: 某单元目录存在内容完整的 brief.yaml
+          - WHEN: 在该单元详情中打开 brief 产物视图
+          - THEN: 语义卡片视图按受众、目的、核心观点等 Schema 字段组织展示，字段值与产物原文一致，视图中没有任何编辑、写入或确认控件
+        outline-cards:
+          - GIVEN: 某单元目录存在多层级 outline.yaml
+          - WHEN: 打开 outline 产物视图
+          - THEN: 语义卡片视图按层级结构展示大纲与核心观点覆盖，内容与产物原文一致
+        claims-cards:
+          - GIVEN: 某单元目录存在关联素材引用的 claims.yaml
+          - WHEN: 打开 claims 产物视图
+          - THEN: 语义卡片视图逐条展示论断及其关联的素材引用，内容与产物原文一致
+        generic-artifact-cards:
+          - GIVEN: 某单元目录存在无定制布局的产物（如 review.yaml 或 acceptance.yaml）
+          - WHEN: 打开该产物视图
+          - THEN: 语义卡片视图按该产物的 Schema 字段通用卡片化展示，不因缺少定制布局而空白或报错
+    yaml-source-highlight-view:
+      strength: MUST
+      statement: 每个 YAML 产物必须可在语义卡片视图（Semantic Card View）与源码高亮视图（Source Highlight View）之间一键切换，切换后保持滚动位置；源码高亮视图必须对键、标量、数组/映射结构、注释、锚点与别名着色；高亮实现打包进面板资源、渲染过程不得发起网络请求；大型 YAML（长篇产物）源码必须按顶层键折叠渲染；产物 YAML 解析失败时必须降级为源码高亮视图并显示解析错误提示，不得空白或崩溃
+      scenarios:
+        toggle-preserves-scroll:
+          - GIVEN: 已打开一个较长 YAML 产物的语义卡片视图并滚动到中部
+          - WHEN: 一键切换到源码高亮视图再切换回来
+          - THEN: 两种视图分别按语义与源码呈现同一产物，切换前后滚动位置保持，不重新跳回顶部
+        highlight-coverage:
+          - GIVEN: 某产物 YAML 含键、字符串与数字标量、数组与映射结构、注释、锚点与别名
+          - WHEN: 打开其源码高亮视图
+          - THEN: 键、标量、结构、注释、锚点与别名分别着色，文本内容与产物原文逐字一致不丢失
+        large-yaml-fold:
+          - GIVEN: 长篇（novel）作品某产物 YAML 顶层键数量多、总体积大
+          - WHEN: 打开其源码高亮视图
+          - THEN: 源码按顶层键折叠呈现，展开后内容完整，面板不因一次性渲染全部行而卡死
+        malformed-yaml-fallback:
+          - GIVEN: 某单元目录的产物 YAML 语法损坏无法解析
+          - WHEN: 打开该产物视图
+          - THEN: 面板显示源码高亮视图与可读的解析错误提示，不空白、不崩溃
+    draft-markdown-views:
+      strength: MUST
+      statement: 草稿（Draft）正文（Markdown）必须提供两种可一键切换的视图：渲染阅读视图（标题、列表、代码块、引用、表格）与源码高亮视图（Source Highlight View），切换保持滚动位置；渲染与高亮打包进面板资源、渲染过程不得发起网络请求，渲染结果不得执行正文中的任何 HTML 或脚本
+      scenarios:
+        rendered-reading:
+          - GIVEN: 某单元 draft 正文 Markdown 含标题、列表、代码块、引用与表格
+          - WHEN: 打开该正文视图
+          - THEN: 渲染阅读视图按对应元素呈现，正文中的 HTML 片段被转义显示而不是执行
+        draft-toggle:
+          - GIVEN: 已打开正文渲染阅读视图并滚动到中部
+          - WHEN: 切换到源码高亮视图再切换回来
+          - THEN: Markdown 源码着色呈现，切换前后滚动位置保持
+    sources-view-claims-navigation:
+      strength: MUST
+      statement: 面板必须提供素材（Source）清单视图：列出工作区全部素材，每个素材条目展示其 source.yaml 语义卡片与原文 Markdown 的阅读视图（可切换源码高亮视图）；论断（Claim）语义卡片中的素材引用必须可点击并跳转到对应素材条目；素材视图同样不得出现任何编辑、写入或确认控件
+      scenarios:
+        claims-source-jump:
+          - GIVEN: claims 语义卡片中某论断关联素材引用 s-01，工作区存在素材 s-01
+          - WHEN: 点击该素材引用
+          - THEN: 面板跳转到素材清单中 s-01 的条目并展示其 source.yaml 卡片与原文，视图中没有任何编辑、写入或确认控件
+        sources-list:
+          - GIVEN: 工作区登记了多个素材（各含 source.yaml 与 original.md）
+          - WHEN: 打开素材清单视图
+          - THEN: 全部素材逐条列出，每条可查看 source.yaml 语义卡片与原文阅读视图
+    queue-views:
+      strength: MUST
+      statement: 面板必须提供两个只读的作者行动队列清单视图：总览的「待决决策」计数磁贴可点开决策队列（Decision Queue）清单，逐条展示每条决策的 id、status、question、options（id 与 text，recommendation 指向的选项带可辨识标记）、rationale、blocking 标记与关联 units；「待复核」计数磁贴可点开作者复核清单，逐条展示 kind、work、ref、channel、confirmed_at 与 reviewed_at。两个清单只消费快照已携带的 decisions.yaml 与 author-reviews.yaml 全文；文件缺失时显示空态提示、YAML 解析失败时显示可读错误提示，均不得空白或崩溃；清单视图不得出现任何编辑、写入或确认控件，作者操作仍走 wa-cli
+      scenarios:
+        decisions-list:
+          - GIVEN: 工作区 decisions.yaml 含一条 open 决策：id dec-1、question、options a/b、recommendation b、rationale、blocking true、units 列出 my-post
+          - WHEN: 点击总览「待决决策」磁贴
+          - THEN: 决策清单逐条显示上述全部字段，推荐选项 b 带可辨识标记，清单内没有任何编辑或确认控件，返回总览入口可用
+        reviews-list:
+          - GIVEN: 工作区 author-reviews.yaml 含一条 kind acceptance、work/ref my-post、channel preview、confirmed_at 与 reviewed_at 的复核记录
+          - WHEN: 点击总览「待复核」磁贴
+          - THEN: 复核清单逐条显示全部字段，无编辑控件，返回总览入口可用
+        missing-and-malformed:
+          - GIVEN: 快照中 decisions 为 null（文件缺失），或 decisions.yaml 文本语法损坏无法解析
+          - WHEN: 打开决策清单
+          - THEN: 分别显示空态提示或可读的解析错误提示，不空白、不崩溃；解析失败分支的计数磁贴显示不可用而不是 0（文件缺失分支的计数仍为 0）
+    panel-loading-feedback:
+      strength: MUST
+      statement: 面板在快照请求进行中且尚无数据可显示时（首次打开面板或定位后尚未获得任何快照数据）必须显示可读的加载提示，不得空白或无反馈；请求完成后按结果呈现数据、空态或错误态
+      scenarios:
+        first-load-hint:
+          - GIVEN: 插件已装入，面板刚打开，快照请求尚未返回，面板尚无任何数据
+          - WHEN: 快照请求进行中
+          - THEN: 面板显示可读的加载提示而非空白，不报错、不显示空态或错误态文案
+    panel-keyboard-navigation:
+      strength: MUST
+      statement: 面板必须支持纯键盘操作：焦点在单元（Unit）树内时，上下方向键在可见单元间移动选中并同步详情区，左右方向键收起或展开汇总单元，Enter 打开选中单元的产物（Artifact）视图或激活清单条目；产物视图中语义卡片视图与源码高亮视图的切换控件必须可经键盘激活；面板全部交互控件必须可经 Tab 到达
+      scenarios:
+        tree-arrow-select:
+          - GIVEN: novel 作品含卷、章、场景三级单元的树已展示，焦点在单元树上
+          - WHEN: 按上或下方向键
+          - THEN: 选中在可见单元间移动，详情区随选中更新，全程无需鼠标
+        keyboard-open-artifact:
+          - GIVEN: 键盘已选中某单元并焦点在其产物清单条目上
+          - WHEN: 按 Enter 打开产物视图，再经键盘激活视图切换控件
+          - THEN: 产物视图打开，语义卡片视图与源码高亮视图可仅用键盘切换，全程无需鼠标
+    skills-static-bundling:
+      strength: MUST
+      statement: 插件必须随包分发全部 13 个内置 wa-* 技能：构建时从仓库 internal/skills/skills/ 原样复制进插件 skills/ 目录，构建脚本核对名单完整（缺失即构建失败），技能内容与同版本 wa-cli 内置技能逐字一致；插件的启用与使用过程不得向用户级或项目级技能目录写入任何文件；捆绑技能与外部同名技能的解析优先由 ZCode 决定，设置区如实显示来源对照（见 setup-provenance），不宣称外部优先
+      scenarios:
+        bundled-listed:
+          - GIVEN: 插件已安装且不存在同名外部技能
+          - WHEN: 查看 ZCode 可用技能清单
+          - THEN: 13 个 wa-* 技能全部出现且内容与仓库内置版本一致
+        no-skill-dir-writes:
+          - GIVEN: 已记录用户级与项目级技能目录的文件清单
+          - WHEN: 安装、启用与使用插件
+          - THEN: 这些目录的清单、内容与修改时间不变
+        build-check-missing:
+          - GIVEN: internal/skills/skills 下某技能被移除或改名
+          - WHEN: 运行插件构建
+          - THEN: 构建失败并指出缺失的技能，产物不更新
+    setup-switch-gate:
+      strength: MUST
+      statement: 插件 userConfig 的启用开关 enableSetup 默认关闭；未开启时，插件不得提供任何设置（Setup）动作（不注册 setup_enable 行为、不发起任何网络请求、不下载任何文件），面板不出现设置区，插件全部行为与本能力不存在时完全一致
+      scenarios:
+        switch-off-inert:
+          - GIVEN: 插件已安装，userConfig 未开启 enableSetup（默认）
+          - WHEN: 宿主启动并打开插件面板
+          - THEN: 面板与既有规格一致且没有设置区；无任何网络请求与下载发生
+    setup-panel-section:
+      strength: MUST
+      statement: enableSetup 开启时，面板必须出现「内置技能与 CLI」设置区：显示内置 CLI 就绪状态（版本与路径）、捆绑技能清单与来源对照（捆绑 vs 外部同名）、进行中提示；尚未启用时提供「启用内置技能与 CLI」的显式入口，该区不得出现任何其他写入控件
+      scenarios:
+        status-unenabled:
+          - GIVEN: 开关已开启，启用动作尚未完成
+          - WHEN: 作者打开插件面板
+          - THEN: 设置区显示未启用状态与「启用内置技能与 CLI」入口，不报错不空白
+        status-enabled:
+          - GIVEN: 启用动作已完成，内置 CLI 就绪
+          - WHEN: 作者打开插件面板
+          - THEN: 设置区列出捆绑技能清单与内置 CLI 的版本和路径；存在外部 wa-cli 时如实显示当前解析到的路径与内置后备，不显示与当前解析结果矛盾的生效声明
+    setup-action:
+      strength: MUST
+      statement: 点击「启用内置技能与 CLI」必须触发一次完整启用：确保内置 CLI 就绪（下载校验安装，见 setup-cli-download），随后刷新设置区状态；同一时间至多存在一个进行中的启用动作，进行中时不得重复触发并显示提示；任一步失败时设置区显示可读原因、不进入已启用状态且可重试；启用动作不修改宿主进程环境（不做 PATH 追加），插件自身调用 wa-cli 按 userConfig waCliPath 或 PATH 解析并在设置区如实显示
+      scenarios:
+        enable-completes:
+          - GIVEN: 开关已开启且本机尚无 wa-cli
+          - WHEN: 作者点击「启用内置技能与 CLI」并等待完成
+          - THEN: 设置区进入已启用状态：内置 CLI 版本与路径齐备，过程中显示进行中提示
+        concurrent-click-ignored:
+          - GIVEN: 一次启用动作正在进行
+          - WHEN: 再次点击启用入口
+          - THEN: 不发起第二次启用动作，显示进行中提示，完成后状态区只反映这一次动作的结果
+        failure-readable:
+          - GIVEN: 启用动作中某一步失败（如下载失败）
+          - WHEN: 动作结束
+          - THEN: 设置区显示可读的失败原因，状态不是已启用，启用入口可再次使用
+    setup-cli-download:
+      strength: MUST
+      statement: 内置 CLI 不就绪（缺失或版本与配置不符）时，启用动作必须从配置的发布地址下载对应平台的发布产物（Release Asset），按发布方的 SHA256SUMS 记录校验通过后原子安装到配置目录（默认 ~/.local/bin，可经 userConfig cliInstallDir 配置）；下载或校验失败时不得留下任何部分写入的可执行文件并显示可读原因；配置目录已存在同版本二进制时跳过下载（waVersion 为默认 latest 时现存二进制视为就绪，为具体版本号且不符时重新下载）；已配置 waCliPath 时直接使用该二进制、不下载。下载只由该显式动作触发，不得在其他任何时机发起
+      scenarios:
+        fresh-download-install:
+          - GIVEN: 开关已开启，配置目录没有 wa-cli
+          - WHEN: 启用动作完成
+          - THEN: 配置目录出现可执行的内置 wa-cli，版本与配置一致，设置区显示其版本与路径
+        checksum-mismatch-refused:
+          - GIVEN: 下载到的发布产物内容与 SHA256SUMS 记录不符
+          - WHEN: 启用动作执行
+          - THEN: 安装不发生，配置目录没有新增或被改写的可执行文件，设置区显示校验失败的可读原因
+        existing-same-version-skip:
+          - GIVEN: 配置目录已存在与配置版本一致的 wa-cli
+          - WHEN: 点击启用
+          - THEN: 跳过下载直接完成状态刷新，不发起对发布地址的产物下载请求
+    setup-workspace-untouched:
+      strength: MUST
+      statement: 启用动作（含下载与安装）与设置区状态查询的全过程不得创建、修改或删除 .writing-anything/ 工作区内的任何文件（含审计日志 audit.log）
+      scenarios:
+        workspace-untouched:
+          - GIVEN: 已记录定位项目 .writing-anything/ 内全部文件（含 audit.log）的清单、内容与修改时间
+          - WHEN: 完成一次启用并查看设置区状态
+          - THEN: 这些文件的清单、内容与修改时间逐项一致，audit.log 没有新增行
+    setup-provenance:
+      strength: MUST
+      statement: enableSetup 开启且启用完成后，设置区必须回答「内置还是外置」：为捆绑名单中的每个技能探测标准技能目录（用户 ~/.agents/skills 与 ~/.claude/skills、项目 .agents/skills 与 .claude/skills，项目目录随面板定位经 root 参数传入）下是否存在同名 SKILL.md——存在即显示外部胜出来源与该文件路径，并标明捆绑后备就绪，全部不存在则显示捆绑（zcode-writing-viewer）；对照表是文件存在性比对（技能加载的优先级以 ZCode 实际解析为准，对照表不宣称优先序），未提供 root 时仅比对用户级目录；CLI 状态必须依据溯源标记如实分类：插件安装的 wa-cli（同目录存在插件写入的标记文件且其记录的 SHA-256 与磁盘二进制一致）显示为插件安装，其余（含操作者经 waCliPath 指定的路径、标记缺失或与磁盘不符）如实显示为非插件安装
+      scenarios:
+        external-in-user-dir:
+          - GIVEN: 用户 ~/.agents/skills 下存在同名 wa-* 技能的 SKILL.md
+          - WHEN: 查看设置区的技能来源对照表
+          - THEN: 该技能显示外部来源与该文件路径，并标明捆绑后备就绪
+        builtin-when-absent:
+          - GIVEN: 全部标准技能目录均无同名外部技能
+          - WHEN: 查看对照表
+          - THEN: 该技能显示捆绑（zcode-writing-viewer）
+        cli-plugin-installed:
+          - GIVEN: 插件刚下载安装了 wa-cli（标记写入成功且 sha256 一致）
+          - WHEN: 查看设置区 CLI 状态
+          - THEN: 显示为插件安装
+        cli-not-plugin-installed:
+          - GIVEN: CLI 路径来自操作者配置的 waCliPath，或路径上二进制被手动更换导致标记 sha256 不符，或无标记
+          - WHEN: 查看设置区 CLI 状态
+          - THEN: 如实显示为非插件安装
+    review-session-start:
+      strength: MUST
+      statement: 插件 server 必须提供审阅会话（Review Session）的启动与状态工具（review_start 与 review_status）：启动请求载荷为不超过 64 KiB 的 JSON 对象，含 unit（单元引用，经纯函数校验：非空、有长度上限、不以 - 开头、不含控制字符）与可选 root（项目目录绝对路径，校验规则与快照的 root 参数相同；省略时按默认定位）。启动时先结束任何既有会话，再以该项目目录调用一次 wa-cli preview <unit> --serve --json --dir <root>，在 10 秒内读到首行输出信封即视为启动成功，返回会话摘要（unit、root、开始时间），响应与会话摘要不得包含阅读页令牌或上游端口；同一 server 同一时间至多一个会话。root 无效或其下没有 .writing-anything/ 时返回可读错误、不调用 wa-cli；wa-cli 不可执行、以非零退出码结束（如单元引用无法解析，原样透出其诊断）或超时未给出首行信封时返回可读失败原因，并确保不残留子进程。review_status 返回当前是否有会话及其摘要。一次启动动作只调用一次 wa-cli，不得轮询
+      scenarios:
+        start-ok:
+          - GIVEN: 面板已定位到含作品 my-post 的项目目录 D，宿主机可执行 wa-cli
+          - WHEN: 调用 review_start，载荷 unit 为 my-post
+          - THEN: 返回成功，会话摘要的 unit 为 my-post、root 为 D，响应不含令牌与端口；review_status 报告有进行中的会话
+        start-replaces:
+          - GIVEN: 已有 my-post 的审阅会话
+          - WHEN: 启动 my-post/intro 的会话
+          - THEN: 旧的 wa-cli preview 子进程已结束，review_status 报告的会话 unit 为 my-post/intro，宿主上只有一个 preview 子进程
+        start-bad-unit:
+          - GIVEN: 项目目录 D 中没有单元 nope
+          - WHEN: 调用 review_start，载荷 unit 为 nope
+          - THEN: 返回失败原因并透出 wa-cli 的单元解析诊断，review_status 报告没有会话，宿主上没有残留的 preview 子进程
+        start-bad-root:
+          - GIVEN: 插件已加载
+          - WHEN: 调用 review_start，载荷 unit 为 my-post、root 为 relative/path
+          - THEN: 返回可读错误，没有调用 wa-cli
+    review-proxy:
+      strength: MUST
+      statement: 插件 server 必须以固定的工具与资源面代理当前会话阅读页服务的数据与提交接口：review_page 工具对应阅读页服务的 GET /page.json；配图取图经 ui://zcode-writing-viewer/review-illustration 资源模板（只接受 unit 与 id 两个取值，对应阅读页服务的 GET /illustration，见 preview 主规格的 preview-illustration）；review_submit 工具的 action 只接受 feedback、confirm 与 author-review 三个提交接口（对应阅读页服务的同名 POST），其他 action 拒绝且不转发。server 向上游请求时注入会话令牌（GET 的 token 查询参数、POST 的 X-WA-Token 头），不接受调用方提供的任何令牌；上游 Host 为 127.0.0.1:<port>；提交载荷超过 64 KiB 时拒绝且不转发。上游响应的状态码与正文原样转达（page.json 的 JSON、配图图片的字节、提交接口的响应），page.json 与提交响应不出现阅读页令牌或 127.0.0.1 地址；没有进行中的会话时各工具与资源返回可读的没有进行中的审阅提示，不访问任何上游；上游不可达或超时时返回可读提示，不回显原始错误信息。经代理写入的结果与直接使用阅读页完全相同，确认渠道（Confirmation Channel）仍为 preview
+      scenarios:
+        proxy-page-json:
+          - GIVEN: 有 my-post 的会话
+          - WHEN: 调用 review_page
+          - THEN: 返回 200 语义的 page.json 结构，units[0].ref 为 my-post 且含正文段落；响应中不出现阅读页令牌或 127.0.0.1 地址
+        proxy-feedback:
+          - GIVEN: 同上，draft.md 含「连接池很重要」一次
+          - WHEN: 调用 review_submit，action 为 feedback，载荷 unit 为 my-post、quote 为「连接池很重要」、text 为「补一个例子」
+          - THEN: 返回成功，feedback.id 为 fb-1；wa-cli feedback list my-post --json 列出这条反馈
+        proxy-no-session:
+          - GIVEN: 没有进行中的会话
+          - WHEN: 调用 review_page、review_submit 或读取配图资源
+          - THEN: 都返回可读的没有进行中的审阅提示，feedback.yaml 不被创建
+        proxy-confirm-decision-channel:
+          - GIVEN: 作品 my-post 的决策队列中有关联 my-post 的 open 决策 dec-1（选项 a、b），有 my-post 的审阅会话
+          - WHEN: 调用 review_submit，action 为 confirm，载荷 kind 为 decision、id 为 dec-1、option 为 a、confirmation 为「作者：用甲」
+          - THEN: '返回成功，confirmation 的 kind 为 decision、id 为 dec-1、channel 为 preview；decisions.yaml 中该决策记录 channel: preview'
+        proxy-illustration:
+          - GIVEN: 有 my-post 的审阅会话，my-post 登记了可用的 PNG 配图 fig-1
+          - WHEN: 读取 ui://zcode-writing-viewer/review-illustration 的 unit=my-post、id=fig-1 资源
+          - THEN: 返回 image/png，正文与 illustrations/fig-1.png 的字节完全相同；响应中不出现阅读页令牌或 127.0.0.1 地址
+        proxy-illustration-not-found:
+          - GIVEN: 有 my-post 的审阅会话，my-post 没有 id 为 ghost 的配图
+          - WHEN: 读取 unit=my-post、id=ghost 的配图资源
+          - THEN: 上游返回的 404 状态语义与正文原样转达，响应中不含图片数据
+        proxy-unknown-action:
+          - GIVEN: 有进行中的会话
+          - WHEN: 调用 review_submit，action 为 feedback2
+          - THEN: 请求被拒绝且未转发到上游，返回可读错误
+    review-session-end:
+      strength: MUST
+      statement: 审阅会话必须在以下任一情形结束并终止对应的 wa-cli preview 子进程：作者经 review_end 工具显式结束、30 分钟内没有任何代理请求、子进程自行退出、启动另一会话、server 进程退出（含收到退出信号）；结束后 review_status 报告没有会话，代理工具与配图资源按没有进行中的审阅处理
+      scenarios:
+        end-explicit:
+          - GIVEN: 有 my-post 的会话
+          - WHEN: 调用 review_end
+          - THEN: 返回成功，preview 子进程已结束，review_page 返回没有进行中的审阅提示
+        end-idle:
+          - GIVEN: 有 my-post 的会话，之后 30 分钟没有任何代理请求
+          - WHEN: 空闲时限到达
+          - THEN: preview 子进程已结束，review_status 报告没有会话
+        end-dispose:
+          - GIVEN: 有进行中的会话
+          - WHEN: server 进程退出（ZCode 关闭面板或停止插件）
+          - THEN: preview 子进程已结束，不残留监听端口
+    review-pending-discovery:
+      strength: MUST
+      statement: 快照中的待作者确认事项（pendingConfirmations）或待作者复核项（pendingAuthorReviews）非空时，面板必须主动标出待审阅位置：总览中对应作品卡片显示「待审阅」徽标与事项数，单元树中事项关联的单元显示「待审阅」标记；徽标与标记可经鼠标与键盘激活，激活后选中该单元（作品级事项选中作品根单元）并直接启动其审阅会话、打开审阅视图（Review View）。判定只使用快照中 wa-cli 给出的事项，面板不自行推导；next 区域降级时不显示徽标，并在降级列表中说明原因。审阅结束刷新快照后，已处理完的事项对应的徽标与标记随之消失
+      scenarios:
+        discovery-badge:
+          - GIVEN: 作品 my-post 需要验收且没有验收记录，没有其他待确认事项
+          - WHEN: 打开插件面板
+          - THEN: my-post 的作品卡片显示「待审阅」徽标与事项数 1，单元树中 my-post 带「待审阅」标记
+        discovery-open:
+          - GIVEN: 同上
+          - WHEN: 作者用键盘激活 my-post 卡片上的「待审阅」徽标
+          - THEN: 插件 server 只调用一次 wa-cli preview my-post --serve 启动会话，详情区显示 my-post 的审阅视图
+        discovery-cleared:
+          - GIVEN: 作者在审阅视图中确认了 my-post 的验收
+          - WHEN: 作者点「结束审阅」
+          - THEN: 快照刷新后 my-post 卡片与单元树中不再显示「待审阅」
+        discovery-degraded:
+          - GIVEN: wa-cli next 执行失败，快照的 next 区域降级
+          - WHEN: 打开插件面板
+          - THEN: 不显示任何「待审阅」徽标，降级列表说明 next 区域降级的原因，面板不崩溃
+    review-native-view:
+      strength: MUST
+      statement: 面板的单元详情必须提供「审阅」按钮；点击它或经 review-pending-discovery 的入口激活后，启动该单元的审阅会话（项目目录取面板当前显示的目录，含路径切换所选目录），成功后在详情区以面板原生组件呈现审阅视图（Review View），不使用 iframe。视图内容取自 review_page 工具的 page.json：按单元树先序列出单元引用与阶段，逐段显示正文与段落序号，按出处（human、agent、agent-draft-human-edited）区分标记并可切换着色，段落下列出文本检查与审稿发现项（标签、severity、说明与建议），全文级发现项、说明与最近失败的命令单列；单元有配图（Illustration，page.json 单元的 illustrations，见 preview 主规格的 preview-page-json）时，在引用配图的段落之后按该段 illustrations 的顺序以 img 节点显示图像：src 由面板以固定配图资源 ui://zcode-writing-viewer/review-illustration 与编码的 unit、id 构造（经 readServerResource 读取），不使用正文或 page.json 中的其他地址；alt 取替代文字，并以纯文本显示氛围图（Mood Image）或信息图（Infographic）、出处标记与信息图关联的论断和素材 id；作品根单元的封面图（Cover Image）显示在该单元开头并标「封面」；referenced 为 false 的正文配图在单元末尾列出并标「未引用」；available 为 false 的配图不加载图片，改为显示不可用说明；没有配图时视图与没有配图功能时相同。待作者确认区逐项显示说明、决策选项与推荐、原话摘要输入框与确认控件（可拒绝的事项另有拒绝控件，需要答复的决策提供答复输入）；strict 关卡下另显示待作者复核区（默认勾选的复选框与「复核所选」）；没有事项时显示与阅读页相同的空提示。作者在单个段落内选中文字后可提交反馈（文字与可选快捷标记 stuck、good、question），也可对整个单元提交反馈；选区为空、跨段落或在正文之外时不发出请求并提示。每次提交经 review_submit 到 wa-cli，成功后重新拉取 page.json 刷新视图；失败时显示 wa-cli 诊断的可读信息并保留作者已填写的内容。来自工作区的全部文字一律以纯文本显示，不解释其中的 HTML 或脚本。审阅视图随 ZCode 明暗主题切换保持可读，并遵守 overview-theme-and-narrow 的窄屏布局。视图提供「刷新」与「结束审阅」按钮，结束后关闭视图并刷新快照。启动进行中显示可读提示；启动失败或会话已结束时显示可读原因与重新审阅入口，不显示空白视图。会话是否已结束由面板在每次拉取 page.json、窗口重新获得焦点或页面重新可见时查询会话状态判定（不调用 wa-cli），并比对会话摘要的 unit 与所审单元——会话不存在、属于其他单元或载荷缺失 unit 时按已结束处理。全部控件必须可经键盘激活。审阅视图头部另提供「放大」按钮：点击后同一审阅视图（内容与详情区完全一致）以铺满面板区域的覆盖层显示，盖住单元树与详情列，不使用 iframe、不新开窗口；正文段落与配图、封面图按放大后的宽度显示；覆盖层提供「还原」按钮，Esc 键同样退出放大，退出后回到详情区显示，审阅会话不结束、已填写的原话摘要与答复保留，数据不重新拉取；覆盖层打开时 DOM 焦点移入覆盖层，随主题保持可读、窄屏下铺满可用区域，其中全部控件可经键盘激活
+      scenarios:
+        native-render:
+          - GIVEN: 作品 my-post 正文两段（第一段出处 human、第二段 agent），第二段有一条 warning 级文本检查发现项，决策队列中有关联 my-post 的 open 决策 dec-1（选项 a、b，推荐 a）
+          - WHEN: 作者在单元详情点「审阅」
+          - THEN: 详情区出现审阅视图且页面中没有 iframe 元素；两段正文带不同的出处标记，第二段下列出该发现项；待作者确认区列出 dec-1、两个选项（a 带推荐标记）与原话摘要输入框
+        native-feedback:
+          - GIVEN: 同上，第一段含「连接池很重要」一次
+          - WHEN: 作者在第一段选中「连接池很重要」，填写「补一个例子」并提交
+          - THEN: wa-cli feedback list my-post --json 列出 quote 为「连接池很重要」、text 为「补一个例子」的反馈；视图随后重新拉取了 page.json
+        native-confirm-decision:
+          - GIVEN: 同 native-render
+          - WHEN: 作者为 dec-1 选 a、填写原话摘要「作者：用甲」并确认
+          - THEN: 'decisions.yaml 中 dec-1 已决定且记录 channel: preview；刷新后的待作者确认区不再列出 dec-1'
+        native-author-review:
+          - GIVEN: gate_level 为 strict，my-post 有一条经 cli 渠道写入的验收待作者复核
+          - WHEN: 作者在审阅视图的待作者复核区保持默认勾选并点「复核所选」
+          - THEN: author-reviews.yaml 记录该项、渠道为 preview；刷新后待作者复核区显示没有待作者复核的确认
+        native-text-safety:
+          - GIVEN: my-post 的一段正文为含 script 与 b 标签的 HTML 字符串
+          - WHEN: 打开 my-post 的审阅视图
+          - THEN: 该段按原文字符显示，脚本不执行，页面中不生成来自正文的 script 或 b 元素
+        native-selection-invalid:
+          - GIVEN: my-post 的审阅视图已打开
+          - WHEN: 作者选中跨越第一段与第二段的文字后提交反馈
+          - THEN: 面板不发出反馈请求，提示只在一个段落内选中文字或改为对整个单元提交，feedback.yaml 不变
+        native-submit-failed:
+          - GIVEN: my-post 的审阅视图已打开，作者为需要答复的决策填写了答复
+          - WHEN: 提交时 wa-cli 返回 400 诊断
+          - THEN: 视图显示诊断的可读信息，作者填写的答复仍保留在输入框中
+        native-session-replaced:
+          - GIVEN: 本面板正在审阅 my-post，另一会话随后启动了 other-post 的审阅
+          - WHEN: 本面板窗口重新获得焦点
+          - THEN: 本面板显示审阅已结束与重新审阅入口，不显示 other-post 的内容
+        native-end:
+          - GIVEN: my-post 的审阅视图已打开
+          - WHEN: 作者用键盘激活「结束审阅」
+          - THEN: 审阅视图关闭，review_status 报告没有会话，快照已刷新
+        native-illustrations:
+          - GIVEN: 作品 my-post 根单元登记了封面图 cover，正文第 2 段引用可用的信息图 fig-1（origin 为 agent，claims 为 c1），另有未被引用的正文配图 fig-2
+          - WHEN: 作者在单元详情点「审阅」
+          - THEN: 单元开头显示封面图像并标「封面」；第 2 段之后有 alt 为 fig-1 替代文字的 img 节点，其来源为配图资源（unit=my-post、id=fig-1），旁边显示「信息图」、出处 agent 与 c1；fig-2 在单元末尾标「未引用」；页面中没有 iframe 元素
+        native-illustration-unavailable:
+          - GIVEN: 正文引用的配图 fig-1 在 page.json 中 available 为 false
+          - WHEN: 打开 my-post 的审阅视图
+          - THEN: fig-1 处显示不可用说明，面板没有请求配图资源
+        native-enlarge:
+          - GIVEN: 作品 my-post 的审阅视图已在单元详情中打开，正文与配图在窄的详情列里显示
+          - WHEN: 作者点「放大」
+          - THEN: 同一审阅视图铺满面板区域（单元树与详情列被盖住），正文段落与配图以更大宽度显示，头部出现「还原」按钮，页面中没有 iframe 元素
+        native-enlarge-exit:
+          - GIVEN: 作者处于放大模式，已在待作者确认区的原话摘要输入框填写了文字
+          - WHEN: 按 Esc（或点「还原」）
+          - THEN: 审阅视图回到单元详情区显示，输入框中的文字保留，审阅会话未结束，再点「放大」可重新铺满
+  MODIFIED: {}
+  REMOVED: {}

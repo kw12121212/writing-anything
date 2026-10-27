@@ -1,0 +1,25 @@
+schema: strict-spec-driven/delta-spec/v1
+schema_version: 1
+artifact_type: delta_spec
+schema_file: templates/strict-spec-driven/schemas/delta-spec.yaml
+target_spec: cli
+operations:
+  ADDED: {}
+  MODIFIED:
+    audit-log:
+      strength: MUST
+      statement: wa-cli 的每次调用（成功、失败与用法错误都算，命令已启动为前提）必须在项目的 .writing-anything/audit.log 追加一行 JSON 对象（JSONL）：含 at（UTC，YYYY-MM-DDTHH:MM:SSZ）、command（命令名，如 review record）、args（参数数组，每个参数截断到 200 个字符）、exit（退出码）、codes（诊断错误码数组，没有时为空数组）与 unit（关键命令——draft write、review record、accept、export——已解析的首个位置参数即单元引用，供回捞配对；其他命令与 export --print（可粘贴正文的只读取用，不交付文件）省略该键，因此 export --print 既不留下待回捞的失败，也不消掉真实导出失败的回捞提示）。audit.log 是 append-only 的运维痕迹（Audit Log）：不进 JSON Schema 校验（wa-cli validate 不检查它）、不出现在 changedPaths；只读命令写审计是「只读不写产物」规则的显式例外（见技术标准 precheck-before-side-effects 与 atomic-writes 的豁免）。MCP 服务为资源订阅轮询而执行的只读命令不记审计（服务自身发起的轮询不是调用方的动作；经 tools/call 执行的命令照常记录）。没有 .writing-anything/ 工作区时不写；写入失败时向标准错误写一行说明、不改变命令的退出码与输出契约；追加用单次写入保证行完整性，文件超过 1 MiB 时轮转为 audit.log.1（替换旧备份）后再追加。命令未启动的失败（PATH 错误、打错的命令名等 shell 层问题）不在记录范围内，由技能会话协议在 shell 层兜底。
+      scenarios:
+        audit-failed-command:
+          - GIVEN: 工作区 D 存在，review record 因缺少评分结论以退出码 1 失败
+          - WHEN: 读取 D/.writing-anything/audit.log 的最后一行
+          - THEN: 该行为 JSON：command 为 review record、exit 为 1、codes 含 review.missing-verdict、unit 为该单元引用；命令的退出码与输出与不记审计时逐字节一致
+        audit-rotate:
+          - GIVEN: 工作区 D 的 audit.log 已为 1 MiB
+          - WHEN: 运行任一命令后读取素材目录
+          - THEN: audit.log.1 存在（轮转前的内容），audit.log 只含新行
+        audit-print-not-paired:
+          - GIVEN: 工作区 D 中作品 post 的上一次 wa-cli export post 以退出码 1 失败，作品 post 之后已验收
+          - WHEN: 运行 wa-cli export post --format paste-html --print --dir D --json（成功），再运行 wa-cli next --dir D --json
+          - THEN: audit.log 新增的一行 command 为 export、exit 为 0、不含 unit 键；next 中 post 的条目仍含「export 在本单元失败后尚未成功重试」的回捞提示
+  REMOVED: {}

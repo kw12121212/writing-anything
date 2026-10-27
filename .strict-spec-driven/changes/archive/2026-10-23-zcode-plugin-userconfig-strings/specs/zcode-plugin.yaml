@@ -1,0 +1,21 @@
+schema: strict-spec-driven/delta-spec/v1
+schema_version: 1
+artifact_type: delta_spec
+schema_file: templates/strict-spec-driven/schemas/delta-spec.yaml
+target_spec: zcode-plugin
+operations:
+  ADDED: {}
+  MODIFIED:
+    panel-visible:
+      strength: MUST
+      statement: 插件（zcode-writing-viewer）的清单（.zcode-plugin/plugin.json）必须能通过 ZCode 的清单校验并使插件可安装：userConfig 每个配置项的 title 与 description 为纯字符串（不得是对象），mcpServers 与 ui.surfaces 的声明结构与实际产物一致；装入 ZCode 后，ZCode 必须提供「写作工作区」面板入口：清单 ui.surfaces 注册的面板可从 ZCode 侧栏打开，选中后加载出面板内容，不报错、不空白崩溃
+      scenarios:
+        gui-entry-load:
+          - GIVEN: 插件已装入 ZCode（本地 marketplace 安装或 Release tarball 安装），清单通过 ZCode 校验
+          - WHEN: 从 ZCode 侧栏打开「写作工作区」面板
+          - THEN: 面板入口出现，面板完成加载并显示内容（定位状态、空态或错误态任一），不报错、不空白崩溃
+        manifest-schema-accept:
+          - GIVEN: 本地市场包含本插件
+          - WHEN: ZCode 加载并校验插件清单
+          - THEN: 清单通过校验（userConfig 的 title/description 均为字符串），市场条目与安装不被拒绝
+  REMOVED: {}

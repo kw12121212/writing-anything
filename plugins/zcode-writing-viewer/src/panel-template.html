@@ -1,0 +1,417 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>写作工作区</title>
+    <style>
+      :root {
+        --wv-bg: #ffffff;
+        --wv-bg-2: #f6f8fa;
+        --wv-text: #1f2328;
+        --wv-text-muted: #6e7781;
+        --wv-border: #d1d9e0;
+        --wv-accent: #0969da;
+        --wv-danger: #cf222e;
+        --wv-success: #1a7f37;
+        --wv-warning: #9a6700;
+      }
+      html[data-theme='dark'] {
+        --wv-bg: #16181d;
+        --wv-bg-2: #1e2128;
+        --wv-text: #e6e8eb;
+        --wv-text-muted: #9aa4b2;
+        --wv-border: #333942;
+        --wv-accent: #6cb6ff;
+        --wv-danger: #ff8182;
+        --wv-success: #57ab5a;
+        --wv-warning: #e3b341;
+      }
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+      }
+      body {
+        font:
+          13px system-ui,
+          -apple-system,
+          'Segoe UI',
+          'PingFang SC',
+          'Microsoft YaHei',
+          sans-serif;
+        background: var(--wv-bg);
+        color: var(--wv-text);
+      }
+      #root {
+        height: 100%;
+        overflow: auto;
+        box-sizing: border-box;
+        padding: 10px 12px 32px;
+      }
+      #wv-boot {
+        color: var(--wv-text-muted);
+      }
+      .wv-shell {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        max-width: 1100px;
+        margin: 0 auto;
+      }
+      .wv-toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px;
+      }
+      .wv-toolbar-root {
+        color: var(--wv-text-muted);
+        max-width: 100%;
+        overflow-wrap: anywhere;
+      }
+      .wv-btn {
+        background: var(--wv-bg-2);
+        color: var(--wv-text);
+        border: 1px solid var(--wv-border);
+        border-radius: 6px;
+        padding: 3px 10px;
+        cursor: pointer;
+        font: inherit;
+      }
+      .wv-btn:hover:not([disabled]) {
+        border-color: var(--wv-accent);
+      }
+      .wv-btn[disabled] {
+        opacity: 0.5;
+        cursor: default;
+      }
+      .wv-btn-active {
+        border-color: var(--wv-accent);
+        color: var(--wv-accent);
+      }
+      .wv-btn-quiet {
+        background: transparent;
+      }
+      .wv-input {
+        background: var(--wv-bg);
+        color: var(--wv-text);
+        border: 1px solid var(--wv-border);
+        border-radius: 6px;
+        padding: 3px 8px;
+        font: inherit;
+        min-width: 220px;
+      }
+      .wv-counts {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: stretch;
+      }
+      .wv-tile {
+        border: 1px solid var(--wv-border);
+        border-radius: 8px;
+        padding: 8px 14px;
+        min-width: 110px;
+        background: var(--wv-bg-2);
+      }
+      .wv-tile-link {
+        cursor: pointer;
+      }
+      .wv-tile-link:hover,
+      .wv-tile-link:focus {
+        border-color: var(--wv-accent);
+      }
+      .wv-tile-value {
+        font-size: 20px;
+        font-weight: 600;
+      }
+      .wv-tile-label {
+        color: var(--wv-text-muted);
+      }
+      .wv-details {
+        border: 1px solid var(--wv-border);
+        border-radius: 8px;
+        padding: 6px 10px;
+        background: var(--wv-bg-2);
+      }
+      .wv-details summary {
+        cursor: pointer;
+        font-weight: 600;
+      }
+      .wv-diag {
+        padding: 1px 0;
+        overflow-wrap: anywhere;
+      }
+      .wv-sev-error {
+        color: var(--wv-danger);
+      }
+      .wv-sev-warning {
+        color: var(--wv-warning);
+      }
+      .wv-works {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      h2,
+      h3 {
+        margin: 8px 0 4px;
+        font-size: 15px;
+      }
+      .wv-card {
+        border: 1px solid var(--wv-border);
+        border-radius: 8px;
+        padding: 8px 12px;
+        background: var(--wv-bg);
+      }
+      .wv-card-active {
+        border-color: var(--wv-accent);
+      }
+      .wv-card[role='button'],
+      .wv-card[tabindex] {
+        cursor: pointer;
+      }
+      .wv-card-title {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 6px;
+      }
+      .wv-card-row {
+        margin: 2px 0;
+        overflow-wrap: anywhere;
+      }
+      .wv-card-label {
+        color: var(--wv-text-muted);
+        margin-right: 4px;
+      }
+      .wv-card-group {
+        margin-left: 12px;
+      }
+      .wv-badge {
+        background: var(--wv-accent);
+        color: var(--wv-bg);
+        border-radius: 10px;
+        padding: 0 8px;
+        font-size: 12px;
+        cursor: pointer;
+      }
+      .wv-badge-small {
+        font-size: 11px;
+      }
+      .wv-columns {
+        display: grid;
+        grid-template-columns: minmax(220px, 1fr) minmax(0, 2fr);
+        gap: 12px;
+      }
+      @media (max-width: 640px) {
+        .wv-columns {
+          grid-template-columns: 1fr;
+        }
+      }
+      .wv-tree-list {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+      }
+      .wv-tree-row {
+        padding: 2px 6px;
+        border-radius: 6px;
+        cursor: pointer;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .wv-tree-row:hover {
+        background: var(--wv-bg-2);
+      }
+      .wv-tree-selected {
+        background: var(--wv-bg-2);
+        outline: 1px solid var(--wv-accent);
+      }
+      .wv-muted {
+        color: var(--wv-text-muted);
+      }
+      .wv-error {
+        color: var(--wv-danger);
+        overflow-wrap: anywhere;
+      }
+      .wv-state {
+        color: var(--wv-text-muted);
+        padding: 12px 0;
+      }
+      .wv-notice {
+        border: 1px solid var(--wv-warning);
+        border-radius: 8px;
+        padding: 6px 10px;
+      }
+      .wv-list {
+        margin: 4px 0;
+        padding-left: 18px;
+      }
+      .wv-list li {
+        margin: 2px 0;
+        display: flex;
+        gap: 8px;
+        align-items: center;
+      }
+      .wv-code {
+        background: var(--wv-bg-2);
+        border-radius: 6px;
+        padding: 1px 6px;
+        overflow-wrap: anywhere;
+      }
+      .wv-link {
+        color: var(--wv-accent);
+      }
+      .wv-modes {
+        display: flex;
+        gap: 6px;
+        margin: 6px 0;
+      }
+      .wv-artifact-body {
+        max-height: 480px;
+        overflow: auto;
+        border: 1px solid var(--wv-border);
+        border-radius: 8px;
+        padding: 8px 10px;
+        background: var(--wv-bg-2);
+      }
+      .wv-source .wv-line {
+        font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+        font-size: 12px;
+        white-space: pre;
+      }
+      .wv-tok-key {
+        color: var(--wv-accent);
+      }
+      .wv-tok-scalar {
+        color: var(--wv-success);
+      }
+      .wv-tok-structure {
+        color: var(--wv-text-muted);
+      }
+      .wv-tok-comment {
+        color: var(--wv-text-muted);
+        font-style: italic;
+      }
+      .wv-tok-anchor,
+      .wv-tok-alias {
+        color: var(--wv-warning);
+      }
+      .wv-tok-md-heading {
+        color: var(--wv-accent);
+        font-weight: 600;
+      }
+      .wv-tok-md-quote {
+        color: var(--wv-text-muted);
+      }
+      .wv-tok-md-emphasis {
+        font-style: italic;
+      }
+      .wv-md-code,
+      .wv-md code {
+        background: var(--wv-bg-2);
+        border-radius: 6px;
+        padding: 6px 8px;
+        font-family: ui-monospace, Consolas, monospace;
+        font-size: 12px;
+        white-space: pre-wrap;
+      }
+      .wv-md blockquote {
+        border-left: 3px solid var(--wv-border);
+        margin: 4px 0;
+        padding-left: 10px;
+        color: var(--wv-text-muted);
+      }
+      .wv-md table {
+        border-collapse: collapse;
+      }
+      .wv-md th,
+      .wv-md td {
+        border: 1px solid var(--wv-border);
+        padding: 2px 8px;
+      }
+      .wv-review {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      .wv-review-unit {
+        border: 1px solid var(--wv-border);
+        border-radius: 8px;
+        padding: 8px 12px;
+      }
+      .wv-paragraph {
+        margin: 6px 0;
+        padding: 4px 8px;
+        border-left: 3px solid var(--wv-border);
+      }
+      .wv-paragraph-index {
+        display: block;
+        color: var(--wv-text-muted);
+        font-size: 11px;
+      }
+      .wv-origin-human {
+        border-left-color: var(--wv-success);
+      }
+      .wv-origin-agent {
+        border-left-color: var(--wv-accent);
+      }
+      .wv-origin-edited {
+        border-left-color: var(--wv-warning);
+      }
+      .wv-illustration {
+        margin: 6px 0;
+      }
+      .wv-illustration img {
+        max-width: 100%;
+        height: auto;
+        border: 1px solid var(--wv-border);
+        border-radius: 6px;
+      }
+      .wv-illustration-missing {
+        color: var(--wv-text-muted);
+        border: 1px dashed var(--wv-border);
+        border-radius: 8px;
+        padding: 6px 10px;
+      }
+      .wv-feedback-bar {
+        position: sticky;
+        bottom: 0;
+        border: 1px solid var(--wv-border);
+        border-radius: 8px;
+        background: var(--wv-bg);
+        padding: 8px 10px;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      .wv-overlay {
+        position: fixed;
+        inset: 0;
+        background: var(--wv-bg);
+        overflow: auto;
+        z-index: 40;
+        padding: 12px;
+      }
+      .wv-overlay-body {
+        max-width: 1100px;
+        margin: 0 auto;
+      }
+      .wv-listview {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      .wv-source-table {
+        margin-top: 8px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"><div id="wv-boot">正在连接写作工作区面板…</div></div>
+    <!-- PANEL_SCRIPT -->
+  </body>
+</html>

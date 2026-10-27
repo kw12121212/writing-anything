@@ -227,6 +227,7 @@ interface TestHooks {
   overviewModel: (body: SnapshotRouteBody) => any;
   reconcileSelection: (body: SnapshotRouteBody, model: any, work: string | null, unit: string | null) => any;
   renderPanel: (h: unknown, state: Record<string, unknown>, actions: Record<string, unknown>) => unknown;
+  renderReviewOverlay: (h: unknown, state: Record<string, unknown>, actions: Record<string, unknown>) => any;
   routeUrl: (root: string | null) => string;
   shouldStack: (container: number | null, viewport: number | null) => boolean;
   labelsFor: (active?: string | null) => Record<string, string>;
@@ -432,7 +433,7 @@ describe('renderPanel', () => {
     // detail's single Review button and the「待审阅」markers, which only start
     // a review session (review-native-view, review-pending-discovery).
     const allowed =
-      /^(Refresh|Switch|Restore default)$|^(my-novel|my-post)\b|^(my-novel|part-1|ch-1|scene-1|scene-2)\b|^Sources \d+$|^Pending decisions \d+( —)?$|^Pending reviews \d+( —)?$|^(brief|outline|claims|feedback|provenance|draft|work)\s+\S+\s+Open$|^(src-migration|src-note)$|^Review$|^Pending review · \d+$|^● \d+$/;
+      /^(Refresh|Switch|Restore default)$|^(my-novel|my-post)\b|^(my-novel|part-1|ch-1|scene-1|scene-2)\b|^Sources \d+$|^Pending decisions \d+( —)?$|^Pending reviews \d+( —)?$|^(brief|outline|claims|feedback|provenance|draft|work)\s+\S+\s+Open$|^(src-migration|src-note)$|^Review$|^Copy with images$|^Pending review · \d+$|^● \d+$/;
     for (const label of labels) expect(label, label).toMatch(allowed);
     expect(labels.filter((label) => label === 'Review')).toHaveLength(1);
   });
@@ -1196,6 +1197,366 @@ describe('ViewerPanel wiring (runnable react)', () => {
     panel.restore();
   });
 
+  it('enlarges the review view over the panel and collapses it through the real wiring (native-enlarge)', async () => {
+    const fixture = await fixtureBody();
+    const page = await pageFixture();
+    let startedUnit: string | null = null;
+    const stub = (async (input: unknown, init?: { method?: string; body?: string }) => {
+      const url = String(input);
+      const method = init?.method ?? 'GET';
+      if (url === '/dsh-writing-viewer/review-session' && method === 'POST') {
+        startedUnit = (JSON.parse(init?.body ?? '{}') as { unit: string }).unit;
+        return { ok: true, status: 200, json: async () => ({ ok: true, session: { unit: startedUnit, root: fixture.root, startedAt: 't1' } }) };
+      }
+      if (url === '/dsh-writing-viewer/review-session') return { ok: true, status: 200, json: async () => ({ ok: true, session: startedUnit === null ? null : { unit: startedUnit, root: fixture.root, startedAt: 't1' } }) };
+      if (url === '/dsh-writing-viewer/review/page.json') return { ok: true, status: 200, json: async () => page };
+      if (url === '/dsh-writing-viewer/review-session/end') return { ok: true, status: 200, json: async () => ({ ok: true, session: null }) };
+      if (url.includes('/dsh-writing-viewer/setup')) return { ok: false, status: 404, json: async () => ({}) };
+      return { ok: true, status: 200, json: async () => fixture };
+    }) as unknown as typeof fetch;
+    const panel = await mountPanel(fixture, stub);
+    await settle();
+    const selected = (elements(toNode(panel.tree()), 'button').find((b) => b.props?.['data-review-start'] !== undefined)?.props?.['data-review-start']) as string;
+    expect(selected).toBeTruthy();
+    const overlayShown = (): boolean => elements(toNode(panel.tree()), 'div').some((n) => n.props?.['data-review-overlay'] === selected);
+    click(panel, (b) => b.props?.['data-review-start'] === selected);
+    await settle();
+    // Enlarge through the wired action: the overlay mounts over the panel.
+    click(panel, (b) => b.props?.['data-review-size'] === 'enlarge');
+    await settle();
+    expect(overlayShown()).toBe(true);
+    // Restore collapses it back to the detail column.
+    click(panel, (b) => b.props?.['data-review-size'] === 'restore');
+    await settle();
+    expect(overlayShown()).toBe(false);
+    // Enlarge again, then end the review: the overlay collapses with it.
+    click(panel, (b) => b.props?.['data-review-size'] === 'enlarge');
+    await settle();
+    expect(overlayShown()).toBe(true);
+    click(panel, (b) => b.props?.['data-review-end'] === selected);
+    await settle();
+    expect(overlayShown()).toBe(false);
+    expect(elements(toNode(panel.tree()), 'section').some((n) => n.props?.['data-review-view'] !== undefined)).toBe(false);
+    panel.restore();
+  });
+
+  /** Swap page globals the clipboard path reads; returns the restore. */
+  function withGlobals(values: Record<string, unknown>): () => void {
+    const saved = Object.keys(values).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)] as const);
+    for (const [key, value] of Object.entries(values)) Object.defineProperty(globalThis, key, { value, configurable: true, writable: true });
+    return () => {
+      for (const [key, descriptor] of saved) {
+        if (descriptor === undefined) delete (globalThis as Record<string, unknown>)[key];
+        else Object.defineProperty(globalThis, key, descriptor);
+      }
+    };
+  }
+
+  const COPY_FRAGMENT = '<section style="a"><p style="b">正文</p><section style="c"><img src="data:image/png;base64,AA" alt="图" style="d"><p style="e">图说</p></section></section>';
+
+  function copyStub(fixture: SnapshotRouteBody, copyBody: unknown, requests: { url: string; method: string }[], page?: unknown) {
+    let startedUnit: string | null = null;
+    return (async (input: unknown, init?: { method?: string; body?: string }) => {
+      const url = String(input);
+      const method = init?.method ?? 'GET';
+      requests.push({ url, method });
+      if (url.startsWith('/dsh-writing-viewer/copy?')) return { ok: true, status: 200, json: async () => copyBody };
+      if (url === '/dsh-writing-viewer/review-session' && method === 'POST') {
+        startedUnit = (JSON.parse(init?.body ?? '{}') as { unit: string }).unit;
+        return { ok: true, status: 200, json: async () => ({ ok: true, session: { unit: startedUnit, root: fixture.root, startedAt: 't1' } }) };
+      }
+      if (url === '/dsh-writing-viewer/review-session') return { ok: true, status: 200, json: async () => ({ ok: true, session: startedUnit === null ? null : { unit: startedUnit, root: fixture.root, startedAt: 't1' } }) };
+      if (url === '/dsh-writing-viewer/review/page.json') return { ok: true, status: 200, json: async () => page };
+      if (url.includes('/dsh-writing-viewer/setup')) return { ok: false, status: 404, json: async () => ({}) };
+      return { ok: true, status: 200, json: async () => fixture };
+    }) as unknown as typeof fetch;
+  }
+
+  function copyButtons(panel: MountedPanel): Node[] {
+    return elements(toNode(panel.tree()), 'button').filter((b) => b.props?.['data-copy-work'] !== undefined);
+  }
+
+  function copyNotice(panel: MountedPanel): Node | undefined {
+    return elements(toNode(panel.tree()), 'span').find((n) => n.props?.['data-copy-notice'] !== undefined);
+  }
+
+  it('copies the whole accepted work from the root unit detail as text/html and text/plain (copy-accepted-work)', async () => {
+    const fixture = await fixtureBody();
+    const requests: { url: string; method: string }[] = [];
+    const written: Record<string, Blob>[] = [];
+    class FakeItem {
+      constructor(public items: Record<string, Promise<Blob>>) {}
+    }
+    const restoreGlobals = withGlobals({
+      isSecureContext: true,
+      ClipboardItem: FakeItem,
+      navigator: {
+        language: 'zh-CN',
+        clipboard: {
+          write: async (list: FakeItem[]) => {
+            const item = list[0]!;
+            written.push({ 'text/html': await item.items['text/html']!, 'text/plain': await item.items['text/plain']! });
+          },
+        },
+      },
+    });
+    try {
+      const panel = await mountPanel(fixture, copyStub(fixture, { ok: true, html: COPY_FRAGMENT, images: 1, diagnostics: [] }, requests));
+      await settle();
+      const button = copyButtons(panel)[0];
+      expect(button).toBeDefined();
+      const work = button!.props?.['data-copy-work'] as string;
+      expect(work.includes('/')).toBe(false);
+      expect(textOf(button!)).toBe('复制图文');
+      click(panel, (b) => b.props?.['data-copy-work'] === work);
+      await settle();
+      const copies = requests.filter((r) => r.url.startsWith('/dsh-writing-viewer/copy?'));
+      expect(copies).toEqual([{ url: '/dsh-writing-viewer/copy?' + new URLSearchParams({ work, root: fixture.root as string }).toString(), method: 'GET' }]);
+      expect(written).toHaveLength(1);
+      expect([written[0]!['text/html']!.type, await written[0]!['text/html']!.text()]).toEqual(['text/html', COPY_FRAGMENT]);
+      expect(await written[0]!['text/plain']!.text()).toBe('正文\n\n图说');
+      const notice = copyNotice(panel);
+      expect(notice?.props?.['data-copy-notice']).toBe('ok');
+      expect(textOf(notice!)).toContain('内嵌配图 1');
+      panel.restore();
+    } finally {
+      restoreGlobals();
+    }
+  });
+
+  it('copies from the review view head without ending the session (copy-from-review-view)', async () => {
+    const fixture = await fixtureBody();
+    const page = await pageFixture();
+    const requests: { url: string; method: string }[] = [];
+    const written: unknown[] = [];
+    const restoreGlobals = withGlobals({
+      isSecureContext: true,
+      ClipboardItem: class { constructor(public items: unknown) {} },
+      navigator: { language: 'en-US', clipboard: { write: async (list: unknown[]) => void written.push(list) } },
+    });
+    try {
+      const panel = await mountPanel(fixture, copyStub(fixture, { ok: true, html: COPY_FRAGMENT, images: 1, diagnostics: [] }, requests, page));
+      await settle();
+      const selected = (elements(toNode(panel.tree()), 'button').find((b) => b.props?.['data-review-start'] !== undefined)?.props?.['data-review-start']) as string;
+      click(panel, (b) => b.props?.['data-review-start'] === selected);
+      await settle();
+      const view = elements(toNode(panel.tree()), 'section').find((n) => n.props?.['data-review-view'] === selected)!;
+      // While the review view shows, its head carries the work's copy button (and only it).
+      const inView = elements(view, 'button').filter((b) => b.props?.['data-copy-work'] !== undefined);
+      expect(inView.map((b) => b.props?.['data-copy-work'])).toEqual([selected.split('/')[0]]);
+      expect(copyButtons(panel)).toHaveLength(1);
+      // Enlarged, the overlay's head offers it too.
+      click(panel, (b) => b.props?.['data-review-size'] === 'enlarge');
+      await settle();
+      expect(copyButtons(panel)).toHaveLength(2);
+      click(panel, (b) => b.props?.['data-review-size'] === 'restore');
+      await settle();
+      click(panel, (b) => b.props?.['data-copy-work'] === selected.split('/')[0]);
+      await settle();
+      expect(written).toHaveLength(1);
+      expect(requests.some((r) => r.url === '/dsh-writing-viewer/review-session/end')).toBe(false);
+      expect(elements(toNode(panel.tree()), 'section').some((n) => n.props?.['data-review-view'] === selected)).toBe(true);
+      expect(copyNotice(panel)?.props?.['data-copy-notice']).toBe('ok');
+      panel.restore();
+    } finally {
+      restoreGlobals();
+    }
+  });
+
+  it('shows the wa-cli diagnostic and leaves the clipboard alone when nothing is accepted (copy-nothing-accepted)', async () => {
+    const fixture = await fixtureBody();
+    const requests: { url: string; method: string }[] = [];
+    const written: unknown[] = [];
+    const restoreGlobals = withGlobals({
+      isSecureContext: true,
+      ClipboardItem: class { constructor(public items: Record<string, Promise<Blob>>) {} },
+      navigator: {
+        language: 'en-US',
+        clipboard: {
+          write: async (list: { items: Record<string, Promise<Blob>> }[]) => {
+            // A real clipboard awaits the promised blobs and fails with them.
+            await list[0]!.items['text/html'];
+            written.push(list);
+          },
+        },
+      },
+    });
+    try {
+      // The route's real shape: wa-cli's warnings precede the deciding error.
+      const body = {
+        ok: false, error: 'no accepted units',
+        diagnostics: [
+          { code: 'export.unaccepted', severity: 'warning', message: 'unit my-post not exported: not accepted', next: ['wa-cli review show my-post --dir /r --json'] },
+          { code: 'export.nothing-accepted', severity: 'error', message: 'no accepted units', next: ['wa-cli next --dir /r --json'] },
+        ],
+      };
+      const panel = await mountPanel(fixture, copyStub(fixture, body, requests));
+      await settle();
+      const work = copyButtons(panel)[0]!.props?.['data-copy-work'] as string;
+      click(panel, (b) => b.props?.['data-copy-work'] === work);
+      await settle();
+      expect(written).toEqual([]);
+      const notice = copyNotice(panel)!;
+      expect(notice.props?.['data-copy-notice']).toBe('failed');
+      expect(notice.props?.['role']).toBe('alert');
+      expect(textOf(notice)).toContain('export.nothing-accepted no accepted units');
+      expect(textOf(notice)).toContain('wa-cli next --dir /r --json');
+      expect(textOf(notice)).not.toContain('export.unaccepted');
+      panel.restore();
+    } finally {
+      restoreGlobals();
+    }
+  });
+
+  it('falls back to the selection copy outside a secure context, then retries on the next click (copy-insecure-context)', async () => {
+    const fixture = await fixtureBody();
+    const requests: { url: string; method: string }[] = [];
+    const log: string[] = [];
+    let allow = false;
+    const area = { value: '', setAttribute: () => {}, select: () => log.push('select') };
+    const data: Record<string, string> = {};
+    let listener: ((event: unknown) => void) | null = null;
+    const restoreGlobals = withGlobals({
+      isSecureContext: false,
+      navigator: { language: 'en-US' },
+      document: {
+        documentElement: { lang: '' },
+        body: { appendChild: () => {}, removeChild: () => {} },
+        createElement: () => area,
+        addEventListener: (_type: string, l: (event: unknown) => void) => (listener = l),
+        removeEventListener: () => (listener = null),
+        execCommand: (command: string) => {
+          log.push(command + ':' + allow);
+          if (allow) listener?.({ clipboardData: { setData: (t: string, v: string) => (data[t] = v) }, preventDefault: () => {} });
+          return allow;
+        },
+      },
+    });
+    try {
+      const panel = await mountPanel(fixture, copyStub(fixture, { ok: true, html: COPY_FRAGMENT, images: 2, diagnostics: [] }, requests));
+      await settle();
+      const work = copyButtons(panel)[0]!.props?.['data-copy-work'] as string;
+      // The browser refuses the copy after the fetch: the fragment is kept.
+      click(panel, (b) => b.props?.['data-copy-work'] === work);
+      await settle();
+      expect(log).toEqual(['select', 'copy:false']);
+      expect(area.value).toBe('正文\n\n图说');
+      expect(data).toEqual({});
+      expect(copyNotice(panel)?.props?.['data-copy-notice']).toBe('failed');
+      // The next click copies the kept fragment synchronously, without another fetch.
+      allow = true;
+      click(panel, (b) => b.props?.['data-copy-work'] === work);
+      await settle();
+      expect(log).toEqual(['select', 'copy:false', 'select', 'copy:true']);
+      expect(data).toEqual({ 'text/html': COPY_FRAGMENT, 'text/plain': '正文\n\n图说' });
+      expect(requests.filter((r) => r.url.startsWith('/dsh-writing-viewer/copy?'))).toHaveLength(1);
+      const notice = copyNotice(panel)!;
+      expect(notice.props?.['data-copy-notice']).toBe('ok');
+      expect(textOf(notice)).toContain('images embedded 1');
+      expect(textOf(notice)).toContain('1 image(s) not embedded');
+      panel.restore();
+    } finally {
+      restoreGlobals();
+    }
+  });
+
+  it('offers one button per part for a work with more than 7 images and copies each on its own click (copy-segments)', async () => {
+    const fixture = await fixtureBody();
+    const requests: { url: string; method: string }[] = [];
+    const written: string[] = [];
+    class FakeItem {
+      constructor(public items: Record<string, Promise<Blob>>) {}
+    }
+    const restoreGlobals = withGlobals({
+      isSecureContext: true,
+      ClipboardItem: FakeItem,
+      navigator: {
+        language: 'zh-CN',
+        clipboard: { write: async (list: FakeItem[]) => void written.push(await (await list[0]!.items['text/html']!).text()) },
+      },
+    });
+    const img = '<img src="data:image/png;base64,AA" alt="x" style="">';
+    const part1 = '<section style="a">' + img.repeat(7) + '</section>';
+    const part2 = '<section style="a">' + img.repeat(2) + '<p style="">参考链接</p></section>';
+    try {
+      const body = { ok: true, html: part1 + part2, images: 9, segments: [part1, part2], diagnostics: [] };
+      const panel = await mountPanel(fixture, copyStub(fixture, body, requests));
+      await settle();
+      const work = copyButtons(panel)[0]!.props?.['data-copy-work'] as string;
+      click(panel, (b) => b.props?.['data-copy-work'] === work);
+      await settle();
+      // The first click fetches once and writes nothing: the parts get their own buttons.
+      expect(written).toEqual([]);
+      const partButtons = () => elements(toNode(panel.tree()), 'button').filter((b) => b.props?.['data-copy-segment'] !== undefined);
+      expect(partButtons().map((b) => textOf(b))).toEqual(['复制第 1 段（图 1–7）', '复制第 2 段（图 8–9）', '复制全文']);
+      expect(textOf(copyNotice(panel)!)).toContain('2 段：公众号每次粘贴最多 7 张图');
+      click(panel, (b) => b.props?.['data-copy-segment'] === '0');
+      await settle();
+      click(panel, (b) => b.props?.['data-copy-segment'] === '1');
+      await settle();
+      click(panel, (b) => b.props?.['data-copy-segment'] === 'all');
+      await settle();
+      expect(written).toEqual([part1, part2, part1 + part2]);
+      expect(requests.filter((r) => r.url.startsWith('/dsh-writing-viewer/copy?'))).toHaveLength(1);
+      expect(partButtons()).toHaveLength(3);
+      expect(textOf(copyNotice(panel)!)).toContain('已复制 复制全文');
+      panel.restore();
+    } finally {
+      restoreGlobals();
+    }
+  });
+
+  it('copies the whole work from a child unit review and keeps the unsent inputs (copy-from-review-view)', async () => {
+    const fixture = await fixtureBody();
+    const requests: { url: string; method: string }[] = [];
+    const written: unknown[] = [];
+    const page = {
+      title: 'my-novel', strict: false, reviews: [], failures: [],
+      confirms: [{ kind: 'decision', unit: 'my-novel/ch-1', id: 'dec-9', label: '选视角', detail: '', options: [{ id: 'a', text: '甲' }], recommend: 'a', needsAnswer: true, canReject: false }],
+      units: [{ ref: 'my-novel/ch-1', stage: 'review', hasDraft: true, notes: [], global: [], paragraphs: [
+        { index: 1, line: 1, text: '正文', origin: 'human', findings: [], illustrations: [] },
+      ], illustrations: [] }],
+    };
+    const restoreGlobals = withGlobals({
+      isSecureContext: true,
+      ClipboardItem: class { constructor(public items: unknown) {} },
+      navigator: { language: 'en-US', clipboard: { write: async (list: unknown[]) => void written.push(list) } },
+    });
+    try {
+      const panel = await mountPanel(fixture, copyStub(fixture, { ok: true, html: COPY_FRAGMENT, images: 1, diagnostics: [] }, requests, page));
+      await settle();
+      // Select the novel, then its child unit ch-1, and start reviewing it.
+      const card = elements(toNode(panel.tree()), 'div').find((n) => n.props?.['data-work-card'] === 'my-novel')!;
+      (elements(card, 'button')[0]!.props?.['onClick'] as () => void)();
+      await settle();
+      click(panel, (b) => b.props?.['data-tree-ref'] === 'my-novel/ch-1');
+      await settle();
+      click(panel, (b) => b.props?.['data-review-start'] === 'my-novel/ch-1');
+      await settle();
+      // The author types an answer and a summary that are not sent yet.
+      const key = 'decision:my-novel/ch-1:dec-9';
+      const typeInto = (attr: string, value: string): void => {
+        const input = elements(toNode(panel.tree()), 'input').find((i) => i.props?.[attr] === key)!;
+        (input.props?.['onChange'] as (e: unknown) => void)({ target: { value } });
+      };
+      typeInto('data-review-answer', '第一人称');
+      typeInto('data-review-confirmation', '作者：用甲');
+      await settle();
+      click(panel, (b) => b.props?.['data-copy-work'] === 'my-novel');
+      await settle();
+      expect(requests.filter((r) => r.url.startsWith('/dsh-writing-viewer/copy?')).map((r) => new URL(r.url, 'http://x').searchParams.get('work'))).toEqual(['my-novel']);
+      expect(written).toHaveLength(1);
+      const tree = toNode(panel.tree());
+      expect(elements(tree, 'section').some((n) => n.props?.['data-review-view'] === 'my-novel/ch-1')).toBe(true);
+      expect(elements(tree, 'input').find((i) => i.props?.['data-review-answer'] === key)?.props?.['value']).toBe('第一人称');
+      expect(elements(tree, 'input').find((i) => i.props?.['data-review-confirmation'] === key)?.props?.['value']).toBe('作者：用甲');
+      expect(requests.some((r) => r.url === '/dsh-writing-viewer/review-session/end')).toBe(false);
+      panel.restore();
+    } finally {
+      restoreGlobals();
+    }
+  });
+
   it('ends the review view when the session was replaced for another unit (native-session-replaced)', async () => {
     const fixture = await fixtureBody();
     const page = await pageFixture();
@@ -1900,6 +2261,79 @@ describe('unit review controls', () => {
     const tree = t.renderPanel(h, { ...(await reviewState(ACTIVE)), reviewData: activeData(await pageFixture()) }, reviewActions().actions);
     expect(elements(tree, 'img')).toHaveLength(0);
     expect(elements(tree, 'figure')).toHaveLength(0);
+  });
+
+  it('covers the panel with the enlarged review view through the overlay (native-enlarge)', async () => {
+    const t = await hooks();
+    const page = {
+      title: 'my-post', strict: false, reviews: [], failures: [], confirms: [],
+      units: [{ ref: 'my-post', stage: 'review', hasDraft: true, notes: [], global: [], paragraphs: [
+        { index: 1, line: 1, text: '一段很长的正文', origin: 'human', findings: [], illustrations: ['fig-1'] },
+      ], illustrations: [
+        { id: 'fig-1', role: 'body', alt: '店内一角', title: null, content: 'mood', origin: 'agent', width: 1600, height: 900, claims: [], sources: [], referenced: true, available: true, url: 'illustration?unit=my-post&id=fig-1' },
+      ] }],
+    };
+    const overlay = t.renderReviewOverlay(h, { ...(await reviewState(ACTIVE)), reviewData: activeData(page), reviewEnlarged: true }, reviewActions().actions);
+    expect(overlay).not.toBeNull();
+    expect(overlay.props?.['data-review-overlay']).toBe('my-post');
+    expect(overlay.props?.['role']).toBe('dialog');
+    expect(elements(overlay, 'iframe')).toHaveLength(0);
+    // The overlay fills the panel (absolute, inset 0) with theme variables,
+    // never hardcoded colors, so light and dark stay readable.
+    expect(overlay.props?.['style']?.position).toBe('absolute');
+    expect(overlay.props?.['style']?.inset).toBe('0');
+    expect(String(overlay.props?.['style']?.background)).toContain('var(--dsw-alias-bg-layer-1');
+    expect(String(overlay.props?.['style']?.color)).toContain('var(--dsw-alias-label-primary');
+    // The same native review view renders inside, at the enlarged width.
+    expect(elements(overlay, 'section').some((n) => n.props?.['data-review-view'] === 'my-post')).toBe(true);
+    const img = elements(overlay, 'img')[0]!;
+    expect(img.props?.['src']).toBe('/dsh-writing-viewer/review/illustration?unit=my-post&id=fig-1');
+    // The overlay header offers restore; the detail-area copy offers enlarge.
+    expect(elements(overlay, 'button').some((b) => b.props?.['data-review-size'] === 'restore')).toBe(true);
+    const detail = t.renderPanel(h, { ...(await reviewState(ACTIVE)), reviewData: activeData(page) }, reviewActions().actions);
+    expect(elements(detail, 'button').some((b) => b.props?.['data-review-size'] === 'enlarge')).toBe(true);
+  });
+
+  it('collapses the overlay without ending the session or losing inputs (native-enlarge-exit)', async () => {
+    const t = await hooks();
+    const calls: string[] = [];
+    const bound = { ...reviewActions().actions, setReviewEnlarged: (open: boolean) => calls.push('size ' + open) };
+    const page = {
+      title: 'my-post', strict: false, reviews: [], failures: [],
+      confirms: [{ kind: 'decision', unit: 'my-post', id: 'dec-1', label: '选风格', detail: '', options: [{ id: 'a', text: '甲', recommend: true }], recommend: 'a', needsAnswer: false, canReject: false }],
+      units: [{ ref: 'my-post', stage: 'review', hasDraft: true, notes: [], global: [], paragraphs: [
+        { index: 1, line: 1, text: '正文', origin: 'human', findings: [], illustrations: [] },
+      ], illustrations: [] }],
+    };
+    const state = {
+      ...(await reviewState(ACTIVE)),
+      reviewData: activeData(page, { confirmDrafts: { 'decision:my-post:dec-1': { option: 'a', answer: '', confirmation: '作者：用甲' } } }),
+      reviewEnlarged: true,
+    };
+    const overlay = t.renderReviewOverlay(h, state, bound);
+    // The author's unsent summary renders inside the overlay.
+    const input = elements(overlay, 'input').find((i) => i.props?.['data-review-confirmation'] === 'decision:my-post:dec-1');
+    expect(input?.props?.['value']).toBe('作者：用甲');
+    // Esc collapses the overlay and consumes the key; the restore button does the same.
+    const consumed: string[] = [];
+    (overlay.props?.['onKeyDown'] as (e: unknown) => void)({ key: 'Escape', stopPropagation: () => consumed.push('stop'), preventDefault: () => consumed.push('prevent') });
+    expect(calls).toEqual(['size false']);
+    expect(consumed).toEqual(['stop', 'prevent']);
+    // Other keys pass through untouched.
+    (overlay.props?.['onKeyDown'] as (e: unknown) => void)({ key: 'Tab' });
+    expect(calls).toEqual(['size false']);
+    expect(consumed).toEqual(['stop', 'prevent']);
+    const restore = elements(overlay, 'button').find((b) => b.props?.['data-review-size'] === 'restore')!;
+    (restore.props?.['onClick'] as () => void)();
+    expect(calls).toEqual(['size false', 'size false']);
+    // Collapsing never ends the review session.
+    expect(calls.some((c) => c === 'end')).toBe(false);
+  });
+
+  it('renders no overlay when the review is not enlarged', async () => {
+    const t = await hooks();
+    const state = { ...(await reviewState(ACTIVE)), reviewData: activeData(await pageFixture()) };
+    expect(t.renderReviewOverlay(h, state, reviewActions().actions)).toBeNull();
   });
 
   it('lists recent failures, a strict review queue, and keeps notices and the invalid-selection hint visible', async () => {

@@ -1,0 +1,69 @@
+schema: strict-spec-driven/delta-spec/v1
+schema_version: 1
+artifact_type: delta_spec
+schema_file: templates/strict-spec-driven/schemas/delta-spec.yaml
+target_spec: export
+operations:
+  ADDED:
+    paste-html-export:
+      strength: MUST
+      statement: 'wa-cli export <work> --format paste-html 必须按 export-markdown 选出验收记录有效的单元（跳过单元的诊断同 export-markdown 与 export-reopen-next，没有可导出单元时报告 export.nothing-accepted、不写任何文件、退出码为 1），去掉作者批注与单处豁免注释，写出一个可粘贴页（Paste-ready Page）：一个完整的 HTML 文档，--output 的规则同 export-output，省略时为 .writing-anything/exports/<work>.paste.html，文件原子写入。页面的正文容器按 wechat-html-export 的规则渲染（同样的标签、样式主题与取值检查、转义、输入上限，链接转为脚注编号与文末参考链接），只有以下不同：独占一段、地址为可用本地配图（已登记、文件存在、SHA-256 与登记一致、格式为 PNG 或 JPEG，见 illustrations 主规格）的图片输出为 img 元素——src 为 data:image/png 或 data:image/jpeg 的 data URI，alt 为替代文字，只带 src、alt 与 style 属性——其后为一个图说段落（标题，没有时为替代文字）。原始字节超过 1 MiB 的配图为粘贴重新编码：宽高之积超过 4000 万像素时不内嵌；否则缩到最长边不超过 1600 像素、在白底上合成后编码为 JPEG，依次尝试质量 85、75、65、55，仍超过 1 MiB 时最长边降到 1200、再到 900 重试，取第一个不超过 1 MiB 的结果以 data:image/jpeg 内嵌，都超过时不内嵌；资产目录与配图清单中仍为原图。内嵌按内嵌后的字节累计（同一张图只计一次），总量不超过 32 MiB，超出后的配图、不能内嵌的配图与其余图片（行内图片、外链地址）按 wechat-html-export 输出「【配图 n】」占位，编号只计正文中的图片、规则不变；根单元的封面图（Cover Image）不出现在页面中；页面始终不含 AI 参与说明（AI-generated Content Label），不受 ai_disclosure 设置影响，--json 的 export.disclosure 仍按 ai-disclosure 计算并报告。正文按内嵌图像分段：顶层块依次归入当前段，加入某块会使当前段的内嵌图像超过 7 张时从该块开始新段（单个块超过 7 张时独占一段），每段是一个独立的根 section，参考链接段落在最后一段。只有一段时，正文容器之外只有一个「复制图文」按钮与一行操作说明；有多段时，按段给出「复制第 n 段（图 a–b）」按钮，另有一个「复制全文」按钮，操作说明提示公众号每次粘贴最多 7 张图、需要分段粘贴。点击按钮把对应段（或全文）的内容以 text/html 与 text/plain 两种格式写入剪贴板，剪贴板接口不可用或被拒绝时退回为选中对应内容后复制，并在页面上显示是否成功；页面只含一个内容固定、不随导出内容变化的 script 元素，带 Content-Security-Policy（default-src ''none''，只放行内联样式、data: 图片与按 SHA-256 哈希放行的该脚本），不引用任何外部资源，可以离线打开。正文中的本地配图与根单元封面按 export-markdown 复制到资产目录（导出文件去掉扩展名加 .assets），并按 wechat-html-export 的规则在导出文件同目录写出配图清单（导出文件去掉 .html 后缀加 .images.md），作为目标编辑器不接受内嵌图片时的兜底；--json 输出与 wechat-html 相同的 export 字段（含 path、images、assets、imageList 与 disclosure）。--front-matter 时报告 input.invalid-value（field 为 front-matter），不写文件，退出码为 1。不加 --json 时与其他格式一样输出说明行（导出路径、AI 参与说明统计、配图清单与资产目录）。'
+      scenarios:
+        paste-embedded:
+          - GIVEN: 作品 post 已验收，正文由 wa-cli draft write 写入（有 AI 参与段落），第 2 段为独占一段的 ![连接池示意](illustrations/fig-1.png "连接池")，fig-1 已登记且可用，根单元另登记了封面 cover，config.yaml 的 ai_disclosure 为 both
+          - WHEN: 运行 wa-cli export post --format paste-html --dir D --json
+          - THEN: 退出码为 0；导出文件为 .writing-anything/exports/post.paste.html；正文容器含一个 src 以 data:image/png;base64, 开头、alt 为「连接池示意」的 img 元素与图说「连接池」，不含「【配图 1】」，页面中没有封面图像；页面不含 AI 参与说明文字，export.disclosure 不为 null；changedPaths 含该文件、资产目录 .writing-anything/exports/post.paste.assets 中的封面与 fig-1 以及配图清单 .writing-anything/exports/post.paste.images.md
+        paste-safe-page:
+          - GIVEN: 作品 post 已验收，正文含 <script>alert(1)</script>、链接 [文档](https://example.com/doc) 与行内的外链图片 ![图标](https://example.com/icon.png)
+          - WHEN: 分别对正文不同的两个作品运行 wa-cli export <作品> --format paste-html --dir D --json
+          - THEN: '<script>alert(1)</script> 以转义后的文字出现；页面只有一个 script 元素，两次导出中该元素的内容相同；Content-Security-Policy 含 default-src ''none''、img-src data: 与 script-src ''sha256-；页面没有指向 example.com 的 img、link 或 script，外链图片显示为「【配图 1：图标】」，链接文字后有 [1] 且文末参考链接列出该地址'
+        paste-front-matter:
+          - GIVEN: 作品 post 已验收
+          - WHEN: 运行 wa-cli export post --format paste-html --front-matter --dir D --json
+          - THEN: diagnostics 中有一条错误码为 input.invalid-value、field 为 front-matter 的诊断，不写文件，退出码为 1
+        paste-nothing-accepted:
+          - GIVEN: 作品 post 没有验收
+          - WHEN: 运行 wa-cli export post --format paste-html --dir D --json
+          - THEN: diagnostics 中有一条错误码为 export.nothing-accepted 的诊断，没有写出页面、资产目录与配图清单，退出码为 1
+        paste-other-formats-unchanged:
+          - GIVEN: 作品 post 已验收，正文引用了已登记的配图，有 AI 参与段落
+          - WHEN: 分别运行 wa-cli export post 的 markdown、wechat-html 与 text 格式导出
+          - THEN: 三个导出文件、资产目录、配图清单与 --json 输出与本变更之前相同（wechat-html 仍为「【配图 n】」占位并含 AI 参与说明）
+        paste-reencode-large:
+          - GIVEN: 作品 post 已验收，正文有独占一段的已登记配图 big（2000×1500 的 PNG，约 3 MiB）与 small（约 200 KB 的 PNG）
+          - WHEN: 运行 wa-cli export post --format paste-html --dir D --json
+          - THEN: 退出码为 0；big 以 data:image/jpeg 内嵌，解码后的字节不超过 1 MiB、宽 1600 像素；small 仍以 data:image/png 原样内嵌；资产目录中 big 的文件与登记的原图逐字节相同
+        paste-pixel-limit:
+          - GIVEN: 作品 post 已验收，正文有独占一段的已登记配图 huge（8000×6000 的 PNG，不超过 10 MiB）
+          - WHEN: 运行 wa-cli export post --format paste-html --dir D --json
+          - THEN: 退出码为 0；huge 处为「【配图 1】」占位，配图清单与资产目录照常列出原图
+        paste-segments:
+          - GIVEN: 作品 post 已验收，正文有 9 张独占一段的已登记小配图，另一个作品 short 只有 7 张
+          - WHEN: 分别运行 wa-cli export <作品> --format paste-html --dir D --json
+          - THEN: post 的页面有两个段（第 1 段 7 张、第 2 段 2 张），工具栏有「复制第 1 段（图 1–7）」「复制第 2 段（图 8–9）」与「复制全文」按钮，参考链接在第 2 段；short 的页面只有一个段与一个「复制图文」按钮
+        paste-embed-budget:
+          - GIVEN: 作品 post 已验收，正文有 33 张独占一段、已登记且可用的配图 fig-1 至 fig-33，各略小于 1 MiB（不需要重新编码）
+          - WHEN: 运行 wa-cli export post --format paste-html --dir D --json
+          - THEN: 退出码为 0；fig-1 至 fig-32（累计不超过 32 MiB）以 data URI 内嵌，fig-33 处为「【配图 33】」占位；配图清单列出全部 33 张配图及其资产路径
+    paste-html-print:
+      strength: MUST
+      statement: wa-cli export <work> --format paste-html --print 必须是只读的：按 paste-html-export 的同样规则选出单元并渲染正文容器中的内容，不写导出文件、资产目录与配图清单，不创建目录；同时给出 --output 时报告 input.invalid-value（field 为 output）。--json 时 export.html 为全文 HTML 片段（各段依次拼接，与同一时刻写出的可粘贴页正文容器中各段的内容相同，不含页面外壳、按钮、script 与 AI 参与说明），export.segments 为各段片段的数组（至少一项，只有一段时与 export.html 相同），export.path 与 export.imageList 为 null，export.assets 为空数组，changedPaths 为空数组，export.images 与 export.disclosure 同 paste-html-export；不加 --json 时把片段写到标准输出。其他格式与不带 --print 的 paste-html 的 --json 输出不含 html 与 segments 字段。没有可导出单元时报告 export.nothing-accepted、退出码为 1。--format 不是 paste-html 时给出 --print 报告 input.invalid-value（field 为 print），不写文件，退出码为 1。
+      scenarios:
+        print-readonly:
+          - GIVEN: 作品 post 已验收，正文引用了已登记且可用的配图 fig-1，根单元登记了封面 cover
+          - WHEN: 运行 wa-cli export post --format paste-html --print --dir D --json
+          - THEN: 退出码为 0；changedPaths 为空数组，.writing-anything/exports/ 下没有新文件；export.html 含 src 以 data:image/ 开头的 img 元素，不含 <script、<html 与 AI 参与说明，不含封面图像；export.path 与 export.imageList 为 null，export.assets 为空数组
+        print-wrong-format:
+          - GIVEN: 作品 post 已验收
+          - WHEN: 运行 wa-cli export post --format wechat-html --print --dir D --json
+          - THEN: diagnostics 中有一条错误码为 input.invalid-value、field 为 print 的诊断，不写文件，退出码为 1
+        print-nothing-accepted:
+          - GIVEN: 作品 post 没有验收
+          - WHEN: 运行 wa-cli export post --format paste-html --print --dir D --json
+          - THEN: diagnostics 中有一条错误码为 export.nothing-accepted 的诊断，export 为 null，changedPaths 为空数组，退出码为 1
+        print-segments:
+          - GIVEN: 作品 post 已验收，正文有 9 张独占一段的已登记小配图
+          - WHEN: 运行 wa-cli export post --format paste-html --print --dir D --json
+          - THEN: export.segments 有两项，各含 7 与 2 个 img 元素，export.html 等于两项依次拼接
+  MODIFIED: {}
+  REMOVED: {}

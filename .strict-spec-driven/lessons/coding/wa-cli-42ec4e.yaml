@@ -8,7 +8,7 @@ lesson:
 category: coding
 status: active
 created_at: '2026-10-20T02:05:17.087Z'
-updated_at: '2026-10-20T04:52:00.531Z'
+updated_at: '2026-10-23T09:54:50.356Z'
 context: workspace-snapshot 变更为 DSH 插件的快照服务以注入式 CliRunner 调用 wa-cli 只读命令（status/validate/next/timeline --json），并在 delta 规格中宣称快照前后工作区文件清单、内容与修改时间完全一致
 observation: fresh-context 评审用真实构建的 wa-cli 二进制对夹具副本实测：一次只读 status --json 就新建了 .writing-anything/audit.log（265 B）；internal/cli 的审计契约对每次调用（含只读命令）都追加一行，子进程路径无抑制手段（runQuiet 仅进程内 MCP）。而全部插件单测都用假执行器（罐装 JSON、零副作用），只读约束测试因此全绿——假执行器恰好掩盖了真实二进制的唯一写入路径
 takeaway: 凡以子进程消费 wa-cli（或任何带运维副作用的 CLI）并宣称只读的组件：先用真实二进制对干净副本实测一次完整调用序列，确认副作用清单；把不可避免的副作用（如 audit.log 追加）作为显式例外写进自己的规格与文档，并用写入型假二进制（模拟副作用 + 输出罐装数据）钉住「例外之外逐字节不变」，而不是用零副作用假执行器自证清白
@@ -20,3 +20,6 @@ occurrences:
   - origin: polish-release
     date: '2026-10-20'
     evidence: 性能探针夹具起初按层级嵌套路径假设单元引用并预期场景单元有目录；改由 gen-large-workspace.mjs 经 wa-cli 真实命令生成后立即暴露真实形态——单元引用是扁平的 <work>/<unit-id>，无产物的场景单元根本没有目录（快照 works[].units 只含根单元）——罐装/手写夹具会把这两个假设固化进测试
+  - origin: paste-ready-copy
+    date: '2026-10-23'
+    evidence: DSH 插件「复制图文」以 wa-cli export --format paste-html --print 只读取用正文；export 是回捞关键命令，--print 调用照样记 unit 参与 next 的回捞配对：面板复制失败会让 next 给 Agent 错误的「export 尚未成功重试」提示，复制成功又会消掉真实导出失败的提示。评审 SF-1 发现后改为 --print 的审计行不记 unit，并修订 cli 主规格 audit-log。

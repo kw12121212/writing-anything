@@ -1,0 +1,63 @@
+schema: strict-spec-driven/question-list/v1
+schema_version: 1
+artifact_type: question_list
+schema_file: templates/strict-spec-driven/schemas/question-list.yaml
+change: paste-ready-copy
+open: []
+resolved:
+  - id: requirement-problem
+    question: What is concretely going wrong today, and for whom?
+    context: 需求问答：现在具体出了什么问题、影响谁。
+    answer: 作者在 DSH 面板审阅视图中复制配图文章，粘贴到浏览器里的公众号编辑器或在线文档/博客平台时，图片带不过去，只能连图带文分开处理。
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-outcome
+    question: What observable difference proves the problem is solved?
+    context: 需求问答：怎样从外部看出问题已解决。
+    answer: 作者一次复制已验收的整篇作品，粘贴到公众号编辑器或飞书、语雀、知乎等在线文档后，正文与配图一起出现；复制出的内容是纯内容，不含 AI 参与说明，也不含封面。
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-trigger
+    question: Why now — what forced this?
+    context: 需求问答：为什么现在做。
+    answer: 配图环节（article-illustrations）上线后，作者实际复制配图文章时发现图片丢失。
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-non-goals
+    question: What must explicitly not change?
+    context: 需求问答：哪些行为必须保持不变。
+    answer: 不复制未验收的正文；不做图床上传；封面不进正文；公众号不认 base64 图片时保留现有配图清单作为兜底，其他导出格式不变。
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-interpretation
+    question: Which reading of the request is intended, where more than one is possible?
+    context: 需求问答：存在多种理解时取哪一种。
+    answer: 既要 wa-cli 导出一份可在浏览器打开后复制的成品页，也要在 DSH 面板加「复制图文」按钮；复制内容与导出一致，只含已验收单元，并且始终不带 AI 参与说明（只针对可粘贴页与面板复制，不改 ai_disclosure 设置）。
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: wechat-base64-paste
+    question: 公众号编辑器是否接受粘贴进来的 base64 内嵌图片？
+    context: 影响：只决定 wa-publish 技能与 README 如何写公众号的使用说明（直接粘贴即可，还是粘贴后需按配图清单补传部分或全部图片），不影响 paste-html 与面板按钮的实现，因为配图清单兜底已在范围内。网上说法不一：花生排版器等工具称复制到公众号时把图片转为 base64 即可，也有工具称微信会拦截 base64 图片。建议：实现完成后由作者在 mp.weixin.qq.com 图文编辑器中粘贴一篇含 2 至 3 张配图（含一张接近 10 MiB）的可粘贴页实测，并顺带验证飞书文档；按结果写入 wa-publish。实现可以先进行，归档前需要作者给出实测结论。
+    answer: 作者选择保留配图清单兜底：paste-html 照常内嵌 base64 并照常写出资产目录与配图清单；公众号是否接受由验证任务 wechat-paste-trial 在实现后实测，结论写入 wa-publish 技能，不影响实现。
+    status: resolved
+    kind: technical
+    answered_by: human
+  - id: wechat-paste-limits
+    question: 公众号图文编辑器粘贴 base64 图片有哪些限制？
+    context: 作者在 mp.weixin.qq.com 图文编辑器中逐页实测可粘贴页（经 Tailscale HTTPS 访问）。
+    answer: 接受 base64 图片；单张约 1 MiB 成功、1.8 MiB 失败；7 张成功、8 张失败（无论合计 0.8 MiB 还是 2 MiB）；2 张各 1 MiB 成功，无总量限制；任一限制超出时整次粘贴的图片全部丢失，文字保留。
+    status: resolved
+    kind: technical
+    answered_by: human
+  - id: oversize-and-count-handling
+    question: 超过 1 MiB 的配图与超过 7 张配图的文章怎么处理？
+    context: 选项：大图自动压缩或改占位；多图分段复制、前 7 张内嵌其余占位或只提示。
+    answer: 大图自动压缩（最长边 ≤1600px、转 JPEG、透明填白、降质量至 ≤1 MiB，资产目录仍为原图）；超过 7 张时分段复制（每段至多 7 张，按段落边界切分）。
+    status: resolved
+    kind: technical
+    answered_by: human

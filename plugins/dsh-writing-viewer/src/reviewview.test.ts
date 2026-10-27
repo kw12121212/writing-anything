@@ -5,6 +5,8 @@ import {
   reviewAfterStatus,
   reviewEnded,
   reviewLabelsFor,
+  overlayDismissKey,
+  reviewOverlayShown,
   reviewStartBody,
   reviewViewModel,
 } from './reviewview';
@@ -42,6 +44,30 @@ describe('review view model', () => {
     const active = reviewAfterStart('my-post', 200, { ok: true, session: { unit: 'my-post', startedAt: 't1' } });
     expect(reviewEnded(active).phase).toBe('ended');
     expect(reviewEnded(IDLE_REVIEW)).toBe(IDLE_REVIEW);
+  });
+
+  it('labels the enlarge and restore controls in both languages', () => {
+    expect(zh.enlarge).toBe('放大');
+    expect(zh.restore).toBe('还原');
+    expect(en.enlarge).toBe('Enlarge');
+    expect(en.restore).toBe('Restore');
+  });
+
+  it('dismisses the enlarged overlay on Escape and no other key', () => {
+    expect(overlayDismissKey({ key: 'Escape' })).toBe(true);
+    expect(overlayDismissKey({ key: 'Esc' })).toBe(false);
+    expect(overlayDismissKey({ key: 'Tab' })).toBe(false);
+    expect(overlayDismissKey({})).toBe(false);
+    expect(overlayDismissKey(null)).toBe(false);
+  });
+
+  it('shows the enlarged overlay only while its own review is active (native-enlarge)', () => {
+    const active = reviewAfterStart('my-post', 200, { ok: true, session: { unit: 'my-post', startedAt: 't1' } });
+    expect(reviewOverlayShown(active, true)).toBe(true);
+    // Not enlarged, or the session ended anywhere: no overlay.
+    expect(reviewOverlayShown(active, false)).toBe(false);
+    expect(reviewOverlayShown(reviewEnded(active), true)).toBe(false);
+    expect(reviewOverlayShown(IDLE_REVIEW, true)).toBe(false);
   });
 
   it('names the authority to allow when the origin guard refused (panel-origin-rejected)', () => {

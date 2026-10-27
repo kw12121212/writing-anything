@@ -1,0 +1,42 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: paste-ready-copy
+  status: proposed
+summary:
+  what:
+    - 新增导出格式 wa-cli export <work> --format paste-html：生成一个完整的可粘贴页（Paste-ready Page），正文按公众号 HTML（wechat-html）同样的规则渲染，正文中可用的本地配图（Illustration）以 base64 data URI 内嵌为 img 元素并保留图说，页面带一个「复制图文」按钮，把正文以 text/html 与 text/plain 一并写入剪贴板，不用按钮时 Ctrl+A、Ctrl+C 也只复制正文；可粘贴页始终不含 AI 参与说明（AI-generated Content Label），与 ai_disclosure 设置无关，--json 输出仍报告 export.disclosure。
+    - paste-html 增加只读的 --print 模式：不写任何文件，把可粘贴正文片段放在 --json 输出的 export.html 中，changedPaths 为空，供 DSH 插件这类不得写项目目录的调用方取用。
+    - DSH 插件在作品根单元详情区与审阅视图头部提供「复制图文」按钮：经插件 host 以 wa-cli export --format paste-html --print 取得整篇作品已验收单元的可粘贴正文并写入剪贴板（剪贴板 API 不可用时退回选区复制），没有可导出单元时显示 wa-cli 给出的原因、不写剪贴板。
+    - wa-publish 技能补充复制图文的用法；术语表加入可粘贴页（Paste-ready Page）。
+    - 按公众号实测的粘贴限制调整可粘贴正文：超过 1 MiB 的正文配图在内嵌前自动缩到最长边不超过 1600 像素并转为 JPEG（透明区域填白），逐档降低质量直到不超过 1 MiB，资产目录与配图清单仍为原图；正文内嵌配图超过 7 张时按段落边界切成每段至多 7 张图的分段，可粘贴页与 DSH 面板提供「复制第 n 段」与「复制全文」按钮，不超过 7 张时仍只有一个「复制图文」按钮。
+  why:
+    - 作者在 DSH 面板审阅视图中选中配图文章复制，粘贴到公众号编辑器或飞书、语雀、知乎等在线文档时图片丢失：面板中的配图经带会话令牌的本地代理地址加载，目标站点取不到；wechat-html 导出只有「【配图 n】」占位，markdown 导出引用本地相对路径，阅读页（Reading View）是带出处与发现项的逐段原文，都不能连图带文复制。作者只能逐张手动上传配图，费时易错。
+    - 作者实测（2026-10-23，mp.weixin.qq.com 图文编辑器）：公众号接受粘贴进来的 base64 图片，但单张超过约 1 MiB（1.8 MiB 失败、1 MiB 成功）或一次粘贴超过 7 张图（8 张失败、7 张成功）时整次粘贴的图片全部丢失，没有总量限制（2 张各 1 MiB 成功）；原样内嵌的大图或图多的文章在公众号里一张图都带不过去。
+scope:
+  in:
+    - dsh-plugin 主规格：新增「复制图文」按钮需求（入口位置、只复制已验收成品、剪贴板写入与非安全上下文的退回方式、无可导出单元与失败时的提示、不写项目目录）。
+    - skills 主规格与 wa-publish 技能：导出后告知作者可用 paste-html 或面板按钮复制图文，公众号不认 base64 图片时按配图清单上传。
+    - docs/GLOSSARY.md 加入可粘贴页（Paste-ready Page）。
+    - export 主规格：新增 paste-html-export（可粘贴页结构、配图内嵌、32 MiB 内嵌上限与超出时的占位、封面不进正文、资产目录与配图清单兜底、始终不含 AI 参与说明、默认路径 .writing-anything/exports/<work>.paste.html）与 paste-html-print（只读片段输出）两条需求。
+    - export 主规格 paste-html-export 与 paste-html-print：超过 1 MiB 的配图为粘贴重新编码（有像素上限，超出或压不到 1 MiB 时改为占位）；正文内嵌配图分段（每段至多 7 张）、页面分段按钮与「复制全文」，--print 输出 export.segments。
+    - dsh-plugin 主规格 copy-illustrated：多段时面板提供「复制第 n 段」与「复制全文」按钮，各段独立复制与重试。
+    - 技术标准 workspace-artifacts 的 trusted-data-uri：允许对 wa-cli 自身从已校验图片重新编码得到的 JPEG 字节构造受信 data URI。
+    - 新增场景 illustrations/copy-out-illustrated「作者把定稿图文复制到公众号或在线文档」；技术标准以 delta tech 修订：workspace-artifacts/trusted-data-uri（允许重新编码的 JPEG 字节）、dsh-plugin-structure 新增 plugin-cli-diagnostic-selection、cli-contract 新增 print-payload-size-budget。
+  out:
+    - 图床上传或把配图改写为 https 地址；wa-cli 不联网。
+    - 复制未验收的正文；面板按钮只复制与导出一致的已验收单元。
+    - 关闭或删除 markdown、wechat-html、text 导出中的 AI 参与说明；ai_disclosure 的取值集合不变。
+    - 加载外链图片（http/https）：可粘贴页中仍为「【配图 n】」占位。
+    - 链接渲染方式调整：可粘贴页与 wechat-html 一样把链接转为脚注编号与文末参考链接。
+    - 封面图（Cover Image）进入正文。
+    - 按目标平台切换的参数（如 --target wechat）：压缩与分段对所有粘贴目标一律生效，「复制全文」供不限张数的目标使用。
+    - 资产目录与配图清单中的图片压缩：作者手动上传时仍用原图。
+unchanged_behavior:
+  - markdown、wechat-html、text 三种导出的文件内容、资产目录、配图清单与 --json 输出与本变更之前一致。
+  - 导出只包含验收记录有效的单元；没有可导出单元时报告 export.nothing-accepted 且不写文件。
+  - 阅读页（静态页与 --serve）的内容与行为不变。
+  - ai_disclosure 配置的合法取值仍只有 footer、metadata、both。
+  - DSH 插件除新增的「复制图文」按钮外，不点按钮时面板与审阅视图的显示与行为不变；插件仍不向项目目录写入任何文件。

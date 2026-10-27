@@ -1,0 +1,108 @@
+schema: strict-spec-driven/scene/v1
+schema_version: 1
+artifact_type: scene
+schema_file: templates/strict-spec-driven/schemas/scene.yaml
+scene:
+  id: copy-out-illustrated
+  title: 作者把定稿图文复制到公众号或在线文档
+area: illustrations
+status: draft
+actors:
+  - name: 作者
+    role: 在 DSH 面板或浏览器中复制已验收作品的图文，粘贴到公众号编辑器或飞书、语雀、知乎等在线文档，必要时按配图清单补传配图
+  - name: Agent
+    role: 按 wa-publish 导出可粘贴页，告知作者两种复制入口与配图清单兜底
+  - name: wa-cli
+    role: 只选取验收有效的单元，渲染内嵌配图、不含 AI 参与说明与封面的可粘贴正文，写出可粘贴页或以只读方式输出片段
+  - name: DSH 插件
+    role: 提供「复制图文」按钮，经只读的 wa-cli 调用取得可粘贴正文并写入剪贴板，不向项目目录写文件
+preconditions:
+  - 作品至少有一个验收记录有效的单元
+  - 正文中的本地配图已登记并随验收锁定（没有配图时同样可以复制）
+main_flow:
+  agent-export-page:
+    action: 发布时 Agent 按 wa-publish 运行 wa-cli export <作品> --format paste-html，交给作者可粘贴页路径与配图清单，并说明面板里的「复制图文」按钮
+    covered_by:
+      - spec_id: skills
+        requirement_id: publish-copy-guidance
+      - spec_id: export
+        requirement_id: paste-html-export
+  click-copy:
+    action: 作者在 DSH 面板选中作品根单元或在审阅视图头部点「复制图文」（也可以在浏览器打开可粘贴页点同名按钮）
+    covered_by:
+      - spec_id: dsh-plugin
+        requirement_id: copy-illustrated
+      - spec_id: export
+        requirement_id: paste-html-export
+  fetch-paste:
+    action: 插件 host 以 wa-cli export <作品> --format paste-html --print --json 取得只含已验收单元的正文片段：可用配图以 data URI 内嵌，不含封面与 AI 参与说明，不写任何文件
+    covered_by:
+      - spec_id: export
+        requirement_id: paste-html-print
+      - spec_id: dsh-plugin
+        requirement_id: copy-illustrated
+  write-clipboard:
+    action: 面板把片段以 text/html 与 text/plain 写入剪贴板并提示复制成功
+    covered_by:
+      - spec_id: dsh-plugin
+        requirement_id: copy-illustrated
+  paste-target:
+    action: 作者在公众号编辑器或在线文档中粘贴，正文与配图一起出现
+    no_coverage_reason: 粘贴后的显示由第三方编辑器决定，系统只能保证剪贴板中的 HTML 含内嵌配图；公众号的实际表现由验证任务实测并写入 wa-publish
+exception_flows:
+  nothing-accepted:
+    trigger: 作品没有验收记录有效的单元
+    steps:
+      show-reason:
+        action: wa-cli 报告 export.nothing-accepted，面板显示其原因与下一步命令，不写剪贴板
+        covered_by:
+          - spec_id: export
+            requirement_id: paste-html-print
+          - spec_id: dsh-plugin
+            requirement_id: copy-illustrated
+  clipboard-unavailable:
+    trigger: DSH 不在安全上下文中（如经 Tailscale 以 http 访问）或浏览器拒绝剪贴板写入
+    steps:
+      fallback-copy:
+        action: 面板退回为选中离屏正文后复制；仍失败时提示作者改用导出的可粘贴页复制
+        covered_by:
+          - spec_id: dsh-plugin
+            requirement_id: copy-illustrated
+  image-not-embedded:
+    trigger: 配图超出 32 MiB 内嵌上限，或图片是外链、行内图片
+    steps:
+      placeholder:
+        action: 该处保留「【配图 n】」占位，作者按配图清单上传对应图片
+        covered_by:
+          - spec_id: export
+            requirement_id: paste-html-export
+  editor-drops-base64:
+    trigger: 目标编辑器丢弃或拦截粘贴进来的 base64 图片
+    steps:
+      upload-by-list:
+        action: 作者按导出的配图清单与资产目录手动上传配图
+        covered_by:
+          - spec_id: skills
+            requirement_id: publish-copy-guidance
+          - spec_id: export
+            requirement_id: paste-html-export
+  over-seven-images:
+    trigger: 作品正文的内嵌配图超过 7 张（公众号每次粘贴最多 7 张）
+    steps:
+      copy-by-segment:
+        action: 可粘贴页与面板给出「复制第 n 段」按钮，作者逐段复制并依次粘贴到公众号；粘贴到飞书等不限张数的目标时用「复制全文」
+        covered_by:
+          - spec_id: export
+            requirement_id: paste-html-export
+          - spec_id: dsh-plugin
+            requirement_id: copy-illustrated
+          - spec_id: skills
+            requirement_id: publish-copy-guidance
+  oversized-image:
+    trigger: 某张配图的原始字节超过 1 MiB（公众号单张粘贴上限）
+    steps:
+      reencode:
+        action: wa-cli 在可粘贴正文中把它缩小并重新编码为不超过 1 MiB 的 JPEG；像素过多或压不到 1 MiB 时改为「【配图 n】」占位，作者按配图清单上传原图
+        covered_by:
+          - spec_id: export
+            requirement_id: paste-html-export

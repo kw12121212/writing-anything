@@ -1,0 +1,14 @@
+# 交接记录（Handoff Note）；由 wa-cli handoff write 追加，新会话经 wa-cli next 接续。
+
+schema_version: 1
+notes:
+  - id: handoff-1
+    written_at: "2026-10-19T16:36:12Z"
+    done:
+      - 建立工作区快照测试夹具
+    todo:
+      - 补写场景正文
+    instructions:
+      - 保持只读
+    risks:
+      - 无

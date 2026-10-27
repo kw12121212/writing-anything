@@ -861,6 +861,7 @@ describe('apply setup gate', () => {
       '/dsh-writing-viewer/review-session',
       '/dsh-writing-viewer/review-session/end',
       '/dsh-writing-viewer/review',
+      '/dsh-writing-viewer/copy',
     ]);
     expect(injected.some((entry) => entry.names.includes('skills'))).toBe(false);
   });
@@ -875,6 +876,7 @@ describe('apply setup gate', () => {
       '/dsh-writing-viewer/review-session',
       '/dsh-writing-viewer/review-session/end',
       '/dsh-writing-viewer/review',
+      '/dsh-writing-viewer/copy',
       SETUP_PATH,
     ]);
     expect(injected.some((entry) => entry.names.includes('skills'))).toBe(true);

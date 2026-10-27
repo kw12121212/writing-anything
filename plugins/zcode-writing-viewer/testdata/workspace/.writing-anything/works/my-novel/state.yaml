@@ -1,0 +1,9 @@
+# 状态台账（State Ledger）；请用 wa-cli state propose 登记状态变更提议，作者经 wa-cli state confirm 确认后生效。
+
+schema_version: 1
+events:
+  - id: state-1
+    scene: my-novel/scene-1
+    entry: lin-che
+    state: 接过了舵轮，成为代理船长
+    status: proposed

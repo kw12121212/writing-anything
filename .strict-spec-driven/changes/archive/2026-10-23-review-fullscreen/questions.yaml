@@ -1,0 +1,56 @@
+schema: strict-spec-driven/question-list/v1
+schema_version: 1
+artifact_type: question_list
+schema_file: templates/strict-spec-driven/schemas/question-list.yaml
+change: review-fullscreen
+open: []
+resolved:
+  - id: requirement-problem
+    question: What is concretely going wrong today, and for whom?
+    context: 'Why this is asked: the change is planned against a need, and the need lives only with the requester. A "problem" here means what someone does or suffers today — not a feature that is missing. What a sufficient answer contains: who is affected, what they do today instead, and how often.'
+    answer: 作者在 DSH 面板审阅单元时，审阅视图显示在单元详情列里，非常窄：正文换行密集、配图（Illustration）被压得很小，正文与配图都看不清；只能离开面板去浏览器阅读页看图文。
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-outcome
+    question: What observable difference proves the problem is solved?
+    context: 'Why this is asked: without a success condition, nobody can tell afterwards whether the change worked. "Observable" means someone outside the system can check it without reading the code.'
+    answer: 作者在审阅视图头部点「放大」后，同一审阅内容铺满整个面板区域，正文与配图可读；点「还原」或按 Esc 回到详情区，会话未结束、已填写的原话摘要仍在。
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-trigger
+    question: Why now — what forced this?
+    context: 'Why this is asked: work that nothing forced is the work most often thrown away later.'
+    answer: v0.8.0 刚上线配图功能，作者实际打开审阅视图查看图文，发现窄列里正文与配图都看不清。
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-non-goals
+    question: What must explicitly not change?
+    context: 'Why this is asked: the requester knows which nearby behavior other people depend on, and the agent does not.'
+    answer: 不点「放大」时详情区审阅视图与现在一致；放大不结束会话、不重拉数据、不丢已填内容；仍全部为原生组件、不用 iframe；不做独立浏览器窗口；不改审阅内容与交互本身；wa-cli 与 host 侧不变。
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-interpretation
+    question: Which reading of the request is intended, where more than one is possible?
+    context: 'Why this is asked: a short request usually admits several readings, and building the wrong one is indistinguishable from building nothing.'
+    answer: 「显示大一点/弹出窗口」按面板内全屏放大（覆盖层）实现，不是自动全宽布局，也不是独立浏览器窗口；正文与配图两者都要受益。
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: display-direction
+    question: 放大方式选哪种：面板内覆盖层全屏放大、审阅时自动全宽、独立浏览器窗口？
+    context: 选项：A 面板内覆盖层（推荐，纯 client 改动、无新路由无 iframe、收益最大）；B 审阅时自动全宽（受窗口宽度限制）；C 独立浏览器窗口（host 需新增 HTML 路由，改动面与安全面最大）。
+    answer: A：面板内全屏放大。
+    status: resolved
+    kind: technical
+    answered_by: human
+  - id: pain-point
+    question: 最痛的是哪块：正文/发现项太挤、配图太小、还是两者都挤？
+    context: 用于判断放大后是否还需要单张配图「点击看大图」之类的补充；两者都挤意味着覆盖层整体放大即可覆盖主要诉求。
+    answer: 两者都挤：正文与配图都需要更大空间。
+    status: resolved
+    kind: technical
+    answered_by: human

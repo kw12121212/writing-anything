@@ -1,0 +1,8 @@
+# 论断（Claim）；请用 wa-cli claim add 追加。
+
+schema_version: 1
+claims:
+  - id: claim-metrics
+    kind: data
+    text: 事故率下降了 40%，构建时间从 25 分钟降到 3 分钟
+    sources: [src-note]

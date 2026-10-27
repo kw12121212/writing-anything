@@ -1,0 +1,17 @@
+{
+  "name": "dev-writing-anything",
+  "plugins": [
+    {
+      "name": "zcode-writing-viewer",
+      "source": "./zcode-writing-viewer",
+      "version": "0.9.0",
+      "description": "ZCode panel for writing-anything workspaces: read-only overview dashboard, unit tree, artifact views, sources and decision queues, in-panel unit review, bundled wa-* skills.",
+      "displayName": "Writing Workspace (writing-anything)",
+      "displayName_i18n": { "zh-CN": "写作工作区（writing-anything）" },
+      "description_i18n": {
+        "zh-CN": "writing-anything 工作区的 ZCode 面板：只读总览仪表盘、单元树、产物视图、素材与决策/复核清单、面板内单元审阅，随包捆绑 wa-* 技能。"
+      },
+      "category": "productivity"
+    }
+  ]
+}

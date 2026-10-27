@@ -32,6 +32,8 @@ src/reviewproxy.ts 阅读页服务同源代理的纯逻辑：只放行 page.json
 src/reviewroutes.ts 审阅会话路由与代理 prefix 路由的注册（先过请求来源校验）
 src/reviewview.ts  client 侧审阅控件的纯视图模型：启动/进行中/失败/来源拒绝/已结束状态与双语文案
 src/reviewmodel.ts client 侧审阅视图（Review View）的纯视图模型：page.json 解析（含配图（Illustration））、配图布局与固定代理取图地址、提交请求体、单段选区规则与「待审阅」标记索引
+src/copyroutes.ts  「复制图文」只读路由：来源校验、作品 id 校验，调用一次 wa-cli export --format paste-html --print --json，只回传正文片段、配图数与诊断（含 severity）
+src/copyview.ts    client 侧「复制图文」：路由响应解析、text/plain 生成、剪贴板写入（异步剪贴板接口，非安全上下文退回 copy 事件写入，片段不进 DOM）与双语文案
 scripts/gen-large-workspace.mjs  经 wa-cli 生成多卷多场景长篇合成工作区（性能检查夹具）
 scripts/perf-check.mjs           端到端大工作区性能检查并把耗时记录进 docs/evidence/perf-check.txt
 testdata/          测试夹具：真实命令生成的多作品工作区 + 捕获的 --json 输出
@@ -133,9 +135,24 @@ Tailscale 远程访问：以 `http://<machine>.<tailnet>.ts.net:13080`（`tailsc
 
 `tailscale serve --https=<port> http://127.0.0.1:<port>` 会把浏览器地址栏里的 Host（`<machine>.<tailnet>.ts.net:<port>`）原样转给 DSH（2026-10-21 实测：同源请求通过，伪造为 `http://127.0.0.1:<port>` 的 Origin 被判为与 Host 不同权威而 403），所以从 http 换成 https 时 `allowedHosts` 与 DSH 的 `--trusted-host` 写法都不变——同一个主机名与端口即可。审阅视图的请求都是不带协议的同源路径，随页面走 https，不产生混合内容；代理到 `http://127.0.0.1:<port>` 的那一段只发生在宿主进程内部。证书只签给 MagicDNS 名，按 `https://<tailnet IP>:<port>` 访问会证书不匹配。
 
-未放行时全部插件路由都被来源校验拒绝：面板在加载快照时即显示被拒原因（指出被拒的 Host）与重试按钮，不崩溃也不空白；若只有审阅路由被拒，单元详情显示在 `allowedHosts` 中放行该权威的提示，不会出现空白的审阅视图。纯 http 的 tailnet 地址不是安全上下文（Secure Context），https 地址是；面板不依赖仅安全上下文可用的浏览器 API，两种访问方式都可用。
+未放行时全部插件路由都被来源校验拒绝：面板在加载快照时即显示被拒原因（指出被拒的 Host）与重试按钮，不崩溃也不空白；若只有审阅路由被拒，单元详情显示在 `allowedHosts` 中放行该权威的提示，不会出现空白的审阅视图。纯 http 的 tailnet 地址不是安全上下文（Secure Context），https 地址是；面板只有「复制图文」会优先使用仅安全上下文可用的异步剪贴板接口，在 http 地址上自动退回选区复制，两种访问方式都可用。
 
 安全边界：审阅默认开启、没有配置开关，凡通过请求来源校验的请求（本机进程、`allowedHosts` 放行的远程权威）都能经代理提交作者确认。wa-cli 生成的 HTML 与脚本不再进入 DSH 源：代理只转发 JSON 与已登记配图的图片，面板以纯文本节点显示其中的工作区文字。安全前提是 tailnet 本身只对作者的设备开放——**不要用 Tailscale Funnel 或其他公网反向代理暴露 DSH**；需要更宽的网络暴露时请置于带认证的反向代理之后。
+
+## 复制图文（Copy with images）
+
+在面板里选中文字复制时，审阅视图中的配图地址是带会话令牌的同源代理路由，粘贴到公众号编辑器或在线文档后图片取不到。「复制图文」按钮因此不复制审阅视图，而是复制 wa-cli 渲染的可粘贴正文（Paste-ready Page 的正文）：
+
+1. **入口。** 作品根单元的单元详情（「审阅」旁）与审阅视图头部（含「放大」后的覆盖层）各有一个「复制图文」按钮，复制对象都是该单元所属的整篇作品。
+2. **只读取用。** 点击后面板请求 `GET /dsh-writing-viewer/copy?work=<作品>&root=<项目目录>`；host 先做请求来源校验，作品 id 经与审阅相同的参数校验（另不得含 `/`），再以参数列表调用一次 `wa-cli export <作品> --format paste-html --print --json --dir <root>`。`--print` 是 wa-cli 的只读模式，不写导出文件、资产目录或配图清单，插件仍不向项目目录写任何文件。该调用的输出上限为 128 MiB、时限 120 秒：wa-cli 最多内嵌 32 MiB 图片字节，base64 后约 42.7 MiB，--print 的信封里全文（export.html）与分段（export.segments）各带一份，再加 JSON 转义，最坏约 98 MiB；超过上限时面板显示可读原因，可改用 `wa-cli export --format paste-html` 导出的可粘贴页复制。
+3. **复制内容与导出一致。** 只含验收记录有效的单元；可用配图以 data URI 内嵌，图说为标题（没有时为替代文字）；不含封面图与 AI 参与说明。按公众号图文编辑器的粘贴限制（2026-10-23 实测：单张超过约 1 MiB 或一次超过 7 张时整次粘贴丢掉全部图片），超过 1 MiB 的配图由 wa-cli 缩到最长边 1600 像素以内并重新编码为不超过 1 MiB 的 JPEG（资产目录仍为原图）；超出 32 MiB 内嵌上限、像素过多或压不下来的配图，以及外链与行内图片，保留「【配图 n】」占位，面板提示按导出的配图清单补传。
+4. **分段。** 内嵌图超过 7 张时 wa-cli 按段落边界把正文切成每段至多 7 张图的分段（`export.segments`）。面板第一次点「复制图文」时不写剪贴板，而是列出「复制第 n 段（图 a–b）」与「复制全文」按钮；作者逐段点击、逐段粘贴到公众号，每次点击都在该次点击中复制已取到的内容，不再调用 wa-cli。「复制全文」用于飞书等不限张数的目标。
+5. **写剪贴板。** 安全上下文（本机或 https）下用异步剪贴板接口同时写入 `text/html` 与 `text/plain`；剪贴板项在点击时同步创建，取正文的请求在其后完成，因此不丢失点击授权。http 远程访问等非安全上下文退回为 `execCommand('copy')`：选区是只放纯文本的离屏 textarea，copy 事件监听器把 `text/html` 与 `text/plain` 写进 `clipboardData`，正文片段从不插入页面 DOM；浏览器拒绝时面板保留取到的正文并提示再点一次，再次点击即在新的点击中同步复制。
+6. **失败提示。** 作品没有可导出的单元时显示 wa-cli 的 `export.nothing-accepted` 诊断与下一步命令（失败原因取第一条 error 级诊断，wa-cli 在它之前列出的 `export.unaccepted` 警告不作为原因），不写剪贴板；wa-cli 不可用、超时或输出超出上限时同样只显示原因，不影响面板其余部分与进行中的审阅会话。
+
+公众号编辑器对粘贴进来的 base64 图片是否全部保留取决于编辑器本身；不保留时按 `wa-cli export <作品> --format paste-html` 写出的配图清单与资产目录手动上传。
+
+实测证据（2026-10-23，本机与局域网 IP 两个隔离 DSH 实例，headless Chrome）：`docs/evidence/copy-live-check.txt`、`docs/evidence/copy-review-insecure.png`、`docs/evidence/copy-nothing-accepted.png`。
 
 ## 内置技能与 CLI 的启用（Setup，默认关闭）
 
@@ -221,7 +238,7 @@ pnpm run perf:check     # 大工作区性能检查：构建 wa-cli → 生成 3 
 公开渠道（推荐）：从本仓库的 GitHub Release 安装插件包（Plugin Package）tarball——它与同版本的 wa-cli 发布产物（Release Asset）一同发布，一条命令完成依赖与 bundle 登记：
 
 ```sh
-dsh plugin --profile web add https://github.com/kw12121212/writing-anything/releases/latest/download/dsh-writing-viewer-0.8.0.tgz
+dsh plugin --profile web add https://github.com/kw12121212/writing-anything/releases/latest/download/dsh-writing-viewer-0.9.0.tgz
 ```
 
 URL 固定用 `latest/download`，升级时先 `dsh plugin --profile web remove dsh-writing-viewer` 再以新版本文件名重新 add。

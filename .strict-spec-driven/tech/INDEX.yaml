@@ -19,3 +19,7 @@ standards:
     title: 工作区产物与 JSON Schema
     category: architecture
     path: .strict-spec-driven/tech/workspace-artifacts.yaml
+  - id: zcode-plugin-structure
+    title: ZCode 插件（ZCode Plugin）包结构与隔离
+    category: architecture
+    path: .strict-spec-driven/tech/zcode-plugin-structure.yaml
