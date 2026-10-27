@@ -131,7 +131,7 @@ pnpm run smoke          # 构建产物冒烟：stdio JSON-RPC 驱动 dist/server
 正式渠道：从本仓库的 GitHub Release 安装插件包（Plugin Package）tarball——它与同版本的 wa-cli 发布产物、dsh-writing-viewer 插件包一同发布：
 
 ```
-zcode-writing-viewer-0.9.0.tgz
+zcode-writing-viewer-0.9.1.tgz
 ```
 
 以 Release tarball 安装/升级时，用该版本的实际文件名（`latest/download` 直链为 `https://github.com/kw12121212/writing-anything/releases/latest/download/zcode-writing-viewer-<版本>.tgz`）。升级前先移除旧版本再安装新版本。
