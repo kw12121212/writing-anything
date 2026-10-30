@@ -6,7 +6,7 @@ milestone:
   wechat-flow-feedback:
     title: 公众号流程复盘落地（WeChat Flow Feedback）
 order: 700
-goal: 落地 2026-10-30 公众号写作流程复盘（docs/feedback-2026-10-30-wechat-flow.md）审阅后采纳的条目：导出标题取作者选定的标题、审稿录入有骨架、技能写明确认与重申的边界、简报决策与交接记录少走弯路、数字类数据候选与字数口径更清楚、阅读页可经反向代理远程访问；不削减任何作者关卡（Author Gate）。
+goal: 落地 2026-10-30 公众号写作流程复盘审阅后采纳的条目：导出标题取作者选定的标题、审稿录入有骨架、技能写明确认与重申的边界、简报决策与交接记录少走弯路、数字类数据候选与字数口径更清楚、阅读页可经反向代理远程访问；不削减任何作者关卡（Author Gate）。
 scope:
   in:
     - E1+E2：paste-html 页面提供复制标题与复制摘要、--print --json 输出 headline 与 digest、页面 title 取选定标题；markdown front matter 的 title 依次取选定标题、正文首个一级标题、作品 id，description 依次取文章摘要（Digest）、写作简报 purpose
@@ -63,6 +63,6 @@ risks:
   - E1 改动 paste-html --print --json 的输出：DSH 插件 copyroutes.ts 与 copyview.ts 消费该输出，新增字段必须是追加的，不能改动现有字段
 status: proposed
 notes:
-  - 来源：docs/feedback-2026-10-30-wechat-flow.md（基线 v0.8.0），审阅时已对照 v0.9.2 代码核对
   - 2026-10-30 作者接受三个 intake 问题的推荐做法：review record --init、交接记录按作品关联、lint --json 增加 cjkChars
+  - 来源：2026-10-30 公众号写作流程复盘（基线 v0.8.0），审阅时已对照 v0.9.2 代码核对
 details: 审阅证据：export.go frontMatter 与 paste.go 只取正文首个一级标题，没有时退回作品 id，description 取 brief.Purpose；公众号编辑器的标题与摘要是单独输入框，所以正文 HTML 不加一级标题。review.go 在 standard 关卡下不要求作者确认，channel 已有 cli 与 preview。review record --reaffirm 已存在（boundary-semantics-silent-failure/review-reaffirm）。claims.go 的 dataRE 只认 %、倍、万、亿等形式。units.go 的 step 对每个步骤都调用 latestHandoff(dir)，取的是工作区最新一条。preview.go 只监听 127.0.0.1，并校验 Host。work.go Blockers 先按 RequiredArtifacts 顺序（draft、marketing）列缺失产物，marketing.Check 在候选达到两个且没有决策时报 headline-unasked，不看正文是否已写入。review-input 的 verdict 是 enum pass|fail，空值目前只得到 Schema 错误。

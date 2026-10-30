@@ -8,3 +8,7 @@ coverage.out
 # 插件包的依赖与构建产物（源码、清单与捆绑技能除外）
 plugins/*/node_modules/
 plugins/*/dist/
+
+# 本地工具插件根（非仓库产物）
+.v2c/
+.video_agent/
