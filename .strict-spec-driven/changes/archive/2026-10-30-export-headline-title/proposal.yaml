@@ -1,0 +1,22 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: export-headline-title
+  status: proposed
+summary:
+  what:
+    - 导出的标题与摘要改取作者选定的标题与文章摘要（Digest）：markdown front matter 的 title 依次取根单元 marketing.yaml 中标题决策状态为 decided 时选定的标题（HeadlineState，见 marketing 主规格）、第一个导出单元正文的首个一级标题、作品 id，description 依次取根单元 marketing.yaml 的 digest、根单元写作简报的 purpose，internal/export 用一个统一解析供 frontMatter 与可粘贴页共用；paste-html 页面 title 用同一标题解析，顶部在「复制图文」旁按需增加「复制标题」「复制摘要」按钮，标题与摘要文字放在 wa-article 正文容器之外的单独容器里，复用现有 data-copy 机制，没有选定标题或摘要时不显示对应按钮与容器，正文 HTML 不插入一级标题；export --format paste-html --print --json 在 export 对象中追加 headline（仅选定标题，没有时为 null）与 digest（仅 digest，没有时为 null），html 与 segments 不变，其他格式与不带 --print 的 paste-html 不含这两个字段；export 的 outputKeys help 同步。
+  why:
+    - 公众号编辑器的标题与摘要是单独输入框，正文里的一级标题与导出兜底值填不进去；作者已经用标题决策选定了标题、用 marketing set 写了 digest，导出时应直接给出作者选定的值，而不是让作者对着导出结果再抄一遍（2026-10-30 公众号写作流程复盘 E1+E2，docs/feedback-2026-10-30-wechat-flow.md，里程碑 wechat-flow-feedback）。
+scope:
+  in:
+    - internal/export：新增统一标题与摘要解析（decided 标题 → FirstHeading → 作品 id；digest → brief purpose），frontMatter（export.go）与可粘贴页页面 title（paste.go）共用，marketing.yaml 缺失、无法加载或状态非 decided 时视为没有选定标题、不新增诊断；internal/export/paste.go：页面模板按需渲染「复制标题」「复制摘要」按钮与 wa-article 之外的标题/摘要容器（复用 data-copy，脚本与 CSP 不变），--print 在结果上携带 headline 与 digest（没有时为 null、字段仍出现）；internal/cli/export.go：--json 视图与 outputKeys help 追加两个字段；测试：公众号夹具（正文无一级标题、标题决策 decided、有 digest）断言 front matter 的 title/description、页面 title 与两个按钮、--print --json 的两个字段，标题决策过期时退回一级标题，tech-blog 夹具行为不变；跑 plugins/dsh-writing-viewer 测试确认 copyroutes.ts 消费 --print --json 兼容追加字段；specs/export.yaml 的 export-markdown、paste-html-export、paste-html-print 三个需求 MODIFIED。
+  out:
+    - 把标题决策挪到 review 之后（4U 评分项仍按作者选定的标题评分，时点不变）；把标题或摘要插入正文 HTML（公众号编辑器是单独输入框）；DSH 插件面板新增复制标题/摘要按钮（本里程碑只保证 copyroutes.ts 消费兼容，面板按钮另行跟进）；wechat-html 与 text 两种格式的任何输出变化；marketing、brief、decisions 命令的行为变化；为 specs/cli.yaml 造 delta（其 help-command 与 json-output-envelope 是通用需求，不罗列 export 的 outputKeys 文本，help 同步义务由技术标准 cli-contract/registry-single-source 既有规则约束）。
+unchanged_behavior:
+  - export 的单元选择、批注与单处豁免注释剥离、配图复制与资产目录、配图清单、AI 参与说明、输出路径检查与原子写入、审计日志（export --print 仍不记 unit）；wechat-html 与 text 格式的全部输出与 --json 字段；不带 --print 的 paste-html --json 输出（不含 headline 与 digest 字段）与页面其余结构、分段按钮与操作说明；--print 的只读语义、html 与 segments 字段；marketing ask/show/set、brief、decisions 命令；DSH 插件面板的显示与行为（只要求消费端对追加字段兼容）。
+roadmap:
+  milestone: wechat-flow-feedback
+  planned_change: export-headline-title

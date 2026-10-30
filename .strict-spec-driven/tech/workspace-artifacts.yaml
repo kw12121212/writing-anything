@@ -350,3 +350,15 @@ rules:
         - 对已通过文件头识别且 SHA-256 与登记一致的 PNG 字节，以 template.URL 构造 data:image/png;base64,… 内嵌进阅读页；或把这张 PNG 解码、缩放后用 image/jpeg 编码，以 data:image/jpeg;base64,… 内嵌进可粘贴页。
       bad:
         - '把产物或规范包中未经校验的字符串直接包成 template.URL 输出，或对白名单之外的 MIME 构造 data: URL。'
+  conditional-branches-byte-stable:
+    strength: SHOULD
+    statement: 向生成 HTML 的既有模板（阅读页、公众号 HTML、可粘贴页）新增条件渲染的内容（按钮、容器、说明文字）时，条件为假的输出必须与新增该条件之前逐字节相同：用模板的空白修剪（如 {{end -}}）消掉空分支残留的换行，不依赖浏览器渲染语义消化多余空白；规格对生成输出写有「与本变更之前相同」一类承诺时，测试必须覆盖空分支的字节稳定——新旧二进制对照，或断言相邻标记的连接点不变。
+    rationale: export.chars 与逐字节金样是导出规格承诺的一部分；空条件块独占一行时，条件为假仍输出该行的换行，所有既有导出无差别地多出空行、字符数偏移，而解析型断言（子串、标签允许列表）全部照常通过——只有逐字节对照能发现。
+    enforcement:
+      method: test
+      detail: internal/cli 的 TestExportHeadlineAbsentUnchanged 断言没有营销要素的作品页面中工具栏与正文容器的连接点 </div>\n<div id=\"wa-article\"> 不变（空分支不留下空行）；export-headline-title 的评审用同一夹具对照新旧二进制，证实 paste-html、wechat-html、text 与 front matter（除验收时间戳）逐字节相同。
+    examples:
+      good:
+        - '{{if .Headline}}<button …>复制标题</button>{{end -}}——结束标记右修剪，条件为假时整行不输出'
+      bad:
+        - '{{if .Headline}}…{{end}} 独占一行：条件为假时仍输出行尾换行，没有该内容的每个导出都比之前多出空行'

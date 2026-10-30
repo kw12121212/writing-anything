@@ -29,7 +29,8 @@ var exportCommand = &command{
 		"assets（复制到资产目录（Asset Directory）的配图与封面图（Cover Image），封面在前，每项含 unit、id、role、origin、source 与 path；没有时或 --print 时为空数组）与 " +
 		"disclosure（AI 参与说明（AI-generated Content Label）：text、placement、aiParagraphs、paragraphs、aiPercent、aiImages 与 images；没有 AI 参与的段落与 AI 配图时为 null；" +
 		"paste-html 照常报告，但页面不含说明）、html（paste-html --print 的全文片段，只在 --print 时出现）与 segments（paste-html --print 的分段片段：公众号每次粘贴最多 7 张图，" +
-		"内嵌图超过 7 张时按段落边界分段，每段至多 7 张；至少一项，只在 --print 时出现）；失败时为 null"}},
+		"内嵌图超过 7 张时按段落边界分段，每段至多 7 张；至少一项，只在 --print 时出现）与 headline、digest（paste-html --print 的作者选定标题与文章摘要（Digest），" +
+		"只在 --print 时出现，没有时为 null）；失败时为 null"}},
 	exitCodes: standardExitCodes,
 	run:       runExport,
 }
@@ -59,6 +60,9 @@ type exportView struct {
 	Disclosure *disclosureView `json:"disclosure"`
 	HTML       *string         `json:"html,omitempty"`
 	Segments   []string        `json:"segments,omitempty"`
+	// Headline 与 Digest 为二级指针：只在 --print 时给出（外层非 nil），没有作者选定值时字段仍出现、取值为 null（内层 nil）。
+	Headline **string `json:"headline,omitempty"`
+	Digest   **string `json:"digest,omitempty"`
 }
 
 type assetView struct {
@@ -178,6 +182,7 @@ func runExport(inv *invocation) int {
 					}
 					if printOnly {
 						v.HTML, v.Segments = &r.HTML, r.Segments
+						v.Headline, v.Digest = &r.Headline, &r.Digest
 					}
 					res.Export, res.ChangedPaths = v, changed
 				}

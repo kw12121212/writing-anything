@@ -1,0 +1,49 @@
+schema: strict-spec-driven/question-list/v1
+schema_version: 1
+artifact_type: question_list
+schema_file: templates/strict-spec-driven/schemas/question-list.yaml
+change: export-headline-title
+open: []
+resolved:
+  - id: cli-spec-scope
+    question: specs/cli.yaml 是否需要 delta？
+    context: 计划文件 details 写「更新 specs/export.yaml 与 specs/cli.yaml」，并要求同步 export 的 outputKeys help（internal/cli/export.go:27）。核对 specs/cli.yaml：help-command 与 json-output-envelope 是通用需求，不罗列任何命令的 outputKeys 文本；help 同步义务由技术标准 cli-contract/registry-single-source 的既有规则约束（注册表是 help、MCP tools 与 Skill 命令校验的唯一依据）。影响范围：proposal 的 specs 字段与 delta-spec 数量；不影响实现文件、测试或依赖（无技术标准变化，也不产生 delta-tech）。
+    answer: 不为 cli.yaml 写 delta：本变更只遵守既有技术标准，cli.yaml 没有需要修改的需求。help 文本的同步由 cli-contract 约束、在实现任务 print-headline-digest 中完成。delta 只针对 specs/export.yaml 的 export-markdown、paste-html-export、paste-html-print 三个需求。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-problem
+    question: What is concretely going wrong today, and for whom?
+    context: 'Why this is asked: the change is planned against a need, and the need lives only with the requester. A "problem" here means what someone does or suffers today — not a feature that is missing. If the answer names a button, a field, a page, or an endpoint, it is a solution, and the underlying problem is still unstated. What a sufficient answer contains: who is affected, what they do today instead, and how often. Worked example: "every Monday one person spends forty minutes copying order rows into a spreadsheet to send the weekly report". What it changes: this becomes the proposal''s why, and it decides whether the change is worth making.'
+    answer: 作者把可粘贴页内容粘进公众号编辑器后，还得手动把标题和摘要再敲一遍：导出的 front matter title 只取正文首个一级标题（公众号正文通常没有一级标题，编辑器的标题是单独输入框），没有时只剩作品 id；description 只取写作简报 purpose（给 Agent 的上下文，不是分享卡片文案）。作者已经用标题决策选定了标题、用 marketing set 写了文章摘要（Digest），这些值都在根单元 marketing.yaml 里，导出却不用——每次发布公众号文章都要发生一次手抄（来源：计划文件 details 与里程碑 details 的审阅证据）。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-outcome
+    question: What observable difference proves the problem is solved?
+    context: 'Why this is asked: without a success condition, nobody can tell afterwards whether the change worked. "Observable" means someone outside the system can check it without reading the code. What a sufficient answer contains: what a person will see, or no longer have to do, once this is done. Worked example: "the report is in the manager''s inbox on Monday morning without anyone assembling it". What it changes: this becomes the delta spec''s scenarios and the acceptance evidence at review time.'
+    answer: 公众号夹具（正文无一级标题、标题决策状态为 decided、有 digest）下可外部观察的三处差异：export --front-matter 的 title 为选定标题、description 为 digest；paste-html 页面 title 为选定标题，页面带「复制标题」「复制摘要」按钮（标题与摘要文字在正文容器之外的容器中），作者点了就能把标题/摘要复制进公众号编辑器的对应输入框，不再手抄；export --format paste-html --print --json 含 headline 与 digest 字段（没有时为 null）供面板与 Agent 取用。tech-blog 夹具全部行为不变（delta 规格六个场景即验收证据）。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-trigger
+    question: Why now — what forced this?
+    context: 'Why this is asked: work that nothing forced is the work most often thrown away later. This question catches a request that sounds reasonable but has no real driver behind it. What a sufficient answer contains: the concrete event, deadline, incident, or cost that made this surface now, or an honest statement that nothing did. Worked example: "the report was missed last month and it was raised with the team". What it changes: a change with no trigger is a candidate for deferral, and the answer is weighed at review before archive.'
+    answer: 2026-10-30 公众号写作流程复盘（docs/feedback-2026-10-30-wechat-flow.md，基线 v0.8.0，对照 v0.9.2 代码审阅）采纳的 E1+E2；作者同日接受里程碑 intake 问题的推荐做法并立项里程碑 wechat-flow-feedback。技术上建立在 v0.9.0 已交付的 paste-html 导出（paste-ready-copy）之上，复制机制与页面已就绪，只差标题与摘要取值。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-non-goals
+    question: What must explicitly not change?
+    context: 'Why this is asked: the requester knows which nearby behavior other people depend on, and the agent does not. A "non-goal" is something the change must leave alone even though it sits close to the work. What a sufficient answer contains: the behavior, setting, or output that must survive untouched, and who relies on it. Worked example: "do not change the saved filters — several people rely on their own". What it changes: these become the proposal''s unchanged_behavior items, which review checks the finished result against.'
+    answer: wechat-html 与 text 两种格式的输出逐字节不变（含配图清单与 AI 参与说明）；不带 --print 的 paste-html --json 输出不新增 headline/digest 字段；DSH 插件面板不加复制标题/摘要按钮（copyroutes.ts 只需兼容追加字段，面板按钮由里程碑范围明确排除、另行跟进）；不把标题决策挪到 review 之后（4U 评分项按选定标题评分）；不把标题或摘要插入正文 HTML；marketing、brief、decisions 命令行为不变；复制脚本内容与 Content-Security-Policy 哈希不变；--print 的只读语义与 html/segments 字段不变（消费方 copyroutes.ts 与 copyview.ts 依赖它们）。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-interpretation
+    question: Which reading of the request is intended, where more than one is possible?
+    context: 'Why this is asked: a short request usually admits several readings, and building the wrong one is indistinguishable from building nothing. What a sufficient answer contains: the reading that is meant, stated plainly enough to rule the others out — or a statement that only one reading exists and what it is. Worked example: "export means the version sent to the manager, not the one I read myself". What it changes: this fixes the scope boundary before any code is written, and settles disputes about what was asked for.'
+    answer: 「导出标题取作者选定的标题」指三处一致：front matter 的 title 与可粘贴页页面 title 用统一回退链（根单元标题决策状态为 decided 时选定的标题 → 第一个导出单元正文的首个一级标题 → 作品 id；marketing.yaml 缺失、无法加载或状态非 decided 视为没有选定标题、不新增诊断）；--print --json 的 headline 只取 decided 选定的标题、没有时字段仍出现且为 null，不做回退（统一回退链以作品 id 结尾永远非空，与计划「没有时为 null」只有不回退才相容，见设计决策 headline-digest-decided-only）。「摘要」：front matter 的 description 依次取根单元 marketing.yaml 的 digest、根单元写作简报的 purpose；--print 的 digest 只取 digest、没有时为 null。复制按钮只在有对应内容（decided 标题/非空 digest）时显示。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap

@@ -251,3 +251,15 @@ rules:
     enforcement:
       method: test
       detail: plugins/dsh-writing-viewer/src/copyroutes.test.ts 的 copy route output budget 用例按 32 MiB 内嵌预算、两份副本与转义膨胀计算最坏体积，断言 COPY_STDOUT_CAP 大于它。
+  json-null-vs-absent:
+    strength: SHOULD
+    statement: 命令的 --json 输出视图需要同时表达「字段不出现」（不适用，见 enum-scoped-output-fields）与「字段出现但取值为 null」（适用而没有值，如 paste-html --print 的 headline 与 digest）时，用二级指针（如 **string）加 omitempty 实现：外层指针为 nil 时键省略，外层非 nil 而内层为 nil 时键出现且取值为 null；同一变更中把合法可空的字段名登记进 cli_test.go 的 nullableFields（以及用到该输出的 noNulls 类清单），并让测试覆盖两种形态：不适用输出的键缺省与适用而无值时键仍出现且为 null。
+    rationale: encoding/json 对指针的 omitempty 只区分「指针是否为 nil」，单层指针表达不了「键出现且为 null」；二级指针把两种形态交给类型直接表达，避免为单个字段写自定义 MarshalJSON。两份 null 白名单与键缺省断言是配套义务：漏登记会让 TestRegistryConsistency 或 noNulls 断言失败，漏断言会让键缺省退化成 null 契约（或相反），消费方无法区分「不支持」与「没有值」。
+    enforcement:
+      method: test
+      detail: internal/cli 的 TestExportPastePrintKeysAndReadOnly 断言 html、segments、headline 与 digest 只在 paste-html --print 的输出中出现，且 --print 没有作者选定值时 headline 与 digest 键仍出现、取值为 null；TestRegistryConsistency 按 nullableFields 白名单校验全部样例输出，internal-cli-null-1ddaed 的教训（两份清单都要登记）继续适用。
+    examples:
+      good:
+        - 'exportView 的 Headline 用 **string 加 json:",omitempty"，printOnly 分支赋 &r.Headline：非 print 输出键省略，print 无值时输出 "headline": null'
+      bad:
+        - 用 *string 加 omitempty 表达「适用而无值」：字段无值时键被整个省略，消费方无法区分「该输出没有标题字段」与「没有作者选定的标题」

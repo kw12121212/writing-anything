@@ -5,7 +5,7 @@ schema_file: ../../templates/strict-spec-driven/schemas/planned-change.yaml
 planned_change:
   id: export-headline-title
   milestone: wechat-flow-feedback
-status: planned
+status: complete
 summary: 导出标题与摘要取作者选定的标题和文章摘要：markdown front matter、paste-html 页面 title、复制标题与复制摘要按钮、paste-html --print --json 追加 headline 与 digest 字段
 details: E1+E2。在 internal/export 新增一个统一的标题解析：先取 marketing.yaml 中 HeadlineState 为 decided 时选定的标题（marketing.go:150），再取正文首个一级标题（FirstHeading），最后取作品 id；description 先取 digest，再取 brief.Purpose。frontMatter（export.go:452）和 paste.go:147 共用这个解析。paste-html 页面顶部在「复制图文」旁增加「复制标题」「复制摘要」按钮：标题和摘要放在页面上单独的容器里（不在 wa-article 正文容器内），复用现有 data-copy 机制（paste.go:29-62）。正文 HTML 不插入一级标题，因为公众号编辑器的标题与摘要是单独输入框；没有选定标题或摘要时不显示对应按钮。--print --json 在 export 对象中追加 headline 与 digest（没有时为 null），现有 html 与 segments 不变；export 的 outputKeys help（internal/cli/export.go:27）同步。wechat-html 与 text 输出不变。DSH 插件 copyroutes.ts 消费 --print --json，跑插件测试确认兼容。更新 specs/export.yaml 与 specs/cli.yaml。测试：公众号夹具（无一级标题、已选定标题）断言 front matter 的 title 和 description、页面 title 与两个按钮、--print --json 的两个字段；标题决策过期时退回一级标题；tech-blog 夹具断言行为不变。
 depends_on: []
