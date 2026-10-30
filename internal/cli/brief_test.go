@@ -494,3 +494,166 @@ func TestBriefFieldProvenance(t *testing.T) {
 		t.Fatalf("show-unsourced-field: code = %d, questions = %v", code, res.Questions)
 	}
 }
+
+// provenanceDecision 返回 brief 视图里字段出处的决策 id；没有该字段或决策时为 nil。
+func provenanceDecision(brief map[string]any, field string) any {
+	p, ok := brief["provenance"].(map[string]any)[field].(map[string]any)
+	if !ok {
+		return nil
+	}
+	return p["decision"]
+}
+
+// 共用决策（--decision）：补位本次写入的字段、前提与核心观点，显式字段级优先，删除与未写入的字段不补位。
+func TestBriefSharedDecision(t *testing.T) {
+	t.Run("fills written scalar fields and key message", func(t *testing.T) {
+		dir := briefWork(t)
+		runWS(t, dir, "decision", "add", "--question", "本轮回答都是你定的吗", "--unit", "my-post")
+		code, res := runBrief(t, dir, "brief", "set", "my-post", "--decision", "dec-1",
+			"--audience", "后端工程师", "--purpose", "讲清楚为什么要做连接池", "--theme", "连接池的取舍",
+			"--message", "km-1", "--message-text", "连接池能显著降低延迟")
+		if code != 0 || !slices.Equal(res.ChangedPaths, []string{briefRel}) {
+			t.Fatalf("exit code = %d, result = %+v", code, res)
+		}
+		for _, f := range []string{"audience", "purpose", "theme"} {
+			if got := provenanceDecision(res.Brief, f); got != "dec-1" {
+				t.Fatalf("provenance.%s.decision = %v, brief = %v", f, got, res.Brief)
+			}
+		}
+		if km := res.Brief["keyMessages"].([]any)[0].(map[string]any); km["decision"] != "dec-1" {
+			t.Fatalf("key message decision = %v", km["decision"])
+		}
+	})
+
+	t.Run("fills premise pov and length", func(t *testing.T) {
+		dir := newWorkspace(t)
+		if code, stdout, stderr := run(t, "new", "short-story", "my-story", "--dir", dir); code != 0 {
+			t.Fatalf("new: exit code = %d; stdout: %s; stderr: %s", code, stdout, stderr)
+		}
+		runWS(t, dir, "decision", "add", "--question", "这些设定都是你定的吗", "--unit", "my-story")
+		code, res := runBrief(t, dir, "brief", "set", "my-story", "--decision", "dec-1",
+			"--premise", "守灯人发现灯里住着说谎的精灵", "--pov-person", "third", "--length", "2000-8000")
+		if code != 0 || res.Brief["premise"].(map[string]any)["decision"] != "dec-1" ||
+			provenanceDecision(res.Brief, "pov") != "dec-1" || provenanceDecision(res.Brief, "length") != "dec-1" {
+			t.Fatalf("exit code = %d, brief = %v, %v", code, res.Brief, res.Diagnostics)
+		}
+	})
+
+	t.Run("explicit field decision wins", func(t *testing.T) {
+		dir := briefWork(t)
+		runWS(t, dir, "decision", "add", "--question", "第一个决策", "--unit", "my-post")
+		runWS(t, dir, "decision", "add", "--question", "第二个决策", "--unit", "my-post")
+		code, res := runBrief(t, dir, "brief", "set", "my-post", "--decision", "dec-1",
+			"--audience", "后端工程师", "--purpose", "讲清楚", "--purpose-decision", "dec-2")
+		if code != 0 || provenanceDecision(res.Brief, "audience") != "dec-1" || provenanceDecision(res.Brief, "purpose") != "dec-2" {
+			t.Fatalf("exit code = %d, brief = %v", code, res.Brief)
+		}
+	})
+
+	t.Run("empty explicit field decision is not filled", func(t *testing.T) {
+		dir := briefWork(t)
+		runWS(t, dir, "decision", "add", "--question", "受众是你定的吗", "--unit", "my-post")
+		if code, res := runBrief(t, dir, "brief", "set", "my-post", "--audience", "后端工程师", "--audience-decision", "dec-1"); code != 0 {
+			t.Fatalf("seed: exit code = %d, %v", code, res.Diagnostics)
+		}
+		code, res := runBrief(t, dir, "brief", "set", "my-post", "--decision", "dec-1", "--audience", "前端工程师", "--audience-decision=")
+		if code != 0 || provenanceDecision(res.Brief, "audience") != nil {
+			t.Fatalf("empty explicit decision: exit code = %d, provenance = %v", code, res.Brief["provenance"])
+		}
+	})
+
+	t.Run("deleted and unwritten targets are not filled", func(t *testing.T) {
+		dir := briefWork(t)
+		runWS(t, dir, "decision", "add", "--question", "受众是你定的吗", "--unit", "my-post")
+		runWS(t, dir, "decision", "add", "--question", "本轮回答", "--unit", "my-post")
+		if code, res := runBrief(t, dir, "brief", "set", "my-post", "--audience", "后端工程师", "--audience-decision", "dec-1",
+			"--message", "km-1", "--message-text", "观点", "--message-decision", "dec-1"); code != 0 {
+			t.Fatalf("seed: exit code = %d, %v", code, res.Diagnostics)
+		}
+		code, res := runBrief(t, dir, "brief", "set", "my-post", "--decision", "dec-2", "--purpose", "讲清楚")
+		if code != 0 || provenanceDecision(res.Brief, "purpose") != "dec-2" ||
+			provenanceDecision(res.Brief, "audience") != "dec-1" ||
+			res.Brief["keyMessages"].([]any)[0].(map[string]any)["decision"] != "dec-1" {
+			t.Fatalf("unwritten targets changed: exit code = %d, brief = %v", code, res.Brief)
+		}
+		if _, ok := res.Brief["provenance"].(map[string]any)["theme"]; ok {
+			t.Fatalf("unwritten theme gained provenance: %v", res.Brief["provenance"])
+		}
+		// 删除字段不补位：没有可补位的写入，报参数错误且文件不变。
+		before := readFile(t, wsPath(dir, briefRel))
+		if code, res := runBrief(t, dir, "brief", "set", "my-post", "--decision", "dec-2", "--audience="); code != 1 ||
+			diag(t, res.result, "input.invalid-value").Field != "decision" || readFile(t, wsPath(dir, briefRel)) != before {
+			t.Fatalf("delete: exit code = %d, %v", code, res.Diagnostics)
+		}
+	})
+
+	t.Run("no fill target is an error", func(t *testing.T) {
+		dir := briefWork(t)
+		runWS(t, dir, "decision", "add", "--question", "本轮回答", "--unit", "my-post")
+		if code, res := runBrief(t, dir, "brief", "set", "my-post", "--audience", "后端工程师"); code != 0 {
+			t.Fatalf("seed: exit code = %d, %v", code, res.Diagnostics)
+		}
+		before := readFile(t, wsPath(dir, briefRel))
+		for _, args := range [][]string{
+			{"--decision", "dec-1"},
+			{"--decision", "dec-1", "--sources", "src-a"},
+			{"--decision", "dec-1", "--audience="},
+		} {
+			code, res := runBrief(t, dir, append([]string{"brief", "set", "my-post"}, args...)...)
+			if code != 1 || res.Brief != nil || len(res.ChangedPaths) != 0 || diag(t, res.result, "input.invalid-value").Field != "decision" {
+				t.Fatalf("%v: exit code = %d, result = %+v", args, code, res)
+			}
+			if readFile(t, wsPath(dir, briefRel)) != before {
+				t.Fatalf("%v: brief.yaml changed", args)
+			}
+		}
+	})
+
+	t.Run("validation matches field-level parameters", func(t *testing.T) {
+		dir := briefWork(t)
+		runWS(t, dir, "decision", "add", "--question", "与本单元无关的决策")
+		runWS(t, dir, "decision", "add", "--question", "关联本单元的决策", "--unit", "my-post")
+		if code, res := runBrief(t, dir, "brief", "set", "my-post", "--audience", "后端工程师"); code != 0 {
+			t.Fatalf("seed: exit code = %d, %v", code, res.Diagnostics)
+		}
+		before := readFile(t, wsPath(dir, briefRel))
+		for _, tc := range []struct {
+			args  []string
+			code  string
+			field string
+		}{
+			{[]string{"--decision", "dec-9", "--audience", "读者"}, "brief.unknown-decision", "audience-decision"},
+			{[]string{"--decision", "dec-9", "--premise", "前提"}, "brief.unknown-decision", "premise-decision"},
+			{[]string{"--decision", "dec-9", "--message", "km-1", "--message-text", "观点"}, "brief.unknown-decision", "message-decision"},
+			{[]string{"--decision", "dec-1", "--audience", "读者"}, "brief.unrelated-decision", "audience-decision"},
+		} {
+			code, res := runBrief(t, dir, append([]string{"brief", "set", "my-post"}, tc.args...)...)
+			d := diag(t, res.result, tc.code)
+			if code != 1 || d.Field != tc.field || d.Path != "" || res.Brief != nil || len(res.ChangedPaths) != 0 || readFile(t, wsPath(dir, briefRel)) != before {
+				t.Fatalf("%v: exit code = %d, diagnostic = %+v", tc.args, code, d)
+			}
+		}
+		// 决策队列无法加载时沿用字段级参数的 decision.invalid-queue（队列级诊断，不填 field）。
+		queue := wsPath(dir, ".writing-anything/decisions.yaml")
+		good := readFile(t, queue)
+		writeFile(t, queue, "decisions: [\n")
+		code, res := runBrief(t, dir, "brief", "set", "my-post", "--decision", "dec-2", "--audience", "读者")
+		d := diag(t, res.result, "decision.invalid-queue")
+		if code != 1 || d.Path != ".writing-anything/decisions.yaml" || d.Field != "" || readFile(t, wsPath(dir, briefRel)) != before {
+			t.Fatalf("invalid queue: exit code = %d, diagnostic = %+v", code, d)
+		}
+		writeFile(t, queue, good)
+	})
+
+	t.Run("empty decision is not given", func(t *testing.T) {
+		dir := briefWork(t)
+		runWS(t, dir, "decision", "add", "--question", "受众是你定的吗", "--unit", "my-post")
+		if code, res := runBrief(t, dir, "brief", "set", "my-post", "--audience", "后端工程师", "--audience-decision", "dec-1"); code != 0 {
+			t.Fatalf("seed: exit code = %d, %v", code, res.Diagnostics)
+		}
+		code, res := runBrief(t, dir, "brief", "set", "my-post", "--decision=", "--audience", "前端工程师")
+		if code != 0 || provenanceDecision(res.Brief, "audience") != "dec-1" {
+			t.Fatalf("empty decision: exit code = %d, provenance = %v", code, res.Brief["provenance"])
+		}
+	})
+}

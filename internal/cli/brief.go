@@ -31,24 +31,25 @@ var briefSetCommand = &command{
 		{"sources", flagString, "关联素材（Source）id，用逗号分隔；整体替换已有的关联素材"},
 		{"premise", flagString, "前提（Premise）：用一两句话概括的故事核心设想；空字符串时删除前提整体"},
 		{"premise-sources", flagString, "前提出自的素材 id，用逗号分隔；整体替换，空字符串时删除前提的关联素材"},
-		{"premise-decision", flagString, "记录作者确认前提的决策 id；决策决定后即为作者的确认记录（Confirmation Record）；空字符串时删除"},
+		{"premise-decision", flagString, "记录作者确认前提的决策 id；决策决定后即为作者的确认记录（Confirmation Record）；空字符串时删除；一轮回答多个字段时用共用的 --decision"},
 		{"theme", flagString, "主题（Theme）：故事想让读者体会到的深层意义；空字符串时删除"},
 		{"pov-person", flagString, "视角（POV）的人称：first（第一人称）、second（第二人称）或 third（第三人称）；空字符串时删除"},
 		{"pov-character", flagString, "视角人物：以谁的视角叙述；空字符串时删除"},
 		{"message", flagString, "要新增或修改的核心观点（Key Message）id；不存在时新增，此时必须给出 --message-text"},
 		{"message-text", flagString, "核心观点的内容，与 --message 一起使用"},
 		{"message-sources", flagString, "核心观点出自的素材 id，用逗号分隔，与 --message 一起使用；整体替换"},
-		{"message-decision", flagString, "记录作者确认该观点的决策 id，与 --message 一起使用；决策决定后即为作者的确认记录（Confirmation Record）"},
+		{"message-decision", flagString, "记录作者确认该观点的决策 id，与 --message 一起使用；决策决定后即为作者的确认记录（Confirmation Record）；一轮回答多个字段时用共用的 --decision"},
 		{"audience-sources", flagString, "受众字段的出处素材 id（逗号分隔，整体替换）；与 --audience-decision 同为字段出处（Field Provenance）"},
-		{"audience-decision", flagString, "记录作者确认受众的决策 id（作者一轮回答多个问题时可多个字段共用一个决策）"},
+		{"audience-decision", flagString, "记录作者确认受众的决策 id；一轮回答多个字段时用共用的 --decision"},
 		{"purpose-sources", flagString, "写作目的字段的出处素材 id（逗号分隔，整体替换）"},
-		{"purpose-decision", flagString, "记录作者确认写作目的的决策 id"},
+		{"purpose-decision", flagString, "记录作者确认写作目的的决策 id；一轮回答多个字段时用共用的 --decision"},
 		{"theme-sources", flagString, "主题字段的出处素材 id（逗号分隔，整体替换）"},
-		{"theme-decision", flagString, "记录作者确认主题的决策 id"},
+		{"theme-decision", flagString, "记录作者确认主题的决策 id；一轮回答多个字段时用共用的 --decision"},
 		{"pov-sources", flagString, "视角字段的出处素材 id（逗号分隔，整体替换）"},
-		{"pov-decision", flagString, "记录作者确认视角的决策 id"},
+		{"pov-decision", flagString, "记录作者确认视角的决策 id；一轮回答多个字段时用共用的 --decision"},
 		{"length-sources", flagString, "字数范围字段的出处素材 id（逗号分隔，整体替换）"},
-		{"length-decision", flagString, "记录作者确认字数范围的决策 id"},
+		{"length-decision", flagString, "记录作者确认字数范围的决策 id；一轮回答多个字段时用共用的 --decision"},
+		{"decision", flagString, "本次调用共用的决策 id：本次写入的字段、前提与核心观点在没有各自的 --<字段>-decision 时用它作为决策出处（确认记录（Confirmation Record））；显式给出的字段级决策优先，删除字段时不补位"},
 		{"remove-message", flagList, "要删除的核心观点 id；可重复，先于 --message 执行"},
 		{"method", flagString, "选用的写作法模板（Method Template）id（见 wa-cli method list）；none 表示不用写作法；空字符串时删除，改用文体的默认写作法"},
 	},
@@ -212,6 +213,12 @@ func briefEdit(inv *invocation, existing *brief.Brief) (brief.Edit, []workspace.
 		}
 		return nil
 	}
+	// --decision：本次写入且没有各自字段级决策的字段、前提与核心观点用它补位。
+	shared := str("decision")
+	if shared != nil && *shared == "" {
+		shared = nil
+	}
+	targets := 0
 	e.Audience, e.Purpose = str("audience"), str("purpose")
 	e.Theme = str("theme")
 	// 取值只有空白的文本与重复的 id 在修改前报告，诊断指向参数（brief-set）。
@@ -262,6 +269,13 @@ func briefEdit(inv *invocation, existing *brief.Brief) (brief.Edit, []workspace.
 			s := splitIDs(*premiseSources)
 			pe.Sources = &s
 		}
+		// 只给本次写入且取值为非空的前提补位；删除前提或删除其素材时不补位。
+		if (pe.Text != nil && *pe.Text != "") || (pe.Sources != nil && len(*pe.Sources) > 0) {
+			targets++
+			if pe.Decision == nil && shared != nil {
+				pe.Decision = shared
+			}
+		}
 		e.Premise = pe
 	}
 	// 视角（POV）：人称必须是 first、second 或 third；给出视角人物时必须有人称可用。
@@ -298,9 +312,23 @@ func briefEdit(inv *invocation, existing *brief.Brief) (brief.Edit, []workspace.
 	if v, ok := inv.values["method"]; ok {
 		e.Method = &v
 	}
-	// 字段出处（Field Provenance）：--<字段>-sources 与 --<字段>-decision 修改 provenance 映射。
+	// 字段出处（Field Provenance）：--<字段>-sources 与 --<字段>-decision 修改 provenance 映射；
+	// 本次写入且没有字段级决策的标量字段用共用的 --decision 补位。
+	written := map[string]bool{
+		brief.FieldAudience: e.Audience != nil && *e.Audience != "",
+		brief.FieldPurpose:  e.Purpose != nil && *e.Purpose != "",
+		brief.FieldTheme:    e.Theme != nil && *e.Theme != "",
+		brief.FieldPov:      (e.PovPerson != nil && *e.PovPerson != "") || (e.PovCharacter != nil && *e.PovCharacter != ""),
+		brief.FieldLength:   e.SetLength && e.Length != nil,
+	}
 	for _, f := range brief.ProvenanceFields {
 		src, dec := str(f+"-sources"), str(f+"-decision")
+		if written[f] {
+			targets++
+			if dec == nil && shared != nil {
+				dec = shared
+			}
+		}
 		if src == nil && dec == nil {
 			continue
 		}
@@ -341,7 +369,18 @@ func briefEdit(inv *invocation, existing *brief.Brief) (brief.Edit, []workspace.
 			s := splitIDs(*sources)
 			me.Sources = &s
 		}
+		// 只给本次写入且取值为非空的核心观点补位；删除观点或删除其素材时不补位。
+		if (me.Text != nil && *me.Text != "") || (me.Sources != nil && len(*me.Sources) > 0) {
+			targets++
+			if me.Decision == nil && shared != nil {
+				me.Decision = shared
+			}
+		}
 		e.Message = me
+	}
+	if shared != nil && targets == 0 {
+		return e, []workspace.Problem{{Code: codeInvalidValue, Severity: workspace.SeverityError, Field: "decision",
+			Message: "给出 --decision 时必须同时写入至少一个字段、前提或核心观点（如 --audience、--purpose、--premise 或 --message 加 --message-text）；只确认单个字段时用对应的 --<字段>-decision"}}
 	}
 	if e.Audience == nil && e.Purpose == nil && e.Premise == nil && e.Theme == nil && e.PovPerson == nil && e.PovCharacter == nil &&
 		!e.SetLength && !e.SetAvoid && !e.SetSources && e.Message == nil && len(e.Remove) == 0 && e.Method == nil && e.Provenance == nil {

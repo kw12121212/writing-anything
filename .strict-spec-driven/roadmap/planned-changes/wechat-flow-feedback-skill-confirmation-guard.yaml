@@ -1,0 +1,11 @@
+schema: strict-spec-driven/planned-change/v1
+schema_version: 1
+artifact_type: planned_change
+schema_file: ../../templates/strict-spec-driven/schemas/planned-change.yaml
+planned_change:
+  id: skill-confirmation-guard
+  milestone: wechat-flow-feedback
+status: planned
+summary: 内置技能写明：没有作者原话时不得带 --confirmed-by-author（试用或假设轮在 standard 关卡下不带确认验收）；验收后小改走 review record --reaffirm
+details: 'A1+F2。wa-publish 与 wa-auto 的「必须停下来问作者」段新增：作者没有在对话、阅读页或面板中明确确认时，不得带 --confirmed-by-author，也不得把「假设」「试用」写进 --confirmation 冒充确认；流程试用在 standard 或 fast 关卡下不带确认验收，记录为 confirmedByAuthor: false（strict 关卡要求确认，试用不能用 strict）。wa-revise 补充：验收后只改排版或小字时，经作者同意，用 review record --reaffirm --summary 重申，再请作者重新确认验收，不要整份重审；改动涉及观点、事实或论断时仍走完整审稿。改完运行 go test ./internal/skills，按 TestSkillHistoryCoversCurrent 的提示在 internal/skills/history.txt 追加哈希；运行 plugins/zcode-writing-viewer/scripts/stage-skills.mjs 重新生成 ZCode 技能副本，并通过插件的逐字核对测试。测试：skills_test 中断言 wa-publish 与 wa-auto 含约束文字、wa-revise 含 --reaffirm 路径。'
+depends_on: []

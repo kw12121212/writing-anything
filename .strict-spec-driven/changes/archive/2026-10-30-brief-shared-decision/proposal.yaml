@@ -1,0 +1,37 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: brief-shared-decision
+  status: proposed
+summary:
+  what:
+    - brief set 增加通用 --decision <决策 id>：把作者本轮确认的决策一次补位到本次写入、且没有显式字段级决策的字段、前提与核心观点
+    - wa-cli help brief set 与 wa-brief 技能改用一条命令的写法，说明显式字段级决策优先、删除字段不补位
+  why:
+    - 公众号流程复盘 F3：简报必填项通常由作者一轮答完，现在要 decision add、decide 之后再逐个给 --<字段>-decision，多字段共用一个决策的写法只在 help 里一句带过
+    - 这是每篇文章的第一道关卡，减少命令轮次能直接减少作者的等待与出错机会
+scope:
+  in:
+    - internal/cli/brief.go 的 brief set 注册 --decision <决策 id>：本次写入且没有显式给出 --<字段>-decision 的 audience、purpose、theme、pov、length 把该决策写入 provenance
+    - 本次写入且没有给出 --premise-decision 的前提把该决策写入 premise.decision；本次写入且没有给出 --message-decision 的核心观点把该决策写入 key_messages[i].decision
+    - 显式字段级决策优先（取值为空字符串时按删除处理）；只作用于本次调用写入且取值为非空的字段、前提与观点，删除与未写入的字段不补位；--decision 取值为空字符串时视为未给出
+    - wa-cli help brief set 的参数说明与 internal/skills/skills/wa-brief/SKILL.md 改用一条命令的写法
+    - 更新 internal/skills/history.txt 并重新生成 ZCode 插件捆绑的技能副本
+    - 本次没有写入任何取值为非空的、带决策出处的字段、前提或核心观点（因而 --decision 无处补位）时报告 input.invalid-value（field 为 decision）
+    - 单元测试覆盖 --decision 补位、显式字段级覆盖与显式空值删除、删除与未写入字段不补位、只给 --decision 或没有补位对象报错、--decision 引用未知决策
+    - 决策校验与字段级参数一致：决策不存在与 units 不含该单元时诊断 field 为对应的 <字段>-decision、premise-decision 或 message-decision；决策队列无法加载时报告 decision.invalid-queue（path 为 .writing-anything/decisions.yaml，不填 field）
+  out:
+    - 不改变 --<字段>-decision、--premise-decision 与 --message-decision 的现有语义与诊断
+    - 不改 brief show 的问题清单（不新增建议命令）
+    - 不新增 brief set 之外命令的 --decision
+    - 不改变 brief.yaml 结构、Schema 与 provenance 的既有字段
+unchanged_behavior:
+  - 未涉及字段的出处映射、字段取值与 YAML 注释保留
+  - brief show 的 brief 与 questions 输出不变
+  - brief set 现有参数的校验、诊断与空字符串删除语义不变
+  - 其他命令、文体与规范包行为不变
+roadmap:
+  milestone: wechat-flow-feedback
+  planned_change: brief-shared-decision

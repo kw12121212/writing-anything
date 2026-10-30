@@ -1,0 +1,11 @@
+schema: strict-spec-driven/planned-change/v1
+schema_version: 1
+artifact_type: planned_change
+schema_file: ../../templates/strict-spec-driven/schemas/planned-change.yaml
+planned_change:
+  id: preview-allow-host
+  milestone: wechat-flow-feedback
+status: planned
+summary: preview --serve 增加显式 Host 白名单参数（如 --allow-host），配合 tailscale serve 等反向代理远程访问，监听地址仍只用 127.0.0.1
+details: A2。internal/cli/preview.go 的 previewServer.hosts 允许追加作者显式给出的 Host（可重复，不支持通配），令牌校验不变；仍然只监听 127.0.0.1，不提供 --bind。--json 首行输出里可选给出按第一个白名单 Host 拼出的 url。更新 cli-contract/loopback-only-server 技术标准，写明白名单是唯一的放宽方式；wa-publish 的 browser 分支补充远程作者的做法。测试：白名单内的 Host 返回 200，白名单外返回 403，缺令牌返回 403，监听地址断言仍为 127.0.0.1。
+depends_on: []

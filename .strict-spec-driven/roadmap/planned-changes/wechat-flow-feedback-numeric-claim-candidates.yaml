@@ -1,0 +1,11 @@
+schema: strict-spec-driven/planned-change/v1
+schema_version: 1
+artifact_type: planned_change
+schema_file: ../../templates/strict-spec-driven/schemas/planned-change.yaml
+planned_change:
+  id: numeric-claim-candidates
+  milestone: wechat-flow-feedback
+status: planned
+summary: claim-candidates 增加可选的「数字＋量词」数据候选参数，内置文体中只在 wechat-marketing 启用，未登记论断的具体数字报 warning
+details: 'R2。internal/lint/claims.go 的 dataRE 只识别 %、倍、万、亿等形式。新增规则参数（如 counters: true 或量词列表），开启时把「阿拉伯数字＋常见量词」（人、个、条、次、天、月、年、元等）也作为数据候选；仍然跳过标题行和引用块，被已关联素材的论断覆盖时不报。wechat-marketing.yaml 的 claim-candidates 开启该参数，其余文体不开。提示文字说明：真实数据请登记论断并关联素材，示意数字请在正文中注明，或经作者写豁免。测试：公众号夹具报 warning，tech-blog 的「3 个步骤」不报，已登记论断覆盖时不报。'
+depends_on: []

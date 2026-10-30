@@ -1,0 +1,48 @@
+schema: strict-spec-driven/question-list/v1
+schema_version: 1
+artifact_type: question_list
+schema_file: templates/strict-spec-driven/schemas/question-list.yaml
+change: brief-shared-decision
+open: []
+resolved:
+  - id: shared-decision-scope
+    question: 通用 --decision 作用于哪些字段，删除字段时是否补位？
+    context: 计划变更只写「作用于本次写入、但没有显式给出 --<字段>-decision 的字段与观点」；需要确认前提（Premise）是否按字段处理、删除字段（取值为空字符串）是否补位。影响 proposal 范围、brief-set delta 规格与测试。
+    answer: roadmap 已定：作用于本次写入的字段与核心观点；前提按字段处理，写入前提时同样补位；只补位取值为非空的写入，删除字段与未写入的字段不补位；显式给出的字段级决策优先。
+    status: resolved
+    answered_by: roadmap
+  - id: requirement-problem
+    question: What is concretely going wrong today, and for whom?
+    context: 'Why this is asked: the change is planned against a need, and the need lives only with the requester. A "problem" here means what someone does or suffers today — not a feature that is missing. If the answer names a button, a field, a page, or an endpoint, it is a solution, and the underlying problem is still unstated. What a sufficient answer contains: who is affected, what they do today instead, and how often. Worked example: "every Monday one person spends forty minutes copying order rows into a spreadsheet to send the weekly report". What it changes: this becomes the proposal''s why, and it decides whether the change is worth making.'
+    answer: 公众号写作的 Agent 与作者：简报必填项（受众、目的、核心观点）通常由作者一轮答完，但写入要先 decision add、再 decide，然后逐个给 --audience-decision、--purpose-decision、--message-decision；多字段共用一个决策的写法只在 brief set --help 里一句带过。每篇文章的第一道关卡都多走一轮命令，2026-10-30 公众号流程复盘 F3 记录了这项摩擦。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-outcome
+    question: What observable difference proves the problem is solved?
+    context: 'Why this is asked: without a success condition, nobody can tell afterwards whether the change worked. "Observable" means someone outside the system can check it without reading the code. What a sufficient answer contains: what a person will see, or no longer have to do, once this is done. Worked example: "the report is in the manager''s inbox on Monday morning without anyone assembling it". What it changes: this becomes the delta spec''s scenarios and the acceptance evidence at review time.'
+    answer: 作者一轮答完后，Agent 用一条 wa-cli brief set <单元> --decision <决策 id> --audience ... --purpose ... --message ... 就能把同一个决策写到本次写入的字段、前提与核心观点的出处；显式给出的 --<字段>-decision 仍然优先，删除字段与未写入的字段不补位，只给 --decision 时报 input.invalid-value。新增单元测试与完整回归通过。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-trigger
+    question: Why now — what forced this?
+    context: 'Why this is asked: work that nothing forced is the work most often thrown away later. This question catches a request that sounds reasonable but has no real driver behind it. What a sufficient answer contains: the concrete event, deadline, incident, or cost that made this surface now, or an honest statement that nothing did. Worked example: "the report was missed last month and it was raised with the team". What it changes: a change with no trigger is a candidate for deferral, and the answer is weighed at review before archive.'
+    answer: 2026-10-30 的公众号写作流程复盘采纳了 F3（P2，每篇第一道关卡），并纳入 wechat-flow-feedback 里程碑；该计划变更是这个里程碑当前唯一可执行的条目。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-non-goals
+    question: What must explicitly not change?
+    context: 'Why this is asked: the requester knows which nearby behavior other people depend on, and the agent does not. A "non-goal" is something the change must leave alone even though it sits close to the work. What a sufficient answer contains: the behavior, setting, or output that must survive untouched, and who relies on it. Worked example: "do not change the saved filters — several people rely on their own". What it changes: these become the proposal''s unchanged_behavior items, which review checks the finished result against.'
+    answer: 不改 brief show 的问题清单与输出；不改变 --<字段>-decision、--premise-decision、--message-decision 的语义与诊断；不改 brief.yaml 结构与 Schema；不新增 brief set 之外命令的 --decision；其他命令、文体与规范包行为不变。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-interpretation
+    question: Which reading of the request is intended, where more than one is possible?
+    context: 'Why this is asked: a short request usually admits several readings, and building the wrong one is indistinguishable from building nothing. What a sufficient answer contains: the reading that is meant, stated plainly enough to rule the others out — or a statement that only one reading exists and what it is. Worked example: "export means the version sent to the manager, not the one I read myself". What it changes: this fixes the scope boundary before any code is written, and settles disputes about what was asked for.'
+    answer: 按 roadmap 的计划变更实现：在 brief set 上增加通用 --decision，只补位本次写入且没有显式字段级决策的字段、前提与核心观点；不把标题决策挪到 review 之后，也不改 brief show 的建议命令。
+    status: resolved
+    kind: requirement
+    answered_by: roadmap

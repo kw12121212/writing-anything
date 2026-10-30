@@ -27,3 +27,7 @@ milestones:
     title: DSH 工作区查看插件（DSH Workspace Viewer）
     path: roadmap/milestones/dsh-workspace-viewer.yaml
     status: complete
+  wechat-flow-feedback:
+    title: 公众号流程复盘落地（WeChat Flow Feedback）
+    path: roadmap/milestones/wechat-flow-feedback.yaml
+    status: proposed

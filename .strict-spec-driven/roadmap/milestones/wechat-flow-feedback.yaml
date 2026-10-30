@@ -1,0 +1,68 @@
+schema: strict-spec-driven/roadmap-milestone/v2
+schema_version: 2
+artifact_type: roadmap_milestone
+schema_file: ../schemas/roadmap-milestone.yaml
+milestone:
+  wechat-flow-feedback:
+    title: 公众号流程复盘落地（WeChat Flow Feedback）
+order: 700
+goal: 落地 2026-10-30 公众号写作流程复盘（docs/feedback-2026-10-30-wechat-flow.md）审阅后采纳的条目：导出标题取作者选定的标题、审稿录入有骨架、技能写明确认与重申的边界、简报决策与交接记录少走弯路、数字类数据候选与字数口径更清楚、阅读页可经反向代理远程访问；不削减任何作者关卡（Author Gate）。
+scope:
+  in:
+    - E1+E2：paste-html 页面提供复制标题与复制摘要、--print --json 输出 headline 与 digest、页面 title 取选定标题；markdown front matter 的 title 依次取选定标题、正文首个一级标题、作品 id，description 依次取文章摘要（Digest）、写作简报 purpose
+    - R1：review record 骨架生成，列出全部评分项与段落编号表，verdict 留空不预填
+    - A1+F2：wa-publish 与 wa-auto 技能写明没有作者原话时不得带 --confirmed-by-author；wa-revise 或 wa-publish 写明验收后小改用 review record --reaffirm 的路径
+    - F3：brief set 增加通用 --decision，作用于本次未显式给出 --<字段>-decision 的字段
+    - R2：claim-candidates 增加可选的「数字＋量词」数据候选参数，内置文体中只有 wechat-marketing 启用
+    - A2：preview --serve 增加 Host 白名单参数，配合 tailscale serve 等反向代理远程访问，监听地址仍只用 127.0.0.1
+    - F1 残余：正文 draft.md 未写入时，营销要素检查不报 marketing.headline-unasked（next 因而不提示 marketing ask），正文写入后照常报；缺失产物本来就按 draft、marketing 的顺序列出，不用改
+    - R3：lint help 已写「非空白字符数」，补写「含标点」，并在 length-range 的诊断与 brief set --length 的 help 中写明同一口径；lint --json 追加 cjkChars（只数汉字），length-range 口径不变
+    - F4：交接记录（Handoff Note）可选关联作品，handoff write --unit 归到所属作品；next 的每个步骤只附带所属作品的交接记录或未关联的旧记录
+  out:
+    - 把标题决策挪到 review 之后（F1 原建议）：4U 评分项要按作者选定的标题评分
+    - 自动区分排版变更与内容变更（F2 原建议）：已有 --reaffirm，是否小改由作者判断
+    - 新增 assumption 确认渠道（A1 原建议）：standard 关卡本来就能不带作者确认验收
+    - preview 监听非回环地址（A2 原建议）：违反 cli-contract/loopback-only-server
+    - 信息密度指标（复盘第七节）：另行评估
+    - DSH 插件面板新增复制标题或复制摘要按钮：本里程碑只保证 DSH 的复制图文（copyroutes.ts 消费 paste-html --print --json）兼容新增字段，面板按钮另行跟进
+done_criteria:
+  - 公众号测试夹具在正文没有一级标题、营销要素已选定标题时：export --front-matter 的 title 等于选定标题、description 等于 digest；paste-html 页面 title 等于选定标题并带复制标题与复制摘要按钮；export --format paste-html --print --json 含 headline 与 digest 字段；tech-blog 夹具行为不变
+  - brief set --decision d1 --audience ... --purpose ... 后，audience 与 purpose 的字段出处都记录 d1；同时给出 --purpose-decision d2 时 purpose 记录 d2
+  - 工作区里两个作品各写一条关联自身的交接记录后，wa-cli next 对每个作品的步骤只附带该作品的交接记录；不关联单元的旧交接记录保持现有行为
+  - wechat-marketing 夹具中「共同好友 12 人」未登记论断时，lint 出现 warning 级数据候选；tech-blog 夹具中「3 个步骤」不报
+  - 新术语按 docs/GLOSSARY.md 加入；完整回归命令 go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out 通过
+  - review record 骨架命令的输出含 review show 的全部评分项与正文段落编号（与 wa-cli provenance 一致），verdict 与 evidence 全部为空；把未填写的骨架直接交给 review record 会被拒，诊断逐项指出未填写的评分项（字段路径 rubric[i].verdict），而不是笼统的 Schema 错误
+  - wa-publish 与 wa-auto 的 SKILL.md 含「无作者原话不得带 --confirmed-by-author」的约束，技能中写明验收后小改走 review record --reaffirm；internal/skills/history.txt 追加新哈希（TestSkillHistoryCoversCurrent 通过），plugins/zcode-writing-viewer/skills 下的副本经 stage-skills.mjs 重新生成并通过逐字核对
+  - preview --serve 加 Host 白名单后，以白名单内的 Host 带令牌请求返回 200；白名单外的 Host 或缺令牌仍返回 403；监听地址仍为 127.0.0.1
+  - wechat-marketing 夹具在 draft 阶段、正文未写入、marketing.yaml 已有两个以上标题候选时，next 的阻塞项不含 marketing.headline-unasked，命令不含 wa-cli help marketing ask；用 draft write 写入正文后才出现
+  - lint 与 length-range 的 help 和诊断写明「字数为非空白字符数，含标点」；lint --json 含 cjkChars，含标点、英文与空白的夹具断言 chars 与 cjkChars 的值
+intake_questions:
+  - id: review-skeleton-form
+    question: 审稿骨架以什么形式提供？
+    context: 当前 review record 需要整份 YAML；其他产物（claim、marketing）都是增量命令
+    impact: 决定 R1 的命令形态与 Agent 的使用方式
+    recommendation: 已定（2026-10-30 作者确认）：review record --init 输出 YAML 骨架到标准输出，由 Agent 填写后整份录入，保持 review record 整体替换的语义；不引入逐项增量命令
+  - id: handoff-scope
+    question: 交接记录按单元还是按作品关联？
+    context: 交接记录目前是工作区级，没有单元字段
+    impact: 决定 F4 的过滤粒度
+    recommendation: 已定（2026-10-30 作者确认）：按作品关联（--unit 给作品或其任一单元时归到所属作品），next 按作品过滤；未关联的旧记录对所有作品可见
+  - id: cjk-chars-field
+    question: R3 是否新增汉字数字段，length-range 是否支持改口径？
+    context: chars 去掉空白、保留标点；作者习惯按汉字数估篇幅，两者相差约 15%
+    impact: 决定 R3 只改文档还是同时扩展输出与规则参数
+    recommendation: 已定（2026-10-30 作者确认）：写清文档，lint --json 增加 cjkChars 字段；length-range 不加口径参数
+planned_changes: {}
+dependencies:
+  - dsh-workspace-viewer 之后执行；E1 建立在 v0.9.0 的 paste-html 导出（paste-ready-copy）之上
+risks:
+  - R2 的量词模式误报：需按文体参数启用，并用 tech-blog 夹具做反例
+  - F4 改变交接记录结构：旧记录没有单元字段，必须保持向后兼容
+  - A2 的 Host 白名单放宽了防 DNS 重绑定的校验：令牌仍是必需的，白名单只能显式给出，不能用通配
+  - A1 与 F2 改动内置技能：internal/skills/history.txt 要追加哈希；只有 ZCode 插件捆绑技能副本（plugins/zcode-writing-viewer/skills，由 scripts/stage-skills.mjs 生成），要重新生成并逐字核对；DSH 插件不捆绑技能
+  - E1 改动 paste-html --print --json 的输出：DSH 插件 copyroutes.ts 与 copyview.ts 消费该输出，新增字段必须是追加的，不能改动现有字段
+status: proposed
+notes:
+  - 来源：docs/feedback-2026-10-30-wechat-flow.md（基线 v0.8.0），审阅时已对照 v0.9.2 代码核对
+  - 2026-10-30 作者接受三个 intake 问题的推荐做法：review record --init、交接记录按作品关联、lint --json 增加 cjkChars
+details: 审阅证据：export.go frontMatter 与 paste.go 只取正文首个一级标题，没有时退回作品 id，description 取 brief.Purpose；公众号编辑器的标题与摘要是单独输入框，所以正文 HTML 不加一级标题。review.go 在 standard 关卡下不要求作者确认，channel 已有 cli 与 preview。review record --reaffirm 已存在（boundary-semantics-silent-failure/review-reaffirm）。claims.go 的 dataRE 只认 %、倍、万、亿等形式。units.go 的 step 对每个步骤都调用 latestHandoff(dir)，取的是工作区最新一条。preview.go 只监听 127.0.0.1，并校验 Host。work.go Blockers 先按 RequiredArtifacts 顺序（draft、marketing）列缺失产物，marketing.Check 在候选达到两个且没有决策时报 headline-unasked，不看正文是否已写入。review-input 的 verdict 是 enum pass|fail，空值目前只得到 Schema 错误。
