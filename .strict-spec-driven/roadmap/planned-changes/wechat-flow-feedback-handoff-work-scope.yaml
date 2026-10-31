@@ -5,7 +5,7 @@ schema_file: ../../templates/strict-spec-driven/schemas/planned-change.yaml
 planned_change:
   id: handoff-work-scope
   milestone: wechat-flow-feedback
-status: planned
+status: complete
 summary: 交接记录可选关联作品：handoff write --unit 归到所属作品，next 的每个步骤只附带所属作品最近的交接记录，未关联的旧记录对所有作品可见
 details: F4。粒度已定（intake handoff-scope，2026-10-30 作者确认）：按作品关联。internal/handoff 的 Note 和 fileNote 新增可选 work 字段，handoffs.schema.json 与 handoff-input.schema.json 同步（schema_version 不升级，字段可选，向后兼容）；handoff write 增加 --unit，接受作品或其任一单元，写入时归到所属作品，单元不存在时报错。units.go 的 step（line 478 起）目前对每个步骤都调用 latestHandoff(dir)，改为 latestHandoff(dir, w.ID)：取该作品最近的记录与最近的未关联记录中较新的一条。handoff show 增加 --unit 过滤。更新 workspace-artifacts 技术标准与 wa-* 技能的会话结束段（写交接时带 --unit；同步 history.txt 与 ZCode 技能副本）。测试：两个作品各写一条关联自身的交接记录后 next 互不串入；只有未关联的旧记录时，所有作品的行为与现在一致。
 depends_on: []

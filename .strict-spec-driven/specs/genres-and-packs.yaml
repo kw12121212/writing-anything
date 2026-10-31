@@ -144,7 +144,7 @@ requirements:
         - THEN: work.yaml 的 genre 为 tech-blog、type 为 article、stage 为 brief；resolved.rules 含 code-language、links 与 references，resolved.rubric 含 accuracy 且 blocking 为 true，退出码都为 0
   wechat-marketing-genre:
     strength: MUST
-    statement: 'wa-cli 必须随二进制提供内置的 wechat-marketing 文体（公众号营销文章）：单元类型 article（子单元类型 section，简报必填项为 audience、purpose 与 key_messages）与 section；阶段依次为 brief（必需产物 brief）、outline（outline）、draft（draft 与 marketing，见 marketing 主规格的 marketing-gate）与 review（review 与 acceptance）；默认写作法为 aida；规则 claims（claim-sources，error）、claim-candidates（warning）、ads（ad-compliance，error）、length（length-range，warning，1500 到 4000 字）与 paragraphs（paragraph-length，warning，每段不超过 150 字）；评分标准为 reader-benefit（读者收益）、hook（开头钩子）、cta（行动号召）、compliance（合规可信，blocking: true）与 4U 标题法的 headline-useful（有用）、headline-urgent（紧迫）、headline-unique（独特）、headline-specific（具体），标题类评分项针对作者选定的标题；上下文预算为 12000。它与其他内置文体一样通过文体的校验。'
+    statement: 'wa-cli 必须随二进制提供内置的 wechat-marketing 文体（公众号营销文章）：单元类型 article（子单元类型 section，简报必填项为 audience、purpose 与 key_messages）与 section；阶段依次为 brief（必需产物 brief）、outline（outline）、draft（draft 与 marketing，见 marketing 主规格的 marketing-gate）与 review（review 与 acceptance）；默认写作法为 aida；规则 claims（claim-sources，error）、claim-candidates（warning，counters 开启：数字（含全角数字）后紧跟常见量词同样作为数据候选，见 lint 主规格的 claim-rule-types）、ads（ad-compliance，error）、length（length-range，warning，1500 到 4000 字）与 paragraphs（paragraph-length，warning，每段不超过 150 字）；评分标准为 reader-benefit（读者收益）、hook（开头钩子）、cta（行动号召）、compliance（合规可信，blocking: true）与 4U 标题法的 headline-useful（有用）、headline-urgent（紧迫）、headline-unique（独特）、headline-specific（具体），标题类评分项针对作者选定的标题；上下文预算为 12000。它与其他内置文体一样通过文体的校验。'
     scenarios:
       new-wechat-marketing:
         - GIVEN: 用 wa-cli init --genre wechat-marketing --dir D 初始化的工作区
@@ -158,6 +158,10 @@ requirements:
         - GIVEN: 用 wa-cli init --genre wechat-marketing --gate-level strict 初始化的工作区
         - WHEN: 只用 wa-cli 命令完成：new、source add、brief set、advance、按 aida 的章节 outline set、advance、draft write、claim add、marketing set、marketing ask、decide、lint（没有 error 级发现项）、advance、review record（含 4U 评分项）、accept（给出作者确认）、advance 与 export
         - THEN: 作品 stage 为 done，导出文件含正文，validate 通过；缺少某个营销要素或标题未决定时 advance 被拒绝
+      counters-on:
+        - GIVEN: wechat-marketing 作品 post 的正文含「共同好友 12 人」，没有已登记的论断
+        - WHEN: 运行 wa-cli config resolved --dir D --json 与 wa-cli lint post --dir D --json
+        - THEN: resolved.rules 中 claim-candidates 的 params.counters 为 true；lint 的 findings 含一条 warning 级数据候选发现项
   pack-html-theme:
     strength: MUST
     statement: '规范包可以用 html_theme 声明 HTML 导出的样式主题（HTML Theme）：键必须是元素名 wrapper、h1、h2、h3、h4、p、strong、em、code、pre、blockquote、ul、ol、li、hr、figure、caption、footnote 与 references 之一，值为 CSS 声明（一个或多个「属性: 值」，用分号分隔；属性名由小写字母与连字符组成，值只能由英文字母、数字、空格、制表符与 # % . , ( ) + - 组成（字符白名单），且不区分大小写地不含 url(、expression 与 javascript）；元素名不在列表中或取值不符合时 wa-cli validate 与 wa-cli config resolved 报告 artifact.schema-violation（field 为 html_theme.<元素名>），config resolved 的 resolved 为 null，以退出码 1 退出。合并时以内置默认主题为基础，按 config.yaml 中 packs 的顺序逐个元素覆盖，后面的规范包覆盖前面的；resolved.htmlTheme 的每个元素含 value 与 source（规范包为 pack:<id>，内置默认为 default）。文体与 config.yaml 不能声明 html_theme。'

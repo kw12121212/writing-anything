@@ -1,0 +1,93 @@
+schema: strict-spec-driven/delta-spec/v1
+schema_version: 1
+artifact_type: delta_spec
+schema_file: templates/strict-spec-driven/schemas/delta-spec.yaml
+target_spec: lint
+operations:
+  ADDED: {}
+  MODIFIED:
+    claim-rule-types:
+      strength: MUST
+      statement: '合并结果中有生效的 claim-sources 或 claim-candidates 规则时，wa-cli lint 必须读取单元目录下的 claims.yaml（不存在时没有已登记的论断；不通过校验时报告其诊断并以退出码 1 退出，论断相关的规则不执行）与所引素材的类型，并按规则的 type 执行以下检查；两种规则都未生效时不读取 claims.yaml。论断文字的比较对象是去掉首尾空白、句末的 。！？；… 与右引号或右括号后的 text，在围栏代码块之外的原文（含行内代码与链接的原文）中查找；同一结束位置只取最长的论断文字。claim-sources（参数 kinds，字符串数组，默认 [experience, opinion, case, data]；source_types，字符串数组，默认 [author-note, interview, transcript]）：kind 在 kinds 中的每个论断（Claim）必须关联至少一份类型在 source_types 中的素材，否则报告一项发现项：没有关联素材时 message 说明缺少作者素材，只关联了其他类型的素材时 message 列出这些素材及其类型；两种 message 都含论断 id、wa-cli source add 与 wa-cli claim set <unit> <论断 id> --sources 的做法；位置为论断文字第一次出现处（text 为该文字），找不到时为全文级发现项。有 error 级 claim-sources 发现项时，lint.findings 诊断的 next 另含 wa-cli help source add --json、wa-cli help claim set --json 与 wa-cli claim list <unit> --dir <dir> --json。claim-candidates（参数 pronouns，默认 [我, 我们]；experience_markers，默认 [曾, 曾经, 当时, 那时, 那次, 去年, 前年, 上个月, 上周, 第一次, 亲自, 亲眼, 遇到, 经历过, 踩过, 做过, 参与, 负责]；data，布尔，默认 true；counters，布尔，默认 false；cover_kinds，字符串数组，默认 [experience, opinion, case, data]）：把散文段落中每行的可见文字在 。！？；… 与行尾处切分为句子；除标题行（不检测任何候选：标题是电报式标签而非散文论断，其中的数字应出现在正文句子中被登记）与引用块行（只检测数据）之外，句子中出现 experience_markers 中的词且其前有 pronouns 中的词时为亲历候选，每个标记词与它之前最近的代词组成一个亲历区间（从该代词到标记词所在分句的末尾，即下一个 ，、：；,;: 或句末标点之前，不含末尾空白）；同一分句的亲历区间中任一被覆盖即视为该分句的亲历已登记，句子中每个含亲历区间的分句都已登记时该句的亲历才算已登记，data 为 true 且句子的可见文字中有数字（含全角数字）后接 %、％、倍、个百分点、万或亿，或有「百分之」加数字、中文数字加「倍」时为数据候选（区间为该数据）；counters 为 true 时，数字（含全角数字）后接常见量词（人、个、条、次、天、月、年、元、名、位、场、篇、种、项、字、分钟、小时、周；数字与量词之间可有空白）同样为数据候选（区间为该数字、空白与量词），与其它数据候选同样受标题行跳过、引用块检测数据与已登记论断覆盖的约束；data 为 false 时不判断数据候选，counters 亦不生效；同一句中多个数据形态嵌套命中时（如「N 个百分点」同时命中「N 个百分点」与「N 个」）取最长区间，只计一个候选。亲历候选的覆盖论断是 kind 在 cover_kinds 中的已登记论断，数据候选的覆盖论断是 kind 在 cover_kinds 中的已登记论断与关联了至少一份素材的 fact 论断；论断文字出现处整段覆盖候选区间时，该候选视为已登记。有未被覆盖的候选区间时报告一项发现项，位置为句子首个非空白字符，text 为句子的原文，message 说明未覆盖的候选种类并提示用 wa-cli claim add <unit> 登记并关联作者素材（真实数据请关联素材；示意数字请在正文中注明，如「示意」）；message 末尾按 claims.yaml 中的顺序为每个满足下述条件、文字与该发现项的未覆盖候选区间重叠的已登记论断追加说明：类型不在 cover_kinds 中、且与未覆盖的亲历区间重叠或（kind 不为 fact 时）与未覆盖的数据区间重叠的论断，说明「论断 <论断 id>（<kind>）的类型不在 claim-candidates 的 cover_kinds（<cover_kinds 实际取值以、相连，为默认时冠以「默认」>）内，未参与覆盖」；kind 为 fact、未关联素材且文字与未覆盖的数据候选区间重叠的论断，说明「论断 <论断 id>（fact）未关联素材，不能覆盖数据候选」；同一论断两句都命中时各追加一句。发现项超过 MaxHits（1000）时只报告前 1000 项并报告 lint.truncated。'
+      scenarios:
+        claim-without-source:
+          - GIVEN: 作品 my-post（minimal）的 claims.yaml 有 kind 为 experience、sources 为空、text 为「我们去年把连接池调到 50」的论断 claim-1，正文含这句话
+          - WHEN: 运行 wa-cli lint my-post --dir D --json
+          - THEN: findings 含一项 rule 为 claims、severity 为 error 的发现项，line 与 column 为该句在正文中的位置，message 含 claim-1 与 wa-cli claim set my-post claim-1；lint.findings 的 next 含 wa-cli help claim set --json 与 wa-cli claim list my-post；valid 为 false，退出码为 1
+        claim-with-reference-only:
+          - GIVEN: 论断 claim-1 只关联了类型为 reference 的素材 src-r
+          - WHEN: 运行 wa-cli lint my-post --dir D --json
+          - THEN: findings 含一项 rule 为 claims 的发现项，message 含 src-r 与 reference
+        claim-with-author-source:
+          - GIVEN: 用 wa-cli claim set my-post claim-1 --sources src-a 让论断 claim-1 关联类型为 interview 的素材 src-a
+          - WHEN: 运行 wa-cli lint my-post --dir D --json
+          - THEN: findings 中没有 rule 为 claims 的发现项
+        fact-claim-not-required:
+          - GIVEN: 论断 claim-2 的 kind 为 fact、没有关联素材
+          - WHEN: 运行 wa-cli lint my-post --dir D --json
+          - THEN: findings 中没有关于 claim-2 的 claims 发现项
+        experience-candidate:
+          - GIVEN: 正文含「我曾经在生产环境踩过这个坑。」，没有已登记的论断
+          - WHEN: 运行 wa-cli lint my-post --dir D --json
+          - THEN: findings 含一项 rule 为 claim-candidates、severity 为 warning、text 为该句的发现项，退出码不因它变为 1
+        generic-we:
+          - GIVEN: 正文为「我们可以看到连接池的作用。」
+          - WHEN: 运行 wa-cli lint my-post --dir D --json
+          - THEN: findings 中没有 claim-candidates 发现项
+        data-candidate:
+          - GIVEN: 正文含「延迟降低了 90%。」
+          - WHEN: 运行 wa-cli lint my-post --dir D --json
+          - THEN: findings 含一项 claim-candidates 发现项，message 说明为数据
+        covered-candidate:
+          - GIVEN: 正文含「我曾经在生产环境踩过这个坑。」，claims.yaml 有 kind 为 experience、text 为「我曾经在生产环境踩过这个坑」的论断，关联了 author-note 素材
+          - WHEN: 运行 wa-cli lint my-post --dir D --json
+          - THEN: findings 中没有 claim-candidates 与 claims 发现项
+        partial-cover:
+          - GIVEN: 正文为「我曾经负责迁移，延迟降低了 90%。」，只登记了 kind 为 experience、text 为「我曾经负责迁移」的论断
+          - WHEN: 运行 wa-cli lint my-post --dir D --json
+          - THEN: findings 含一项 claim-candidates 发现项，message 说明为数据而不含亲历；登记的论断 kind 为 fact、关联了素材、text 为「我曾经负责迁移，延迟降低了 90%」时，message 只说明亲历，并追加该论断类型不在 cover_kinds 内的说明；该论断未关联素材，或文字只覆盖「迁移」或只是「我曾」时，message 同时说明亲历与数据
+        heading-and-quote:
+          - GIVEN: 正文的标题行为「## 我曾经踩过的坑」与「## 0.81 秒、33.2 万、2028」，引用块行为「> 我们去年增长了 50%。」
+          - WHEN: 运行 wa-cli lint my-post --dir D --json
+          - THEN: 两个标题行都没有 claim-candidates 发现项（含数字的标题行也不产生数据候选，其中的数字应出现在正文句子中登记）；引用块行有一项 message 说明为数据而不含亲历的发现项
+        nearest-pronoun:
+          - GIVEN: 正文为「我们知道，我曾经踩过这个坑。」，登记了 kind 为 experience、text 为「我曾经踩过这个坑」的论断
+          - WHEN: 运行 wa-cli lint my-post --dir D --json
+          - THEN: findings 中没有 claim-candidates 发现项
+        invalid-claims:
+          - GIVEN: claims.yaml 不通过校验
+          - WHEN: 运行 wa-cli lint my-post --dir D --json
+          - THEN: diagnostics 中有该 claims.yaml 的诊断，退出码为 1
+        claim-rules-inactive:
+          - GIVEN: claims.yaml 不通过校验，项目配置豁免了 claims 与 claim-candidates 两条规则
+          - WHEN: 运行 wa-cli lint my-post --dir D --json
+          - THEN: diagnostics 为空，退出码为 0
+        fact-covers-data:
+          - GIVEN: 正文含「延迟降低了 90%。」，claims.yaml 有 kind 为 fact、关联了 reference 类型素材、text 为「延迟降低了 90%」的论断
+          - WHEN: 运行 wa-cli lint my-post --dir D --json
+          - THEN: findings 中没有 claim-candidates 与 claims 发现项
+        fact-without-source-note:
+          - GIVEN: 正文含「延迟降低了 90%。」，claims.yaml 有 kind 为 fact、未关联素材、text 为「延迟降低了 90%」的论断
+          - WHEN: 运行 wa-cli lint my-post --dir D --json
+          - THEN: findings 含一项说明为数据的 claim-candidates 发现项，message 含该论断 id 与「未关联素材，不能覆盖数据候选」
+        fact-experience-note:
+          - GIVEN: 正文含「我曾经在生产环境踩过这个坑。」，claims.yaml 有 kind 为 fact、关联了素材、text 为「我曾经在生产环境踩过这个坑」的论断
+          - WHEN: 运行 wa-cli lint my-post --dir D --json
+          - THEN: findings 含一项说明为亲历的 claim-candidates 发现项，message 含该论断 id 与「的类型不在 claim-candidates 的 cover_kinds（默认 experience、opinion、case、data）内，未参与覆盖」
+        excluded-cover-kind-note:
+          - GIVEN: 项目配置 claim-candidates 规则的 cover_kinds 为 [fact]，正文为「我曾经踩过坑。」，登记了 kind 为 experience、text 为「我曾经踩过坑」的论断
+          - WHEN: 运行 wa-cli lint my-post --dir D --json
+          - THEN: findings 含一项说明为亲历的 claim-candidates 发现项，message 含该论断 id 与「的类型不在 claim-candidates 的 cover_kinds（fact）内，未参与覆盖」
+        counter-candidate:
+          - GIVEN: wechat-marketing 作品 post 的正文含「共同好友 12 人」，没有已登记的论断
+          - WHEN: 运行 wa-cli lint post --dir D --json
+          - THEN: findings 含一项 rule 为 claim-candidates、severity 为 warning 的发现项，message 含「数据」，退出码为 0
+        tech-blog-no-counters:
+          - GIVEN: tech-blog 作品 post（未开启 counters 参数）的正文含「3 个步骤」，没有已登记的论断
+          - WHEN: 运行 wa-cli lint post --dir D --json
+          - THEN: findings 中没有该句的数据候选发现项（「个」不在默认数据形态中），退出码为 0
+        counter-covered:
+          - GIVEN: wechat-marketing 作品 post 的正文含「共同好友 12 人」，claims.yaml 有文字含「共同好友 12 人」且关联了素材的论断
+          - WHEN: 运行 wa-cli lint post --dir D --json
+          - THEN: 该数据候选被覆盖，findings 中没有该句的发现项
+  REMOVED: {}

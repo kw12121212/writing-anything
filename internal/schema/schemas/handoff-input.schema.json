@@ -7,6 +7,7 @@
   "required": ["done"],
   "properties": {
     "done": {"type": "array", "minItems": 1, "items": {"type": "string", "pattern": "\\S"}},
+  "work": {"type": "string", "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$"},
     "todo": {"type": "array", "items": {"type": "string", "pattern": "\\S"}},
     "instructions": {"type": "array", "items": {"type": "string", "pattern": "\\S"}},
     "risks": {"type": "array", "items": {"type": "string", "pattern": "\\S"}}

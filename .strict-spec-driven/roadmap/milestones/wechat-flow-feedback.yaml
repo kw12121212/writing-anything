@@ -61,7 +61,7 @@ risks:
   - A2 的 Host 白名单放宽了防 DNS 重绑定的校验：令牌仍是必需的，白名单只能显式给出，不能用通配
   - A1 与 F2 改动内置技能：internal/skills/history.txt 要追加哈希；只有 ZCode 插件捆绑技能副本（plugins/zcode-writing-viewer/skills，由 scripts/stage-skills.mjs 生成），要重新生成并逐字核对；DSH 插件不捆绑技能
   - E1 改动 paste-html --print --json 的输出：DSH 插件 copyroutes.ts 与 copyview.ts 消费该输出，新增字段必须是追加的，不能改动现有字段
-status: proposed
+status: complete
 notes:
   - 2026-10-30 作者接受三个 intake 问题的推荐做法：review record --init、交接记录按作品关联、lint --json 增加 cjkChars
   - 来源：2026-10-30 公众号写作流程复盘（基线 v0.8.0），审阅时已对照 v0.9.2 代码核对

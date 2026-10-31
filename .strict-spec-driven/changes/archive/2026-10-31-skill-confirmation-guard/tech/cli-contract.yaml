@@ -1,0 +1,21 @@
+schema: strict-spec-driven/delta-tech/v1
+schema_version: 1
+artifact_type: delta_tech
+schema_file: templates/strict-spec-driven/schemas/delta-tech.yaml
+target_standard: cli-contract
+operations:
+  ADDED:
+    skill-command-paths-reachable:
+      strength: SHOULD
+      statement: 内置技能正文写出的命令序列（操作路径）必须在单元的每个相关阶段下实际可行：评审技能改动时沿命令层的阶段检查（如 accept 的 wrongStage）、验收与审稿的过期判定（review.Stale、AcceptanceBlockers 各自比较哪个哈希）与 wa-cli next 给出的 commands 推演一遍，确认按技能文字逐步执行不会撞状态机拒绝；守护测试的字面量断言拦不住「文字与命令行为差一步」的问题。
+      rationale: skill-confirmation-guard 评审发现 wa-revise 的小改路径写「reaffirm 后重新确认验收」，但 --reaffirm 只更新 review.yaml 的 draft_sha256、验收记录仍按自己的哈希判过期，且 done 单元不能直接 accept（wrongStage）——照文字走会撞诊断，正确序列是 reaffirm → reopen → 重新 accept → advance。技能里的命令序列 Agent 会逐字执行，与状态机差一步就在真实会话里暴露。
+      enforcement:
+        method: review
+        detail: 评审技能中新增或改动的命令序列时，对照 internal/cli 的阶段检查与过期判定推演每个阶段下的可达性；必要时在测试里按技能文字执行同一命令序列。
+      examples:
+        good:
+          - wa-revise 的小改路径写明：重申只解除审稿过期，done 单元先经作者同意 reopen 退回再重新确认验收并推进。
+        bad:
+          - 技能写「reaffirm 后直接重新确认验收」而单元在 done 阶段：直接 accept 被 wrongStage 拒绝。
+  MODIFIED: {}
+  REMOVED: {}

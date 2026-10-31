@@ -2,6 +2,7 @@ package cli
 
 import (
 	"encoding/json"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -11,6 +12,7 @@ type lintOut struct {
 	Findings []map[string]any `json:"findings"`
 	Waived   []map[string]any `json:"waived"`
 	Chars    int              `json:"chars"`
+	CJKChars int              `json:"cjkChars"`
 }
 
 const draftRel = ".writing-anything/works/my-post/draft.md"
@@ -45,9 +47,9 @@ func TestLint(t *testing.T) {
 	if code, res := runLintJSON(t, dir, ""); code != 1 || !hasNext(diag(t, res.result, "draft.not-found"), "wa-cli help draft write --json") || len(res.Findings) != 0 {
 		t.Fatalf("lint-no-draft: exit code = %d", code)
 	}
-	// lint-clean：字数 10；minimal 的 length 规则报告字数不足（warning），不影响退出码。
+	// lint-clean：字数 10（非空白字符数，含标点）、汉字 9；minimal 的 length 规则报告字数不足（warning），不影响退出码。
 	code, res := runLintJSON(t, dir, "连接池可以降低延迟。")
-	if code != 0 || !res.Valid || res.Chars != 10 || len(res.Waived) != 0 || len(res.ChangedPaths) != 0 {
+	if code != 0 || !res.Valid || res.Chars != 10 || res.CJKChars != 9 || len(res.Waived) != 0 || len(res.ChangedPaths) != 0 {
 		t.Fatalf("lint-clean: exit code = %d, result = %+v", code, res)
 	}
 	if l := findingsOf(res.Findings, "length"); len(l) != 1 || l[0]["line"] != nil || !strings.Contains(l[0]["message"].(string), "300") || len(res.Findings) != 1 {
@@ -314,5 +316,93 @@ func TestLintAdComplianceTechBlogOff(t *testing.T) {
 	// 规则确实执行了：tech-blog 的 length 规则报告字数不足。
 	if len(findingsOf(res.Findings, "length")) != 1 {
 		t.Fatalf("rules did not run: %v", res.Findings)
+	}
+}
+
+// length-counting-clarity：字数口径写明「非空白字符数，含标点」，lint --json 与文本摘要行输出汉字数
+// （cjkChars，只数汉字）；length-range 的诊断 message 与 help 写明同一口径；brief set --length 的 help 同句。
+func TestLintCountingClarity(t *testing.T) {
+	dir := newWork(t)
+	// 含标点、英文与空白的夹具：chars 数全部非空白字符（含标点与英文字母数字），cjkChars 只数汉字。
+	code, res := runLintJSON(t, dir, "连接池，Go 的 10 个要点。")
+	if code != 0 || res.Chars != 13 || res.CJKChars != 7 {
+		t.Fatalf("mixed text: exit code = %d, chars = %d, cjkChars = %d", code, res.Chars, res.CJKChars)
+	}
+	l := findingsOf(res.Findings, "length")
+	if len(l) != 1 || !strings.Contains(l[0]["message"].(string), "字数（Word Count）为 13（非空白字符数，含标点），少于下限 300") {
+		t.Fatalf("length message should state the counting scope: %v", res.Findings)
+	}
+	// 屏蔽区域不计入两个口径：围栏代码块、URL 与 HTML 注释里的英文与汉字都不数。
+	if code, res = runLintJSON(t, dir, "正文七个字。\n\n```\nGo 10 连接池\n```\n"); code != 0 || res.Chars != 6 || res.CJKChars != 5 {
+		t.Fatalf("masked code block: exit code = %d, chars = %d, cjkChars = %d", code, res.Chars, res.CJKChars)
+	}
+	if code, res = runLintJSON(t, dir, "见字\n\nhttps://example.com/连接池Go\n"); code != 0 || res.Chars != 2 || res.CJKChars != 2 {
+		t.Fatalf("masked url: exit code = %d, chars = %d, cjkChars = %d", code, res.Chars, res.CJKChars)
+	}
+	if code, res = runLintJSON(t, dir, "见字\n\n<!-- 连接池，Go -->\n"); code != 0 || res.Chars != 2 || res.CJKChars != 2 {
+		t.Fatalf("masked comment: exit code = %d, chars = %d, cjkChars = %d", code, res.Chars, res.CJKChars)
+	}
+	// 文本摘要行同时显示字数（含口径）与汉字数。
+	if code, out, _ := run(t, "lint", "my-post", "--dir", dir); code != 0 ||
+		!strings.Contains(out, "字数 2（非空白字符数，含标点），汉字 2") {
+		t.Fatalf("text summary line: exit code = %d, stdout = %s", code, out)
+	}
+	// help 与 brief set --length 的 help 写明同一口径。
+	for _, doc := range helpDocs(t, "help", "lint", "--json") {
+		if doc.Name != "lint" {
+			continue
+		}
+		byKey := map[string]string{}
+		for _, k := range doc.OutputKeys {
+			byKey[k.Name] = k.Description
+		}
+		if !strings.Contains(byKey["chars"], "含标点") || !strings.Contains(byKey["cjkChars"], "汉字") {
+			t.Fatalf("lint help output keys lack counting scope: %+v", doc.OutputKeys)
+		}
+	}
+	for _, doc := range helpDocs(t, "help", "brief", "set", "--json") {
+		if doc.Name != "brief set" {
+			continue
+		}
+		for _, f := range doc.Flags {
+			if f.Name == "length" && !strings.Contains(f.Description, "非空白字符数，含标点") {
+				t.Fatalf("brief set --length help lacks counting scope: %+v", doc.Flags)
+			}
+		}
+	}
+}
+
+// numeric-claim-candidates：counters 开启时「数字＋常见量词」是数据候选——wechat-marketing 报 warning、
+// tech-blog 不报（参数未开启）、已登记并关联素材的论断覆盖时不报。
+func TestLintCounters(t *testing.T) {
+	// wechat-marketing：counters 随文体开启。
+	dir := t.TempDir()
+	mustRunWS(t, dir, "init", "--genre", "wechat-marketing")
+	mustRunWS(t, dir, "new", "wechat-marketing", "post")
+	_, res := runWS(t, dir, "config", "resolved")
+	r := res.resolved(t)
+	if get(r, "rules.claim-candidates.params.counters.value") != true {
+		t.Fatalf("counters not enabled in wechat-marketing: %v", get(r, "rules.claim-candidates"))
+	}
+	writeFile(t, wsPath(dir, ".writing-anything/works/post/draft.md"), "共同好友 12 人都拿到了内测资格。\n")
+	code, res := runWS(t, dir, "lint", "post")
+	if code != 0 || !strings.Contains(res.stdout, `"rule":"claim-candidates"`) || !strings.Contains(res.stdout, "，数据）") ||
+		!strings.Contains(res.stdout, "示意数字请在正文中注明") {
+		t.Fatalf("wechat-marketing counter candidate: exit code = %d, stdout = %s", code, res.stdout)
+	}
+	// 已登记并关联素材的论断覆盖该数字时不报。
+	writeFile(t, filepath.Join(dir, "note.md"), "作者：共同好友 12 人都拿到了内测资格。\n")
+	mustRunWS(t, dir, "source", "add", "--type", "author-note", "--id", "note", "--file", "note.md")
+	mustRunWS(t, dir, "claim", "add", "post", "--kind", "data", "--text", "共同好友 12 人都拿到了内测资格", "--sources", "note")
+	if code, res = runWS(t, dir, "lint", "post"); code != 0 || strings.Contains(res.stdout, `"rule":"claim-candidates"`) {
+		t.Fatalf("covered counter candidate: exit code = %d, stdout = %s", code, res.stdout)
+	}
+	// tech-blog：未开启 counters，「3 个步骤」不是数据候选。
+	tb := t.TempDir()
+	mustRunWS(t, tb, "init", "--genre", "tech-blog")
+	mustRunWS(t, tb, "new", "tech-blog", "post")
+	writeFile(t, wsPath(tb, ".writing-anything/works/post/draft.md"), "整个迁移分 3 个步骤就能完成。\n")
+	if code, res = runWS(t, tb, "lint", "post"); code != 0 || strings.Contains(res.stdout, "claim-candidates") {
+		t.Fatalf("tech-blog must not report counter candidates: exit code = %d, stdout = %s", code, res.stdout)
 	}
 }

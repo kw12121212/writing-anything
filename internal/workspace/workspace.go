@@ -363,6 +363,11 @@ func regular(root, rel string) bool {
 	return true
 }
 
+// IsRegular 报告 rel 是否为工作区中的普通文件（途经真实目录、不跟随符号链接；不存在同样为 false）。
+// 判断「某产物是否已写入」的入口必须共用它，使同一产物在所有入口（阻塞项、show、next）得出同一结论
+// （workspace-artifacts/presence-probe-single-source）；不得在领域包或命令层各自用 os.Stat / os.Lstat 推断。
+func IsRegular(root, rel string) bool { return regular(root, rel) }
+
 // Blocked 报告 rel 在工作区目录之下途经的某一级存在但不是真实目录（如符号链接），或 rel 本身存在但不是普通
 // 文件；不存在的路径不算受阻。读取侧据此区分「不存在」与「途经符号链接，按不存在处理并报告」
 // （workspace-artifacts/validated-path-segments）。

@@ -27,7 +27,7 @@ var helpOnlyAllowed = map[string]struct {
 	"cli/export.go:runExport":               {1, "非生命周期主路径：export 的输出路径与格式参数问题，与单元产物无关"},
 	"cli/feedback.go:runFeedbackAdd":        {1, "非生命周期主路径：feedback add 的参数与引文锚点问题，修复依据是用法"},
 	"cli/feedback.go:runFeedbackResolve":    {1, "非生命周期主路径：feedback resolve 的 status 参数与锚点值问题"},
-	"cli/handoff.go:handoffNext":            {2, "非生命周期主路径：交接记录是工作区级产物，输入与参数问题没有单元可引用"},
+	"cli/handoff.go:handoffNext":            {3, "非生命周期主路径：交接记录是工作区级产物，输入与参数问题没有单元可引用；--unit 的取值问题按 field 分流到 write 或 show 的用法"},
 	"cli/impact.go:impactNext":              {1, "非生命周期主路径：impact clear 缺少作者确认参数，需作者给出确认原话"},
 	"cli/learn.go:finishProposal":           {1, "非生命周期主路径：pack learn/prefer/confirm/reject 的参数问题兜底，其余错误码已给出 source list 等具体命令"},
 	"cli/marketing.go:runMarketingSet":      {1, "非生命周期主路径包之外的营销要素：marketing set 的参数问题，路线图把它排除在本次改造包之外"},

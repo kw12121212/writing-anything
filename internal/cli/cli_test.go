@@ -294,6 +294,7 @@ var nullableFields = map[string]bool{
 	"illustrationsSha256": true,
 	"markdown":            true,
 	"tool":                true,
+	"skeleton":            true,
 	"style":               true,
 	"key":                 true,
 	"keyMessage":          true,

@@ -1,0 +1,4 @@
+schema_version: 1
+notes:
+  - {id: handoff-1, written_at: "2026-10-04T08:00:00Z", work: my-novel, done: [x], todo: [y]}
+  - {id: handoff-2, written_at: "2026-10-04T09:00:00Z", done: [x], todo: [y]}

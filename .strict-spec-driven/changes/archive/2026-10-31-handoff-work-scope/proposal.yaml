@@ -1,0 +1,36 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: handoff-work-scope
+  status: proposed
+summary:
+  what:
+    - 交接记录（Handoff Note）条目新增可选的 work 字段关联作品（Work）：handoff write 增加 --unit，接受作品或其任一单元的单元引用（Unit Reference），写入时归到所属作品，单元不存在时报错；handoff show 增加 --unit 过滤；wa-cli next 每个步骤的 handoff 字段只取所属作品的最近记录与未关联记录中较新的一条，未关联的旧记录对所有作品保持可见
+  why:
+    - 交接记录目前是工作区（Workspace）级，多作品并行时 next 把其他作品的待办附到每个步骤上，新会话接续时互相串台（2026-10-30 公众号流程复盘 F4，粒度经 intake handoff-scope 由作者确认为按作品关联）
+scope:
+  in:
+    - internal/handoff 的 fileNote 与 View 新增可选 work 字段（JSON 输出 omitempty），Write 仅在非空时写入 work 键，节点树追加语义不变
+    - internal/schema/schemas/handoffs.schema.json 与 handoff-input.schema.json 同步新增可选 work 字段（作品 id 形态，schema_version 不升级，向后兼容），internal/schema 测试夹具同步
+    - handoff write 新增 --unit：经 internal/work 的 Resolve 把 <work> 或 <work>/<unit-id> 归一到所属作品 id 并写入 work；解析失败原样报告 work.not-found 或 work.unit-not-found
+    - handoff write 输入含可选 work（作品 id）时校验作品存在；--unit 与输入 work 指向不同作品时报告 input.invalid-value（field 为 unit）
+    - handoff show 新增 --unit：解析到所属作品后只输出关联该作品与未关联作品的记录（倒序），解析失败同上报告
+    - wa-cli next 每条命令只加载一次交接记录，逐作品过滤：步骤的 handoff 字段取关联该作品的最近记录与未关联的最近记录中较新的一条（internal/cli/units.go 的 latestHandoff 改为按作品取值）
+    - next 不加 --json 的文本输出改为同一条交接记录只在第一条引用它的步骤之前显示一次；全部步骤共享同一条记录时输出位置与现在一致
+    - wa-assemble 与 wa-auto 技能的会话结束段写明写交接时带 --unit；internal/skills/history.txt 追加新哈希，plugins/zcode-writing-viewer/skills 副本经 scripts/stage-skills.mjs 重新生成并逐字核对
+    - workspace-artifacts 技术标准新增可选作品关联的工程规则（可选字段、向后兼容、写出前校验作品存在、按作品过滤取较新者、逐作品消费只加载一次）
+  out:
+    - 不新增交接记录的编辑或删除命令（仍只能追加）
+    - 不改变未关联记录的语义：不带 --unit 且输入无 work 时写出的记录对所有作品可见，行为与现在一致
+    - 不把 next 的其他字段（blockers、action、commands、feedback、progress）按作品过滤
+    - 不改动 MCP 服务与 DSH 插件
+unchanged_behavior:
+  - 只有未关联记录的工作区里，next 与 handoff show 的行为与现在完全一致（含文本输出顶部一次的交接段）
+  - 交接记录只能追加、上限 200 条（handoff.too-many）、YAML 注释保留、锚点别名合并键拒绝、changedPaths 为 [handoffs.yaml] 等既有行为不变
+  - wa-cli validate 对 handoffs.yaml 的整体校验与单产物校验口径不变（work 字段只做 Schema 形态校验，不校验作品存在）
+  - handoff show --last 的取值范围（1 到 50）与诊断不变
+roadmap:
+  milestone: wechat-flow-feedback
+  planned_change: handoff-work-scope

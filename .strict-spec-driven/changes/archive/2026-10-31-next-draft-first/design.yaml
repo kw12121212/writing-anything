@@ -1,0 +1,19 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: next-draft-first
+approach:
+  - 把 draftPresent 作为参数穿过 marketing.Questions 与 marketing.Check：判定只作用于标题决策状态为 none 的分支（正文未写入时省略 headline-unasked），其余问题原样。internal/work 的 marketingBlockers 用 isFile(root, 目录+"/draft.md")（与 work.go 缺失产物判定同一写法）、internal/cli/marketing.go 的 marketing show 用 draft.FileName 计算同一事实后传入；advance（经 Work.Blockers）与 marketing show 因此共用同一判定，口径不会分叉。marketing 包不 import internal/draft，符合 go-project-structure/leaf-domain-wiring
+decisions:
+  suppress-only-unasked:
+    decision: 只有 headline-unasked（标题决策状态为 none）在正文未写入时省略；headline-stale、too-many-headlines 与缺失要素照常报告
+    rationale: stale 表示作者已选过标题而候选在其后改动，即使正文尚未写入也需要重新提问，压掉会让过期决策静默漂移；复盘 F1 残余只针对「还没问过」的情形
+  shared-judgment-in-domain:
+    decision: 判定放在 internal/marketing 的 Questions（领域包），work 的阻塞项与 cli 的 marketing show 都传 draftPresent 共用它
+    rationale: single-blocker-source 要求阻塞项只由 Work.Blockers 计算，在 cli 层过滤会让 advance 与 next 分叉；marketing show 与 next 口径一致才不会出现 show 报 unasked 而 next 不报
+alternatives:
+  - option: 在 internal/cli 的 blockerNext 里按 draft.md 是否存在过滤命令
+    reason: 阻塞项的判定逃出领域包，advance 的诊断与 next 的 blockers 会不一致（违反 single-blocker-source）
+risks:
+  - 既有断言 headline-unasked 的测试夹具若没有写 draft.md 会翻转结果，需逐一核对夹具状态

@@ -96,7 +96,7 @@ var nextCommand = &command{
 	summary: "列出单元（Unit）的当前阶段（Stage）、阻塞项（Blocker）与下一步命令；汇总单元（Aggregated Unit）的阶段与阻塞项由子单元汇总",
 	args:    []argSpec{{"unit", "只列出该单元；省略时列出所有未完成的单元。" + unitRefHelp, false}},
 	flags:   []flagSpec{dirFlag},
-	outputKeys: []outputKey{{"steps", "下一步数组，每项含 unit、stage、blockers、action、commands、feedback（未处理完的作者反馈）、progress（汇总单元的进度，其他单元为 null）与 handoff（最近一条交接记录（Handoff Note）的 id、todo 与 instructions，没有时为 null）"},
+	outputKeys: []outputKey{{"steps", "下一步数组，每项含 unit、stage、blockers、action、commands、feedback（未处理完的作者反馈）、progress（汇总单元的进度，其他单元为 null）与 handoff（该步骤所属作品可见的最近一条交接记录（Handoff Note）——关联该作品的记录与未关联记录中较新者——的 id、todo 与 instructions，没有时为 null）"},
 		{"pendingAuthorReviews", "给出单元时为其所在作品、省略时为全部作品的" + pendingAuthorReviewsHelp},
 		{"pendingConfirmations", "给出单元时为其所在作品、省略时为全部作品的" + pendingConfirmationsHelp}},
 	exitCodes: standardExitCodes,
@@ -170,7 +170,8 @@ type stepView struct {
 	Feedback []feedbackView `json:"feedback"`
 	// Progress 只对汇总单元（Aggregated Unit）非空：子单元树中走生命周期的单元的完成进度。
 	Progress *progressView `json:"progress"`
-	// Handoff 是工作区最近一条交接记录（Handoff Note）的 id、待办与作者新指示，供新会话接续；没有记录时为 null。
+	// Handoff 是该步骤所属作品可见的最近一条交接记录（Handoff Note，关联该作品的记录与未关联记录中较新者）的
+	// id、待办与作者新指示，供新会话接续；没有可见记录时为 null。
 	Handoff *handoffRef `json:"handoff"`
 }
 
@@ -411,24 +412,37 @@ func runNext(inv *invocation) int {
 	if problems == nil {
 		var works []*work.Work
 		recoveries := auditRecoveries(dir) // 审计回捞只解析一次（workspace-artifacts/load-once-per-command）
+		// 交接记录每条命令只加载一次，逐作品过滤（invalid 时不附带，问题由 validate 报告，见 handoff-show）。
+		var handoffNotes []handoff.View
+		if notes, hps := handoff.Show(dir, handoff.MaxNotes); hps == nil {
+			handoffNotes = notes
+		}
+		latest := func(workID string) *handoffRef {
+			note := handoff.VisibleLatest(handoffNotes, workID)
+			if note == nil {
+				return nil
+			}
+			return &handoffRef{ID: note.ID, Todo: note.Todo, Instructions: note.Instructions, WrittenAt: note.WrittenAt}
+		}
 		if len(inv.args) == 1 {
 			var w *work.Work
 			var u *work.Unit
 			if w, u, problems = work.Resolve(dir, inv.args[0]); u != nil {
-				res.Steps = append(res.Steps, step(dir, w, u, impact.OpenMarks(dir, w.ID), recoveries))
+				res.Steps = append(res.Steps, step(dir, w, u, impact.OpenMarks(dir, w.ID), recoveries, latest(w.ID)))
 				works = []*work.Work{w}
 			}
 		} else {
 			works, _, problems = work.LoadAll(dir)
 			for _, w := range works {
 				marks := impact.OpenMarks(dir, w.ID) // 每个作品只读一次复查标记文件
+				latestRef := latest(w.ID)
 				for _, u := range w.Units() {
 					// 汇总单元的阶段由子单元汇总：推导阶段为 done 时不再列出（同 next-skips-done）；
 					// 唯一例外是已 done 而有 open 复查标记的场景，列出以给出复查与解除命令。
 					// 验收失效的已完成单元同样列出，以给出 wa-cli reopen（reopen-stage）。
 					if w.EffectiveStage(u) != catalog.StageDone || len(openMarkTargets(marks, u)) > 0 ||
 						!w.Aggregated(u) && len(w.Blockers(dir, u)) > 0 {
-						res.Steps = append(res.Steps, step(dir, w, u, marks, recoveries))
+						res.Steps = append(res.Steps, step(dir, w, u, marks, recoveries, latestRef))
 					}
 				}
 			}
@@ -444,11 +458,14 @@ func runNext(inv *invocation) int {
 		if len(res.Steps) == 0 && len(res.PendingAuthorReviews) == 0 && len(res.PendingConfirmations) == 0 && !hasError(res.Diagnostics) {
 			b.WriteString("没有需要推进的单元（Unit）\n")
 		}
-		// 各步骤共享同一条最近交接记录，只在顶部输出一次（与 JSON 的 handoff 字段一致）。
-		if len(res.Steps) > 0 && res.Steps[0].Handoff != nil {
-			b.WriteString(handoffText(res.Steps[0].Handoff))
-		}
+		// 交接记录按 id 去重：同一条记录只在第一条引用它的步骤之前显示一次（与 JSON 的 handoff 字段一致）；
+		// 各步骤共享一条记录时等价于在顶部显示一次，多个作品各有记录时各显示一次。
+		printed := map[string]bool{}
 		for _, s := range res.Steps {
+			if s.Handoff != nil && !printed[s.Handoff.ID] {
+				b.WriteString(handoffText(s.Handoff))
+				printed[s.Handoff.ID] = true
+			}
 			stage := s.Stage
 			if s.Progress != nil {
 				stage = fmt.Sprintf("%s，进度 %d/%d", stage, s.Progress.Done, s.Progress.Total)
@@ -471,11 +488,12 @@ func runNext(inv *invocation) int {
 	})
 }
 
-// step 返回单元 u 的下一步条目；marks 为作品的 open 复查标记（impact.OpenMarks）。
-func step(dir string, w *work.Work, u *work.Unit, marks []impact.FileMark, recoveries map[string]string) stepView {
+// step 返回单元 u 的下一步条目；marks 为作品的 open 复查标记（impact.OpenMarks），latest 为该作品
+// 可见的最近交接记录摘要（没有时为 nil）。
+func step(dir string, w *work.Work, u *work.Unit, marks []impact.FileMark, recoveries map[string]string, latest *handoffRef) stepView {
 	blockers, commands := progress(dir, w, u)
 	s := stepView{Unit: u.Ref, Stage: w.EffectiveStage(u), Blockers: blockers, Action: action(dir, w, u, blockers), Commands: commands,
-		Handoff:  latestHandoff(dir),
+		Handoff:  latest,
 		Feedback: pendingFeedback(dir, w, u)}
 	if w.Aggregated(u) {
 		done, total := w.Progress(u)
@@ -657,16 +675,7 @@ func pendingCheckpoint(dir string, w *work.Work, u *work.Unit) bool {
 	return v != nil && len(ps) == 0 && !v.ConfirmedByAuthor
 }
 
-// latestHandoff 返回工作区最近一条交接记录的摘要（没有记录或文件不合法时为 nil，问题由命令层报告）。
-func latestHandoff(dir string) *handoffRef {
-	note, ps := handoff.Latest(dir)
-	if note == nil || len(ps) > 0 {
-		return nil
-	}
-	return &handoffRef{ID: note.ID, Todo: note.Todo, Instructions: note.Instructions, WrittenAt: note.WrittenAt}
-}
-
-// handoffText 以人读文字输出 next 顶部的最近交接记录：id、写入时间、未完成事项与作者新指示。
+// handoffText 以人读文字输出 next 的交接记录段：id、写入时间、未完成事项与作者新指示。
 func handoffText(h *handoffRef) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "最近交接记录（Handoff Note）%s（%s）\n", h.ID, h.WrittenAt)

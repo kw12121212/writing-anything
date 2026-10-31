@@ -162,7 +162,7 @@ func TestCandidateFactCoverAndNotes(t *testing.T) {
 	sourced := []Claim{{ID: "claim-1", Kind: "fact", Text: "我曾经负责迁移，延迟降低了 90%", Sources: []ClaimSource{{"src-r", "reference"}}}}
 	// 关联了素材的 fact 论断：数据候选被覆盖，亲历候选仍报告，说明其类型不在 cover_kinds 内。
 	res, _ := Run("我曾经负责迁移，延迟降低了 90%。", r, "draft.md", Input{Claims: sourced})
-	if len(res.Findings) != 1 || !strings.Contains(res.Findings[0].Message, "亲历") || strings.Contains(res.Findings[0].Message, "数据") {
+	if len(res.Findings) != 1 || !strings.Contains(res.Findings[0].Message, "，亲历）") || strings.Contains(res.Findings[0].Message, "，数据）") {
 		t.Fatalf("sourced fact: %+v", res.Findings)
 	}
 	if msg := res.Findings[0].Message; !strings.Contains(msg, "论断 claim-1（fact）的类型不在 claim-candidates 的 cover_kinds（默认 experience、opinion、case、data）内，未参与覆盖") ||
@@ -213,8 +213,8 @@ func TestCandidateEdges(t *testing.T) {
 		t.Fatalf("candidates = %q, want %q", got, want)
 	}
 	// 引用块只检测数据；行内代码中的数据不算。
-	if strings.Contains(res.Findings[0].Message, "亲历") || !strings.Contains(res.Findings[4].Message, "亲历") || strings.Contains(res.Findings[4].Message, "数据") ||
-		!strings.Contains(res.Findings[1].Message, "wa-cli claim add <单元>") {
+	if strings.Contains(res.Findings[0].Message, "，亲历）") || !strings.Contains(res.Findings[4].Message, "，亲历）") || strings.Contains(res.Findings[4].Message, "，数据）") ||
+		!strings.Contains(res.Findings[1].Message, "wa-cli claim add <单元>") || !strings.Contains(res.Findings[1].Message, "示意数字请在正文中注明") {
 		t.Fatalf("quote, masked data and message: %+v", res.Findings)
 	}
 	// 候选超过 MaxHits 时截断并报告 lint.truncated。
@@ -253,5 +253,46 @@ func TestCheckConflicts(t *testing.T) {
 	res, _ = Run("官方说法是 10 个喷嘴。", r, "draft.md", Input{})
 	if len(res.Findings) != 0 {
 		t.Fatalf("no conflicts: %+v", res.Findings)
+	}
+}
+
+// numeric-claim-candidates：counters 开启时「数字＋常见量词」是数据候选——量词表逐项命中、形近非词不命中、
+// 全角数字与小数、数字与量词间的空白；data 为 false 或 counters 缺省时不生效；嵌套命中取最长区间。
+func TestCounterCandidates(t *testing.T) {
+	r := rules(map[string]string{"cc": "claim-candidates"}, map[string]map[string]any{"cc": {"counters": true}})
+	// 每个量词都命中。
+	for _, c := range []string{"人", "个", "条", "次", "天", "月", "年", "元", "名", "位", "场", "篇", "种", "项", "字", "分钟", "小时", "周"} {
+		res, _ := Run("多了 3 "+c+"。", r, "draft.md", Input{})
+		if len(res.Findings) != 1 || !strings.Contains(res.Findings[0].Message, "，数据）") {
+			t.Errorf("counter %s: %+v", c, res.Findings)
+		}
+	}
+	// 全角数字（含全角小数点）与数字量词间的空白（tab、连续空格）。
+	for _, s := range []string{"多了３人。", "花了一．５小时。", "多了 12\t人。", "多了 12  人。"} {
+		res, _ := Run(s, r, "draft.md", Input{})
+		if len(res.Findings) != 1 {
+			t.Errorf("%q: %+v", s, res.Findings)
+		}
+	}
+	// 形近非词不命中：纯数字、ISO 日期、时间、序数（部不在表）、中文数字、连字符隔开。
+	for _, s := range []string{"共有 12。", "发布于 2026-10-30。", "十点 10:30 开门。", "第 3 部分略。", "三个人到场。", "共 12-人。"} {
+		res, _ := Run(s, r, "draft.md", Input{})
+		if len(res.Findings) != 0 {
+			t.Errorf("%q: %+v", s, res.Findings)
+		}
+	}
+	// 嵌套命中取最长区间：「N 个百分点」只计一个候选。
+	res, _ := Run("上升了 5 个百分点。", r, "draft.md", Input{})
+	if len(res.Findings) != 1 {
+		t.Fatalf("nested spans: %+v", res.Findings)
+	}
+	// counters 缺省 false 与 data=false 时都不生效。
+	plain := rules(map[string]string{"cc": "claim-candidates"}, nil)
+	if res, _ = Run("多了 3 人。", plain, "draft.md", Input{}); len(res.Findings) != 0 {
+		t.Errorf("default counters off: %+v", res.Findings)
+	}
+	noData := rules(map[string]string{"cc": "claim-candidates"}, map[string]map[string]any{"cc": {"counters": true, "data": false}})
+	if res, _ = Run("多了 3 人，上升 50%。", noData, "draft.md", Input{}); len(res.Findings) != 0 {
+		t.Errorf("data=false disables counters: %+v", res.Findings)
 	}
 }

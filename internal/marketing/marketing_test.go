@@ -62,7 +62,7 @@ func TestSet(t *testing.T) {
 	if ps != nil || len(changed) != 1 || m.Headlines[0].Text != "三步搞定连接池" || m.Digest != "一篇短文" {
 		t.Fatalf("create: %+v %v %+v", m, changed, ps)
 	}
-	if got := questionCodes(Questions(m, Queue{})); !slices.Equal(got, []string{"marketing.missing-field:headlines", "marketing.missing-field:opening", "marketing.missing-field:cta"}) {
+	if got := questionCodes(Questions(m, Queue{}, true)); !slices.Equal(got, []string{"marketing.missing-field:headlines", "marketing.missing-field:opening", "marketing.missing-field:cta"}) {
 		t.Fatalf("questions: %v", got)
 	}
 	// 修改已有候选、追加候选、删除字段；作者的注释保留。
@@ -126,14 +126,14 @@ func TestLoadAndCheck(t *testing.T) {
 	if m, ps := Load(root, dir); m != nil || ps != nil {
 		t.Fatalf("absent: %+v %+v", m, ps)
 	}
-	if g := Check(root, dir, false, false, Queue{}); g != nil {
+	if g := Check(root, dir, false, false, false, Queue{}); g != nil {
 		t.Fatalf("no artifact: %+v", g)
 	}
 	write(t, root, Path(dir), "schema_version: 1\nheadlines:\n  - {id: h1, text: 甲}\n  - {id: h1, text: 乙}\n")
 	if _, ps := Load(root, dir); len(ps) != 1 || ps[0].Code != "artifact.duplicate-id" || ps[0].Field != "headlines[1].id" {
 		t.Fatalf("duplicate: %+v", ps)
 	}
-	if g := Check(root, dir, true, false, Queue{}); g == nil || len(g.Invalid) != 1 {
+	if g := Check(root, dir, true, false, true, Queue{}); g == nil || len(g.Invalid) != 1 {
 		t.Fatalf("invalid gate: %+v", g)
 	}
 	checked, ps := CheckUnitArtifacts(root, []string{dir, ".writing-anything/works/other"})
@@ -150,7 +150,7 @@ func TestLoadAndCheck(t *testing.T) {
 	}
 	// 只有 marketing.md：视为没有填写任何要素。
 	os.Remove(filepath.Join(root, filepath.FromSlash(Path(dir))))
-	if g := Check(root, dir, false, true, Queue{}); g == nil || g.Path != dir+"/marketing.md" || len(g.Questions) != 4 {
+	if g := Check(root, dir, false, true, true, Queue{}); g == nil || g.Path != dir+"/marketing.md" || len(g.Questions) != 4 {
 		t.Fatalf("md gate: %+v", g)
 	}
 	// 途经符号链接按不存在处理并报告 artifact.not-found。
@@ -164,7 +164,7 @@ func TestLoadAndCheck(t *testing.T) {
 
 func TestHeadlineState(t *testing.T) {
 	m := &Marketing{Headlines: []Headline{{"h1", "甲"}, {"h2", "乙"}}, Digest: "d", Opening: "o", CTA: "c"}
-	if s, _ := m.HeadlineState(Queue{}); s != StateNone || !slices.Equal(questionCodes(Questions(m, Queue{})), []string{"marketing.headline-unasked:headline_decision"}) {
+	if s, _ := m.HeadlineState(Queue{}); s != StateNone || !slices.Equal(questionCodes(Questions(m, Queue{}, true)), []string{"marketing.headline-unasked:headline_decision"}) {
 		t.Fatalf("none: %s", s)
 	}
 	m.HeadlineDecision = "dec-1"
@@ -187,9 +187,17 @@ func TestHeadlineState(t *testing.T) {
 		if s != tt.state || (s == StateDecided) != (h != nil) || h != nil && h.ID != "h2" {
 			t.Errorf("%s: state %s, headline %+v", name, s, h)
 		}
-		qs := questionCodes(Questions(m, tt.q))
+		qs := questionCodes(Questions(m, tt.q, true))
 		if want := tt.state == StateStale; want != slices.Contains(qs, "marketing.headline-stale:headline_decision") {
 			t.Errorf("%s: questions %v", name, qs)
+		}
+		// 正文未写入时 headline-unasked 不报（stale 不受影响）。
+		qs = questionCodes(Questions(m, tt.q, false))
+		if slices.Contains(qs, "marketing.headline-unasked:headline_decision") {
+			t.Errorf("%s: unasked without a draft: %v", name, qs)
+		}
+		if want := tt.state == StateStale; want != slices.Contains(qs, "marketing.headline-stale:headline_decision") {
+			t.Errorf("%s: questions without a draft %v", name, qs)
 		}
 	}
 }
@@ -295,7 +303,7 @@ func TestTooManyHeadlines(t *testing.T) {
 	for i := range decision.MaxOptions + 1 {
 		m.Headlines = append(m.Headlines, Headline{ID: "h" + string(rune('a'+i%26)) + strings.Repeat("x", i/26), Text: "t"})
 	}
-	if got := questionCodes(Questions(m, Queue{})); !slices.Equal(got, []string{"marketing.too-many-headlines:headlines"}) {
+	if got := questionCodes(Questions(m, Queue{}, true)); !slices.Equal(got, []string{"marketing.too-many-headlines:headlines"}) {
 		t.Fatalf("questions: %v", got)
 	}
 }

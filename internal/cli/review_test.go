@@ -563,3 +563,129 @@ func TestReviewReaffirm(t *testing.T) {
 		t.Fatalf("re-record: code = %d, reaffirms = %+v", code, rr.Review.Reaffirms)
 	}
 }
+
+// review-record-skeleton：--init 输出与 review show 一致的评分项骨架（verdict 与 evidence 留空、注释含 title 与
+// blocking、末尾段落表），空骨架录入逐项报 review.missing-verdict 与 review.missing-evidence，填写后录入成功。
+func TestReviewRecordSkeleton(t *testing.T) {
+	dir := newWork(t)
+	// --init 需要正文。
+	writeFile(t, wsPath(dir, draftRel), "连接池很重要。连接池要复用。\n\n复用能降低延迟。\n")
+	code, res := runWS(t, dir, "review", "record", "my-post", "--init")
+	if code != 0 || res.ChangedPaths != nil && len(res.ChangedPaths) != 0 {
+		t.Fatalf("init: exit code = %d, result = %+v", code, res)
+	}
+	var out struct {
+		Skeleton string `json:"skeleton"`
+	}
+	if err := json.Unmarshal([]byte(res.stdout), &out); err != nil || out.Skeleton == "" {
+		t.Fatalf("skeleton field missing: %s", res.stdout)
+	}
+	skel := out.Skeleton
+	// 评分项与 review show 的 rubric 一致（item、title、blocking 注释），verdict 与 evidence 留空。
+	_, show := runWS(t, dir, "review", "show", "my-post")
+	var showOut struct {
+		Rubric []struct {
+			ID       string `json:"id"`
+			Title    string `json:"title"`
+			Blocking bool   `json:"blocking"`
+		} `json:"rubric"`
+	}
+	if err := json.Unmarshal([]byte(show.stdout), &showOut); err != nil || len(showOut.Rubric) == 0 {
+		t.Fatalf("review show rubric: %s", show.stdout)
+	}
+	for _, it := range showOut.Rubric {
+		line := "  - item: " + it.ID + " # " + it.Title
+		if it.Blocking {
+			line += "（blocking：fail 时阻塞验收）"
+		}
+		if !strings.Contains(skel, line+"\n") {
+			t.Errorf("skeleton lacks rubric item %s: %s", it.ID, skel)
+		}
+	}
+	if !strings.Contains(skel, "    verdict: \"\"\n    evidence: \"\"\n    paragraphs: []\n") || !strings.Contains(skel, "findings: []") {
+		t.Errorf("skeleton must leave verdict/evidence empty and findings empty: %s", skel)
+	}
+	// 段落表：两段、编号与首句一致。
+	if !strings.Contains(skel, "# 1: 连接池很重要。") || !strings.Contains(skel, "# 2: 复用能降低延迟。") {
+		t.Errorf("skeleton paragraph table: %s", skel)
+	}
+	// 文本模式输出与 skeleton 字段等价；不写文件。
+	if code, out2, _ := run(t, "review", "record", "my-post", "--init", "--dir", dir); code != 0 || !strings.HasPrefix(strings.TrimSpace(out2), "# 审稿（Review）骨架") {
+		t.Fatalf("init text mode: exit code = %d, stdout = %s", code, out2)
+	}
+	if _, err := os.Stat(wsPath(dir, ".writing-anything/works/my-post/review.yaml")); err == nil {
+		t.Fatal("--init must not write review.yaml")
+	}
+	// --init 与 --file / --reaffirm 互斥。
+	for _, args := range [][]string{{"review", "record", "my-post", "--init", "--file", "r.yaml"}, {"review", "record", "my-post", "--init", "--reaffirm", "--summary", "x"}} {
+		if code, res := runWS(t, dir, args...); code != 1 || !strings.Contains(res.stdout, `"code":"input.invalid-value"`) || !strings.Contains(res.stdout, `"field":"init"`) {
+			t.Fatalf("%v: exit code = %d, stdout = %s", args, code, res.stdout)
+		}
+	}
+	// 空骨架整份录入：逐项报错、不写文件。
+	writeFile(t, filepath.Join(dir, "empty.yaml"), skel)
+	if code, res = runWS(t, dir, "review", "record", "my-post", "--file", "empty.yaml"); code != 1 {
+		t.Fatalf("empty skeleton: exit code = %d", code)
+	}
+	missVerdict, missEvidence := 0, 0
+	for _, d := range res.Diagnostics {
+		switch d.Code {
+		case "review.missing-verdict":
+			missVerdict++
+			if !strings.HasPrefix(d.Field, "rubric[") || !strings.HasSuffix(d.Field, ".verdict") {
+				t.Errorf("missing-verdict field = %q", d.Field)
+			}
+		case "review.missing-evidence":
+			missEvidence++
+			if !strings.HasPrefix(d.Field, "rubric[") || !strings.HasSuffix(d.Field, ".evidence") {
+				t.Errorf("missing-evidence field = %q", d.Field)
+			}
+		}
+	}
+	if missVerdict != len(showOut.Rubric) || missEvidence != len(showOut.Rubric) {
+		t.Fatalf("per-item diagnostics: verdict %d, evidence %d, rubric %d", missVerdict, missEvidence, len(showOut.Rubric))
+	}
+	if _, err := os.Stat(wsPath(dir, ".writing-anything/works/my-post/review.yaml")); err == nil {
+		t.Fatal("empty skeleton must not write review.yaml")
+	}
+	// 填写后录入成功。
+	filled := skel
+	for _, it := range showOut.Rubric {
+		filled = strings.Replace(filled, "  - item: "+it.ID+" # ", "  - item: "+it.ID+" # FILLED ", 1)
+	}
+	// 逐项填值：verdict 与 evidence 都在固定行上。
+	lines := strings.Split(filled, "\n")
+	inRubric := false
+	item := ""
+	var bld []string
+	for _, ln := range lines {
+		if strings.HasPrefix(ln, "rubric:") {
+			inRubric = true
+			bld = append(bld, ln)
+			continue
+		}
+		if strings.HasPrefix(ln, "findings:") {
+			inRubric = false
+		}
+		if inRubric {
+			if strings.HasPrefix(ln, "  - item: ") {
+				item = strings.TrimSpace(strings.TrimPrefix(ln, "  - item: "))
+				item = strings.TrimSpace(strings.SplitN(item, " ", 2)[0])
+			}
+			if ln == "    verdict: \"\"" {
+				ln = "    verdict: pass"
+			}
+			if ln == "    evidence: \"\"" {
+				ln = "    evidence: 依据充分（" + item + "）"
+			}
+		}
+		bld = append(bld, ln)
+	}
+	writeFile(t, filepath.Join(dir, "filled.yaml"), strings.Join(bld, "\n"))
+	if code, res = runWS(t, dir, "review", "record", "my-post", "--file", "filled.yaml"); code != 0 {
+		t.Fatalf("filled skeleton: exit code = %d, diagnostics = %+v", code, res.Diagnostics)
+	}
+	if _, err := os.Stat(wsPath(dir, ".writing-anything/works/my-post/review.yaml")); err != nil {
+		t.Fatal("filled skeleton should write review.yaml")
+	}
+}

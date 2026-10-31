@@ -1,0 +1,29 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: next-draft-first
+  status: proposed
+summary:
+  what:
+    - 正文（draft.md）未写入时，营销要素（Marketing Elements）关卡不报 marketing.headline-unasked：wa-cli next 因而不在正文写好之前提示 wa-cli help marketing ask，正文写入后照常报告；marketing.headline-stale、marketing.too-many-headlines 与缺失要素不受影响
+  why:
+    - 标题按正文选定，正文还没写就提示提问会让 Agent 过早打扰作者；缺失 draft 本身已阻塞 advance，关卡强度不变（2026-10-30 公众号流程复盘 F1 残余，审阅时已对照代码确认）
+scope:
+  in:
+    - internal/marketing 的 Questions 与 Check 增加 draftPresent 参数：仅标题决策状态为 none（headline-unasked）且正文未写入时省略该问题；stale、too-many-headlines 与缺失要素照常
+    - internal/work 的 marketingBlockers（advance 与 next 经 Work.Blockers）与 internal/cli/marketing.go 的 marketing show 传入「单元目录下 draft.md 是否存在」，两个入口共用同一判定
+    - marketing 主规格 delta：marketing-show 的 questions 与 marketing-gate 的阻塞项把 headline-unasked 的报告条件写明为正文已写入
+    - 测试：wechat-marketing 夹具在草稿阶段、正文未写入、marketing.yaml 有两个以上候选时，next 的阻塞项不含 marketing.headline-unasked、commands 不含 wa-cli help marketing ask；用 draft write 写入正文后出现；已提问的决策过期（stale）时没有正文也照常报
+  out:
+    - 不改 marketing.headline-stale、marketing.too-many-headlines、marketing.missing-field 的报告条件
+    - 不改阶段必需产物：draft 缺失仍报 lifecycle.missing-artifact，commands 仍先给 draft 的命令
+    - 不改标题决策的阻塞语义（decision.blocking 与 4U 评分项依赖选定标题）
+    - 不改 marketing ask、decide 命令本身
+unchanged_behavior:
+  - 正文已写入时 marketing show、advance、next 的行为与现在完全一致
+  - 缺失 draft 的阻塞项与命令（context、draft write 用法）不变
+roadmap:
+  milestone: wechat-flow-feedback
+  planned_change: next-draft-first

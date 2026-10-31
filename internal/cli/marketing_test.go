@@ -399,3 +399,67 @@ func TestWechatMarketingAIDAMissingPart(t *testing.T) {
 		t.Fatalf("aida complete: %+v", res.Diagnostics)
 	}
 }
+
+// next-draft-first：正文未写入时不报 marketing.headline-unasked，next 不提示 marketing ask、仍被缺失 draft 阻塞；
+// marketing show 同口径；正文经 draft write 写入后照常出现；决策过期（stale）与正文无关照常报。
+func TestMarketingUnaskedWaitsForDraft(t *testing.T) {
+	dir := t.TempDir()
+	mustRunWS(t, dir, "init", "--genre", "wechat-marketing")
+	mustRunWS(t, dir, "new", "wechat-marketing", "post")
+	work := wsPath(dir, ".writing-anything/works/post/work.yaml")
+	writeFile(t, work, strings.Replace(readFile(t, work), "stage: brief", "stage: draft", 1))
+	// 营销要素齐全、有两个候选，但没有正文：headline-unasked 不报。
+	mustRunWS(t, dir, "marketing", "set", "post", "--headline", "h1", "--headline-text", "会员日提前一周公布")
+	mustRunWS(t, dir, "marketing", "set", "post", "--headline", "h2", "--headline-text", "会员日怎么报名")
+	mustRunWS(t, dir, "marketing", "set", "post", "--digest", "会员日的报名方式", "--opening", "上个月有老顾客没赶上", "--cta", "回复「报名」即可")
+	_, res := runWS(t, dir, "next", "post")
+	if strings.Contains(res.stdout, "headline-unasked") || strings.Contains(res.stdout, "wa-cli help marketing ask") {
+		t.Fatalf("next before the draft should not ask for the headline decision: %s", res.stdout)
+	}
+	if !strings.Contains(res.stdout, `"code":"lifecycle.missing-artifact"`) || !strings.Contains(res.stdout, "wa-cli help draft write --json") {
+		t.Fatalf("next should stay blocked on the missing draft: %s", res.stdout)
+	}
+	if _, res = runWS(t, dir, "marketing", "show", "post"); strings.Contains(res.stdout, "headline-unasked") {
+		t.Fatalf("show before the draft should not ask for the headline decision: %s", res.stdout)
+	}
+	if code, _ := runWS(t, dir, "advance", "post"); code != 1 {
+		t.Fatal("advance before the draft must stay blocked")
+	}
+	// 决策过期（stale）与正文是否写入无关：没有正文也照常报。
+	writeFile(t, wsPath(dir, ".writing-anything/works/post/marketing.yaml"),
+		"schema_version: 1\nheadlines:\n  - {id: h1, text: 会员日提前一周公布}\n  - {id: h2, text: 会员日怎么报名}\ndigest: 会员日的报名方式\nopening: 上个月有老顾客没赶上\ncta: 回复「报名」即可\nheadline_decision: dec-9\n")
+	if _, res = runWS(t, dir, "next", "post"); !strings.Contains(res.stdout, `"code":"marketing.headline-stale"`) {
+		t.Fatalf("stale must be reported without a draft: %s", res.stdout)
+	}
+	// draft.md 为符号链接时两个入口一致：都按正文未写入处理，headline-unasked 同样不报。
+	outside := t.TempDir()
+	os.WriteFile(filepath.Join(outside, "body.md"), []byte("外部的正文。\n"), 0o644)
+	if err := os.Symlink(filepath.Join(outside, "body.md"), wsPath(dir, ".writing-anything/works/post/draft.md")); err != nil {
+		t.Skip("symlink not supported:", err)
+	}
+	_, res = runWS(t, dir, "next", "post")
+	nextHasUnasked := strings.Contains(res.stdout, "headline-unasked")
+	_, res = runWS(t, dir, "marketing", "show", "post")
+	if showHasUnasked := strings.Contains(res.stdout, "headline-unasked"); nextHasUnasked != showHasUnasked {
+		t.Fatalf("next and show disagree on the symlinked draft: next=%v show=%v", nextHasUnasked, showHasUnasked)
+	}
+	if nextHasUnasked {
+		t.Fatalf("symlinked draft.md must count as absent: %s", res.stdout)
+	}
+	if err := os.Remove(wsPath(dir, ".writing-anything/works/post/draft.md")); err != nil {
+		t.Fatal(err)
+	}
+	// 回到没有标题决策的状态，用 draft write 写入正文后 headline-unasked 照常出现（next 与 show 一致）。
+	writeFile(t, wsPath(dir, ".writing-anything/works/post/marketing.yaml"),
+		"schema_version: 1\nheadlines:\n  - {id: h1, text: 会员日提前一周公布}\n  - {id: h2, text: 会员日怎么报名}\ndigest: 会员日的报名方式\nopening: 上个月有老顾客没赶上\ncta: 回复「报名」即可\n")
+	if code, stdout, stderr := runIn(t, "会员日三步就能报名。\n", "draft", "write", "post", "--dir", dir); code != 0 {
+		t.Fatalf("draft write: exit code = %d; stdout: %s; stderr: %s", code, stdout, stderr)
+	}
+	if _, res = runWS(t, dir, "next", "post"); !strings.Contains(res.stdout, `"code":"marketing.headline-unasked"`) ||
+		!strings.Contains(res.stdout, "wa-cli help marketing ask --json") {
+		t.Fatalf("next after the draft should ask for the headline decision: %s", res.stdout)
+	}
+	if _, res = runWS(t, dir, "marketing", "show", "post"); !strings.Contains(res.stdout, "headline-unasked") {
+		t.Fatalf("show after the draft should ask for the headline decision: %s", res.stdout)
+	}
+}

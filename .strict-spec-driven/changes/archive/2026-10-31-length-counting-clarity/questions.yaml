@@ -1,0 +1,48 @@
+schema: strict-spec-driven/question-list/v1
+schema_version: 1
+artifact_type: question_list
+schema_file: templates/strict-spec-driven/schemas/question-list.yaml
+change: length-counting-clarity
+open: []
+resolved:
+  - id: cjk-chars-field
+    question: R3 是否新增汉字数字段，length-range 是否支持改口径？
+    context: chars 去掉空白、保留标点；作者习惯按汉字数估篇幅，两者相差约 15%；决定 R3 只改文档还是同时扩展输出与规则参数（影响 proposal 范围、lint 主规格 delta 与实现）
+    answer: 写清文档（非空白字符数，含标点）；lint --json 增加 cjkChars 字段（只数汉字），文本输出同时显示汉字数；length-range 不加口径参数，计数口径不变
+    status: resolved
+    answered_by: human
+  - id: requirement-problem
+    question: What is concretely going wrong today, and for whom?
+    context: 'Why this is asked: the change is planned against a need, and the need lives only with the requester. A "problem" here means what someone does or suffers today — not a feature that is missing. If the answer names a button, a field, a page, or an endpoint, it is a solution, and the underlying problem is still unstated. What a sufficient answer contains: who is affected, what they do today instead, and how often. Worked example: "every Monday one person spends forty minutes copying order rows into a spreadsheet to send the weekly report". What it changes: this becomes the proposal''s why, and it decides whether the change is worth making.'
+    answer: chars 的口径（去空白、含标点）在 help 与诊断中没有写全，作者按汉字估篇幅时两个口径相差约 15%，Agent 与作者对「字数」的理解会分叉（来源：2026-10-30 公众号写作流程复盘 R3 与 planned change details）
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-interpretation
+    question: Which reading of the request is intended, where more than one is possible?
+    context: 'Why this is asked: a short request usually admits several readings, and building the wrong one is indistinguishable from building nothing. What a sufficient answer contains: the reading that is meant, stated plainly enough to rule the others out — or a statement that only one reading exists and what it is. Worked example: "export means the version sent to the manager, not the one I read myself". What it changes: this fixes the scope boundary before any code is written, and settles disputes about what was asked for.'
+    answer: 按 intake cjk-chars-field 的作者确认执行：help 与诊断写明「非空白字符数，含标点」；lint --json 追加 cjkChars（只数汉字）；length-range 口径与参数保持不变
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-outcome
+    question: What observable difference proves the problem is solved?
+    context: 'Why this is asked: without a success condition, nobody can tell afterwards whether the change worked. "Observable" means someone outside the system can check it without reading the code. What a sufficient answer contains: what a person will see, or no longer have to do, once this is done. Worked example: "the report is in the manager''s inbox on Monday morning without anyone assembling it". What it changes: this becomes the delta spec''s scenarios and the acceptance evidence at review time.'
+    answer: 里程碑 done_criteria：lint 与 length-range 的 help 和诊断写明「字数为非空白字符数，含标点」；lint --json 含 cjkChars，含标点、英文与空白的夹具断言 chars 与 cjkChars 的值
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-non-goals
+    question: What must explicitly not change?
+    context: 'Why this is asked: the requester knows which nearby behavior other people depend on, and the agent does not. A "non-goal" is something the change must leave alone even though it sits close to the work. What a sufficient answer contains: the behavior, setting, or output that must survive untouched, and who relies on it. Worked example: "do not change the saved filters — several people rely on their own". What it changes: these become the proposal''s unchanged_behavior items, which review checks the finished result against.'
+    answer: length-range 不加口径参数、计数逻辑不变；不新增汉字数以外的口径；不改 paragraph-length 等其他规则的诊断；不改 lint --json 既有字段名（proposal 的 out 已列出）
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-trigger
+    question: Why now — what forced this?
+    context: 'Why this is asked: work that nothing forced is the work most often thrown away later. This question catches a request that sounds reasonable but has no real driver behind it. What a sufficient answer contains: the concrete event, deadline, incident, or cost that made this surface now, or an honest statement that nothing did. Worked example: "the report was missed last month and it was raised with the team". What it changes: a change with no trigger is a candidate for deferral, and the answer is weighed at review before archive.'
+    answer: 2026-10-30 公众号写作流程复盘（基线 v0.8.0）审阅采纳的 R3 条目，随 wechat-flow-feedback 里程碑落地
+    status: resolved
+    kind: requirement
+    answered_by: roadmap

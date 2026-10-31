@@ -36,7 +36,7 @@ requirements:
         - THEN: 都报告 input.invalid-value，next 包含 wa-cli help marketing set --json，文件不变，退出码为 1
   marketing-show:
     strength: MUST
-    statement: wa-cli marketing show <unit> 必须只读地输出单元的营销要素：--json 输出 marketing 与 questions。marketing 含 unit、path（marketing.yaml 路径）、headlines（每项含 id 与 text，未设置时为空数组）、digest、opening 与 cta（未设置时为 null）、headlineDecision（标题决策 id，没有时为 null）、headlineState（none：还没有标题决策；open：决策尚未决定；decided：已决定且选项与当前候选一致；stale：决策不存在，或其选项文字与当前候选按顺序不一致；unknown：决策队列无法加载）与 headline（headlineState 为 decided 时为选定的候选，含 id 与 text，否则为 null）；单元目录下没有 marketing.yaml 时 marketing 为 null。questions 为仍需补齐的要素，按以下顺序、每项含 code、field 与 message：标题候选少于两个（code 为 marketing.missing-field，field 为 headlines），digest、opening、cta 未填写（各一项，code 为 marketing.missing-field），候选超过 26 个（标题决策的选项上限，code 为 marketing.too-many-headlines，field 为 headlines，此时不判断标题决策），有至少两个候选但还没有标题决策（code 为 marketing.headline-unasked，field 为 headline_decision），标题决策过期（code 为 marketing.headline-stale，field 为 headline_decision）；决策队列无法加载时不判断标题决策。changedPaths 为空数组；marketing.yaml 不通过校验时报告其诊断，valid 为 false，退出码为 1；否则退出码为 0。不加 --json 时以人读文本输出同样的信息。
+    statement: wa-cli marketing show <unit> 必须只读地输出单元的营销要素：--json 输出 marketing 与 questions。marketing 含 unit、path（marketing.yaml 路径）、headlines（每项含 id 与 text，未设置时为空数组）、digest、opening 与 cta（未设置时为 null）、headlineDecision（标题决策 id，没有时为 null）、headlineState（none：还没有标题决策；open：决策尚未决定；decided：已决定且选项与当前候选一致；stale：决策不存在，或其选项文字与当前候选按顺序不一致；unknown：决策队列无法加载）与 headline（headlineState 为 decided 时为选定的候选，含 id 与 text，否则为 null）；单元目录下没有 marketing.yaml 时 marketing 为 null。questions 为仍需补齐的要素，按以下顺序、每项含 code、field 与 message：标题候选少于两个（code 为 marketing.missing-field，field 为 headlines），digest、opening、cta 未填写（各一项，code 为 marketing.missing-field），候选超过 26 个（标题决策的选项上限，code 为 marketing.too-many-headlines，field 为 headlines，此时不判断标题决策），有至少两个候选但还没有标题决策（code 为 marketing.headline-unasked，field 为 headline_decision；仅当单元目录下已写入正文——存在 draft.md——时报告，正文未写入时不报告：标题按正文选定，正文写好前不提示提问），标题决策过期（code 为 marketing.headline-stale，field 为 headline_decision；与正文是否写入无关）；决策队列无法加载时不判断标题决策。changedPaths 为空数组；marketing.yaml 不通过校验时报告其诊断，valid 为 false，退出码为 1；否则退出码为 0。不加 --json 时以人读文本输出同样的信息。
     scenarios:
       show-decided:
         - GIVEN: marketing.yaml 有候选 h1、h2 与 headline_decision dec-1，dec-1 的选项文字依次与 h1、h2 相同且已决定为 b
@@ -46,6 +46,10 @@ requirements:
         - GIVEN: 同上，之后用 marketing set 修改了 h2 的文字
         - WHEN: 运行 wa-cli marketing show my-post --dir D --json
         - THEN: headlineState 为 stale，headline 为 null，questions 中有一项 code 为 marketing.headline-stale
+      show-unasked-waits-for-draft:
+        - GIVEN: wechat-marketing 作品处于草稿阶段，marketing.yaml 有两个候选、没有标题决策，单元目录下没有 draft.md
+        - WHEN: 运行 wa-cli marketing show post --dir D --json
+        - THEN: questions 不含 code 为 marketing.headline-unasked 的项（缺失要素照常）；写入正文 draft.md 后再运行，questions 含一项 marketing.headline-unasked，退出码为 0
   marketing-ask:
     strength: MUST
     statement: wa-cli marketing ask <unit> 必须把单元的标题候选登记为决策队列中的一个待决事项：question 为「单元 <unit> 用哪个标题？」，选项按候选顺序为各候选的文字，blocking 为 true，units 为 [<unit>]；--recommend <候选 id> 记为对应选项的推荐，--rationale 记为推荐理由；并把新决策的 id 写入 marketing.yaml 的 headline_decision。作者用 wa-cli decide <决策 id> --option <选项 id> --confirmation <原话摘要> 选定标题。成功时 changedPaths 为 .writing-anything/decisions.yaml 与 marketing.yaml，--json 输出的 decision 为新决策（字段见 decisions 主规格的 decisions-list），marketing 同 marketing-show，退出码为 0。单元没有 marketing.yaml 时报告 artifact.not-found；标题候选少于两个时报告 marketing.missing-field（field 为 headlines），多于 26 个（决策选项的上限）时报告 artifact.schema-violation；已有标题决策尚未决定且没有过期时报告 marketing.already-asked（next 包含 wa-cli decisions --dir <dir> --json）；已有标题决策尚未决定但已过期（候选在提问之后改过）时，不另建决策，而是原地替换该决策的选项、推荐与理由（id、问题与关联单元不变），changedPaths 只有 .writing-anything/decisions.yaml，使旧的选项不会继续阻塞单元；已决定的标题决策过期后重新提问时另建新的决策；--recommend 不是候选 id 时报告 marketing.headline-not-found（field 为 recommend）；决策队列无法加载时报告其诊断；marketing.yaml 不通过校验时报告其诊断。所有检查都在写入任何文件之前完成，任何一项失败都不修改文件，退出码为 1。决策已追加而写入 marketing.yaml 失败时报告 workspace.write-failed，message 含已追加的决策 id，changedPaths 为 [.writing-anything/decisions.yaml]。
@@ -68,7 +72,7 @@ requirements:
         - THEN: decision.id 仍为 dec-1，选项文字已更新，changedPaths 只有 .writing-anything/decisions.yaml；决定后 advance 成功，没有其他标题决策阻塞
   marketing-gate:
     strength: MUST
-    statement: 单元当前阶段的 required_artifacts 含 marketing，且单元目录下存在 marketing.yaml 或 marketing.md 时，营销要素的问题必须是该单元的阻塞项（Blocker），artifact 为 marketing、decision 为 null：marketing.yaml 不通过 marketing-artifact 的校验时只有一条 code 为 marketing.invalid 的阻塞项；否则 marketing-show 的 questions 中每一项都是一条阻塞项，code 与 message 与该问题相同，path 为 marketing.yaml（单元只有 marketing.md 时为 marketing.md，并视为没有填写任何要素）。标题决策尚未决定时由 decisions 主规格的 decision-blocking 阻塞。wa-cli advance 因营销要素阻塞项拒绝推进时，为每个阻塞项给出一条错误码为其 code、path 为其 path 的诊断，next 为：marketing.missing-field 与 marketing.too-many-headlines 给出 wa-cli marketing show <unit> --dir <dir> --json 与 wa-cli help marketing set --json；marketing.headline-unasked 与 marketing.headline-stale 给出 wa-cli marketing show <unit> --dir <dir> --json 与 wa-cli help marketing ask --json；marketing.invalid 给出 wa-cli validate <marketing.yaml 路径> --dir <dir> --json。缺少 marketing 产物时 wa-cli next 的 commands 列出 wa-cli help marketing set --json。
+    statement: 单元当前阶段的 required_artifacts 含 marketing，且单元目录下存在 marketing.yaml 或 marketing.md 时，营销要素的问题必须是该单元的阻塞项（Blocker），artifact 为 marketing、decision 为 null：marketing.yaml 不通过 marketing-artifact 的校验时只有一条 code 为 marketing.invalid 的阻塞项；否则 marketing-show 的 questions 中每一项都是一条阻塞项，code 与 message 与该问题相同，path 为 marketing.yaml（单元只有 marketing.md 时为 marketing.md，并视为没有填写任何要素）；marketing.headline-unasked 同样只在单元目录下已写入正文（存在 draft.md）时成为问题与阻塞项，正文未写入时 next 的阻塞项不含它、commands 不含 wa-cli help marketing ask（缺失的 draft 产物已单独阻塞并先给出它的命令）。标题决策尚未决定时由 decisions 主规格的 decision-blocking 阻塞。wa-cli advance 因营销要素阻塞项拒绝推进时，为每个阻塞项给出一条错误码为其 code、path 为其 path 的诊断，next 为：marketing.missing-field 与 marketing.too-many-headlines 给出 wa-cli marketing show <unit> --dir <dir> --json 与 wa-cli help marketing set --json；marketing.headline-unasked 与 marketing.headline-stale 给出 wa-cli marketing show <unit> --dir <dir> --json 与 wa-cli help marketing ask --json；marketing.invalid 给出 wa-cli validate <marketing.yaml 路径> --dir <dir> --json。缺少 marketing 产物时 wa-cli next 的 commands 列出 wa-cli help marketing set --json。
     scenarios:
       gate-open-decision:
         - GIVEN: 同上，四个要素都已填写，标题决策 dec-1 尚未决定
@@ -78,3 +82,11 @@ requirements:
         - GIVEN: wechat-marketing 作品 post 处于草稿阶段，有 draft.md，marketing.yaml 的标题已选定、有 digest 与 opening，没有 cta
         - WHEN: 运行 wa-cli advance post --dir D --json
         - THEN: diagnostics 中有一条错误码为 marketing.missing-field 的诊断，message 含 cta，next 含 wa-cli help marketing set --json；work.yaml 不变，退出码为 1
+      gate-unasked-waits-for-draft:
+        - GIVEN: wechat-marketing 作品 post 处于草稿阶段，没有 draft.md，marketing.yaml 有两个候选、digest、opening 与 cta，没有标题决策
+        - WHEN: 运行 wa-cli next post --dir D --json 与 wa-cli advance post --dir D --json
+        - THEN: next 的阻塞项为缺失 draft 的 lifecycle.missing-artifact，不含 marketing.headline-unasked，commands 不含 wa-cli help marketing ask；advance 因缺失产物拒绝；写入正文 draft.md 后 next 的阻塞项含 marketing.headline-unasked
+      gate-stale-without-draft:
+        - GIVEN: 同 gate-unasked-waits-for-draft，但 marketing.yaml 的 headline_decision 指向已不存在或选项已改动的决策
+        - WHEN: 运行 wa-cli next post --dir D --json
+        - THEN: 阻塞项含 marketing.headline-stale（与正文是否写入无关），退出码为 0

@@ -4,22 +4,74 @@
   "description": "wa-cli review record 的输入：按评分标准（Rubric）逐项的结论与发现项（Finding）。发现项的 id 可以省略，由 wa-cli 编号。",
   "type": "object",
   "additionalProperties": false,
-  "required": ["rubric"],
+  "required": [
+    "rubric"
+  ],
   "properties": {
-    "rubric": {"$ref": "review.schema.json#/$defs/verdicts"},
+    "rubric": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "item"
+        ],
+        "properties": {
+          "item": {
+            "$ref": "common.schema.json#/$defs/id"
+          },
+          "verdict": {
+            "enum": [
+              "pass",
+              "fail",
+              ""
+            ]
+          },
+          "evidence": {
+            "type": "string"
+          },
+          "paragraphs": {
+            "type": "array",
+            "items": {
+              "$ref": "review.schema.json#/$defs/paragraph"
+            },
+            "description": "结论依据的段落编号；不针对段落的评分项（如评作者选定的标题）可以为空或省略，写出时规范化为空数组"
+          }
+        }
+      },
+      "description": "评分结论数组（wa-cli review record --init 的骨架把 verdict 与 evidence 留空待填；空值由录入时的领域校验逐项报告，产物 Schema 仍只接受 pass 或 fail）"
+    },
     "findings": {
       "type": "array",
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["paragraph", "message"],
+        "required": [
+          "paragraph",
+          "message"
+        ],
         "properties": {
-          "id": {"$ref": "common.schema.json#/$defs/id"},
-          "rubric": {"$ref": "common.schema.json#/$defs/id"},
-          "paragraph": {"$ref": "review.schema.json#/$defs/paragraph"},
-          "quote": {"type": "string", "pattern": "\\S"},
-          "message": {"type": "string", "pattern": "\\S"},
-          "suggestion": {"type": "string", "pattern": "\\S"}
+          "id": {
+            "$ref": "common.schema.json#/$defs/id"
+          },
+          "rubric": {
+            "$ref": "common.schema.json#/$defs/id"
+          },
+          "paragraph": {
+            "$ref": "review.schema.json#/$defs/paragraph"
+          },
+          "quote": {
+            "type": "string",
+            "pattern": "\\S"
+          },
+          "message": {
+            "type": "string",
+            "pattern": "\\S"
+          },
+          "suggestion": {
+            "type": "string",
+            "pattern": "\\S"
+          }
         }
       }
     }

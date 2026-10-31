@@ -5,7 +5,7 @@ schema_file: ../../templates/strict-spec-driven/schemas/planned-change.yaml
 planned_change:
   id: length-counting-clarity
   milestone: wechat-flow-feedback
-status: planned
+status: complete
 summary: 写清字数（Word Count）口径：非空白字符数，含标点；在 lint、length-range 与 brief --length 的 help 和诊断中统一说明，按 intake 结论决定是否输出汉字数
 details: R3。internal/lint/text.go 的 chars 去掉空白、保留标点；lint help（internal/cli/lint.go:32）已写「屏蔽区域之外的非空白字符数」，但没写含标点。改动：lint.go:32 的 help、checkLength（internal/lint/lint.go:453）的诊断「字数（Word Count）为 N」、brief set --length 的 help（internal/cli/brief.go:29）都写明「非空白字符数，含标点」。已定（intake cjk-chars-field，2026-10-30 作者确认）：lint --json 追加 cjkChars 字段（只数汉字），文本输出同时显示汉字数；length-range 的计数口径不变，也不加口径参数。新术语（若有）加入 docs/GLOSSARY.md。测试：含标点、英文与空白的夹具断言 chars（及 cjkChars）的值，并断言诊断文字含口径说明。
 depends_on: []

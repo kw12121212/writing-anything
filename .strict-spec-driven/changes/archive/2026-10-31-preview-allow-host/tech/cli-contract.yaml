@@ -1,0 +1,21 @@
+schema: strict-spec-driven/delta-tech/v1
+schema_version: 1
+artifact_type: delta_tech
+schema_file: templates/strict-spec-driven/schemas/delta-tech.yaml
+target_standard: cli-contract
+operations:
+  ADDED: {}
+  MODIFIED:
+    loopback-only-server:
+      strength: MUST
+      statement: 'wa-cli 中监听网络的命令（如 preview --serve）只能监听回环地址 127.0.0.1，不得监听 0.0.0.0 或其他网卡，也不得提供选择监听地址的参数，给出的访问地址必须取自实际监听的套接字；必须为每次运行生成至少 128 位的随机令牌，并对每个请求在读取或修改任何产物之前校验令牌（常量时间比较）与 Host 头（端口为 80 时同时接受不带端口的写法），不符合时返回 403；Host 校验默认只接受回环地址与 localhost，唯一放宽方式是作者显式给出的 Host 白名单参数（可重复、host 或 host:port（端口为 1 到 65535）的字面值、不支持通配与后缀匹配），白名单只放宽 Host 校验——令牌校验、监听地址与其余防护不因它放宽，也不校验可伪造的转发头（如 X-Forwarded-Host）；响应必须带 Cache-Control: no-store 与 Referrer-Policy: no-referrer，服务只在命令运行期间存在，不作为常驻服务；请求体必须限制大小，服务端日志写到命令的标准错误。测试必须断言访问地址是回环地址，并覆盖拒绝无令牌、令牌错误、Host 不符与白名单外 Host 的请求。'
+      rationale: 本地阅读页是项目中唯一的网络监听，同一台机器上的其他网页或进程也能访问回环地址：令牌防止伪造提交，Host 校验防 DNS 重绑定，no-referrer 防止令牌随 Referer 外泄，限制请求体防止占满内存；地址取自实际套接字，测试才能发现误改为监听全部网卡。远程作者经反向代理（tailscale serve 等）访问时 Host 头不是回环地址，复盘 A2 采纳显式白名单作为唯一放宽方式：通配或后缀匹配会一次放开不可枚举的 Host 集合，校验转发头等于放开任意 Host；令牌与监听地址保持不变，防护面不随远程访问扩大。
+      enforcement:
+        method: test
+        detail: internal/cli 的 TestPreviewServe 断言首行地址的主机为 127.0.0.1 且是回环地址，并对无令牌、令牌错误与错误 Host 的 GET 与 POST 断言 403 且 feedback.yaml 不变；TestPreviewServeAllowHost 断言白名单内 Host 携令牌 200、白名单外携令牌与白名单内缺令牌 403、非法取值（通配、带路径）与脱离 --serve 均拒绝、监听地址仍为回环。
+      examples:
+        good:
+          - preview --serve --allow-host machine.tail123.ts.net：hosts 追加该字面值，authorized 仍逐字比较且令牌常量时间校验不变。
+        bad:
+          - 提供 --bind 0.0.0.0；或按 X-Forwarded-Host 校验；或 --allow-host *.example 通配。
+  REMOVED: {}

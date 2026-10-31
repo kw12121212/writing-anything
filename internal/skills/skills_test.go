@@ -429,3 +429,46 @@ func TestProductSourceHasNoRenderer(t *testing.T) {
 		}
 	}
 }
+
+// skill-confirmation-guard（confirmation-guard-guidance）：wa-publish 与 wa-auto 写明无作者原话不得带
+// --confirmed-by-author、试用在 standard 或 fast 关卡不带确认验收；wa-revise 写明小改走 --reaffirm 的分界。
+func TestSkillConfirmationGuard(t *testing.T) {
+	byName := map[string]Skill{}
+	for _, s := range All() {
+		byName[s.Name] = s
+	}
+	for _, name := range []string{"wa-publish", "wa-auto"} {
+		body := string(byName[name].Content)
+		for _, want := range []string{
+			"不得带 --confirmed-by-author",
+			"「假设」「试用」",
+			"--confirmation",
+			"standard 或 fast 关卡",
+			"confirmedByAuthor 为 false",
+			"strict 关卡要求作者确认",
+		} {
+			if !strings.Contains(body, want) {
+				t.Errorf("%s lacks %q", name, want)
+			}
+		}
+		if !strings.Contains(body, "必须停下来问作者") {
+			t.Errorf("%s lacks the stop-and-ask section", name)
+		}
+	}
+	revise := string(byName["wa-revise"].Content)
+	for _, want := range []string{
+		"--reaffirm",
+		"--summary <变化摘要>",
+		"重申只解除审稿过期",
+		"reopen",
+		"再请作者重新确认验收",
+		"涉及观点、事实或论断时仍走完整审稿",
+	} {
+		if !strings.Contains(revise, want) {
+			t.Errorf("wa-revise lacks %q", want)
+		}
+	}
+	if !slices.Contains(Commands(byName["wa-revise"].Content), "review record") {
+		t.Error("wa-revise commands lack review record")
+	}
+}

@@ -1,0 +1,46 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: handoff-work-scope
+sections:
+  Implementation:
+    schemas-work-field:
+      text: internal/schema/schemas/handoffs.schema.json 与 handoff-input.schema.json 的条目新增可选 work 字段（作品 id 形态，与 common.schema.json 的 id 口径一致；schema_version 不升级），internal/schema 测试的合法与不合法夹具同步覆盖该字段
+      status: complete
+    handoff-package:
+      text: internal/handoff：fileNote 与 View 新增可选 work 字段（View 用 json omitempty）；Write 仅在 work 非空时追加 work 键（节点树追加、注释保留语义不变）；Show 支持按作品过滤（关联该作品或未关联，倒序）；Latest 改为按作品取「关联该作品的最近记录」与「未关联的最近记录」中较新的一条
+      status: complete
+    cli-write-unit:
+      text: internal/cli/handoff.go：handoff write 增加 --unit，经 work.Resolve 把作品或其任一单元归一到所属作品 id；输入含 work 时校验作品存在；--unit 与输入 work 指向不同作品时报告 input.invalid-value（field 为 unit）；更新命令 summary、flags 与 outputKeys 说明
+      status: complete
+    cli-show-next:
+      text: internal/cli：handoff show 增加 --unit 过滤（结果集与 next 口径一致）；runNext 每条命令只加载一次交接记录、逐作品过滤后传入 step（latestHandoff 改为按作品取值）；next 文本输出改为同一条交接记录只在第一条引用它的步骤之前显示一次
+      status: complete
+    skills-update:
+      text: wa-assemble 与 wa-auto 技能的会话结束段写明写交接时带 --unit（接受作品或其任一单元）；internal/skills/history.txt 追加新哈希使 TestSkillHistoryCoversCurrent 通过；plugins/zcode-writing-viewer/skills 副本经 scripts/stage-skills.mjs 重新生成并逐字核对
+      status: complete
+  Testing:
+    unit-tests:
+      text: 单元与命令测试：两个作品各写一条关联自身的交接记录后 next 互不串入（含 JSON handoff 字段与文本输出）；只有未关联记录时 next 与 handoff show 行为与现在一致；handoff write --unit 归到所属作品、指向不存在单元报 work.unit-not-found 且文件未变、与输入 work 冲突报 input.invalid-value、输入 work 指向不存在作品报 work.not-found；handoff show --unit 过滤含未关联记录、--last 既有行为不变；work 缺省时产物条目无 work 键且 JSON 视图缺省；next 文本输出在全部步骤共享一条记录时位置不变、多条记录时按 id 去重
+      status: complete
+      command: go test ./internal/handoff/... ./internal/cli/... ./internal/schema/...
+    project-regression:
+      text: 完整回归（review_evidence.project_regression）：构建、全部测试与 80% 覆盖率门槛（internal/**，不含 internal/tools/**）
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    ready-check:
+      text: ready 检查变更构件齐备（含技能哈希同步后的 TestSkillHistoryCoversCurrent）
+      status: complete
+      command: strict-spec-cli ready handoff-work-scope
+    verify-check:
+      text: verify 校验变更构件与引用一致性
+      status: complete
+      command: strict-spec-cli verify handoff-work-scope
+    archive-consistency:
+      text: 归档前检查：delta-spec 的 MODIFIED 需求与实际实现逐条对照（--unit 语义、过滤口径、文本输出），确认 ZCode 插件技能副本逐字一致、history.txt 覆盖当前技能
+      status: complete
+testing_gates:
+  validation_task: project-regression
+  unit_test_task: unit-tests

@@ -1,0 +1,41 @@
+schema: strict-spec-driven/delta-spec/v1
+schema_version: 1
+artifact_type: delta_spec
+schema_file: templates/strict-spec-driven/schemas/delta-spec.yaml
+target_spec: preview
+operations:
+  ADDED: {}
+  MODIFIED:
+    preview-serve:
+      strength: MUST
+      statement: 'wa-cli preview <unit> --serve 必须启动一个只监听 127.0.0.1 的本地 HTTP 服务（不提供选择监听地址的参数；--allow-host 只放宽 Host 头校验，令牌校验与监听地址不变）（--port 指定端口，省略时由系统分配），并生成至少 128 位的随机令牌（Token），不写阅读页文件。--json 时先输出一行输出信封：preview 含 unit、units、path（null）、url（http://127.0.0.1:<port>/?token=<令牌>，地址取自实际监听的地址）与 remoteUrl（给出 --allow-host 时按第一个白名单 Host 拼出的页面地址——Host 不带端口或端口为 443 时用 https，其余用 http，含令牌；未给出 --allow-host 时该字段缺省），feedback 为 null，changedPaths 为空数组；之后每保存一条反馈输出一行信封，feedback 为该反馈（字段见 feedback 主规格的 feedback-list），changedPaths 为这次保存变更的路径，preview 同首行；作者每记录一次确认或批量复核也输出一行信封（confirmation 或 authorReview 非 null，见 preview-confirm 与 preview-author-review）；各行信封的 feedback、confirmation 与 authorReview 中不对应的字段为 null。服务对每个请求都校验 Host 头（默认只接受 127.0.0.1:<port> 与 localhost:<port>；端口为 80 时也接受不带端口的写法；给出 --allow-host <Host>（可重复，取值为 host 或 host:port（端口为 1 到 65535）的字面值，不支持通配）时，给出的 Host 也按字面接受）与令牌（GET 用查询参数 token，POST 用请求头 X-WA-Token），不符合时返回 403，不读取也不修改任何产物。GET / 返回按当前工作区状态重新生成的阅读页（内容同 preview-content，配图与封面图的图像以相对页面地址、不以 / 开头的 illustration?unit=<单元引用>&id=<配图 id>&token=<令牌> 加载而不内嵌，另含选中文字后提交意见、作者确认与复核的脚本，以及 preview-confirm-queue 的待作者确认区与待作者复核区）；GET /page.json 返回同一时刻阅读页的结构化数据（见 preview-page-json）；GET /illustration 返回已登记配图的图片（见 preview-illustration）；POST /feedback 见 preview-feedback，POST /confirm 见 preview-confirm，POST /author-review 见 preview-author-review；其他路径返回 404，其他方法返回 405。响应带 Cache-Control: no-store、Referrer-Policy: no-referrer、X-Frame-Options: DENY 与 Content-Security-Policy（只放行哈希与页面内联脚本一致的脚本，图片只放行 img-src ''self'' data:）。给出 --max <n> 时保存 n 条反馈（确认与复核不计数）后关闭服务并以退出码 0 结束，否则一直运行到命令被中断；命令结束即关闭服务。--port 不是 1 到 65535 的整数，--max 不是不超过 86400000 的正整数，未给出 --serve 却给出 --port 或 --max，给出 --serve 又给出 --output，或 --allow-host 只给出 --serve 以外的场合、取值不是 host 或 host:port（端口为 1 到 65535；含通配与空值）时报告 input.invalid-value（field 为 allow-host，next 为 wa-cli help preview --json），退出码为 1；端口无法监听时报告 preview.listen-failed，退出码为 1。不加 --json 时首行输出阅读页地址（给出 --allow-host 时另附按第一个白名单 Host 拼出的远程地址），之后每条反馈输出一行人读文本。 这是可审计的流程约束而非安全隔离：同机同账户的 Agent 能读到令牌，确认渠道（Confirmation Channel）只把经阅读页写入的确认如实记为 preview。'
+      scenarios:
+        serve-url:
+          - GIVEN: 作品 my-post 有正文
+          - WHEN: 运行 wa-cli preview my-post --serve --max 1 --dir D --json
+          - THEN: '首行信封的 preview.url 以 http://127.0.0.1: 开头并含 token=，path 为 null；用该地址 GET 得到 200 与含正文的页面，响应带 Cache-Control: no-store 与 Referrer-Policy: no-referrer'
+        serve-reject-no-token:
+          - GIVEN: preview --serve 正在运行
+          - WHEN: GET / 不带 token，或 POST /feedback、/confirm 或 /author-review 不带 X-WA-Token 或令牌错误，或 Host 头为 evil.example:<port>
+          - THEN: 都返回 403，feedback.yaml、确认记录与 author-reviews.yaml 都不被创建或修改
+        serve-bad-flags:
+          - GIVEN: 已初始化的工作区与作品 my-post
+          - WHEN: 运行 wa-cli preview my-post --port 70000 --serve --dir D --json，或 wa-cli preview my-post --max 1 --dir D --json
+          - THEN: diagnostics 中有一条错误码为 input.invalid-value 的诊断，next 为 wa-cli help preview --json，退出码为 1
+        serve-illustration-relative:
+          - GIVEN: 作品 my-post 正文引用已登记、可用的 illustrations/fig-1.png，preview my-post --serve 正在运行
+          - WHEN: 带令牌 GET / 并读取响应头 Content-Security-Policy
+          - THEN: 页面中 fig-1 的 img 地址为不以 / 开头的 illustration?unit=my-post&id=fig-1&token=<令牌>，页面不含 data:image/ 内嵌；CSP 含 img-src 'self' data:，script-src 仍只放行页面内联脚本的哈希
+        allow-host-accepted:
+          - GIVEN: wa-cli preview my-post --serve --allow-host ts.example --allow-host box.lan:8080 --dir D --json 运行中，令牌为 T
+          - WHEN: 以 Host 为 ts.example（不带令牌的 GET 除外）携带令牌 GET /，另以 Host 为 box.lan:8080 携带令牌 GET /page.json
+          - THEN: 两个请求都返回 200；首行信封 preview.remoteUrl 以 https://ts.example/ 开头并含令牌；监听地址仍为 127.0.0.1
+        allow-host-outside:
+          - GIVEN: 同上运行中的服务
+          - WHEN: 以 Host 为 evil.example 携带正确令牌 GET /，或以 Host 为 ts.example 不带令牌 GET /
+          - THEN: 两个请求都返回 403，不读取也不修改任何产物
+        allow-host-invalid:
+          - GIVEN: 运行 wa-cli preview my-post --serve --allow-host "*.example" --dir D --json
+          - WHEN: 解析参数
+          - THEN: 报告 input.invalid-value（field 为 allow-host），退出码为 1，不启动服务
+  REMOVED: {}

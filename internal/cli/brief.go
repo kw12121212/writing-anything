@@ -26,7 +26,7 @@ var briefSetCommand = &command{
 		dirFlag,
 		{"audience", flagString, "受众（Audience）：文章写给谁看"},
 		{"purpose", flagString, "写作目的（Purpose）：读者读完后应该知道、相信或去做什么"},
-		{"length", flagString, "字数范围，写作 <min>-<max>，如 1500-3000"},
+		{"length", flagString, "字数范围，写作 <min>-<max>，如 1500-3000；字数为非空白字符数，含标点"},
 		{"avoid", flagList, "禁区（Off-limits）：不能写或需要回避的内容；可重复，整体替换已有的禁区"},
 		{"sources", flagString, "关联素材（Source）id，用逗号分隔；整体替换已有的关联素材"},
 		{"premise", flagString, "前提（Premise）：用一两句话概括的故事核心设想；空字符串时删除前提整体"},

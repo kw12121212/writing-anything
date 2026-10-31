@@ -30,4 +30,4 @@ milestones:
   wechat-flow-feedback:
     title: 公众号流程复盘落地（WeChat Flow Feedback）
     path: roadmap/milestones/wechat-flow-feedback.yaml
-    status: proposed
+    status: complete

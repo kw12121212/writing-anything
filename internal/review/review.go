@@ -25,6 +25,7 @@ import (
 // 审稿与验收的错误码（Error Code）。已发布的错误码不得改名或复用。
 const (
 	CodeMissingVerdict    = "review.missing-verdict"
+	CodeMissingEvidence   = "review.missing-evidence"
 	CodeUnknownRubricItem = "review.unknown-rubric-item"
 	CodeDuplicateVerdict  = "review.duplicate-verdict"
 	CodeUnknownParagraph  = "review.unknown-paragraph"
@@ -314,6 +315,16 @@ func Record(root, dir string, data []byte, paragraphs []string, draftSHA string,
 			out = append(out, errorAt(CodeDuplicateVerdict, "", field+".item", "评分项 "+v.Item+" 有多个结论；每个评分项只能有一个结论"))
 		}
 		seen[v.Item] = true
+		// 骨架未填完：verdict 与 evidence 为空时逐项指出（而不是笼统的 Schema 错误），field 到具体位置；
+		// item 本身未知的项已由 unknown-rubric-item 指出，不再叠加空值提示。
+		if known[v.Item] && v.Verdict != "pass" && v.Verdict != "fail" {
+			out = append(out, errorAt(CodeMissingVerdict, "", field+".verdict",
+				fmt.Sprintf("评分项 %s 的结论（verdict）未填写：骨架未填完；请填为 pass 或 fail", v.Item)))
+		}
+		if known[v.Item] && strings.TrimSpace(v.Evidence) == "" {
+			out = append(out, errorAt(CodeMissingEvidence, "", field+".evidence",
+				fmt.Sprintf("评分项 %s 的证据（evidence）未填写：骨架未填完；请写明结论的依据（依据的段落写在 paragraphs）", v.Item)))
+		}
 		for j, n := range v.Paragraphs {
 			paragraph(fmt.Sprintf("%s.paragraphs[%d]", field, j), n)
 		}

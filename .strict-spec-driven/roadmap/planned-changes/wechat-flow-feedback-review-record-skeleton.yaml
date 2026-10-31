@@ -5,7 +5,7 @@ schema_file: ../../templates/strict-spec-driven/schemas/planned-change.yaml
 planned_change:
   id: review-record-skeleton
   milestone: wechat-flow-feedback
-status: planned
+status: complete
 summary: review record 提供审稿骨架：列出全部评分项（item、title、blocking，verdict 与 evidence 留空）与正文段落编号和首句；未填写的结论逐项报错
 details: 'R1。形态已定（intake review-skeleton-form，2026-10-30 作者确认）：review record --init，只读，把 YAML 骨架写到标准输出，加 --json 时放在 skeleton 字段；review record 仍是整份替换，不引入逐项增量命令。骨架的评分项来自 rubricOf（internal/cli/review.go:158，文体、规范包和写作法合并后的结果），每项给出 item、verdict: ""、evidence: ""、paragraphs: []，并以 YAML 注释标出 title 与 blocking；末尾注释附段落表（编号与 wa-cli provenance 一致，每段附首句摘录，方便核对引文）和 findings: [] 占位。骨架不预填 pass，也不推测发现项。review.Validate（review.go:295 附近）在 Schema 校验之前或替代 Schema 的 enum 报错：verdict 为空或缺失时，逐项给出 review.missing-verdict，字段路径为 rubric[i].verdict；evidence 为空时同样逐项报告。wa-review 技能第 2 步改为先取骨架（同步 history.txt 与 ZCode 技能副本）。测试：骨架评分项与 review show 一致、段落数与正文一致、空骨架录入时逐项报错且不写文件、填写后录入成功。'
 depends_on: []

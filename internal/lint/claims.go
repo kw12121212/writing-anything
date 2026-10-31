@@ -53,9 +53,21 @@ var (
 	defaultMarkers     = []string{"曾", "曾经", "当时", "那时", "那次", "去年", "前年", "上个月", "上周", "第一次", "亲自", "亲眼", "遇到", "经历过", "踩过", "做过", "参与", "负责"}
 	// dataRE 匹配需要出处的具体数据：数字（含全角数字）后接百分号、倍数或大数单位，以及「百分之」与中文数字加「倍」。
 	dataRE = regexp.MustCompile(`[0-9０-９]+(?:[.．][0-9０-９]+)?\s*(?:%|％|倍|个百分点|万|亿)|百分之[零〇一二三四五六七八九十百千两0-9０-９]+|[零〇一二三四五六七八九十百千两]+倍`)
+	// counterRE 匹配「数字＋常见量词」（counters 开启时的数据候选）；量词表与 lint 主规格 claim-rule-types 逐字一致。
+	counterRE = regexp.MustCompile(`[0-9０-９]+(?:[.．][0-9０-９]+)?\s*(?:人|个|条|次|天|月|年|元|名|位|场|篇|种|项|字|分钟|小时|周)`)
 	// quoteRE 匹配引用块（Blockquote）行，其中的文字多为引述他人。
 	quoteRE = regexp.MustCompile(`^ {0,3}>`)
 )
+
+var dataREOnly = []*regexp.Regexp{dataRE}
+
+// dataREs 返回数据候选的正则集合：counters 开启时追加「数字＋常见量词」。
+func dataREs(counters bool) []*regexp.Regexp {
+	if counters {
+		return []*regexp.Regexp{dataRE, counterRE}
+	}
+	return dataREOnly
+}
 
 // orDefault 返回参数 name 的取值；没有给出时返回 def。
 func (p params) orDefault(name string, def []string) []string {
@@ -232,6 +244,7 @@ func checkCandidates(t *text, p params, _ *resolve.Resolved, in Input) ([]Findin
 	pronouns := newMatcher(p.orDefault("pronouns", defaultPronouns))
 	markers := newMatcher(p.orDefault("experience_markers", defaultMarkers))
 	data := p.bool("data", true)
+	counters := p.bool("counters", false)
 	coverKinds := p.orDefault("cover_kinds", defaultClaimKinds)
 	_, coverGiven := p["cover_kinds"].([]string)
 	coverList := strings.Join(coverKinds, "、")
@@ -319,7 +332,7 @@ func checkCandidates(t *text, p params, _ *resolve.Resolved, in Input) ([]Findin
 		}
 		isCovered := func(s span) bool { return done[s.to]-done[s.from] == s.to-s.from }
 		isCoveredData := func(s span) bool { return doneData[s.to]-doneData[s.from] == s.to-s.from }
-		for _, s := range candidates(t.vis[i], pronouns, markers, narrative, data) {
+		for _, s := range candidates(t.vis[i], pronouns, markers, narrative, data, counters) {
 			// 亲历按分句分组（同一分句的亲历区间中任一被覆盖即视为该分句已登记），未登记的分句取从最早代词到分句末尾的并集。
 			fromOf, registered := map[int]int{}, map[int]bool{}
 			for _, e := range s.experience {
@@ -353,7 +366,7 @@ func checkCandidates(t *text, p params, _ *resolve.Resolved, in Input) ([]Findin
 				return out, true
 			}
 			msg := "疑似论断（Claim Candidate，" + strings.Join(kinds, "、") + "）尚未登记为论断（Claim）：请用 wa-cli claim add " + unitOr(in.Unit) +
-				" --kind <类型> --text <论断> --sources <作者素材 id> 登记该论断并关联作者素材；确属泛指时可由作者单处豁免"
+				" --kind <类型> --text <论断> --sources <作者素材 id> 登记该论断并关联作者素材（真实数据请关联素材；示意数字请在正文中注明，如「示意」）；确属泛指时可由作者单处豁免"
 			if ns := exclusionNotes(notes, lineNotes(i), expOpen, dataOpen, coverList); len(ns) > 0 {
 				msg += "；" + strings.Join(ns, "；")
 			}
@@ -453,9 +466,10 @@ func spansOf(m *matcher, v []rune) []span {
 	return out
 }
 
-// candidates 把一行可见文字 v 在句末标点处切分为句子，返回其中的亲历候选（experience 为 false 时不检测）与数据候选。
-// 代词、标记词与数据各扫描一遍，耗时与行长成线性（排序除外）。
-func candidates(v []rune, pronouns, markers *matcher, experience, data bool) []candidate {
+// candidates 把一行可见文字 v 在句末标点处切分为句子，返回其中的亲历候选（experience 为 false 时不检测）与数据候选
+// （counters 为 true 时「数字＋常见量词」也作为数据候选）。代词、标记词与数据正则各扫描一遍（数据正则至多两个，
+// 嵌套命中取最长区间），耗时与行长成线性（排序除外）。
+func candidates(v []rune, pronouns, markers *matcher, experience, data, counters bool) []candidate {
 	var sents []candidate
 	of := make([]int, len(v)) // of[c] 为第 c 列所在句子的下标，不在句子中时为 -1
 	start := -1
@@ -519,8 +533,23 @@ func candidates(v []rune, pronouns, markers *matcher, experience, data bool) []c
 			c++
 		}
 		col[len(line)] = c
-		for _, m := range dataRE.FindAllStringIndex(line, -1) {
-			s := span{col[m[0]], col[m[1]]}
+		var hits []span
+		for _, re := range dataREs(counters) {
+			for _, m := range re.FindAllStringIndex(line, -1) {
+				hits = append(hits, span{col[m[0]], col[m[1]]})
+			}
+		}
+		// 嵌套命中（如「N 个百分点」同时命中「N 个百分点」与「N 个」）取最长区间：按起点排序后跳过被包含的区间。
+		slices.SortFunc(hits, func(a, b span) int { return a.from - b.from })
+		var taken []span
+		for _, s := range hits {
+			if n := len(taken); n > 0 {
+				last := taken[n-1]
+				if s.from >= last.from && s.to <= last.to {
+					continue
+				}
+			}
+			taken = append(taken, s)
 			if k := in(s.from, s.to); k >= 0 {
 				sents[k].data = append(sents[k].data, s)
 			}

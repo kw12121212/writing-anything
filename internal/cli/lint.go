@@ -29,7 +29,8 @@ var lintCommand = &command{
 	outputKeys: []outputKey{
 		{"findings", "未被豁免的发现项，按行、列、规则排序；" + findingHelp},
 		{"waived", "被单处豁免（Waiver）的发现项，另含 reason"},
-		{"chars", "正文字数（Word Count）：屏蔽区域之外的非空白字符数"},
+		{"chars", "正文字数（Word Count）：屏蔽区域之外、去掉 Markdown 标题标记后的非空白字符数，含标点"},
+		{"cjkChars", "正文汉字数：同一口径下只数汉字（Unicode Han），全角标点与假名等不计入"},
 	},
 	exitCodes: standardExitCodes,
 	run:       runLint,
@@ -53,6 +54,7 @@ type lintResult struct {
 	Findings []findingView `json:"findings"`
 	Waived   []findingView `json:"waived"`
 	Chars    int           `json:"chars"`
+	CJKChars int           `json:"cjkChars"`
 }
 
 func viewFinding(f lint.Finding, waived bool) findingView {
@@ -333,7 +335,7 @@ func runLint(inv *invocation) int {
 				for _, f := range out.Waived {
 					res.Waived = append(res.Waived, viewFinding(f, true))
 				}
-				res.Chars, checked = out.Chars, true
+				res.Chars, res.CJKChars, checked = out.Chars, out.CJKChars, true
 				if errors > 0 {
 					problems = append(problems, workspace.Problem{Code: lint.CodeFindings, Severity: workspace.SeverityError, Path: rel,
 						Message: fmt.Sprintf("文本检查（Lint）有 %d 条 error 级发现项（Finding）；请按 findings 中的 message 与建议改写正文或为论断（Claim）关联作者素材后重新检查", errors)})
@@ -369,7 +371,7 @@ func runLint(inv *invocation) int {
 		if !checked {
 			return nil
 		}
-		fmt.Fprintf(&b, "文本检查（Lint）%s：%d 条发现项（Finding），%d 条已豁免，字数 %d\n", rel, len(res.Findings), len(res.Waived), res.Chars)
+		fmt.Fprintf(&b, "文本检查（Lint）%s：%d 条发现项（Finding），%d 条已豁免，字数 %d（非空白字符数，含标点），汉字 %d\n", rel, len(res.Findings), len(res.Waived), res.Chars, res.CJKChars)
 		for _, f := range res.Findings {
 			where := "全文"
 			if f.Line != nil {

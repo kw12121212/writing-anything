@@ -1,0 +1,21 @@
+schema: strict-spec-driven/delta-tech/v1
+schema_version: 1
+artifact_type: delta_tech
+schema_file: templates/strict-spec-driven/schemas/delta-tech.yaml
+target_standard: cli-contract
+operations:
+  ADDED:
+    documented-command-roundtrip:
+      strength: SHOULD
+      statement: 面向 Agent 的文档（技能正文、help 示例）中写出的命令组合必须按字面可用：把命令输出重定向到文件再交给后续命令消费时（如  后经  回录），落盘格式必须是后续命令期望的领域格式——不得把 --json 的输出信封（Output Envelope）重定向成领域 YAML 使用；需要信封中的某个字段时，文档要写明提取该字段，或改用文本模式。发布前按文档字面执行一遍命令组合核实。
+      rationale: wa-review 技能第 2 步初版写 ：--json 模式的标准输出是含 valid、diagnostics 与 skeleton 字段的信封，落盘后直接回录得到成串 artifact.schema-violation——text-json-parity 只约束文本与 JSON 的字段对应，不约束文档中命令组合的可用性；Agent 会逐字执行技能里的命令，写错形态的命令组合在真跑时才暴露。
+      enforcement:
+        method: review
+        detail: 评审技能与 help 中新增的命令组合时按字面执行一遍（或在测试中执行同一序列），确认重定向产物能被后续命令接受。
+      examples:
+        good:
+          - （文本模式输出骨架 YAML），填写后  回录。
+        bad:
+          - ：落盘的是 JSON 信封而非骨架，回录报 artifact.schema-violation。
+  MODIFIED: {}
+  REMOVED: {}

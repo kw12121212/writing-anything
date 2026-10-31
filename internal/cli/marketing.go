@@ -123,12 +123,18 @@ func viewMarketing(ref string, m *marketing.Marketing, q marketing.Queue) *marke
 	return v
 }
 
-func marketingQuestions(m *marketing.Marketing, q marketing.Queue) []marketingQuestionView {
+func marketingQuestions(m *marketing.Marketing, q marketing.Queue, draftPresent bool) []marketingQuestionView {
 	out := []marketingQuestionView{}
-	for _, qu := range marketing.Questions(m, q) {
+	for _, qu := range marketing.Questions(m, q, draftPresent) {
 		out = append(out, marketingQuestionView(qu))
 	}
 	return out
+}
+
+// draftPresent 报告单元目录下的正文（draft.md）是否已写入：标题按正文选定，正文未写入时 questions
+// 不提示标题决策提问。与 work 的阻塞项判定共用 workspace.IsRegular（同一产物在所有入口得出同一结论）。
+func draftPresent(root, unitDir string) bool {
+	return workspace.IsRegular(root, unitDir+"/"+draft.FileName)
 }
 
 // marketingEdit 把 marketing set 的参数转换为修改；参数取值不合法时返回 input.invalid-value 或 artifact.schema-violation。
@@ -199,7 +205,7 @@ func runMarketingSet(inv *invocation) int {
 					if m, changed, problems = marketing.Set(dir, unitDir, e, ensure); m != nil {
 						q := marketing.LoadQueue(dir)
 						res.Marketing, res.ChangedPaths = viewMarketing(u.Ref, m, q), changed
-						res.Questions = marketingQuestions(m, q)
+						res.Questions = marketingQuestions(m, q, draftPresent(dir, unitDir))
 					}
 				}
 				edit = true
@@ -245,7 +251,7 @@ func runMarketingShow(inv *invocation) int {
 				if m != nil {
 					res.Marketing = viewMarketing(u.Ref, m, q)
 				}
-				res.Questions = marketingQuestions(m, q)
+				res.Questions = marketingQuestions(m, q, draftPresent(dir, w.UnitDir(u)))
 			}
 		}
 	}

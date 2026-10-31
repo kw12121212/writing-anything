@@ -1,0 +1,21 @@
+schema: strict-spec-driven/delta-tech/v1
+schema_version: 1
+artifact_type: delta_tech
+schema_file: templates/strict-spec-driven/schemas/delta-tech.yaml
+target_standard: go-project-structure
+operations:
+  ADDED:
+    leaf-domain-wiring:
+      strength: SHOULD
+      statement: 领域包（internal/handoff、internal/work、internal/impact 等）互为平级叶子包，不得互相 import（internal/schema、internal/workspace 等被全体复用的基础包除外）；引用另一领域包实体的参数（如单元引用（Unit Reference）、作品 id）由 internal/cli 解析、校验存在性并归一后传入领域包，解析失败的诊断原样转发被引用包的错误码、只改写 field 指向参数。否则领域包之间形成横向依赖或长出 internal/cli 之外的第二个接线层。
+      rationale: handoff-work-scope 的 --unit 需要把单元引用归到所属作品：若 internal/handoff import internal/work 解析，两个领域包横向耦合，任一方加载与校验的变更都会波及另一方；解析放命令层后 handoff 仍是叶子包，work.not-found/unit.not-found 的诊断与 next 由 CLI 既有路径统一给出。domain-problems 只约束「领域包不 import internal/cli」，兄弟领域包之间的依赖此前没有成文约束。
+      enforcement:
+        method: review
+        detail: 代码审查时检查领域包的 import 列表不出现兄弟领域包；跨领域实体的引用解析与存在性校验只出现在 internal/cli。
+      examples:
+        good:
+          - internal/cli 的 resolveHandoffWork 调 work.Resolve 把单元引用归一到作品 id 后传给 handoff.Write，失败时转发 work 包的错误码并把 field 改写为 unit。
+        bad:
+          - internal/handoff 里 import internal/work 来校验输入 work 字段的作品存在性。
+  MODIFIED: {}
+  REMOVED: {}

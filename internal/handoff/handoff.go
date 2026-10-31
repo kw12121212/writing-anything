@@ -1,6 +1,8 @@
 // Package handoff 管理工作区（Workspace）的交接记录（Handoff Note）handoffs.yaml：Agent 会话结束前经
-// wa-cli handoff write 追加完成了什么、未完成事项、作者的新指示与风险；wa-cli next 附上最近一条，新会话不
-// 依赖对话历史即可接续。交接记录只能追加（没有编辑或删除命令），条目数上限 200。本包不 import internal/cli。
+// wa-cli handoff write 追加完成了什么、未完成事项、作者的新指示与风险；条目可选关联作品（Work，work 字段），
+// wa-cli next 附上所属作品可见的最近一条（关联该作品的与未关联的记录中较新者），未关联的记录对所有作品可见，
+// 新会话不依赖对话历史即可接续。交接记录只能追加（没有编辑或删除命令），条目数上限 200。本包不 import
+// internal/cli，作品存在性由命令层校验。
 package handoff
 
 import (
@@ -33,16 +35,18 @@ func Path() string { return workspace.Dir + "/" + FileName }
 type Note struct {
 	ID           string   `json:"id"`
 	WrittenAt    string   `json:"written_at"`
+	Work         string   `json:"work"`
 	Done         []string `json:"done"`
 	Todo         []string `json:"todo"`
 	Instructions []string `json:"instructions"`
 	Risks        []string `json:"risks"`
 }
 
-// View 是输出形态（数组永不为 null）。
+// View 是输出形态（数组永不为 null）；Work 是关联作品（Work）的 id，未关联时为空、JSON 输出缺省。
 type View struct {
 	ID           string   `json:"id"`
 	WrittenAt    string   `json:"writtenAt"`
+	Work         string   `json:"work,omitempty"`
 	Done         []string `json:"done"`
 	Todo         []string `json:"todo"`
 	Instructions []string `json:"instructions"`
@@ -57,6 +61,7 @@ type fileRecord struct {
 type fileNote struct {
 	ID           string   `json:"id"`
 	WrittenAt    string   `json:"written_at"`
+	Work         string   `json:"work"`
 	Done         []string `json:"done"`
 	Todo         []string `json:"todo"`
 	Instructions []string `json:"instructions"`
@@ -117,9 +122,10 @@ func ParseInput(data []byte) (View, []workspace.Problem) {
 		Todo         []string `json:"todo"`
 		Instructions []string `json:"instructions"`
 		Risks        []string `json:"risks"`
+		Work         string   `json:"work"`
 	}
 	catalog.Decode(doc, &in)
-	v := View{Done: nonNil(in.Done), Todo: nonNil(in.Todo), Instructions: nonNil(in.Instructions), Risks: nonNil(in.Risks)}
+	v := View{Work: in.Work, Done: nonNil(in.Done), Todo: nonNil(in.Todo), Instructions: nonNil(in.Instructions), Risks: nonNil(in.Risks)}
 	return v, nil
 }
 
@@ -156,6 +162,9 @@ func Write(root string, in View, now time.Time) (*View, []string, []workspace.Pr
 	addKV := func(k string, v *yaml.Node) { item.Content = append(item.Content, workspace.Str(k), v) }
 	addKV("id", workspace.Str(id))
 	addKV("written_at", workspace.Str(nowUTC(now)))
+	if in.Work != "" {
+		addKV("work", workspace.Str(in.Work))
+	}
 	seq := func(vs []string) *yaml.Node {
 		s := &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq"}
 		for _, x := range vs {
@@ -210,6 +219,16 @@ func Write(root string, in View, now time.Time) (*View, []string, []workspace.Pr
 
 // Show 返回最近 n 条交接记录（倒序，最近在前）；没有记录时空数组。
 func Show(root string, n int) ([]View, []workspace.Problem) {
+	return show(root, nil, n)
+}
+
+// ShowFor 返回作品 workID 可见的最近 n 条交接记录（关联该作品的与未关联的，倒序）。
+func ShowFor(root, workID string, n int) ([]View, []workspace.Problem) {
+	return show(root, &workID, n)
+}
+
+// show 按可选的作品过滤输出记录；workID 为 nil 时不过滤（全部记录）。
+func show(root string, workID *string, n int) ([]View, []workspace.Problem) {
 	_, f, ps := load(root)
 	if ps != nil {
 		return nil, ps
@@ -220,22 +239,24 @@ func Show(root string, n int) ([]View, []workspace.Problem) {
 	}
 	for i := len(f.Notes) - 1; i >= 0 && len(out) < n; i-- {
 		note := f.Notes[i]
-		out = append(out, View{ID: note.ID, WrittenAt: note.WrittenAt, Done: nonNil(note.Done), Todo: nonNil(note.Todo),
+		if workID != nil && note.Work != "" && note.Work != *workID {
+			continue
+		}
+		out = append(out, View{ID: note.ID, WrittenAt: note.WrittenAt, Work: note.Work, Done: nonNil(note.Done), Todo: nonNil(note.Todo),
 			Instructions: nonNil(note.Instructions), Risks: nonNil(note.Risks)})
 	}
 	return out, nil
 }
 
-// Latest 返回最近一条（供 next 的 handoff 字段）；没有记录时为 nil。文件不合法时返回其问题。
-func Latest(root string) (*View, []workspace.Problem) {
-	notes, ps := Show(root, 1)
-	if ps != nil {
-		return nil, ps
+// VisibleLatest 返回已加载记录（倒序，最近在前）中作品 workID 可见的最近一条：关联该作品的
+// 记录与未关联的记录中较新的一条；没有可见记录时为 nil。供 next 每条命令只加载一次后逐作品过滤。
+func VisibleLatest(notes []View, workID string) *View {
+	for i := range notes {
+		if notes[i].Work == "" || notes[i].Work == workID {
+			return &notes[i]
+		}
 	}
-	if len(notes) == 0 {
-		return nil, nil
-	}
-	return &notes[0], nil
+	return nil
 }
 
 // CheckArtifact 对 handoffs.yaml 做 Schema 与领域校验（wa-cli validate <path>）。

@@ -136,16 +136,16 @@ rules:
       detail: internal/cli 的 TestRejectedWriteTouchesNothing 断言被拒绝与过大正文的 draft write 不创建 feedback.yaml；TestCommentFeedback 断言 feedback list 不创建 feedback.yaml。
   loopback-only-server:
     strength: MUST
-    statement: 'wa-cli 中监听网络的命令（如 preview --serve）只能监听回环地址 127.0.0.1，不得监听 0.0.0.0 或其他网卡，给出的访问地址必须取自实际监听的套接字；必须为每次运行生成至少 128 位的随机令牌，并对每个请求在读取或修改任何产物之前校验令牌（常量时间比较）与 Host 头（端口为 80 时同时接受不带端口的写法），不符合时返回 403；响应必须带 Cache-Control: no-store 与 Referrer-Policy: no-referrer，服务只在命令运行期间存在，不作为常驻服务；请求体必须限制大小，服务端日志写到命令的标准错误。测试必须断言访问地址是回环地址，并覆盖拒绝无令牌、令牌错误与 Host 不符的请求。'
-    rationale: 本地阅读页是项目中唯一的网络监听，同一台机器上的其他网页或进程也能访问回环地址：令牌防止伪造提交，Host 校验防 DNS 重绑定，no-referrer 防止令牌随 Referer 外泄，限制请求体防止占满内存；地址取自实际套接字，测试才能发现误改为监听全部网卡。
+    statement: 'wa-cli 中监听网络的命令（如 preview --serve）只能监听回环地址 127.0.0.1，不得监听 0.0.0.0 或其他网卡，也不得提供选择监听地址的参数，给出的访问地址必须取自实际监听的套接字；必须为每次运行生成至少 128 位的随机令牌，并对每个请求在读取或修改任何产物之前校验令牌（常量时间比较）与 Host 头（端口为 80 时同时接受不带端口的写法），不符合时返回 403；Host 校验默认只接受回环地址与 localhost，唯一放宽方式是作者显式给出的 Host 白名单参数（可重复、host 或 host:port（端口为 1 到 65535）的字面值、不支持通配与后缀匹配），白名单只放宽 Host 校验——令牌校验、监听地址与其余防护不因它放宽，也不校验可伪造的转发头（如 X-Forwarded-Host）；响应必须带 Cache-Control: no-store 与 Referrer-Policy: no-referrer，服务只在命令运行期间存在，不作为常驻服务；请求体必须限制大小，服务端日志写到命令的标准错误。测试必须断言访问地址是回环地址，并覆盖拒绝无令牌、令牌错误、Host 不符与白名单外 Host 的请求。'
+    rationale: 本地阅读页是项目中唯一的网络监听，同一台机器上的其他网页或进程也能访问回环地址：令牌防止伪造提交，Host 校验防 DNS 重绑定，no-referrer 防止令牌随 Referer 外泄，限制请求体防止占满内存；地址取自实际套接字，测试才能发现误改为监听全部网卡。远程作者经反向代理（tailscale serve 等）访问时 Host 头不是回环地址，复盘 A2 采纳显式白名单作为唯一放宽方式：通配或后缀匹配会一次放开不可枚举的 Host 集合，校验转发头等于放开任意 Host；令牌与监听地址保持不变，防护面不随远程访问扩大。
     enforcement:
       method: test
-      detail: internal/cli 的 TestPreviewServe 断言首行地址的主机为 127.0.0.1 且是回环地址，并对无令牌、令牌错误与错误 Host 的 GET 与 POST 断言 403 且 feedback.yaml 不变。
+      detail: internal/cli 的 TestPreviewServe 断言首行地址的主机为 127.0.0.1 且是回环地址，并对无令牌、令牌错误与错误 Host 的 GET 与 POST 断言 403 且 feedback.yaml 不变；TestPreviewServeAllowHost 断言白名单内 Host 携令牌 200、白名单外携令牌与白名单内缺令牌 403、非法取值（通配、带路径）与脱离 --serve 均拒绝、监听地址仍为回环。
     examples:
       good:
-        - ln, _ := net.Listen("tcp", "127.0.0.1:0")；url 由 ln.Addr() 生成；请求先经 authorized(r) 校验 Host 与令牌
+        - preview --serve --allow-host machine.tail123.ts.net：hosts 追加该字面值，authorized 仍逐字比较且令牌常量时间校验不变。
       bad:
-        - http.ListenAndServe(":8080", mux)；或地址写死为 "http://127.0.0.1:" 加端口；或只在 POST 上校验令牌
+        - 提供 --bind 0.0.0.0；或按 X-Forwarded-Host 校验；或 --allow-host *.example 通配。
   mcp-thin-wrapper:
     strength: MUST
     statement: MCP 服务只做命令注册表到 MCP 的映射：每个 tool 由注册表中的命令生成，tools/call 在进程内运行同一条 wa-cli 命令（命令接受 --dir 时加 --dir，并加 --json）并原样返回其输出信封，资源只读取产物或运行只读命令；internal/mcp 不 import internal/cli 与任何领域包，命令信息与执行函数由命令层传入。新增命令时不得为 MCP 单独编写逻辑。每次 tools/call 必须不等待作者或其他外部事件即结束（会一直等待的命令不对应 tool）；tool 的参数不得让客户端读写项目目录之外的文件（路径类参数只能经已有的输出路径检查，否则不作为 tool 参数）；协议错误码按所实现的协议版本的规范选用。测试逐一调用每个 tool（按命令登记的样例），断言成功，并断言同一操作经 MCP 与 CLI 调用的结果一致。wa-cli mcp 的标准输出只写 MCP 消息，不受输出信封规则约束。
@@ -263,3 +263,51 @@ rules:
         - 'exportView 的 Headline 用 **string 加 json:",omitempty"，printOnly 分支赋 &r.Headline：非 print 输出键省略，print 无值时输出 "headline": null'
       bad:
         - 用 *string 加 omitempty 表达「适用而无值」：字段无值时键被整个省略，消费方无法区分「该输出没有标题字段」与「没有作者选定的标题」
+  counting-scope-stated-once:
+    strength: SHOULD
+    statement: 同一统计口径（如字数、汉字数）出现在命令 help 的输出键或参数说明、诊断 message、人读文本输出与 docs/GLOSSARY.md 时，必须使用同一句口径文字（如「非空白字符数，含标点」），并在同一变更中同步修改所有出现处；测试以同一字面量断言各处文案。
+    rationale: 公众号流程复盘 R3 的根因正是口径句只写一半：help 写了「非空白字符数」没写「含标点」，作者按汉字估篇幅时理解分叉。length-counting-clarity 的做法是把同一句口径写进 lint help、length-range 诊断、brief set --length 的 help、文本摘要行与 GLOSSARY 五处，并用同一字面量在测试中锁定；text-json-parity 只约束文本与 JSON 的字段对应，不约束口径句跨命令、跨文档的逐字一致，此规则补上该缝隙。
+    enforcement:
+      method: test
+      detail: internal/cli 的测试以规格中的口径字面量断言 help 输出键说明、flag 说明与文本输出中的同一句口径；代码审查时确认新增口径表述没有第五种写法。
+    examples:
+      good:
+        - length-counting-clarity 在 lint help 的 chars 键、cjkChars 键、length-range 诊断 message、brief set --length help 与 GLOSSARY 用同一句「非空白字符数，含标点」，TestLintCountingClarity 用同一字面量断言。
+      bad:
+        - help 写「非空白字符数」而诊断 message 写「含标点的字符数」：两句各自正确但读者无法确认是同一口径。
+  state-transition-both-sides:
+    strength: SHOULD
+    statement: delta spec 场景声明某状态翻转前后同一命令的输出时（如「写入正文后再运行，questions 含某项」），测试必须在翻转后复跑该命令并断言恢复项，不得只以另一命令（如 next）的恢复作为该命令（如 marketing show）的证据；两个命令共享同一判定函数的事实不能替代该断言——共享的判定恰恰会掩盖事实输入（如存在性探测）的分叉。
+    rationale: next-draft-first 的 show-unasked-waits-for-draft 场景要求写入正文后 marketing show 恢复报告，初版测试只复跑了 next；评审发现的 next/show 探测分叉正落在 show 路径上，补上 show 的复跑断言才把两个入口的一致性锁进测试。
+    enforcement:
+      method: review
+      detail: 评审 delta spec 场景与对应测试时逐一核对：场景里的每个 THEN 在测试中有直接断言，状态翻转后的复跑覆盖场景点名的每个命令。
+    examples:
+      good:
+        - 写入正文后先断言 next 报 headline-unasked，再复跑 marketing show 断言 questions 同样含 headline-unasked。
+      bad:
+        - 场景写「写入后再运行 show 应含某项」，测试只在写入后断言了 next，show 的恢复从未被执行。
+  documented-command-roundtrip:
+    strength: SHOULD
+    statement: 面向 Agent 的文档（技能正文、help 示例）中写出的命令组合必须按字面可用：把命令输出重定向到文件再交给后续命令消费时（如「wa-cli review record <单元> --init > skeleton.yaml」后经 --file 回录），落盘格式必须是后续命令期望的领域格式——不得把 --json 的输出信封（Output Envelope）重定向成领域 YAML 使用；需要信封中的某个字段时，文档要写明提取该字段，或改用文本模式。发布前按文档字面执行一遍命令组合核实。
+    rationale: wa-review 技能第 2 步初版写「review record --init --json > skeleton.yaml」：--json 模式的标准输出是含 valid、diagnostics 与 skeleton 字段的信封，落盘后直接回录得到成串 artifact.schema-violation——text-json-parity 只约束文本与 JSON 的字段对应，不约束文档中命令组合的可用性；Agent 会逐字执行技能里的命令，写错形态的命令组合在真跑时才暴露。
+    enforcement:
+      method: review
+      detail: 评审技能与 help 中新增的命令组合时按字面执行一遍（或在测试中执行同一序列），确认重定向产物能被后续命令接受。
+    examples:
+      good:
+        - 「wa-cli review record <单元> --init > skeleton.yaml」（文本模式输出骨架 YAML），填写后「wa-cli review record <单元> --file skeleton.yaml」回录。
+      bad:
+        - 「wa-cli review record <单元> --init --json > skeleton.yaml」：落盘的是 JSON 信封而非骨架，回录报 artifact.schema-violation。
+  skill-command-paths-reachable:
+    strength: SHOULD
+    statement: 内置技能正文写出的命令序列（操作路径）必须在单元的每个相关阶段下实际可行：评审技能改动时沿命令层的阶段检查（如 accept 的 wrongStage）、验收与审稿的过期判定（review.Stale、AcceptanceBlockers 各自比较哪个哈希）与 wa-cli next 给出的 commands 推演一遍，确认按技能文字逐步执行不会撞状态机拒绝；守护测试的字面量断言拦不住「文字与命令行为差一步」的问题。
+    rationale: skill-confirmation-guard 评审发现 wa-revise 的小改路径写「reaffirm 后重新确认验收」，但 --reaffirm 只更新 review.yaml 的 draft_sha256、验收记录仍按自己的哈希判过期，且 done 单元不能直接 accept（wrongStage）——照文字走会撞诊断，正确序列是 reaffirm → reopen → 重新 accept → advance。技能里的命令序列 Agent 会逐字执行，与状态机差一步就在真实会话里暴露。
+    enforcement:
+      method: review
+      detail: 评审技能中新增或改动的命令序列时，对照 internal/cli 的阶段检查与过期判定推演每个阶段下的可达性；必要时在测试里按技能文字执行同一命令序列。
+    examples:
+      good:
+        - wa-revise 的小改路径写明：重申只解除审稿过期，done 单元先经作者同意 reopen 退回再重新确认验收并推进。
+      bad:
+        - 技能写「reaffirm 后直接重新确认验收」而单元在 done 阶段：直接 accept 被 wrongStage 拒绝。

@@ -362,3 +362,27 @@ rules:
         - '{{if .Headline}}<button …>复制标题</button>{{end -}}——结束标记右修剪，条件为假时整行不输出'
       bad:
         - '{{if .Headline}}…{{end}} 独占一行：条件为假时仍输出行尾换行，没有该内容的每个导出都比之前多出空行'
+  optional-work-association:
+    strength: MUST
+    statement: 工作区级产物（如交接记录（Handoff Note））为条目新增可选的作品（Work）关联字段时：Schema 中该字段可选、只约束作品 id 形态、不升级 schema_version；写入命令接受单元引用（Unit Reference，作品或其任一单元）并归到所属作品，引用或输入中的作品不存在时报错，不得写出关联到不存在作品的记录（否则该记录在任何作品的过滤下都不可见）；既有无该字段的记录必须保持原有可见性（对所有作品可见）；按作品消费（如 wa-cli next 逐步骤附带）时取「关联该作品的最近记录」与「未关联的最近记录」中较新的一条，且每条命令只加载一次该产物再逐作品过滤，不在逐单元循环中重复读取；同一产物的只读入口（如 handoff show --unit）与 next 采用同一过滤口径。
+    rationale: 可选关联是向后兼容地给工作区级产物加作用域的唯一途径：升级 schema_version 会让所有既有工作区不合法，而缺省的存在性校验会让拼错的作品 id 写出永远不可见的记录（静默失败）；「未关联对所有作品可见、关联只对本作品可见、取较新者」让旧记录无需迁移即保持行为；逐作品过滤若在逐单元循环中重新加载文件，既违反 load-once-per-command 又可能读到不同版本；两个入口口径分叉会让同一记录在一处可见、另一处不可见。
+    enforcement:
+      method: test
+      detail: internal/handoff 的测试覆盖 work 缺省不写键、按作品过滤含未关联记录、关联与未关联中取较新者；internal/cli 的测试覆盖两个作品各写一条关联记录后 next 互不串入、只有未关联记录时行为与之前一致、--unit 指向不存在的单元或作品时报错且文件未变、handoff show --unit 与 next 同口径；代码审查确认 runNext 每条命令只加载一次交接记录。
+    examples:
+      good:
+        - handoff write --unit w1/s1 把记录归到作品 w1；旧 handoffs.yaml 中无 work 字段的记录在 next 与 handoff show --unit w1 中都可见
+      bad:
+        - handoff write 接受任意字符串作为 work 写入而不校验作品存在；next 对每个单元重新读取并校验 handoffs.yaml
+  presence-probe-single-source:
+    strength: MUST
+    statement: 判定工作区产物（Artifact）是否存在或是否已写入的代码必须复用 internal/workspace 的共享探测函数（workspace.IsRegular：途经真实目录、不跟随符号链接、只认普通文件），不得在领域包或命令层各自调用 os.Stat 或 os.Lstat 推断同一事实；同一产物（如 draft.md）的存在性在所有入口（阻塞项、show、validate、next）必须得出同一结论。internal/work 的 isFile（os.Stat，跟随符号链接）是必需产物判定的存量用法，不得用于新增判定；存量用途迁移前须评估各入口一致性。
+    rationale: next-draft-first 评审以实验复现了分叉：work 侧用 os.Stat 把符号链接的 draft.md 当「已写入」、cli 侧用 os.Lstat 当「不存在」，同一工作区里 next 报 marketing.headline-unasked 而 marketing show 的 questions 为空——validated-path-segments 要求同一产物在所有入口符号链接处理一致，但「存在性探测必须集中」此前没有成文，测试没有符号链接夹具时全部照常通过。
+    enforcement:
+      method: test
+      detail: internal/cli 的测试以符号链接 draft.md 夹具断言 next 与 marketing show 对 headline-unasked 得出同一结论；代码审查时确认新增的存在性判定只调用 workspace.IsRegular。
+    examples:
+      good:
+        - work 的 marketingBlockers 与 cli 的 marketing show 都以 workspace.IsRegular(root, 目录+"/draft.md") 判断正文是否写入。
+      bad:
+        - 一个入口 os.Stat（跟随符号链接）、另一个入口 os.Lstat+IsRegular，对同一 draft.md 得出相反结论。

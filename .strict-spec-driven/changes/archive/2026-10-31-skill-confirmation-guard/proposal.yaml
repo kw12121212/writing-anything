@@ -1,0 +1,30 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: skill-confirmation-guard
+  status: proposed
+summary:
+  what:
+    - 内置技能写明确认边界：wa-publish 与 wa-auto 的「必须停下来问作者」一节写明作者没有明确确认时不得带 --confirmed-by-author、不得把「假设」「试用」写进 --confirmation 冒充确认，流程试用在 standard 或 fast 关卡下不带确认验收；wa-revise 写明验收后小改（只改排版或个别字词）经作者同意走 review record --reaffirm 重申再重新确认验收，涉及观点、事实或论断时仍走完整审稿
+  why:
+    - Agent 在流程试用或假设轮里带 --confirmed-by-author 冒充作者确认，破坏「作者为最终决策来源」的定位；验收后小改不知有 --reaffirm 而整份重审，费时且打断作者（2026-10-30 复盘 A1+F2，不削减任何作者关卡）
+scope:
+  in:
+    - internal/skills/skills/wa-publish/SKILL.md 与 wa-auto/SKILL.md 的「必须停下来问作者」一节新增确认边界：无作者原话不得带 --confirmed-by-author、不得把假设或试用冒充确认写进 --confirmation；试用在 standard 或 fast 关卡（Gate Level）下不带确认验收（confirmedByAuthor 为 false），strict 关卡要求确认、试用不能以 strict 验收
+    - internal/skills/skills/wa-revise/SKILL.md 补充验收后小改路径：只改排版或个别字词（不涉及观点、事实或论断（Claim））时经作者同意用 wa-cli review record <单元> --reaffirm --summary <变化摘要> 重申（Reaffirm），再请作者重新确认验收；涉及观点、事实或论断时仍走完整审稿与 reopen
+    - internal/skills/skills_test.go 新增断言：wa-publish 与 wa-auto 含确认边界文字、wa-revise 含 --reaffirm 路径且 commands 含 review record
+    - internal/skills/history.txt 追加三个技能的新哈希；plugins/zcode-writing-viewer/skills 副本经 stage-skills.mjs 重新生成并通过逐字核对
+    - skills 主规格新增 confirmation-guard-guidance 需求：钉住上述技能内容
+  out:
+    - 不削减任何作者关卡（Author Gate）：strict 关卡下的确认要求不变，试用不能以 strict 关卡验收
+    - 不改 accept、review record 命令本身（--reaffirm 已存在，boundary-semantics-silent-failure/review-reaffirm）
+    - 不改 wa-revise 的既有步骤（完整审稿与 reopen 路径保留）
+unchanged_behavior:
+  - 技能的会话协议、阅读页指引（preview-serve-guidance）、配图询问（illustrate-skill-prompt）与复制图文指引不变
+  - 十三技能清单与 skills list、install 行为不变
+  - wa-publish 与 wa-auto 其余正文不变
+roadmap:
+  milestone: wechat-flow-feedback
+  planned_change: skill-confirmation-guard

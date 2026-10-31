@@ -1,0 +1,48 @@
+schema: strict-spec-driven/question-list/v1
+schema_version: 1
+artifact_type: question_list
+schema_file: templates/strict-spec-driven/schemas/question-list.yaml
+change: handoff-work-scope
+open: []
+resolved:
+  - id: handoff-scope
+    question: 交接记录（Handoff Note）按单元还是按作品关联？
+    context: 交接记录目前是工作区（Workspace）级，没有作品或单元字段；过滤粒度决定 next 逐步骤附带的记录集合与 handoff write 的关联语义（影响 proposal 范围、handoff 主规格 delta 与实现）
+    answer: 按作品（Work）关联：--unit 给作品或其任一单元时归到所属作品；next 按作品过滤（关联该作品的记录与未关联记录中较新者）；未关联的旧记录对所有作品可见
+    status: resolved
+    answered_by: human
+  - id: requirement-problem
+    question: What is concretely going wrong today, and for whom?
+    context: 'Why this is asked: the change is planned against a need, and the need lives only with the requester. A "problem" here means what someone does or suffers today — not a feature that is missing. If the answer names a button, a field, a page, or an endpoint, it is a solution, and the underlying problem is still unstated. What a sufficient answer contains: who is affected, what they do today instead, and how often. Worked example: "every Monday one person spends forty minutes copying order rows into a spreadsheet to send the weekly report". What it changes: this becomes the proposal''s why, and it decides whether the change is worth making.'
+    answer: 交接记录（Handoff Note）是工作区（Workspace）级、没有作品字段：多作品并行时 wa-cli next 把其他作品的待办附到每个单元步骤上，新会话接续时互相串台（来源：2026-10-30 公众号写作流程复盘 F4，planned change summary 与 details）
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-interpretation
+    question: Which reading of the request is intended, where more than one is possible?
+    context: 'Why this is asked: a short request usually admits several readings, and building the wrong one is indistinguishable from building nothing. What a sufficient answer contains: the reading that is meant, stated plainly enough to rule the others out — or a statement that only one reading exists and what it is. Worked example: "export means the version sent to the manager, not the one I read myself". What it changes: this fixes the scope boundary before any code is written, and settles disputes about what was asked for.'
+    answer: 按 2026-10-30 intake（handoff-scope）作者确认的粒度执行：按作品（Work）关联——handoff write --unit 接受作品或其任一单元并归到所属作品；next 每个步骤只附带所属作品的最近记录与未关联记录中较新的一条；未关联的旧记录对所有作品保持可见
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-outcome
+    question: What observable difference proves the problem is solved?
+    context: 'Why this is asked: without a success condition, nobody can tell afterwards whether the change worked. "Observable" means someone outside the system can check it without reading the code. What a sufficient answer contains: what a person will see, or no longer have to do, once this is done. Worked example: "the report is in the manager''s inbox on Monday morning without anyone assembling it". What it changes: this becomes the delta spec''s scenarios and the acceptance evidence at review time.'
+    answer: 里程碑 done_criteria 第 3 条：工作区里两个作品各写一条关联自身的交接记录后，wa-cli next 对每个作品的步骤只附带该作品的交接记录；不关联单元的旧交接记录保持现有行为（测试断言见 tasks 的 unit-tests）
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-non-goals
+    question: What must explicitly not change?
+    context: 'Why this is asked: the requester knows which nearby behavior other people depend on, and the agent does not. A "non-goal" is something the change must leave alone even though it sits close to the work. What a sufficient answer contains: the behavior, setting, or output that must survive untouched, and who relies on it. Worked example: "do not change the saved filters — several people rely on their own". What it changes: these become the proposal''s unchanged_behavior items, which review checks the finished result against.'
+    answer: 不新增交接记录的编辑或删除命令（仍只能追加）；不把 next 的其他字段（blockers、action、commands、feedback、progress）按作品过滤；不升级 schema_version；不改动 MCP 服务与 DSH 插件；未关联记录的语义不变（proposal 的 out 与 unchanged 已列出）
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-trigger
+    question: Why now — what forced this?
+    context: 'Why this is asked: work that nothing forced is the work most often thrown away later. This question catches a request that sounds reasonable but has no real driver behind it. What a sufficient answer contains: the concrete event, deadline, incident, or cost that made this surface now, or an honest statement that nothing did. Worked example: "the report was missed last month and it was raised with the team". What it changes: a change with no trigger is a candidate for deferral, and the answer is weighed at review before archive.'
+    answer: 2026-10-30 公众号写作流程复盘（基线 v0.8.0）审阅采纳的 F4 条目，随 wechat-flow-feedback 里程碑落地；复盘 notes 记录了作者对三个 intake 问题推荐做法的接受
+    status: resolved
+    kind: requirement
+    answered_by: roadmap

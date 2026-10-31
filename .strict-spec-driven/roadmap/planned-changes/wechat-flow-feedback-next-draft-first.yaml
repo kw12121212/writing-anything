@@ -5,7 +5,7 @@ schema_file: ../../templates/strict-spec-driven/schemas/planned-change.yaml
 planned_change:
   id: next-draft-first
   milestone: wechat-flow-feedback
-status: planned
+status: complete
 summary: 正文未写入时不报标题决策未提问（marketing.headline-unasked），next 因而不在正文写好之前提示 marketing ask
 details: F1 残余。现状：work.go Blockers 先按 RequiredArtifacts 顺序（draft、marketing）列缺失产物，所以 next 的命令本来就先给 draft；问题只出在 marketing.yaml 已有两个以上候选、而 draft.md 还没写的时候，marketing.Check（marketing.go:215）照样报 headline-unasked，next 经 blockerNext 提示 wa-cli help marketing ask。改动：marketingBlockers（work.go:422）把「正文已写入」传给 marketing.Check，没有正文时不报 headline-unasked；headline-stale、too-many-headlines 与缺失要素照常报。缺失 draft 本身已阻塞 advance，关卡强度不变；也不改阶段的必需产物与标题决策的阻塞语义（4U 评分项依赖选定标题）。advance 与 marketing show 共用这个判定，保持一致。测试：wechat-marketing 夹具在 draft 阶段、正文未写入、有两个候选时，next 不含 headline-unasked 和 marketing ask；draft write 之后出现；已提问的决策过期时，没有正文也照常报 stale。
 depends_on: []

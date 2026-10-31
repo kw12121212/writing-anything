@@ -1,0 +1,21 @@
+schema: strict-spec-driven/delta-tech/v1
+schema_version: 1
+artifact_type: delta_tech
+schema_file: templates/strict-spec-driven/schemas/delta-tech.yaml
+target_standard: go-project-structure
+operations:
+  ADDED:
+    touched-files-gofmt-clean:
+      strength: SHOULD
+      statement: 变更修改过的 Go 源文件必须保持 gofmt 干净（gofmt -l 对该文件无输出，以仓库当前工具链为准）；仓库允许未触碰文件保留历史格式偏差，但不得在改动文件时引入新的格式违规（缩进、对齐、空行）。vet、build、test 与覆盖率门禁都不检查格式，格式事故只能由这一步拦截。
+      rationale: next-draft-first 评审发现改动把 internal/cli/marketing.go 的两个代码块改掉一级缩进，HEAD 版本本已合规，而完整回归命令全部放行——格式事故不影响编译与测试结果，只有显式的 gofmt 检查能拦住。
+      enforcement:
+        method: review
+        detail: 评审与归档检查时对变更触碰的 .go 文件运行 gofmt -l，输出非空即为违反。
+      examples:
+        good:
+          - 改动完成后对每个触碰的 .go 文件运行 gofmt -w 并确认 gofmt -l 无输出。
+        bad:
+          - 手工编辑后留下少一级缩进的 if 块，交给不检查格式的回归命令后直接归档。
+  MODIFIED: {}
+  REMOVED: {}

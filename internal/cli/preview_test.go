@@ -128,6 +128,7 @@ func TestPreviewFlags(t *testing.T) {
 // serving 是一个在后台运行的 preview --serve。
 type serving struct {
 	first  previewOut // --json 时的首行信封
+	line   string     // 首行原文（文本模式时用于断言）
 	url    string
 	token  string
 	host   string
@@ -144,7 +145,7 @@ func servePreviewT(t *testing.T, dir string, args ...string) *serving {
 	}()
 	waitFor(t, &out, "\n")
 	first, _, _ := strings.Cut(out.String(), "\n")
-	s := &serving{finish: func() (int, string, string) {
+	s := &serving{line: first, finish: func() (int, string, string) {
 		select {
 		case code := <-done:
 			_, rest, _ := strings.Cut(out.String(), "\n")
@@ -211,7 +212,7 @@ func TestPreviewServe(t *testing.T) {
 	if len(s.token) < 32 {
 		t.Fatalf("token %q shorter than 128 bits", s.token)
 	}
-	if f := s.first; f.Preview.Path != nil || f.Feedback != nil || len(f.ChangedPaths) != 0 || !f.Valid || strings.Join(f.Preview.Units, ",") != "my-post,my-post/intro" {
+	if f := s.first; f.Preview.Path != nil || f.Feedback != nil || len(f.ChangedPaths) != 0 || !f.Valid || strings.Join(f.Preview.Units, ",") != "my-post,my-post/intro" || f.Preview.RemoteURL != nil {
 		t.Fatalf("first line: %+v", f)
 	}
 	// serve-url
@@ -426,5 +427,65 @@ func TestPreviewClosing(t *testing.T) {
 	}
 	if _, err := os.Stat(wsPath(dir, ".writing-anything/works/my-post/feedback.yaml")); err == nil {
 		t.Fatal("feedback saved after --max")
+	}
+}
+
+// preview-allow-host：--allow-host 白名单内的 Host 携令牌可访问（200），白名单外或缺令牌仍 403；
+// 监听地址仍为 127.0.0.1；remoteUrl 按第一个白名单 Host 拼出（不带端口推导为 https，带端口为 http）。
+func TestPreviewServeAllowHost(t *testing.T) {
+	dir := previewWork(t, "连接池很重要。\n")
+	// 非法取值与脱离 --serve：拒绝且不启动服务。
+	for _, args := range [][]string{
+		{"preview", "my-post", "--serve", "--allow-host", "*.example", "--dir", dir, "--json"},
+		{"preview", "my-post", "--serve", "--allow-host", "box.lan/path", "--dir", dir, "--json"},
+		{"preview", "my-post", "--serve", "--allow-host", "", "--dir", dir, "--json"},
+		{"preview", "my-post", "--serve", "--allow-host", "box.lan:99999", "--dir", dir, "--json"},
+		{"preview", "my-post", "--allow-host", "ts.example", "--dir", dir, "--json"},
+	} {
+		var out, errOut syncBuffer
+		if code := Run(args, strings.NewReader(""), &out, &errOut); code != 1 || !strings.Contains(out.String(), `"code":"input.invalid-value"`) ||
+			!strings.Contains(out.String(), `"field":"allow-host"`) || !strings.Contains(out.String(), "wa-cli help preview --json") {
+			t.Fatalf("%v: exit code %d, stdout %s", args, code, out.String())
+		}
+	}
+	s := servePreviewT(t, dir, "--max", "3", "--json", "--allow-host", "ts.example", "--allow-host", "box.lan:8080")
+	if u, _ := url.Parse(s.url); u.Hostname() != "127.0.0.1" {
+		t.Fatalf("must still listen on loopback: %s", s.url)
+	}
+	if s.first.Preview.RemoteURL == nil || !strings.HasPrefix(*s.first.Preview.RemoteURL, "https://ts.example/?token=") {
+		t.Fatalf("remoteUrl should be derived from the first allowed host: %+v", s.first.Preview)
+	}
+	withToken := func(r *http.Request) {
+		r.Header.Set("X-WA-Token", s.token)
+		r.URL.RawQuery = "token=" + s.token
+	}
+	// 白名单内：不带端口的 Host 与带自定义端口的 Host 都 200（GET / 与 /page.json）。
+	for _, host := range []string{"ts.example", "box.lan:8080"} {
+		asHost := func(r *http.Request) { r.Host = host; withToken(r) }
+		if resp := httpGet(t, s.url, asHost); resp.StatusCode != 200 {
+			t.Errorf("host %s GET /: status %d", host, resp.StatusCode)
+		}
+		if resp := httpGet(t, s.url+"/page.json", asHost); resp.StatusCode != 200 {
+			t.Errorf("host %s GET /page.json: status %d", host, resp.StatusCode)
+		}
+	}
+	// 白名单外携正确令牌、白名单内缺令牌（去掉 URL 上的 token）：403。
+	if resp := httpGet(t, s.url, func(r *http.Request) { r.Host = "evil.example"; withToken(r) }); resp.StatusCode != 403 {
+		t.Errorf("outside host with token: status %d", resp.StatusCode)
+	}
+	noToken := strings.Split(s.url, "?")[0]
+	if resp := httpGet(t, noToken, func(r *http.Request) { r.Host = "ts.example" }); resp.StatusCode != 403 {
+		t.Errorf("allowed host without token: status %d", resp.StatusCode)
+	}
+	// 文本首行也附远程地址（带自定义端口推导为 http，协议以代理配置为准）。
+	s2 := servePreviewT(t, dir, "--max", "1", "--allow-host", "box.lan:8080")
+	if !strings.Contains(s2.host, "127.0.0.1") || !strings.Contains(s2.line, "远程地址（经反向代理，协议以代理配置为准）：http://box.lan:8080/?token=") {
+		t.Fatalf("text first line lacks remote url: host %s, line %s", s2.host, s2.line)
+	}
+	if code, _ := s2.post(t, `{"unit":"my-post","text":"收尾"}`); code != 200 {
+		t.Fatalf("closing feedback: status %d", code)
+	}
+	if code, _, _ := s2.finish(); code != 0 {
+		t.Fatal("s2 did not finish cleanly")
 	}
 }

@@ -1,0 +1,37 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: skill-confirmation-guard
+sections:
+  Implementation:
+    skill-texts:
+      text: internal/skills/skills 的 wa-publish 与 wa-auto 在「必须停下来问作者」一节新增确认边界（无作者原话不得带 --confirmed-by-author、不得把假设/试用冒充 --confirmation、试用在 standard 或 fast 关卡不带确认验收且 strict 下不能试用验收）；wa-revise 补验收后小改路径（review record --reaffirm --summary 经作者同意重申再重新确认验收，涉及观点、事实或论断仍走完整审稿）
+      status: complete
+    skills-sync:
+      text: internal/skills/history.txt 追加三个技能的新哈希；plugins/zcode-writing-viewer/skills 副本经 stage-skills.mjs 重新生成并逐字核对
+      status: complete
+  Testing:
+    unit-tests:
+      text: skills_test.go 新增 TestSkillConfirmationGuard：wa-publish 与 wa-auto 含「不得带 --confirmed-by-author」与试用边界的字面量，wa-revise 含 --reaffirm 路径与完整审稿的分界且 commands 含 review record；TestSkillHistoryCoversCurrent 通过；既有技能测试（会话协议、preview 指引、配图询问等）不回归
+      status: complete
+      command: go test ./internal/skills/...
+    project-regression:
+      text: 完整回归（review_evidence.project_regression）：构建、全部测试与 80% 覆盖率门槛
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    ready-check:
+      text: ready 检查变更构件齐备
+      status: complete
+      command: strict-spec-cli ready skill-confirmation-guard
+    verify-check:
+      text: verify 校验变更构件与引用一致性
+      status: complete
+      command: strict-spec-cli verify skill-confirmation-guard
+    archive-consistency:
+      text: 归档前检查：delta-spec 的字面量与三个技能正文逐字对照；ZCode 副本逐字一致；既有技能约束（preview-serve-guidance、illustrate-skill-prompt 等）未回归
+      status: complete
+testing_gates:
+  validation_task: project-regression
+  unit_test_task: unit-tests
