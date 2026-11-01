@@ -1,0 +1,43 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: review-record-skeleton
+sections:
+  Implementation:
+    input-schema-relax:
+      text: internal/schema/schemas/review-input.schema.json：rubric 项不再共用 review.schema.json 的 verdicts，改为自有定义——item 仍必填，verdict 的 enum 加空串且不再必填，evidence 允许空且不再必填；夹具同步（合法：空骨架；不合法：verdict 非三值）
+      status: complete
+    domain-empty-checks:
+      text: internal/review：Record 对每个 rubric[i] 校验 verdict ∈ {pass, fail}（否则 review.missing-verdict，field 为 rubric[i].verdict）与 evidence 非空白（否则新增 review.missing-evidence，field 为 rubric[i].evidence）；有问题时不写文件；写出的产物仍过严格 Schema
+      status: complete
+    init-flag:
+      text: internal/cli/review.go：--init 只读分支（与 --file/--reaffirm 互斥，input.invalid-value field 为 init；正文缺失报 draft.not-found），骨架 YAML（注释含 title/blocking 与段落表首句）写到标准输出，--json 放 skeleton 字段，changedPaths 为空；命令 flags 与 outputKeys 更新
+      status: complete
+    skills-skeleton:
+      text: wa-review 技能第 2 步改为先运行 wa-cli review record <单元> --init 取骨架、填写后经 --file 整份录入；internal/skills/history.txt 追加哈希；plugins/zcode-writing-viewer/skills 副本经 stage-skills.mjs 重新生成并逐字核对
+      status: complete
+  Testing:
+    unit-tests:
+      text: 骨架评分项与 review show 的 rubric 一致（item、title、blocking 注释、段落表段落数与首句）；--json 的 skeleton 字段与文本输出等价；空骨架录入逐项报 review.missing-verdict 与 review.missing-evidence（field 为 rubric[i].verdict/rubric[i].evidence）且不写文件；填写后录入成功；既有 review record 行为回归不变
+      status: complete
+      command: go test ./internal/review/... ./internal/cli/ -run 'TestReview|TestAccept' && go test ./internal/schema/...
+    project-regression:
+      text: 完整回归（review_evidence.project_regression）：构建、全部测试与 80% 覆盖率门槛
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    ready-check:
+      text: ready 检查变更构件齐备（含技能哈希同步）
+      status: complete
+      command: strict-spec-cli ready review-record-skeleton
+    verify-check:
+      text: verify 校验变更构件与引用一致性
+      status: complete
+      command: strict-spec-cli verify review-record-skeleton
+    archive-consistency:
+      text: 归档前检查：delta-spec 与实现逐条对照（--init 语义、空值逐项报错、Schema 放宽范围）；产物 Schema 与 validate 口径未变；ZCode 副本逐字一致
+      status: complete
+testing_gates:
+  validation_task: project-regression
+  unit_test_task: unit-tests

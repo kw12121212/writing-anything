@@ -1,0 +1,48 @@
+schema: strict-spec-driven/question-list/v1
+schema_version: 1
+artifact_type: question_list
+schema_file: templates/strict-spec-driven/schemas/question-list.yaml
+change: next-draft-first
+open: []
+resolved:
+  - id: f1-residual-approach
+    question: 正文未写入时如何避免 next 提前提示标题决策提问？
+    context: marketing.Check 目前不看正文是否写入，候选达到两个即报 headline-unasked（影响 proposal 范围、marketing 主规格 delta 与实现）
+    answer: 已定（2026-10-30 复盘 F1 残余）：把「正文已写入」传进关卡判定，没有正文时不报 headline-unasked；stale、too-many-headlines 与缺失要素照常；advance 与 marketing show 共用判定
+    status: resolved
+    answered_by: human
+  - id: requirement-problem
+    question: What is concretely going wrong today, and for whom?
+    context: 'Why this is asked: the change is planned against a need, and the need lives only with the requester. A "problem" here means what someone does or suffers today — not a feature that is missing. If the answer names a button, a field, a page, or an endpoint, it is a solution, and the underlying problem is still unstated. What a sufficient answer contains: who is affected, what they do today instead, and how often. Worked example: "every Monday one person spends forty minutes copying order rows into a spreadsheet to send the weekly report". What it changes: this becomes the proposal''s why, and it decides whether the change is worth making.'
+    answer: next 在正文未写入时就提示 wa-cli help marketing ask，Agent 会在标题按正文选定之前过早打扰作者（来源：复盘 F1 残余与 planned change details，缺失 draft 本身已阻塞 advance，该提示不增加关卡强度）
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-interpretation
+    question: Which reading of the request is intended, where more than one is possible?
+    context: 'Why this is asked: a short request usually admits several readings, and building the wrong one is indistinguishable from building nothing. What a sufficient answer contains: the reading that is meant, stated plainly enough to rule the others out — or a statement that only one reading exists and what it is. Worked example: "export means the version sent to the manager, not the one I read myself". What it changes: this fixes the scope boundary before any code is written, and settles disputes about what was asked for.'
+    answer: 按复盘结论执行：仅当标题决策状态为 none 且正文未写入时省略 headline-unasked；advance（经 Work.Blockers）与 marketing show 共用同一判定
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-outcome
+    question: What observable difference proves the problem is solved?
+    context: 'Why this is asked: without a success condition, nobody can tell afterwards whether the change worked. "Observable" means someone outside the system can check it without reading the code. What a sufficient answer contains: what a person will see, or no longer have to do, once this is done. Worked example: "the report is in the manager''s inbox on Monday morning without anyone assembling it". What it changes: this becomes the delta spec''s scenarios and the acceptance evidence at review time.'
+    answer: 里程碑 done_criteria：wechat-marketing 夹具在 draft 阶段、正文未写入、marketing.yaml 已有两个以上标题候选时，next 的阻塞项不含 marketing.headline-unasked，命令不含 wa-cli help marketing ask；用 draft write 写入正文后才出现
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-non-goals
+    question: What must explicitly not change?
+    context: 'Why this is asked: the requester knows which nearby behavior other people depend on, and the agent does not. A "non-goal" is something the change must leave alone even though it sits close to the work. What a sufficient answer contains: the behavior, setting, or output that must survive untouched, and who relies on it. Worked example: "do not change the saved filters — several people rely on their own". What it changes: these become the proposal''s unchanged_behavior items, which review checks the finished result against.'
+    answer: 不改 stale、too-many-headlines、missing-field 的报告条件；不改阶段必需产物与标题决策的阻塞语义；不改 marketing ask/decide 命令（proposal 的 out 已列出）
+    status: resolved
+    kind: requirement
+    answered_by: roadmap
+  - id: requirement-trigger
+    question: Why now — what forced this?
+    context: 'Why this is asked: work that nothing forced is the work most often thrown away later. This question catches a request that sounds reasonable but has no real driver behind it. What a sufficient answer contains: the concrete event, deadline, incident, or cost that made this surface now, or an honest statement that nothing did. Worked example: "the report was missed last month and it was raised with the team". What it changes: a change with no trigger is a candidate for deferral, and the answer is weighed at review before archive.'
+    answer: 2026-10-30 公众号写作流程复盘审阅采纳的 F1 残余条目，随 wechat-flow-feedback 里程碑落地
+    status: resolved
+    kind: requirement
+    answered_by: roadmap

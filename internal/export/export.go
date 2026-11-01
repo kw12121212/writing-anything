@@ -16,6 +16,7 @@ import (
 	"github.com/kw12121212/writing-anything/internal/brief"
 	"github.com/kw12121212/writing-anything/internal/draft"
 	"github.com/kw12121212/writing-anything/internal/illustration"
+	"github.com/kw12121212/writing-anything/internal/marketing"
 	"github.com/kw12121212/writing-anything/internal/review"
 	"github.com/kw12121212/writing-anything/internal/work"
 	"github.com/kw12121212/writing-anything/internal/workspace"
@@ -66,6 +67,8 @@ type Result struct {
 	Disclosure *Disclosure // AI 参与说明；没有 AI 参与时为 nil
 	HTML       string      // 可粘贴页只读模式（Print）的全文片段；其他情况为空
 	Segments   []string    // 可粘贴页只读模式（Print）的分段片段（至少一项）；其他情况为 nil
+	Headline   *string     // 可粘贴页只读模式（Print）的作者选定标题（标题决策为 decided 时）；其他情况为 nil
+	Digest     *string     // 可粘贴页只读模式（Print）的文章摘要（Digest）；其他情况为 nil
 }
 
 // Options 是导出的选项：FrontMatter 为 true 时附带 front matter；Output 为相对项目目录的输出路径，空时为 DefaultPath。
@@ -445,14 +448,39 @@ func parents(root, rel, code string, create bool) ([]string, []workspace.Problem
 	return created, nil
 }
 
-// frontMatter 生成 front matter：title（第一个导出单元正文中的第一个一级标题，没有时为作品 id）、description（根单元写作简报的
-// purpose，没有时省略）、genre、units 与 accepted_at（导出单元中最晚的验收时间）。
+// marketingTexts 返回根单元 marketing.yaml 中作者选定的标题与文章摘要（Digest）：标题只在标题决策状态为 decided 时
+// 非空（marketing.HeadlineState 推导，不把选择复制进产物），摘要为 marketing.yaml 的 digest。marketing.yaml 缺失、
+// 无法加载或状态不是 decided 时对应取值为空——导出把它当作没有作者选定值处理，不新增诊断（产物校验由 wa-cli validate 负责）。
+func marketingTexts(root string, w *work.Work) (decided, digest string) {
+	m, _ := marketing.Load(root, w.UnitDir(w.Root))
+	if m == nil {
+		return "", ""
+	}
+	if _, h := m.HeadlineState(marketing.LoadQueue(root)); h != nil {
+		decided = h.Text
+	}
+	return decided, m.Digest
+}
+
+// exportTitle 返回导出标题（export-markdown 的 front matter title 与可粘贴页的页面 title 共用）：
+// 依次取作者选定的标题（decided，见 marketingTexts）、正文 first 中围栏代码块之外的首个一级标题、作品 id。
+func exportTitle(decided, workID, first string) string {
+	if decided != "" {
+		return decided
+	}
+	if h := FirstHeading(first); h != "" {
+		return h
+	}
+	return workID
+}
+
+// frontMatter 生成 front matter：title（依次取作者选定的标题、第一个导出单元正文中的第一个一级标题、作品 id，见
+// exportTitle）、description（依次取根单元 marketing.yaml 的文章摘要（Digest）与根单元写作简报的 purpose，都没有时省略）、
+// genre、units 与 accepted_at（导出单元中最晚的验收时间）。
 // coverPath 非空时另含 cover（封面在资产目录中的路径，相对导出文件）。
 func frontMatter(root string, w *work.Work, first string, units []string, accepted []*review.Acceptance, label, coverPath string) (string, error) {
-	title := w.ID
-	if h := FirstHeading(first); h != "" {
-		title = h
-	}
+	decided, digest := marketingTexts(root, w)
+	title := exportTitle(decided, w.ID, first)
 	latest := ""
 	for _, a := range accepted {
 		if a != nil && a.AcceptedAt > latest {
@@ -469,9 +497,12 @@ func frontMatter(root string, w *work.Work, first string, units []string, accept
 		Disclosure  string   `yaml:"ai_disclosure,omitempty"`
 	}
 	v := fm{Title: title, Genre: w.Genre.ID, Units: units, AcceptedAt: latest, Cover: coverPath, Disclosure: label}
-	if b, _ := brief.Load(root, w.UnitDir(w.Root), brief.Queue{Invalid: true}); b != nil {
-		v.Description = b.Purpose
+	if digest == "" {
+		if b, _ := brief.Load(root, w.UnitDir(w.Root), brief.Queue{Invalid: true}); b != nil {
+			digest = b.Purpose
+		}
 	}
+	v.Description = digest
 	data, err := yaml.Marshal(v)
 	if err != nil {
 		return "", err

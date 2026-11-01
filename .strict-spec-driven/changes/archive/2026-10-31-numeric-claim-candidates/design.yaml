@@ -1,0 +1,24 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: numeric-claim-candidates
+approach:
+  - 'internal/lint/claims.go 新增 counterRE（阿拉伯数字含全角与小数点、可选空白、固定量词表，与 dataRE 同一方式按句定位并入 data 区间；嵌套命中取最长区间）：counters 是数据候选，遵循标题行跳过、引用块只检测数据、被 cover_kinds 论断与关联素材的 fact 论断覆盖的既有语义；candidates 增加 counters 参数，checkCandidates 用 p.bool(counters, false) 读取。量词表为内置固定集合并逐字写进规格（可从外部观察、测试）。wechat-marketing 的内置文体 YAML 给 claim-candidates 加 params: {counters: true}。发现项 message 在既有「登记并关联作者素材」提示后追加「示意数字请在正文中注明（如「示意」）」'
+decisions:
+  fixed-counter-list:
+    decision: 量词用内置固定表（人、个、条、次、天、月、年、元、名、位、场、篇、种、项、字、分钟、小时、周），不提供自定义列表参数
+    rationale: 复盘 R2 只要求常见量词；固定表写进规格即可从外部观察与测试，自定义参数会引出每个文体配表的维护成本，确有需要时再另行变更（YAGNI）
+  counters-are-data-candidates:
+    decision: 计数候选并入数据候选管线：与 %、倍、万、亿 同样受标题行跳过、引用块只检测数据、已登记论断（含关联素材的 fact）覆盖的既有语义
+    rationale: 「也作为数据候选」是复盘的措辞；单独一套跳过与覆盖规则会让同一句里的两类数据候选行为分叉，复用既有管线只需一个正则与一个参数
+  genre-scoped-enablement:
+    decision: 只在内置 wechat-marketing 开启 counters，其余内置文体不开
+    rationale: 里程碑风险项要求按文体参数启用并用 tech-blog 夹具做反例：tech-blog 的「3 个步骤」是步骤序号而非出处敏感数据，开了就是噪音
+alternatives:
+  - option: 把 dataRE 直接扩展为也匹配数字＋量词（不加参数）
+    reason: 对所有文体生效，tech-blog 等文体的步骤序号、章节号会大量误报，正是里程碑风险项要避免的
+  - option: 提供 counter_words 自定义列表参数
+    reason: 复盘只要求常见量词；先内置固定表，确有文体要定制时再加参数，避免一开始背上配置面
+risks:
+  - wechat-marketing 既有夹具正文若含数字＋量词会新增发现项，需核对既有测试夹具

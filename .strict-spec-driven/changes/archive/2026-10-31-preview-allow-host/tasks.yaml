@@ -1,0 +1,40 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: preview-allow-host
+sections:
+  Implementation:
+    allow-host-flag:
+      text: internal/cli/preview.go：--allow-host（flagList，可重复）只用于 --serve，取值校验为 host 或 host:port（域名段字母数字与连字符、可选数字端口；含通配或非法字符时 input.invalid-value，field 为 allow-host）；previewServer.hosts 按字面追加（去重），authorized 与令牌校验不变
+      status: complete
+    remote-url-output:
+      text: previewView 增加 remoteUrl（json omitempty）：按第一个白名单 Host 拼页面地址（不带端口或 443 用 https，其余用 http，含令牌）；文本首行同附远程地址；outputKeys 与命令 flags 帮助更新
+      status: complete
+    skills-remote-author:
+      text: wa-publish 技能的 browser 分支补充远程作者的做法（--allow-host 加反向代理如 tailscale serve；说明 remoteUrl 的协议以代理侧配置为准）；internal/skills/history.txt 追加哈希；plugins/zcode-writing-viewer/skills 副本经 stage-skills.mjs 重新生成并逐字核对
+      status: complete
+  Testing:
+    unit-tests:
+      text: 白名单内 Host（不带端口与带自定义端口）携令牌 GET / 与 /page.json 返回 200；白名单外 Host 或缺令牌返回 403 且产物不变；监听地址断言仍为 127.0.0.1；非法取值（通配、带路径、空、端口越界）与脱离 --serve 给出 --allow-host 均报告 input.invalid-value（field 为 allow-host、next 为用法）且不启动服务；remoteUrl 的 http/https 推导与未给 --allow-host 时的缺省（omitempty）；文本首行同附远程地址
+      status: complete
+      command: go test ./internal/cli/ -run TestPreview
+    project-regression:
+      text: 完整回归（review_evidence.project_regression）：构建、全部测试与 80% 覆盖率门槛
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    ready-check:
+      text: ready 检查变更构件齐备（含技能哈希同步后的 TestSkillHistoryCoversCurrent）
+      status: complete
+      command: strict-spec-cli ready preview-allow-host
+    verify-check:
+      text: verify 校验变更构件与引用一致性
+      status: complete
+      command: strict-spec-cli verify preview-allow-host
+    archive-consistency:
+      text: 归档前检查：delta-spec 与 delta-tech（loopback-only-server MODIFIED）与实现逐条对照；ZCode 技能副本逐字一致；未给 --allow-host 的既有行为回归不变
+      status: complete
+testing_gates:
+  validation_task: project-regression
+  unit_test_task: unit-tests

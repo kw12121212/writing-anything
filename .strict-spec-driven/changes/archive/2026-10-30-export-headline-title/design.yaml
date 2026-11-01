@@ -1,0 +1,20 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: export-headline-title
+approach:
+  - 在 internal/export 新增一个统一的标题与摘要解析：标题依次取根单元 marketing.yaml 中标题决策状态为 decided 时选定的标题（marketing.Load + marketing.LoadQueue 推导 HeadlineState；marketing.yaml 缺失、无法加载或状态不是 decided 时视为没有选定标题，不新增诊断，与 frontMatter 忽略 brief 加载问题的既有做法一致）、第一个导出单元正文中围栏代码块之外的首个一级标题（FirstHeading）、作品 id；摘要依次取根单元 marketing.yaml 的 digest、根单元写作简报的 purpose。frontMatter 的 title/description 与 PasteHTML 的页面 title 共用该解析。可粘贴页模板在工具栏按需追加「复制标题」「复制摘要」按钮，标题与摘要文字放在 id 独立、位于 wa-article 之外的容器中，data-copy 指向它们，复用现有复制脚本（脚本内容不变，Content-Security-Policy 哈希不变）；--print 模式在导出结果上携带 headline 与 digest 两个字段，internal/cli 的 --json 视图与 outputKeys help 同步（--print 且没有值时字段仍出现、取值为 null）。
+decisions:
+  headline-digest-decided-only:
+    decision: paste-html --print --json 的 headline 只取根单元标题决策状态为 decided 时选定的标题，digest 只取根单元 marketing.yaml 的 digest；两者没有时字段仍出现、取值为 null，不做一级标题、purpose 或作品 id 的回退。
+    rationale: 计划文件写明这两个字段「没有时为 null」，而统一回退链以作品 id 结尾、永远非空，二者只有在不回退时才相容；消费端（DSH copyroutes.ts 与后续面板按钮）需要的是作者选定的值本身——正文一级标题已在片段里，purpose 是给 Agent 的上下文而非读者可见的摘要，兜底值对公众号的标题/摘要输入框没有意义。
+alternatives:
+  - option: 逐格式各自解析标题与摘要（frontMatter 与可粘贴页各写一套）
+    reason: 两处口径会漂移，计划明确要求共用一个统一解析。
+  - option: 把选定标题作为一级标题插入正文 HTML、把 digest 追加为正文段落
+    reason: 公众号编辑器的标题与摘要是单独输入框，正文里再出现会与粘贴的内容重复，计划已明确排除。
+  - option: 为 specs/cli.yaml 也写一条 delta
+    reason: cli.yaml 的 help-command 与 json-output-envelope 是通用需求，不罗列任何命令的 outputKeys 文本；help 同步义务来自技术标准 cli-contract/registry-single-source，遵守既有标准不产生 delta-tech。计划文件提到「更新 specs/cli.yaml」，经规格核对实际没有需要修改的 cli.yaml 需求。
+risks:
+  - 两个兼容点：paste-html 页面新增按钮与容器改变了页面结构，现有断言页面结构的测试（脚本唯一性、CSP、无外部资源）需保持通过，复制脚本与 CSP 哈希必须逐字节不变；--print --json 追加字段被 DSH 插件 copyroutes.ts 与 copyview.ts 消费，必须跑插件测试确认兼容（新增字段只能追加，不能改动现有字段）。

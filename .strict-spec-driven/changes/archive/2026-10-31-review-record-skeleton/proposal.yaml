@@ -1,0 +1,32 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: review-record-skeleton
+  status: proposed
+summary:
+  what:
+    - review record --init 输出审稿（Review）骨架：按单元评分标准逐项列出 item、留空的 verdict 与 evidence、空 paragraphs（YAML 注释标出 title 与 blocking），findings 占空数组，末尾注释附段落表（编号与 wa-cli provenance 一致、每段附首句摘录）；未填完的骨架录入时逐项报告 review.missing-verdict（field 为 rubric[i].verdict）与 review.missing-evidence（field 为 rubric[i].evidence），不再笼统报 Schema 错误
+  why:
+    - review record 需要整份 YAML，Agent 手拼评分项清单容易漏项或猜格式；verdict 是 enum，空骨架直接得到 artifact.schema-violation，作者与 Agent 都看不出缺哪些（2026-10-30 复盘 R1，形态经 intake review-skeleton-form 由作者确认为 --init + 整份录入）
+scope:
+  in:
+    - internal/cli/review.go：--init 只读分支（不读 --file/标准输入、不写文件），骨架 YAML 写到标准输出，--json 时放在 skeleton 字段；--init 与 --file/--reaffirm 互斥（input.invalid-value，field 为 init）
+    - internal/review：Record 对 verdict 为空或缺失逐项报 review.missing-verdict（field 为 rubric[i].verdict），evidence 为空或只含空白逐项报 review.missing-evidence（field 为 rubric[i].evidence）；新增错误码 review.missing-evidence
+    - internal/schema/schemas/review-input.schema.json：rubric 项的 verdict 允许空串（enum 加空）、evidence 允许空（去 pattern），verdict/evidence 不再必填——产物 Schema（review.schema.json 的 verdicts）保持 pass|fail 不变
+    - wa-review 技能第 2 步改为先运行 review record --init 取骨架再填写；internal/skills/history.txt 追加哈希；plugins/zcode-writing-viewer/skills 副本重新生成并逐字核对
+    - review 主规格 review-record 的 delta：--init 语义与空值逐项报错
+    - 测试：骨架评分项与 review show 的 rubric 一致（含 blocking 注释）、段落数与正文一致、空骨架录入逐项报错且不写文件、填写后录入成功
+  out:
+    - 不引入逐项增量命令（review record 仍整份替换，intake 已确认）
+    - 骨架不预填 pass、不推测发现项与段落
+    - 不改 review.yaml 产物 Schema 与 wa-cli validate 对产物的校验
+    - 不改 --reaffirm 语义
+unchanged_behavior:
+  - 已填好的输入行为不变：未知评分项、重复结论、段落越界、引文不符等既有校验与错误码不变
+  - review show、accept、next 等消费方不变
+  - wa-review 技能除第 2 步外不变
+roadmap:
+  milestone: wechat-flow-feedback
+  planned_change: review-record-skeleton

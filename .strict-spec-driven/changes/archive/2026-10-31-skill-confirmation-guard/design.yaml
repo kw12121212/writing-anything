@@ -1,0 +1,19 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: skill-confirmation-guard
+approach:
+  - 只改三个内置技能的 SKILL.md 文本与守护测试：wa-publish、wa-auto 在「必须停下来问作者」一节加同一条确认边界（无作者原话不带 --confirmed-by-author、不把假设/试用冒充 --confirmation、试用在 standard 或 fast 关卡不带确认验收且 strict 下不能试用验收）；wa-revise 在步骤 4 前补小改路径（review record --reaffirm --summary 经作者同意重申后请作者重新确认验收，涉及观点、事实或论断仍走完整审稿）。skills_test.go 新增 TestSkillConfirmationGuard 以字面量断言三处文字与 wa-revise 的 commands 含 review record；history.txt 追加哈希、stage-skills.mjs 重新生成 ZCode 副本逐字核对。skills 主规格新增 confirmation-guard-guidance 需求钉住内容（与 illustrate-skill-prompt 同构）
+decisions:
+  spec-pin-skill-text:
+    decision: 技能内容要求以 skills 主规格的新需求钉住（两条场景：确认边界文字、--reaffirm 路径），守护测试用规格中的字面量断言
+    rationale: skills 主规格已有同构先例（illustrate-skill-prompt、publish-copy-guidance 都钉住技能正文要求）；技能随二进制分发、是可观察行为，散在测试里的私有断言没有规格对账
+  trial-not-strict:
+    decision: 流程试用在 standard 或 fast 关卡下不带确认验收（confirmedByAuthor 为 false）；strict 关卡要求作者确认，试用不能以 strict 关卡验收
+    rationale: standard 关卡的确认本来就允许不带作者确认（复盘确认）；strict 关卡的存在意义是作者把关，试用冒充会架空它——技能必须把这个边界写给 Agent
+alternatives:
+  - option: 在 wa-cli accept 命令层拒绝试用性确认
+    reason: 命令层无法区分「试用」与真实确认（都是调用者的说法）；边界是技能层的操作纪律，复盘 A1 的结论是写明技能而不是加命令校验
+risks:
+  - 三个技能同时改动需追加三条哈希并重新生成 ZCode 副本（TestSkillHistoryCoversCurrent 与逐字核对）

@@ -1,0 +1,21 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: length-counting-clarity
+approach:
+  - 把 internal/lint/text.go 的 charsOf 逐行可见字符循环提炼为 countOf(first, last, keep)：先做与现在完全相同的屏蔽与去行首 Markdown 标题标记处理，再按 keep 谓词计数；chars 用「非空白」谓词、新增的 cjkChars 用「Unicode Han 汉字」谓词，两个口径共用一份实现，不会漂移。Result 增加 CJKChars，在现有 t.chars() 的同一处由 t.cjkChars() 算出。checkLength 的诊断 message、internal/cli/lint.go 的 outputKeys 与文本摘要行、internal/cli/brief.go 的 --length help 用同一句口径「非空白字符数，含标点」；文本摘要行同时显示字数与汉字数。docs/GLOSSARY.md 的字数条目同步该口径并提及 cjkChars
+decisions:
+  cjk-chars-definition:
+    decision: cjkChars 只数 Unicode Han 的汉字，与 chars 共用同一屏蔽区域与去标题标记口径；全角标点、假名等不计入
+    rationale: 作者按汉字估篇幅（复盘：chars 与汉字数相差约 15%）；Han 脚本恰好排除全角标点与假名，取值无需配置即可复现
+  no-length-mode-parameter:
+    decision: length-range 不加口径参数，计数与判定保持现状
+    rationale: intake cjk-chars-field 已由作者确认：加参数会让每个文体规则各自声明口径，跨作品与跨文体的字数失去统一基准；需要汉字口径时读 cjkChars 即可
+alternatives:
+  - option: 把 chars 本身改为只数汉字
+    reason: 会改变既有 length 规则的判定结果与全部夹具的预期值，破坏向后兼容；intake 结论是另出 cjkChars 而不是改 chars
+  - option: 在 length-range 增加 count 参数（chars 或 cjk）
+    reason: intake 已否决：口径参数让规则声明分叉，作者在两个作品间对比字数时口径可能不一致
+risks:
+  - lint 的文本摘要行与 --json 输出新增字样后，逐字断言旧输出的测试与金样需要同步更新

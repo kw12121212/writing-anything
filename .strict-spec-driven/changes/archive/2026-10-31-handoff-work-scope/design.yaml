@@ -1,0 +1,25 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: handoff-work-scope
+approach:
+  - internal/handoff 的 fileNote 与 View 增加可选 work 字段（View 用 json omitempty，未关联时输出中缺省），两个嵌入 Schema 同步声明可选 work（作品 id 形态 pattern，schema_version 保持 1）。单元引用解析放在 internal/cli：handoff write 的 --unit 经 work.Resolve 把 <work> 或 <work>/<unit-id> 归一到所属作品 id，输入中的 work 只接受作品 id 并同样经 work.Load/Resolve 校验存在；两者不一致报告 input.invalid-value（field 为 unit），解析失败原样报告 work.not-found/work.unit-not-found（经 diagnostics 得到 wa-cli status 的 next）。internal/handoff 保持叶子领域包、不 import internal/work。Show 增加按作品过滤（关联该作品或未关联的记录，倒序），Latest 改为按作品取「关联该作品的最近记录」与「未关联的最近记录」中较新的一条；runNext 每条命令只加载一次交接记录并逐作品过滤后传入 step（消除现有逐单元重复加载，workspace-artifacts/load-once-per-command）。next 文本输出按记录 id 去重，在第一条引用它的步骤之前显示一次。wa-assemble 与 wa-auto 技能会话结束段写明 --unit，history.txt 追加哈希并重新生成 ZCode 插件技能副本
+decisions:
+  work-association-granularity:
+    decision: 交接记录按作品（Work）关联：--unit 接受作品 id 或其任一单元的引用，写入时一律归到所属作品的 id
+    rationale: 2026-10-30 intake（handoff-scope）作者已确认按作品关联：交接记录服务跨单元的会话接续，next 已按作品组织步骤，粒度到作品即可；按单元过滤会让跨单元的待办在接续时不可见
+  unit-resolution-in-cli:
+    decision: 单元引用的解析与作品存在性校验放在 internal/cli（复用 work.Resolve 与 work.Load 的诊断），internal/handoff 只接收并存储作品 id，不 import internal/work
+    rationale: internal/handoff 是与 internal/work 平级的叶子领域包（internal/work 也不依赖它），引入反向依赖会造出 cli 之外的接线层；work.not-found/work.unit-not-found 的诊断与 next 命令由 CLI 既有路径统一给出
+  show-matches-next-scope:
+    decision: handoff show --unit 的结果集与 next 的过滤口径一致：关联该作品的记录加上未关联的记录
+    rationale: 未关联的旧记录对所有作品可见是本变更定下的兼容语义；两个入口口径分叉会让同一记录在 next 可见、在 show --unit 不可见，Agent 会误判记录丢失
+alternatives:
+  - option: 交接记录按单元（Unit）关联并在 next 中只附到该单元的步骤
+    reason: 作者在 intake 中已否决：会话级待办常跨单元（例如「场景三待收口」写在场景二的会话末尾），按单元过滤会把这些待办藏起来
+  - option: 为关联字段升级 handoffs.schema.json 的 schema_version 并迁移旧文件
+    reason: 新字段可选且向后兼容，旧文件无需迁移；升级版本会让所有既有工作区的 handoffs.yaml 突然不合法
+risks:
+  - next 的文本输出从「顶部固定一次」改为「按记录去重、首条引用前一次」：全部步骤共享同一条记录时输出不变，多个作品各有记录时会新增交接段，测试需覆盖两种形态
+  - handoff write 的输入新增 work 字段：若不做存在性校验，拼错的作品 id 会写出在任何作品下都不可见的记录（静默失败），因此输入 work 必须校验作品存在

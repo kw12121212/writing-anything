@@ -1,0 +1,25 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: preview-allow-host
+approach:
+  - internal/cli/preview.go 增加 --allow-host（flagList 可重复）：previewFlags 校验它只用于 --serve、每个取值为 host 或 host:port（字母数字与连字符的域名段、可选数字端口；含通配或其他字符时 input.invalid-value，field 为 allow-host），并把白名单传入 servePreview；previewServer.hosts 按字面追加（去重），authorized 的逐字比较与令牌常量时间校验不变，监听仍是 127.0.0.1 上的实际套接字。previewView 增加 remoteUrl（json omitempty）：按第一个白名单 Host 拼页面地址——不带端口或端口为 443 用 https，其余（含 80 与自定义端口）用 http；文本首行同附。wa-publish 的 browser 分支补远程作者做法，history.txt 追加哈希并重新生成 ZCode 副本
+decisions:
+  literal-host-match:
+    decision: 白名单按字面字符串比较（与既有 hosts 匹配一致），不做后缀或通配匹配；取值必须显式给出完整 Host
+    rationale: 通配会一次放开不可枚举的 Host 集合，与 Host 校验防 DNS 重绑定的初衷冲突；字面白名单让作者明确知道放开了哪些名字，也复用 authorized 的既有比较
+  remote-url-scheme:
+    decision: remoteUrl 的协议按端口推导：白名单 Host 不带端口或端口为 443 用 https，其余（含 80 与自定义端口）用 http
+    rationale: tailscale serve 等反向代理对外默认 https（浏览器对 443 不写端口，Host 不带端口），自定义端口多为本地 http 转发；wa-cli 无法得知代理的 TLS 配置，按端口推导是可解释的缺省，作者仍以代理侧配置为准
+  whitelist-only-relaxation:
+    decision: 白名单只放宽 Host 头校验：令牌校验、监听地址（仍 127.0.0.1）、安全响应头与请求体限制全部不变，也不提供选择监听地址的参数
+    rationale: cli-contract/loopback-only-server 的防护逐项保留，白名单成为唯一显式放宽通道并写进技术标准；监听非回环地址（bind 类参数）在里程碑 out 中被明确排除
+alternatives:
+  - option: 提供 --bind 0.0.0.0 直接对外监听
+    reason: 里程碑 out 明确排除：违反 loopback-only-server 的监听约束，令牌一旦泄露即对全网开放
+  - option: 按请求的 X-Forwarded-Host 校验代理转发的主机名
+    reason: 转发头可被伪造，校验它等于放开任意 Host；白名单校验实际的 Host 头才保持防重绑定语义
+risks:
+  - remoteUrl 的协议按端口推导可能与代理实际配置不符（如自定义端口上配了 https）；help 与技能写明以代理侧配置为准
+  - wa-publish 技能改动需同步 history.txt 与 ZCode 插件副本（TestSkillHistoryCoversCurrent 与逐字核对）

@@ -49,6 +49,8 @@ type Result struct {
 	Findings []Finding
 	Waived   []Finding
 	Chars    int
+	// CJKChars 是正文汉字数（Unicode Han；口径与 Chars 同，见 lint-text-model）。
+	CJKChars int
 }
 
 // kind 是参数的取值类型。
@@ -108,7 +110,7 @@ var ruleTypes = map[string]ruleType{
 	"code-block-language":  {check: checkCodeLanguage},
 	"link-format":          {params: []param{{"schemes", kindStrings, false}}, check: checkLinks},
 	"reference-sources":    {params: []param{{"source_types", kindNonEmptyStrings, false}, {"versions", kindBool, false}, {"apis", kindBool, false}}, check: checkReferences},
-	"claim-candidates":     {params: []param{{"pronouns", kindStrings, false}, {"experience_markers", kindStrings, false}, {"data", kindBool, false}, {"cover_kinds", kindStrings, false}}, check: checkCandidates},
+	"claim-candidates":     {params: []param{{"pronouns", kindStrings, false}, {"experience_markers", kindStrings, false}, {"data", kindBool, false}, {"counters", kindBool, false}, {"cover_kinds", kindStrings, false}}, check: checkCandidates},
 	"ad-compliance":        {params: []param{{"terms", kindStrings, false}, {"builtin", kindBool, false}, {"basis", kindString, false}}, check: checkAdCompliance},
 	"dialogue-punctuation": {check: checkDialogue},
 	"pov-consistency":      {check: checkPOV},
@@ -164,7 +166,7 @@ func Run(content string, r *resolve.Resolved, rel string, in Input) (*Result, []
 		}
 	}
 	problems = append(problems, inactive(r, active, rel)...)
-	res := &Result{Chars: t.chars()}
+	res := &Result{Chars: t.chars(), CJKChars: t.cjkChars()}
 	waivers, ps := t.waivers(ids, rel, in.Origin)
 	problems = append(problems, ps...)
 	for _, f := range all {
@@ -453,10 +455,10 @@ func checkTerms(t *text, _ params, r *resolve.Resolved, _ Input) ([]Finding, boo
 func checkLength(t *text, p params, _ *resolve.Resolved, _ Input) ([]Finding, bool) {
 	n := t.chars()
 	if lo, ok := p.int("min"); ok && n < lo {
-		return []Finding{{Message: fmt.Sprintf("字数（Word Count）为 %d，少于下限 %d", n, lo)}}, false
+		return []Finding{{Message: fmt.Sprintf("字数（Word Count）为 %d（非空白字符数，含标点），少于下限 %d", n, lo)}}, false
 	}
 	if hi, ok := p.int("max"); ok && n > hi {
-		return []Finding{{Message: fmt.Sprintf("字数（Word Count）为 %d，超过上限 %d", n, hi)}}, false
+		return []Finding{{Message: fmt.Sprintf("字数（Word Count）为 %d（非空白字符数，含标点），超过上限 %d", n, hi)}}, false
 	}
 	return nil, false
 }

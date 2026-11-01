@@ -1,0 +1,57 @@
+schema: strict-spec-driven/delta-spec/v1
+schema_version: 1
+artifact_type: delta_spec
+schema_file: templates/strict-spec-driven/schemas/delta-spec.yaml
+target_spec: review
+operations:
+  ADDED: {}
+  MODIFIED:
+    review-record:
+      strength: MUST
+      statement: 'wa-cli review record <unit> 必须从 --file（相对 --dir 或为绝对路径）或标准输入读取审稿（Review）输入并整体替换单元目录下的 review.yaml。输入为 YAML：rubric 为评分结论数组，每项含 item（评分项 id）、verdict（pass 或 fail，骨架取值为空待填）、evidence（非空，骨架取值为空待填）与可选的 paragraphs（段落编号数组，可以为空或省略，如评作者选定标题的评分项；写出时规范化为数组）；findings 为发现项（Finding）数组，每项含 paragraph 与 message，可选 id、rubric、quote 与 suggestion。段落编号从 1 开始，与 wa-cli provenance 的段落一致。单元的评分标准（Rubric）为合并后的评分标准（见 wa-cli config resolved），加上单元选用的写作法附带的评分项（见 methods 主规格的 method-rubric）；其中每个评分项都必须恰有一个结论：整项缺少时报告 review.missing-verdict（field 为 rubric，message 含评分项 id 与标题），verdict 为空或缺失时逐项报告 review.missing-verdict（field 为 rubric[i].verdict），evidence 为空或只含空白时逐项报告 review.missing-evidence（field 为 rubric[i].evidence）——未填完的骨架由此逐项指出，而不是笼统的 Schema 错误，item 或 rubric 不是单元的评分项时报告 review.unknown-rubric-item，同一评分项有多个结论时报告 review.duplicate-verdict；段落编号大于正文段落数时报告 review.unknown-paragraph；quote 不出现在所引段落的原文中时报告 review.quote-not-found；发现项 id 重复时报告 artifact.duplicate-id；输入不符合审稿输入的 Schema 时报告 artifact.schema-violation 或 artifact.parse-error。这些诊断的 path 为空、field 为输入中的位置（如 findings[0].quote），next 依次包含 wa-cli help review record --json、wa-cli review show <unit> --dir <dir> --json（其 rubric 为必须逐项给结论的评分项清单）、wa-cli provenance <unit> --dir <dir> --json 、wa-cli config resolved --dir <dir> --json 与 wa-cli brief show <unit> --dir <dir> --json；单元没有正文时报告 draft.not-found；都不修改文件，退出码为 1。给出 --init 时为只读：把审稿骨架写到标准输出（--json 时放在 skeleton 字段，不给 --init 时该字段为 null；changedPaths 为空数组，退出码为 0，不读取 --file 或标准输入，不写任何文件）——骨架的 rubric 按单元评分标准逐项给出 item、verdict: ""、evidence: "" 与 paragraphs: []，以 YAML 注释标出每项的 title 与 blocking（不预填 pass、不推测发现项），findings 为空数组占位，末尾以注释附段落表（编号与 wa-cli provenance 一致，每段附首句摘录）；单元没有正文时报告 draft.not-found；--init 与 --file 或 --reaffirm 同时给出时报告 input.invalid-value（field 为 init）。给出 --reaffirm 时不读取审稿输入：单元必须已有通过校验的 review.yaml（否则报告 review.reaffirm-no-review，next 含 wa-cli review record 的整份录入用法），--summary <变化摘要>（非空白）必填；既有 rubric 结论与 findings 原样沿用（不重校验 quote 是否仍在正文——措辞修改后引文移位是重申的常态），--resolve 与 --waive 的发现项 id 必须存在且为 open（否则报告 review resolve 的既有错误码），标记为 resolved 或 waived；draft_sha256 更新为当前 draft.md 的 SHA-256，并在 review.yaml 的 reaffirms 数组追加一条重申（Reaffirm）记录（at、summary、draft_sha256 与本次标记的发现项 id），changedPaths 为 [review.yaml]。整份录入成功时写出的 review.yaml 含 schema_version 1、draft_sha256（当前 draft.md 原始字节的 SHA-256）、rubric 与 findings，省略的发现项 id 取 rf-<n>（n 从 1 递增，跳过输入中已用的 id），每个发现项的 status 为 open；changedPaths 为 [review.yaml]，--json 输出的 review 字段含 unit、path、stale、draftSha256、rubric（每项另含评分项的 title 与 blocking）与 findings，退出码为 0。'
+      scenarios:
+        record-review:
+          - GIVEN: 作品 my-post（minimal，评分标准为 clarity）处于审稿阶段，正文有两个段落，第二段含「可能」
+          - WHEN: 运行 wa-cli review record my-post --dir D --json，标准输入为 clarity 的 fail 结论（paragraphs [2]）、一个 id 为 rf-1 的发现项与一个不带 id、quote 为「可能」的发现项
+          - THEN: review.yaml 的 draft_sha256 为当前正文的 SHA-256，findings 依次为 rf-1 与 rf-2，status 都为 open；review.rubric[0].title 为 清晰；changedPaths 为 [.writing-anything/works/my-post/review.yaml]，退出码为 0
+        missing-verdict:
+          - GIVEN: 同上
+          - WHEN: 标准输入的 rubric 为空数组
+          - THEN: diagnostics 中有一条错误码为 review.missing-verdict、field 为 rubric 的诊断，其 next 包含 wa-cli help review record --json；没有写出 review.yaml，退出码为 1
+        unknown-paragraph:
+          - GIVEN: 同上，正文只有两个段落
+          - WHEN: 标准输入的结论引用第 3 段
+          - THEN: diagnostics 中有一条错误码为 review.unknown-paragraph、field 为 rubric[0].paragraphs[0] 的诊断，退出码为 1
+        quote-not-found:
+          - GIVEN: 同上，第一段不含「例子」
+          - WHEN: 标准输入的发现项引用第 1 段、quote 为「例子」
+          - THEN: diagnostics 中有一条错误码为 review.quote-not-found、field 为 findings[0].quote 的诊断，退出码为 1
+        verdict-without-paragraphs:
+          - GIVEN: wechat-marketing 作品 my-post 处于 review 阶段，评分标准含 headline-useful
+          - WHEN: '审稿输入中 headline-useful 的结论为 {item: headline-useful, verdict: pass, evidence: 作者选定的标题说明了读者收益}，没有 paragraphs，其余评分项各有结论，运行 wa-cli review record my-post --dir D --json'
+          - THEN: 退出码为 0，写出的 review.yaml 与输出中该结论的 paragraphs 为空数组
+        reaffirm-small-edit:
+          - GIVEN: my-post 已有通过的 review（含 open 发现项 rf-1），正文做了小改（措辞修正，引文移位）
+          - WHEN: 运行 wa-cli review record my-post --reaffirm --summary 措辞修正：rf-1 的引文对应句子 --resolve rf-1 --dir D --json
+          - THEN: rubric 结论沿用、rf-1 的 status 变 resolved、draft_sha256 为当前正文哈希、reaffirms 追加一条（含 summary 与 rf-1），退出码 0；wa-cli review show 不再报 stale，accept 不因 review 过期阻塞
+        reaffirm-no-review:
+          - GIVEN: my-post 没有 review.yaml
+          - WHEN: 运行 wa-cli review record my-post --reaffirm --summary 摘要 --dir D --json
+          - THEN: 报告 review.reaffirm-no-review（next 引导整份录入的 review record 用法），文件不变，退出码 1
+        reaffirm-blank-summary:
+          - GIVEN: my-post 已有 review
+          - WHEN: 运行 wa-cli review record my-post --reaffirm --summary 空白 --dir D --json（summary 为空白）
+          - THEN: 报告输入错误（message 指明 summary 必须是非空白的变化摘要），文件不变，退出码 1
+        init-skeleton:
+          - GIVEN: 作品 my-post 处于审稿阶段且有正文（3 个段落），评分标准含 blocking 的 accuracy 与非 blocking 的 doc-type
+          - WHEN: 运行 wa-cli review record my-post --init --dir D --json 与不加 --json 各一次
+          - THEN: 两次退出码都为 0、changedPaths 为空数组、单元目录下没有新建 review.yaml；--json 的 skeleton 为 YAML 文本：rubric 依次含两个评分项（item、verdict 为空串、evidence 为空串、paragraphs 为空数组，注释含各自 title，accuracy 的注释含 blocking），findings 为空数组，末尾注释列出 1 到 3 的段落与各段首句
+        record-empty-skeleton:
+          - GIVEN: 把 init-skeleton 的骨架原样（verdict 与 evidence 均为空）交给 wa-cli review record my-post --file <骨架> --dir D --json
+          - WHEN: 运行该命令
+          - THEN: 诊断逐项给出 review.missing-verdict（field 依次为 rubric[0].verdict 与 rubric[1].verdict）与 review.missing-evidence（field 依次为 rubric[0].evidence 与 rubric[1].evidence），不写 review.yaml，退出码为 1
+        record-filled-skeleton:
+          - GIVEN: 在骨架上填好全部 verdict（pass 或 fail）与非空 evidence
+          - WHEN: 运行 wa-cli review record my-post --file <填写后的骨架> --dir D --json
+          - THEN: 审稿写入成功，rubric 的结论与填写一致，changedPaths 为 [review.yaml]，退出码为 0
+  REMOVED: {}

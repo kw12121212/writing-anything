@@ -62,10 +62,11 @@ func TestWriteAndShow(t *testing.T) {
 	if len(notes) != 2 || notes[0].ID != "handoff-2" || notes[1].ID != "handoff-1" {
 		t.Fatalf("notes = %+v", notes)
 	}
-	// Latest。
-	latest, ps := Latest(root)
-	if ps != nil || latest == nil || latest.ID != "handoff-2" {
-		t.Fatalf("latest = %+v ps=%+v", latest, ps)
+	// VisibleLatest：未关联记录对所有作品可见。
+	for _, workID := range []string{"", "my-novel", "other"} {
+		if latest := VisibleLatest(notes, workID); latest == nil || latest.ID != "handoff-2" {
+			t.Fatalf("VisibleLatest(%q) = %+v", workID, latest)
+		}
 	}
 }
 
@@ -95,8 +96,72 @@ func TestShowEmpty(t *testing.T) {
 	if ps != nil || len(notes) != 0 {
 		t.Fatalf("notes = %+v ps = %+v", notes, ps)
 	}
-	if latest, ps := Latest(root); latest != nil || ps != nil {
+	if notes, ps := ShowFor(root, "my-novel", 1); ps != nil || len(notes) != 0 {
+		t.Fatalf("ShowFor notes = %+v ps = %+v", notes, ps)
+	}
+	if latest := VisibleLatest(notes, "my-novel"); latest != nil {
 		t.Fatalf("latest = %+v", latest)
+	}
+}
+
+// 交接记录可选关联作品：work 仅在非空时写入；ShowFor 过滤含未关联记录；VisibleLatest 取关联与未关联中较新者。
+func TestWorkAssociation(t *testing.T) {
+	root := newWorkspace(t)
+	first := in("完成场景一", "w1 待办")
+	first.Work = "w-one"
+	if v, _, ps := Write(root, first, time.Now()); ps != nil || v.Work != "w-one" {
+		t.Fatalf("write with work: v = %+v ps = %+v", v, ps)
+	}
+	data, _ := os.ReadFile(filepath.Join(root, Path()))
+	if !strings.Contains(string(data), "work: w-one") {
+		t.Fatalf("work key missing: %s", data)
+	}
+	// 未关联条目不写 work 键。
+	if _, _, ps := Write(root, in("全工作区收尾", "跨作品待办"), time.Now()); ps != nil {
+		t.Fatal(ps)
+	}
+	data, _ = os.ReadFile(filepath.Join(root, Path()))
+	if strings.Count(string(data), "work:") != 1 {
+		t.Fatalf("unassociated note should not add a work key: %s", data)
+	}
+	// 再写一条 w-one 的记录（最新）。
+	third := in("继续 w1", "w1 新待办")
+	third.Work = "w-one"
+	Write(root, third, time.Now())
+
+	// ShowFor：关联该作品的与未关联的，倒序；作品过滤对另一作品不可见。
+	notes, ps := ShowFor(root, "w-one", 10)
+	if ps != nil {
+		t.Fatal(ps)
+	}
+	if len(notes) != 3 || notes[0].ID != "handoff-3" || notes[1].ID != "handoff-2" || notes[2].ID != "handoff-1" || notes[1].Work != "" {
+		t.Fatalf("ShowFor(w-one) = %+v", notes)
+	}
+	if notes, ps = ShowFor(root, "w-two", 10); ps != nil || len(notes) != 1 || notes[0].ID != "handoff-2" {
+		t.Fatalf("ShowFor(w-two) = %+v ps = %+v", notes, ps)
+	}
+	// Show 不带作品：全部记录。
+	if notes, ps = Show(root, 10); ps != nil || len(notes) != 3 {
+		t.Fatalf("Show = %+v ps = %+v", notes, ps)
+	}
+
+	// VisibleLatest：w-one 可见的最新是自己的 handoff-3；w-two 只见未关联的 handoff-2。
+	if latest := VisibleLatest(notes, "w-one"); latest == nil || latest.ID != "handoff-3" || latest.Todo[0] != "w1 新待办" {
+		t.Fatalf("VisibleLatest(w-one) = %+v", latest)
+	}
+	if latest := VisibleLatest(notes, "w-two"); latest == nil || latest.ID != "handoff-2" {
+		t.Fatalf("VisibleLatest(w-two) = %+v", latest)
+	}
+	// 未关联记录较新时对关联作品同样可见（取较新者）。
+	writeAt(t, root, Path(), "schema_version: 1\nnotes:\n"+
+		"  - {id: handoff-1, written_at: \"2026-10-04T08:00:00Z\", work: w-one, done: [x], todo: [旧]}\n"+
+		"  - {id: handoff-2, written_at: \"2026-10-04T09:00:00Z\", done: [x], todo: [新]}\n")
+	all, ps := Show(root, 10)
+	if ps != nil {
+		t.Fatal(ps)
+	}
+	if latest := VisibleLatest(all, "w-one"); latest == nil || latest.ID != "handoff-2" || latest.Todo[0] != "新" {
+		t.Fatalf("newer unassociated should win: %+v", latest)
 	}
 }
 
@@ -111,6 +176,9 @@ func TestParseInput(t *testing.T) {
 	}
 	if v, ps = ParseInput([]byte("done: [x]\ntodo: [y]\n")); ps != nil || len(v.Done) != 1 || len(v.Todo) != 1 || v.Instructions == nil {
 		t.Fatalf("v = %+v ps = %+v", v, ps)
+	}
+	if v, ps = ParseInput([]byte("done: [x]\nwork: my-novel\n")); ps != nil || v.Work != "my-novel" {
+		t.Fatalf("work input: v = %+v ps = %+v", v, ps)
 	}
 	if _, ps = ParseInput([]byte("todo: [y]\n")); ps == nil {
 		t.Fatal("missing done accepted")

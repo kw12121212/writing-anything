@@ -123,6 +123,7 @@
 | 散文段落 | Prose Paragraph | 散文段落 | 文本检查中由空行分隔、含屏蔽区域之外文字的连续行；单处豁免以它为作用范围 |
 | 发现项 | Finding | 发现项 | 检查或审稿发现的一个问题 |
 | 重申 | Reaffirm | 重申 | 正文小改后沿用既有审稿结论的一键重申：更新正文哈希解除过期、可顺带标记发现项，必须记录变化摘要；见 `review record --reaffirm` |
+| 骨架 | Skeleton | 骨架 | `wa-cli review record --init` 输出的待填 YAML：评分项逐项留空（verdict 与 evidence 待填），填写后整份录入 |
 | 豁免 | Waiver | 豁免 | 对某条规则在某处不适用的显式声明，须写明理由 |
 | 单处豁免 | Inline Waiver | 单处豁免 | 正文注释 `<!-- lint-ignore <规则 id>: 理由 -->`，豁免一个散文段落中该规则的发现项；须由作者写入 |
 | 规则类型 | Rule Type | 规则类型 | 规则的检查方式，如 `length-range`、`banned-terms`；只能取已知类型 |
@@ -244,7 +245,7 @@
 | 金字塔原理 | Pyramid Principle | 金字塔原理 | 结论先行、以上统下的表达方法 |
 | 代码示例 | Code Sample | 代码示例 | 技术文章中的示例代码 |
 | 前置要求 | Prerequisites | 前置要求 | 读者需要事先具备的知识或环境 |
-| 字数 | Word Count | 字数 | 中文按字符计 |
+| 字数 | Word Count | 字数 | 非空白字符数，含标点；`wa-cli lint --json` 另出 `cjkChars`（只数 Unicode Han 汉字） |
 
 ## 营销与公众号
 

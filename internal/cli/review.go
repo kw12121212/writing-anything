@@ -36,13 +36,17 @@ var reviewRecordCommand = &command{
 	args: []argSpec{{"unit", unitRefHelp, true}},
 	flags: []flagSpec{dirFlag,
 		{"file", flagString, "审稿输入（YAML）：rubric 为结论数组（item、verdict: pass|fail、evidence、可选的 paragraphs；评分项清单见 wa-cli review show 的 rubric），findings 为发现项数组（paragraph、message，可选 id、rubric、quote、suggestion）；相对 --dir 或为绝对路径，省略时从标准输入读取；--reaffirm 时不读取"},
+		{"init", flagBool, "把审稿骨架写到标准输出（只读，不写文件）：rubric 按单元评分标准逐项留空（verdict 与 evidence 待填，注释标出标题与 blocking），findings 为空数组，末尾注释附段落表（编号与 wa-cli provenance 一致，每段附首句）；填写后经 --file 整份录入；不能与 --file 或 --reaffirm 同时使用"},
 		{"reaffirm", flagBool, "重申（Reaffirm）：正文小改后沿用既有评分结论与发现项的一键重申，不读取审稿输入；更新 draft_sha256 解除过期，需 --summary 写明变化摘要"},
 		{"summary", flagString, "重申的变化摘要（--reaffirm 必填，非空白）：自上次审稿以来正文变了什么、为什么不用重新审"},
 		{"resolve", flagList, "重申时标记为 resolved 的发现项 id；可重复，必须存在且为 open"},
 		{"waive", flagList, "重申时标记为 waived 的发现项 id；可重复，必须存在且为 open"}},
-	outputKeys: []outputKey{{"review", "记录的审稿：" + reviewViewHelp + "；失败时为 null"}},
-	exitCodes:  standardExitCodes,
-	run:        runReviewRecord,
+	outputKeys: []outputKey{
+		{"review", "记录的审稿：" + reviewViewHelp + "；失败时为 null"},
+		{"skeleton", "--init 时的审稿骨架 YAML 文本（verdict 与 evidence 留空待填，注释标出标题、blocking 与段落表）；不给 --init 时为 null"},
+	},
+	exitCodes: standardExitCodes,
+	run:       runReviewRecord,
 }
 
 var reviewShowCommand = &command{
@@ -174,13 +178,18 @@ func rubricOf(r *resolve.Resolved, m *catalog.Method) []catalog.RubricItem {
 
 type reviewRecordResult struct {
 	Result
-	Review *reviewView `json:"review"`
+	Review   *reviewView `json:"review"`
+	Skeleton *string     `json:"skeleton"`
 }
 
 func runReviewRecord(inv *invocation) int {
 	dir := projectDir(inv)
 	res := &reviewRecordResult{}
 	problems := workspace.Require(dir)
+	if inv.flag("init") && (inv.flag("reaffirm") || inv.values["file"] != "") {
+		problems = append(problems, workspace.Problem{Code: codeInvalidValue, Severity: workspace.SeverityError, Field: "init",
+			Message: "--init 只输出审稿骨架，不能与 --file 或 --reaffirm 同时使用"})
+	}
 	input := false
 	if problems == nil {
 		var w *work.Work
@@ -217,6 +226,10 @@ func runReviewRecord(inv *invocation) int {
 	}
 	concreteHelpNext(res.Diagnostics, shellCommand("wa-cli", "review", "show", inv.args[0], "--dir", dir, "--json"), "review record", []string{codeInputReadFailed})
 	return finish(inv, res, func(w io.Writer) error {
+		if res.Skeleton != nil {
+			_, err := io.WriteString(w, *res.Skeleton)
+			return err
+		}
 		if res.Review == nil {
 			return nil
 		}
@@ -226,8 +239,77 @@ func runReviewRecord(inv *invocation) int {
 	})
 }
 
+// initReviewSkeleton 是 review record --init：只读输出审稿骨架——rubric 按单元评分标准逐项留空
+// （verdict 与 evidence 待填，注释标出 title 与 blocking；不预填 pass、不推测发现项），findings 占空数组，
+// 末尾注释附段落表（编号与 wa-cli provenance 一致，每段附首句摘录，方便核对引文）。
+func initReviewSkeleton(dir string, w *work.Work, u *work.Unit, unitDir string, res *reviewRecordResult) []workspace.Problem {
+	content, ok, ps := draft.Read(dir, w, u)
+	if len(ps) > 0 {
+		return ps
+	}
+	if !ok {
+		return []workspace.Problem{{Code: draft.CodeNotFound, Severity: workspace.SeverityError, Path: unitDir + "/" + draft.FileName,
+			Message: "单元 " + u.Ref + " 还没有正文，无法生成审稿骨架；请先用 wa-cli draft write 写入"}}
+	}
+	var paragraphs []string
+	for _, p := range draft.Split(content) {
+		paragraphs = append(paragraphs, p.Text)
+	}
+	r, ps := series.Resolve(dir, w)
+	if r == nil {
+		return ps
+	}
+	rubric := rubricOf(r, unitMethod(dir, w, u))
+	var b strings.Builder
+	b.WriteString("# 审稿（Review）骨架：把每个评分项的 verdict 填为 pass 或 fail，evidence 写明结论的依据；\n")
+	b.WriteString("# paragraphs 为依据的段落编号（不针对段落的评分项留空），段落表见文件末尾；填写后整份经 wa-cli review record <单元> --file <本文件> 录入。\n")
+	b.WriteString("rubric:\n")
+	for _, it := range rubric {
+		note := it.Title
+		if it.Blocking {
+			note += "（blocking：fail 时阻塞验收）"
+		}
+		fmt.Fprintf(&b, "  - item: %s # %s\n", it.ID, note)
+		b.WriteString("    verdict: \"\"\n")
+		b.WriteString("    evidence: \"\"\n")
+		b.WriteString("    paragraphs: []\n")
+	}
+	b.WriteString("findings: []\n")
+	b.WriteString("# 段落表（编号与 wa-cli provenance 一致；发现项与结论的引文须出现在所引段落中）：\n")
+	for i, p := range paragraphs {
+		fmt.Fprintf(&b, "# %d: %s\n", i+1, firstSentenceOf(p))
+	}
+	s := b.String()
+	res.Skeleton = &s
+	return nil
+}
+
+// firstSentenceOf 返回段落的首句（截到首个句末标点，过长时截断加省略号），用于骨架的段落表摘录。
+func firstSentenceOf(p string) string {
+	rs := []rune(strings.TrimSpace(p))
+	end := len(rs)
+	for i, r := range rs {
+		if strings.ContainsRune("。！？；", r) {
+			end = i + 1
+			break
+		}
+	}
+	truncated := end > 40
+	if truncated {
+		end = 40
+	}
+	out := strings.TrimSpace(string(rs[:end]))
+	if truncated {
+		out += "…"
+	}
+	return out
+}
+
 func recordReview(inv *invocation, dir string, w *work.Work, u *work.Unit, res *reviewRecordResult, input *bool) []workspace.Problem {
 	unitDir := w.UnitDir(u)
+	if inv.flag("init") {
+		return initReviewSkeleton(dir, w, u, unitDir, res)
+	}
 	if inv.flag("reaffirm") {
 		return reaffirmReview(inv, dir, w, u, unitDir, res)
 	}

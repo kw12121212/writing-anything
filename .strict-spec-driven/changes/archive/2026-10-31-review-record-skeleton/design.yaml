@@ -1,0 +1,25 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: review-record-skeleton
+approach:
+  - 'internal/cli/review.go 的 recordReview 前置只读分支：--init 解析单元后加载正文（缺失报 draft.not-found）、series.Resolve 与 unitMethod 得到 rubricOf 评分项、draft.Split 得到段落，手写带 YAML 注释的骨架文本（rubric 每项 item + verdict: "" + evidence: "" + paragraphs: []，注释给 title 与 blocking；findings: []；末尾注释给段落表与首句摘录），--json 放 skeleton 字段、文本模式直接打印。internal/schema 的 review-input Schema 只放宽 rubric 项的 verdict（enum 含空串）与 evidence（允许空、不再必填），产物 Schema 保持 pass|fail；internal/review 的 Record 在领域层逐项校验空值：verdict 不为 pass/fail 时 review.missing-verdict（field 为 rubric[i].verdict），evidence 只含空白时 review.missing-evidence（field 为 rubric[i].evidence），有问题时不写文件。wa-review 第 2 步改为先取骨架再填写，history.txt 与 ZCode 副本同步'
+decisions:
+  skeleton-via-init-flag:
+    decision: 骨架以 review record --init 只读输出到标准输出（--json 时在 skeleton 字段），录入仍走整份替换，不加逐项增量命令
+    rationale: intake review-skeleton-form 由作者确认：保持 review record 整体替换的语义与既有的多命令并置形态（claim、marketing 之外 review 维持整份），骨架只是填写辅助
+  domain-level-empty-checks:
+    decision: 空 verdict/evidence 的逐项报错放在 internal/review 的领域校验（新错误码 review.missing-evidence 与既有 review.missing-verdict 复用），输入 Schema 只放宽到允许空值
+    rationale: enum 拒绝发生在 Schema 层，给出的诊断笼统且没有 rubric[i] 位置；领域层知道评分项上下文，能逐项给出可执行的 field 与 message。产物 Schema 不放宽，写出的 review.yaml 仍严格 pass|fail，wa-cli validate 口径不变
+  comments-in-skeleton:
+    decision: 骨架以 YAML 注释携带 title、blocking 与段落表（首句摘录），数据字段只留待填项
+    rationale: 注释不参与解析，填写后整份录入无需清理；段落表让 Agent 核对引文时不必再跑一次 provenance
+alternatives:
+  - option: 提供 review record --item <id> --verdict pass 增量命令
+    reason: intake 已否决逐项增量：命令面扩大且部分填写的状态难以校验，整份替换的原子性是既有语义
+  - option: '骨架预填 verdict: pass'
+    reason: 预填会让 Agent 漏检直接提交；留空强制逐项给出真实结论（复盘 R1 的初衷）
+risks:
+  - review-input Schema 放宽后，若领域校验遗漏空值分支会写出含空结论的产物；Record 写出前对产物重新过严格 Schema，可兜底拦截
+  - wa-review 技能改动需同步 history.txt 与 ZCode 副本（TestSkillHistoryCoversCurrent 与逐字核对）

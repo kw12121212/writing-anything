@@ -1,0 +1,21 @@
+schema: strict-spec-driven/delta-tech/v1
+schema_version: 1
+artifact_type: delta_tech
+schema_file: templates/strict-spec-driven/schemas/delta-tech.yaml
+target_standard: workspace-artifacts
+operations:
+  ADDED:
+    presence-probe-single-source:
+      strength: MUST
+      statement: 判定工作区产物（Artifact）是否存在或是否已写入的代码必须复用 internal/workspace 的共享探测函数（workspace.IsRegular：途经真实目录、不跟随符号链接、只认普通文件），不得在领域包或命令层各自调用 os.Stat 或 os.Lstat 推断同一事实；同一产物（如 draft.md）的存在性在所有入口（阻塞项、show、validate、next）必须得出同一结论。internal/work 的 isFile（os.Stat，跟随符号链接）是必需产物判定的存量用法，不得用于新增判定；存量用途迁移前须评估各入口一致性。
+      rationale: next-draft-first 评审以实验复现了分叉：work 侧用 os.Stat 把符号链接的 draft.md 当「已写入」、cli 侧用 os.Lstat 当「不存在」，同一工作区里 next 报 marketing.headline-unasked 而 marketing show 的 questions 为空——validated-path-segments 要求同一产物在所有入口符号链接处理一致，但「存在性探测必须集中」此前没有成文，测试没有符号链接夹具时全部照常通过。
+      enforcement:
+        method: test
+        detail: internal/cli 的测试以符号链接 draft.md 夹具断言 next 与 marketing show 对 headline-unasked 得出同一结论；代码审查时确认新增的存在性判定只调用 workspace.IsRegular。
+      examples:
+        good:
+          - work 的 marketingBlockers 与 cli 的 marketing show 都以 workspace.IsRegular(root, 目录+"/draft.md") 判断正文是否写入。
+        bad:
+          - 一个入口 os.Stat（跟随符号链接）、另一个入口 os.Lstat+IsRegular，对同一 draft.md 得出相反结论。
+  MODIFIED: {}
+  REMOVED: {}

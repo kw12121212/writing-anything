@@ -185,8 +185,10 @@ type Question struct {
 }
 
 // Questions 返回营销要素 m（nil 表示没有可检查的字段）仍需补齐的要素：标题候选少于两个，摘要、钩子与行动号召未填写，
-// 标题还没有交给作者选定，或标题决策已过期。决策队列无法加载时不判断标题决策。
-func Questions(m *Marketing, q Queue) []Question {
+// 标题还没有交给作者选定，或标题决策已过期。决策队列无法加载时不判断标题决策。draftPresent 报告单元目录下的正文
+// （draft.md）是否已写入：标题按正文选定，正文未写入时不报 headline-unasked（等正文写好再提示提问）；
+// headline-stale、too-many-headlines 与缺失要素不受它影响。
+func Questions(m *Marketing, q Queue, draftPresent bool) []Question {
 	if m == nil {
 		m = &Marketing{}
 	}
@@ -214,8 +216,10 @@ func Questions(m *Marketing, q Queue) []Question {
 	}
 	switch state, _ := m.HeadlineState(q); state {
 	case StateNone:
-		out = append(out, Question{Code: CodeHeadlineUnasked, Field: FieldHeadlineDecision,
-			Message: "标题候选还没有交给作者选定；请用 wa-cli marketing ask 把候选登记为标题决策，再请作者用 wa-cli decide 选定"})
+		if draftPresent {
+			out = append(out, Question{Code: CodeHeadlineUnasked, Field: FieldHeadlineDecision,
+				Message: "标题候选还没有交给作者选定；请用 wa-cli marketing ask 把候选登记为标题决策，再请作者用 wa-cli decide 选定"})
+		}
 	case StateStale:
 		out = append(out, Question{Code: CodeHeadlineStale, Field: FieldHeadlineDecision,
 			Message: fmt.Sprintf("标题决策 %s 已过期：决策不存在，或标题候选在提问之后改过；请用 wa-cli marketing ask 重新登记，请作者重新选定", m.HeadlineDecision)})
@@ -231,19 +235,20 @@ type Gate struct {
 }
 
 // Check 计算单元目录 dir 下营销要素的关卡：yamlPresent 与 mdPresent 报告 marketing.yaml 与 marketing.md 是否按必需产物的
-// 规则存在，两者都不存在时返回 nil（由缺失产物报告）。只有 marketing.md 时视为没有填写任何要素。
-func Check(root, dir string, yamlPresent, mdPresent bool, q Queue) *Gate {
+// 规则存在，两者都不存在时返回 nil（由缺失产物报告）。只有 marketing.md 时视为没有填写任何要素。draftPresent 报告
+// 正文是否已写入（见 Questions），由调用方计算，本包不依赖正文的文件名。
+func Check(root, dir string, yamlPresent, mdPresent, draftPresent bool, q Queue) *Gate {
 	if yamlPresent {
 		m, ps := Load(root, dir)
 		if len(ps) > 0 {
 			return &Gate{Path: Path(dir), Invalid: ps}
 		}
 		if m != nil {
-			return &Gate{Path: Path(dir), Questions: Questions(m, q)}
+			return &Gate{Path: Path(dir), Questions: Questions(m, q, draftPresent)}
 		}
 	}
 	if mdPresent {
-		return &Gate{Path: dir + "/" + MDName, Questions: Questions(nil, q)}
+		return &Gate{Path: dir + "/" + MDName, Questions: Questions(nil, q, draftPresent)}
 	}
 	return nil
 }

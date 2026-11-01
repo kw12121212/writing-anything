@@ -1,0 +1,33 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: length-counting-clarity
+  status: proposed
+summary:
+  what:
+    - 写清字数（Word Count）口径并输出汉字数：lint 的 help 与 length-range 的诊断写明「字数为非空白字符数，含标点」，brief set --length 的 help 同句；lint --json 追加 cjkChars 字段（只数汉字），文本输出同时显示汉字数
+  why:
+    - chars 去掉空白、保留标点，而作者习惯按汉字数估篇幅，两者相差约 15%；现行 help 只写「非空白字符数」没写含标点，Agent 与作者对「字数」的理解会分叉（2026-10-30 公众号流程复盘 R3，口径与是否输出汉字数经 intake cjk-chars-field 由作者确认）
+scope:
+  in:
+    - internal/lint/text.go 把 charsOf 的逐行可见字符计数提炼为 countOf(first, last, keep 谓词)，chars（非空白）与新增的 cjkChars（Unicode Han 汉字）共用同一屏蔽区域与去 Markdown 标题标记处理
+    - internal/lint 的 Result 增加 CJKChars，由正文一次算出
+    - internal/lint checkLength 的诊断 message 写明「非空白字符数，含标点」
+    - internal/cli/lint.go：outputKeys 的 chars 说明补「含标点」并新增 cjkChars 键说明，lintResult 增加 cjkChars 字段，文本摘要行同时显示字数与汉字数
+    - internal/cli/brief.go --length 的 help 写明同一口径
+    - docs/GLOSSARY.md 的字数条目说明更新为该口径并提及 cjkChars
+  out:
+    - length-range 不加口径参数，计数逻辑与判定不变
+    - 不新增汉字数以外的其他口径（如英文单词数）
+    - 不改 paragraph-length、ai-cliche 等其他规则的诊断口径
+    - 不改 lint --json 既有字段名与结构
+unchanged_behavior:
+  - chars 的计数口径与取值不变（屏蔽区域之外、去标题标记后的非空白字符数，含标点）
+  - length-range 与 paragraph-length 的判定结果与发现项数量不变
+  - findings、waived 的结构、lint 的退出码与既有诊断错误码不变
+  - brief set --length 的取值格式（<min>-<max>）与校验不变
+roadmap:
+  milestone: wechat-flow-feedback
+  planned_change: length-counting-clarity

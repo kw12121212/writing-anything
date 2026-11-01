@@ -1,0 +1,37 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: length-counting-clarity
+sections:
+  Implementation:
+    lint-count-of:
+      text: internal/lint/text.go：charsOf 提炼为 countOf(first, last, keep)（屏蔽与去标题标记处理保持逐字节等价），chars 用非空白谓词、新增 cjkCharsOf/cjkChars 用 Unicode Han 谓词；Result 增加 CJKChars 并在 lint 执行处一次算出
+      status: complete
+    wording-and-output:
+      text: internal/lint checkLength 诊断 message 写明「非空白字符数，含标点」；internal/cli/lint.go 的 outputKeys（chars 补含标点、新增 cjkChars）与 lintResult.cjkChars、文本摘要行同时显示字数与汉字数；internal/cli/brief.go --length help 写明同一口径；docs/GLOSSARY.md 字数条目更新
+      status: complete
+  Testing:
+    unit-tests:
+      text: 夹具正文含标点、英文与空白：断言 chars（全部非空白字符）与 cjkChars（只数汉字）的精确值；length-range 诊断 message 含口径说明；lint help 与 brief set --length 的 help 含口径；文本摘要行含字数与汉字数；屏蔽区域（代码块、URL、注释）不计入两个口径
+      status: complete
+      command: go test ./internal/lint/... ./internal/cli/...
+    project-regression:
+      text: 完整回归（review_evidence.project_regression）：构建、全部测试与 80% 覆盖率门槛
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    ready-check:
+      text: ready 检查变更构件齐备
+      status: complete
+      command: strict-spec-cli ready length-counting-clarity
+    verify-check:
+      text: verify 校验变更构件与引用一致性
+      status: complete
+      command: strict-spec-cli verify length-counting-clarity
+    archive-consistency:
+      text: 归档前检查：delta-spec 三条 MODIFIED 需求与实际实现逐条对照（cjkChars 口径、诊断与 help 文案、文本摘要行），GLOSSARY 与帮助文案一致
+      status: complete
+testing_gates:
+  validation_task: project-regression
+  unit_test_task: unit-tests

@@ -158,12 +158,20 @@ func TestPasteScriptHash(t *testing.T) {
 	tree, _ := renderTree("正文。", catalog.DefaultHTMLTheme, "", nil)
 	if err := pastePage.ExecuteTemplate(&b, "paste", struct {
 		Title    string
+		Headline string
+		Digest   string
 		Segments []pasteSegment
-	}{"标题 <b>", segment(tree)}); err != nil {
+	}{"标题 <b>", "选定标题 <i>", "摘要 <i>", segment(tree)}); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(b.String(), "<script>"+pasteScript+"</script>") || !strings.Contains(b.String(), "<title>标题 &lt;b&gt;</title>") {
-		t.Errorf("page:\n%s", b.String())
+	page := b.String()
+	if !strings.Contains(page, "<script>"+pasteScript+"</script>") || !strings.Contains(page, "<title>标题 &lt;b&gt;</title>") {
+		t.Errorf("page:\n%s", page)
+	}
+	// 选定的标题与摘要经模板转义，放在正文容器之外的容器中（generated-html：产物文字一律经模板转义）。
+	if !strings.Contains(page, `<div id="wa-headline"`) || !strings.Contains(page, ">选定标题 &lt;i&gt;</div>") ||
+		!strings.Contains(page, `<div id="wa-digest"`) || !strings.Contains(page, ">摘要 &lt;i&gt;</div>") {
+		t.Errorf("headline/digest containers:\n%s", page)
 	}
 }
 

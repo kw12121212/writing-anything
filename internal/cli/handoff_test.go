@@ -1,8 +1,10 @@
 package cli
 
 import (
+	"encoding/json"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -145,5 +147,135 @@ func TestNextHandoffInvalidAndNoSteps(t *testing.T) {
 	}
 	if code, out, _ := run(t, "next", "--dir", empty); code != 0 || out != "没有需要推进的单元（Unit）\n" {
 		t.Fatalf("no steps: exit code = %d, stdout = %q", code, out)
+	}
+}
+
+// handoff-work-scope：交接记录可选关联作品（Work）——handoff write --unit 归到所属作品（接受作品或其任一单元），
+// next 逐作品过滤互不串入，handoff show --unit 与 next 同口径；未关联的旧记录对所有作品可见（取较新者）。
+func TestHandoffWorkScope(t *testing.T) {
+	dir := newWork(t)
+	if code, stdout, stderr := run(t, "new", "minimal", "other-post", "--dir", dir); code != 0 {
+		t.Fatalf("new other-post: exit code = %d; stdout: %s; stderr: %s", code, stdout, stderr)
+	}
+	type stepOut struct {
+		Unit    string `json:"unit"`
+		Handoff *struct {
+			ID   string   `json:"id"`
+			Todo []string `json:"todo"`
+		} `json:"handoff"`
+	}
+	stepsOf := func(t *testing.T, args ...string) []stepOut {
+		t.Helper()
+		code, res := runWS(t, dir, args...)
+		if code != 0 {
+			t.Fatalf("%v: exit code = %d, result = %+v", args, code, res)
+		}
+		var out struct {
+			Steps []stepOut `json:"steps"`
+		}
+		if err := json.Unmarshal([]byte(res.stdout), &out); err != nil {
+			t.Fatalf("%v: stdout is not JSON: %v; %q", args, err, res.stdout)
+		}
+		return out.Steps
+	}
+	// 两个作品各写一条关联自身的记录（--unit 接受作品 id 与单元引用两种形态，都归到所属作品）。
+	if code, _, stderr := run(t, "unit", "add", "my-post", "section", "intro", "--dir", dir); code != 0 {
+		t.Fatalf("unit add: exit code = %d; stderr = %s", code, stderr)
+	}
+	writeFile(t, filepath.Join(dir, "w1.yaml"), "done: [完成 my-post 大纲]\ntodo: [my-post 待收口]\n")
+	writeFile(t, filepath.Join(dir, "w2.yaml"), "done: [完成 other-post 大纲]\ntodo: [other-post 待收口]\n")
+	if code, res := runWS(t, dir, "handoff", "write", "--unit", "my-post/intro", "--file", "w1.yaml"); code != 0 {
+		t.Fatalf("write unit work: exit code = %d, result = %+v", code, res)
+	} else if !strings.Contains(res.stdout, `"work":"my-post"`) {
+		t.Fatalf("note should carry work: %s", res.stdout)
+	}
+	if code, _ := runWS(t, dir, "handoff", "write", "--unit", "other-post", "--file", "w2.yaml"); code != 0 {
+		t.Fatalf("write unit other-post: exit code = %d", code)
+	}
+	// next：每个作品的步骤只附带该作品的记录，互不串入。
+	steps := stepsOf(t, "next")
+	byUnit := map[string]stepOut{}
+	for _, s := range steps {
+		byUnit[s.Unit] = s
+	}
+	if s := byUnit["my-post"]; s.Handoff == nil || s.Handoff.ID != "handoff-1" || !slices.Equal(s.Handoff.Todo, []string{"my-post 待收口"}) {
+		t.Fatalf("my-post handoff = %+v", s.Handoff)
+	}
+	if s := byUnit["other-post"]; s.Handoff == nil || s.Handoff.ID != "handoff-2" || !slices.Equal(s.Handoff.Todo, []string{"other-post 待收口"}) {
+		t.Fatalf("other-post handoff = %+v", s.Handoff)
+	}
+	// 文本输出：同一条记录只在首条引用它的步骤之前显示一次，两条各显示一次且顺序正确。
+	if code, out, _ := run(t, "next", "--dir", dir); code != 0 {
+		t.Fatalf("next text: exit code = %d, stdout = %s", code, out)
+	} else {
+		i1, i2 := strings.Index(out, "handoff-1"), strings.Index(out, "handoff-2")
+		im, io := strings.Index(out, "my-post（阶段"), strings.Index(out, "other-post（阶段")
+		if i1 < 0 || i2 < 0 || !(i1 < im && i2 < io && im < io) || strings.Count(out, "最近交接记录") != 2 {
+			t.Fatalf("text handoff sections misplaced: %s", out)
+		}
+		if !strings.Contains(out, "未完成：my-post 待收口") || strings.Contains(out[:im], "other-post 待收口") {
+			t.Fatalf("text handoff cross-contaminated: %s", out)
+		}
+	}
+	// 未关联的记录对所有作品可见，且较新者胜出。
+	writeFile(t, filepath.Join(dir, "w3.yaml"), "done: [跨作品事项]\ntodo: [全工作区待办]\n")
+	if code, _ := runWS(t, dir, "handoff", "write", "--file", "w3.yaml"); code != 0 {
+		t.Fatalf("write unassociated: exit code = %d", code)
+	}
+	if s := stepsOf(t, "next", "my-post")[0]; s.Handoff == nil || s.Handoff.ID != "handoff-3" || !slices.Equal(s.Handoff.Todo, []string{"全工作区待办"}) {
+		t.Fatalf("newer unassociated should win for my-post: %+v", s.Handoff)
+	}
+	// handoff show --unit：与 next 同口径（关联该作品的＋未关联的），不带 --unit 输出全部。
+	code, res := runWS(t, dir, "handoff", "show", "--unit", "other-post", "--last", "50")
+	if code != 0 || !strings.Contains(res.stdout, "handoff-2") || !strings.Contains(res.stdout, "handoff-3") || strings.Contains(res.stdout, "handoff-1") {
+		t.Fatalf("show --unit other-post: exit code = %d, stdout = %s", code, res.stdout)
+	}
+	if code, res = runWS(t, dir, "handoff", "show", "--last", "50"); code != 0 || !strings.Contains(res.stdout, "handoff-1") {
+		t.Fatalf("show without --unit: exit code = %d, stdout = %s", code, res.stdout)
+	}
+	// --unit 指向不存在的单元：show 与 write 都拒绝（field 为 unit），write 不改文件。
+	before := readFile(t, filepath.Join(dir, ".writing-anything", "handoffs.yaml"))
+	if code, res = runWS(t, dir, "handoff", "show", "--unit", "my-post/nope"); code != 1 || len(res.Diagnostics) != 1 ||
+		res.Diagnostics[0].Code != "unit.not-found" || res.Diagnostics[0].Field != "unit" {
+		t.Fatalf("show unknown unit: exit code = %d, diagnostics = %+v", code, res.Diagnostics)
+	}
+	if code, res = runWS(t, dir, "handoff", "write", "--unit", "my-post/nope", "--file", "w1.yaml"); code != 1 || len(res.Diagnostics) != 1 ||
+		res.Diagnostics[0].Code != "unit.not-found" || res.Diagnostics[0].Field != "unit" {
+		t.Fatalf("write unknown unit: exit code = %d, diagnostics = %+v", code, res.Diagnostics)
+	}
+	// --unit 指向不存在的作品：同样拒绝（field 为 unit）。
+	if code, res = runWS(t, dir, "handoff", "show", "--unit", "nope"); code != 1 || len(res.Diagnostics) != 1 ||
+		res.Diagnostics[0].Code != "work.not-found" || res.Diagnostics[0].Field != "unit" {
+		t.Fatalf("show unknown work: exit code = %d, diagnostics = %+v", code, res.Diagnostics)
+	}
+	if code, res = runWS(t, dir, "handoff", "write", "--unit", "nope", "--file", "w1.yaml"); code != 1 || len(res.Diagnostics) != 1 ||
+		res.Diagnostics[0].Code != "work.not-found" || res.Diagnostics[0].Field != "unit" {
+		t.Fatalf("write unknown work: exit code = %d, diagnostics = %+v", code, res.Diagnostics)
+	}
+	if after := readFile(t, filepath.Join(dir, ".writing-anything", "handoffs.yaml")); after != before {
+		t.Fatal("failed write must not change handoffs.yaml")
+	}
+	// --unit 与输入 work 冲突：input.invalid-value（field 为 unit），文件未变。
+	writeFile(t, filepath.Join(dir, "conflict.yaml"), "done: [x]\nwork: my-post\n")
+	if code, res = runWS(t, dir, "handoff", "write", "--unit", "other-post", "--file", "conflict.yaml"); code != 1 || len(res.Diagnostics) != 1 ||
+		res.Diagnostics[0].Code != "input.invalid-value" || res.Diagnostics[0].Field != "unit" {
+		t.Fatalf("unit input conflict: exit code = %d, diagnostics = %+v", code, res.Diagnostics)
+	}
+	if after := readFile(t, filepath.Join(dir, ".writing-anything", "handoffs.yaml")); after != before {
+		t.Fatal("conflicting write must not change handoffs.yaml")
+	}
+	// 输入 work 指向不存在的作品：work.not-found（field 为 work）。
+	writeFile(t, filepath.Join(dir, "missing.yaml"), "done: [x]\nwork: nope\n")
+	if code, res = runWS(t, dir, "handoff", "write", "--file", "missing.yaml"); code != 1 || len(res.Diagnostics) != 1 ||
+		res.Diagnostics[0].Code != "work.not-found" || res.Diagnostics[0].Field != "work" {
+		t.Fatalf("missing input work: exit code = %d, diagnostics = %+v", code, res.Diagnostics)
+	}
+	// 输入 work 与 --unit 同指一个作品：成功且不重复。
+	writeFile(t, filepath.Join(dir, "same.yaml"), "done: [x]\nwork: my-post\n")
+	if code, _ = runWS(t, dir, "handoff", "write", "--unit", "my-post", "--file", "same.yaml"); code != 0 {
+		t.Fatalf("unit matching input work: exit code = %d", code)
+	}
+	if s := stepsOf(t, "next", "my-post")[0]; s.Handoff == nil || s.Handoff.ID != "handoff-4" {
+		t.Fatalf("my-post latest = %+v", s.Handoff)
 	}
 }

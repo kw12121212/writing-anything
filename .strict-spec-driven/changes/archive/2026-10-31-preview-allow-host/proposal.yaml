@@ -1,0 +1,32 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: preview-allow-host
+  status: proposed
+summary:
+  what:
+    - preview --serve 增加显式 Host 白名单参数 --allow-host（可重复，host 或 host:port，不支持通配）：白名单内的 Host 携带令牌可访问，供 tailscale serve 等反向代理远程访问；监听地址仍只用 127.0.0.1（不提供 --bind），令牌校验不变；--json 首行信封可选给出按第一个白名单 Host 拼出的 remoteUrl
+  why:
+    - 作者不在本机时无法访问 127.0.0.1 的阅读页；反向代理（tailscale serve 等）转发时 Host 头不是回环地址而被 Host 校验拒绝，远程作者无法经代理审阅（2026-10-30 公众号流程复盘 A2）
+scope:
+  in:
+    - internal/cli/preview.go：--allow-host 参数（flagList，可重复）只用于 --serve，取值校验为 host 或 host:port（含通配时拒绝，input.invalid-value、field 为 allow-host）；previewServer.hosts 追加白名单（按字面比较）
+    - previewView 增加 remoteUrl（omitempty）：给出 --allow-host 时按第一个白名单 Host 拼出——不带端口或 443 用 https，其余用 http，含令牌；文本首行同附远程地址
+    - cli-contract/loopback-only-server 技术标准改为 delta-tech MODIFIED：白名单是 Host 校验唯一放宽方式，令牌与监听地址不放宽
+    - wa-publish 技能的 browser 分支补充远程作者的做法（--allow-host + 反向代理），同步 history.txt 与 ZCode 插件副本
+    - preview 主规格 preview-serve 的 delta：Host 校验白名单、remoteUrl、参数校验与文本首行
+    - 测试：白名单内 Host 携令牌返回 200（含 GET / 与 /page.json），白名单外或缺令牌返回 403，监听地址断言仍为 127.0.0.1，非法取值与脱离 --serve 均拒绝
+  out:
+    - 不提供 --bind 或任何选择监听地址的参数（监听仍只用 127.0.0.1）
+    - 不支持通配 Host
+    - 不放宽令牌校验、不改变 CSP 与其他安全响应头
+    - 不改动 GET /page.json、/illustration 与各 POST 端点的语义（它们复用 GET / 的 Host 与令牌校验）
+unchanged_behavior:
+  - 未给出 --allow-host 时 preview --serve 的全部行为与现在一致（Host 只接受回环与 localhost，首行信封无 remoteUrl 字段）
+  - '令牌长度、常量时间比较、Cache-Control: no-store、Referrer-Policy: no-referrer、X-Frame-Options 与 CSP 不变'
+  - wa-publish 技能除 browser 分支的远程说明外不变
+roadmap:
+  milestone: wechat-flow-feedback
+  planned_change: preview-allow-host

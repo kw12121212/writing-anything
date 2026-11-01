@@ -8,7 +8,7 @@ spec:
 requirements:
   lint-command:
     strength: MUST
-    statement: wa-cli lint <unit> 必须只读地对单元目录下的 draft.md 执行按作品文体合并（文体 → 规范包 → 项目配置）的全部生效规则（Rule）：被规则级 waivers 豁免（enabled 为 false）的规则不执行。--json 输出 findings、waived 与 chars：findings 为未被豁免的发现项（Finding），waived 为被单处豁免的发现项（另含 reason），两者按行、列、规则 id 排序（全文级发现项排在最前）；每项含 rule（规则 id）、type（规则类型）、severity、source（定义该规则类型的配置层：genre:<id>、pack:<id> 或 project）、line 与 column（从 1 开始，列按 Unicode 字符计；全文级发现项为 null）、text（命中的原文；全文级为 null）、message 与 suggestion（建议的写法，没有时为 null）；chars 为正文字数（见 lint-text-model）。changedPaths 为空数组，不创建或修改任何文件，不发起网络请求。findings 中有 severity 为 error 的发现项时，必须给出一条错误码为 lint.findings、severity 为 error 的诊断（path 为 draft.md，message 含 error 级发现项的条数，next 为 wa-cli help draft write --json 与 wa-cli lint <unit> --dir <dir> --json），valid 为 false，退出码为 1；否则 valid 为 true、退出码为 0。单元没有可读取的 draft.md（不存在、途经符号链接或不是普通文件）时报告 draft.not-found；draft.md 超过 2 MiB（2097152 字节）时报告 lint.too-large（输入规模上限）；一条规则的词表命中超过 1000 处时只列出前 1000 处，并给出一条 severity 为 warning、错误码为 lint.truncated 的诊断；合并配置有 error 级问题时报告其诊断；两种情况 findings 与 waived 为空数组，退出码为 1。合并后有禁用词或术语表中要避免的写法、却没有生效的 banned-terms 或 term-consistency 规则时，给出一条 severity 为 warning、错误码为 lint.inactive-terms 的诊断。不加 --json 时以人读文本逐条列出发现项（位置、规则、说明与建议）。
+    statement: wa-cli lint <unit> 必须只读地对单元目录下的 draft.md 执行按作品文体合并（文体 → 规范包 → 项目配置）的全部生效规则（Rule）：被规则级 waivers 豁免（enabled 为 false）的规则不执行。--json 输出 findings、waived、chars 与 cjkChars：findings 为未被豁免的发现项（Finding），waived 为被单处豁免的发现项（另含 reason），两者按行、列、规则 id 排序（全文级发现项排在最前）；每项含 rule（规则 id）、type（规则类型）、severity、source（定义该规则类型的配置层：genre:<id>、pack:<id> 或 project）、line 与 column（从 1 开始，列按 Unicode 字符计；全文级发现项为 null）、text（命中的原文；全文级为 null）、message 与 suggestion（建议的写法，没有时为 null）；chars 为正文字数、cjkChars 为正文汉字数（口径见 lint-text-model，帮助说明写明字数为非空白字符数，含标点）。changedPaths 为空数组，不创建或修改任何文件，不发起网络请求。findings 中有 severity 为 error 的发现项时，必须给出一条错误码为 lint.findings、severity 为 error 的诊断（path 为 draft.md，message 含 error 级发现项的条数，next 为 wa-cli help draft write --json 与 wa-cli lint <unit> --dir <dir> --json），valid 为 false，退出码为 1；否则 valid 为 true、退出码为 0。单元没有可读取的 draft.md（不存在、途经符号链接或不是普通文件）时报告 draft.not-found；draft.md 超过 2 MiB（2097152 字节）时报告 lint.too-large（输入规模上限）；一条规则的词表命中超过 1000 处时只列出前 1000 处，并给出一条 severity 为 warning、错误码为 lint.truncated 的诊断；合并配置有 error 级问题时报告其诊断；两种情况 findings 与 waived 为空数组，退出码为 1。合并后有禁用词或术语表中要避免的写法、却没有生效的 banned-terms 或 term-consistency 规则时，给出一条 severity 为 warning、错误码为 lint.inactive-terms 的诊断。不加 --json 时以人读文本逐条列出发现项（位置、规则、说明与建议），摘要行同时显示字数（非空白字符数，含标点）与汉字数。
     scenarios:
       lint-error:
         - GIVEN: draft.md 含「值得注意的是，连接池很重要。」，default 规范包生效
@@ -29,14 +29,18 @@ requirements:
       lint-clean:
         - GIVEN: 作品 my-post（minimal）的 draft.md 为「连接池可以降低延迟。」
         - WHEN: 运行 wa-cli lint my-post --dir D --json
-        - THEN: findings 只有一项 rule 为 length、severity 为 warning、line 为 null 的字数不足发现项，waived 为空数组，chars 为 10，valid 为 true，changedPaths 为空数组，退出码为 0
+        - THEN: findings 只有一项 rule 为 length、severity 为 warning、line 为 null 的字数不足发现项，waived 为空数组，chars 为 10，cjkChars 为 9，valid 为 true，changedPaths 为空数组，退出码为 0
+      chars-with-mixed-text:
+        - GIVEN: draft.md 为「连接池，Go 的 10 个要点。」（汉字 7 个、标点 2 个、英文字母与数字 4 个、空白 3 处）
+        - WHEN: 运行 wa-cli lint my-post --dir D --json
+        - THEN: chars 为 13（非空白字符数，含标点），cjkChars 为 7（Go、10 与标点不计），length 发现项的 message 写明口径，退出码为 0
       inactive-terms:
         - GIVEN: config.yaml 的 packs 为 [house]（不含 default），house 的 banned_terms 含「赋能」
         - WHEN: 运行 wa-cli lint my-post --dir D --json
         - THEN: findings 中没有 banned-terms 发现项，diagnostics 中有一条错误码为 lint.inactive-terms、severity 为 warning 的诊断
   lint-text-model:
     strength: MUST
-    statement: '文本检查（Lint）必须去掉开头的 BOM、把 CRLF 与单独的 CR 规范为 LF 后按行检查，并跳过屏蔽区域（Masked Region）：围栏代码块（行首至多 3 个空格后为至少 3 个反引号或 ~，反引号围栏其后不含反引号；到同一字符、长度不短于开头、其后只有空白的结束行，未闭合时到正文末尾）、行内代码（n 个反引号到其后第一个恰好 n 个反引号，没有结束时不是行内代码）、已闭合的 HTML 注释（<!-- 到其后第一个 -->，包括作者批注：行首的 <!-- 可以跨越空行，不在行首的 <!-- 不能跨越空行；没有对应 --> 的 <!-- 按普通文字检查）、URL（http:// 或 https:// 开始，到空白或全角标点（，。；：、！？）」』】》“”‘’…—）为止，路径中的汉字属于 URL）与 Markdown 链接地址（](...) 中的地址）。散文段落（Prose Paragraph）为由空行或围栏代码块分隔、含屏蔽区域之外文字的连续行；首尾只含屏蔽区域的行不属于散文段落，只含屏蔽区域（如单独一行的注释）的块不成段。字数为屏蔽区域之外、去掉行首 Markdown 标题标记（1 至 6 个 # 与其后的空白）后的非空白 Unicode 字符个数；段落字数同理按段落计。'
+    statement: '文本检查（Lint）必须去掉开头的 BOM、把 CRLF 与单独的 CR 规范为 LF 后按行检查，并跳过屏蔽区域（Masked Region）：围栏代码块（行首至多 3 个空格后为至少 3 个反引号或 ~，反引号围栏其后不含反引号；到同一字符、长度不短于开头、其后只有空白的结束行，未闭合时到正文末尾）、行内代码（n 个反引号到其后第一个恰好 n 个反引号，没有结束时不是行内代码）、已闭合的 HTML 注释（<!-- 到其后第一个 -->，包括作者批注：行首的 <!-- 可以跨越空行，不在行首的 <!-- 不能跨越空行；没有对应 --> 的 <!-- 按普通文字检查）、URL（http:// 或 https:// 开始，到空白或全角标点（，。；：、！？）」』】》“”‘’…—）为止，路径中的汉字属于 URL）与 Markdown 链接地址（](...) 中的地址）。散文段落（Prose Paragraph）为由空行或围栏代码块分隔、含屏蔽区域之外文字的连续行；首尾只含屏蔽区域的行不属于散文段落，只含屏蔽区域（如单独一行的注释）的块不成段。字数为屏蔽区域之外、去掉行首 Markdown 标题标记（1 至 6 个 # 与其后的空白）后的非空白 Unicode 字符个数（含标点，wa-cli lint --json 的 chars）；段落字数同理按段落计。汉字数为同一口径下 Unicode Han 汉字的个数（全角标点、假名等不计入，wa-cli lint --json 的 cjkChars）。length-range 的计数口径不变，不提供口径参数。'
     scenarios:
       skip-code:
         - GIVEN: draft.md 的围栏代码块中与行内代码中都含「值得注意的是」
@@ -54,9 +58,13 @@ requirements:
         - GIVEN: draft.md 为「正文 <!-- 未闭合」、空行、「值得注意的是」、空行、「<!-- 注释 -->」
         - WHEN: 运行 wa-cli lint my-post --dir D --json
         - THEN: findings 含一项 ai-cliche 发现项（不在行首的 <!-- 不跨越空行）
+      cjk-chars-scope:
+        - GIVEN: draft.md 为「连接池，Go 的 10 个要点。」
+        - WHEN: 运行 wa-cli lint my-post --dir D --json
+        - THEN: chars 为 13（非空白字符数，含标点：汉字 7、标点 2、英文字母与数字 4），cjkChars 为 7（只数汉字），退出码为 0
   rule-types:
     strength: MUST
-    statement: '规则引擎（Rule Engine）必须按规则的 type 执行以下检查，参数取自合并后的 params：cjk-typography（参数 spacing 与 punctuation，布尔，默认 true）：spacing 为 true 时，汉字与 ASCII 字母或数字直接相邻处各报告一项，text 为相邻的两个字符，suggestion 为中间加一个空格；punctuation 为 true 时，汉字之后紧跟的半角 , . : ; ! ? 各报告一项（其后紧跟 ASCII 字母、数字或同一标点时不报告，如 .env、...），suggestion 为对应的全角标点（，。：；！？）。ai-cliche（参数 terms，字符串数组，默认为空；max_dashes_per_1000，正数，可选）：terms 中每个词的每处出现报告一项；给出 max_dashes_per_1000 且每千字的破折号数（连续的 — 记为一个）超过它时报告一项全文级发现项。banned-terms（参数 terms，字符串数组，可选）：terms 与合并后的 bannedTerms 中每个词的每处出现报告一项，bannedTerms 给出 replacement 时 suggestion 为它，message 含 reason。term-consistency（无参数）：合并后 glossary 中每个词条 avoid 里的写法每处出现报告一项，suggestion 为该词条的 term；落在标准写法某处出现范围内的命中（如「大语言模型」中的「语言模型」）不报告。同一个词在词表中出现多次时只报告一次。length-range（参数 min 与 max，正整数，至少给出一个）：字数小于 min 或大于 max 时报告一项全文级发现项。paragraph-length（参数 max，正整数，必需）：字数超过 max 的散文段落各报告一项，位置为段落首行首列。required-sections（参数 sections，非空字符串数组，必需）：正文中（屏蔽区域之外）没有文字等于该项的 Markdown 标题（1 至 6 个 # 开头的行）时，每项报告一项全文级发现项。词的匹配区分大小写；只由 ASCII 字母、数字与连字符组成的词要求前后都不是 ASCII 字母、数字或连字符，其他词按子串匹配。'
+    statement: '规则引擎（Rule Engine）必须按规则的 type 执行以下检查，参数取自合并后的 params：cjk-typography（参数 spacing 与 punctuation，布尔，默认 true）：spacing 为 true 时，汉字与 ASCII 字母或数字直接相邻处各报告一项，text 为相邻的两个字符，suggestion 为中间加一个空格；punctuation 为 true 时，汉字之后紧跟的半角 , . : ; ! ? 各报告一项（其后紧跟 ASCII 字母、数字或同一标点时不报告，如 .env、...），suggestion 为对应的全角标点（，。：；！？）。ai-cliche（参数 terms，字符串数组，默认为空；max_dashes_per_1000，正数，可选）：terms 中每个词的每处出现报告一项；给出 max_dashes_per_1000 且每千字的破折号数（连续的 — 记为一个）超过它时报告一项全文级发现项。banned-terms（参数 terms，字符串数组，可选）：terms 与合并后的 bannedTerms 中每个词的每处出现报告一项，bannedTerms 给出 replacement 时 suggestion 为它，message 含 reason。term-consistency（无参数）：合并后 glossary 中每个词条 avoid 里的写法每处出现报告一项，suggestion 为该词条的 term；落在标准写法某处出现范围内的命中（如「大语言模型」中的「语言模型」）不报告。同一个词在词表中出现多次时只报告一次。length-range（参数 min 与 max，正整数，至少给出一个）：字数小于 min 或大于 max 时报告一项全文级发现项，message 写明字数为非空白字符数，含标点。paragraph-length（参数 max，正整数，必需）：字数超过 max 的散文段落各报告一项，位置为段落首行首列。required-sections（参数 sections，非空字符串数组，必需）：正文中（屏蔽区域之外）没有文字等于该项的 Markdown 标题（1 至 6 个 # 开头的行）时，每项报告一项全文级发现项。词的匹配区分大小写；只由 ASCII 字母、数字与连字符组成的词要求前后都不是 ASCII 字母、数字或连字符，其他词按子串匹配。'
     scenarios:
       cjk-spacing:
         - GIVEN: draft.md 为「使用Go语言」
@@ -77,7 +85,7 @@ requirements:
       length-range:
         - GIVEN: 'minimal 文体的 length 规则为 {min: 300, max: 5000}，draft.md 只有 10 个字'
         - WHEN: 运行 wa-cli lint my-post --dir D --json
-        - THEN: findings 含一项 rule 为 length、line 为 null 的全文级发现项，message 含 10 与 300
+        - THEN: findings 含一项 rule 为 length、line 为 null 的全文级发现项，message 含 10 与 300，且写明字数为非空白字符数，含标点
       paragraph-length:
         - GIVEN: '项目配置定义 rules.para {type: paragraph-length, params: {max: 5}}，draft.md 的第二段有 8 个字'
         - WHEN: 运行 wa-cli lint my-post --dir D --json
@@ -140,7 +148,7 @@ requirements:
         - THEN: 'resolved.rules 含 cjk-typography、ai-cliche、banned-terms 与 term-consistency，ai-cliche 与 banned-terms 的 severity 为 {value: error, source: pack:default}'
   claim-rule-types:
     strength: MUST
-    statement: '合并结果中有生效的 claim-sources 或 claim-candidates 规则时，wa-cli lint 必须读取单元目录下的 claims.yaml（不存在时没有已登记的论断；不通过校验时报告其诊断并以退出码 1 退出，论断相关的规则不执行）与所引素材的类型，并按规则的 type 执行以下检查；两种规则都未生效时不读取 claims.yaml。论断文字的比较对象是去掉首尾空白、句末的 。！？；… 与右引号或右括号后的 text，在围栏代码块之外的原文（含行内代码与链接的原文）中查找；同一结束位置只取最长的论断文字。claim-sources（参数 kinds，字符串数组，默认 [experience, opinion, case, data]；source_types，字符串数组，默认 [author-note, interview, transcript]）：kind 在 kinds 中的每个论断（Claim）必须关联至少一份类型在 source_types 中的素材，否则报告一项发现项：没有关联素材时 message 说明缺少作者素材，只关联了其他类型的素材时 message 列出这些素材及其类型；两种 message 都含论断 id、wa-cli source add 与 wa-cli claim set <unit> <论断 id> --sources 的做法；位置为论断文字第一次出现处（text 为该文字），找不到时为全文级发现项。有 error 级 claim-sources 发现项时，lint.findings 诊断的 next 另含 wa-cli help source add --json、wa-cli help claim set --json 与 wa-cli claim list <unit> --dir <dir> --json。claim-candidates（参数 pronouns，默认 [我, 我们]；experience_markers，默认 [曾, 曾经, 当时, 那时, 那次, 去年, 前年, 上个月, 上周, 第一次, 亲自, 亲眼, 遇到, 经历过, 踩过, 做过, 参与, 负责]；data，布尔，默认 true；cover_kinds，字符串数组，默认 [experience, opinion, case, data]）：把散文段落中每行的可见文字在 。！？；… 与行尾处切分为句子；除标题行（不检测任何候选：标题是电报式标签而非散文论断，其中的数字应出现在正文句子中被登记）与引用块行（只检测数据）之外，句子中出现 experience_markers 中的词且其前有 pronouns 中的词时为亲历候选，每个标记词与它之前最近的代词组成一个亲历区间（从该代词到标记词所在分句的末尾，即下一个 ，、：；,;: 或句末标点之前，不含末尾空白）；同一分句的亲历区间中任一被覆盖即视为该分句的亲历已登记，句子中每个含亲历区间的分句都已登记时该句的亲历才算已登记，data 为 true 且句子的可见文字中有数字（含全角数字）后接 %、％、倍、个百分点、万或亿，或有「百分之」加数字、中文数字加「倍」时为数据候选（区间为该数据）。亲历候选的覆盖论断是 kind 在 cover_kinds 中的已登记论断，数据候选的覆盖论断是 kind 在 cover_kinds 中的已登记论断与关联了至少一份素材的 fact 论断；论断文字出现处整段覆盖候选区间时，该候选视为已登记。有未被覆盖的候选区间时报告一项发现项，位置为句子首个非空白字符，text 为句子的原文，message 说明未覆盖的候选种类并提示用 wa-cli claim add <unit> 登记并关联作者素材；message 末尾按 claims.yaml 中的顺序为每个满足下述条件、文字与该发现项的未覆盖候选区间重叠的已登记论断追加说明：类型不在 cover_kinds 中、且与未覆盖的亲历区间重叠或（kind 不为 fact 时）与未覆盖的数据区间重叠的论断，说明「论断 <论断 id>（<kind>）的类型不在 claim-candidates 的 cover_kinds（<cover_kinds 实际取值以、相连，为默认时冠以「默认」>）内，未参与覆盖」；kind 为 fact、未关联素材且文字与未覆盖的数据候选区间重叠的论断，说明「论断 <论断 id>（fact）未关联素材，不能覆盖数据候选」；同一论断两句都命中时各追加一句。发现项超过 MaxHits（1000）时只报告前 1000 项并报告 lint.truncated。'
+    statement: '合并结果中有生效的 claim-sources 或 claim-candidates 规则时，wa-cli lint 必须读取单元目录下的 claims.yaml（不存在时没有已登记的论断；不通过校验时报告其诊断并以退出码 1 退出，论断相关的规则不执行）与所引素材的类型，并按规则的 type 执行以下检查；两种规则都未生效时不读取 claims.yaml。论断文字的比较对象是去掉首尾空白、句末的 。！？；… 与右引号或右括号后的 text，在围栏代码块之外的原文（含行内代码与链接的原文）中查找；同一结束位置只取最长的论断文字。claim-sources（参数 kinds，字符串数组，默认 [experience, opinion, case, data]；source_types，字符串数组，默认 [author-note, interview, transcript]）：kind 在 kinds 中的每个论断（Claim）必须关联至少一份类型在 source_types 中的素材，否则报告一项发现项：没有关联素材时 message 说明缺少作者素材，只关联了其他类型的素材时 message 列出这些素材及其类型；两种 message 都含论断 id、wa-cli source add 与 wa-cli claim set <unit> <论断 id> --sources 的做法；位置为论断文字第一次出现处（text 为该文字），找不到时为全文级发现项。有 error 级 claim-sources 发现项时，lint.findings 诊断的 next 另含 wa-cli help source add --json、wa-cli help claim set --json 与 wa-cli claim list <unit> --dir <dir> --json。claim-candidates（参数 pronouns，默认 [我, 我们]；experience_markers，默认 [曾, 曾经, 当时, 那时, 那次, 去年, 前年, 上个月, 上周, 第一次, 亲自, 亲眼, 遇到, 经历过, 踩过, 做过, 参与, 负责]；data，布尔，默认 true；counters，布尔，默认 false；cover_kinds，字符串数组，默认 [experience, opinion, case, data]）：把散文段落中每行的可见文字在 。！？；… 与行尾处切分为句子；除标题行（不检测任何候选：标题是电报式标签而非散文论断，其中的数字应出现在正文句子中被登记）与引用块行（只检测数据）之外，句子中出现 experience_markers 中的词且其前有 pronouns 中的词时为亲历候选，每个标记词与它之前最近的代词组成一个亲历区间（从该代词到标记词所在分句的末尾，即下一个 ，、：；,;: 或句末标点之前，不含末尾空白）；同一分句的亲历区间中任一被覆盖即视为该分句的亲历已登记，句子中每个含亲历区间的分句都已登记时该句的亲历才算已登记，data 为 true 且句子的可见文字中有数字（含全角数字）后接 %、％、倍、个百分点、万或亿，或有「百分之」加数字、中文数字加「倍」时为数据候选（区间为该数据）；counters 为 true 时，数字（含全角数字）后接常见量词（人、个、条、次、天、月、年、元、名、位、场、篇、种、项、字、分钟、小时、周；数字与量词之间可有空白）同样为数据候选（区间为该数字、空白与量词），与其它数据候选同样受标题行跳过、引用块检测数据与已登记论断覆盖的约束；data 为 false 时不判断数据候选，counters 亦不生效；同一句中多个数据形态嵌套命中时（如「N 个百分点」同时命中「N 个百分点」与「N 个」）取最长区间，只计一个候选。亲历候选的覆盖论断是 kind 在 cover_kinds 中的已登记论断，数据候选的覆盖论断是 kind 在 cover_kinds 中的已登记论断与关联了至少一份素材的 fact 论断；论断文字出现处整段覆盖候选区间时，该候选视为已登记。有未被覆盖的候选区间时报告一项发现项，位置为句子首个非空白字符，text 为句子的原文，message 说明未覆盖的候选种类并提示用 wa-cli claim add <unit> 登记并关联作者素材（真实数据请关联素材；示意数字请在正文中注明，如「示意」）；message 末尾按 claims.yaml 中的顺序为每个满足下述条件、文字与该发现项的未覆盖候选区间重叠的已登记论断追加说明：类型不在 cover_kinds 中、且与未覆盖的亲历区间重叠或（kind 不为 fact 时）与未覆盖的数据区间重叠的论断，说明「论断 <论断 id>（<kind>）的类型不在 claim-candidates 的 cover_kinds（<cover_kinds 实际取值以、相连，为默认时冠以「默认」>）内，未参与覆盖」；kind 为 fact、未关联素材且文字与未覆盖的数据候选区间重叠的论断，说明「论断 <论断 id>（fact）未关联素材，不能覆盖数据候选」；同一论断两句都命中时各追加一句。发现项超过 MaxHits（1000）时只报告前 1000 项并报告 lint.truncated。'
     scenarios:
       claim-without-source:
         - GIVEN: 作品 my-post（minimal）的 claims.yaml 有 kind 为 experience、sources 为空、text 为「我们去年把连接池调到 50」的论断 claim-1，正文含这句话
@@ -210,6 +218,18 @@ requirements:
         - GIVEN: 项目配置 claim-candidates 规则的 cover_kinds 为 [fact]，正文为「我曾经踩过坑。」，登记了 kind 为 experience、text 为「我曾经踩过坑」的论断
         - WHEN: 运行 wa-cli lint my-post --dir D --json
         - THEN: findings 含一项说明为亲历的 claim-candidates 发现项，message 含该论断 id 与「的类型不在 claim-candidates 的 cover_kinds（fact）内，未参与覆盖」
+      counter-candidate:
+        - GIVEN: wechat-marketing 作品 post 的正文含「共同好友 12 人」，没有已登记的论断
+        - WHEN: 运行 wa-cli lint post --dir D --json
+        - THEN: findings 含一项 rule 为 claim-candidates、severity 为 warning 的发现项，message 含「数据」，退出码为 0
+      tech-blog-no-counters:
+        - GIVEN: tech-blog 作品 post（未开启 counters 参数）的正文含「3 个步骤」，没有已登记的论断
+        - WHEN: 运行 wa-cli lint post --dir D --json
+        - THEN: findings 中没有该句的数据候选发现项（「个」不在默认数据形态中），退出码为 0
+      counter-covered:
+        - GIVEN: wechat-marketing 作品 post 的正文含「共同好友 12 人」，claims.yaml 有文字含「共同好友 12 人」且关联了素材的论断
+        - WHEN: 运行 wa-cli lint post --dir D --json
+        - THEN: 该数据候选被覆盖，findings 中没有该句的发现项
   techblog-rule-types:
     strength: MUST
     statement: wa-cli lint 必须按规则的 type 执行以下技术写作检查，只检查正文、不访问网络。code-block-language（无参数）：每个开头的围栏（``` 或 ~~~）之后没有信息字符串的围栏代码块报告一项发现项，位置为开头的围栏行，message 提示写明语言。link-format（参数 schemes，字符串数组，默认 [http, https, mailto]）：围栏之外、不在行内代码与已闭合的 HTML 注释中的每个行内链接 [文字](地址) 与图片 ![替代文字](地址)，链接文字为空（图片除外）、地址为空、地址中含空白（尖括号包住的地址与带引号的标题除外）、协议不在 schemes 中、http 或 https 地址没有主机名时各报告一项发现项，位置为链接开头，text 为整个链接；不在链接地址中的裸 URL 没有主机名时同样报告。reference-sources（参数 source_types，至少一项的字符串数组，默认 [reference]，给出空数组时报告 rule.invalid-params；versions 与 apis，布尔，默认 true）：散文段落中的版本号（v 加数字与点，如 v2.3.1；三段及以上的数字版本，如 1.2.3；紧跟英文名称的两段版本，如 Go 1.22，在可见文字中查找）与 API 说法（内容为函数调用形式、不在 HTML 注释中的行内代码，如 http.Get(url)）必须被已登记论断的文字在原文中的出现处覆盖，且该论断关联至少一份类型在 source_types 中的素材；否则在提及处报告一项发现项，text 为该版本号或 API 说法，message 给出 wa-cli source add 与 wa-cli claim add <unit> 的做法。claims.yaml 不通过校验时 reference-sources 不执行；合并结果中有生效的 reference-sources 规则时 lint 读取 claims.yaml。

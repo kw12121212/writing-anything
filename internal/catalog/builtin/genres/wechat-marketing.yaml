@@ -33,6 +33,7 @@ rules:
   claim-candidates:
     type: claim-candidates
     severity: warning
+    params: {counters: true}
   conflicts:
     type: conflict-sources
     severity: error

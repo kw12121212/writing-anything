@@ -11,6 +11,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -38,9 +39,10 @@ var previewCommand = &command{
 		{"output", flagString, "静态阅读页的输出文件，相对 --dir；省略时为 .writing-anything/exports/<work>.preview.html（子单元为 <work>.<unit-id>.preview.html）；不能与 --serve 同时使用"},
 		{"serve", flagBool, "启动本地阅读页（只监听 127.0.0.1），一直运行到命令被中断或保存 --max 条反馈"},
 		{"port", flagString, "--serve 监听的端口，1 到 65535；省略时由系统分配"},
-		{"max", flagString, "--serve 保存指定条数的反馈后结束；省略时一直运行"}},
+		{"max", flagString, "--serve 保存指定条数的反馈后结束；省略时一直运行"},
+		{"allow-host", flagList, "--serve 允许的额外 Host 头（可重复，取值为 host 或 host:port，字面比较，不支持通配），供 tailscale serve 等反向代理远程访问；只放宽 Host 校验，令牌必需、监听地址仍为 127.0.0.1"}},
 	outputKeys: []outputKey{
-		{"preview", "阅读页：unit、units（按单元树先序列出的单元引用）、path（静态阅读页的路径，--serve 时为 null）与 url（--serve 时的页面地址，含令牌；否则为 null）；失败时为 null"},
+		{"preview", "阅读页：unit、units（按单元树先序列出的单元引用）、path（静态阅读页的路径，--serve 时为 null）、url（--serve 时的页面地址，含令牌；否则为 null）与 remoteUrl（给出 --allow-host 时按第一个白名单 Host 拼出的远程地址，含令牌，协议以代理侧配置为准——不带端口或 443 推导为 https；未给出时缺省）；失败时为 null"},
 		{"feedback", "--serve 时每保存一条反馈输出一行，含 " + feedbackViewHelp + "；其他行为 null"},
 		{"confirmation", "--serve 时作者在阅读页每记录一次确认输出一行，含 kind（acceptance、decision、plan、state、knowledge 或 volume）、unit、action（confirm 或 reject）与 channel（preview）；id 只在 decision、plan、state 与 knowledge 出现（各自的条目 id），acceptance 与 volume 没有条目 id、不含 id 字段；其他行为 null"},
 		{"authorReview", "--serve 时作者在阅读页每批量复核一次输出一行，含 reviewed（被复核的待作者复核项，每项含 key、kind、work、ref、path、confirmation 与 confirmedAt）与 channel（preview）；其他行为 null"},
@@ -54,6 +56,8 @@ type previewView struct {
 	Units []string `json:"units"`
 	Path  *string  `json:"path"`
 	URL   *string  `json:"url"`
+	// RemoteURL 是给出 --allow-host 时按第一个白名单 Host 拼出的远程地址；未给出白名单时缺省。
+	RemoteURL *string `json:"remoteUrl,omitempty"`
 }
 
 type previewResult struct {
@@ -76,36 +80,62 @@ func previewPath(w *work.Work, u *work.Unit) string {
 	return export.ExportsDir + "/" + name + ".preview.html"
 }
 
-// previewFlags 检查参数组合与取值；返回端口（0 为由系统分配）与 --max（0 为不限）。
-func previewFlags(inv *invocation) (port, limit int, p *workspace.Problem) {
+// previewFlags 检查参数组合与取值；返回端口（0 为由系统分配）、--max（0 为不限）与 --allow-host 白名单。
+func previewFlags(inv *invocation) (port, limit int, allowHosts []string, p *workspace.Problem) {
 	serve := inv.flag("serve")
 	for _, name := range []string{"port", "max"} {
 		if v, ok := inv.values[name]; ok && !serve {
 			q := invalidValue(name, v, "--"+name+" 只用于 --serve")
-			return 0, 0, &q
+			return 0, 0, nil, &q
 		}
+	}
+	if hosts := inv.lists["allow-host"]; len(hosts) > 0 && !serve {
+		q := invalidValue("allow-host", hosts[0], "--allow-host 只用于 --serve")
+		q.Field = "allow-host"
+		return 0, 0, nil, &q
 	}
 	if v, ok := inv.values["output"]; ok && serve {
 		q := invalidValue("output", v, "--output 只用于静态阅读页，不能与 --serve 同时使用")
-		return 0, 0, &q
+		return 0, 0, nil, &q
 	}
 	if v, ok := inv.values["port"]; ok {
 		n, err := strconv.Atoi(v)
 		if err != nil || n < 1 || n > 65535 {
 			q := invalidValue("port", v, "应为 1 到 65535 的整数")
-			return 0, 0, &q
+			return 0, 0, nil, &q
 		}
 		port = n
 	}
+	for _, h := range inv.lists["allow-host"] {
+		// 端口与 --port 同口径：1 到 65535。
+		if !allowHostRE.MatchString(h) {
+			q := invalidValue("allow-host", h, "应为 host 或 host:port（域名段由字母、数字与连字符组成，端口为 1 到 65535），不支持通配")
+			q.Field = "allow-host"
+			return 0, 0, nil, &q
+		}
+		if _, port, err := net.SplitHostPort(h); err == nil {
+			if n, err := strconv.Atoi(port); err != nil || n < 1 || n > 65535 {
+				q := invalidValue("allow-host", h, "端口应为 1 到 65535")
+				q.Field = "allow-host"
+				return 0, 0, nil, &q
+			}
+		}
+		if !slices.Contains(allowHosts, h) {
+			allowHosts = append(allowHosts, h)
+		}
+	}
 	limit, p = positive(inv, "max", 0)
-	return port, limit, p
+	return port, limit, allowHosts, p
 }
+
+// allowHostRE 匹配 --allow-host 的合法取值：host 或 host:port，字面值、不含通配（cli-contract/loopback-only-server）。
+var allowHostRE = regexp.MustCompile(`^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*(:[0-9]{1,5})?$`)
 
 func runPreview(inv *invocation) int {
 	dir := projectDir(inv)
 	res := &previewResult{}
 	problems := workspace.Require(dir)
-	port, limit, p := previewFlags(inv)
+	port, limit, allowHosts, p := previewFlags(inv)
 	if problems == nil && p != nil {
 		problems = []workspace.Problem{*p}
 	}
@@ -116,7 +146,7 @@ func runPreview(inv *invocation) int {
 	}
 	if u != nil {
 		if inv.flag("serve") {
-			return servePreview(inv, dir, w, u, port, limit)
+			return servePreview(inv, dir, w, u, port, limit, allowHosts)
 		}
 		units := preview.Subtree(u)
 		sp := preview.Build(dir, w, units, unitLint(dir, w))
@@ -180,7 +210,7 @@ type previewServer struct {
 	closing sync.Once
 }
 
-func servePreview(inv *invocation, dir string, w *work.Work, u *work.Unit, port, limit int) int {
+func servePreview(inv *invocation, dir string, w *work.Work, u *work.Unit, port, limit int, allowHosts []string) int {
 	ln, err := net.Listen("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(port)))
 	if err != nil {
 		res := &previewResult{}
@@ -203,9 +233,23 @@ func servePreview(inv *invocation, dir string, w *work.Work, u *work.Unit, port,
 		// 浏览器对默认端口不写端口号。
 		s.hosts = append(s.hosts, addr.IP.String(), "localhost")
 	}
+	// --allow-host 白名单按字面追加：唯一放宽 Host 校验的方式，令牌与监听地址不变（cli-contract/loopback-only-server）。
+	s.hosts = append(s.hosts, allowHosts...)
 	url := "http://" + hostport + "/?token=" + s.token
 	s.view = &previewView{Unit: u.Ref, Units: refs(preview.Subtree(u)), URL: &url}
-	if err := s.emit(&previewResult{Preview: s.view}, "阅读页（Reading View）："+url+"（按 Ctrl+C 结束）\n"); err != nil {
+	remote := "阅读页（Reading View）：" + url + "（按 Ctrl+C 结束）"
+	if len(allowHosts) > 0 {
+		// 按第一个白名单 Host 拼远程地址：不带端口或 443 推导为 https，其余用 http；实际协议以代理侧配置为准。
+		host := allowHosts[0]
+		scheme := "http"
+		if _, port, err := net.SplitHostPort(host); err != nil || port == "443" {
+			scheme = "https"
+		}
+		remoteURL := scheme + "://" + host + "/?token=" + s.token
+		s.view.RemoteURL = &remoteURL
+		remote += "；远程地址（经反向代理，协议以代理配置为准）：" + remoteURL
+	}
+	if err := s.emit(&previewResult{Preview: s.view}, remote+"\n"); err != nil {
 		ln.Close()
 		return writeFailed(inv.stderr, err)
 	}

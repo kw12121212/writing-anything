@@ -1,0 +1,21 @@
+schema: strict-spec-driven/delta-spec/v1
+schema_version: 1
+artifact_type: delta_spec
+schema_file: templates/strict-spec-driven/schemas/delta-spec.yaml
+target_spec: skills
+operations:
+  ADDED:
+    confirmation-guard-guidance:
+      strength: MUST
+      statement: 内置技能 wa-publish 与 wa-auto 的「必须停下来问作者」一节必须写明确认（Confirmation）边界：作者没有在对话、阅读页（Reading View）或插件面板中明确确认时，不得带 --confirmed-by-author 运行 accept，也不得把「假设」「试用」等不是作者原话的文字写进 --confirmation 冒充确认；流程试用（试走一遍流程）在 standard 或 fast 关卡（Gate Level）下不带确认验收（confirmedByAuthor 为 false），strict 关卡要求作者确认——试用不能以 strict 关卡验收。内置技能 wa-revise 必须写明验收（Acceptance）后的小改路径：只改排版或个别字词、不涉及观点、事实或论断（Claim）时，经作者同意用 wa-cli review record <单元> --reaffirm --summary <变化摘要> 重申（Reaffirm；重申只解除审稿过期，验收记录仍按旧正文判过期——单元已推进到 done 时先经作者同意 reopen 退回），再请作者重新确认验收并推进，不要整份重审；改动涉及观点、事实或论断时仍走完整审稿与 reopen。wa-revise 引用的命令必须包含 review record。
+      scenarios:
+        guard-text-present:
+          - GIVEN: wa-cli skills list --json 列出内置技能
+          - WHEN: 读取 wa-publish 与 wa-auto 的正文
+          - THEN: 两个技能的「必须停下来问作者」一节都含「不得带 --confirmed-by-author」、不得把「假设」「试用」写进 --confirmation 的约束，以及试用在 standard 或 fast 关卡下不带确认验收、strict 关卡要求作者确认的说明
+        revise-reaffirm-path:
+          - GIVEN: 同上，读取 wa-revise 的正文
+          - WHEN: 检查其步骤与引用的命令
+          - THEN: 正文写明验收后只改排版或个别字词时经作者同意用 review record --reaffirm --summary 重申再请作者重新确认验收、涉及观点、事实或论断时仍走完整审稿，且引用的命令包含 review record
+  MODIFIED: {}
+  REMOVED: {}

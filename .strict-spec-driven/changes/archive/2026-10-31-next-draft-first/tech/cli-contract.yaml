@@ -1,0 +1,21 @@
+schema: strict-spec-driven/delta-tech/v1
+schema_version: 1
+artifact_type: delta_tech
+schema_file: templates/strict-spec-driven/schemas/delta-tech.yaml
+target_standard: cli-contract
+operations:
+  ADDED:
+    state-transition-both-sides:
+      strength: SHOULD
+      statement: delta spec 场景声明某状态翻转前后同一命令的输出时（如「写入正文后再运行，questions 含某项」），测试必须在翻转后复跑该命令并断言恢复项，不得只以另一命令（如 next）的恢复作为该命令（如 marketing show）的证据；两个命令共享同一判定函数的事实不能替代该断言——共享的判定恰恰会掩盖事实输入（如存在性探测）的分叉。
+      rationale: next-draft-first 的 show-unasked-waits-for-draft 场景要求写入正文后 marketing show 恢复报告，初版测试只复跑了 next；评审发现的 next/show 探测分叉正落在 show 路径上，补上 show 的复跑断言才把两个入口的一致性锁进测试。
+      enforcement:
+        method: review
+        detail: 评审 delta spec 场景与对应测试时逐一核对：场景里的每个 THEN 在测试中有直接断言，状态翻转后的复跑覆盖场景点名的每个命令。
+      examples:
+        good:
+          - 写入正文后先断言 next 报 headline-unasked，再复跑 marketing show 断言 questions 同样含 headline-unasked。
+        bad:
+          - 场景写「写入后再运行 show 应含某项」，测试只在写入后断言了 next，show 的恢复从未被执行。
+  MODIFIED: {}
+  REMOVED: {}

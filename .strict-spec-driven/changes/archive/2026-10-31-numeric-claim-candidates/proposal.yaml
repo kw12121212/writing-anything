@@ -1,0 +1,31 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: numeric-claim-candidates
+  status: proposed
+summary:
+  what:
+    - claim-candidates 规则新增可选参数 counters（布尔，缺省 false）：开启时「数字＋常见量词」（人、个、条、次、天、月、年、元等）也作为数据候选，未登记论断时报 warning；内置文体中只在 wechat-marketing 开启；候选发现项的提示文字说明真实数据请登记论断并关联素材、示意数字请在正文中注明
+  why:
+    - 公众号营销文里「共同好友 12 人」这类具体数字是营销合规的关键出处点，但 dataRE 只认 %、倍、万、亿等形式，数字＋量词漏检；其他文体（如 tech-blog 的「3 个步骤」）多为步骤序号，报了反而是噪音（2026-10-30 公众号流程复盘 R2）
+scope:
+  in:
+    - 候选发现项 message 追加「示意数字请在正文中注明」的提示（真实数据登记论断并关联素材；确属泛指时作者单处豁免的既有提示保留）
+    - '内置 wechat-marketing 文体的 claim-candidates 规则 params 增加 counters: true，其余内置文体不开启'
+    - lint 主规格 claim-rule-types 与 genres-and-packs 主规格 wechat-marketing-genre 的 delta 同步参数、量词表与文体开关
+    - 测试：wechat-marketing 夹具「共同好友 12 人」未登记论断时报 warning 级数据候选；tech-blog 夹具「3 个步骤」不报；已登记并关联素材的论断覆盖时不报
+    - checkCandidates 读取规则参数 p.bool(counters, false)
+  out:
+    - 不改 claim-sources、conflict-sources 等其他论断规则
+    - 不把 counters 设为缺省开启（其他文体与既有夹具行为不变）
+    - 不新增量词的自定义参数（用内置固定表；确有需要时另行变更）
+    - 不改标题行跳过与引用块只检测数据的既有候选语义（计数候选作为数据候选遵循同样语义）
+unchanged_behavior:
+  - counters 缺省 false 时所有文体的 claim-candidates 行为与现在完全一致（dataRE 原有形态照旧）
+  - 标题行不产生任何候选、引用块行只检测数据、亲历候选按 cover_kinds 覆盖、MaxHits 截断等既有语义不变
+  - wechat-marketing 的其余规则（claims、ads、length、paragraphs）与上下文预算不变
+roadmap:
+  milestone: wechat-flow-feedback
+  planned_change: numeric-claim-candidates

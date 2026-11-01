@@ -1,0 +1,34 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: next-draft-first
+sections:
+  Implementation:
+    marketing-draft-gate:
+      text: internal/marketing：Questions 与 Check 增加 draftPresent 参数，标题决策状态为 none 且正文未写入时省略 headline-unasked（stale、too-many-headlines、missing-field 照常）；internal/work 的 marketingBlockers 与 internal/cli/marketing.go 的 marketing show（含 set 后的 questions）传入 workspace.IsRegular 计算的正文存在性（单一探测，两入口同口径），更新既有 Check/Questions 调用点与测试
+      status: complete
+  Testing:
+    unit-tests:
+      text: wechat-marketing 夹具：草稿阶段、正文未写入、两个以上候选时 next 阻塞项不含 marketing.headline-unasked 且 commands 不含 wa-cli help marketing ask；draft write 写入正文后出现；marketing show 的 questions 同口径；决策过期（stale）没有正文也照常报；正文已写入的既有行为回归不变
+      status: complete
+      command: go test ./internal/marketing/... ./internal/work/... ./internal/cli/...
+    project-regression:
+      text: 完整回归（review_evidence.project_regression）：构建、全部测试与 80% 覆盖率门槛
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    ready-check:
+      text: ready 检查变更构件齐备
+      status: complete
+      command: strict-spec-cli ready next-draft-first
+    verify-check:
+      text: verify 校验变更构件与引用一致性
+      status: complete
+      command: strict-spec-cli verify next-draft-first
+    archive-consistency:
+      text: 归档前检查：delta-spec 两条 MODIFIED 与实现逐条对照（仅压 unasked、stale 照常、两入口同口径），核对既有 next-blocked-by-marketing 场景夹具（有 draft.md）不受影响
+      status: complete
+testing_gates:
+  validation_task: project-regression
+  unit_test_task: unit-tests

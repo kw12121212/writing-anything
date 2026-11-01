@@ -1,0 +1,50 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: brief-shared-decision
+sections:
+  Implementation:
+    brief-decision-flag:
+      text: 在 internal/cli/brief.go 的 briefSetCommand.flags 注册 --decision <决策 id>：说明它是本次调用统一使用的决策，只为本次写入且没有显式字段级决策的字段、前提与核心观点补位，显式字段级决策优先、删除不补位；同步调整 --audience-decision 等字段级参数的说明指向 --decision。
+      status: complete
+    brief-decision-fill:
+      text: 在 briefEdit 中解析 --decision：为本次写入的 audience、purpose、theme、pov、length 写入 provenance.decision，为本次写入的前提写入 premise.decision，为本次写入的核心观点写入 key_messages[i].decision；显式字段级参数优先，空字符串视为未给出；只给 --decision 而没有写入任何字段、前提或核心观点时报告 input.invalid-value（field 为 decision）。
+      status: complete
+    wa-brief-skill:
+      text: 更新 internal/skills/skills/wa-brief/SKILL.md：把多字段确认改成一条 brief set --decision 命令的写法，说明显式字段级决策优先，并保留只确认单条观点时的 --message-decision 路径。
+      status: complete
+    skill-history:
+      text: 运行 go test ./internal/skills，按 TestSkillHistoryCoversCurrent 的失败信息把 wa-brief 的新哈希追加到 internal/skills/history.txt。
+      status: complete
+    zcode-skills:
+      text: 在 plugins/zcode-writing-viewer 运行 node scripts/stage-skills.mjs，重新生成 13 个技能副本并逐字核对 wa-brief/SKILL.md。
+      status: complete
+  Testing:
+    brief-decision-tests:
+      text: 在 internal/cli/brief_test.go 增加测试：--decision 写入 provenance、前提与核心观点；显式字段级覆盖与显式空值删除；删除字段与未写入的字段不补位；只给 --decision 或没有补位对象时报 input.invalid-value（field 为 decision）；--decision 引用未知、无关决策与决策队列无法加载时沿用字段级参数的诊断。
+      status: complete
+    focused-tests:
+      text: 聚焦测试：brief 命令、brief 包与内置技能历史。
+      status: complete
+      command: go test ./internal/cli ./internal/brief ./internal/skills
+    full-regression:
+      text: 完整项目回归：go vet、go build、全部 go test 与覆盖率检查（阈值 80%，范围 internal/** 不含 internal/tools/**）。
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    verify-strict:
+      text: strict 校验：ready 与 verify 通过，delta 规格的 brief-set 覆盖新增场景。
+      status: complete
+      command: strict-spec-cli ready brief-shared-decision && strict-spec-cli verify brief-shared-decision
+    verify-help:
+      text: 命令帮助核对：wa-cli help brief set --json 含 --decision 及其说明。
+      status: complete
+      command: go run ./cmd/wa-cli help brief set --json
+    verify-skill-sync:
+      text: 技能副本核对：history.txt 含当前 wa-brief 哈希，ZCode 插件捆绑的 wa-brief/SKILL.md 与源文件逐字一致。
+      status: complete
+      command: go test ./internal/skills -run TestSkillHistoryCoversCurrent && node plugins/zcode-writing-viewer/scripts/stage-skills.mjs
+testing_gates:
+  validation_task: full-regression
+  unit_test_task: focused-tests

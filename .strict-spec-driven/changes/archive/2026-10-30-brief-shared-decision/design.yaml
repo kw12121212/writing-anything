@@ -1,0 +1,28 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: brief-shared-decision
+approach:
+  - 在 internal/cli/brief.go 的 briefEdit 中解析 --decision，把它补位成本次写入字段、前提与核心观点的显式决策后再交给 brief.Edit；写入与校验沿用 brief 包的现有路径，不新增 brief 包参数。
+decisions:
+  resolve-in-brief-edit:
+    decision: 通用 --decision 在 CLI 层解析并补位到 brief.Edit 的字段级决策
+    rationale: roadmap 已把改动位置定在 brief.go 的字段出处循环与观点写入附近；brief 包的字段级校验、写入与诊断无需改动，通用决策与字段级决策共用同一条路径。
+  fill-written-values-only:
+    decision: 通用决策只为本次写入且取值为非空的字段、前提与核心观点补位；删除字段、删除子字段与未写入的字段都不补位
+    rationale: 删除后字段不存在，出处没有意义；brief.Set 在删除标量字段时本来就会清理 provenance，补位会把出处写回已删除的字段。
+  explicit-field-decision-wins:
+    decision: 显式给出的 --<字段>-decision、--premise-decision 与 --message-decision 优先于 --decision，取值为空字符串时同样优先（按删除处理）
+    rationale: 字段级参数是作者对单个字段的明确选择，--decision 只是缺省补位。
+  diagnostics-use-field-level-names:
+    decision: 通用 --decision 沿用字段级参数的校验与诊断字段名；只给 --decision 时报 input.invalid-value（field 为 decision）
+    rationale: 校验与写入走同一条路径，作者按诊断提示补对应的字段级参数或修决策队列即可。
+alternatives:
+  - option: 在 internal/brief 的 Edit 增加 SharedDecision 字段，由 brief.Set 统一补位
+    reason: 把 CLI 参数语义下沉到包内，需要改动 brief.Set 的写入与校验路径及所有调用方，超出 roadmap 指定的改动范围。
+  - option: 在 brief show 的问题清单中直接给出建议命令（复盘 F3 的备选方案）
+    reason: 改变 brief show 的输出契约，且只提示写法、不减少多字段确认的命令轮次。
+risks:
+  - SKILL.md 改动后必须同步 history.txt 与 ZCode 插件捆绑副本，否则 TestSkillHistoryCoversCurrent 与逐字核对失败。
+  - 补位规则与作者预期不符时会给字段挂上错误的确认记录；用显式字段级覆盖、删除不补位与 --decision 引用未知决策的测试固定行为。

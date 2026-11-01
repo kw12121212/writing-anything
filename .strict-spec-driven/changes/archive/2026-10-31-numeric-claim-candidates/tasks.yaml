@@ -1,0 +1,37 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: numeric-claim-candidates
+sections:
+  Implementation:
+    counters-rule:
+      text: internal/lint/claims.go：新增 counterRE（阿拉伯数字含全角＋固定量词表：人、个、条、次、天、月、年、元、名、位、场、篇、种、项、字、分钟、小时、周）；candidates 增加 counters 参数并入数据候选扫描；checkClaimCandidates 用 p.bool(counters, false) 读取；发现项 message 追加「示意数字请在正文中注明」
+      status: complete
+    genre-enablement:
+      text: '内置 wechat-marketing 文体的 claim-candidates 规则 params 增加 counters: true（internal/catalog/builtin/genres/wechat-marketing.yaml）；核对内置文体校验与 resolved 输出'
+      status: complete
+  Testing:
+    unit-tests:
+      text: wechat-marketing 夹具「共同好友 12 人」未登记论断时报 warning 级数据候选（resolved 的 claim-candidates params.counters 为 true）；tech-blog 夹具「3 个步骤」不报；已登记并关联素材的论断覆盖时不报；counters 缺省 false 的既有夹具行为不变；标题行与引用块语义不变
+      status: complete
+      command: go test ./internal/lint/... ./internal/cli/... ./internal/catalog/...
+    project-regression:
+      text: 完整回归（review_evidence.project_regression）：构建、全部测试与 80% 覆盖率门槛
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    ready-check:
+      text: ready 检查变更构件齐备
+      status: complete
+      command: strict-spec-cli ready numeric-claim-candidates
+    verify-check:
+      text: verify 校验变更构件与引用一致性
+      status: complete
+      command: strict-spec-cli verify numeric-claim-candidates
+    archive-consistency:
+      text: 归档前检查：delta-spec（claim-rule-types、wechat-marketing-genre）与实现逐条对照——量词表逐字一致、message 文案、文体开关；核对既有 wechat-marketing 夹具未因计数候选新增发现项而翻转
+      status: complete
+testing_gates:
+  validation_task: project-regression
+  unit_test_task: unit-tests

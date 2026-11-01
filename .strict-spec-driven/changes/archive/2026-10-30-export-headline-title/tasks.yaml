@@ -1,0 +1,40 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: export-headline-title
+sections:
+  Implementation:
+    title-digest-resolution:
+      text: internal/export 新增统一的标题与摘要解析：标题依次取根单元 marketing.yaml 中标题决策状态为 decided 时选定的标题（marketing.Load + marketing.LoadQueue 推导 HeadlineState；marketing.yaml 缺失、无法加载或状态非 decided 时视为没有选定标题，不新增诊断，与 frontMatter 忽略 brief 加载问题的做法一致）、第一个导出单元正文中围栏代码块之外的首个一级标题（FirstHeading）、作品 id；摘要依次取根单元 marketing.yaml 的 digest、根单元写作简报的 purpose。frontMatter（internal/export/export.go）与可粘贴页页面 title（internal/export/paste.go）共用该解析，替换两处各自取 FirstHeading 的现状。
+      status: complete
+    paste-copy-buttons:
+      text: internal/export/paste.go：可粘贴页模板按需在工具栏渲染「复制标题」「复制摘要」按钮，标题与摘要文字放在 id 独立、位于 wa-article 正文容器之外的容器中（data-copy 指向对应容器）；根单元没有选定标题（标题决策状态非 decided）或没有 digest 时不渲染对应按钮与容器；正文 HTML 不插入一级标题；复制脚本 pasteScript 与 Content-Security-Policy 哈希保持逐字节不变（脚本已按 data-copy 属性通用定位按钮）。
+      status: complete
+    print-headline-digest:
+      text: internal/export/paste.go 的 --print 结果与 internal/cli/export.go：export.headline（仅根单元标题决策状态为 decided 时选定的标题文字）与 export.digest（仅根单元 marketing.yaml 的 digest）只在 paste-html --print 的 --json 输出中出现，没有对应值时字段仍出现、取值为 null（注意 Go 视图结构需区分「字段缺失」与「字段为 null」，如二级指针），html 与 segments 及其余字段不变；export 命令的 outputKeys help 同步说明两个字段（MCP tools 随注册表自动更新）。
+      status: complete
+  Testing:
+    go-headline-tests:
+      text: internal/cli 与 internal/export 的单元测试，覆盖 delta 规格场景：公众号夹具（wechat-marketing，正文无一级标题、根单元标题决策状态为 decided、marketing.yaml 有 digest，夹具按既有测试做法生成）断言 export --front-matter 的 title 为选定标题、description 为 digest（front-matter-decided-headline）；标题决策过期（stale）时 title 退回正文首个一级标题、description 仍为 digest（front-matter-stale-fallback）；paste-html 页面 title 为选定标题、工具栏有「复制标题」「复制摘要」按钮、标题与摘要文字在 wa-article 之外的容器中、正文 HTML 无新插入的一级标题（paste-title-copy-buttons）；--print --json 的 headline 与 digest 取选定值（print-headline-digest）；tech-blog 夹具（无 marketing.yaml）页面无两个新按钮、title 为首个一级标题、--print 的 headline 与 digest 为 null 且字段仍出现、既有 e2e 导出与 wechat/text 测试逐字节不变（paste-no-headline-no-buttons、print-headline-digest-null、paste-other-formats-unchanged）；paste 页面既有结构断言（脚本唯一、CSP、无外部资源）保持通过。
+      status: complete
+      command: go test ./internal/export/... ./internal/cli/...
+    plugin-compat-tests:
+      text: plugins/dsh-writing-viewer：跑插件检查确认 copyroutes.ts 与 copyview.ts 消费 wa-cli export --format paste-html --print --json 对追加的 headline 与 digest 字段兼容（copyBodyOf 只取 html、segments、images 与 diagnostics，现有断言不破；不新增面板按钮）。
+      status: complete
+      command: cd plugins/dsh-writing-viewer && pnpm run check
+    full-regression:
+      text: 运行完整项目回归（含 80% 覆盖率门槛）。
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    strict-checks:
+      text: 运行 strict ready 与 strict verify，确认变更产物齐全、delta 规格语句与场景可归档合并。
+      status: complete
+      command: strict-spec-cli ready export-headline-title && strict-spec-cli verify export-headline-title
+    scope-check:
+      text: 逐条核对 proposal 的 out_of_scope 与 unchanged_behavior：wechat-html 与 text 的输出逐字节不变；不带 --print 的 paste-html --json 不含 headline 与 digest；DSH 面板无新增按钮；marketing/brief/decisions 命令行为不变；正文 HTML 未插入一级标题；复制脚本与 CSP 哈希未变。
+      status: complete
+testing_gates:
+  validation_task: full-regression
+  unit_test_task: go-headline-tests

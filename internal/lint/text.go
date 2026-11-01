@@ -325,8 +325,19 @@ func (t *text) nextParagraph(i int) int {
 	return lo
 }
 
-// charsOf 返回第 first 到 last 行中可见的、去掉 Markdown 标题标记后的非空白字符数。
+// charsOf 返回第 first 到 last 行中可见的、去掉 Markdown 标题标记后的非空白字符数（含标点）。
 func (t *text) charsOf(first, last int) int {
+	return t.countOf(first, last, func(r rune) bool { return !unicode.IsSpace(r) })
+}
+
+// cjkCharsOf 返回第 first 到 last 行中可见的、去掉 Markdown 标题标记后的汉字数（Unicode Han；
+// 全角标点与假名等不计入）。与 charsOf 共用同一屏蔽与去标题处理，两个口径不会漂移。
+func (t *text) cjkCharsOf(first, last int) int {
+	return t.countOf(first, last, func(r rune) bool { return unicode.Is(unicode.Han, r) })
+}
+
+// countOf 返回第 first 到 last 行中可见的、去掉 Markdown 标题标记后满足 keep 的字符个数。
+func (t *text) countOf(first, last int, keep func(rune) bool) int {
 	n := 0
 	for i := first; i <= last; i++ {
 		v := t.vis[i]
@@ -338,7 +349,7 @@ func (t *text) charsOf(first, last int) int {
 			k += len([]rune(m))
 		}
 		for _, r := range v[k:] {
-			if !unicode.IsSpace(r) {
+			if keep(r) {
 				n++
 			}
 		}
@@ -346,8 +357,11 @@ func (t *text) charsOf(first, last int) int {
 	return n
 }
 
-// chars 返回正文字数。
+// chars 返回正文字数（非空白字符数，含标点）。
 func (t *text) chars() int { return t.charsOf(0, len(t.lines)-1) }
+
+// cjkChars 返回正文汉字数。
+func (t *text) cjkChars() int { return t.cjkCharsOf(0, len(t.lines)-1) }
 
 func blank(v []rune, from, to int) {
 	for k := from; k < to && k < len(v); k++ {

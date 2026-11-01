@@ -1,0 +1,21 @@
+schema: strict-spec-driven/delta-tech/v1
+schema_version: 1
+artifact_type: delta_tech
+schema_file: templates/strict-spec-driven/schemas/delta-tech.yaml
+target_standard: cli-contract
+operations:
+  ADDED:
+    counting-scope-stated-once:
+      strength: SHOULD
+      statement: 同一统计口径（如字数、汉字数）出现在命令 help 的输出键或参数说明、诊断 message、人读文本输出与 docs/GLOSSARY.md 时，必须使用同一句口径文字（如「非空白字符数，含标点」），并在同一变更中同步修改所有出现处；测试以同一字面量断言各处文案。
+      rationale: 公众号流程复盘 R3 的根因正是口径句只写一半：help 写了「非空白字符数」没写「含标点」，作者按汉字估篇幅时理解分叉。length-counting-clarity 的做法是把同一句口径写进 lint help、length-range 诊断、brief set --length 的 help、文本摘要行与 GLOSSARY 五处，并用同一字面量在测试中锁定；text-json-parity 只约束文本与 JSON 的字段对应，不约束口径句跨命令、跨文档的逐字一致，此规则补上该缝隙。
+      enforcement:
+        method: test
+        detail: internal/cli 的测试以规格中的口径字面量断言 help 输出键说明、flag 说明与文本输出中的同一句口径；代码审查时确认新增口径表述没有第五种写法。
+      examples:
+        good:
+          - length-counting-clarity 在 lint help 的 chars 键、cjkChars 键、length-range 诊断 message、brief set --length help 与 GLOSSARY 用同一句「非空白字符数，含标点」，TestLintCountingClarity 用同一字面量断言。
+        bad:
+          - help 写「非空白字符数」而诊断 message 写「含标点的字符数」：两句各自正确但读者无法确认是同一口径。
+  MODIFIED: {}
+  REMOVED: {}

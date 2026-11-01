@@ -419,9 +419,12 @@ func (w *Work) outlineBlockers(root string, u *Unit, q brief.Queue) []Blocker {
 
 // marketingBlockers 返回单元 u 的营销要素（Marketing Elements）阻塞项：marketing.yaml 不通过校验时一条 marketing.invalid，否则
 // 每个仍缺的要素一条；单元目录下没有 marketing.yaml 与 marketing.md 时没有（由缺失产物报告）。标题决策尚未决定时由决策阻塞项报告。
+// 正文未写入时不报 headline-unasked（标题按正文选定，等正文写好再提示提问）；正文存在性与 marketing show 共用
+// workspace.IsRegular 的同一判定（"/draft.md" 对应 internal/draft 的 FileName，本包不 import 它以免领域包互相依赖）。
 func (w *Work) marketingBlockers(root string, u *Unit, q marketing.Queue) []Blocker {
 	dir := w.UnitDir(u)
-	g := marketing.Check(root, dir, isFile(root, marketing.Path(dir)), isFile(root, dir+"/"+marketing.MDName), q)
+	g := marketing.Check(root, dir, isFile(root, marketing.Path(dir)), isFile(root, dir+"/"+marketing.MDName),
+		workspace.IsRegular(root, dir+"/draft.md"), q)
 	if g == nil {
 		return nil
 	}

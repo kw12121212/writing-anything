@@ -1,0 +1,21 @@
+schema: strict-spec-driven/delta-tech/v1
+schema_version: 1
+artifact_type: delta_tech
+schema_file: templates/strict-spec-driven/schemas/delta-tech.yaml
+target_standard: go-project-structure
+operations:
+  ADDED:
+    wordlist-regex-snapshot-tests:
+      strength: SHOULD
+      statement: 把固定词表编译进正则、且词表逐字写进主规格的匹配（如 lint 的数据候选 dataRE 与 counterRE），必须有逐项行为快照测试：断言词表中每个词命中、每个形近非词（如同类量词的秒/部/日、纯数字、日期）不命中，以及与规格一致的形态边界（全角字符、空白）。只测一两个代表词时，「规格与正则逐字一致」只存在于注释里，不可执行。
+      rationale: counterRE 的量词表逐字写进了 claim-rule-types 规格，但初版只有 e2e 的一个量词用例；评审指出 18 个量词只有「人」「个」被触达、正则调整时没有护栏。dataRE 是同类第一例且至今没有逐项快照——固定词表与规格的一致性应像契约字面量一样被测试锁定。
+      enforcement:
+        method: test
+        detail: internal/lint 的 TestCounterCandidates 以表驱动断言每个量词命中与形近非词不命中；为 dataRE 补同类测试时同样适用。
+      examples:
+        good:
+          - TestCounterCandidates 遍历量词表逐项断言，另断言纯数字、ISO 日期、时间与序数不命中。
+        bad:
+          - 只断言「共同好友 12 人」一个用例，量词表改掉一半测试仍全绿。
+  MODIFIED: {}
+  REMOVED: {}

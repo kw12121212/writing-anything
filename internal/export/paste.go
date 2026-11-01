@@ -13,7 +13,9 @@ import (
 )
 
 // 可粘贴页（Paste-ready Page，paste-html）：正文按公众号 HTML 的规则渲染，可用的本地配图以受信 data URI 内嵌为图像，外包一个带「复制图文」
-// 按钮的完整 HTML 文档。页面始终不含 AI 参与说明与封面图；资产目录与配图清单照常写出，作为目标编辑器不接受内嵌图片时的兜底。
+// 按钮的完整 HTML 文档。作者已选定标题（标题决策为 decided）或有文章摘要（Digest）时，工具栏另有「复制标题」「复制摘要」按钮，标题与摘要
+// 文字放在正文容器之外的单独容器中（公众号编辑器的标题与摘要是单独输入框，正文不插入一级标题）。页面始终不含 AI 参与说明与封面图；
+// 资产目录与配图清单照常写出，作为目标编辑器不接受内嵌图片时的兜底。
 
 // FormatPaste 是可粘贴页的导出格式。
 const FormatPaste = "paste-html"
@@ -93,7 +95,11 @@ var pastePage = template.Must(template.Must(page.Clone()).Funcs(template.FuncMap
 {{range .Segments}}<button data-copy="{{.ID}}" type="button" style="font-size: 14px; padding: 6px 12px; margin: 0 8px 8px 0; cursor: pointer">{{.Label}}</button>{{end}}<button data-copy="wa-article" type="button" style="font-size: 14px; padding: 6px 12px; margin: 0 8px 8px 0; cursor: pointer">复制全文</button>
 <div id="wa-status">公众号每次粘贴最多 7 张图：请依次点「复制第 n 段」，逐段粘贴到公众号；粘贴到飞书等在线文档时可以用「复制全文」。</div>
 {{- end}}
+{{if .Headline}}<button data-copy="wa-headline" type="button" style="font-size: 14px; padding: 6px 12px; margin: 0 8px 8px 0; cursor: pointer">复制标题</button>{{end -}}
+{{if .Digest}}<button data-copy="wa-digest" type="button" style="font-size: 14px; padding: 6px 12px; margin: 0 8px 8px 0; cursor: pointer">复制摘要</button>{{end -}}
 </div>
+{{if .Headline}}<div id="wa-headline" style="font-size: 20px; font-weight: 600; line-height: 1.5; margin: 0 0 8px">{{.Headline}}</div>{{end -}}
+{{if .Digest}}<div id="wa-digest" style="font-size: 14px; color: #666; line-height: 1.5; margin: 0 0 16px">{{.Digest}}</div>{{end -}}
 <div id="wa-article">{{if eq (len .Segments) 1}}{{template "block" (index .Segments 0).Root}}{{else}}{{range .Segments}}<div id="{{.ID}}">{{template "block" .Root}}</div>{{end}}{{end}}</div>
 </div>
 <script>{{script}}</script>
@@ -120,6 +126,8 @@ func PasteHTML(root string, w *work.Work, opt Options, theme map[string]string) 
 	if len(parts) == 0 {
 		return nil, nil, problems
 	}
+	// 页面 title、复制标题/复制摘要按钮与 --print 的 headline/digest 共用同一份作者选定值（exportTitle）。
+	decided, digest := marketingTexts(root, w)
 	var occ []occurrence
 	_, res.Assets, occ = planAssets(root, w, units, parts, rel)
 	// AI 参与说明照常计算并报告，但不写进页面（paste-html-export）。
@@ -140,19 +148,25 @@ func PasteHTML(root string, w *work.Work, opt Options, theme map[string]string) 
 	if opt.Print {
 		res.HTML, res.Assets = full.String(), nil
 		res.Chars = len([]rune(res.HTML))
+		// headline 与 digest 只取作者选定的值，没有时字段仍出现、取值为 null（不做标题回退，见设计决策）。
+		if decided != "" {
+			res.Headline = &decided
+		}
+		if digest != "" {
+			res.Digest = &digest
+		}
 		return res, nil, problems
 	}
 	res.Segments = nil
 	res.Path = rel
-	title := w.ID
-	if h := FirstHeading(parts[0]); h != "" {
-		title = h
-	}
+	title := exportTitle(decided, w.ID, parts[0])
 	var doc bytes.Buffer
 	if err := pastePage.ExecuteTemplate(&doc, "paste", struct {
 		Title    string
+		Headline string
+		Digest   string
 		Segments []pasteSegment
-	}{title, segs}); err != nil {
+	}{title, decided, digest, segs}); err != nil {
 		panic(err)
 	}
 	changed, ps, ok := writeWithImages(root, rel, doc.Bytes(), res, occ)

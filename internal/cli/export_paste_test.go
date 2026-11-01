@@ -403,8 +403,8 @@ func TestExportPastePrintNotPaired(t *testing.T) {
 	}
 }
 
-// print-readonly 与 enum-scoped-output-fields：html 与 segments 只在 paste-html --print 时出现，其他格式与不带 --print 的
-// paste-html 的 --json 输出中没有这两个键；--print 除追加一行审计日志外不改动工作区中的任何文件。
+// print-readonly 与 enum-scoped-output-fields：html、segments、headline 与 digest 只在 paste-html --print 时出现，
+// 其他格式与不带 --print 的 paste-html 的 --json 输出中没有这些键；--print 除追加一行审计日志外不改动工作区中的任何文件。
 func TestExportPastePrintKeysAndReadOnly(t *testing.T) {
 	dir := illustratedAccepted(t, "# 周六的店\n\n![店门口](illustrations/shop.jpg)\n", true, addShop, addCover)
 	keys := func(args ...string) map[string]any {
@@ -420,11 +420,15 @@ func TestExportPastePrintKeysAndReadOnly(t *testing.T) {
 	}
 	for _, args := range [][]string{{}, {"--format", "wechat-html"}, {"--format", "text"}, {"--format", "paste-html"}} {
 		e := keys(args...)
-		for _, k := range []string{"html", "segments"} {
+		for _, k := range []string{"html", "segments", "headline", "digest"} {
 			if _, ok := e[k]; ok {
 				t.Errorf("%v: export has key %s", args, k)
 			}
 		}
+	}
+	// --print 时四个键都出现（headline 与 digest 没有作者选定值时为 null，键仍在，见 paste-html-print）。
+	if e := keys("--format", "paste-html", "--print"); e["html"] == nil || e["segments"] == nil || e["headline"] != nil || e["digest"] != nil {
+		t.Errorf("print keys: html=%v segments=%v headline=%v digest=%v", e["html"], e["segments"], e["headline"], e["digest"])
 	}
 	// 快照工作区（含 exports/），--print 之后只有 audit.log 变化。
 	snapshot := func() map[string]string {
