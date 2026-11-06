@@ -286,6 +286,18 @@ func TestAIDisclosure(t *testing.T) {
 		t.Fatalf("wechat footer: %+v\n%s", res.Export.Disclosure, html)
 	}
 	allowedHTML(t, html)
+	// none：任何输出都不出现说明，export.disclosure 为 null。
+	mustRunWS(t, dir, "config", "set", "ai_disclosure", "none")
+	code, res = runExportJSON(t, dir, "my-post", "--front-matter")
+	md := readFile(t, wsPath(dir, exported))
+	if code != 0 || res.Export.Disclosure != nil || strings.Contains(md, "ai_disclosure") || strings.Contains(md, "AI 辅助") {
+		t.Fatalf("none markdown: %+v\n%s", res.Export, md)
+	}
+	code, res = runExportJSON(t, dir, "my-post", "--format", "wechat-html")
+	if wechat := readFile(t, wsPath(dir, ".writing-anything/exports/my-post.html")); code != 0 || res.Export.Disclosure != nil || strings.Contains(wechat, "AI 参与") || strings.Contains(wechat, "AI 辅助") {
+		t.Fatalf("none wechat: %+v", res.Export)
+	}
+	mustRunWS(t, dir, "config", "set", "ai_disclosure", "footer")
 	// resolved-ai-disclosure
 	_, rr := runWS(t, dir, "config", "resolved")
 	r := rr.resolved(t)

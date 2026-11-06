@@ -1,0 +1,37 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: export-pdf-and-silent-disclosure
+sections:
+  Implementation:
+    impl-none-placement:
+      text: ai_disclosure 增加 none 取值：配置校验接受 none，footer()/metadata() 在 none 时为假，none 时不生成说明文字、export.disclosure 输出 null；同步 config set 的 help 文案与输出键说明。
+      status: complete
+    impl-pdf-format:
+      text: 新增 pdf 导出格式：按 export-format-layering 复用 collect、export-output 与资产复制，新增 RenderPDF 产出 A4 文档，内嵌封面与正文配图；--format 白名单、默认输出路径与诊断同步。
+      status: pending
+    impl-docs:
+      text: 同步 docs/GLOSSARY.md 与内置 wa-publish 技能正文：说明 none 取值与 pdf 导出用法。
+      status: pending
+  Testing:
+    test-none:
+      text: 测试 ai_disclosure=none：四种格式的输出都不含说明文字，export.disclosure 为 null，front matter 不含 ai_disclosure。
+      status: pending
+      command: go test ./internal/export/... -run None
+    test-pdf:
+      text: 测试 pdf 导出：验收有效单元产出 A4 文件、无效单元不导出并给出 export.unaccepted、本机配图被复制到资产目录、输出路径越界报 export.invalid-output。
+      status: pending
+      command: go test ./internal/export/... -run PDF
+    test-regression:
+      text: 跑完整回归并检查覆盖率门槛。
+      status: pending
+      command: 'go vet ./... && go build ./... && go test ./... '
+  Verification:
+    verify-regression:
+      text: 跑完整回归（vet、build、test、覆盖率 80% 门槛）并执行 strict-spec-cli ready/verify。
+      status: pending
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+testing_gates:
+  validation_task: test-regression
+  unit_test_task: test-none

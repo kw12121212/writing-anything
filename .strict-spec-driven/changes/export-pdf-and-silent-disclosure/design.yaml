@@ -1,0 +1,16 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: export-pdf-and-silent-disclosure
+approach:
+  - AI 说明一侧：在既有 ai-disclosure 规格上把放置位置扩为 footer/metadata/both/none，渲染入口沿用 footer()/metadata() 两个判定；none 时两者都为假，说明文字不再计算渲染，export.disclosure 输出 null。PDF 一侧：按 export-format-layering 复用 collect、export-output 与资产复制，新增 RenderPDF，把已验收正文渲染为 A4 文档并内嵌封面与正文配图。
+decisions:
+  pdf-render-engine:
+    decision: PDF 由 wa-cli 进程内生成，不调用外部程序。
+    rationale: 技术标准规定 wa-cli 只能调用固定的客户端 CLI 与 git，外调 Chrome/headless 浏览器出 PDF 会突破该约束；进程内生成也让输出可复现、无本机浏览器依赖。
+  none-placement:
+    decision: ai_disclosure 增加 none 取值，而不是删除说明功能。
+    rationale: 说明的出处计算仍被 provenance 与 review 复用，删除功能会牵连其他规格；增加取值只影响渲染出口，且可随时改回 footer/metadata/both。
+alternatives: []
+risks: []

@@ -189,7 +189,7 @@
 | 上下文包 | Context Pack | 上下文包 | 只包含当前单元所需信息的输入集合 |
 | 上下文预算 | Context Budget | 上下文预算 | 上下文包的大小上限，以字符数近似度量 |
 | 相邻节 | Neighbor Section | 相邻节 | 单元在父单元中的前一个与后一个兄弟单元，上下文包给出其大纲标题与正文节选 |
-| AI 参与说明 | AI-generated Content Label | AI 参与说明 | 导出时按段落出处说明 AI 参与情况的文字或元数据，也称「AI 生成内容标识」；放置位置由 `ai_disclosure` 决定 |
+| AI 参与说明 | AI-generated Content Label | AI 参与说明 | 导出时按段落出处说明 AI 参与情况的文字或元数据，也称「AI 生成内容标识」；放置位置由 `ai_disclosure` 决定（`footer`、`metadata`、`both`，或 `none` 表示完全不输出） |
 | 文风画像 | Style Profile | 文风画像 | 从作者样文归纳的写作风格特征 |
 | 作者偏好 | Author Preference | 作者偏好 | 从作者修改与作者反馈中归纳的习惯，如"不用排比句"；以规范包提议的条目出现，作者确认后写入规范包 |
 | 修改记录 | Edit Record | 修改记录 | 单元目录中的 `edits.yaml`：作者对 Agent 段落的修改对，由 `wa-cli draft write` 追加 |

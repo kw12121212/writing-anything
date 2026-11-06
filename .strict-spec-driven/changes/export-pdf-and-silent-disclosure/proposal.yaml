@@ -1,0 +1,19 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: export-pdf-and-silent-disclosure
+  status: proposed
+summary:
+  what:
+    - 导出新增 pdf 格式（给读者的 A4 文件，含封面与正文配图），并让 AI 参与说明支持完全关闭：config.yaml 的 ai_disclosure 增加 none 取值，取 none 时导出文件与 export.disclosure 都不再出现说明。
+  why:
+    - 作者要把已验收的文章以 PDF 形式发给读者，而 wa-cli 现有四种导出格式都不产出可分发的文档；同时作者要求成品不出现 AI 参与说明，现有 footer/metadata/both 三档无法彻底关闭。
+scope:
+  in:
+    - ai_disclosure 增加 none；导出层按 none 跳过说明渲染与 export.disclosure；新增 pdf 导出格式与其渲染、输出路径、配图资产处理；配置项 help 与文档同步；对应测试与回归。
+  out:
+    - 不改 wechat-html、markdown、text、paste-html 四种格式的既有输出；不改阅读页与 DSH 插件；不引入 PDF 之外的新导出格式。
+unchanged_behavior:
+  - 现有四种格式在 ai_disclosure 未设置为 none 时的输出逐字节不变；验收、审稿、生命周期与单元选择规则不变。
