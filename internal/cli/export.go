@@ -110,7 +110,7 @@ func runExport(inv *invocation) int {
 	case !slices.Contains(export.Formats, format):
 		problems = []workspace.Problem{invalidValue("format", format, "支持的导出格式为 "+strings.Join(export.Formats, "、"))}
 	case format != export.FormatMarkdown && frontMatter:
-		name := map[string]string{export.FormatWechat: "公众号 HTML", export.FormatText: "纯文本", export.FormatPaste: "可粘贴页"}[format]
+		name := map[string]string{export.FormatWechat: "公众号 HTML", export.FormatText: "纯文本", export.FormatPaste: "可粘贴页", export.FormatPDF: "PDF"}[format]
 		p := invalidValue("front-matter", "true", "--front-matter 只用于 markdown 格式；"+name+"没有文件头元数据")
 		p.Field = "front-matter"
 		problems = []workspace.Problem{p}
@@ -158,6 +158,13 @@ func runExport(inv *invocation) int {
 					} else {
 						r, changed, problems = export.WechatHTML(dir, w, opt, theme)
 					}
+				case format == export.FormatPDF:
+					opt.Disclosure = disclosureConfig(resolved)
+					theme := map[string]string{}
+					for k, v := range resolved.HTMLTheme {
+						theme[k] = fmt.Sprint(v.Value)
+					}
+					r, changed, problems = export.PDF(dir, w, opt, theme, pdfRenderer)
 				case format == export.FormatText:
 					opt.Disclosure = disclosureConfig(resolved)
 					r, changed, problems = export.PlainText(dir, w, opt)

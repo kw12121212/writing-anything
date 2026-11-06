@@ -104,7 +104,7 @@ func TestExportWechatHTML(t *testing.T) {
 	if d := diag(t, res.result, "input.invalid-value"); code != 1 || d.Field != "front-matter" || res.Export != nil {
 		t.Fatalf("front matter: %+v", res.Diagnostics)
 	}
-	if code, res := runExportJSON(t, dir, "my-post", "--format", "pdf"); code != 1 || !strings.Contains(diag(t, res.result, "input.invalid-value").Message, "wechat-html") {
+	if code, res := runExportJSON(t, dir, "my-post", "--format", "docx"); code != 1 || !strings.Contains(diag(t, res.result, "input.invalid-value").Message, "wechat-html") {
 		t.Fatalf("format: %+v", res.Diagnostics)
 	}
 	// 配图清单的路径同样经过输出路径检查：清单落在符号链接上时两个文件都不写。

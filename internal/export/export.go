@@ -41,7 +41,7 @@ const (
 )
 
 // Formats 是支持的导出格式。
-var Formats = []string{FormatMarkdown, FormatWechat, FormatText, FormatPaste}
+var Formats = []string{FormatMarkdown, FormatWechat, FormatText, FormatPaste, FormatPDF}
 
 // ExportsDir 是工作区中存放导出文件的目录。
 const ExportsDir = workspace.Dir + "/exports"
