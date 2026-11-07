@@ -34,6 +34,9 @@ func TestPDF(t *testing.T) {
 	if !bytes.Contains(doc, []byte("<title>标题</title>")) || !bytes.Contains(doc, []byte("data:image/png;base64,")) {
 		t.Errorf("document: %.200s", doc)
 	}
+	if res.Chars != len("%PDF-1.4 fake") {
+		t.Errorf("chars = %d，应为文件字节数", res.Chars)
+	}
 	if len(changed) == 0 {
 		t.Errorf("changedPaths empty")
 	}

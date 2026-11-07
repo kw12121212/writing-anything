@@ -88,9 +88,10 @@ func PDF(root string, w *work.Work, opt Options, theme map[string]string, render
 	if len(ps) > 0 {
 		return nil, nil, append(problems, ps...)
 	}
-	// PDF 内嵌全部图片，不复制资产目录（与 wechat-html 不同）。
+	// PDF 内嵌全部图片，不复制资产目录（与 wechat-html 不同）。chars 对二进制文件无字符意义，
+	// 这里报写出文件的字节数（见 export-pdf 的输出说明）。
 	res.Assets = nil
-	res.Chars = len([]rune(string(out2)))
+	res.Chars = len(out2)
 	return res, changed, problems
 }
 

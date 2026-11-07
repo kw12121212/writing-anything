@@ -24,7 +24,7 @@ var exportCommand = &command{
 		{"output", flagString, "输出文件，相对 --dir；省略时为 .writing-anything/exports/<work>.md（wechat-html 为 <work>.html，text 为 <work>.txt，paste-html 为 <work>.paste.html）"},
 		{"front-matter", flagBool, "在开头附带 YAML front matter：title、description、genre、units 与 accepted_at；只用于 markdown"},
 		{"print", flagBool, "只用于 paste-html：只读，不写任何文件，把可粘贴正文片段放在 export.html（不加 --json 时写到标准输出）；不能与 --output 同时使用"}},
-	outputKeys: []outputKey{{"export", "导出结果：work、format、path（--print 时为 null）、units（导出的单元，按顺序）、skipped（没有导出的单元，每项含 unit 与 reason）、chars（写出文件的字符数，paste-html 含内嵌图片与页面外壳；--print 时为片段的字符数）、" +
+	outputKeys: []outputKey{{"export", "导出结果：work、format、path（--print 时为 null）、units（导出的单元，按顺序）、skipped（没有导出的单元，每项含 unit 与 reason）、chars（写出文件的字符数，paste-html 含内嵌图片与页面外壳；pdf 为写出文件的字节数；--print 时为片段的字符数）、" +
 		"images（wechat-html 与 paste-html 的配图（Illustration），每项含 index、alt、src 与 title；markdown 与 text 为空数组）、imageList（配图清单的路径，没有时或 --print 时为 null）、" +
 		"assets（复制到资产目录（Asset Directory）的配图与封面图（Cover Image），封面在前，每项含 unit、id、role、origin、source 与 path；没有时或 --print 时为空数组）与 " +
 		"disclosure（AI 参与说明（AI-generated Content Label）：text、placement、aiParagraphs、paragraphs、aiPercent、aiImages 与 images；没有 AI 参与的段落与 AI 配图时为 null；" +
