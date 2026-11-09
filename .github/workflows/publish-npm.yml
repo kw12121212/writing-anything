@@ -3,7 +3,8 @@ name: Publish npm
 # 仓库里唯一的持续集成工作流：把 DSH 插件（DSH Plugin）`plugins/dsh-writing-viewer` 发布到 npm。
 #
 # 触发：任何进入 main 的提交，外加 GitHub Release 发布与手动重试。合并进 main 即发布，
-# 不必等 Release 建好；同一个版本已经发过时自动跳过，所以重复触发不会报错。
+# 不必等 Release 建好；同一 workflow 的全部触发共用一个并发组串行执行。已发布或已在 npm
+# 暂存区的版本跳过发布；发布时撞上“暂存区已有同版本”（E409）按已发布处理，不重发。
 #
 # 认证走 npm Trusted Publishing（OIDC）：工作流向 GitHub 换取短期令牌，npm 侧按
 # 「发布者 = GitHub Actions、用户 kw12121212、仓库 writing-anything、工作流文件名
@@ -27,7 +28,9 @@ permissions:
   id-token: write # OIDC，Trusted Publishing 必需
 
 concurrency:
-  group: npm-publish-${{ github.ref }}
+  # 固定分组而不带 github.ref：push: main 与 release: published 的 ref 不同，带 ref 会分成
+  # 两个并发队列，main 触发还在暂存时 release 触发会误判“未发布”并重复 publish（E409）。
+  group: npm-publish
   cancel-in-progress: false
 
 jobs:
@@ -56,8 +59,27 @@ jobs:
           version=$(node -p "require('./plugins/dsh-writing-viewer/package.json').version")
           echo "插件版本 ${version}"
           echo "version=${version}" >> "$GITHUB_OUTPUT"
+
+          # 已发布（npm view 能查到版本）或已在暂存区等待转正的版本都不再发布。
+          # 暂存条目先于 dist-tags 出现，只查 npm view 会在并发窗口里误判“没发过”。
+          published=false
           if npm view "dsh-writing-viewer@${version}" version >/dev/null 2>&1; then
-            echo "::notice::npm 上已存在 ${version}，本次跳过发布"
+            published=true
+          fi
+          staged=false
+          if ! $published && npm stage list "dsh-writing-viewer@${version}" --json >/tmp/npm-staged.json 2>/dev/null; then
+            if node -e '
+              const fs = require("fs");
+              const want = process.argv[1];
+              let data;
+              try { data = JSON.parse(fs.readFileSync("/tmp/npm-staged.json", "utf8")); } catch { process.exit(1); }
+              process.exit(JSON.stringify(data).includes(want) ? 0 : 1);
+            ' "$version"; then
+              staged=true
+            fi
+          fi
+          if $published || $staged; then
+            echo "::notice::npm 上已存在或已暂存 ${version}，本次跳过发布"
             echo "skip=true" >> "$GITHUB_OUTPUT"
           else
             echo "skip=false" >> "$GITHUB_OUTPUT"
@@ -101,9 +123,22 @@ jobs:
         working-directory: plugins/dsh-writing-viewer
 
       - name: 发布到 npm
+        id: publish
         if: steps.version.outputs.skip == 'false'
         # prepublishOnly 会先重新构建（npm run build），发布的产物由该提交的源码构建。
-        run: npm publish --access public --tag "${{ steps.version.outputs.dist_tag }}"
+        # 并发窗口内另一条触发可能已经暂存同版本；E409 说明无需再发，按已发布处理而不是失败。
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -o pipefail
+          if npm publish --access public --tag "${{ steps.version.outputs.dist_tag }}" 2>&1 | tee /tmp/npm-publish.log; then
+            exit 0
+          fi
+          if grep -q 'previously staged version' /tmp/npm-publish.log; then
+            echo "::notice::${VERSION} 已在 npm 暂存区等待转正，本次按已发布处理（不重发）"
+            exit 0
+          fi
+          exit 1
         working-directory: plugins/dsh-writing-viewer
 
       - name: 核对发布结果

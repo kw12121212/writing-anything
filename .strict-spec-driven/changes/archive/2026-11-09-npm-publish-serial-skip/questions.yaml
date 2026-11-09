@@ -1,0 +1,42 @@
+schema: strict-spec-driven/question-list/v1
+schema_version: 1
+artifact_type: question_list
+schema_file: templates/strict-spec-driven/schemas/question-list.yaml
+change: npm-publish-serial-skip
+open: []
+resolved:
+  - id: requirement-problem
+    question: 今天具体坏在哪？
+    context: 推荐：push main 与 release 并发；push 先暂存 1.0.0，release 的 skip 仍看 dist-tags 于是重发，撞 E409 变红。
+    answer: 'workflow 同时挂 push: main 与 release: published，两条并发；main 那条还在暂存 1.0.0 时 dist-tags 仍是 0.10.1，release 那条的 skip 判断因此判定没发过，于是去 publish，撞上 E409 变红。v0.10.0、v0.10.1 也是同样模式。'
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-outcome
+    question: 什么可观察的差别能证明修好了？
+    context: 推荐：1.0.0 的红 run 重跑成绿且是跳过；dist-tags 仍 latest 1.0.0，没有多发版本。
+    answer: '把 1.0.0 这条红 run 重跑成绿（re-run 或 workflow_dispatch），说明这次是跳过不是重发；再确认 npm view dist-tags 仍是 latest: 1.0.0、没有多发版本。'
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-trigger
+    question: 为什么现在修？
+    context: 推荐：1.0.0 发布时再次红，且 v0.10.0/v0.10.1 同样模式，不是偶发。
+    answer: 1.0.0 的 Publish npm run 又红了；此前 v0.10.0、v0.10.1 同样模式，属于确定性缺陷。
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-non-goals
+    question: 哪些不改？
+    context: 推荐：不改发布内容与 npm 包，不重发 1.0.0，不新增工作流。
+    answer: 不改发布内容、不改 npm 包、不重发 1.0.0；不引入新的 CI 工作流。
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-interpretation
+    question: 『已发过』怎么算？
+    context: 推荐：已发布或已在暂存区都算；E409 按已发布处理。
+    answer: 已发布（npm view 能查到版本）或已在暂存区（npm stage list 能看到）都算已发过；发布时撞上 E409 previously staged version 按已发布处理，不再让 run 变红。
+    status: resolved
+    kind: requirement
+    answered_by: human
