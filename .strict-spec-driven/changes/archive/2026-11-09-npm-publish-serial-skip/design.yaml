@@ -1,0 +1,26 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: npm-publish-serial-skip
+approach:
+  - 只改 .github/workflows/publish-npm.yml：把 concurrency.group 改成常量 npm-publish，使 push main 与 release 两条触发进入同一串行队列；跳过判断在 npm view 之外补 npm stage list --json（失败时忽略），命中已发布或已暂存即 skip=true；发布步骤捕获输出，出现「previously staged version」的 E409 时输出 notice 并以 0 退出；顶部与并发段注释改写为实际行为。纯 CI 工具变更，不涉及用户可观察行为，不写 delta spec、不写场景，理由记录在此。
+decisions:
+  single-concurrency-group:
+    decision: concurrency.group 固定为 npm-publish，不再带 github.ref；cancel-in-progress 保持 false。
+    rationale: 'push: main 与 release: published 的 github.ref 不同，原来的 group 会分到两个队列并发执行；固定常量才能让同一 workflow 的全部触发串行。'
+  staged-aware-skip:
+    decision: 跳过判断同时查 npm view 与 npm stage list --json；stage 查询失败时按未暂存处理，不阻塞正常发布。
+    rationale: main 触发的暂存动作先于 dist-tags 生效，只看 npm view 会在并发窗口里误判没发过；stage list 是唯一能看到暂存条目的入口，失败时回退到原有判断符合『尽力判重』。
+  e409-is-skcp:
+    decision: 发布输出出现 previously staged version 的 E409 时，输出 notice 并 exit 0，不重发。
+    rationale: 即使暂存检查因权限或时序漏掉，E409 也说明同版本已在暂存区，重发不可能成功；把它当失败只会留下反复变红的 run。
+  no-spec-no-scene:
+    decision: 本变更只改 CI 工作流，不改变 wa-cli、技能或插件用户可观察行为，因此不写 delta spec 与 delta scene；不动技术标准。
+    rationale: strict 规则要求纯工具链变更在无用户可观察影响时记录缺席理由；CI 串行与判重不构成产品规格。
+alternatives:
+  - option: '只在 release 触发里加 if: github.event_name != ''push'' 之类的互斥'
+    reason: release 与 push 都需要能独立重试，靠事件互斥会让手动重试与后续发布路径分叉；并发组加暂存判重覆盖所有触发。
+risks:
+  - npm stage list 在 OIDC 令牌下可能无权限；代码已把失败回退为未暂存，E409 兜底，但最坏情况仍会多一次失败 publish 尝试（被吞掉）。
+  - 固定的并发组会让不同版本的并发发布排队；本仓库只有一个插件包，排队可接受。

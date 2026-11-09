@@ -1,0 +1,33 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: npm-publish-serial-skip
+sections:
+  Implementation:
+    impl-concurrency:
+      text: concurrency.group 改为常量 npm-publish，cancel-in-progress 保持 false，使 push main 与 release 串行。
+      status: complete
+    impl-skip-e409:
+      text: 跳过判断补 npm stage list --json（失败回退），命中已发布或已暂存即 skip=true；发布步骤捕获 E409 previously staged version 并 exit 0。
+      status: complete
+    impl-comment:
+      text: 改写 workflow 顶部与并发段注释，说明串行、暂存判重与 E409 处理。
+      status: complete
+  Testing:
+    test-workflow:
+      text: 解析 workflow YAML，断言并发组为常量、跳过判断含 stage list、发布步骤含 E409 分支。
+      status: complete
+      command: python3 -c "import yaml;d=yaml.safe_load(open('.github/workflows/publish-npm.yml'));assert d['concurrency']['group']=='npm-publish' and d['concurrency']['cancel-in-progress'] is False; s=open('.github/workflows/publish-npm.yml').read();assert 'npm stage list' in s and 'previously staged version' in s;print('workflow ok')"
+    test-regression:
+      text: 跑完整回归。
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    verify-strict:
+      text: 运行 strict-spec-cli ready/verify。
+      status: complete
+      command: strict-spec-cli ready npm-publish-serial-skip && strict-spec-cli verify npm-publish-serial-skip
+testing_gates:
+  validation_task: test-regression
+  unit_test_task: test-workflow
