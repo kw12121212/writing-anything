@@ -39,14 +39,14 @@ irm https://raw.githubusercontent.com/kw12121212/writing-anything/main/install.p
 从本仓库的 GitHub Release 安装插件包（Plugin Package）：
 
 ```sh
-dsh plugin --profile web add https://github.com/kw12121212/writing-anything/releases/latest/download/dsh-writing-viewer-0.9.0.tgz
+dsh plugin --profile web add https://github.com/kw12121212/writing-anything/releases/latest/download/dsh-writing-viewer-1.0.0.tgz
 ```
 
 详见 [plugins/dsh-writing-viewer/README.md](plugins/dsh-writing-viewer/README.md)。
 
 ### ZCode 插件
 
-从 Release 安装 `zcode-writing-viewer-0.9.0.tgz`，或在 ZCode 中以本地市场（`plugins/marketplace.json`）安装；详见 [plugins/zcode-writing-viewer/README.md](plugins/zcode-writing-viewer/README.md)。
+从 Release 安装 `zcode-writing-viewer-1.0.0.tgz`，或在 ZCode 中以本地市场（`plugins/marketplace.json`）安装；详见 [plugins/zcode-writing-viewer/README.md](plugins/zcode-writing-viewer/README.md)。
 
 ## 快速开始
 
