@@ -1,0 +1,15 @@
+schema: strict-spec-driven/delta-tech/v1
+schema_version: 1
+artifact_type: delta_tech
+schema_file: templates/strict-spec-driven/schemas/delta-tech.yaml
+target_standard: cli-contract
+operations:
+  ADDED: {}
+  MODIFIED:
+    external-processes:
+      strength: MUST
+      statement: wa-cli 运行外部程序（MCP 客户端的官方 CLI、pack install 拉取 git 来源时的 git、pdf 导出时的无头浏览器）时必须经可注入的环境接口（查找与执行分离，测试可以替换），用 exec 直接传参数列表、不经 shell，不连接 wa-cli 自己的标准输入与输出，设时长上限（超时视为失败），并设 cmd.WaitDelay。外部程序只能是固定的客户端 CLI、git 与用于 pdf 导出的无头浏览器；参数列表只由固定的子命令与经过校验的参数组成，不得执行来自产物或规范包的命令。浏览器只接受固定的开关、本次生成文件的 file:// 地址与输出路径，不得接受产物中出现的 URL，也不得加载网络资源；除 MCP 客户端 CLI、git 与无头浏览器之外的任何外部程序一律不允许。
+      rationale: pdf 导出需要浏览器级排版（分页、中文字体、图片位置），进程内拼装达不到；放行范围收窄为固定的无头浏览器、固定开关与本次生成文件的 file:// 地址，产物内容不会成为可执行参数或网络地址。
+      enforcement:
+        method: test
+  REMOVED: {}

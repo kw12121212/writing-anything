@@ -84,7 +84,7 @@ var configSetCommand = &command{
 	name:    "config set",
 	summary: "修改工作区配置中的一项：language、default_genre、packs、gate_level、context_budget、ai_disclosure 或 review_surface",
 	args: []argSpec{
-		{"key", "配置项：language、default_genre、packs、gate_level、context_budget（上下文预算（Context Budget），字符数）、ai_disclosure（AI 参与说明（AI-generated Content Label）的放置位置：footer、metadata 或 both）或 review_surface（审阅位置（Review Surface），作者审阅阅读页（Reading View）的位置：browser 为浏览器打开 wa-cli preview --serve 的地址，dsh 为 DSH 插件面板；不设置时按环境自动判断，DSH Web 中为 dsh）", true},
+		{"key", "配置项：language、default_genre、packs、gate_level、context_budget（上下文预算（Context Budget），字符数）、ai_disclosure（AI 参与说明（AI-generated Content Label）的放置位置：footer、metadata、both，或 none 表示完全不输出）或 review_surface（审阅位置（Review Surface），作者审阅阅读页（Reading View）的位置：browser 为浏览器打开 wa-cli preview --serve 的地址，dsh 为 DSH 插件面板；不设置时按环境自动判断，DSH Web 中为 dsh）", true},
 		{"value", "新取值；packs 用逗号分隔，空字符串表示清空；default_genre、context_budget、ai_disclosure 与 review_surface 为空字符串时删除该项", true},
 	},
 	flags:      []flagSpec{dirFlag},

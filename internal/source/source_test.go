@@ -192,3 +192,60 @@ func TestSymlinkedMetadata(t *testing.T) {
 		t.Fatalf("Check(symlinked source.yaml) = %v", ps)
 	}
 }
+
+func TestRetire(t *testing.T) {
+	root := newRoot(t)
+	s, _, ps := Add(root, []byte("旧版骨架"), "author-note", "旧版", "src-old", "", "https://example.com/x", "secondary")
+	if len(ps) > 0 {
+		t.Fatal(ps)
+	}
+	changed, ps := Retire(root, s.ID)
+	if len(ps) > 0 || !slices.Equal(changed, []string{Path(s.ID)}) {
+		t.Fatalf("Retire = %v, %v", changed, ps)
+	}
+	meta, _ := os.ReadFile(filepath.Join(root, filepath.FromSlash(Path(s.ID))))
+	for _, want := range []string{"retired: true", "title: 旧版", "tier: secondary", "sha256: " + s.SHA256, "素材（Source）元数据"} {
+		if !strings.Contains(string(meta), want) {
+			t.Errorf("source.yaml lacks %q:\n%s", want, meta)
+		}
+	}
+	loaded, ps := Check(root, s.ID)
+	if len(ps) > 0 || !loaded.Retired {
+		t.Fatalf("Check after retire = %+v, %v", loaded, ps)
+	}
+	if got, _ := os.ReadFile(filepath.Join(root, filepath.FromSlash(s.FilePath()))); string(got) != "旧版骨架" {
+		t.Error("retire changed the archived original")
+	}
+	// 已作废时重复调用不写文件，返回值只为问题。
+	if changed, ps := Retire(root, s.ID); len(changed) != 0 || len(ps) != 0 {
+		t.Errorf("repeat Retire = %v, %v", changed, ps)
+	}
+	// 不存在的 id 与路径穿越都报 source.not-found，且不新建路径。
+	for _, id := range []string{"nope", "../outside"} {
+		if _, ps := Retire(root, id); len(ps) != 1 || ps[0].Code != CodeNotFound || ps[0].Path != "" {
+			t.Errorf("Retire(%q) = %v", id, ps)
+		}
+	}
+}
+
+func TestRemove(t *testing.T) {
+	root := newRoot(t)
+	s, _, ps := Add(root, []byte("旧版骨架"), "author-note", "旧版", "src-old", "", "", "")
+	if len(ps) > 0 {
+		t.Fatal(ps)
+	}
+	changed, ps := Remove(root, s.ID)
+	want := []string{Dir(s.ID), s.FilePath(), Path(s.ID)}
+	if len(ps) > 0 || !slices.Equal(changed, want) {
+		t.Fatalf("Remove = %v, %v", changed, ps)
+	}
+	if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(Dir(s.ID)))); !os.IsNotExist(err) {
+		t.Errorf("source directory still exists: %v", err)
+	}
+	if _, ps := Remove(root, s.ID); len(ps) != 1 || ps[0].Code != CodeNotFound {
+		t.Errorf("repeat Remove = %v", ps)
+	}
+	if _, ps := Remove(root, "../outside"); len(ps) != 1 || ps[0].Code != CodeNotFound || ps[0].Path != "" {
+		t.Errorf("Remove traversal = %v", ps)
+	}
+}

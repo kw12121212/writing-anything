@@ -1,0 +1,42 @@
+schema: strict-spec-driven/question-list/v1
+schema_version: 1
+artifact_type: question_list
+schema_file: templates/strict-spec-driven/schemas/question-list.yaml
+change: source-rm-force-detach-all-artifacts
+open: []
+resolved:
+  - id: requirement-problem
+    question: 今天具体坏在哪、对谁坏？
+    context: 推荐：只摘 claims 时 brief/outline 引用仍悬空，真实写作区 force 后 validate 仍失败。
+    answer: 验收实测 writing-desk 中同一素材被 claims、brief、outline 三处引用；只摘 claims 不能保证 validate 通过。
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-outcome
+    question: 什么可观察的差别能证明问题解决了？
+    context: 推荐：force 后所有 validate 相关产物都不再含该 id，validate valid。
+    answer: force 后 brief、outline、plan、claims、illustrations、canon、series、proposals 都不再含该素材 id，validate 保持通过。
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-trigger
+    question: 为什么现在要扩？
+    context: 推荐：验收在真实 writing-desk 上实测到 brief/outline 引用。
+    answer: 用真实 writing-desk 副本实测：只摘 claims 后 validate 报 brief.unknown-source 与 outline.unknown-source。
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-non-goals
+    question: 哪些明确不做？
+    context: 推荐：不改 handoffs 等 validate 不检查的产物，不删配图条目，不改 retire 与普通 rm。
+    answer: 不处理 validate 不检查的 handoffs；不自动删配图条目或正文引用；retire 与未引用 rm 不变。
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-interpretation
+    question: 信息图失去唯一出处时怎么办？
+    context: 推荐：整体拒绝 force，提示先调整配图，避免 validate 失败。
+    answer: 信息图摘掉素材后如果没有任何论断或素材，force 整体拒绝并提示先调整该配图。
+    status: resolved
+    kind: requirement
+    answered_by: human

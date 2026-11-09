@@ -39,14 +39,14 @@ irm https://raw.githubusercontent.com/kw12121212/writing-anything/main/install.p
 从本仓库的 GitHub Release 安装插件包（Plugin Package）：
 
 ```sh
-dsh plugin --profile web add https://github.com/kw12121212/writing-anything/releases/latest/download/dsh-writing-viewer-0.9.0.tgz
+dsh plugin --profile web add https://github.com/kw12121212/writing-anything/releases/latest/download/dsh-writing-viewer-1.0.0.tgz
 ```
 
 详见 [plugins/dsh-writing-viewer/README.md](plugins/dsh-writing-viewer/README.md)。
 
 ### ZCode 插件
 
-从 Release 安装 `zcode-writing-viewer-0.9.0.tgz`，或在 ZCode 中以本地市场（`plugins/marketplace.json`）安装；详见 [plugins/zcode-writing-viewer/README.md](plugins/zcode-writing-viewer/README.md)。
+从 Release 安装 `zcode-writing-viewer-1.0.0.tgz`，或在 ZCode 中以本地市场（`plugins/marketplace.json`）安装；详见 [plugins/zcode-writing-viewer/README.md](plugins/zcode-writing-viewer/README.md)。
 
 ## 快速开始
 
@@ -56,6 +56,9 @@ wa-cli new tech-blog my-post     # 按文体创建作品（Work），作品是�
 wa-cli next                      # 当前阶段（Stage）、阻塞项（Blocker）与下一步命令
 wa-cli status                    # 工作区汇总：每个单元的阶段、阻塞项与校验结果
 wa-cli validate                  # 按 JSON Schema 校验整个工作区
+wa-cli source list               # 列出已登记素材；作废的默认不显示，加 --all 显示并标注
+wa-cli source retire <id>        # 软删：标记作废，保留原文存档，source list 默认不再显示
+wa-cli source rm <id>            # 硬删；被论断引用时拒绝，确需删除用 --force --reason 连引用一起摘除
 ```
 
 内置文体：`minimal`、`tech-blog`、`wechat-marketing`、`short-story`、`novel`。所有命令支持 `--json`，诊断（Diagnostic）包含错误码、产物路径与下一步可执行命令。

@@ -1,0 +1,23 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: source-rm-force-detach-all-artifacts
+approach:
+  - DetachSource 按工作区结构收集所有可能引用素材的产物：每个单元目录的 brief.yaml、outline.yaml、plan.yaml、claims.yaml、illustrations.yaml，作品根目录的 canon.yaml，series 下的系列文件与 series/*/canon.yaml，以及 proposals/*.yaml。对每个存在的产物在 YAML 节点树上递归删除键为 sources 的序列中的目标 id，outline 另删 uses；编码后重新解析、按 schema.KindFor 校验 Schema、扫残留；任一失败不写任何文件。illustrations 另行预检：若删除后信息图既无 claims 也无 sources，报告 source.referenced 并整体拒绝。
+decisions:
+  generic-sources-walk:
+    decision: 摘引用用通用节点遍历，只认键名 sources 与 outline 的 uses，不按每种产物写一套结构代码。
+    rationale: 这些键在对应产物中语义一致；通用遍历减少七套易漂移的节点编辑代码，实现集中在 internal/draft。
+  infographic-refusal:
+    decision: 信息图摘掉唯一素材后若没有 claims，也不静默删配图或正文引用，而是整体拒绝并提示先调整配图。
+    rationale: 删除配图条目还要同步 draft 引用，超出摘引用的范围；从信息图失去出处到 validate 通过之间没有安全中间态，拒绝比留下半个坏状态好。
+  validate-scope-only:
+    decision: 只处理 validate 会报错的产物（brief、outline、plan、claims、illustrations、canon、series、proposals），handoffs 等不检查 source 的产物不动。
+    rationale: 目标是把工作区恢复到 validate 通过；改写与校验无关的审计或交接记录会扩大破坏面。
+alternatives:
+  - option: 只摘 claims，然后在 --force 的 message 里提示 brief/outline 仍需手工处理
+    reason: 真实写作区的素材几乎都被 brief 与 outline 引用，手工处理等于 force 不可用，也不满足 validate 保持通过。
+risks:
+  - force 现在会改写多个产物，写前全量校验只能挡住可预见的失败；极端写入失败仍可能留下部分改写。
+  - 通用遍历会删除任何 sources/uses 序列中的目标 id；这些键在受影响产物中都是素材引用，风险可控。

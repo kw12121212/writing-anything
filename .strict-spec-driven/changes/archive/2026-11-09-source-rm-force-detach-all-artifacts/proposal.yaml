@@ -1,0 +1,20 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: source-rm-force-detach-all-artifacts
+  status: proposed
+summary:
+  what:
+    - source rm --force 删除素材前，从工作区所有引用它的产物中移除该 id：brief、outline（uses）、plan、claims、illustrations、作品 canon.yaml、系列与规范包提议；changedPaths 列出全部被改写的产物，validate 保持通过。
+    - 当摘除引用会让信息图（Infographic）失去全部出处时整体拒绝删除并提示先调整配图。
+  why:
+    - 只处理 claims 时，真实写作区里的 brief 与 outline 引用仍会悬空；验收实测 writing-desk 的同一素材被 claims、brief、outline 三处引用，只摘 claims 后 validate 仍失败。
+scope:
+  in:
+    - internal/draft 的摘引用范围与通用节点遍历；信息图失去出处的预检；spec 与场景文案；测试。
+  out:
+    - 不处理 handoffs 等 validate 不检查的产物；不删除配图条目；不改 retire 与未引用 rm 的行为。
+unchanged_behavior:
+  - source retire、未被引用的 rm、被引用且未给 --force 的拒绝、source.not-found 与 audit.log 契约不变。

@@ -1,0 +1,17 @@
+schema: strict-spec-driven/delta-scene/v1
+schema_version: 1
+artifact_type: delta_scene
+schema_file: templates/strict-spec-driven/schemas/delta-scene.yaml
+target_scene: source-cleanup
+operations:
+  ADDED: {}
+  MODIFIED:
+    exception_flows:
+      referenced:
+        steps:
+          choose:
+            action: 作者确认引用不再需要时用 wa-cli source retire 保留为作废，或带 --force 与 --reason 强制删除；force 删除会同时把该素材 id 从引用它的论断 sources 中移除，validate 保持通过
+            covered_by:
+              - spec_id: sources-and-provenance
+                requirement_id: source-remove
+  REMOVED: {}

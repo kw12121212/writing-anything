@@ -45,11 +45,34 @@ var sourceAddCommand = &command{
 
 var sourceListCommand = &command{
 	name:       "source list",
-	summary:    "列出素材库（Source Library）中已登记的素材（Source）",
-	flags:      []flagSpec{dirFlag},
-	outputKeys: []outputKey{{"sources", "按 id 排序的素材数组，每项含 id、type、title、path 与 sha256，给出时另含 url 与 tier（信源等级（Source Tier））"}},
+	summary:    "列出素材库（Source Library）中已登记的素材（Source）；默认不显示已作废的素材",
+	flags:      []flagSpec{dirFlag, {"all", flagBool, "连同已作废的素材一起列出"}},
+	outputKeys: []outputKey{{"sources", "按 id 排序的素材数组，每项含 id、type、title、path、sha256 与 retired（true 表示已作废），给出时另含 url 与 tier（信源等级（Source Tier））"}},
 	exitCodes:  standardExitCodes,
 	run:        runSourceList,
+}
+
+var sourceRetireCommand = &command{
+	name:       "source retire",
+	summary:    "把素材（Source）标记为作废：source.yaml 增加 retired: true，保留原文存档；source list 默认不再显示",
+	args:       []argSpec{{"id", "素材 id", true}},
+	flags:      []flagSpec{dirFlag},
+	outputKeys: []outputKey{{"source", "作废后的素材：id、type、title、path、sha256 与 retired（true）；失败时为 null"}},
+	exitCodes:  standardExitCodes,
+	run:        runSourceRetire,
+}
+
+var sourceRemoveCommand = &command{
+	name:    "source rm",
+	summary: "硬删素材（Source）及其原文存档；被论断（Claim）引用时拒绝删除，用 --force 与 --reason 连同引用一起摘除",
+	args:    []argSpec{{"id", "素材 id", true}},
+	flags: []flagSpec{dirFlag,
+		{"force", flagBool, "被论断引用时仍然删除：先把该素材 id 从所有引用它的产物（brief、outline、plan、claims、illustrations、canon、series、提案）中摘除；必须同时给出 --reason"},
+		{"reason", flagString, "强制删除的原因，记入 .writing-anything/audit.log；只与 --force 一起使用"},
+	},
+	outputKeys: []outputKey{{"removed", "被删除的素材 id；失败时为 null"}},
+	exitCodes:  standardExitCodes,
+	run:        runSourceRemove,
 }
 
 var draftWriteCommand = &command{
@@ -127,13 +150,14 @@ var claimRemoveCommand = &command{
 }
 
 type sourceView struct {
-	ID     string  `json:"id"`
-	Type   string  `json:"type"`
-	Title  *string `json:"title"`
-	URL    string  `json:"url,omitempty"`
-	Tier   string  `json:"tier,omitempty"`
-	Path   string  `json:"path"`
-	SHA256 string  `json:"sha256"`
+	ID      string  `json:"id"`
+	Type    string  `json:"type"`
+	Title   *string `json:"title"`
+	URL     string  `json:"url,omitempty"`
+	Tier    string  `json:"tier,omitempty"`
+	Retired *bool   `json:"retired,omitempty"`
+	Path    string  `json:"path"`
+	SHA256  string  `json:"sha256"`
 }
 
 func viewOf(s *source.Source) sourceView {
@@ -141,6 +165,14 @@ func viewOf(s *source.Source) sourceView {
 	if s.Title != "" {
 		v.Title = &s.Title
 	}
+	return v
+}
+
+// listViewOf 在 viewOf 的基础上强制输出 retired：source list 的每一项都带该键，false 表示未作废。
+func listViewOf(s *source.Source) sourceView {
+	v := viewOf(s)
+	retired := s.Retired
+	v.Retired = &retired
 	return v
 }
 
@@ -152,6 +184,16 @@ type sourceAddResult struct {
 type sourceListResult struct {
 	Result
 	Sources []sourceView `json:"sources"`
+}
+
+type sourceRetireResult struct {
+	Result
+	Source *sourceView `json:"source"`
+}
+
+type sourceRemoveResult struct {
+	Result
+	Removed *string `json:"removed"`
 }
 
 type draftView struct {
@@ -285,7 +327,10 @@ func runSourceList(inv *invocation) int {
 		var sources []*source.Source
 		sources, _, problems = source.LoadAll(dir)
 		for _, s := range sources {
-			res.Sources = append(res.Sources, viewOf(s))
+			if s.Retired && !inv.flag("all") {
+				continue
+			}
+			res.Sources = append(res.Sources, listViewOf(s))
 		}
 	}
 	res.Diagnostics = diagnostics(problems, dir)
@@ -299,9 +344,173 @@ func runSourceList(inv *invocation) int {
 			if s.Title != nil {
 				title = " " + *s.Title
 			}
-			fmt.Fprintf(&b, "%s（%s）%s：%s\n", s.ID, s.Type, title, s.Path)
+			retired := ""
+			if s.Retired != nil && *s.Retired {
+				retired = "（作废）"
+			}
+			fmt.Fprintf(&b, "%s（%s）%s%s：%s\n", s.ID, s.Type, title, retired, s.Path)
 		}
 		_, err := io.WriteString(w, b.String())
+		return err
+	})
+}
+
+// sourceNext 为素材命令的诊断给出可直接运行的下一步：素材不存在时先列出已登记的素材，写入问题先整体校验，
+// 查看用法只作补充（cli-contract/runnable-next）。
+func sourceNext(ds []Diagnostic, name, dir string) {
+	for i := range ds {
+		switch ds[i].Code {
+		case source.CodeNotFound:
+			ds[i].Next = []string{shellCommand("wa-cli", "source", "list", "--dir", dir, "--json"), "wa-cli help " + name + " --json"}
+		case workspace.CodeWriteFailed, schema.CodeSchemaViolation:
+			ds[i].Next = []string{shellCommand("wa-cli", "validate", "--dir", dir, "--json"), "wa-cli help " + name + " --json"}
+		}
+	}
+}
+
+// sourceReferencedMessage 汇总引用素材的论断与产物：论断给出作品、单元、论断 id 与文字（截断过长文字），
+// 产物给出被引用的路径。
+func sourceReferencedMessage(id string, refs []draft.Reference, artifacts []string) string {
+	var msg string
+	if len(refs) > 0 {
+		items := make([]string, 0, len(refs))
+		for _, r := range refs {
+			text := r.Text
+			if runes := []rune(text); len(runes) > 40 {
+				text = string(runes[:40]) + "…"
+			}
+			items = append(items, r.Unit+"（"+r.Claim+"）「"+text+"」")
+		}
+		msg = fmt.Sprintf("素材（Source）%s 仍被论断（Claim）引用：%s", id, strings.Join(items, "、"))
+	}
+	var others []string
+	for _, rel := range artifacts {
+		if len(refs) > 0 && strings.HasSuffix(rel, "/claims.yaml") {
+			continue
+		}
+		others = append(others, rel)
+	}
+	switch {
+	case len(others) > 0 && msg != "":
+		msg += "；另被产物引用：" + strings.Join(others, "、")
+	case len(others) > 0:
+		msg = fmt.Sprintf("素材（Source）%s 仍被产物引用：%s", id, strings.Join(others, "、"))
+	}
+	return msg + fmt.Sprintf("；确需删除请用 wa-cli source rm %s --force --reason <原因>，强制删除会一并摘除这些引用，或先改用 wa-cli source retire %s 保留为作废", id, id)
+}
+
+// sourceReferencedNext 为 source.referenced 给出可直接运行的下一步：先把素材改为作废，再按作品查看引用它的论断；
+// 没有论断引用（只有其他产物引用）时给出整体校验。
+func sourceReferencedNext(id, dir string, refs []draft.Reference) []string {
+	next := []string{shellCommand("wa-cli", "source", "retire", id, "--dir", dir, "--json")}
+	seen := map[string]bool{}
+	for _, r := range refs {
+		if seen[r.Unit] {
+			continue
+		}
+		seen[r.Unit] = true
+		next = append(next, shellCommand("wa-cli", "claim", "list", r.Unit, "--dir", dir, "--json"))
+	}
+	if len(refs) == 0 {
+		next = append(next, shellCommand("wa-cli", "validate", "--dir", dir, "--json"))
+	}
+	return next
+}
+
+func runSourceRetire(inv *invocation) int {
+	dir := projectDir(inv)
+	res := &sourceRetireResult{}
+	problems := workspace.Require(dir)
+	if problems == nil {
+		var changed []string
+		if changed, problems = source.Retire(dir, inv.args[0]); problems == nil {
+			if s, _ := source.Load(dir, inv.args[0]); s != nil {
+				v := viewOf(s)
+				retired := s.Retired
+				v.Retired = &retired
+				res.Source, res.ChangedPaths = &v, changed
+			}
+		}
+	}
+	res.Diagnostics = diagnostics(problems, dir)
+	sourceNext(res.Diagnostics, "source retire", dir)
+	return finish(inv, res, func(w io.Writer) error {
+		if res.Source == nil {
+			return nil
+		}
+		if len(res.ChangedPaths) == 0 {
+			_, err := fmt.Fprintf(w, "素材（Source）%s 已是作废状态，未修改\n", res.Source.ID)
+			return err
+		}
+		_, err := fmt.Fprintf(w, "已作废素材（Source）%s：原文存档保留在 %s\n", res.Source.ID, res.Source.Path)
+		return err
+	})
+}
+
+func runSourceRemove(inv *invocation) int {
+	dir := projectDir(inv)
+	id := inv.args[0]
+	res := &sourceRemoveResult{}
+	problems := workspace.Require(dir)
+	force := inv.flag("force")
+	reason := inv.values["reason"]
+	var refs []draft.Reference
+	if problems == nil {
+		switch {
+		case force && strings.TrimSpace(reason) == "":
+			problems = []workspace.Problem{{Code: codeInvalidValue, Severity: workspace.SeverityError, Field: "reason",
+				Message: "强制删除必须说明原因：请用 --reason 给出删除这份素材的原因，原因会记入审计日志"}}
+		case !force && reason != "":
+			problems = []workspace.Problem{{Code: codeInvalidValue, Severity: workspace.SeverityError, Field: "reason",
+				Message: "--reason 只用于 --force 的强制删除；未被引用的素材直接删除，不需要原因"}}
+		default:
+			var rps []workspace.Problem
+			refs, rps = draft.References(dir, id)
+			var artifacts []string
+			if len(rps) == 0 {
+				artifacts, rps = draft.ArtifactReferences(dir, id)
+			}
+			if !force {
+				// 无法确认引用（error 级问题）时不删除，避免把仍被论断使用的素材删掉；已有悬空引用的
+				// warning 与本次删除无关，不拦。
+				var blocking []workspace.Problem
+				for _, p := range rps {
+					if p.Severity == workspace.SeverityError {
+						blocking = append(blocking, p)
+					}
+				}
+				if len(blocking) > 0 {
+					problems = blocking
+				} else if len(refs) > 0 || len(artifacts) > 0 {
+					problems = []workspace.Problem{{Code: source.CodeReferenced, Severity: workspace.SeverityError,
+						Message: sourceReferencedMessage(id, refs, artifacts)}}
+				}
+			}
+			// 强制删除先摘掉论断中的引用，再删素材，工作区在删除后仍能通过 validate。
+			var detached []string
+			if problems == nil && force {
+				detached, problems = draft.DetachSource(dir, id)
+			}
+			if problems == nil {
+				var changed []string
+				if changed, problems = source.Remove(dir, id); problems == nil {
+					res.Removed, res.ChangedPaths = &id, append(changed, detached...)
+				}
+			}
+		}
+	}
+	res.Diagnostics = diagnostics(problems, dir)
+	sourceNext(res.Diagnostics, "source rm", dir)
+	for i := range res.Diagnostics {
+		if res.Diagnostics[i].Code == source.CodeReferenced {
+			res.Diagnostics[i].Next = sourceReferencedNext(id, dir, refs)
+		}
+	}
+	return finish(inv, res, func(w io.Writer) error {
+		if res.Removed == nil {
+			return nil
+		}
+		_, err := fmt.Fprintf(w, "已删除素材（Source）%s 及其原文存档\n", *res.Removed)
 		return err
 	})
 }

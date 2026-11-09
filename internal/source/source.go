@@ -27,6 +27,8 @@ const (
 	CodeEmpty      = "source.empty"
 	CodeIDMismatch = "source.id-mismatch"
 	CodeModified   = "source.modified"
+	CodeNotFound   = "source.not-found"
+	CodeReferenced = "source.referenced"
 )
 
 // FileName 是素材目录中元数据的文件名。
@@ -52,8 +54,9 @@ type Source struct {
 	ID           string `json:"id"`
 	Type         string `json:"type"`
 	Title        string `json:"title"`
-	URL          string `json:"url,omitempty"`  // 一手网页地址（http 或 https）；可选，只登记不抓取
-	Tier         string `json:"tier,omitempty"` // 信源等级（Source Tier）：primary 一手、secondary 二手转述；与 type 正交
+	URL          string `json:"url,omitempty"`     // 一手网页地址（http 或 https）；可选，只登记不抓取
+	Tier         string `json:"tier,omitempty"`    // 信源等级（Source Tier）：primary 一手、secondary 二手转述；与 type 正交
+	Retired      bool   `json:"retired,omitempty"` // 已作废（Retired）：source list 默认不显示，--all 显示
 	OriginalName string `json:"original_name"`
 	File         string `json:"file"` // 存档文件名，位于素材目录中
 	SHA256       string `json:"sha256"`
@@ -145,7 +148,78 @@ func Add(root string, content []byte, typ, title, id, originalName, url, tier st
 	return s, []string{dir, s.FilePath(), Path(id)}, nil
 }
 
+// Retire 把素材 id 标记为作废（Retired）：在 source.yaml 上增加或改写 retired: true，保留其他字段与注释；
+// 已作废时不写文件。返回变更的路径（未写入时为空）。素材不存在（含 id 不符合格式）时报告 source.not-found；
+// 元数据本身有问题时原样报告。不检查论断（Claim）引用，也不改变素材是否已登记：引用它的论断照常通过校验。
+func Retire(root, id string) ([]string, []workspace.Problem) {
+	if !idPattern.MatchString(id) || !isDir(root, Dir(id)) {
+		return nil, []workspace.Problem{errorAt(CodeNotFound, "", "", "素材（Source）"+id+" 未登记；请用 wa-cli source list 查看已登记的素材")}
+	}
+	s, ps := Load(root, id)
+	if s == nil {
+		return nil, ps
+	}
+	if s.Retired {
+		return nil, nil
+	}
+	doc, ps := workspace.Read(root, Path(id))
+	if doc == nil {
+		return nil, ps
+	}
+	m := doc.Content[0]
+	at := -1
+	for i := 0; i+1 < len(m.Content); i += 2 {
+		if m.Content[i].Value == "retired" {
+			at = i + 1
+			break
+		}
+	}
+	if at >= 0 {
+		m.Content[at] = boolNode(true)
+	} else {
+		m.Content = append(m.Content, str("retired"), boolNode(true))
+	}
+	data, err := workspace.Encode(doc)
+	if err != nil {
+		return nil, []workspace.Problem{errorAt(workspace.CodeWriteFailed, Path(id), "", "生成素材元数据失败："+err.Error())}
+	}
+	written, p := schema.Parse(data)
+	if p != nil {
+		p.Line = 0 // 未写出的文件，行号没有意义
+		return nil, workspace.FromSchema(Path(id), []schema.Problem{*p})
+	}
+	if ps := schema.Named("source").ValidateNode(written); len(ps) > 0 {
+		return nil, workspace.FromSchema(Path(id), ps)
+	}
+	if err := workspace.WriteFile(root, Path(id), data); err != nil {
+		return nil, []workspace.Problem{errorAt(workspace.CodeWriteFailed, Path(id), "", "写入素材元数据失败："+err.Error())}
+	}
+	return []string{Path(id)}, nil
+}
+
+// Remove 删除素材 id 的整个素材目录（元数据与原文存档）；调用方负责在删除前检查论断引用。
+// 返回被删除的路径（素材目录、存档文件与 source.yaml）。素材不存在（含 id 不符合格式）时报告 source.not-found；
+// 元数据本身有问题时原样报告，不删除任何文件。
+func Remove(root, id string) ([]string, []workspace.Problem) {
+	if !idPattern.MatchString(id) || !isDir(root, Dir(id)) {
+		return nil, []workspace.Problem{errorAt(CodeNotFound, "", "", "素材（Source）"+id+" 未登记；请用 wa-cli source list 查看已登记的素材")}
+	}
+	s, ps := Load(root, id)
+	if s == nil {
+		return nil, ps
+	}
+	changed := []string{Dir(id), s.FilePath(), Path(id)}
+	if err := os.RemoveAll(abs(root, Dir(id))); err != nil {
+		return nil, []workspace.Problem{errorAt(workspace.CodeWriteFailed, Dir(id), "", "删除素材失败："+err.Error())}
+	}
+	return changed, nil
+}
+
 func str(v string) *yaml.Node { return &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: v} }
+
+func boolNode(v bool) *yaml.Node {
+	return &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!bool", Value: strconv.FormatBool(v)}
+}
 
 func integer(v int) *yaml.Node {
 	return &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!int", Value: strconv.Itoa(v)}

@@ -69,6 +69,7 @@
 |---|---|---|---|
 | 素材 | Source | 素材 | 作者笔记、访谈、转写稿、参考资料、过往文章 |
 | 素材库 | Source Library | 素材库 | 原文存档的素材集合 |
+| 作废素材 | Retired Source | 作废素材 | `source.yaml` 标记 `retired: true` 的素材：`source list` 默认不显示，`--all` 显示并标注；原文存档与校验照常保留，可用 `source rm` 彻底删除 |
 | 信源等级 | Source Tier | 信源等级 | 素材离一手的距离：`primary` 一手（作者亲历或原始出处）、`secondary` 二手转述（引用转述的引语时须向作者明示）；与素材类型（谁说的）正交，见 `source add --tier` |
 | 冲突 | Conflict | 冲突 | 素材对同一主题的两种矛盾说法（素材冲突）：登记为带结构化载荷的决策（两说各含素材 id 与引文），未决时阻塞推进、lint 对引用任一方引文报 error，作者裁定后解除；见 `decision add --conflict-about`。与小说创作中作为叙事张力的「冲突」无关 |
 | 论断 | Claim | 论断 | 需要出处支撑的事实、数据、经历或观点 |
@@ -189,7 +190,7 @@
 | 上下文包 | Context Pack | 上下文包 | 只包含当前单元所需信息的输入集合 |
 | 上下文预算 | Context Budget | 上下文预算 | 上下文包的大小上限，以字符数近似度量 |
 | 相邻节 | Neighbor Section | 相邻节 | 单元在父单元中的前一个与后一个兄弟单元，上下文包给出其大纲标题与正文节选 |
-| AI 参与说明 | AI-generated Content Label | AI 参与说明 | 导出时按段落出处说明 AI 参与情况的文字或元数据，也称「AI 生成内容标识」；放置位置由 `ai_disclosure` 决定 |
+| AI 参与说明 | AI-generated Content Label | AI 参与说明 | 导出时按段落出处说明 AI 参与情况的文字或元数据，也称「AI 生成内容标识」；放置位置由 `ai_disclosure` 决定（`footer`、`metadata`、`both`，或 `none` 表示完全不输出） |
 | 文风画像 | Style Profile | 文风画像 | 从作者样文归纳的写作风格特征 |
 | 作者偏好 | Author Preference | 作者偏好 | 从作者修改与作者反馈中归纳的习惯，如"不用排比句"；以规范包提议的条目出现，作者确认后写入规范包 |
 | 修改记录 | Edit Record | 修改记录 | 单元目录中的 `edits.yaml`：作者对 Agent 段落的修改对，由 `wa-cli draft write` 追加 |

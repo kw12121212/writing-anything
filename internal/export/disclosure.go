@@ -24,6 +24,8 @@ const (
 	PlacementFooter   = "footer"
 	PlacementMetadata = "metadata"
 	PlacementBoth     = "both"
+	// PlacementNone 关闭说明：任何输出（正文、front matter、export.disclosure）都不出现。
+	PlacementNone = "none"
 )
 
 // DisclosureConfig 是合并后的说明配置：放置位置与模板。
@@ -45,8 +47,12 @@ type Disclosure struct {
 	Images       int // 导出配图的张数
 }
 
-func (d *Disclosure) footer() bool   { return d != nil && d.Placement != PlacementMetadata }
-func (d *Disclosure) metadata() bool { return d != nil && d.Placement != PlacementFooter }
+func (d *Disclosure) footer() bool {
+	return d != nil && d.Placement != PlacementMetadata && d.Placement != PlacementNone
+}
+func (d *Disclosure) metadata() bool {
+	return d != nil && d.Placement != PlacementFooter && d.Placement != PlacementNone
+}
 
 // disclose 汇总导出单元 units 的段落出处：出处为 agent 与 agent-draft-human-edited 的段落算作 AI 参与；无法推导出处的单元给出
 // warning 并全部算作 AI 参与。没有 AI 参与段落或 cfg 为 nil 时返回 nil。
@@ -59,7 +65,8 @@ func DisclosureOf(root string, w *work.Work, units []*work.Unit, cfg *Disclosure
 // disclose 另按导出配图计入 AI 配图：aiImages 为出处为 agent 的张数，images 为导出配图的张数；aiImages 大于 0 时在正文说明之后
 // 直接追加配图说明（没有 AI 参与段落时只有配图说明）。
 func disclose(root string, w *work.Work, units []*work.Unit, cfg *DisclosureConfig, aiImages, images int) (*Disclosure, []workspace.Problem) {
-	if cfg == nil {
+	if cfg == nil || cfg.Placement == PlacementNone {
+		// none：不生成说明，export.disclosure 为 null；出处推导仍由 provenance 命令提供。
 		return nil, nil
 	}
 	var problems []workspace.Problem

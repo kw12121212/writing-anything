@@ -1,0 +1,54 @@
+schema: strict-spec-driven/question-list/v1
+schema_version: 1
+artifact_type: question_list
+schema_file: templates/strict-spec-driven/schemas/question-list.yaml
+change: export-pdf-and-silent-disclosure
+open: []
+resolved:
+  - id: requirement-problem
+    question: What is concretely going wrong today, and for whom?
+    context: 'Why this is asked: the change is planned against a need, and the need lives only with the requester. A "problem" here means what someone does or suffers today — not a feature that is missing. If the answer names a button, a field, a page, or an endpoint, it is a solution, and the underlying problem is still unstated. What a sufficient answer contains: who is affected, what they do today instead, and how often. Worked example: "every Monday one person spends forty minutes copying order rows into a spreadsheet to send the weekly report". What it changes: this becomes the proposal''s why, and it decides whether the change is worth making.'
+    answer: 今天导出公众号版时，正文末尾带出了「本文在 AI 辅助下完成…」这段说明，作者不想让它出现在发给读者的稿件上；同时作者想把文章以 PDF 形式发给读者，而现有四种导出格式都不产文档。
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-outcome
+    question: What observable difference proves the problem is solved?
+    context: 'Why this is asked: without a success condition, nobody can tell afterwards whether the change worked. "Observable" means someone outside the system can check it without reading the code. What a sufficient answer contains: what a person will see, or no longer have to do, once this is done. Worked example: "the report is in the manager''s inbox on Monday morning without anyone assembling it". What it changes: this becomes the delta spec''s scenarios and the acceptance evidence at review time.'
+    answer: 导出文件（正文与 front matter）和 --json 的 export.disclosure 都不再出现说明；wa-cli export <work> --format pdf 能直接产出一份可发给读者的 PDF。
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-trigger
+    question: Why now — what forced this?
+    context: 'Why this is asked: work that nothing forced is the work most often thrown away later. This question catches a request that sounds reasonable but has no real driver behind it. What a sufficient answer contains: the concrete event, deadline, incident, or cost that made this surface now, or an honest statement that nothing did. Worked example: "the report was missed last month and it was raised with the team". What it changes: a change with no trigger is a candidate for deferral, and the answer is weighed at review before archive.'
+    answer: 今天准备发布文章、要同时给读者 PDF 版时，发现说明去不掉、PDF 也没有。
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-non-goals
+    question: What must explicitly not change?
+    context: 'Why this is asked: the requester knows which nearby behavior other people depend on, and the agent does not. A "non-goal" is something the change must leave alone even though it sits close to the work. What a sufficient answer contains: the behavior, setting, or output that must survive untouched, and who relies on it. Worked example: "do not change the saved filters — several people rely on their own". What it changes: these become the proposal''s unchanged_behavior items, which review checks the finished result against.'
+    answer: wechat-html、markdown、text、paste-html 四种格式在 ai_disclosure 未设为 none 时的输出必须逐字节不变；不改阅读页、DSH 插件、验收与生命周期。
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-interpretation
+    question: Which reading of the request is intended, where more than one is possible?
+    context: 'Why this is asked: a short request usually admits several readings, and building the wrong one is indistinguishable from building nothing. What a sufficient answer contains: the reading that is meant, stated plainly enough to rule the others out — or a statement that only one reading exists and what it is. Worked example: "export means the version sent to the manager, not the one I read myself". What it changes: this fixes the scope boundary before any code is written, and settles disputes about what was asked for.'
+    answer: 「全部去掉」指全部输出出口：正文、front matter 与 export.disclosure；出处推导与 provenance 命令保留供审计，不删功能本身。
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: pdf-engine
+    question: PDF 的生成方式选哪种：进程内纯 Go 生成，还是允许 wa-cli 外调 Chrome？
+    context: 影响面：纯 Go 需要引入一个第三方 PDF 库（违反 stdlib-first 这条 SHOULD，需在 design 里记录理由），并自行处理分页与中文字体；外调 Chrome 能拿到与本机验证过的排版效果一致输出，但技术标准明确规定 wa-cli 只能调用固定的客户端 CLI 与 git，选择它必须在同一变更里用 delta-tech 修改该 MUST 规则，且使用者的机器必须有 Chrome。推荐纯 Go：无外部依赖、输出可复现，代价是排版能力弱于浏览器。
+    answer: 选外调 Chrome：用户要求「哪个效果好就用哪个」，本机实测浏览器打印的排版（分页、中文、图和图注）明显好于进程内拼装；为此在同一变更中修改 external-processes 这条标准。
+    status: resolved
+    answered_by: human
+  - id: pdf-font
+    question: PDF 是否内嵌中文字体？
+    context: 影响面：不内嵌时 PDF 依赖阅读设备字体，中文可能显示为方框，完全不可接受；内嵌完整字体让单篇文件从几十 KB 涨到数 MB，内嵌子集则需要字体子集化逻辑。推荐内嵌子集：保证任何设备打开都不缺字，体积可控。
+    answer: 不自行内嵌字体：由 Chrome 打印时自动内嵌所用字体的子集；机器缺少中文字体时报告诊断而不是产出缺字的文件。
+    status: resolved
+    answered_by: human

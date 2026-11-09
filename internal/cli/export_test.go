@@ -104,7 +104,7 @@ func TestExportWechatHTML(t *testing.T) {
 	if d := diag(t, res.result, "input.invalid-value"); code != 1 || d.Field != "front-matter" || res.Export != nil {
 		t.Fatalf("front matter: %+v", res.Diagnostics)
 	}
-	if code, res := runExportJSON(t, dir, "my-post", "--format", "pdf"); code != 1 || !strings.Contains(diag(t, res.result, "input.invalid-value").Message, "wechat-html") {
+	if code, res := runExportJSON(t, dir, "my-post", "--format", "docx"); code != 1 || !strings.Contains(diag(t, res.result, "input.invalid-value").Message, "wechat-html") {
 		t.Fatalf("format: %+v", res.Diagnostics)
 	}
 	// 配图清单的路径同样经过输出路径检查：清单落在符号链接上时两个文件都不写。
@@ -286,6 +286,18 @@ func TestAIDisclosure(t *testing.T) {
 		t.Fatalf("wechat footer: %+v\n%s", res.Export.Disclosure, html)
 	}
 	allowedHTML(t, html)
+	// none：任何输出都不出现说明，export.disclosure 为 null。
+	mustRunWS(t, dir, "config", "set", "ai_disclosure", "none")
+	code, res = runExportJSON(t, dir, "my-post", "--front-matter")
+	md := readFile(t, wsPath(dir, exported))
+	if code != 0 || res.Export.Disclosure != nil || strings.Contains(md, "ai_disclosure") || strings.Contains(md, "AI 辅助") {
+		t.Fatalf("none markdown: %+v\n%s", res.Export, md)
+	}
+	code, res = runExportJSON(t, dir, "my-post", "--format", "wechat-html")
+	if wechat := readFile(t, wsPath(dir, ".writing-anything/exports/my-post.html")); code != 0 || res.Export.Disclosure != nil || strings.Contains(wechat, "AI 参与") || strings.Contains(wechat, "AI 辅助") {
+		t.Fatalf("none wechat: %+v", res.Export)
+	}
+	mustRunWS(t, dir, "config", "set", "ai_disclosure", "footer")
 	// resolved-ai-disclosure
 	_, rr := runWS(t, dir, "config", "resolved")
 	r := rr.resolved(t)

@@ -45,6 +45,7 @@ curl -fsSL https://raw.githubusercontent.com/kw12121212/writing-anything/main/in
 | 日期 | pwsh 版本 | 系统与架构 | 运行方式 | 结果 |
 |---|---|---|---|---|
 | 2026-10-08 | PowerShell 7.6.6 | Linux x64，运行在 Linux 子系统（WSL）2 中；以环境变量模拟 Windows 的 `OS` 与 `PROCESSOR_ARCHITECTURE` | `-File`、iex、`irm <url> \| iex` | `TestInstallPs1` 全部 23 个用例通过，未发现脚本缺陷 |
+| 2026-11-09 | PowerShell 7.6.6 | Linux x64，运行在 WSL 2 中；以环境变量模拟 Windows 的 `OS` 与 `PROCESSOR_ARCHITECTURE` | `-File`、iex、`irm <url> \| iex` | `TestInstallPs1` 全部 21 个用例通过（v0.10.1 发布验证），未发现脚本缺陷。附注：同日在原生 Windows 上以 MSIX 安装的 PowerShell 7.6.9 运行时，受控制台代码页（GBK）影响输出断言失败，本机验证仍走 WSL 路线 |
 
 尚未覆盖：在原生 Windows 上运行、Windows PowerShell 5.1，以及默认安装目录下把目录写入用户级 `PATH`（`HKCU\Environment` 注册表）的分支。`TestInstallPs1` 总是指定 `WA_INSTALL_DIR` 并只用 pwsh 运行，即使在 Windows 本机执行也不覆盖后两项；它们需要在 Windows 上不设置环境变量、分别用 Windows PowerShell 5.1 与 PowerShell 7 手动运行 `irm https://raw.githubusercontent.com/kw12121212/writing-anything/main/install.ps1 | iex`，确认新开的终端中 `wa-cli version` 可用。完成任一项验证后，请在上表追加一行并写明覆盖的部分。
 

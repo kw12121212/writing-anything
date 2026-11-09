@@ -1,0 +1,21 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: source-rm-force-detaches-references
+  status: proposed
+summary:
+  what:
+    - source rm --force 删除被论断（Claim）引用的素材前，先从 works 下所有 claims.yaml 的论断 sources 中移除该素材 id，再删除素材目录；changedPaths 列出被改写的 claims.yaml，audit.log 照常记录命令与原因，validate 保持通过。
+    - 补用例断言 force 删除后 validate 仍 valid、论断不再引用该素材、audit.log 含删除原因。
+  why:
+    - 现状 force 删除后引用悬空，validate 报 claim.unknown-source 永久失败，advance 与 accept 都被挡；等于「允许删、但删完就不能用」。
+scope:
+  in:
+    - internal/draft 增加摘引用的领域函数（节点树编辑、写前解析与 Schema 校验、全部通过才写）；source rm --force 接线；delta 规格与场景；测试与文档文案。
+  out:
+    - 不改 retire 行为；不改 rm 未引用路径、source.referenced 门禁与 source.not-found；不提供恢复或批量删除。
+unchanged_behavior:
+  - source retire 的全部行为与输出不变；未被引用的 source rm 结果不变；被引用且未给 --force 时仍拒绝且不修改文件。
+  - audit.log 每次调用记录一行、args 截断 200 字符的既有契约不变。

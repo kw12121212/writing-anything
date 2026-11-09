@@ -1,0 +1,48 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: source-rm-and-retire
+sections:
+  Implementation:
+    impl-schema-retire:
+      text: 'source.schema.json 增加可选布尔字段 retired（默认不出现）；source.Source 增加 Retired 字段与视图；source.Retire 在 source.yaml 的 YAML 节点树上只追加 retired: true，保留其他字段与注释，写前重新解析并校验 Schema。'
+      status: complete
+    impl-source-remove:
+      text: source 包增加 References（遍历 works 下每个单元的 claims.yaml，返回引用素材的作品、单元与论断）与 Remove（删除素材目录；调用方负责引用门禁）；新增错误码 source.not-found 与 source.referenced。
+      status: complete
+    impl-cli-commands:
+      text: internal/cli 增加 source retire 与 source rm 命令并登记注册表：retire 幂等标记作废；rm 无引用时删除、被引用时报告 source.referenced 并列出引用、--force 必须配 --reason（缺失报 input.invalid-value）；source list 增加 --all 并默认过滤作废素材，视图增加 retired 键与文本标注。
+      status: complete
+    impl-docs-samples:
+      text: 同步 help 文案（注册表 summary/flags/outputKeys）、README、docs/GLOSSARY.md（作废素材术语）与 sampleArgs/mutatingSamples 样例登记。
+      status: complete
+  Testing:
+    test-retire-list:
+      text: 测试 source retire：作废后 source list 默认不含、--all 含且 retired 为 true，source.yaml 保留既有字段与注释，validate 通过；重复 retire 幂等。
+      status: complete
+      command: go test ./internal/cli -run TestSourceRetire
+    test-rm-referenced:
+      text: 测试被引用拒删：论断引用素材后 source rm 报 source.referenced 并列出作品与论断，素材目录不变；--force 缺少 --reason 报 input.invalid-value。
+      status: complete
+      command: go test ./internal/cli -run TestSourceRemoveReferenced
+    test-rm-force:
+      text: 测试删除：无引用时 source rm 删除素材目录且 list 不再显示；--force --reason 删除被引用素材后引用检查函数报悬空、audit.log 含原因。
+      status: complete
+      command: go test ./internal/cli -run TestSourceRemove
+    test-regression:
+      text: 跑完整回归并检查覆盖率门槛。
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    verify-strict:
+      text: 运行 strict-spec-cli ready/verify，确认规划产物完整、问题清零。
+      status: complete
+      command: strict-spec-cli ready source-rm-and-retire && strict-spec-cli verify source-rm-and-retire
+    verify-regression:
+      text: 在最终代码上跑完整回归（vet、build、test、覆盖率 80% 门槛）。
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+testing_gates:
+  validation_task: test-regression
+  unit_test_task: test-retire-list

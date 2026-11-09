@@ -1,0 +1,25 @@
+schema: strict-spec-driven/delta-spec/v1
+schema_version: 1
+artifact_type: delta_spec
+schema_file: templates/strict-spec-driven/schemas/delta-spec.yaml
+target_spec: export
+operations:
+  ADDED:
+    export-pdf:
+      strength: MUST
+      statement: wa-cli export <work> --format pdf 必须把验收记录有效的单元导出为一个 A4 尺寸的 PDF 文档，按单元树先序排列正文，封面在文档开头、正文配图在引用处出现；没有任何可导出单元时报告 export.nothing-accepted 且不写文件；不支持的输出路径按 export.invalid-output 拒绝。
+      scenarios:
+        pdf-basic:
+          - GIVEN: 作品 post 已验收，含一张封面与一张正文配图，config.yaml 的 ai_disclosure 为 none
+          - WHEN: 运行 wa-cli export post --format pdf --dir D --json
+          - THEN: 写出 .writing-anything/exports/post.pdf，文件以 %PDF- 开头，export.format 为 pdf、export.path 为该路径，退出码为 0
+  MODIFIED:
+    ai-disclosure:
+      strength: MUST
+      statement: wa-cli export 必须支持把 AI 参与说明完全关闭：config.yaml 的 ai_disclosure 取 none 时，任何导出格式的交付文件（正文、front matter）都不得出现说明文字，--json 的 export.disclosure 必须为 null；出处推导与 provenance 命令的行为不变。
+      scenarios:
+        none-silences-every-format:
+          - GIVEN: 作品 post 已验收，config.yaml 的 ai_disclosure 为 none，规范包模板为内置模板
+          - WHEN: 分别运行 wa-cli export post --format markdown --front-matter 与 wa-cli export post --format wechat-html
+          - THEN: 两个导出文件都不含说明文字，markdown 的 front matter 不含 ai_disclosure 键，两次 --json 的 export.disclosure 都为 null，退出码均为 0
+  REMOVED: {}

@@ -246,7 +246,7 @@ function labels(): Labels {
 
 type AnyRecord = Record<string, unknown>;
 
-const app = new App({ name: 'zcode-writing-viewer', version: '0.10.1' }, {});
+const app = new App({ name: 'zcode-writing-viewer', version: '1.0.0' }, {});
 
 /** Sequential tool-call ids: only the newest call's answer lands. */
 let callSeq = 0;
