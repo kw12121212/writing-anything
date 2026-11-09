@@ -57,6 +57,10 @@
         "secondary"
       ],
       "description": "信源等级（Source Tier）：primary 一手（作者亲历或原始出处）、secondary 二手转述；可选，与 type 正交"
+    },
+    "retired": {
+      "type": "boolean",
+      "description": "已作废（Retired）：source list 默认不显示，--all 显示；原文存档与校验不受影响；可选，默认不出现"
     }
   }
 }

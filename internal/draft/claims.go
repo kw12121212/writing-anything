@@ -109,6 +109,33 @@ func danglingAsWarnings(ps []workspace.Problem) (errs, warns []workspace.Problem
 	return errs, warns
 }
 
+// Reference 是一条引用素材（Source）的论断（Claim）。
+type Reference struct {
+	Work  string `json:"work"`
+	Unit  string `json:"unit"`
+	Claim string `json:"claim"`
+	Text  string `json:"text"`
+}
+
+// References 返回 works 下全部论断中 sources 含 id 的引用，按作品、单元与论断的先后顺序排列。无法加载的作品或
+// claims.yaml 原样报告问题；调用方在无法确认引用时不应删除素材。
+func References(root, id string) ([]Reference, []workspace.Problem) {
+	works, _, ps := work.LoadAll(root)
+	out := []Reference{}
+	for _, w := range works {
+		for _, u := range w.Units() {
+			cs, cps := ListClaims(root, w, u)
+			ps = append(ps, cps...)
+			for _, c := range cs {
+				if slices.Contains(c.Sources, id) {
+					out = append(out, Reference{Work: w.ID, Unit: u.Ref, Claim: c.ID, Text: c.Text})
+				}
+			}
+		}
+	}
+	return out, ps
+}
+
 // AddClaim 在单元 u 的 claims.yaml 末尾追加论断。id 为空时取 claim-<n>，n 从已有论断数加一开始递增到不重复；
 // sources 中的素材必须已登记。claims.yaml 不存在时创建，已存在时只追加该项，保留其他内容与注释。
 // 返回新论断与变更的路径（新建的单元目录与 claims.yaml）；出错时不修改文件。

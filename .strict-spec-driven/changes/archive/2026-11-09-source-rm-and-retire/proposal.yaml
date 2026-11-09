@@ -1,0 +1,27 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: source-rm-and-retire
+  status: proposed
+summary:
+  what:
+    - '新增 wa-cli source retire <id>：把素材（Source）标记为作废（source.yaml 增加 retired: true），保留原文存档与元数据；source list 默认不显示作废素材，--all 显示并标注。'
+    - 新增 wa-cli source rm <id>：硬删素材目录；被任一论断（Claim）引用时拒绝删除，并在诊断中报出引用它的作品、单元与论断；确需删除时用 --force 与 --reason 说明原因。
+    - source list 增加 --all 参数与 retired 输出键；同步 help、README 与术语表。
+  why:
+    - 录音机的素材改版后旧版本（v1、v2）只能标成「作废，仅留档」：现有 source 只有 add 与 list，没有删除或作废命令，工作区会持续积累无法清理的旧素材。
+    - 硬删必须拦住仍被论断引用的素材，否则会制造悬空引用并让 validate 失败。
+scope:
+  in:
+    - source retire：retired 字段与 source.yaml Schema、source 包写入、CLI 命令、source list 过滤与 --all。
+    - source rm：引用检查（遍历 works 下各单元的 claims.yaml）、拒绝与 --force/--reason 通道、删除与审计记录。
+    - 错误码 source.not-found 与 source.referenced；测试、主规格 delta、场景、help、README 与 docs/GLOSSARY.md 同步。
+  out:
+    - 不改 source add 的行为与 source.yaml 既有字段含义；不提供恢复、批量删除或回收站目录。
+    - 不改 claim add/claim set 的引用规则；不为 MCP 单独写逻辑（由命令注册表自动映射）；不触碰 story-desk 的真实素材。
+unchanged_behavior:
+  - 未标记 retired 的素材在 source add、source list 与 archive-integrity 校验中的输出与行为不变。
+  - 已有 claims.yaml 的解析、校验与论断编辑行为不变。
+  - validate 对素材存档完整性（source.modified、source.id-mismatch 等）的判定不变。
