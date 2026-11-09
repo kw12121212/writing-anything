@@ -1,12 +1,12 @@
 package draft
 
 import (
-	"time"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/kw12121212/writing-anything/internal/source"
 	"github.com/kw12121212/writing-anything/internal/work"
@@ -154,5 +154,103 @@ func TestAddClaimKeepsFlowComment(t *testing.T) {
 	write(t, root, rel, "schema_version: 1\nclaims: []  # 行尾注释\n")
 	if _, _, ps := AddClaim(root, w, u, "fact", "x", "", nil, ""); len(ps) > 0 || !strings.Contains(read(t, root, rel), "# 行尾注释") {
 		t.Fatalf("%v\n%s", ps, read(t, root, rel))
+	}
+}
+
+// TestDetachSource 覆盖强制删除前的引用摘除：claims、brief、outline、canon 都摘到，只删目标 id，
+// 保留其他引用与注释，并遍历全部作品。
+func TestDetachSource(t *testing.T) {
+	root, _ := newWork(t)
+	addSource(t, root, "src-old")
+	addSource(t, root, "src-keep")
+	w, u := unit(t, root, "my-post")
+	base := ".writing-anything/works/my-post"
+	claimsRel, briefRel, outlineRel, canonRel := base+"/claims.yaml", base+"/brief.yaml", base+"/outline.yaml", base+"/canon.yaml"
+	if _, _, ps := AddClaim(root, w, u, "fact", "旧版与新版都在用", "", []string{"src-old", "src-keep"}, ""); len(ps) > 0 {
+		t.Fatal(ps)
+	}
+	write(t, root, briefRel, "schema_version: 1\naudience: 后端工程师\npurpose: 讲清楚\nprovenance:\n  audience: {sources: [src-old]}\n  purpose: {sources: [src-keep]}\n")
+	write(t, root, outlineRel, "schema_version: 1\nsections:\n  - {id: why, title: 为什么, uses: [src-old], reason: 引出问题}\n")
+	write(t, root, canonRel, "schema_version: 1\nentries:\n  - {id: hero, type: character, name: 守灯人, text: 五十岁, sources: [src-old], protection: normal}\n")
+	write(t, root, claimsRel, "# 作者的注释\n"+read(t, root, claimsRel))
+
+	changed, ps := DetachSource(root, "src-old")
+	if len(ps) > 0 || len(changed) != 4 {
+		t.Fatalf("DetachSource = %v, %v", changed, ps)
+	}
+	for _, rel := range []string{briefRel, outlineRel, canonRel, claimsRel} {
+		if !slices.Contains(changed, rel) {
+			t.Errorf("changed = %v, want %s", changed, rel)
+		}
+		if text := read(t, root, rel); strings.Contains(text, "src-old") {
+			t.Errorf("%s still references src-old:\n%s", rel, text)
+		}
+	}
+	if !strings.Contains(read(t, root, claimsRel), "src-keep") || !strings.Contains(read(t, root, claimsRel), "# 作者的注释") {
+		t.Error("claims.yaml lost src-keep or the author comment")
+	}
+	if !strings.Contains(read(t, root, briefRel), "src-keep") {
+		t.Error("brief.yaml lost unrelated provenance")
+	}
+	cs, ps := LoadClaims(root, w, u)
+	if len(ps) > 0 || len(cs) != 1 || !slices.Equal(cs[0].Sources, []string{"src-keep"}) {
+		t.Fatalf("claims after detach = %+v, %v", cs, ps)
+	}
+	// 没有引用时不写文件。
+	if changed, ps := DetachSource(root, "src-old"); len(changed) != 0 || len(ps) != 0 {
+		t.Errorf("repeat DetachSource = %v, %v", changed, ps)
+	}
+	// 第二个作品也引用同一素材：一次摘掉另一份 claims.yaml。
+	other, _, ps := work.Create(root, "minimal", "other-post")
+	if len(ps) > 0 {
+		t.Fatal(ps)
+	}
+	if _, _, ps := AddClaim(root, other, other.Root, "fact", "另一作品也引用旧版", "", []string{"src-old"}, ""); len(ps) > 0 {
+		t.Fatal(ps)
+	}
+	otherRel := ".writing-anything/works/other-post/claims.yaml"
+	changed, ps = DetachSource(root, "src-old")
+	if len(ps) > 0 || !slices.Equal(changed, []string{otherRel}) {
+		t.Fatalf("second DetachSource = %v, %v", changed, ps)
+	}
+	if text := read(t, root, otherRel); strings.Contains(text, "src-old") {
+		t.Errorf("other-post claims.yaml still references src-old:\n%s", text)
+	}
+	for _, r := range []string{claimsRel, otherRel} {
+		if ps := CheckArtifact(root, r); len(ps) > 0 {
+			t.Errorf("CheckArtifact(%s) = %v", r, ps)
+		}
+	}
+}
+
+// TestDetachSourceRefusesLostInfographic 断言摘掉素材会让信息图失去全部出处时整体拒绝、不写任何产物。
+func TestDetachSourceRefusesLostInfographic(t *testing.T) {
+	root, _ := newWork(t)
+	addSource(t, root, "src-old")
+	base := ".writing-anything/works/my-post"
+	write(t, root, base+"/brief.yaml", "schema_version: 1\naudience: 后端工程师\npurpose: 讲清楚\nprovenance:\n  audience: {sources: [src-old]}\n")
+	write(t, root, base+"/illustrations.yaml", `schema_version: 1
+illustrations:
+  - id: fig-1
+    role: body
+    file: illustrations/fig-1.png
+    format: png
+    sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    width: 10
+    height: 10
+    alt: 数据图
+    content: infographic
+    origin: agent
+    claims: []
+    sources: [src-old]
+    added_at: "2025-01-01T00:00:00Z"
+`)
+	briefBefore := read(t, root, base+"/brief.yaml")
+	changed, ps := DetachSource(root, "src-old")
+	if len(changed) != 0 || len(ps) != 1 || ps[0].Code != source.CodeReferenced || !strings.Contains(ps[0].Message, "fig-1") {
+		t.Fatalf("DetachSource = %v, %v", changed, ps)
+	}
+	if read(t, root, base+"/brief.yaml") != briefBefore {
+		t.Error("refused detach wrote files")
 	}
 }

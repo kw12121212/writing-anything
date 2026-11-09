@@ -1,0 +1,26 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: source-rm-force-detaches-references
+approach:
+  - 在 internal/draft 增加 DetachSource：遍历 works 下每个单元的 claims.yaml，在 YAML 节点树上只删除论断 sources 中含目标素材 id 的元素（保留其他字段、顺序与注释），对全部文档先在内存中完成编码、重新解析与 Schema 校验，全部通过后才逐个原子写入；任一文件读取失败或校验失败时不写任何文件。source rm --force 在校验 --reason 之后先调用 DetachSource，再调用 source.Remove，changedPaths 先列素材目录、存档文件与 source.yaml，再列被改写的 claims.yaml；audit.log 沿用每次调用的自动记录。
+decisions:
+  detach-in-draft:
+    decision: 摘引用的逻辑放在 internal/draft：它已拥有 claims.yaml 的加载、Schema 校验与节点编辑约定，source 包不反向依赖 draft。
+    rationale: 技术标准要求领域包平级不互相 import；claims.yaml 的读写与校验归 draft，素材目录归 source，命令层负责接线。
+  detach-before-delete:
+    decision: force 删除顺序固定为先摘引用、再删素材目录；摘引用任一步失败就整体失败，素材保留。
+    rationale: 先删素材会让引用悬空、validate 立刻失败；先摘引用把工作区保持在可校验状态，失败时也不会留下更坏的结果。
+  all-or-nothing-precheck:
+    decision: 写入前对每个受影响的 claims.yaml 完成编码、重新解析、Schema 校验与残留检查，全部通过才写；不考虑替换已有文件之外的恢复。
+    rationale: 一条命令改写多个产物时，技术标准要求第一次写入前完成全部可能失败的检查；这样大多数失败不会留下半套改写。
+  changed-paths-include-claims:
+    decision: changedPaths 列出素材目录、存档文件、source.yaml 与每个被改写的 claims.yaml；removed 仍只输出素材 id。
+    rationale: 调用方需要知道 force 实际改写了哪些产物；把 claims.yaml 漏掉会让变更清单与事实不符。
+alternatives:
+  - option: 删除后让 validate 忽略指向不存在素材的引用
+    reason: 悬空引用是真实错误，忽略它会把作者真正需要的修复掩盖掉，也会让 claim 的出处约束失效。
+risks:
+  - force 会改写多个 claims.yaml，极端情况下某个写入仍可能失败并留下部分改写；写前全量校验把可预见的失败挡在第一次写之前。
+  - 大工作区上要遍历并重编码全部 claims.yaml，耗时随论断数量增长；一次删除只做一遍，可接受。

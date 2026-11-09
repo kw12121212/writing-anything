@@ -792,3 +792,212 @@ func TestClaimKindOverrideDecision(t *testing.T) {
 		t.Fatalf("set authorized: code = %d, claim = %v, %v", code, res.Claim, res.Diagnostics)
 	}
 }
+
+// TestSourceRetire 覆盖软删：作废后默认列表隐藏、--all 显示并标注，source.yaml 保留既有字段与注释，
+// 重复作废幂等，validate 照常通过。
+func TestSourceRetire(t *testing.T) {
+	dir := newWork(t)
+	runSrc(t, dir, "旧版骨架", "source", "add", "--type", "author-note", "--id", "src-old", "--title", "旧版")
+	rel := ".writing-anything/sources/src-old/source.yaml"
+	code, res := runSrc(t, dir, "", "source", "retire", "src-old")
+	if code != 0 || res.Source["id"] != "src-old" || res.Source["retired"] != true || !slices.Equal(res.ChangedPaths, []string{rel}) {
+		t.Fatalf("code = %d, source = %v, changedPaths = %v, diagnostics = %v", code, res.Source, res.ChangedPaths, res.Diagnostics)
+	}
+	after := readFile(t, wsPath(dir, rel))
+	if !strings.Contains(after, "retired: true") || !strings.Contains(after, "title: 旧版") {
+		t.Errorf("source.yaml after retire:\n%s", after)
+	}
+	if readFile(t, wsPath(dir, ".writing-anything/sources/src-old/original.txt")) != "旧版骨架" {
+		t.Error("retire changed the archived original")
+	}
+	// 默认列表不显示作废素材；--all 显示并带 retired: true。
+	code, res = runSrc(t, dir, "", "source", "list")
+	if code != 0 || len(res.Sources) != 1 || res.Sources[0]["id"] != "brief-note" || res.Sources[0]["retired"] != false || len(res.ChangedPaths) != 0 {
+		t.Fatalf("default list: code = %d, sources = %v", code, res.Sources)
+	}
+	code, res = runSrc(t, dir, "", "source", "list", "--all")
+	if code != 0 || len(res.Sources) != 2 || res.Sources[1]["id"] != "src-old" || res.Sources[1]["retired"] != true {
+		t.Fatalf("list --all: code = %d, sources = %v", code, res.Sources)
+	}
+	if code, stdout, _ := run(t, "source", "list", "--all", "--dir", dir); code != 0 || !strings.Contains(stdout, "src-old（author-note） 旧版（作废）") {
+		t.Errorf("text list --all = %q", stdout)
+	}
+	// 重复运行不写文件。
+	code, res = runSrc(t, dir, "", "source", "retire", "src-old")
+	if code != 0 || len(res.ChangedPaths) != 0 || res.Source["retired"] != true {
+		t.Fatalf("repeat retire: code = %d, changedPaths = %v, source = %v", code, res.ChangedPaths, res.Source)
+	}
+	if readFile(t, wsPath(dir, rel)) != after {
+		t.Error("repeat retire rewrote source.yaml")
+	}
+	if code, stdout, _ := run(t, "validate", "--dir", dir, "--json"); code != 0 {
+		t.Fatalf("validate after retire: exit code = %d; %s", code, stdout)
+	}
+}
+
+// TestSourceRetireKeepsReferences 断言软删不切断已有论断引用：引用作废素材的论断照常通过 validate。
+func TestSourceRetireKeepsReferences(t *testing.T) {
+	dir := newWork(t)
+	runSrc(t, dir, "旧版报道", "source", "add", "--type", "reference", "--id", "src-old")
+	runSrc(t, dir, "", "claim", "add", "my-post", "--kind", "fact", "--text", "报道称旧版仍在使用", "--sources", "src-old")
+	if code, res := runSrc(t, dir, "", "source", "retire", "src-old"); code != 0 {
+		t.Fatalf("retire: code = %d, %v", code, res.Diagnostics)
+	}
+	if code, stdout, _ := run(t, "validate", "--dir", dir, "--json"); code != 0 {
+		t.Fatalf("validate after retire: exit code = %d; %s", code, stdout)
+	}
+}
+
+// TestSourceRemove 覆盖无引用硬删：目录、原文与 source.yaml 一并删除，changedPaths 如实列出。
+func TestSourceRemove(t *testing.T) {
+	dir := newWork(t)
+	runSrc(t, dir, "旧版骨架", "source", "add", "--type", "author-note", "--id", "src-old")
+	code, res := runSrc(t, dir, "", "source", "rm", "src-old")
+	want := []string{".writing-anything/sources/src-old", ".writing-anything/sources/src-old/original.txt", ".writing-anything/sources/src-old/source.yaml"}
+	if code != 0 || res.Removed == nil || *res.Removed != "src-old" || !slices.Equal(res.ChangedPaths, want) {
+		t.Fatalf("code = %d, removed = %v, changedPaths = %v, diagnostics = %v", code, res.Removed, res.ChangedPaths, res.Diagnostics)
+	}
+	if _, err := os.Stat(wsPath(dir, ".writing-anything/sources/src-old")); !os.IsNotExist(err) {
+		t.Errorf("source directory still exists: %v", err)
+	}
+	code, res = runSrc(t, dir, "", "source", "list", "--all")
+	if code != 0 || len(res.Sources) != 1 || res.Sources[0]["id"] != "brief-note" {
+		t.Errorf("list after rm: code = %d, sources = %v", code, res.Sources)
+	}
+	// 再删一次报 source.not-found。
+	code, res = runSrc(t, dir, "", "source", "rm", "src-old")
+	if d := diag(t, res.result, "source.not-found"); code != 1 || d.Path != "" {
+		t.Errorf("rm missing: code = %d, diagnostic = %+v", code, d)
+	}
+	if code, stdout, _ := run(t, "validate", "--dir", dir, "--json"); code != 0 {
+		t.Fatalf("validate after rm: exit code = %d; %s", code, stdout)
+	}
+}
+
+// TestSourceRemoveReferenced 覆盖硬删的引用门禁：被论断引用时拒绝并列出作品与论断，--force 必须带 --reason。
+func TestSourceRemoveReferenced(t *testing.T) {
+	dir := newWork(t)
+	runSrc(t, dir, "旧版报道", "source", "add", "--type", "reference", "--id", "src-old")
+	runSrc(t, dir, "", "claim", "add", "my-post", "--kind", "fact", "--text", "报道称旧版仍在使用", "--sources", "src-old")
+	claimsRel := ".writing-anything/works/my-post/claims.yaml"
+	srcRel := ".writing-anything/sources/src-old/source.yaml"
+	claimsBefore, srcBefore := readFile(t, wsPath(dir, claimsRel)), readFile(t, wsPath(dir, srcRel))
+
+	code, res := runSrc(t, dir, "", "source", "rm", "src-old")
+	d := diag(t, res.result, "source.referenced")
+	if code != 1 || !strings.Contains(d.Message, "my-post") || !strings.Contains(d.Message, "claim-1") || !strings.Contains(d.Message, "报道称旧版仍在使用") {
+		t.Fatalf("code = %d, diagnostic = %+v", code, d)
+	}
+	if !slices.Contains(d.Next, shellCommand("wa-cli", "source", "retire", "src-old", "--dir", dir, "--json")) ||
+		!slices.Contains(d.Next, shellCommand("wa-cli", "claim", "list", "my-post", "--dir", dir, "--json")) {
+		t.Errorf("next = %v", d.Next)
+	}
+	if readFile(t, wsPath(dir, claimsRel)) != claimsBefore || readFile(t, wsPath(dir, srcRel)) != srcBefore {
+		t.Error("rejected rm changed claims.yaml or source.yaml")
+	}
+
+	// --force 没有 --reason：参数错误，不删除。
+	code, res = runSrc(t, dir, "", "source", "rm", "src-old", "--force")
+	if d := diag(t, res.result, "input.invalid-value"); code != 1 || d.Field != "reason" {
+		t.Errorf("force without reason: code = %d, diagnostic = %+v", code, d)
+	}
+	// 没有 --force 却给 --reason：同样拒绝，避免把原因当成可选项。
+	code, res = runSrc(t, dir, "", "source", "rm", "src-old", "--reason", "重复登记")
+	if d := diag(t, res.result, "input.invalid-value"); code != 1 || d.Field != "reason" {
+		t.Errorf("reason without force: code = %d, diagnostic = %+v", code, d)
+	}
+	if _, err := os.Stat(wsPath(dir, srcRel)); err != nil {
+		t.Fatalf("rejected rm removed the source: %v", err)
+	}
+
+	// --force 与 --reason：先摘掉论断引用再删素材，工作区保持可校验，原因进审计日志。
+	reason := "旧版已被 v3 取代"
+	code, res = runSrc(t, dir, "", "source", "rm", "src-old", "--force", "--reason", reason)
+	if code != 0 || res.Removed == nil || *res.Removed != "src-old" {
+		t.Fatalf("force rm: code = %d, removed = %v, %v", code, res.Removed, res.Diagnostics)
+	}
+	if !slices.Contains(res.ChangedPaths, claimsRel) {
+		t.Errorf("changedPaths = %v, want %s", res.ChangedPaths, claimsRel)
+	}
+	claims := readFile(t, wsPath(dir, claimsRel))
+	if strings.Contains(claims, "src-old") || !strings.Contains(claims, "报道称旧版仍在使用") {
+		t.Errorf("claims.yaml after forced rm:\n%s", claims)
+	}
+	audit := readFile(t, wsPath(dir, ".writing-anything/audit.log"))
+	if !strings.Contains(audit, reason) || !strings.Contains(audit, "src-old") {
+		t.Errorf("audit.log lacks removal reason:\n%s", audit)
+	}
+	if code, stdout, _ := run(t, "validate", "--dir", dir, "--json"); code != 0 {
+		t.Errorf("validate after forced rm: exit code = %d; %s", code, stdout)
+	}
+}
+
+// TestSourceRemoveForceDetachesAllWorks 断言 force 删除会摘掉所有作品中的引用，而不是只处理第一处。
+func TestSourceRemoveForceDetachesAllWorks(t *testing.T) {
+	dir := newWork(t)
+	if code, stdout, stderr := run(t, "new", "minimal", "other-post", "--dir", dir); code != 0 {
+		t.Fatalf("new other-post: exit code = %d; %s; %s", code, stdout, stderr)
+	}
+	runSrc(t, dir, "旧版报道", "source", "add", "--type", "reference", "--id", "src-old")
+	writeFile(t, wsPath(dir, ".writing-anything/works/my-post/brief.yaml"), "schema_version: 1\naudience: 后端工程师\npurpose: 讲清楚\nprovenance:\n  audience: {sources: [src-old]}\n")
+	writeFile(t, wsPath(dir, ".writing-anything/works/my-post/outline.yaml"), "schema_version: 1\nsections:\n  - {id: why, title: 为什么, uses: [src-old], reason: 引出问题}\n")
+	runSrc(t, dir, "", "claim", "add", "my-post", "--kind", "fact", "--text", "我的作品引用旧版", "--sources", "src-old")
+	runSrc(t, dir, "", "claim", "add", "other-post", "--kind", "fact", "--text", "另一作品也引用旧版", "--sources", "src-old")
+	code, res := runSrc(t, dir, "", "source", "rm", "src-old", "--force", "--reason", "旧版已被替换")
+	if code != 0 || res.Removed == nil {
+		t.Fatalf("force rm: code = %d, removed = %v, %v", code, res.Removed, res.Diagnostics)
+	}
+	for _, rel := range []string{
+		".writing-anything/works/my-post/brief.yaml",
+		".writing-anything/works/my-post/outline.yaml",
+		".writing-anything/works/my-post/claims.yaml",
+		".writing-anything/works/other-post/claims.yaml",
+	} {
+		if !slices.Contains(res.ChangedPaths, rel) {
+			t.Errorf("changedPaths = %v, want %s", res.ChangedPaths, rel)
+		}
+		if strings.Contains(readFile(t, wsPath(dir, rel)), "src-old") {
+			t.Errorf("%s still references src-old", rel)
+		}
+	}
+	if code, stdout, _ := run(t, "validate", "--dir", dir, "--json"); code != 0 {
+		t.Errorf("validate after forced rm: exit code = %d; %s", code, stdout)
+	}
+}
+
+// TestSourceNotFound 断言 retire 与 rm 对不存在的 id 报 source.not-found 且不访问路径。
+func TestSourceNotFound(t *testing.T) {
+	dir := newWork(t)
+	for _, name := range [][]string{{"source", "retire", "nope"}, {"source", "rm", "nope"}, {"source", "rm", "../outside"}} {
+		code, res := runSrc(t, dir, "", name...)
+		d := diag(t, res.result, "source.not-found")
+		if code != 1 || d.Path != "" {
+			t.Errorf("%v: code = %d, diagnostic = %+v", name, code, d)
+		}
+		if !slices.Contains(d.Next, "wa-cli help "+strings.Join(name[:2], " ")+" --json") {
+			t.Errorf("%v: next = %v", name, d.Next)
+		}
+	}
+}
+
+// TestSourceRemoveRejectsArtifactOnlyReference 断言素材只被 brief 等产物引用（没有论断）时也拒绝普通删除。
+func TestSourceRemoveRejectsArtifactOnlyReference(t *testing.T) {
+	dir := newWork(t)
+	runSrc(t, dir, "旧版报道", "source", "add", "--type", "reference", "--id", "src-old")
+	rel := ".writing-anything/works/my-post/brief.yaml"
+	writeFile(t, wsPath(dir, rel), "schema_version: 1\naudience: 后端工程师\npurpose: 讲清楚\nprovenance:\n  audience: {sources: [src-old]}\n")
+	code, res := runSrc(t, dir, "", "source", "rm", "src-old")
+	d := diag(t, res.result, "source.referenced")
+	if code != 1 || !strings.Contains(d.Message, "brief.yaml") {
+		t.Fatalf("code = %d, diagnostic = %+v", code, d)
+	}
+	if !slices.Contains(d.Next, shellCommand("wa-cli", "validate", "--dir", dir, "--json")) {
+		t.Errorf("next = %v", d.Next)
+	}
+	if _, err := os.Stat(wsPath(dir, ".writing-anything/sources/src-old/source.yaml")); err != nil {
+		t.Fatalf("rejected rm removed the source: %v", err)
+	}
+	if code, stdout, _ := run(t, "validate", "--dir", dir, "--json"); code != 0 {
+		t.Errorf("validate before rm: exit code = %d; %s", code, stdout)
+	}
+}

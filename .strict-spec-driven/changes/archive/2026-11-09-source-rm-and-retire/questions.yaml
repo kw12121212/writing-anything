@@ -1,0 +1,42 @@
+schema: strict-spec-driven/question-list/v1
+schema_version: 1
+artifact_type: question_list
+schema_file: templates/strict-spec-driven/schemas/question-list.yaml
+change: source-rm-and-retire
+open: []
+resolved:
+  - id: requirement-problem
+    question: 今天具体坏在哪、对谁坏？
+    context: 录音机入库的素材改版后旧版无法清理；wa-cli 现有 source 只有 add 与 list。推荐答案：旧版只能一直标「作废，仅留档」，工作区积累无法清理的脏数据。
+    answer: 录音机入库一个骨架改了三版，v1/v2 标了「作废，仅留档」，因为 source 只有 add/list，删不掉，只能留着脏数据。
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-outcome
+    question: 什么可观察的差别能证明问题解决了？
+    context: 推荐：source list 默认隐藏作废素材且 --all 可见；source rm 能删掉未引用素材；被论断引用时拒绝并报出引用。可观察点落在命令输出与工作区目录。
+    answer: source retire 后默认列表不显示、--all 能看到并被标注；source rm 删掉未被引用的素材；被论断引用时拒绝并报出引用它的作品和论断；确需删除用 --force 并在记录里写原因。
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-trigger
+    question: 为什么是现在？不做什么会怎样？
+    context: 推荐：今天入库流程走到 v3 终版，v1/v2 清理需求再次撞上；不做就继续积累无法清理的旧素材。
+    answer: 今天收尾时 v1、v2 只能标作废留档，Chief 明确把补「删素材命令」列入待办并指定本次执行。
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-non-goals
+    question: 哪些东西明确不许变？
+    context: 推荐：不改 source add、claim 引用规则和 archive-integrity 校验；不提供恢复与批量删除；不碰 story-desk 真实素材；不为 MCP 单独写逻辑。
+    answer: 不改 source add 与 claim 引用规则；不提供恢复、批量删除或回收站；不碰 story-desk 的真实素材；MCP 由命令注册表自动映射，不为它单独写逻辑。
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-interpretation
+    question: retire 与 rm 分别取哪种语义？
+    context: 推荐：retire 是软删（标作废、默认列表隐藏、存档保留、已有引用照常通过校验）；rm 是硬删（被引用拒绝，--force 需配 --reason）。
+    answer: retire 是软删：标成作废、source list 默认不显示、--all 能看到，存档与已有引用不受影响；rm 是硬删：被 claim 引用就拒绝，确需删除带 --force 与原因。
+    status: resolved
+    kind: requirement
+    answered_by: human

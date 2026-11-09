@@ -2,6 +2,8 @@ package draft
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"reflect"
 	"slices"
 	"strings"
@@ -107,6 +109,262 @@ func danglingAsWarnings(ps []workspace.Problem) (errs, warns []workspace.Problem
 		errs = append(errs, p)
 	}
 	return errs, warns
+}
+
+// Reference 是一条引用素材（Source）的论断（Claim）。
+type Reference struct {
+	Work  string `json:"work"`
+	Unit  string `json:"unit"`
+	Claim string `json:"claim"`
+	Text  string `json:"text"`
+}
+
+// References 返回 works 下全部论断中 sources 含 id 的引用，按作品、单元与论断的先后顺序排列。无法加载的作品或
+// claims.yaml 原样报告问题；调用方在无法确认引用时不应删除素材。
+func References(root, id string) ([]Reference, []workspace.Problem) {
+	works, _, ps := work.LoadAll(root)
+	out := []Reference{}
+	for _, w := range works {
+		for _, u := range w.Units() {
+			cs, cps := ListClaims(root, w, u)
+			ps = append(ps, cps...)
+			for _, c := range cs {
+				if slices.Contains(c.Sources, id) {
+					out = append(out, Reference{Work: w.ID, Unit: u.Ref, Claim: c.ID, Text: c.Text})
+				}
+			}
+		}
+	}
+	return out, ps
+}
+
+// detachArtifactNames 是单元目录中可能引用素材（Source）的产物文件名。
+var detachArtifactNames = []string{"brief.yaml", "outline.yaml", "plan.yaml", "claims.yaml", "illustrations.yaml"}
+
+// DetachSource 从工作区所有引用素材 id 的产物中移除该引用：单元目录的 brief、outline、plan、claims 与
+// illustrations，作品根单元目录的 canon.yaml，系列（series/*.yaml 与 series/*/canon.yaml）与规范包提议
+// （proposals/*.yaml）。在 YAML 节点树上只删除 sources（outline 另含 uses）序列中的目标元素，保留其他字段、
+// 顺序与注释；写前对全部受影响的文档完成编码、重新解析、Schema 校验与残留检查，任一文档失败时不写任何文件。
+// 删除后会让信息图（Infographic）失去全部出处时报告 source.referenced，由作者先调整配图。
+func DetachSource(root, id string) ([]string, []workspace.Problem) {
+	rels, ps := detachTargets(root)
+	if len(ps) > 0 {
+		return nil, ps
+	}
+	type edit struct {
+		rel  string
+		data []byte
+	}
+	var edits []edit
+	for _, rel := range rels {
+		if !workspace.IsRegular(root, rel) {
+			continue
+		}
+		doc, ps := workspace.Read(root, rel)
+		if doc == nil {
+			if len(ps) > 0 {
+				return nil, ps
+			}
+			continue
+		}
+		uses := strings.HasSuffix(rel, "/outline.yaml")
+		changed, anchor := detachDocument(doc, id, uses)
+		if anchor != "" {
+			return nil, []workspace.Problem{errorAt(CodeAnchoredValue, rel, "", anchor)}
+		}
+		if !changed {
+			continue
+		}
+		data, err := workspace.Encode(doc)
+		if err != nil {
+			return nil, []workspace.Problem{errorAt(workspace.CodeWriteFailed, rel, "", "生成产物失败："+err.Error())}
+		}
+		written, p := schema.Parse(data)
+		if p != nil {
+			p.Line = 0 // 未写出的文件，行号没有意义
+			return nil, workspace.FromSchema(rel, []schema.Problem{*p})
+		}
+		kind := schema.KindFor(rel)
+		if kind == nil {
+			return nil, []workspace.Problem{errorAt(schema.CodeUnknownKind, rel, "", "无法识别产物类型")}
+		}
+		if ps := kind.ValidateNode(written); len(ps) > 0 {
+			return nil, workspace.FromSchema(rel, ps)
+		}
+		decoded := schema.Decode(written)
+		if containsSourceID(decoded, id, uses) {
+			return nil, []workspace.Problem{errorAt(CodeAnchoredValue, rel, "",
+				"素材引用无法自动移除（可能经由 YAML 锚点、别名或合并键）；请先去掉锚点、别名与合并键再强制删除")}
+		}
+		if strings.HasSuffix(rel, "/illustrations.yaml") {
+			if msg := lostIllustrationProvenance(decoded); msg != "" {
+				return nil, []workspace.Problem{{Code: source.CodeReferenced, Severity: workspace.SeverityError, Message: msg}}
+			}
+		}
+		edits = append(edits, edit{rel, data})
+	}
+	changed := make([]string, 0, len(edits))
+	for _, e := range edits {
+		if err := workspace.WriteFile(root, e.rel, e.data); err != nil {
+			return nil, []workspace.Problem{errorAt(workspace.CodeWriteFailed, e.rel, "", "写入产物失败："+err.Error())}
+		}
+		changed = append(changed, e.rel)
+	}
+	return changed, nil
+}
+
+// detachTargets 收集工作区中可能引用素材（Source）的产物路径：各单元的 brief、outline、plan、claims 与
+// illustrations，作品根单元的 canon.yaml，系列文件与 series/*/canon.yaml，以及规范包提议。
+func detachTargets(root string) ([]string, []workspace.Problem) {
+	works, _, ps := work.LoadAll(root)
+	if len(ps) > 0 {
+		return nil, ps
+	}
+	var rels []string
+	for _, w := range works {
+		for _, u := range w.Units() {
+			for _, name := range detachArtifactNames {
+				rels = append(rels, w.UnitDir(u)+"/"+name)
+			}
+		}
+		rels = append(rels, w.UnitDir(w.Root)+"/canon.yaml")
+	}
+	for _, name := range workspace.YAMLFiles(root, workspace.Dir+"/series") {
+		rels = append(rels, workspace.Dir+"/series/"+name)
+	}
+	if entries, err := os.ReadDir(filepath.Join(root, filepath.FromSlash(workspace.Dir+"/series"))); err == nil {
+		for _, e := range entries {
+			if e.IsDir() && !strings.HasPrefix(e.Name(), ".") {
+				rels = append(rels, workspace.Dir+"/series/"+e.Name()+"/canon.yaml")
+			}
+		}
+	}
+	for _, name := range workspace.YAMLFiles(root, workspace.Dir+"/proposals") {
+		rels = append(rels, workspace.Dir+"/proposals/"+name)
+	}
+	return rels, nil
+}
+
+// ArtifactReferences 返回 sources（outline 另含 uses）中仍含 id 的产物路径，按 detachTargets 的顺序排列。
+// 用于 source rm 未给 --force 时拒绝删除：任何产物仍引用该素材时删除都会让 validate 失败。
+func ArtifactReferences(root, id string) ([]string, []workspace.Problem) {
+	rels, ps := detachTargets(root)
+	if len(ps) > 0 {
+		return nil, ps
+	}
+	out := []string{}
+	for _, rel := range rels {
+		if !workspace.IsRegular(root, rel) {
+			continue
+		}
+		doc, ps := workspace.Read(root, rel)
+		if doc == nil {
+			if len(ps) > 0 {
+				return nil, ps
+			}
+			continue
+		}
+		if containsSourceID(schema.Decode(doc), id, strings.HasSuffix(rel, "/outline.yaml")) {
+			out = append(out, rel)
+		}
+	}
+	return out, nil
+}
+
+// detachDocument 在节点树上删除 sources（uses 为真时另含 outline 的 uses）序列中的 id，返回是否有改动；
+// 遇到合并键、锚点或别名时返回原因，交由调用方拒绝并提示作者先清理。
+func detachDocument(doc *yaml.Node, id string, uses bool) (bool, string) {
+	changed := false
+	var walk func(n *yaml.Node) string
+	walk = func(n *yaml.Node) string {
+		switch n.Kind {
+		case yaml.DocumentNode, yaml.SequenceNode:
+			for _, c := range n.Content {
+				if msg := walk(c); msg != "" {
+					return msg
+				}
+			}
+		case yaml.MappingNode:
+			for i := 0; i+1 < len(n.Content); i += 2 {
+				k, v := n.Content[i], n.Content[i+1]
+				if k.ShortTag() == "!!merge" {
+					return "产物含 YAML 合并键；请先去掉合并键再强制删除"
+				}
+				if (k.Value == "sources" || (uses && k.Value == "uses")) && v.Kind == yaml.SequenceNode {
+					if v.Anchor != "" {
+						return "素材引用带有 YAML 锚点；请先去掉锚点再强制删除"
+					}
+					kept := v.Content[:0]
+					for _, item := range v.Content {
+						if item.Kind == yaml.AliasNode || item.Anchor != "" {
+							return "素材引用带有 YAML 别名或锚点；请先去掉再强制删除"
+						}
+						if item.Value == id {
+							changed = true
+							continue
+						}
+						kept = append(kept, item)
+					}
+					v.Content = kept
+					continue
+				}
+				if msg := walk(v); msg != "" {
+					return msg
+				}
+			}
+		}
+		return ""
+	}
+	return changed, walk(doc)
+}
+
+// containsSourceID 报告解码后的产物是否仍把 id 放在 sources（uses 为真时另含 uses）里。
+func containsSourceID(v any, id string, uses bool) bool {
+	switch v := v.(type) {
+	case map[string]any:
+		for k, val := range v {
+			if k == "sources" || (uses && k == "uses") {
+				if arr, ok := val.([]any); ok {
+					for _, x := range arr {
+						if x == id {
+							return true
+						}
+					}
+				}
+			}
+			if containsSourceID(val, id, uses) {
+				return true
+			}
+		}
+	case []any:
+		for _, x := range v {
+			if containsSourceID(x, id, uses) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// lostIllustrationProvenance 报告摘除引用后不再关联任何论断与素材的信息图（Infographic）；没有时为 ""。
+func lostIllustrationProvenance(v any) string {
+	m, ok := v.(map[string]any)
+	if !ok {
+		return ""
+	}
+	items, _ := m["illustrations"].([]any)
+	for _, it := range items {
+		im, ok := it.(map[string]any)
+		if !ok || im["content"] != "infographic" {
+			continue
+		}
+		claims, _ := im["claims"].([]any)
+		sources, _ := im["sources"].([]any)
+		if len(claims) == 0 && len(sources) == 0 {
+			return fmt.Sprintf("配图（Illustration）%v 是信息图（Infographic），删除素材后不再关联任何论断或素材；请先调整该配图再强制删除", im["id"])
+		}
+	}
+	return ""
 }
 
 // AddClaim 在单元 u 的 claims.yaml 末尾追加论断。id 为空时取 claim-<n>，n 从已有论断数加一开始递增到不重复；

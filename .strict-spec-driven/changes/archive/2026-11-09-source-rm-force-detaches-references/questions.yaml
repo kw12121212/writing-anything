@@ -1,0 +1,42 @@
+schema: strict-spec-driven/question-list/v1
+schema_version: 1
+artifact_type: question_list
+schema_file: templates/strict-spec-driven/schemas/question-list.yaml
+change: source-rm-force-detaches-references
+open: []
+resolved:
+  - id: requirement-problem
+    question: 今天具体坏在哪、对谁坏？
+    context: 推荐：force 删除被引用素材后 validate 报 claim.unknown-source，工作区永久无效，advance/accept 被挡。
+    answer: 实测删一条被论断引用的素材并加 --force 后，validate 报 claim.unknown-source，工作区永久无效；advance 与 accept 都依赖 validate 通过，等于允许删但删完不能用。
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-outcome
+    question: 什么可观察的差别能证明问题解决了？
+    context: 推荐：force 删除后 claims.yaml 不再含该 source id，validate valid，audit.log 有原因。
+    answer: force 应连引用一起摘掉：从 claims.yaml 移除该 source id，在 audit.log 记一笔，validate 保持通过；并有用例断言 rm --force 后 validate 仍 valid。
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-trigger
+    question: 为什么是现在？
+    context: 推荐：Chief 验收实测到这一条，要求合并前修掉。
+    answer: 验收时实测发现，属于合并前必须修掉的阻塞项。
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-non-goals
+    question: 哪些东西明确不许变？
+    context: 推荐：retire、rm 未引用路径、source.referenced 门禁、source.not-found 与审计日志契约都不变。
+    answer: retire 的行为、rm 未引用素材的行为、被引用未给 force 时拒绝的行为、source.not-found 与审计日志都不变。
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-interpretation
+    question: force 的语义取哪种读法？
+    context: 推荐：force = 作者确认删除并授权摘掉引用；不是留悬空引用。
+    answer: force 是作者的明确授权：删除素材的同时把它从所有论断的 sources 里摘掉，工作区保持 valid。
+    status: resolved
+    kind: requirement
+    answered_by: human

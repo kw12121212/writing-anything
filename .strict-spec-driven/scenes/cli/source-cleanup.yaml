@@ -1,0 +1,73 @@
+schema: strict-spec-driven/scene/v1
+schema_version: 1
+artifact_type: scene
+schema_file: templates/strict-spec-driven/schemas/scene.yaml
+scene:
+  id: source-cleanup
+  title: 作者作废与清理旧素材
+area: cli
+status: draft
+actors:
+  - name: 作者
+    role: 决定哪份素材保留、哪份作废或删除，并给出删除原因
+  - name: Agent
+    role: 按作者指示运行 wa-cli source 命令并回报引用关系
+preconditions:
+  - 工作区已用 wa-cli init 创建，旧版素材已用 wa-cli source add 登记
+  - 作者知道旧版素材的 id，或先运行 wa-cli source list --all 查看
+main_flow:
+  list:
+    action: 运行 wa-cli source list 查看当前素材：未作废的素材照常列出，作废素材默认不出现
+    covered_by:
+      - spec_id: sources-and-provenance
+        requirement_id: source-list
+  retire:
+    action: '对旧版本运行 wa-cli source retire <id>：source.yaml 增加 retired: true，原文存档、sha256 与其他字段不变'
+    covered_by:
+      - spec_id: sources-and-provenance
+        requirement_id: source-retire
+  list-all:
+    action: 运行 wa-cli source list --all：作废素材出现在列表里并标注「作废」，retired 为 true
+    covered_by:
+      - spec_id: sources-and-provenance
+        requirement_id: source-list
+  remove-unused:
+    action: 对确认无引用的旧素材运行 wa-cli source rm <id>：素材目录、原文与 source.yaml 一并删除，changedPaths 列出这些路径
+    covered_by:
+      - spec_id: sources-and-provenance
+        requirement_id: source-remove
+  confirm-gone:
+    action: 再次运行 source list 与 wa-cli validate：被删素材不再出现，工作区校验通过
+    covered_by:
+      - spec_id: sources-and-provenance
+        requirement_id: source-list
+exception_flows:
+  referenced:
+    trigger: 要硬删的素材仍被某个论断（Claim）引用
+    steps:
+      reject:
+        action: wa-cli 拒绝删除并报告 source.referenced，message 列出引用它的作品、单元与论断 id
+        covered_by:
+          - spec_id: sources-and-provenance
+            requirement_id: source-remove
+      choose:
+        action: 作者确认引用不再需要时用 wa-cli source retire 保留为作废，或带 --force 与 --reason 强制删除；force 删除会把该素材 id 从 brief、outline、plan、claims、illustrations、canon、series 与规范包提议等所有引用处摘除，validate 保持通过；信息图会因此失去全部出处时整体拒绝
+        covered_by:
+          - spec_id: sources-and-provenance
+            requirement_id: source-remove
+  force-without-reason:
+    trigger: 带 --force 但没有给 --reason
+    steps:
+      reject:
+        action: 报告 input.invalid-value（field 为 reason），素材与审计记录都不变
+        covered_by:
+          - spec_id: sources-and-provenance
+            requirement_id: source-remove
+  unknown-id:
+    trigger: 给出的素材 id 不存在或不符合 id 格式
+    steps:
+      reject:
+        action: 报告 source.not-found，不访问该路径、不修改任何文件
+        covered_by:
+          - spec_id: sources-and-provenance
+            requirement_id: source-retire

@@ -436,7 +436,7 @@ func TestRegistryConsistency(t *testing.T) {
 }
 
 // mutatingSamples 列出只能通过变更产物才能成功的命令；它们的样例在临时工作区中变更产物。
-var mutatingSamples = map[string]bool{"new": true, "unit add": true, "unit move": true, "advance": true, "reopen": true, "source add": true, "claim add": true, "claim remove": true, "illustration add": true, "illustration remove": true, "review record": true, "accept": true, "export": true, "preview": true, "marketing ask": true, "mcp install": true, "skills install": true, "feedback add": true, "decision add": true, "decide": true, "outline remove": true, "pack install": true, "pack remove": true, "metrics record": true, "metrics calibrate": true, "pack learn": true, "series add": true, "series fact": true, "summary set": true, "pack confirm": true, "pack reject": true, "canon add": true, "canon remove": true, "scene contract": true, "threads add": true, "plan step": true, "plan confirm": true, "state propose": true, "state confirm": true, "state reject": true, "state set": true, "knowledge propose": true, "knowledge confirm": true, "knowledge reject": true, "knowledge set": true, "scene close-out": true, "volume checkpoint": true, "volume confirm": true, "review plan": true, "review submit": true, "impact mark": true, "impact clear": true, "assemble": true, "handoff write": true}
+var mutatingSamples = map[string]bool{"new": true, "unit add": true, "unit move": true, "advance": true, "reopen": true, "source add": true, "source retire": true, "source rm": true, "claim add": true, "claim remove": true, "illustration add": true, "illustration remove": true, "review record": true, "accept": true, "export": true, "preview": true, "marketing ask": true, "mcp install": true, "skills install": true, "feedback add": true, "decision add": true, "decide": true, "outline remove": true, "pack install": true, "pack remove": true, "metrics record": true, "metrics calibrate": true, "pack learn": true, "series add": true, "series fact": true, "summary set": true, "pack confirm": true, "pack reject": true, "canon add": true, "canon remove": true, "scene contract": true, "threads add": true, "plan step": true, "plan confirm": true, "state propose": true, "state confirm": true, "state reject": true, "state set": true, "knowledge propose": true, "knowledge confirm": true, "knowledge reject": true, "knowledge set": true, "scene close-out": true, "volume checkpoint": true, "volume confirm": true, "review plan": true, "review submit": true, "impact mark": true, "impact clear": true, "assemble": true, "handoff write": true}
 
 // sampleArgs 返回命令的一次成功调用：除 mutatingSamples 中的命令外都不变更任何产物；工作区命令在已初始化的
 // 临时工作区中运行。
@@ -466,6 +466,16 @@ func sampleArgs(t *testing.T, name string) []string {
 		return []string{"source", "add", "--type", "author-note", "--file", "idea.md", "--dir", dir, "--json"}
 	case "source list":
 		return []string{"source", "list", "--dir", newWorkspace(t), "--json"}
+	case "source retire":
+		dir := newWorkspace(t)
+		writeFile(t, filepath.Join(dir, "idea.md"), "作者笔记")
+		run(t, "source", "add", "--type", "author-note", "--file", "idea.md", "--id", "src-old", "--dir", dir)
+		return []string{"source", "retire", "src-old", "--dir", dir, "--json"}
+	case "source rm":
+		dir := newWorkspace(t)
+		writeFile(t, filepath.Join(dir, "idea.md"), "作者笔记")
+		run(t, "source", "add", "--type", "author-note", "--file", "idea.md", "--id", "src-old", "--dir", dir)
+		return []string{"source", "rm", "src-old", "--dir", dir, "--json"}
 	case "draft write":
 		// 同样的内容再次写入不变更产物（cli-contract/sample-invocation）。
 		dir := newWork(t)

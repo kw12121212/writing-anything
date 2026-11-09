@@ -8,6 +8,10 @@ areas:
       title: 核对已安装 wa-cli 的版本
       status: draft
       path: .strict-spec-driven/scenes/cli/cli-version-check.yaml
+    source-cleanup:
+      title: 作者作废与清理旧素材
+      status: draft
+      path: .strict-spec-driven/scenes/cli/source-cleanup.yaml
   dsh-plugin:
     plugin-setup-enable:
       title: 插件内置技能与 CLI 的启用与优先

@@ -1,0 +1,89 @@
+schema: strict-spec-driven/delta-spec/v1
+schema_version: 1
+artifact_type: delta_spec
+schema_file: templates/strict-spec-driven/schemas/delta-spec.yaml
+target_spec: sources-and-provenance
+operations:
+  ADDED:
+    source-retire:
+      strength: MUST
+      statement: 'wa-cli source retire <id> 必须把素材标记为作废：在 .writing-anything/sources/<id>/source.yaml 上增加 retired: true，保留其他字段、取值与 YAML 注释；原文存档、file、sha256、bytes 与 id 不变，不删除任何文件，不改素材目录结构。成功时退出码为 0，changedPaths 为 [.writing-anything/sources/<id>/source.yaml]，--json 输出的 source 字段与 source add 相同并含 retired: true。素材已作废时重复运行不修改文件、changedPaths 为空数组、退出码为 0。素材 id 不符合 id 格式或不存在时报告 source.not-found（诊断不填 path，next 含 wa-cli help source retire --json 与 wa-cli source list --dir <dir> --json），不访问该路径、不修改任何文件，退出码为 1。source retire 不做论断（Claim）引用检查，也不改变素材是否已登记：引用该素材的论断照常通过 wa-cli validate。写入必须经过工作区统一的原子写入，写前重新解析并校验素材 Schema。'
+      scenarios:
+        retire-source:
+          - GIVEN: 已登记素材 src-old，source.yaml 含 title 与 tier
+          - WHEN: 运行 wa-cli source retire src-old --dir D --json
+          - THEN: 'source.yaml 增加 retired: true，title、tier 与其他字段逐字保留；changedPaths 为 [.writing-anything/sources/src-old/source.yaml]，source.retired 为 true，退出码为 0'
+        retire-hides-from-list:
+          - GIVEN: 已登记素材 src-old
+          - WHEN: 运行 wa-cli source retire src-old --dir D，再运行 wa-cli source list --dir D --json
+          - THEN: source retire 退出码为 0；source list 的 sources 不含 src-old
+        retire-idempotent:
+          - GIVEN: 已用 wa-cli source retire src-old 标记作废的素材
+          - WHEN: 再次运行 wa-cli source retire src-old --dir D --json
+          - THEN: source.yaml 与运行前逐字节相同，changedPaths 为空数组，退出码为 0
+        retire-keeps-references:
+          - GIVEN: 作品 my-post 的论断 claim-1 关联素材 src-old
+          - WHEN: 运行 wa-cli source retire src-old --dir D，再运行 wa-cli validate --dir D --json
+          - THEN: source retire 退出码为 0；validate 的 valid 为 true，退出码为 0
+        retire-not-found:
+          - GIVEN: 工作区 D 中没有素材 nope
+          - WHEN: 运行 wa-cli source retire nope --dir D --json
+          - THEN: diagnostics 中有一条错误码为 source.not-found 的诊断，不填 path，next 含 wa-cli help source retire --json 与 wa-cli source list --dir D --json；sources/ 下没有新建或改动的目录，退出码为 1
+    source-remove:
+      strength: MUST
+      statement: wa-cli source rm <id> 必须硬删素材：删除 .writing-anything/sources/<id>/ 整个目录（source.yaml、原文与目录本身）。删除前必须遍历 .writing-anything/works/ 下每个作品的每个单元里的 claims.yaml，找出 sources 含该 id 的论断（Claim）：有引用且未给 --force 时报告 source.referenced（severity 为 error，诊断不填 path，message 列出引用它的作品、单元与论断 id 及论断文字），不删除任何文件，退出码为 1，next 含 wa-cli source retire <id> --dir <dir> --json 与 wa-cli claim list <作品> --dir <dir> --json；无法确认引用（某个作品或 claims.yaml 加载失败）时，未给 --force 就原样报告该诊断并拒绝删除。给出 --force 时必须同时给出非空 --reason，否则报告 input.invalid-value（field 为 reason，message 说明强制删除需要原因），不删除任何文件、退出码为 1；给出 --force 与非空 --reason 时即使被引用也删除，删除原因随命令参数记入 .writing-anything/audit.log，引用它的论断在下次 validate 时按悬空引用报告 claim.unknown-source。成功时退出码为 0，changedPaths 为 [素材目录, 存档文件, source.yaml]（删除后这些路径不再存在），--json 输出的 removed 字段为该素材 id。只给 --reason 而不给 --force 时报告 input.invalid-value（field 为 reason，说明原因只用于强制删除）。素材 id 不符合 id 格式或不存在时报告 source.not-found（诊断不填 path，next 含 wa-cli help source rm --json 与 wa-cli source list --dir <dir> --json），不访问该路径、不删除任何文件，退出码为 1。所有可能失败的检查必须在删除前完成。
+      scenarios:
+        remove-unreferenced:
+          - GIVEN: 已登记素材 src-old，没有任何论断引用它
+          - WHEN: 运行 wa-cli source rm src-old --dir D --json
+          - THEN: 素材目录、原文与 source.yaml 都不存在；changedPaths 为 [.writing-anything/sources/src-old, .writing-anything/sources/src-old/original.txt, .writing-anything/sources/src-old/source.yaml]；removed 为 src-old，退出码为 0
+        remove-referenced-rejects:
+          - GIVEN: 已登记素材 src-old，作品 my-post 的论断 claim-1 关联它
+          - WHEN: 运行 wa-cli source rm src-old --dir D --json
+          - THEN: diagnostics 中有一条错误码为 source.referenced 的诊断，message 含 my-post、claim-1 与论断文字；素材目录与 source.yaml 逐字节不变，changedPaths 为空数组，退出码为 1
+        force-requires-reason:
+          - GIVEN: 已登记素材 src-old，作品 my-post 的论断 claim-1 关联它
+          - WHEN: 运行 wa-cli source rm src-old --force --dir D --json
+          - THEN: diagnostics 中有一条错误码为 input.invalid-value、field 为 reason 的诊断；素材目录不变，退出码为 1
+        reason-requires-force:
+          - GIVEN: 已登记素材 src-old，没有论断引用它
+          - WHEN: 运行 wa-cli source rm src-old --reason 重复登记 --dir D --json
+          - THEN: diagnostics 中有一条错误码为 input.invalid-value、field 为 reason 的诊断；素材目录不变，退出码为 1
+        force-removes-referenced:
+          - GIVEN: 已登记素材 src-old，作品 my-post 的论断 claim-1 关联它
+          - WHEN: 运行 wa-cli source rm src-old --force --reason 旧版已被 v3 取代 --dir D --json
+          - THEN: 素材目录被删除，removed 为 src-old，退出码为 0；audit.log 最后一行的 args 含 src-old 与 旧版已被 v3 取代
+        remove-not-found:
+          - GIVEN: 工作区 D 中没有素材 nope
+          - WHEN: 运行 wa-cli source rm nope --dir D --json
+          - THEN: diagnostics 中有一条错误码为 source.not-found 的诊断，不填 path，next 含 wa-cli help source rm --json 与 wa-cli source list --dir D --json；sources/ 不变，退出码为 1
+  MODIFIED:
+    source-list:
+      strength: MUST
+      statement: wa-cli source list 必须只读地列出工作区中已登记的素材：不带 --all 时只列出未作废的素材，带 --all 时列出全部（含已作废的素材）；--json 输出 sources 数组，按 id 排序，每项含 id、type、title（未设置时为 null）、path（存档文件路径）、sha256 与 retired（true 表示该素材已作废），给出时另含 url 与 tier（信源等级（Source Tier））；只列出 sources/ 下不以 . 开头、通过素材校验（见 archive-integrity）的子目录。changedPaths 为空数组；有素材目录不通过素材校验时报告其诊断、valid 为 false、退出码为 1，其他素材照常列出；否则退出码为 0。
+      scenarios:
+        list-sources:
+          - GIVEN: 已登记素材 interview-ceo 与 src-0123456789ab
+          - WHEN: 运行 wa-cli source list --dir D --json
+          - THEN: sources 依次为 interview-ceo 与 src-0123456789ab，每项 retired 为 false，changedPaths 为空数组，退出码为 0
+        list-empty:
+          - GIVEN: 刚初始化的工作区 D
+          - WHEN: 运行 wa-cli source list --dir D --json
+          - THEN: sources 为空数组，valid 为 true，退出码为 0
+        list-skips-tampered:
+          - GIVEN: 已登记素材 interview-ceo 与 tampered，tampered 的存档文件被改动
+          - WHEN: 运行 wa-cli source list --dir D --json
+          - THEN: sources 只含 interview-ceo；diagnostics 中有一条错误码为 source.modified 的诊断，valid 为 false，退出码为 1
+        list-hides-retired:
+          - GIVEN: 已登记素材 old 与 new，old 已被 source retire 标记作废
+          - WHEN: 运行 wa-cli source list --dir D --json
+          - THEN: sources 只含 new，退出码为 0
+        list-all-shows-retired:
+          - GIVEN: 已登记素材 old 与 new，old 已被 source retire 标记作废
+          - WHEN: 运行 wa-cli source list --all --dir D --json
+          - THEN: sources 含 old 与 new，old 的 retired 为 true，new 的 retired 为 false，退出码为 0
+        list-text-marks-retired:
+          - GIVEN: 已登记素材 old，old 已被 source retire 标记作废
+          - WHEN: 运行 wa-cli source list --all --dir D
+          - THEN: 文本输出含 old 那一行，并带「（作废）」标注
+  REMOVED: {}

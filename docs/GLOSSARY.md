@@ -69,6 +69,7 @@
 |---|---|---|---|
 | 素材 | Source | 素材 | 作者笔记、访谈、转写稿、参考资料、过往文章 |
 | 素材库 | Source Library | 素材库 | 原文存档的素材集合 |
+| 作废素材 | Retired Source | 作废素材 | `source.yaml` 标记 `retired: true` 的素材：`source list` 默认不显示，`--all` 显示并标注；原文存档与校验照常保留，可用 `source rm` 彻底删除 |
 | 信源等级 | Source Tier | 信源等级 | 素材离一手的距离：`primary` 一手（作者亲历或原始出处）、`secondary` 二手转述（引用转述的引语时须向作者明示）；与素材类型（谁说的）正交，见 `source add --tier` |
 | 冲突 | Conflict | 冲突 | 素材对同一主题的两种矛盾说法（素材冲突）：登记为带结构化载荷的决策（两说各含素材 id 与引文），未决时阻塞推进、lint 对引用任一方引文报 error，作者裁定后解除；见 `decision add --conflict-about`。与小说创作中作为叙事张力的「冲突」无关 |
 | 论断 | Claim | 论断 | 需要出处支撑的事实、数据、经历或观点 |

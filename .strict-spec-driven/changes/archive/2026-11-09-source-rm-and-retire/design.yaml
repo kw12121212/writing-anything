@@ -1,0 +1,29 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: source-rm-and-retire
+approach:
+  - '在 source 包增加作废与删除的领域函数：Retire 在 source.yaml 的 YAML 节点树上只追加 retired: true（保留其他字段与注释），Remove 删除素材目录；新增 References 函数遍历 works 下每个单元的 claims.yaml，返回引用该素材的论断（作品、单元、论断 id 与文字）。CLI 增加 source retire 与 source rm 两个命令：retire 只改 source.yaml；rm 先做引用检查，被引用时拒绝并给出引用清单，--force 必须与 --reason 同时出现，删除原因随命令参数进入既有 audit.log。source list 增加 --all，默认过滤 retired 素材，视图增加 retired 布尔键。'
+decisions:
+  retired-field-in-source-yaml:
+    decision: '软删用 source.yaml 的可选布尔字段 retired: true 表示，不移动目录、不改 schema_version；存档文件与 sha256 保持原样，archive-integrity 校验照常通过。'
+    rationale: source.yaml 是素材的唯一真相来源，目录结构被 source list、validate 与 claims 引用检查共同依赖；就地标记让所有既有读取路径无需迁移，也让作废状态随来源元数据一起追溯。
+  retire-keeps-registered:
+    decision: retire 不切断已有引用，也不改变素材是否已登记（Registered）：已有论断引用作废素材时 validate 仍通过；retire 不做引用检查。
+    rationale: 软删的语义是「默认列表不再出现」，不是「历史引用失效」；若 retire 让 Registered 变假，会把历史 claims 变成悬空引用并让 validate 失败，反而惩罚整理素材的作者。硬删才需要引用保护，由 source rm 承担。
+  rm-reference-gate:
+    decision: source rm 在删除前遍历 works 下全部单元的 claims.yaml，收集 sources 含该 id 的论断；有引用且未给 --force 时报告 source.referenced，message 列出作品、单元与论断，next 给出 source retire 与 claim list；--force 必须同时给 --reason，否则报告 input.invalid-value。
+    rationale: 删除是唯一不可恢复的素材操作，必须让作者看到谁在用这份素材；--force 的存在保证被引用素材仍有出路，--reason 让强制删除在审计日志里可归因。
+  force-reason-in-audit-log:
+    decision: 强制删除时必须同时给出 --reason，删除原因经命令参数写入既有 .writing-anything/audit.log 的 args，不新增工作区产物与 Schema。
+    rationale: audit.log 已经是 wa-cli 全部调用的追加式运维记录，且是唯一不进入 changedPaths 与 Schema 的显式例外；为一条删除原因新增 .removed.yaml 产物会牵动 schema 登记、validate 接线与覆盖范围，与本需求不成比例。
+alternatives:
+  - option: 把作废素材移到 .writing-anything/sources/.trash/<id>/ 回收站目录
+    reason: 回收站语义要求新增目录约定、清理与恢复流程，并让 source list 与 validate 认识两套位置；本次只要默认列表不显示，retired 字段更小且不改变既有路径。
+  - option: 把强制删除的原因写入新的 .writing-anything/sources/.removed.yaml 记录文件
+    reason: 新文件是结构化工作区产物，按技术标准必须登记 JSON Schema、接入 validate 与产物类型，收益只是让原因更顺手可查；audit.log 已覆盖审计诉求。
+risks:
+  - source list 默认隐藏作废素材后，作者若忘记 --all 会以为素材丢了；帮助文案与 README 必须写清 --all。
+  - 引用检查需要读取全部作品的 claims.yaml，大工作区上 rm 的耗时会随论断数量增长；一次删除只做一次遍历，可接受。
+  - 强制删除不可恢复，原文与元数据一起消失，只留审计日志中的 id 与原因；必须在 help 与诊断中写明。
