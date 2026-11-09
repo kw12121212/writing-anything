@@ -841,7 +841,7 @@ export function buildTools(
 
 export function createMcpServer(deps: ServerDeps, sessions: ReviewSessions): Server {
   const server = new Server(
-    { name: PLUGIN_ID, version: '0.10.0' },
+    { name: PLUGIN_ID, version: '0.10.1' },
     { capabilities: { tools: {}, resources: {} } },
   );
   const viewer = createViewerState();
