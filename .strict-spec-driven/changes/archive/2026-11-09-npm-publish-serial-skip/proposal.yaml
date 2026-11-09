@@ -1,0 +1,20 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: npm-publish-serial-skip
+  status: proposed
+summary:
+  what:
+    - 'npm 发布工作流改为单并发组串行（push main 与 release 共用一组、cancel-in-progress: false），跳过判断覆盖 npm 暂存区，发布时撞上 E409「previously staged version」按已发布处理并成功退出。'
+    - 修正 workflow 顶部与 concurrency 注释，使其与实际行为一致。
+  why:
+    - 'push: main 与 release: published 两条触发用不同 github.ref 组，可并发执行：push 那条把 1.0.0 暂存后，release 那条的跳过判断仍看 dist-tags（0.10.1），误判没发过又去 publish，撞 E409 变红；v0.10.0、v0.10.1 同样模式。'
+scope:
+  in:
+    - .github/workflows/publish-npm.yml 的并发组、版本跳过判断、E409 处理与注释。
+  out:
+    - 不改发布内容、不改 npm 包、不重发 1.0.0；不引入新的 CI 工作流。
+unchanged_behavior:
+  - 正常首次发布仍以 latest/next 标签发布；已验证版本的重复触发仍然跳过且不发布。
