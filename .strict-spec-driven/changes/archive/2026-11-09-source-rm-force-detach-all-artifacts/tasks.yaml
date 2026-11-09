@@ -1,0 +1,30 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: source-rm-force-detach-all-artifacts
+sections:
+  Implementation:
+    impl-broad-detach:
+      text: DetachSource 收集并改写全部 validate 相关产物（brief/outline/plan/claims/illustrations/canon/series/proposals），通用节点遍历删 sources 与 outline uses，信息图失去全部出处时拒绝。
+      status: complete
+    impl-tests:
+      text: 更新 draft 与 cli 测试覆盖 brief、outline、canon 同时摘除与 validate 通过；更新 help 与场景文案。
+      status: complete
+  Testing:
+    test-broad-detach:
+      text: 测试 brief/outline/claims 同时摘引用且 validate valid；信息图失去出处时拒绝。
+      status: complete
+      command: go test ./internal/draft -run TestDetachSource && go test ./internal/cli -run TestSourceRemoveForceDetachesAllWorks
+    test-regression:
+      text: 跑完整回归并检查覆盖率门槛。
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    verify-strict:
+      text: 运行 strict-spec-cli ready/verify。
+      status: complete
+      command: strict-spec-cli ready source-rm-force-detach-all-artifacts && strict-spec-cli verify source-rm-force-detach-all-artifacts
+testing_gates:
+  validation_task: test-regression
+  unit_test_task: test-broad-detach

@@ -51,7 +51,7 @@ exception_flows:
           - spec_id: sources-and-provenance
             requirement_id: source-remove
       choose:
-        action: 作者确认引用不再需要时用 wa-cli source retire 保留为作废，或带 --force 与 --reason 强制删除
+        action: 作者确认引用不再需要时用 wa-cli source retire 保留为作废，或带 --force 与 --reason 强制删除；force 删除会把该素材 id 从 brief、outline、plan、claims、illustrations、canon、series 与规范包提议等所有引用处摘除，validate 保持通过；信息图会因此失去全部出处时整体拒绝
         covered_by:
           - spec_id: sources-and-provenance
             requirement_id: source-remove

@@ -384,29 +384,41 @@ requirements:
         - THEN: diagnostics 中有一条错误码为 source.not-found 的诊断，不填 path，next 含 wa-cli help source retire --json 与 wa-cli source list --dir D --json；sources/ 下没有新建或改动的目录，退出码为 1
   source-remove:
     strength: MUST
-    statement: wa-cli source rm <id> 必须硬删素材：删除 .writing-anything/sources/<id>/ 整个目录（source.yaml、原文与目录本身）。删除前必须遍历 .writing-anything/works/ 下每个作品的每个单元里的 claims.yaml，找出 sources 含该 id 的论断（Claim）：有引用且未给 --force 时报告 source.referenced（severity 为 error，诊断不填 path，message 列出引用它的作品、单元与论断 id 及论断文字），不删除任何文件，退出码为 1，next 含 wa-cli source retire <id> --dir <dir> --json 与 wa-cli claim list <作品> --dir <dir> --json；无法确认引用（某个作品或 claims.yaml 加载失败）时，未给 --force 就原样报告该诊断并拒绝删除。给出 --force 时必须同时给出非空 --reason，否则报告 input.invalid-value（field 为 reason，message 说明强制删除需要原因），不删除任何文件、退出码为 1；给出 --force 与非空 --reason 时即使被引用也删除，删除原因随命令参数记入 .writing-anything/audit.log，引用它的论断在下次 validate 时按悬空引用报告 claim.unknown-source。成功时退出码为 0，changedPaths 为 [素材目录, 存档文件, source.yaml]（删除后这些路径不再存在），--json 输出的 removed 字段为该素材 id。只给 --reason 而不给 --force 时报告 input.invalid-value（field 为 reason，说明原因只用于强制删除）。素材 id 不符合 id 格式或不存在时报告 source.not-found（诊断不填 path，next 含 wa-cli help source rm --json 与 wa-cli source list --dir <dir> --json），不访问该路径、不删除任何文件，退出码为 1。所有可能失败的检查必须在删除前完成。
+    statement: wa-cli source rm <id> 必须硬删素材：删除 .writing-anything/sources/<id>/ 整个目录（source.yaml、原文与目录本身）。删除前必须遍历工作区中所有可能引用该 id 的产物：各单元的 claims.yaml（论断 sources）、brief.yaml、outline.yaml（uses）、plan.yaml、illustrations.yaml，作品根单元目录的 canon.yaml，系列（.writing-anything/series/*.yaml 与 series/*/canon.yaml）与规范包提议（.writing-anything/proposals/*.yaml）；有任何引用且未给 --force 时报告 source.referenced（severity 为 error，诊断不填 path，message 对论断列出作品、单元、论断 id 与论断文字，并列出被引用的产物路径），不删除任何文件，退出码为 1，next 含 wa-cli source retire <id> --dir <dir> --json 与引用处的查看命令（论断为 wa-cli claim list <作品>，只有产物引用时为 wa-cli validate）；无法确认引用（某个作品或产物加载失败）时，未给 --force 就原样报告该诊断并拒绝删除。给出 --force 时必须同时给出非空 --reason，否则报告 input.invalid-value（field 为 reason，message 说明强制删除需要原因），不删除任何文件、退出码为 1。给出 --force 与非空 --reason 时，删除前必须先遍历上述产物并移除该 id 的引用：只在 YAML 节点树上删除 sources（outline 另含 uses）序列中的目标元素，保留论断与条目的其他字段、顺序与其余引用、注释；全部文档写前重新解析并按各自产物类型校验 Schema，任一文档无法读取或校验失败时不删除素材、不写任何产物。删除后会让信息图（Infographic）既无 claims 也无 sources 时报告 source.referenced 并整体拒绝，不删除素材、不写任何产物。摘引用完成后删除素材目录，删除原因随命令参数记入 .writing-anything/audit.log，完成后 wa-cli validate 必须保持 valid。成功时退出码为 0，changedPaths 为 [素材目录, 存档文件, source.yaml] 加上每个被改写的产物路径（素材路径删除后不再存在），--json 输出的 removed 字段为该素材 id。只给 --reason 而不给 --force 时报告 input.invalid-value（field 为 reason，说明原因只用于强制删除）。素材 id 不符合 id 格式或不存在时报告 source.not-found（诊断不填 path，next 含 wa-cli help source rm --json 与 wa-cli source list --dir <dir> --json），不访问该路径、不删除任何文件，退出码为 1。所有可能失败的检查必须在删除前完成。
     scenarios:
       remove-unreferenced:
-        - GIVEN: 已登记素材 src-old，没有任何论断引用它
+        - GIVEN: 已登记素材 src-old，没有任何论断或产物引用它
         - WHEN: 运行 wa-cli source rm src-old --dir D --json
         - THEN: 素材目录、原文与 source.yaml 都不存在；changedPaths 为 [.writing-anything/sources/src-old, .writing-anything/sources/src-old/original.txt, .writing-anything/sources/src-old/source.yaml]；removed 为 src-old，退出码为 0
       remove-referenced-rejects:
         - GIVEN: 已登记素材 src-old，作品 my-post 的论断 claim-1 关联它
         - WHEN: 运行 wa-cli source rm src-old --dir D --json
-        - THEN: diagnostics 中有一条错误码为 source.referenced 的诊断，message 含 my-post、claim-1 与论断文字；素材目录与 source.yaml 逐字节不变，changedPaths 为空数组，退出码为 1
+        - THEN: diagnostics 中有一条错误码为 source.referenced 的诊断，message 含 my-post、claim-1 与论断文字；素材目录与 claims.yaml 逐字节不变，changedPaths 为空数组，退出码为 1
       force-requires-reason:
         - GIVEN: 已登记素材 src-old，作品 my-post 的论断 claim-1 关联它
         - WHEN: 运行 wa-cli source rm src-old --force --dir D --json
-        - THEN: diagnostics 中有一条错误码为 input.invalid-value、field 为 reason 的诊断；素材目录不变，退出码为 1
+        - THEN: diagnostics 中有一条错误码为 input.invalid-value、field 为 reason 的诊断；素材与 claims.yaml 不变，退出码为 1
       reason-requires-force:
         - GIVEN: 已登记素材 src-old，没有论断引用它
         - WHEN: 运行 wa-cli source rm src-old --reason 重复登记 --dir D --json
         - THEN: diagnostics 中有一条错误码为 input.invalid-value、field 为 reason 的诊断；素材目录不变，退出码为 1
-      force-removes-referenced:
-        - GIVEN: 已登记素材 src-old，作品 my-post 的论断 claim-1 关联它
+      force-detaches-claims-brief-outline:
+        - GIVEN: 已登记素材 src-old，作品 my-post 的 claim-1、brief.yaml 的 provenance 与 outline.yaml 的 uses 都引用它，brief 另有一条 src-keep 出处
         - WHEN: 运行 wa-cli source rm src-old --force --reason 旧版已被 v3 取代 --dir D --json
-        - THEN: 素材目录被删除，removed 为 src-old，退出码为 0；audit.log 最后一行的 args 含 src-old 与 旧版已被 v3 取代
+        - THEN: 三份产物都不再含 src-old，brief 的 src-keep 与 claims 的其余字段、注释不变；changedPaths 同时列出 claims.yaml、brief.yaml 与 outline.yaml；audit.log 含原因；wa-cli validate --dir D --json 的 valid 为 true、退出码为 0
+      force-detaches-multiple-works:
+        - GIVEN: 已登记素材 src-old，作品 my-post 与 other-post 的论断都关联它
+        - WHEN: 运行 wa-cli source rm src-old --force --reason 旧版已被 v3 取代 --dir D --json
+        - THEN: 两个作品的 claims.yaml 都不再含 src-old，changedPaths 同时列出两份 claims.yaml；wa-cli validate --dir D --json 的 valid 为 true，退出码为 0
+      force-refuses-lost-infographic:
+        - GIVEN: 已登记素材 src-old，作品 my-post 的信息图只关联 src-old，没有 claims
+        - WHEN: 运行 wa-cli source rm src-old --force --reason 旧版已被 v3 取代 --dir D --json
+        - THEN: diagnostics 中有一条 source.referenced，message 指出该信息图会失去全部出处；素材与所有产物逐字节不变，退出码为 1
       remove-not-found:
         - GIVEN: 工作区 D 中没有素材 nope
         - WHEN: 运行 wa-cli source rm nope --dir D --json
         - THEN: diagnostics 中有一条错误码为 source.not-found 的诊断，不填 path，next 含 wa-cli help source rm --json 与 wa-cli source list --dir D --json；sources/ 不变，退出码为 1
+      remove-artifact-reference-rejects:
+        - GIVEN: 已登记素材 src-old，作品 my-post 的 brief.yaml 引用它，但没有论断引用
+        - WHEN: 运行 wa-cli source rm src-old --dir D --json
+        - THEN: diagnostics 中有一条错误码为 source.referenced、message 含 brief.yaml 的诊断，next 含 wa-cli validate --dir D --json；素材与 brief.yaml 不变，退出码为 1

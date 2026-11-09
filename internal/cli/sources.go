@@ -64,10 +64,10 @@ var sourceRetireCommand = &command{
 
 var sourceRemoveCommand = &command{
 	name:    "source rm",
-	summary: "硬删素材（Source）及其原文存档；被论断（Claim）引用时拒绝删除，确需删除用 --force 与 --reason",
+	summary: "硬删素材（Source）及其原文存档；被论断（Claim）引用时拒绝删除，用 --force 与 --reason 连同引用一起摘除",
 	args:    []argSpec{{"id", "素材 id", true}},
 	flags: []flagSpec{dirFlag,
-		{"force", flagBool, "被论断引用时仍然删除；必须同时给出 --reason"},
+		{"force", flagBool, "被论断引用时仍然删除：先把该素材 id 从所有引用它的产物（brief、outline、plan、claims、illustrations、canon、series、提案）中摘除；必须同时给出 --reason"},
 		{"reason", flagString, "强制删除的原因，记入 .writing-anything/audit.log；只与 --force 一起使用"},
 	},
 	outputKeys: []outputKey{{"removed", "被删除的素材 id；失败时为 null"}},
@@ -368,21 +368,39 @@ func sourceNext(ds []Diagnostic, name, dir string) {
 	}
 }
 
-// sourceReferencedMessage 汇总引用素材的论断：作品、单元、论断 id 与论断文字（截断过长文字）。
-func sourceReferencedMessage(id string, refs []draft.Reference) string {
-	items := make([]string, 0, len(refs))
-	for _, r := range refs {
-		text := r.Text
-		if runes := []rune(text); len(runes) > 40 {
-			text = string(runes[:40]) + "…"
+// sourceReferencedMessage 汇总引用素材的论断与产物：论断给出作品、单元、论断 id 与文字（截断过长文字），
+// 产物给出被引用的路径。
+func sourceReferencedMessage(id string, refs []draft.Reference, artifacts []string) string {
+	var msg string
+	if len(refs) > 0 {
+		items := make([]string, 0, len(refs))
+		for _, r := range refs {
+			text := r.Text
+			if runes := []rune(text); len(runes) > 40 {
+				text = string(runes[:40]) + "…"
+			}
+			items = append(items, r.Unit+"（"+r.Claim+"）「"+text+"」")
 		}
-		items = append(items, r.Unit+"（"+r.Claim+"）「"+text+"」")
+		msg = fmt.Sprintf("素材（Source）%s 仍被论断（Claim）引用：%s", id, strings.Join(items, "、"))
 	}
-	return fmt.Sprintf("素材（Source）%s 仍被论断（Claim）引用：%s；确需删除请用 wa-cli source rm %s --force --reason <原因>，或先改用 wa-cli source retire %s 保留为作废",
-		id, strings.Join(items, "、"), id, id)
+	var others []string
+	for _, rel := range artifacts {
+		if len(refs) > 0 && strings.HasSuffix(rel, "/claims.yaml") {
+			continue
+		}
+		others = append(others, rel)
+	}
+	switch {
+	case len(others) > 0 && msg != "":
+		msg += "；另被产物引用：" + strings.Join(others, "、")
+	case len(others) > 0:
+		msg = fmt.Sprintf("素材（Source）%s 仍被产物引用：%s", id, strings.Join(others, "、"))
+	}
+	return msg + fmt.Sprintf("；确需删除请用 wa-cli source rm %s --force --reason <原因>，强制删除会一并摘除这些引用，或先改用 wa-cli source retire %s 保留为作废", id, id)
 }
 
-// sourceReferencedNext 为 source.referenced 给出可直接运行的下一步：先把素材改为作废，再按作品查看引用它的论断。
+// sourceReferencedNext 为 source.referenced 给出可直接运行的下一步：先把素材改为作废，再按作品查看引用它的论断；
+// 没有论断引用（只有其他产物引用）时给出整体校验。
 func sourceReferencedNext(id, dir string, refs []draft.Reference) []string {
 	next := []string{shellCommand("wa-cli", "source", "retire", id, "--dir", dir, "--json")}
 	seen := map[string]bool{}
@@ -392,6 +410,9 @@ func sourceReferencedNext(id, dir string, refs []draft.Reference) []string {
 		}
 		seen[r.Unit] = true
 		next = append(next, shellCommand("wa-cli", "claim", "list", r.Unit, "--dir", dir, "--json"))
+	}
+	if len(refs) == 0 {
+		next = append(next, shellCommand("wa-cli", "validate", "--dir", dir, "--json"))
 	}
 	return next
 }
@@ -445,6 +466,10 @@ func runSourceRemove(inv *invocation) int {
 		default:
 			var rps []workspace.Problem
 			refs, rps = draft.References(dir, id)
+			var artifacts []string
+			if len(rps) == 0 {
+				artifacts, rps = draft.ArtifactReferences(dir, id)
+			}
 			if !force {
 				// 无法确认引用（error 级问题）时不删除，避免把仍被论断使用的素材删掉；已有悬空引用的
 				// warning 与本次删除无关，不拦。
@@ -456,15 +481,20 @@ func runSourceRemove(inv *invocation) int {
 				}
 				if len(blocking) > 0 {
 					problems = blocking
-				} else if len(refs) > 0 {
+				} else if len(refs) > 0 || len(artifacts) > 0 {
 					problems = []workspace.Problem{{Code: source.CodeReferenced, Severity: workspace.SeverityError,
-						Message: sourceReferencedMessage(id, refs)}}
+						Message: sourceReferencedMessage(id, refs, artifacts)}}
 				}
+			}
+			// 强制删除先摘掉论断中的引用，再删素材，工作区在删除后仍能通过 validate。
+			var detached []string
+			if problems == nil && force {
+				detached, problems = draft.DetachSource(dir, id)
 			}
 			if problems == nil {
 				var changed []string
 				if changed, problems = source.Remove(dir, id); problems == nil {
-					res.Removed, res.ChangedPaths = &id, changed
+					res.Removed, res.ChangedPaths = &id, append(changed, detached...)
 				}
 			}
 		}

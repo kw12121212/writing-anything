@@ -1,0 +1,41 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: source-rm-force-detaches-references
+sections:
+  Implementation:
+    impl-detach-domain:
+      text: internal/draft 增加 DetachSource：遍历 works 下每个单元的 claims.yaml，在节点树上从论断 sources 中删除目标素材 id；写前对全部受影响文档完成编码、重新解析、Schema 校验与残留检查，全部通过才原子写入；返回被改写的 claims.yaml 路径。
+      status: complete
+    impl-force-wiring:
+      text: source rm --force 在 --reason 校验通过后先调用 DetachSource、再 source.Remove；changedPaths 列出素材三路径与每个被改写的 claims.yaml；摘引用失败时不删除素材。
+      status: complete
+    impl-tests-docs:
+      text: 更新 force 测试：断言删除后 validate valid、claims.yaml 不再含素材 id、changedPaths 含 claims.yaml、audit.log 含原因；补多作品引用用例；同步 delta 规格、场景文案与 help/README 措辞。
+      status: complete
+  Testing:
+    test-force-valid:
+      text: 更新 force 测试：断言 rm --force 后 validate 仍 valid、claims.yaml 不再含素材 id、changedPaths 含 claims.yaml、audit.log 含原因。
+      status: complete
+      command: go test ./internal/cli -run TestSourceRemoveReferenced
+    test-detach-multi:
+      text: 测试 DetachSource 的多作品引用：同一素材被两个作品的论断引用时全部摘掉，其他论断与字段、注释不变。
+      status: complete
+      command: go test ./internal/draft -run TestDetachSource
+    test-regression:
+      text: 跑完整回归并检查覆盖率门槛。
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+  Verification:
+    verify-strict:
+      text: 运行 strict-spec-cli ready/verify，确认规划产物完整、问题清零。
+      status: complete
+      command: strict-spec-cli ready source-rm-force-detaches-references && strict-spec-cli verify source-rm-force-detaches-references
+    verify-regression:
+      text: 在最终代码上跑完整回归（vet、build、test、覆盖率 80% 门槛）。
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+testing_gates:
+  validation_task: test-regression
+  unit_test_task: test-force-valid

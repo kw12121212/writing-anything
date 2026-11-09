@@ -58,7 +58,7 @@ wa-cli status                    # 工作区汇总：每个单元的阶段、阻
 wa-cli validate                  # 按 JSON Schema 校验整个工作区
 wa-cli source list               # 列出已登记素材；作废的默认不显示，加 --all 显示并标注
 wa-cli source retire <id>        # 软删：标记作废，保留原文存档，source list 默认不再显示
-wa-cli source rm <id>            # 硬删；被论断引用时拒绝，确需删除用 --force --reason 说明原因
+wa-cli source rm <id>            # 硬删；被论断引用时拒绝，确需删除用 --force --reason 连引用一起摘除
 ```
 
 内置文体：`minimal`、`tech-blog`、`wechat-marketing`、`short-story`、`novel`。所有命令支持 `--json`，诊断（Diagnostic）包含错误码、产物路径与下一步可执行命令。

@@ -910,18 +910,57 @@ func TestSourceRemoveReferenced(t *testing.T) {
 		t.Fatalf("rejected rm removed the source: %v", err)
 	}
 
-	// --force 与 --reason：删除被引用素材，原因进审计日志。
+	// --force 与 --reason：先摘掉论断引用再删素材，工作区保持可校验，原因进审计日志。
 	reason := "旧版已被 v3 取代"
 	code, res = runSrc(t, dir, "", "source", "rm", "src-old", "--force", "--reason", reason)
 	if code != 0 || res.Removed == nil || *res.Removed != "src-old" {
 		t.Fatalf("force rm: code = %d, removed = %v, %v", code, res.Removed, res.Diagnostics)
 	}
+	if !slices.Contains(res.ChangedPaths, claimsRel) {
+		t.Errorf("changedPaths = %v, want %s", res.ChangedPaths, claimsRel)
+	}
+	claims := readFile(t, wsPath(dir, claimsRel))
+	if strings.Contains(claims, "src-old") || !strings.Contains(claims, "报道称旧版仍在使用") {
+		t.Errorf("claims.yaml after forced rm:\n%s", claims)
+	}
 	audit := readFile(t, wsPath(dir, ".writing-anything/audit.log"))
 	if !strings.Contains(audit, reason) || !strings.Contains(audit, "src-old") {
 		t.Errorf("audit.log lacks removal reason:\n%s", audit)
 	}
-	// 强制删掉被引用的素材后，引用悬空：validate 报告 claim.unknown-source。
-	if code, stdout, _ := run(t, "validate", "--dir", dir, "--json"); code != 1 || !strings.Contains(stdout, "claim.unknown-source") {
+	if code, stdout, _ := run(t, "validate", "--dir", dir, "--json"); code != 0 {
+		t.Errorf("validate after forced rm: exit code = %d; %s", code, stdout)
+	}
+}
+
+// TestSourceRemoveForceDetachesAllWorks 断言 force 删除会摘掉所有作品中的引用，而不是只处理第一处。
+func TestSourceRemoveForceDetachesAllWorks(t *testing.T) {
+	dir := newWork(t)
+	if code, stdout, stderr := run(t, "new", "minimal", "other-post", "--dir", dir); code != 0 {
+		t.Fatalf("new other-post: exit code = %d; %s; %s", code, stdout, stderr)
+	}
+	runSrc(t, dir, "旧版报道", "source", "add", "--type", "reference", "--id", "src-old")
+	writeFile(t, wsPath(dir, ".writing-anything/works/my-post/brief.yaml"), "schema_version: 1\naudience: 后端工程师\npurpose: 讲清楚\nprovenance:\n  audience: {sources: [src-old]}\n")
+	writeFile(t, wsPath(dir, ".writing-anything/works/my-post/outline.yaml"), "schema_version: 1\nsections:\n  - {id: why, title: 为什么, uses: [src-old], reason: 引出问题}\n")
+	runSrc(t, dir, "", "claim", "add", "my-post", "--kind", "fact", "--text", "我的作品引用旧版", "--sources", "src-old")
+	runSrc(t, dir, "", "claim", "add", "other-post", "--kind", "fact", "--text", "另一作品也引用旧版", "--sources", "src-old")
+	code, res := runSrc(t, dir, "", "source", "rm", "src-old", "--force", "--reason", "旧版已被替换")
+	if code != 0 || res.Removed == nil {
+		t.Fatalf("force rm: code = %d, removed = %v, %v", code, res.Removed, res.Diagnostics)
+	}
+	for _, rel := range []string{
+		".writing-anything/works/my-post/brief.yaml",
+		".writing-anything/works/my-post/outline.yaml",
+		".writing-anything/works/my-post/claims.yaml",
+		".writing-anything/works/other-post/claims.yaml",
+	} {
+		if !slices.Contains(res.ChangedPaths, rel) {
+			t.Errorf("changedPaths = %v, want %s", res.ChangedPaths, rel)
+		}
+		if strings.Contains(readFile(t, wsPath(dir, rel)), "src-old") {
+			t.Errorf("%s still references src-old", rel)
+		}
+	}
+	if code, stdout, _ := run(t, "validate", "--dir", dir, "--json"); code != 0 {
 		t.Errorf("validate after forced rm: exit code = %d; %s", code, stdout)
 	}
 }
@@ -938,5 +977,27 @@ func TestSourceNotFound(t *testing.T) {
 		if !slices.Contains(d.Next, "wa-cli help "+strings.Join(name[:2], " ")+" --json") {
 			t.Errorf("%v: next = %v", name, d.Next)
 		}
+	}
+}
+
+// TestSourceRemoveRejectsArtifactOnlyReference 断言素材只被 brief 等产物引用（没有论断）时也拒绝普通删除。
+func TestSourceRemoveRejectsArtifactOnlyReference(t *testing.T) {
+	dir := newWork(t)
+	runSrc(t, dir, "旧版报道", "source", "add", "--type", "reference", "--id", "src-old")
+	rel := ".writing-anything/works/my-post/brief.yaml"
+	writeFile(t, wsPath(dir, rel), "schema_version: 1\naudience: 后端工程师\npurpose: 讲清楚\nprovenance:\n  audience: {sources: [src-old]}\n")
+	code, res := runSrc(t, dir, "", "source", "rm", "src-old")
+	d := diag(t, res.result, "source.referenced")
+	if code != 1 || !strings.Contains(d.Message, "brief.yaml") {
+		t.Fatalf("code = %d, diagnostic = %+v", code, d)
+	}
+	if !slices.Contains(d.Next, shellCommand("wa-cli", "validate", "--dir", dir, "--json")) {
+		t.Errorf("next = %v", d.Next)
+	}
+	if _, err := os.Stat(wsPath(dir, ".writing-anything/sources/src-old/source.yaml")); err != nil {
+		t.Fatalf("rejected rm removed the source: %v", err)
+	}
+	if code, stdout, _ := run(t, "validate", "--dir", dir, "--json"); code != 0 {
+		t.Errorf("validate before rm: exit code = %d; %s", code, stdout)
 	}
 }
