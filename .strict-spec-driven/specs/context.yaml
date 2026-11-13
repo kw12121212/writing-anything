@@ -126,3 +126,19 @@ requirements:
         - GIVEN: 读者已在前序场景获知 canon-3（揭示词「灯芯所化」），视角人物尚未获知
         - WHEN: 运行 wa-cli context 该场景 --dir D --json
         - THEN: readerOnly 中 canon-3 的 text 保持原文，人物卡中含「灯芯所化」的句子被遮蔽
+  context-voice:
+    strength: MUST
+    statement: 本要求扩充 context-content：上下文包（Context Pack）的 brief 必须另含 voice，取自同一份写作简报（与 audience、purpose 的取用规则相同：单元自己的 brief.yaml，没有时依次取父单元与更上层祖先单元的），该写作简报没有 voice 时为 null；brief 为 null 时不输出 voice。voice 作为写作简报的一部分按 context-trim 计入上下文预算，不改变其他内容的裁剪顺序。
+    scenarios:
+      context-voice:
+        - GIVEN: tech-blog 作品 my-post 的 brief.yaml 含 voice「像跟同事聊天」，子单元 my-post/intro 没有 brief.yaml
+        - WHEN: 运行 wa-cli context my-post/intro --dir D --json
+        - THEN: context.brief.unit 为 my-post，context.brief.voice 为「像跟同事聊天」，changedPaths 为空数组，退出码为 0
+      context-voice-null:
+        - GIVEN: brief.yaml 没有 voice
+        - WHEN: 运行 wa-cli context my-post --dir D --json
+        - THEN: context.brief.voice 为 null
+      context-tone-norms:
+        - GIVEN: tech-blog 作品，packs 为空
+        - WHEN: 运行 wa-cli context my-post --dir D --json
+        - THEN: context.norms.rules 含 tone-patterns 与 tone-density 及其 params；context.norms.style 含「像当面讲给读者听」开头的条目

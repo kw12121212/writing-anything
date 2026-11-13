@@ -67,6 +67,7 @@ type Brief struct {
 	Unit        string
 	Audience    string
 	Purpose     string
+	Voice       string // 口吻（Voice）；空表示写作简报没有 voice
 	Length      *brief.Length
 	Avoid       []string
 	KeyMessages []Message
@@ -854,7 +855,7 @@ func oneLine(s string) string {
 }
 
 func briefOf(ref string, b *brief.Brief) *Brief {
-	v := &Brief{Unit: ref, Audience: b.Audience, Purpose: b.Purpose, Length: b.Length, Avoid: b.Avoid}
+	v := &Brief{Unit: ref, Audience: b.Audience, Purpose: b.Purpose, Voice: b.Voice, Length: b.Length, Avoid: b.Avoid}
 	for _, m := range b.KeyMessages {
 		v.KeyMessages = append(v.KeyMessages, Message{m.ID, m.Text})
 	}

@@ -121,11 +121,7 @@ func Measure(content []byte, aiTerms []string) (Metrics, []Paragraph) {
 	inside, depth, fn, punct := 0, 0, 0, 0
 	bigrams, types := 0, map[string]bool{}
 	var run []rune
-	four := 0
 	flush := func() {
-		if len(run) == 4 {
-			four++
-		}
 		for i := 0; i+1 < len(run); i++ {
 			bigrams++
 			types[string(run[i:i+2])] = true
@@ -166,6 +162,8 @@ func Measure(content []byte, aiTerms []string) (Metrics, []Paragraph) {
 	if bigrams > 0 {
 		m.VocabularyRichness = round(float64(len(types))/float64(bigrams), 4)
 	}
+	// 四字片段与 lint 的 tone-density 规则同一口径（lint.FourCharRuns）。
+	four := lint.FourCharRuns(all)
 	// AI 腔与 lint 的 ai-cliche 规则同一口径：一次扫描、去重、屏蔽代码与注释（workspace-artifacts/input-limits）。
 	cliche := lint.CountTerms(string(content), aiTerms)
 	m.FunctionWords, m.FourChar, m.AICliche, m.Punctuation = per1000(fn, m.Chars), per1000(four, m.Chars), per1000(cliche, m.Chars), per1000(punct, m.Chars)

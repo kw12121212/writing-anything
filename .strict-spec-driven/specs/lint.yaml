@@ -322,3 +322,59 @@ requirements:
         - GIVEN: 同上，但该决策已由作者 decide
         - WHEN: 运行 wa-cli lint my-post --dir D --json
         - THEN: 没有 conflict-sources 类型的发现项，退出码不因它变为 1
+  tone-rule-types:
+    strength: MUST
+    statement: '规则引擎（Rule Engine）必须提供两种检查 AI 腔（AI Tone）的规则类型，只检查正文、不访问网络，跳过屏蔽区域（同 rule-types 的文本模型），发现项的位置、排序、单处豁免（lint-ignore）与规则级 waivers 同现有规则；它们的发现项按规则的 severity 报告，severity 为 warning 时不使 lint 的 valid 为 false，也不阻塞 advance 与 accept。formulaic-patterns（句式套路（Formulaic Pattern），参数 patterns，必需）：patterns 为非空数组，每项含 id（id 格式，同一规则内不重复）、terms（1 到 3 个非空字符串，按顺序出现）、可选 scope（sentence 或 paragraph，默认 sentence）、可选 position（any、paragraph-start 或 paragraph-end，默认 any）、可选 at_sentence_start（布尔，默认 false）与可选 message（非空字符串）。在每个散文段落内（散文段落中的 Markdown 标题行——行首至多 3 个空格后为 1 至 6 个 #，其后为空白或行尾——单独成段，标题可以紧贴正文不隔空行；句子按 style-profile 主规格 style-stats 的规则切分），terms 依次出现、互不重叠，且全部落在同一句（scope 为 sentence）或同一段（scope 为 paragraph）内时为一次命中；position 为 paragraph-start 时还要求第一个词落在段落的第一句，为 paragraph-end 时要求最后一个词落在段落的最后一句；at_sentence_start 为 true 时还要求第一个词位于它所在句子的开头（该句中它之前没有非空白字符；屏蔽区域按空白处理，引号、> 与列表标记等都是非空白字符）。每次命中报告一项：位置为第一个词的行与列，text 为命中的各词按顺序以「…」连接（只有一个词时为该词），message 为模式的 message，未给出时写明模式 id 与词序列并提示换成直接的说法，suggestion 为 null。同一模式在同一句或同一段内从上一次命中的最后一个词之后继续查找；同一处原文被多个模式命中时各自报告。词的匹配规则同 rule-types（区分大小写，只由 ASCII 字母、数字与连字符组成的词要求前后边界）。tone-density（腔调密度（Tone Density），参数都可选但至少给出一个阈值）：connectives（字符串数组）与 max_connectives_per_1000（正数）必须同时给出，connectives 中各词（去重）在正文中的出现次数之和每千字超过阈值时报告；max_four_char_per_1000（正数）：四字片段（定义同 metrics 主规格 deterministic-metrics 的 fourChar）每千字超过阈值时报告；min_sentence_stdev（正数）：句子不少于 10 句、且句长（每句的非空白字符数）的总体标准差低于阈值时报告，只统计既不是 Markdown 标题行（1 至 6 个 # 开头）也不是列表项行的行中的句子；max_list_line_ratio（大于 0、不超过 1 的数）：列表项行（行首至多 3 个空格后为 -、*、+ 或 1 至 9 位数字加 . 或 )，其后为空白）占非空行（去掉屏蔽区域后仍有非空白字符的行）的比例超过阈值时报告；min_section_length_cv（正数）：按二级标题（行首为 ## 加空白）切分的节不少于 3 个、且各节非空白字符数的变异系数（总体标准差除以均值）低于阈值时报告，节从标题行的下一行算到下一个二级标题之前，不含标题行，第一个二级标题之前的内容不成节。每项超限报告一项全文级发现项（line、column 与 text 为 null），message 写明指标、实测值（两位小数）与阈值，suggestion 为 null；是否超限按四舍五入到两位小数的实测值与阈值比较，等于阈值不报告；统计都在屏蔽区域之外进行，每千字的分母为屏蔽后的非空白字符数，该字数少于 300 时 tone-density 不报告任何发现项。参数校验同 rule-params 的 rule.invalid-params：patterns 缺失、为空或不是数组，某项不是对象、缺少 id 或 terms 或含上述字段以外的字段（field 指向该字段），id 不是 id 格式或重复，terms 为空、多于 3 个或含只有空白的词，scope 或 position 不在取值范围内，at_sentence_start 不是布尔值，tone-density 一个阈值都没有给出（也没有给出 connectives），connectives 与 max_connectives_per_1000 只给出其中一个，max_list_line_ratio 不在 (0, 1] 内时，field 指向出错的参数（如 rules.<id>.params.patterns[2].terms），该规则不执行，其他规则照常执行。'
+    scenarios:
+      pattern-sentence-hit:
+        - GIVEN: 'tech-blog 作品的 formulaic-patterns 规则 patterns 含 {id: not-but, terms: [不是, 而是]}，draft.md 第 3 行为「这不是工具的问题，而是流程的问题。」'
+        - WHEN: 运行 wa-cli lint my-post --dir D --json
+        - THEN: findings 含一项 rule 为该规则、type 为 formulaic-patterns、severity 为 warning、line 为 3、text 为「不是…而是」的发现项，message 含 not-but；valid 为 true，退出码为 0
+      pattern-cross-sentence-miss:
+        - GIVEN: 同上，但正文为「这不是重点。重点而是流程。」
+        - WHEN: 运行 wa-cli lint my-post --dir D --json
+        - THEN: findings 中没有该模式的发现项（两个词不在同一句）
+      pattern-paragraph-end:
+        - GIVEN: 'patterns 含 {id: closing-summary, terms: [总之], position: paragraph-end}，一段的最后一句以「总之」开头，另一段的第一句含「总之」且该段有三句'
+        - WHEN: 运行 wa-cli lint my-post --dir D --json
+        - THEN: 只有第一段报告一项 closing-summary 发现项
+      pattern-masked:
+        - GIVEN: 'patterns 含 {id: empower, terms: [赋能]}，「赋能」只出现在围栏代码块与行内代码中'
+        - WHEN: 运行 wa-cli lint my-post --dir D --json
+        - THEN: findings 中没有 empower 的发现项
+      density-connectives:
+        - GIVEN: tone-density 规则的 connectives 为 [此外, 同时, 因此]、max_connectives_per_1000 为 5，正文 1000 个非空白字符中这些词共出现 9 次
+        - WHEN: 运行 wa-cli lint my-post --dir D --json
+        - THEN: findings 含一项 type 为 tone-density、line 为 null 的发现项，message 含 9.00 与 5；valid 为 true，退出码为 0
+      density-uniform-sentences:
+        - GIVEN: min_sentence_stdev 为 4，正文 16 句、每句都是 20 个非空白字符（共 320 字，不少于 300 字）
+        - WHEN: 运行 wa-cli lint my-post --dir D --json
+        - THEN: findings 含一项 message 写明句长标准差 0.00 与阈值 4 的全文级发现项
+      density-short-text:
+        - GIVEN: tone-density 给出任意阈值，屏蔽后的正文少于 300 个非空白字符
+        - WHEN: 运行 wa-cli lint my-post --dir D --json
+        - THEN: findings 中没有 tone-density 的发现项
+      density-uniform-sections:
+        - GIVEN: min_section_length_cv 为 0.2，正文有 4 个二级标题节，各节都是 300 个非空白字符
+        - WHEN: 运行 wa-cli lint my-post --dir D --json
+        - THEN: findings 含一项 message 写明节长变异系数 0.00 与阈值 0.2 的全文级发现项
+      invalid-patterns:
+        - GIVEN: config.yaml 把 formulaic-patterns 规则的 patterns[0].terms 设为四个词
+        - WHEN: 运行 wa-cli lint my-post --dir D --json
+        - THEN: diagnostics 中有一条错误码为 rule.invalid-params、field 为 rules.<id>.params.patterns[0].terms、path 为 config.yaml 的诊断；该规则不执行，其他规则的发现项照常报告，valid 为 false，退出码为 1
+      author-waiver:
+        - GIVEN: '作者在命中「不是…而是」的段落写入 <!-- lint-ignore <规则 id>: 我就要这个对比 -->'
+        - WHEN: 运行 wa-cli lint my-post --dir D --json
+        - THEN: 该命中移入 waived，reason 为「我就要这个对比」
+      pattern-sentence-start:
+        - GIVEN: 'patterns 含 {id: closing-visible, terms: [可见], position: paragraph-end, at_sentence_start: true}，一段的最后一句为「每次重试的间隔在日志里清晰可见。」，另一段的最后一句为「可见，酒香不怕巷子深。」'
+        - WHEN: 运行 wa-cli lint my-post --dir D --json
+        - THEN: 只有第二段报告一项 closing-visible 发现项
+      density-prose-sentences-only:
+        - GIVEN: min_sentence_stdev 为 5，正文超过 300 个非空白字符，标题行与列表项行之外只有 2 个句子
+        - WHEN: 运行 wa-cli lint my-post --dir D --json
+        - THEN: findings 中没有句长标准差的发现项（句子不足 10 句）
+      pattern-heading-adjacent:
+        - GIVEN: patterns 含 closing-in-short（terms 总之，position paragraph-end，at_sentence_start true），正文为「缓存加好了。总之，问题解决了。」，下一行紧接「## 下一节」，中间没有空行
+        - WHEN: 运行 wa-cli lint my-post --dir D --json
+        - THEN: findings 含一项 closing-in-short 发现项（标题行单独成段，不算该段的最后一句）

@@ -9,6 +9,10 @@ style:
     applies_to: [article]
   - text: 用具体的事实、数据和例子代替空泛的形容词。
     applies_to: [article]
+  - text: 像当面讲给读者听，多用短句和口语，少用连接词、四字词和排比。
+    applies_to: [article]
+  - text: 直接讲事，不在段末总结或升华，不用「不是…而是」「不仅…更是」这类套路句式。
+    applies_to: [article]
 rules:
   cjk-typography:
     type: cjk-typography

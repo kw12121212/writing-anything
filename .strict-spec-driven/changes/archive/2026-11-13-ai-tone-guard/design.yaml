@@ -1,0 +1,54 @@
+schema: strict-spec-driven/change-design/v1
+schema_version: 1
+artifact_type: change_design
+schema_file: templates/strict-spec-driven/schemas/change-design.yaml
+change: ai-tone-guard
+approach:
+  - '检测、引导、评分三层叠加，全部由纯数据驱动、wa-cli 不调用模型：(1) 检测层在规则引擎（Rule Engine）新增两种规则类型 formulaic-patterns 与 tone-density，由内置 tech-blog 与 wechat-marketing 文体以 warning 级声明，规范包与项目配置可按规则 id 覆盖参数、调整 severity 或用 waivers 豁免；(2) 引导层在写作简报加入可选 voice 字段，经上下文包（Context Pack）的 brief 交给 Agent，default 规范包补充 applies_to: [article] 的正面文风条目，上下文包 norms.rules 已含规则参数，Agent 写作前即可看到模式表与阈值；wa-draft 技能在文本检查后加入去 AI 腔自查；(3) 评分层由两个文章类文体声明 AI 评分指标 natural-voice，沿用 metrics plan/record/show 的独立会话逐段打分与分歧决策，低分段落经 wa-review/wa-revise 交给作者。'
+decisions:
+  patterns-as-ordered-terms:
+    decision: formulaic-patterns 的模式用「1 到 3 个按顺序出现的词 + scope（sentence/paragraph）+ position（any/paragraph-start/paragraph-end）」表达，不接受正则表达式。
+    rationale: 规范包只能是数据；有序词组能覆盖不是…而是、不仅…更是、首先…其次、段末总结等已知套路，作者看得懂、能手写，匹配为线性扫描，没有正则的灾难性回溯与跨实现差异，测试夹具也更直观。单个词的模式覆盖书面用词，不必再开一个词表规则。
+  rules-in-article-genres:
+    decision: '新规则声明在内置 tech-blog 与 wechat-marketing 文体中，不放进 default 规范包；default 规范包只新增 applies_to: [article] 的文风条目，ai-cliche 规则保持原样。'
+    rationale: 规范包的规则没有文体类别过滤，放进 default 会作用到小说；放在文体里只影响文章类。书面用词不放进 ai-cliche 类型的新规则，是因为 metrics compute 的 aiCliche 指标按全部 ai-cliche 规则的 terms 计数，加词会改变已有作品的指标与漂移基准。
+  warning-severity:
+    decision: 两条新规则在内置文体中的 severity 为 warning。
+    rationale: 作者确认新检测不阻塞：句式与密度检测有误报，warning 不影响 lint 的 valid、advance 与 accept；已有工作区升级后不产生新的 error 级发现项。作者可在规范包或 config.yaml 中把它调成 error。
+  scored-metric-not-rubric:
+    decision: 口吻自然以 AI 评分指标 natural-voice（1 到 5 分，锚定评分）声明，而不是评分标准（Rubric）的评分项。
+    rationale: 评分项加入后，standard 与 strict 关卡下所有已审稿未验收的单元会因缺少该项结论报告 review.missing-verdict 而被 accept 阻塞，违反已有工作区不受影响；AI 评分指标逐段打分、多个独立会话打分（缓解同一模型自审看不出自身腔调），只供参考、不进入验收关卡，并天然把漏网的 AI 腔定位到段落。
+  density-reuses-metrics:
+    decision: tone-density 的四字词与句长标准差按 metrics 主规格 deterministic-metrics 的定义计算，在文本检查的文本模型上（屏蔽区域去掉）统计；列表行占比为散文以外的列表项行数占非空行数之比，节长变异系数为各二级标题节非空白字符数的标准差除以均值（少于 3 节时不判定）。
+    rationale: 与 metrics compute 的口径一致，作者在两处看到的数值可以对照；屏蔽代码块等区域避免技术博客的代码与引用拉高密度。
+  voice-free-text:
+    decision: 写作简报的 voice 为非空自由文本（如「像跟同事聊天，第一人称，允许口语」），不是枚举，不进入 brief_required 的可选取值，也不做规则检查。
+    rationale: 口吻因人因文而异，枚举表达力不够；它只用于引导 Agent，检测仍由规则承担，避免把主观描述变成不可验证的规则。
+  no-scene-skip:
+    decision: 新增 lint 区域场景 ai-tone-drafting 描述 Agent 起草—自查—审稿打分—作者决定的流程。
+    rationale: 变更涉及用户可观察行为，按 scene-first 路由，每个 delta-spec 需求对应场景中的步骤。
+  sentence-start-anchor:
+    decision: formulaic-patterns 的模式增加可选的 at_sentence_start：为 true 时第一个词必须在句首。内置的 grand-opening 与三个段末总结模式使用它；not-but 等句内对比模式不使用。
+    rationale: 词按子串匹配，段末句里的「清晰可见」会被「可见」误伤，句中任意一个「在」都能和「的今天」配对；这些套路的特征正是词在句首。「不是…而是」可以出现在句中任何位置，加句首限制会漏掉大部分命中，因此保留现状并接受「是不是…而是」这类少量误报。
+  fixed-content-in-spec:
+    decision: 模式的 id 与 message、连接词表、五个阈值、natural-voice 的五档锚点与固定样本在规划阶段确定并写入 delta spec 与 internal/lint/testdata/tone/，实现时原样采用。
+    rationale: 这些内容靠语感与判断，不是照规格能推出来的；如果由实现者同时写样本和定阈值，可以把阈值调到刚好让自己的样本通过，测试就不再约束什么。先固定输入，实现只负责让规则的行为符合定义。
+  heading-blocks:
+    decision: formulaic-patterns 判定段首、段末与句首时，散文段落中的 Markdown 标题行单独成段。
+    rationale: CommonMark 允许标题紧贴正文、不隔空行；按空行切出的段落会把标题当成第一句或最后一句，使「在……的今天」与段末总结漏报。句长标准差本来就排除标题行，两处口径一致。
+  shared-markdown-line-rules:
+    decision: 标题行与列表项行的识别放进 internal/mdscan（Heading、ListItem），导出的公众号 HTML 解析与 tone-density 共用；正文句子切分与四字片段放在 internal/lint（SentenceSpans、FourCharRuns），文风统计与文风指标改为调用它们。
+    rationale: 技术标准 markdown-structure-single-source 要求 Markdown 结构识别只有一处；导出原有的两条正则原样移入 mdscan，导出结果不变。lint 只依赖 catalog、resolve、workspace，learn 与 stylemetric 依赖 lint 不会成环。
+alternatives:
+  - option: 扩充 default 规范包 ai-cliche 词表（error 级）
+    reason: 会让已有工作区出现新的 error 级发现项并改变 aiCliche 指标口径；也覆盖不了句式与结构问题。
+  - option: formulaic-patterns 使用正则表达式
+    reason: 表达力强但作者难以手写、维护，且正则属于近似可执行的规则语言，与规范包只能是数据的定位有张力；有序词组已覆盖已知套路。
+  - option: 新增评分标准评分项 natural-voice
+    reason: 会阻塞在途单元的验收，见 scored-metric-not-rubric。
+risks:
+  - 内置文体新增规则与指标会改变 config resolved、context 等输出的 golden 夹具，需要同步更新 e2e golden。
+  - 句式与密度检测有误报（如技术文章合理使用「首先…其次」描述步骤）：以 warning 级、可按规则 id 覆盖参数与豁免缓解。
+  - 作者不提供人写样本，tone-density 的阈值未经人写样本标定，只取偏松的保守值并以平实对照段落回归：上线初期可能漏报较多，需按作者使用反馈再收紧。
+  - natural-voice 的 sessions 取 2（低于默认 3）以控制成本：两个会话分歧时没有多数票，靠 max_spread 触发的作者决策兜底。
+  - 固定样本中的密度套路稿远超阈值（如连接词约 58 对阈值 12），只能证明规则会触发与对照稿不触发，不能说明阈值在边界附近是否合适。

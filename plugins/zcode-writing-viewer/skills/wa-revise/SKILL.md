@@ -9,10 +9,11 @@ description: 处理审稿发现项与作者反馈形成的修订任务，修改�
 
 1. 运行 `wa-cli feedback list <单元> --json` 与 `wa-cli review show <单元> --json`，列出修订任务（Revision Task）：未处理的审稿发现项与作者反馈（Feedback，包括正文中的 `<!-- @me: … -->` 批注（Comment））。等待作者的新反馈时运行 `wa-cli feedback watch --max 1 --json`，收到一条后返回。作者想边读边提意见时，先运行 `wa-cli status --json` 查看 config.reviewSurface（审阅位置（Review Surface），即作者在哪里审阅阅读页）。未设置 review_surface 时 wa-cli 按运行环境自动给出：在 DSH 中运行即为 dsh、在 ZCode 中运行即为 zcode，不要自己判断。为 dsh 时：不要启动 `wa-cli preview --serve`，也不要交出 127.0.0.1 地址，而是请作者打开 DSH 插件（DSH Plugin）面板，在标为「待审阅」的作品或单元上点「审阅」，在面板里完成选中文字提交意见；作者说完成后，用 `wa-cli feedback list <单元> --json` 与 `wa-cli review show <单元> --json` 复查结果再继续。作者说面板里没有「待审阅」入口（DSH 未安装 dsh-writing-viewer 插件）为 zcode 时：不要启动 `wa-cli preview --serve`，也不要交出 127.0.0.1 地址，而是请作者打开 ZCode 插件（zcode-writing-viewer）面板，在标为「待审阅」的作品或单元上点「审阅」，在面板里完成选中文字提交意见；作者说完成后，用 `wa-cli feedback list <单元> --json` 与 `wa-cli review show <单元> --json` 复查结果再继续。作者说 ZCode 面板里没有「待审阅」入口（ZCode 未安装 zcode-writing-viewer 插件）时，改按下面 browser 的做法。为 browser 时：运行 `wa-cli preview <单元> --serve --json`，把首行输出中的 preview.url 交给作者在浏览器中打开（只在本机可访问）。阅读页（Reading View）是在作者确认期间持续运行的本地服务：用客户端的后台任务运行该命令（不要放在会结束或被回收的前台命令里），作者确认完成前不要停止它；读取首行输出的 preview.url 后，先确认该地址可以访问（如请求它得到 200）再交给作者；作者说打不开时，重新运行该命令并交出新的地址（令牌会变化）。作者在阅读页中提交的意见会保存为作者反馈，同样出现在 feedback watch 中。
 2. 逐项和作者确认怎么改，修改正文后用 `wa-cli draft write <单元> --file <文件> --json` 写入（作者改过正文时先 `wa-cli diff <单元> --json`）。
-3. 处理完的反馈用 `wa-cli feedback resolve <单元> <反馈 id> --json`；审稿发现项用 `wa-cli review resolve <单元> <发现项 id> --json`，作者决定不改的用 `--status waived --note <作者的理由>`。
-4. 验收（Acceptance）后的小改：只改排版或个别字词、不涉及观点、事实或论断（Claim）时，经作者同意，用 `wa-cli review record <单元> --reaffirm --summary <变化摘要> --json` 重申（Reaffirm）——重申只解除审稿过期，验收记录仍按旧正文判过期；单元已推进到 done 时先经作者同意 `wa-cli reopen <单元> --json` 退回，再请作者重新确认验收并推进，不要整份重审；改动涉及观点、事实或论断时仍走完整审稿（下面的路径）。
-5. 正文改动后审稿过期：回到 wa-review 重新记录审稿；用 `wa-cli lint <单元> --json` 确认没有 error 级发现项。单元已经完成（done）时，改动正文会使验收（Acceptance）失效，导出不再包含它：先运行 `wa-cli reopen <单元> --json` 把它退回需要验收的阶段，再重新审稿并按 wa-publish 请作者重新验收；不要手工修改 work.yaml 的 stage。
-6. 一轮修订结束后，运行 `wa-cli pack prefer <提议 id> --pack <作者规范包 id> --json`，从作者的修改与反馈中归纳作者偏好（Author Preference）；把每个条目连同 evidence 交给作者，作者同意的用 `wa-cli pack confirm <提议 id> --item <条目 id> --confirmation <作者原话摘要> --json` 写入规范包，不同意的用 `wa-cli pack reject <提议 id> --item <条目 id> --json` 记下，之后不会再提出。
+3. 修订口吻：作者选定要改的 natural-voice 低分段落与 tone-patterns、tone-density 发现项，按作者的意见和发现项的 message 逐段改写，用 `wa-cli draft write <单元> --file <文件> --json` 写入后重新运行 `wa-cli lint <单元> --json` 与 `wa-cli metrics compute <单元> --json`，确认改过的段落没有新的套路句式、密度没有超过阈值。
+4. 处理完的反馈用 `wa-cli feedback resolve <单元> <反馈 id> --json`；审稿发现项用 `wa-cli review resolve <单元> <发现项 id> --json`，作者决定不改的用 `--status waived --note <作者的理由>`。
+5. 验收（Acceptance）后的小改：只改排版或个别字词、不涉及观点、事实或论断（Claim）时，经作者同意，用 `wa-cli review record <单元> --reaffirm --summary <变化摘要> --json` 重申（Reaffirm）——重申只解除审稿过期，验收记录仍按旧正文判过期；单元已推进到 done 时先经作者同意 `wa-cli reopen <单元> --json` 退回，再请作者重新确认验收并推进，不要整份重审；改动涉及观点、事实或论断时仍走完整审稿（下面的路径）。
+6. 正文改动后审稿过期：回到 wa-review 重新记录审稿；用 `wa-cli lint <单元> --json` 确认没有 error 级发现项。单元已经完成（done）时，改动正文会使验收（Acceptance）失效，导出不再包含它：先运行 `wa-cli reopen <单元> --json` 把它退回需要验收的阶段，再重新审稿并按 wa-publish 请作者重新验收；不要手工修改 work.yaml 的 stage。
+7. 一轮修订结束后，运行 `wa-cli pack prefer <提议 id> --pack <作者规范包 id> --json`，从作者的修改与反馈中归纳作者偏好（Author Preference）；把每个条目连同 evidence 交给作者，作者同意的用 `wa-cli pack confirm <提议 id> --item <条目 id> --confirmation <作者原话摘要> --json` 写入规范包，不同意的用 `wa-cli pack reject <提议 id> --item <条目 id> --json` 记下，之后不会再提出。
 
 ## 会话协议（可执行模板）
 
@@ -29,4 +30,5 @@ wa next --json   # 示例：每步先看下一步；把 wa 后面换成当前步
 ## 必须停下来问作者
 
 - 每个修订任务怎么处理、是否豁免，都由作者决定；豁免的理由写作者的原话。
+- 低分段落与 tone-patterns、tone-density 的 warning 改还是保留由作者决定；保留 tone-patterns 的命中时由作者自己在正文写单处豁免；tone-density 是全文级发现项，不能单处豁免：作者要保留时，由作者自己在 config.yaml 的 rules.tone-density 中放宽阈值，或在 waivers 中写规则级豁免（Waiver），Agent 不替作者改。
 - 归纳出的作者偏好是否采纳由作者逐项决定，不要代替作者确认。

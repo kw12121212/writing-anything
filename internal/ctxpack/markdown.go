@@ -50,6 +50,7 @@ func (b *Brief) markdown() string {
 	}
 	line("受众（Audience）", b.Audience)
 	line("写作目的（Purpose）", b.Purpose)
+	line("口吻（Voice）", b.Voice)
 	if b.Length != nil {
 		line("字数范围", fmt.Sprintf("%d-%d", b.Length.Min, b.Length.Max))
 	}

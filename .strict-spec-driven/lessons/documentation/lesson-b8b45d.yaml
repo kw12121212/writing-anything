@@ -1,0 +1,19 @@
+schema: strict-spec-driven/lesson/v1
+schema_version: 1
+artifact_type: lesson
+schema_file: templates/strict-spec-driven/schemas/lesson.yaml
+lesson:
+  id: lesson-b8b45d
+  title: 带最低样本门槛的统计规则，场景给出的样本规模要先满足门槛
+category: documentation
+status: active
+created_at: '2026-11-13T08:16:55.615Z'
+updated_at: '2026-11-13T08:16:55.615Z'
+context: ai-tone-guard 的 tone-density 规定屏蔽后少于 300 字不报告任何发现项，同一需求的 density-uniform-sentences 场景却写「正文 12 句、每句 20 个非空白字符」（共 240 字）并期望报告句长标准差
+observation: 场景与本需求自己的门槛相互矛盾，按字面实现时该场景必然不报告；规划阶段逐条写场景时只盯着被测指标（句数、标准差），没有回头核对同一需求里的全局前置条件，直到写测试才发现
+takeaway: 为带全局门槛（最少字数、最少句数、最少节数等）的统计或阈值规则写场景时，先列出该需求的全部门槛，逐个场景核算 GIVEN 中样本的规模是否满足；需要触发的场景把样本规模与计算过程写进 GIVEN（如「16 句×20 字，共 320 字」），不需要触发的场景写明是哪条门槛使它不触发
+applies_when: 撰写 delta-spec 场景，且需求同时含有最低样本门槛（字数、句数、节数、会话数等）与基于样本的阈值判定时
+occurrences:
+  - origin: ai-tone-guard
+    date: '2026-11-13'
+    evidence: lint delta spec 的 density-uniform-sentences 场景由 12 句改为 16 句（320 字）；internal/lint/tone_test.go TestDensitySentences 按 16 句断言

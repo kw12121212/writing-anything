@@ -269,6 +269,7 @@ var nullableFields = map[string]bool{
 	"authorReview":        true,
 	"answer":              true,
 	"brief":               true,
+	"voice":               true,
 	"channel":             true,
 	"choice":              true,
 	"column":              true,

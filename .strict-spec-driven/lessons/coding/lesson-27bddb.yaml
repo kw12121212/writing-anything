@@ -1,0 +1,19 @@
+schema: strict-spec-driven/lesson/v1
+schema_version: 1
+artifact_type: lesson
+schema_file: templates/strict-spec-driven/schemas/lesson.yaml
+lesson:
+  id: lesson-27bddb
+  title: 自写匹配器先全部收集再截断，命中上限形同虚设
+category: coding
+status: active
+created_at: '2026-11-13T08:16:55.801Z'
+updated_at: '2026-11-13T08:16:55.801Z'
+context: ai-tone-guard 的 formulaic-patterns 没有用 matcher.find（收集时就在 MaxHits+1 处停止），而是自己按段落、按模式收集全部命中，排序后才截到 MaxHits，且每次命中都 strings.Join 一次 text
+observation: 独立审查用约 2MB 的「赋能」重复正文配 3 个单词模式探测：TotalAlloc 约 1.1GB，同样输入的 ai-cliche 只有 31MB；单元测试只断言截断后的条数与 lint.truncated，看不出内存放大
+takeaway: 新规则自己产生发现项时，在收集过程中就按 MaxHits 停止：利用块内命中按位置升序，每个模式每块至多取 MaxHits+1 个，按块累计超过上限即排序截断并返回；每次命中不变的字符串按模式预先算好；并补一条接近 MaxBytes 输入的分配量回归测试（runtime.MemStats 的 TotalAlloc 上限）
+applies_when: 在 internal/lint 新增或修改不经过 matcher.find、自行收集命中的规则类型（有序词组、跨句匹配、全文统计后再定位等）时
+occurrences:
+  - origin: ai-tone-guard
+    date: '2026-11-13'
+    evidence: internal/lint/tone.go checkPatterns 改为按块截断（2MB 输入分配约 75MB）；internal/lint/tone_test.go TestPatternHitsBounded

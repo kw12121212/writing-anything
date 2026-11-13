@@ -275,7 +275,7 @@ func TestNovelCorpusStyleIsolation(t *testing.T) {
 	dir := t.TempDir()
 	replayNovelCorpus(t, dir)
 
-	articleStyle := []string{"结论先行", "用具体的事实、数据和例子代替空泛的形容词"}
+	articleStyle := []string{"结论先行", "用具体的事实、数据和例子代替空泛的形容词", "像当面讲给读者听", "直接讲事"}
 	code, res := runWS(t, dir, "config", "resolved")
 	if code != 0 {
 		t.Fatalf("config resolved: exit = %d, diagnostics = %+v", code, res.Diagnostics)
@@ -301,7 +301,7 @@ func TestNovelCorpusStyleIsolation(t *testing.T) {
 		t.Fatal(err)
 	}
 	r := out.Resolved
-	if r.Genre.ID != "novel" || r.Genre.Category != "fiction" || len(r.ExcludedStyle) != 2 {
+	if r.Genre.ID != "novel" || r.Genre.Category != "fiction" || len(r.ExcludedStyle) != len(articleStyle) {
 		t.Fatalf("resolved = %+v", r)
 	}
 	for _, s := range r.Style {

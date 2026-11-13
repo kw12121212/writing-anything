@@ -48,6 +48,82 @@ rules:
     type: paragraph-length
     severity: warning
     params: {max: 150}
+  # AI 腔（AI Tone）检查：模式、连接词与阈值见 genres-and-packs 主规格的 article-tone-rules；按规则 id 覆盖参数或调整 severity。
+  tone-patterns:
+    type: formulaic-patterns
+    severity: warning
+    params:
+      patterns:
+        - id: not-but
+          terms: [不是, 而是]
+          message: '「不是…而是」是先立靶子再否定的套路对比。直接说你要说的那一面；确实要对比时，写出具体差别。'
+        - id: not-only
+          terms: [不仅, 更是]
+          message: '「不仅…更是」是层层拔高的套路。把两件事分开直说，或只留真正要说的那一件。'
+        - id: first-second
+          terms: [首先, 其次]
+          scope: paragraph
+          message: '「首先…其次」把段落写成了提纲。确实是步骤就用有序列表，否则按事情本身的顺序讲，去掉序数词。'
+        - id: grand-opening
+          terms: [在, 的今天]
+          position: paragraph-start
+          at_sentence_start: true
+          message: '「在……的今天」是宏大背景式的开头。从具体的事、人或问题写起。'
+        - id: lets
+          terms: [让我们]
+          message: '「让我们」是号召式的套话。直接讲接下来的内容。'
+        - id: closing-in-short
+          terms: [总之]
+          position: paragraph-end
+          at_sentence_start: true
+          message: '段末用「总之」复述前文。这句没有新信息就删掉。'
+        - id: closing-visible
+          terms: [可见]
+          position: paragraph-end
+          at_sentence_start: true
+          message: '段末用「可见」下结论是升华式收尾。让事实自己说话，或把结论提到段首。'
+        - id: closing-shows
+          terms: [这说明]
+          position: paragraph-end
+          at_sentence_start: true
+          message: '段末用「这说明」替读者总结。删掉这句，或换成下一步的具体内容。'
+        - id: word-empower
+          terms: [赋能]
+          message: '「赋能」是公文腔。写出具体帮谁做成了什么。'
+        - id: word-lever
+          terms: [抓手]
+          message: '「抓手」是公文腔。写出具体的做法或入口。'
+        - id: word-closed-loop
+          terms: [闭环]
+          message: '「闭环」是公文腔。写出流程从哪里开始、到哪里结束。'
+        - id: word-crucial
+          terms: [至关重要]
+          message: '「至关重要」只下判断不给理由。写出它为什么重要、缺了会怎样。'
+        - id: word-seamless
+          terms: [无缝]
+          message: '「无缝」是宣传腔。写出具体省掉了哪一步。'
+        - id: word-deep-dive
+          terms: [深入探讨]
+          message: '「深入探讨」是预告式的套话。直接开始讲。'
+        - id: word-boost
+          terms: [助力]
+          message: '「助力」是宣传腔。换成「帮」，或写出具体帮了什么。'
+        - id: word-all-round
+          terms: [全方位]
+          message: '「全方位」是空泛的形容。列出具体是哪几个方面。'
+        - id: word-indispensable
+          terms: [不可或缺]
+          message: '「不可或缺」只下判断不给理由。写出缺了它会发生什么。'
+  tone-density:
+    type: tone-density
+    severity: warning
+    params:
+      connectives: [此外, 另外, 同时, 因此, 然而, 从而, 进而, 换言之, 不仅如此, 总的来说]
+      max_connectives_per_1000: 12
+      max_four_char_per_1000: 25
+      min_sentence_stdev: 5
+      max_list_line_ratio: 0.5
+      min_section_length_cv: 0.15
 rubric:
   - id: reader-benefit
     title: 读者收益
@@ -74,4 +150,26 @@ rubric:
   - id: headline-specific
     title: 标题具体（4U）
     description: 作者选定的标题有具体的对象、数字或场景，而不是空泛的形容词。
+scored_metrics:
+  - id: natural-voice
+    title: 口吻自然
+    description: 片段读起来像不像一个人在当面讲：有没有套路句式、书面腔和为总结而总结的句子。
+    scale: {min: 1, max: 5}
+    sessions: 2
+    anchors:
+      - score: 1
+        description: 通篇套路句式与书面词，像通稿或说明书
+        example: 在数字化转型的今天，缓存不仅是性能优化的抓手，更是系统稳定的基石。
+      - score: 2
+        description: 套路或书面词明显，偶有具体内容
+        example: 缓存至关重要。首先它能降低数据库压力，其次它能提升响应速度。
+      - score: 3
+        description: 偶有套路或书面词，整体能读
+        example: 我们给接口加了缓存，响应时间降了一半。可见，缓存的作用不容小觑。
+      - score: 4
+        description: 基本是直说，个别句子略显工整
+        example: 我们给接口加了缓存，响应时间从 800 毫秒降到 400 毫秒，数据库的压力也随之下降。
+      - score: 5
+        description: 像当面讲给读者听，句子长短自然，没有套路
+        example: 接口太慢，我加了一层缓存。800 毫秒变成 400。数据库那边也消停了。
 context_budget: 12000

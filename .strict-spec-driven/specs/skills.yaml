@@ -138,3 +138,23 @@ requirements:
         - GIVEN: 同上，读取 wa-revise 的正文
         - WHEN: 检查其步骤与引用的命令
         - THEN: 正文写明验收后只改排版或个别字词时经作者同意用 review record --reaffirm --summary 重申再请作者重新确认验收、涉及观点、事实或论断时仍走完整审稿，且引用的命令包含 review record
+  ai-tone-skill-guidance:
+    strength: MUST
+    statement: 内置技能必须指导 Agent 处理 AI 腔（AI Tone），只说明何时调用哪些 wa-cli 命令与何时停下来问作者，不实现业务逻辑：wa-brief 在写作简报步骤中询问作者想要的口吻（Voice，可选），作者给出时用 wa-cli brief set --voice 写入，不替作者编造口吻；wa-draft 要求写正文前读取上下文包中的 brief.voice、norms.style 与 tone-patterns、tone-density 的参数，并在文本检查步骤之后加入去 AI 腔自查——逐项处理 formulaic-patterns 与 tone-density 的 warning 级发现项（改写后重新 draft write 并再次 lint），不能消除或确属作者口吻的留给作者决定，不得自行写 lint-ignore 豁免；wa-review 在 AI 评分步骤中说明文体声明了 natural-voice 时按 metrics plan 为每个独立会话开全新会话打分，并把 metrics show 中 natural-voice 低分的段落与剩余的 tone-patterns、tone-density 发现项一并交给作者；wa-revise 说明按作者选定要改的低分段落与发现项修订，改后重新运行 lint 与 metrics compute。四个技能的「必须停下来问作者」一节写明：低分段落与 warning 改还是保留由作者决定；保留 tone-patterns 的命中时由作者在正文写单处豁免，tone-density 是全文级发现项、不能单处豁免，保留时由作者在 config.yaml 中放宽该规则的阈值或写规则级豁免（Waiver），Agent 不替作者改。技能正文中的命令与参数仍须满足 builtin-skills 的命令存在性检查。
+    scenarios:
+      draft-skill-self-check:
+        - GIVEN: 内置技能 wa-draft
+        - WHEN: 运行 wa-cli skills list --json 并读取 wa-draft 的 SKILL.md
+        - THEN: SKILL.md 含去 AI 腔自查步骤，提到 tone-patterns、tone-density 与 brief.voice，并写明不得自行写 lint-ignore；commands 含 context、draft write 与 lint
+      brief-skill-voice:
+        - GIVEN: 内置技能 wa-brief
+        - WHEN: 读取其 SKILL.md
+        - THEN: 含用 wa-cli brief set --voice 写入作者给出的口吻的说明，--voice 是 brief set 声明的参数
+      review-skill-natural-voice:
+        - GIVEN: 内置技能 wa-review 与 wa-revise
+        - WHEN: 读取其 SKILL.md
+        - THEN: wa-review 提到 natural-voice 与 metrics show，并把低分段落交给作者；wa-revise 提到按低分段落修订后重新运行 lint 与 metrics compute
+      skills-commands-valid:
+        - GIVEN: 修改后的全部内置技能
+        - WHEN: 运行内置技能的命令存在性测试
+        - THEN: 每个 wa-cli 之后的命令名都在 wa-cli help --json 中，同一处写出的参数都是该命令声明的参数

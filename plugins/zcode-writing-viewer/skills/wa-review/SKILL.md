@@ -12,9 +12,10 @@ Agent 的审稿是 AI 预审（Pre-review），默认不阻塞，由作者做最
 1. 运行 `wa-cli review show <单元> --json`：其中的 rubric 是本次审稿必须逐项给出结论的全部评分项（已合并文体与规范包的评分标准（Rubric），以及选用的写作法附带的评分项），同时可以看到文本检查（Lint）结果与验收关卡；运行 `wa-cli provenance <单元> --json` 查看段落编号。文体的评分标准含标题类评分项（如 wechat-marketing 的 4U 标题法）时，运行 `wa-cli marketing show <单元> --json`，按其中作者选定的 headline 评分。
 2. 运行 `wa-cli review record <单元> --init > skeleton.yaml`（文本模式直接输出骨架 YAML；不要用 --json 重定向——那会存下 JSON 信封而不是骨架）取得审稿骨架（rubric 已按评分标准逐项列好，verdict 与 evidence 留空，注释标出标题、blocking 与段落表；不写任何文件）。按真实审稿逐项填写 verdict（pass 或 fail，不预填、不猜）、证据与依据的段落编号（不针对段落的评分项，如评作者选定的标题，可以省略 paragraphs，把依据写在证据里），在 findings 下列出发现项（Finding，每项引用具体段落，可附引文与建议），再用 `wa-cli review record <单元> --file skeleton.yaml --json` 整份记录；未填完的骨架会被逐项指出（review.missing-verdict 与 review.missing-evidence，字段到 rubric[i].verdict 与 rubric[i].evidence）。
 3. 文体或启用的规范包声明了 AI 评分指标（Metric，见 `wa-cli config resolved --json` 的 scoredMetrics）时，运行 `wa-cli metrics plan <单元> --json` 取得打分任务；按其中的 sessions，每次开一个全新的独立会话（如新的子 Agent，不带其他会话的分数），只依据锚定说明给全部片段打分，用 `wa-cli metrics record <单元> --file <文件> --json` 写入（每个会话一个新的 session id）。不要自己合并分数或替分歧下结论：分歧超过阈值的片段会成为作者决策，`wa-cli metrics show <单元> --json` 汇总结果。
-4. 作者愿意时，请作者给几个片段打分，用 `wa-cli metrics calibrate <单元> --metric <指标> --paragraph <段落> --score <分值> --confirmation <作者原话摘要> --json` 记录为校准（Calibration）样本；与作者一致率低的指标会降级为仅供参考。
-5. 运行 `wa-cli metrics compute <单元> --json` 查看文风与节奏的确定性指标与文风漂移（Style Drift）：drift 中的每一项说明偏离了作者文风画像还是本作品已验收单元、偏离多少与段落位置。漂移只说明偏离、不评判好坏，也不阻塞验收；把它作为参考交给作者，是否调整由作者决定。
-6. 再次运行 `wa-cli review show <单元> --json`，把 `revisions`（即修订任务，Revision Task）与 `gate.blockers` 交给作者，转到 wa-revise 处理。
+4. 文体声明了 natural-voice（口吻自然）指标时（如 tech-blog 与 wechat-marketing），它和其他 AI 评分指标一样按 `wa-cli metrics plan <单元> --json` 的 sessions 为每个独立会话开全新会话打分。打完后运行 `wa-cli metrics show <单元> --json`，找出 natural-voice 的 segments 中 median（作者已决定的为 value）在 2 分及以下的段落，连同 `wa-cli lint <单元> --json` 中剩下的 tone-patterns 与 tone-density 发现项一起交给作者，由作者决定改哪些。
+5. 作者愿意时，请作者给几个片段打分，用 `wa-cli metrics calibrate <单元> --metric <指标> --paragraph <段落> --score <分值> --confirmation <作者原话摘要> --json` 记录为校准（Calibration）样本；与作者一致率低的指标会降级为仅供参考。
+6. 运行 `wa-cli metrics compute <单元> --json` 查看文风与节奏的确定性指标与文风漂移（Style Drift）：drift 中的每一项说明偏离了作者文风画像还是本作品已验收单元、偏离多少与段落位置。漂移只说明偏离、不评判好坏，也不阻塞验收；把它作为参考交给作者，是否调整由作者决定。
+7. 再次运行 `wa-cli review show <单元> --json`，把 `revisions`（即修订任务，Revision Task）与 `gate.blockers` 交给作者，转到 wa-revise 处理。
 
 ## 会话协议（可执行模板）
 
@@ -31,4 +32,5 @@ wa next --json   # 示例：每步先看下一步；把 wa 后面换成当前步
 ## 必须停下来问作者
 
 - 审稿结论只是建议：哪些发现项要改、哪些保留，由作者决定。
+- natural-voice 低分的段落与剩下的 tone-patterns、tone-density 发现项改还是保留，由作者决定；作者要保留 tone-patterns 的命中时，由作者自己在正文写单处豁免，不要替作者写；tone-density 是全文级发现项，不能单处豁免：作者要保留时，由作者自己在 config.yaml 的 rules.tone-density 中放宽阈值，或在 waivers 中写规则级豁免（Waiver），Agent 不替作者改。
 - AI 评分的分歧由作者用 `wa-cli decide` 决定；校准打分必须是作者本人给出的分数，不能由 Agent 代填。

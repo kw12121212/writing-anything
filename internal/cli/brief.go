@@ -14,7 +14,7 @@ import (
 	"github.com/kw12121212/writing-anything/internal/workspace"
 )
 
-const briefViewHelp = "写作简报：unit、path、audience、purpose、premise（text、sources、decision）、theme、pov（person、character）、keyMessages（id、text、sources、decision）、length（min、max）、avoid、sources 与 method（选用的写作法模板（Method Template），null 表示用文体的默认写作法）"
+const briefViewHelp = "写作简报：unit、path、audience、purpose、voice（口吻（Voice），未设置时为 null）、premise（text、sources、decision）、theme、pov（person、character）、keyMessages（id、text、sources、decision）、length（min、max）、avoid、sources 与 method（选用的写作法模板（Method Template），null 表示用文体的默认写作法）"
 
 const questionsHelp = "仍需向作者提问的问题数组，每项含 code、field、message 与 question"
 
@@ -26,6 +26,7 @@ var briefSetCommand = &command{
 		dirFlag,
 		{"audience", flagString, "受众（Audience）：文章写给谁看"},
 		{"purpose", flagString, "写作目的（Purpose）：读者读完后应该知道、相信或去做什么"},
+		{"voice", flagString, "口吻（Voice）：正文应有的语气、人称与口语程度，如「像跟同事聊天，第一人称，允许口语」；空字符串时删除"},
 		{"length", flagString, "字数范围，写作 <min>-<max>，如 1500-3000；字数为非空白字符数，含标点"},
 		{"avoid", flagList, "禁区（Off-limits）：不能写或需要回避的内容；可重复，整体替换已有的禁区"},
 		{"sources", flagString, "关联素材（Source）id，用逗号分隔；整体替换已有的关联素材"},
@@ -93,18 +94,19 @@ type povView struct {
 }
 
 type briefView struct {
-	Unit        string                    `json:"unit"`
-	Path        string                    `json:"path"`
-	Audience    *string                   `json:"audience"`
-	Purpose     *string                   `json:"purpose"`
-	Premise     *premiseView              `json:"premise"`
-	Theme       *string                   `json:"theme"`
-	Pov         *povView                  `json:"pov"`
-	KeyMessages []messageView             `json:"keyMessages"`
-	Length      *brief.Length             `json:"length"`
-	Avoid       []string                  `json:"avoid"`
-	Sources     []string                  `json:"sources"`
-	Method      *string                   `json:"method"`
+	Unit        string                         `json:"unit"`
+	Path        string                         `json:"path"`
+	Audience    *string                        `json:"audience"`
+	Purpose     *string                        `json:"purpose"`
+	Voice       *string                        `json:"voice"`
+	Premise     *premiseView                   `json:"premise"`
+	Theme       *string                        `json:"theme"`
+	Pov         *povView                       `json:"pov"`
+	KeyMessages []messageView                  `json:"keyMessages"`
+	Length      *brief.Length                  `json:"length"`
+	Avoid       []string                       `json:"avoid"`
+	Sources     []string                       `json:"sources"`
+	Method      *string                        `json:"method"`
 	Provenance  map[string]fieldProvenanceView `json:"provenance"`
 }
 
@@ -150,7 +152,7 @@ func nonNilInts(m map[string]int) map[string]int {
 }
 
 func viewBrief(ref string, b *brief.Brief) *briefView {
-	v := &briefView{Unit: ref, Path: b.Path, Audience: optional(b.Audience), Purpose: optional(b.Purpose), KeyMessages: []messageView{},
+	v := &briefView{Unit: ref, Path: b.Path, Audience: optional(b.Audience), Purpose: optional(b.Purpose), Voice: optional(b.Voice), KeyMessages: []messageView{},
 		Length: b.Length, Avoid: nonNilStrings(b.Avoid), Sources: nonNilStrings(b.Sources), Method: optional(b.Method), Provenance: map[string]fieldProvenanceView{}}
 	for f, pv := range b.Provenance {
 		pvv := fieldProvenanceView{Sources: nonNilStrings(pv.Sources)}
@@ -220,9 +222,9 @@ func briefEdit(inv *invocation, existing *brief.Brief) (brief.Edit, []workspace.
 	}
 	targets := 0
 	e.Audience, e.Purpose = str("audience"), str("purpose")
-	e.Theme = str("theme")
+	e.Theme, e.Voice = str("theme"), str("voice")
 	// 取值只有空白的文本与重复的 id 在修改前报告，诊断指向参数（brief-set）。
-	for _, name := range []string{"audience", "purpose", "message-text", "premise", "theme", "pov-character"} {
+	for _, name := range []string{"audience", "purpose", "voice", "message-text", "premise", "theme", "pov-character"} {
 		if v, ok := inv.values[name]; ok && v != "" && strings.TrimSpace(v) == "" {
 			hint := "不能只含空白；要删除该字段请给出空字符串"
 			if name == "message-text" {
@@ -382,10 +384,10 @@ func briefEdit(inv *invocation, existing *brief.Brief) (brief.Edit, []workspace.
 		return e, []workspace.Problem{{Code: codeInvalidValue, Severity: workspace.SeverityError, Field: "decision",
 			Message: "给出 --decision 时必须同时写入至少一个字段、前提或核心观点（如 --audience、--purpose、--premise 或 --message 加 --message-text）；只确认单个字段时用对应的 --<字段>-decision"}}
 	}
-	if e.Audience == nil && e.Purpose == nil && e.Premise == nil && e.Theme == nil && e.PovPerson == nil && e.PovCharacter == nil &&
+	if e.Audience == nil && e.Purpose == nil && e.Voice == nil && e.Premise == nil && e.Theme == nil && e.PovPerson == nil && e.PovCharacter == nil &&
 		!e.SetLength && !e.SetAvoid && !e.SetSources && e.Message == nil && len(e.Remove) == 0 && e.Method == nil && e.Provenance == nil {
 		return e, []workspace.Problem{{Code: codeInvalidValue, Severity: workspace.SeverityError,
-			Message: "没有给出要修改的字段；至少给出 --audience、--purpose、--premise、--theme、--pov-person、--pov-character、--length、--avoid、--sources、--message、--remove-message 或 --method 之一"}}
+			Message: "没有给出要修改的字段；至少给出 --audience、--purpose、--voice、--premise、--theme、--pov-person、--pov-character、--length、--avoid、--sources、--message、--remove-message 或 --method 之一"}}
 	}
 	return e, nil
 }
@@ -494,6 +496,7 @@ func briefText(b *briefView, questions []questionView) string {
 		}
 		line("受众", b.Audience)
 		line("写作目的", b.Purpose)
+		line("口吻", b.Voice)
 		if b.Premise != nil {
 			from := "没有出处"
 			switch {

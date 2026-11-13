@@ -9,6 +9,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/kw12121212/writing-anything/internal/draft"
+	"github.com/kw12121212/writing-anything/internal/lint"
 )
 
 // MaxChars 是一份提议全部素材的非空白字符数上限：常用词统计的内存随字数增长，不可信的输入不能不受限制。
@@ -50,9 +51,7 @@ type Stats struct {
 var Punctuation = []rune("，。、；：？！…—「」『』“”‘’（）《》,.;:?!")
 
 var (
-	sentenceEnd = []rune("。！？!?；;…")
-	closers     = []rune("”」』）】〕)]’\"'")
-	latinWord   = regexp.MustCompile(`[A-Za-z]{3,}`)
+	latinWord = regexp.MustCompile(`[A-Za-z]{3,}`)
 )
 
 // Chars 返回 text 中非空白字符的个数。
@@ -95,36 +94,8 @@ func Compute(texts [][]byte) Stats {
 }
 
 // splitSentences 返回段落中每个句子的长度：在句末标点与换行处切分，句末标点后紧跟的句末标点、右引号与右括号归入该句，空句不计。
-func splitSentences(text string) []int {
-	var out []int
-	rs := []rune(text)
-	n := 0
-	flush := func() {
-		if n > 0 {
-			out = append(out, n)
-		}
-		n = 0
-	}
-	for i := 0; i < len(rs); i++ {
-		r := rs[i]
-		if r == '\n' {
-			flush()
-			continue
-		}
-		if !unicode.IsSpace(r) {
-			n++
-		}
-		if slices.Contains(sentenceEnd, r) {
-			for i+1 < len(rs) && (slices.Contains(sentenceEnd, rs[i+1]) || slices.Contains(closers, rs[i+1])) {
-				i++
-				n++
-			}
-			flush()
-		}
-	}
-	flush()
-	return out
-}
+// 切分规则与文本检查（Lint）共用 lint.SentenceSpans。
+func splitSentences(text string) []int { return lint.SentenceLengths(text) }
 
 func distribution(xs []int) Distribution {
 	d := Distribution{Count: len(xs)}

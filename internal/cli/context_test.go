@@ -34,7 +34,7 @@ func runContextJSON(t *testing.T, dir string, args ...string) (int, contextOut) 
 // contextNoNulls 断言上下文包输出中只有可为 null 的字段为 null，数组永不为 null（cli-contract/shared-envelope）。
 func contextNoNulls(t *testing.T, v any, path string) {
 	t.Helper()
-	nullable := []string{"context", "brief", "outline", "section", "audience", "purpose", "length", "reason", "title", "excerpt",
+	nullable := []string{"context", "brief", "outline", "section", "audience", "purpose", "voice", "length", "reason", "title", "excerpt",
 		"english", "replacement", "note", "quote", "line", "paragraph", "source", "anchor", "series"}
 	switch v := v.(type) {
 	case map[string]any:
