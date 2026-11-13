@@ -1,0 +1,66 @@
+schema: strict-spec-driven/task-list/v2
+schema_version: 2
+artifact_type: task_list
+schema_file: templates/strict-spec-driven/schemas/task-list.yaml
+change: ai-tone-guard
+sections:
+  Implementation:
+    register-rule-types:
+      text: internal/catalog/catalog.go 的 RuleTypes 加入 formulaic-patterns 与 tone-density；更新 config Schema（internal/schema）使 patterns 对象数组与阈值参数可以通过校验；known-rule-types 的 message 列出新类型。
+      status: complete
+    lint-formulaic-patterns:
+      text: internal/lint 新增 formulaic-patterns 检查（新文件 tone.go）：参数校验（rule.invalid-params，field 指向 patterns[i] 的子字段；patterns 是对象数组，现有 kind 不够用，需为它写专门的校验）、句子切分复用 internal/learn 的切句规则（需要拿到每句的文字与位置，不只是长度）、有序词组匹配、scope、position 与 at_sentence_start、屏蔽区域、单处豁免与发现项字段，在 lint.go 的规则类型表登记。逐条对照 lint delta spec 的 tone-rule-types 实现，不自行增减语义。
+      status: complete
+    lint-tone-density:
+      text: internal/lint 新增 tone-density 检查：连接词、四字片段（与 internal/stylemetric 的 fourChar 同一定义，把 Measure 里内联的计数抽成共用函数）、句长标准差（只统计非标题行、非列表项行中的句子）、列表行占比（分母为屏蔽后仍有非空白字符的行）与二级标题节长变异系数（节不含标题行）；屏蔽后少于 300 字不报告；全文级发现项沿用 length-range 的写法（不设 Line 与 Column），message 含实测值（两位小数）与阈值。
+      status: complete
+    builtin-genre-rules:
+      text: internal/catalog/builtin/genres/tech-blog.yaml 与 wechat-marketing.yaml 声明 warning 级 tone-patterns 与 tone-density 以及 scored_metrics natural-voice（sessions 为 2）。17 个模式的 id、terms、选项与 message，connectives 的 10 个词，五个阈值，natural-voice 的 title、description 与五档 anchors，全部从 genres-and-packs delta spec 的 article-tone-rules 与 article-natural-voice-metric 原样抄入，不改写措辞、不调整数值；两个文体的内容相同。确认 compute.go 的 aiCliche 口径不受影响。
+      status: complete
+    default-pack-style:
+      text: 'internal/catalog/builtin/packs/default.yaml 新增两条 applies_to: [article] 的文风条目（像当面讲给读者听…；直接讲事，不在段末总结或升华…）。'
+      status: complete
+    brief-voice:
+      text: internal/brief 与 brief.yaml 的 Schema 支持 voice：brief set --voice（命令注册表登记参数与 sampleArgs）、字段顺序放在 purpose 之后、空字符串删除、空白报 input.invalid-value；brief show 输出 voice 与人读显示。
+      status: complete
+    context-voice:
+      text: internal/ctxpack 的上下文包 brief 输出 voice（取自同一份写作简报，计入预算）。
+      status: complete
+    skills-guidance:
+      text: 更新 internal/skills/skills 下 wa-brief、wa-draft、wa-review、wa-revise 的 SKILL.md，内容按 skills delta spec 的 ai-tone-skill-guidance，只加步骤与「必须停下来问作者」条目，不改动已有步骤的措辞。wa-draft 在文本检查步骤之后加入这一步（原样使用）：「去 AI 腔自查：文本检查没有 error 后，逐项看 tone-patterns 与 tone-density 的 warning 级发现项，按 message 改写正文后重新 draft write 并再次 lint。改不掉、或看起来是作者本来的说法的，留着交给作者决定，不要为了消掉 warning 把句子改得更绕，也不要自己写 lint-ignore。」完成后运行 plugins/zcode-writing-viewer/scripts/stage-skills.mjs 同步插件捆绑的技能副本。
+      status: complete
+    glossary:
+      text: docs/GLOSSARY.md 加入 AI 腔（AI Tone）、句式套路（Formulaic Pattern）、腔调密度（Tone Density）、口吻（Voice）与口吻自然（natural-voice）等新术语。
+      status: complete
+  Testing:
+    unit-tests:
+      text: 为 formulaic-patterns（句内与跨句、paragraph scope、paragraph-start/end、at_sentence_start、屏蔽区域、豁免、参数校验）、tone-density（每个阈值、只统计散文句子、少于 300 字、参数校验）、brief set/show 的 voice、context 的 voice、内置文体合并结果与 natural-voice 指标、default 规范包四条文风编写单元测试；delta spec 的每个场景对应至少一个测试，按规格字面量断言错误码与输出键。
+      status: complete
+    fixture-calibration-test:
+      text: 编写固定样本测试：internal/lint/testdata/tone/ 下的样本已随规划写好，tb- 开头按 tech-blog、wx- 开头按 wechat-marketing 合并后的规则运行；plain 目录每个文件没有 tone-patterns 与 tone-density 发现项，cliche 目录每个文件至少有 README.md 中列出的发现项。不得为了让测试通过修改样本、README 或内置阈值；结果不一致时先核对实现是否符合 tone-rule-types 的定义，仍不一致就停下来报告作者。
+      status: complete
+    update-goldens:
+      text: 更新受内置文体、default 规范包文风与 context brief 变化影响的 e2e golden 与技能快照（internal/cli/testdata、internal/skills/testdata），逐项核对差异只来自本变更。
+      status: complete
+    run-regression:
+      text: 运行完整回归。
+      status: complete
+      command: go vet ./... && go build ./... && go test -coverprofile=coverage.out ./... && go run ./internal/tools/covercheck -min 80 -profile coverage.out
+    plugin-tests:
+      text: 同步技能后运行插件测试，确认捆绑名单与技能副本一致。
+      status: complete
+      command: cd plugins/zcode-writing-viewer && pnpm test
+  Verification:
+    verify-unchanged:
+      text: 核对不变行为：default 规范包 ai-cliche 词表与 error 级、aiCliche 指标、short-story/novel/minimal 的合并结果、评分标准与 accept 阻塞项都不变；warning 不阻塞 advance 与 accept；Agent 写的 lint-ignore 仍报告 lint.agent-waiver。
+      status: complete
+    strict-ready-verify:
+      text: 运行 strict ready 与 verify，确认场景步骤都有覆盖、delta spec 与实际实现一致。
+      status: complete
+      command: strict-spec-cli ready ai-tone-guard && strict-spec-cli verify ai-tone-guard
+    report-thresholds:
+      text: 交付时把内置的五个阈值、连接词表与固定样本上的实测值（对照 README.md 中规划时的数值）列给作者，并说明阈值未经人写样本标定、可在 config.yaml 按规则 id 覆盖。
+      status: complete
+testing_gates:
+  validation_task: run-regression
+  unit_test_task: unit-tests

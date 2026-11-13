@@ -1,0 +1,115 @@
+schema: strict-spec-driven/delta-scene/v1
+schema_version: 1
+artifact_type: delta_scene
+schema_file: templates/strict-spec-driven/schemas/delta-scene.yaml
+target_scene: ai-tone-drafting
+scene:
+  title: 文章类草稿的去 AI 腔（AI Tone）起草与审稿
+  area: lint
+  actors:
+    - name: Agent
+      role: 起草正文，运行 wa-cli context、lint 与 metrics 命令，按发现项与低分段落修改，并把剩余问题交给作者
+    - name: 作者
+      role: 给出口吻（Voice），决定低分段落与剩余发现项改还是保留，有意保留时写单处豁免
+    - name: 独立打分会话
+      role: 不带其他会话分数的全新会话，只依据 natural-voice 的锚定说明逐段打分
+  preconditions:
+    - 作品文体为 tech-blog 或 wechat-marketing（文体类别为 article）
+    - 单元处于 draft 阶段，写作简报与大纲已就绪
+operations:
+  ADDED:
+    exception_flows:
+      intentional-keep:
+        trigger: 作者有意保留某处被命中的写法
+        steps:
+          author-waiver:
+            action: '作者在正文写 <!-- lint-ignore <规则 id>: 理由 -->，该命中移入 waived'
+            covered_by:
+              - spec_id: lint
+                requirement_id: inline-waiver
+      agent-waiver:
+        trigger: Agent 自己在写入的正文中加 lint-ignore
+        steps:
+          report:
+            action: 命中仍在 findings 中，诊断报告 lint.agent-waiver，豁免不生效
+            covered_by:
+              - spec_id: lint
+                requirement_id: inline-waiver
+      score-disagreement:
+        trigger: 独立会话对同一片段的 natural-voice 分歧超过 max_spread
+        steps:
+          decision:
+            action: 该片段成为非阻塞的作者决策，由作者用 wa-cli decide 决定
+            covered_by:
+              - spec_id: metrics
+                requirement_id: metrics-disagreement
+      invalid-pattern-params:
+        trigger: 规范包或 config.yaml 把 formulaic-patterns 或 tone-density 的参数写错
+        steps:
+          report:
+            action: lint 报告 rule.invalid-params，指出出错的参数与配置层，该规则不执行，其他规则照常执行
+            covered_by:
+              - spec_id: lint
+                requirement_id: tone-rule-types
+      fiction-work:
+        trigger: 作品文体为 short-story 或 novel
+        steps:
+          skip:
+            action: 合并结果不含 formulaic-patterns、tone-density 与 natural-voice，小说的检查与评分不变
+            covered_by:
+              - spec_id: genres-and-packs
+                requirement_id: article-tone-rules
+    main_flow:
+      set-voice:
+        action: 作者说明想要的口吻，Agent 运行 wa-cli brief set <unit> --voice <口吻> 写入写作简报
+        covered_by:
+          - spec_id: brief
+            requirement_id: brief-voice
+      read-context:
+        action: Agent 运行 wa-cli context <unit> --json，读到 brief.voice、norms.style 中文章类的口语文风条目，以及 norms.rules 中 formulaic-patterns 与 tone-density 的模式表、词表与阈值
+        covered_by:
+          - spec_id: context
+            requirement_id: context-voice
+          - spec_id: genres-and-packs
+            requirement_id: genre-style-scope
+          - spec_id: genres-and-packs
+            requirement_id: article-tone-rules
+      draft-write:
+        action: Agent 按口吻与规范写正文，用 wa-cli draft write 写入
+        covered_by:
+          - spec_id: skills
+            requirement_id: ai-tone-skill-guidance
+      lint-tone:
+        action: Agent 运行 wa-cli lint <unit> --json：句式套路以 warning 级发现项定位到行列，腔调密度超过阈值以 warning 级全文级发现项写明实测值与阈值
+        covered_by:
+          - spec_id: lint
+            requirement_id: tone-rule-types
+          - spec_id: genres-and-packs
+            requirement_id: article-tone-rules
+      self-revise:
+        action: Agent 逐项改写命中的句式与超限的密度后重新写入并再次运行 lint，不替作者写豁免
+        covered_by:
+          - spec_id: skills
+            requirement_id: ai-tone-skill-guidance
+      advance:
+        action: Agent 运行 wa-cli advance 进入审稿；只剩 warning 级发现项时不阻塞
+        covered_by:
+          - spec_id: lint
+            requirement_id: tone-rule-types
+      score:
+        action: Agent 运行 wa-cli metrics plan <unit> --json，按 sessions 为每个独立打分会话开全新会话，按 natural-voice 锚定说明逐段打分，用 wa-cli metrics record 写入
+        covered_by:
+          - spec_id: genres-and-packs
+            requirement_id: article-natural-voice-metric
+      hand-off:
+        action: Agent 运行 wa-cli metrics show 与 wa-cli lint，把 natural-voice 低分段落与剩余 warning 交给作者
+        covered_by:
+          - spec_id: skills
+            requirement_id: ai-tone-skill-guidance
+      author-decides:
+        action: 作者决定逐段修改还是保留；修改转 wa-revise，保留的写法由作者写单处豁免
+        covered_by:
+          - spec_id: skills
+            requirement_id: ai-tone-skill-guidance
+  MODIFIED: {}
+  REMOVED: {}

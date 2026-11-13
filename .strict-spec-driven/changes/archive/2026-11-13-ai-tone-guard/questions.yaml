@@ -1,0 +1,49 @@
+schema: strict-spec-driven/question-list/v1
+schema_version: 1
+artifact_type: question_list
+schema_file: templates/strict-spec-driven/schemas/question-list.yaml
+change: ai-tone-guard
+open: []
+resolved:
+  - id: requirement-problem
+    question: What is concretely going wrong today, and for whom?
+    context: 'Why this is asked: the change is planned against a need, and the need lives only with the requester. A "problem" here means what someone does or suffers today — not a feature that is missing. If the answer names a button, a field, a page, or an endpoint, it is a solution, and the underlying problem is still unstated. What a sufficient answer contains: who is affected, what they do today instead, and how often. Worked example: "every Monday one person spends forty minutes copying order rows into a spreadsheet to send the weekly report". What it changes: this becomes the proposal''s why, and it decides whether the change is worth making.'
+    answer: 作者用 writing-anything 写文章类稿件时，Agent 产出的初稿仍然太书面、AI 味重，最刺眼的是三类：句式套路（不是…而是、首先/其次/最后、排比三连、段末总结升华、开头宏大背景）、书面用词（赋能、抓手、至关重要、四字词与连接词堆砌）与结构太工整（小标题与列表过多、各节长度对称、句长均匀）。作者没有把「不像我本人说话」列为问题。
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-outcome
+    question: What observable difference proves the problem is solved?
+    context: 'Why this is asked: without a success condition, nobody can tell afterwards whether the change worked. "Observable" means someone outside the system can check it without reading the code. What a sufficient answer contains: what a person will see, or no longer have to do, once this is done. Worked example: "the report is in the manager''s inbox on Monday morning without anyone assembling it". What it changes: this becomes the delta spec''s scenarios and the acceptance evidence at review time.'
+    answer: 两者都要：作者拿到的初稿里这些写法已经很少（Agent 写时避开并自查改掉），漏网的每一处都能在文本检查（Lint）或审稿评分中定位到段落。
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-trigger
+    question: Why now — what forced this?
+    context: 'Why this is asked: work that nothing forced is the work most often thrown away later. This question catches a request that sounds reasonable but has no real driver behind it. What a sufficient answer contains: the concrete event, deadline, incident, or cost that made this surface now, or an honest statement that nothing did. Worked example: "the report was missed last month and it was raised with the team". What it changes: a change with no trigger is a candidate for deferral, and the answer is weighed at review before archive.'
+    answer: 产品定位要求：工具宣称帮人写而不是替人写，写出来却一眼就是 AI，与定位矛盾。
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-non-goals
+    question: What must explicitly not change?
+    context: 'Why this is asked: the requester knows which nearby behavior other people depend on, and the agent does not. A "non-goal" is something the change must leave alone even though it sits close to the work. What a sufficient answer contains: the behavior, setting, or output that must survive untouched, and who relies on it. Worked example: "do not change the saved filters — several people rely on their own". What it changes: these become the proposal''s unchanged_behavior items, which review checks the finished result against.'
+    answer: wa-cli 不自动改写正文、不调用模型；新增的句式、密度与结构检测默认 warning，不让 advance 或验收卡住，现有 ai-cliche 的 error 行为不变；作者有意保留的写法仍可用 lint-ignore 单处豁免与 waivers，Agent 不能自己豁免；已有作品升级后不出现新的 error 级发现项而卡住。
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: requirement-interpretation
+    question: Which reading of the request is intended, where more than one is possible?
+    context: 'Why this is asked: a short request usually admits several readings, and building the wrong one is indistinguishable from building nothing. What a sufficient answer contains: the reading that is meant, stated plainly enough to rule the others out — or a statement that only one reading exists and what it is. Worked example: "export means the version sent to the manager, not the one I read myself". What it changes: this fixes the scope boundary before any code is written, and settles disputes about what was asked for.'
+    answer: 只覆盖文章类文体（tech-blog 与 wechat-marketing，以及 default 规范包的 article 文风条目），小说已有 fiction-cliches，句式规则对小说误报率高，留待以后。范围为检测扩充、口吻引导与审稿评分三项；从作者修改学句式与作者范文进上下文包拆到后续变更（作者在提案检查点确认）。
+    status: resolved
+    kind: requirement
+    answered_by: human
+  - id: default-pattern-thresholds
+    question: 内置 tech-blog 与 wechat-marketing 的 formulaic-patterns 默认模式表、书面词表与 tone-density 各项阈值（连接词密度、四字词密度、最小句长标准差、列表行占比、节长变异系数）以及 natural-voice 的 sessions 取什么值？
+    context: 影响：取值决定误报与漏报，直接影响作者是否信任这些 warning；阈值过严会让每篇文章都报一堆 warning 而被忽略，过松则抓不到 AI 腔。推荐：实现阶段先建一组人写与 Agent 写的文章段落夹具（各类文体至少 10 段），按夹具标定使人写段落基本不触发、Agent 套路段落大多触发的取值，模式表初稿含 不是…而是、不仅…更是、首先…其次、段末 总之/可见/这说明、在…的今天、让我们，书面词初稿含 赋能、抓手、闭环、至关重要、无缝、深入探讨、助力、全方位、不可或缺；natural-voice 的 sessions 推荐 2（默认 3 成本偏高）；标定结果交作者确认后写入内置文体。选项：A 按推荐标定后确认；B 作者直接给出词表与阈值；C 先用推荐初稿上线、之后按作者反馈调整。
+    answer: 作者决定（2026-11-13）：模式表与书面词表按推荐初稿原样采用，不增删；作者不提供人写样本，因此 tone-density 的阈值不做人写样本标定，实现时取偏松的保守值上线，之后按作者使用反馈调整；natural-voice 的 sessions 为 2。内置夹具改为 Agent 套路段落（必须触发）与不含套路的平实对照段落（不得触发），对照段落不声称是人写。实现交付时把最终阈值数值列给作者。
+    status: resolved
+    kind: technical
+    answered_by: human

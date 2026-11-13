@@ -36,10 +36,10 @@ type Image struct {
 }
 
 var (
-	headingRE = regexp.MustCompile(`^ {0,3}(#{1,6})(?:[ \t]+(.*?))?(?:[ \t]+#+)?[ \t]*$`)
+	headingRE = mdscan.Heading
 	hrRE      = regexp.MustCompile(`^ {0,3}(?:(?:-[ \t]*){3,}|(?:\*[ \t]*){3,}|(?:_[ \t]*){3,})$`)
 	quoteRE   = regexp.MustCompile(`^ {0,3}> ?`)
-	listRE    = regexp.MustCompile(`^ {0,3}([-*+]|\d{1,9}[.)])[ \t]+(.*)$`)
+	listRE    = mdscan.ListItem
 	fenceOpen = regexp.MustCompile("^ {0,3}(`{3,}|~{3,})")
 	commentRE = regexp.MustCompile(`(?s)<!--.*?-->`)
 	// linkAt 在 [ 或 ![ 处匹配链接或图片；文字、地址与标题的长度有上限（最长不超过 linkWindow 字节），每次只在这个窗口内尝试，耗时有界。

@@ -58,10 +58,16 @@ const (
 	FieldSources     = "sources"
 	// FieldMethod 是选用的写作法模板（Method Template）；不是可声明为必填项的字段，排在最后。
 	FieldMethod = "method"
+	// FieldVoice 是口吻（Voice）：正文应有的语气、人称与口语程度；不是可声明为必填项的字段，排在 purpose 之后。
+	FieldVoice = "voice"
 )
 
 // Fields 是可以声明为简报必填项的字段，也是 brief.yaml 中字段的固定顺序（schema_version 之后）。
 var Fields = []string{FieldAudience, FieldPurpose, FieldPremise, FieldTheme, FieldPov, FieldKeyMessages, FieldLength, FieldAvoid, FieldSources}
+
+// keyOrder 是 brief.yaml 顶层键的固定顺序：新写入的键按它放置。
+var keyOrder = []string{"schema_version", FieldAudience, FieldPurpose, FieldVoice, FieldPremise, FieldTheme, FieldPov, FieldKeyMessages,
+	FieldLength, FieldAvoid, FieldSources, FieldMethod, "provenance"}
 
 // fieldTitles 是字段的中文名。
 var fieldTitles = map[string]string{
@@ -121,6 +127,7 @@ type Brief struct {
 	Path        string    `json:"-"` // brief.yaml 相对项目目录的路径
 	Audience    string    `json:"audience"`
 	Purpose     string    `json:"purpose"`
+	Voice       string    `json:"voice"` // 口吻（Voice）；空表示未设置
 	Premise     *Premise  `json:"premise"`
 	Theme       string    `json:"theme"`
 	Pov         *Pov      `json:"pov"`

@@ -1,0 +1,33 @@
+schema: strict-spec-driven/delta-spec/v1
+schema_version: 1
+artifact_type: delta_spec
+schema_file: templates/strict-spec-driven/schemas/delta-spec.yaml
+target_spec: brief
+operations:
+  ADDED:
+    brief-voice:
+      strength: MUST
+      statement: 本要求扩充 brief-artifact、brief-set 与 brief-show：写作简报（Brief）必须可以含可选字段 voice（口吻（Voice），非空文本，描述正文应有的语气、人称与口语程度，如「像跟同事聊天，第一人称，允许口语」）。wa-cli validate 对 brief.yaml 的 Schema 校验接受 voice，取值不是非空文本时报告 artifact.schema-violation（field 为 voice）。wa-cli brief set --voice <text> 设置 voice，取值为空字符串时删除该字段，取值非空但只含空白时报告 input.invalid-value（不填 path，message 指明参数 --voice，与 brief-set 中其他文本参数相同）；--voice 算作修改参数，新增的 voice 放在 purpose 之后（其余字段的顺序同 brief-set），修改后取值不变时不写文件；voice 不属于 provenance 的键，--decision 不为它补位。wa-cli brief show 的 brief 含 voice（未设置时为 null），不加 --json 时人读输出显示口吻。voice 不是简报必填项（Required Brief Field）的可选取值，不产生 questions，也不被任何规则检查。
+      scenarios:
+        set-voice:
+          - GIVEN: 作品 my-post 已有 brief.yaml，含 audience 与 purpose
+          - WHEN: 运行 wa-cli brief set my-post --voice 像跟同事聊天，第一人称 --dir D --json
+          - THEN: brief.yaml 的 voice 为「像跟同事聊天，第一人称」，位于 purpose 之后，其他字段与注释不变；brief.voice 为该文字，changedPaths 为 [brief.yaml]，退出码为 0
+        clear-voice:
+          - GIVEN: 同上，voice 已设置
+          - WHEN: 运行 wa-cli brief set my-post --voice "" --dir D --json
+          - THEN: brief.yaml 不再含 voice，brief.voice 为 null，退出码为 0
+        blank-voice:
+          - GIVEN: 作品 my-post 已有 brief.yaml
+          - WHEN: 运行 wa-cli brief set my-post --voice "  " --dir D --json
+          - THEN: diagnostics 中有一条错误码为 input.invalid-value、没有 path、message 提到 --voice 的诊断，next 含 wa-cli help brief set --json；brief.yaml 不变，退出码为 1
+        show-voice-null:
+          - GIVEN: brief.yaml 没有 voice
+          - WHEN: 运行 wa-cli brief show my-post --dir D --json
+          - THEN: brief.voice 为 null，questions 中没有与 voice 有关的问题
+        validate-bad-voice:
+          - GIVEN: brief.yaml 的 voice 为空字符串
+          - WHEN: 运行 wa-cli validate --dir D --json
+          - THEN: diagnostics 中有一条错误码为 artifact.schema-violation、field 为 voice 的诊断，退出码为 1
+  MODIFIED: {}
+  REMOVED: {}

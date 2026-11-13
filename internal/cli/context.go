@@ -30,6 +30,7 @@ type ctxBrief struct {
 	Unit        string        `json:"unit"`
 	Audience    *string       `json:"audience"`
 	Purpose     *string       `json:"purpose"`
+	Voice       *string       `json:"voice"`
 	Length      *brief.Length `json:"length"`
 	Avoid       []string      `json:"avoid"`
 	KeyMessages []ctxMessage  `json:"keyMessages"`
@@ -236,7 +237,7 @@ func viewContext(p *ctxpack.Pack) *ctxView {
 		Feedback: []feedbackView{}, Decisions: []ctxDecision{}, Sources: []ctxSource{}, Neighbors: []ctxNeighbor{}, Trimmed: []ctxTrim{}, Masked: []ctxMasked{},
 		Norms: ctxNorms{Rules: []ctxRule{}, Glossary: []ctxTerm{}, BannedTerms: []ctxBannedTerm{}, Style: nonNilStrings(p.Norms.Style)}}
 	if b := p.Brief; b != nil {
-		v.Brief = &ctxBrief{Unit: b.Unit, Audience: optional(b.Audience), Purpose: optional(b.Purpose), Length: b.Length,
+		v.Brief = &ctxBrief{Unit: b.Unit, Audience: optional(b.Audience), Purpose: optional(b.Purpose), Voice: optional(b.Voice), Length: b.Length,
 			Avoid: nonNilStrings(b.Avoid), KeyMessages: messagesView(b.KeyMessages)}
 	}
 	if o := p.Outline; o != nil {

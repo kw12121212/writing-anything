@@ -26,6 +26,7 @@ type PremiseEdit struct {
 // Edit 是一次 brief set 的修改。指针或 Set* 为零值的字段不修改；取值为空（空字符串、nil 的 Length、空数组）表示删除该字段。
 type Edit struct {
 	Audience, Purpose *string
+	Voice             *string      // 口吻（Voice）；空字符串表示删除
 	Premise           *PremiseEdit // 前提（含子字段修改）；nil 表示不修改前提
 	Theme             *string
 	PovPerson         *string // 视角的人称（first、second、third）；空字符串表示删除人称（两者都删除后删除 pov）
@@ -116,7 +117,7 @@ func Set(root, dir string, e Edit, q Queue, ensure func() ([]string, []workspace
 func paramOf(field string) string {
 	head, rest, _ := strings.Cut(field, ".")
 	switch {
-	case head == FieldAudience || head == FieldPurpose || head == FieldTheme || head == FieldMethod || strings.HasPrefix(head, FieldAvoid) || strings.HasPrefix(head, FieldSources):
+	case head == FieldAudience || head == FieldPurpose || head == FieldVoice || head == FieldTheme || head == FieldMethod || strings.HasPrefix(head, FieldAvoid) || strings.HasPrefix(head, FieldSources):
 		return head
 	case head == FieldPremise:
 		switch {
@@ -252,6 +253,16 @@ func apply(doc *yaml.Node, rel string, e Edit) *workspace.Problem {
 		}
 		if n == nil {
 			dropProvenance(m, kv.key)
+		}
+	}
+	if e.Voice != nil {
+		// 口吻不是出处映射的键，删除时没有出处要清理。
+		var n *yaml.Node
+		if *e.Voice != "" {
+			n = workspace.Str(*e.Voice)
+		}
+		if p := setField(m, rel, FieldVoice, n); p != nil {
+			return p
 		}
 	}
 	if e.Theme != nil {
@@ -413,7 +424,7 @@ func provenanceMap(m *yaml.Node, rel string) (*yaml.Node, *workspace.Problem) {
 		}
 	}
 	n := &yaml.Node{Kind: yaml.MappingNode}
-	if f, ok := workspace.SetKey(m, append(append([]string{"schema_version"}, Fields...), FieldMethod, "provenance"), "provenance", n); !ok {
+	if f, ok := workspace.SetKey(m, keyOrder, "provenance", n); !ok {
 		return nil, anchored(rel, f)
 	}
 	return n, nil
@@ -518,12 +529,12 @@ func applyPremise(m *yaml.Node, rel string, p PremiseEdit) *workspace.Problem {
 		if p.Text == nil {
 			// 只改子字段而没有前提文本：写前复查会因缺少 text 拒绝；这里先建出 premise，让复查报告它。
 			node = &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
-			if _, ok := workspace.SetKey(m, append(append([]string{"schema_version"}, Fields...), FieldMethod), FieldPremise, node); !ok {
+			if _, ok := workspace.SetKey(m, keyOrder, FieldPremise, node); !ok {
 				return anchored(rel, FieldPremise)
 			}
 		} else {
 			node = &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map", Content: []*yaml.Node{workspace.Str("text"), workspace.Str(*p.Text)}}
-			if _, ok := workspace.SetKey(m, append(append([]string{"schema_version"}, Fields...), FieldMethod), FieldPremise, node); !ok {
+			if _, ok := workspace.SetKey(m, keyOrder, FieldPremise, node); !ok {
 				return anchored(rel, FieldPremise)
 			}
 			p.Text = nil // 已写入 text，下面只处理 sources 与 decision
@@ -566,7 +577,7 @@ func applyPov(m *yaml.Node, rel string, person, character *string) *workspace.Pr
 			return nil
 		}
 		node = &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map", Content: []*yaml.Node{workspace.Str("person"), workspace.Str(*person)}}
-		if _, ok := workspace.SetKey(m, append(append([]string{"schema_version"}, Fields...), FieldMethod), FieldPov, node); !ok {
+		if _, ok := workspace.SetKey(m, keyOrder, FieldPov, node); !ok {
 			return anchored(rel, FieldPov)
 		}
 		person = nil // person 已写入，下面只处理 character
@@ -636,9 +647,9 @@ func editMessage(msgs *yaml.Node, rel string, me MessageEdit) *workspace.Problem
 	return nil
 }
 
-// setField 把写作简报顶层字段 key 设为 n（nil 表示删除），新字段按 Fields 的顺序放置。
+// setField 把写作简报顶层字段 key 设为 n（nil 表示删除），新字段按 keyOrder 的顺序放置。
 func setField(m *yaml.Node, rel, key string, n *yaml.Node) *workspace.Problem {
-	return setKey(m, rel, "", append(append([]string{"schema_version"}, Fields...), FieldMethod), key, n)
+	return setKey(m, rel, "", keyOrder, key, n)
 }
 
 // setKey 把映射 m 中的 key 设为 n（nil 表示删除），见 workspace.SetKey；base 是 m 在文档中的字段路径。

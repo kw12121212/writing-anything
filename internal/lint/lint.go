@@ -63,6 +63,7 @@ const (
 	kindString // 非空字符串
 	kindStrings
 	kindNonEmptyStrings // 至少一项的 kindStrings
+	kindPatterns        // formulaic-patterns 的模式数组，按子字段校验（parsePatterns）
 )
 
 // param 是规则类型声明的一个参数。
@@ -115,6 +116,10 @@ var ruleTypes = map[string]ruleType{
 	"dialogue-punctuation": {check: checkDialogue},
 	"pov-consistency":      {check: checkPOV},
 	"conflict-sources":     {check: checkConflicts},
+	"formulaic-patterns":   {params: []param{{"patterns", kindPatterns, true}}, check: checkPatterns},
+	"tone-density": {params: []param{{"connectives", kindStrings, false}, {"max_connectives_per_1000", kindPositiveNumber, false},
+		{"max_four_char_per_1000", kindPositiveNumber, false}, {"min_sentence_stdev", kindPositiveNumber, false},
+		{"max_list_line_ratio", kindPositiveNumber, false}, {"min_section_length_cv", kindPositiveNumber, false}}, check: checkDensity},
 }
 
 // Run 对正文 content 执行 r 中的全部生效规则，按行、列、规则 id 排序发现项，并应用单处豁免。problems 为规则参数问题
@@ -232,6 +237,16 @@ func validate(id string, rt ruleType, rule *resolve.Rule, r *resolve.Resolved) (
 			bad("."+name, v.Source, fmt.Sprintf("规则类型 %v 没有参数 %s", rule.Type.Value, name))
 			continue
 		}
+		if rt.params[i].kind == kindPatterns {
+			pats, fps := parsePatterns(v.Value)
+			for _, fp := range fps {
+				bad("."+name+fp.field, v.Source, fp.msg)
+			}
+			if len(fps) == 0 {
+				p[name] = pats
+			}
+			continue
+		}
 		x, ok := convert(rt.params[i].kind, v.Value)
 		if !ok {
 			bad("."+name, v.Source, fmt.Sprintf("参数 %s 的取值 %v 应为%s", name, v.Value, kindNames[rt.params[i].kind]))
@@ -262,6 +277,9 @@ func validate(id string, rt ruleType, rule *resolve.Rule, r *resolve.Resolved) (
 		}
 		bad(".terms", source, "builtin 为 false 时 terms 至少要有一项，否则这条规则什么也不检查")
 	}
+	if len(out) == 0 && fmt.Sprint(rule.Type.Value) == "tone-density" {
+		validateDensity(p, rule, bad)
+	}
 	return p, out
 }
 
@@ -284,7 +302,7 @@ func layerOf(r *resolve.Resolved, source string) (path, origin string) {
 	return "", ""
 }
 
-var kindNames = map[kind]string{kindBool: "布尔值", kindPositiveInt: "正整数", kindPositiveNumber: "正数", kindString: "非空字符串", kindStrings: "非空字符串的数组", kindNonEmptyStrings: "至少一项、每项都是非空字符串的数组"}
+var kindNames = map[kind]string{kindBool: "布尔值", kindPositiveInt: "正整数", kindPositiveNumber: "正数", kindString: "非空字符串", kindStrings: "非空字符串的数组", kindNonEmptyStrings: "至少一项、每项都是非空字符串的数组", kindPatterns: "模式数组"}
 
 // convert 把合并结果中的参数取值（YAML 解码得到的 bool、float64、[]any 等）转换为参数类型。
 func convert(k kind, v any) (any, bool) {

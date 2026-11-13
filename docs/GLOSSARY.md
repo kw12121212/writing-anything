@@ -45,6 +45,7 @@
 | 关卡强度 | Gate Level | 关卡强度 | `strict` 严格 / `standard` 标准 / `fast` 快速 |
 | 写作简报 | Brief | 写作简报 | 受众、目的、核心观点、字数、禁区 |
 | 核心观点 | Key Message | 核心观点 | 文章必须传达的观点，由作者提供 |
+| 口吻 | Voice | 口吻 | 写作简报的可选字段 `voice`：作者希望正文用的语气、人称与口语程度，如"像跟同事聊天，第一人称"；经上下文包交给 Agent，只作引导，不做规则检查 |
 | 写作目的 | Purpose | 写作目的 | 读者读完后应该知道、相信或去做什么；写作简报的 `purpose` 字段 |
 | 禁区 | Off-limits | 禁区 | 文章不能写或需要回避的内容；写作简报的 `avoid` 字段 |
 | 简报必填项 | Required Brief Field | 简报必填项 | 文体为单元类型声明、推进前必须在写作简报中填写的字段（`brief_required`） |
@@ -130,7 +131,10 @@
 | 规则类型 | Rule Type | 规则类型 | 规则的检查方式，如 `length-range`、`banned-terms`；只能取已知类型 |
 | 禁用词 | Banned Term | 禁用词 | 规范包中不允许出现的词语，可附理由与替换写法 |
 | 评分标准 | Rubric | 评分标准 | 审稿时逐项评判的标准 |
-| AI 腔 | AI Cliché | AI 腔 | 典型的 AI 套话与句式，如"值得注意的是" |
+| AI 腔 | AI Cliché / AI Tone | AI 腔 | 典型的 AI 套话、书面腔与句式，如"值得注意的是"；文章类文体用句式套路与腔调密度两种规则和口吻自然指标检查 |
+| 句式套路 | Formulaic Pattern | 句式套路 | `formulaic-patterns` 规则按 1 到 3 个按顺序出现的词（可限定同句或同段、段首或段末、词在句首）找出的套路写法，如"不是…而是""在…的今天"；单个词的模式覆盖"赋能"这类书面用词 |
+| 腔调密度 | Tone Density | 腔调密度 | `tone-density` 规则的全文级统计：连接词与四字片段的每千字个数、句长标准差、列表行占比与二级标题节长的变异系数；超过阈值时报告，正文少于 300 字（非空白字符数，含标点）时不判定；全文级发现项不能单处豁免 |
+| 四字片段 | Four-character Run | 四字片段 | 恰好由四个汉字组成、前后都不是汉字的连续汉字串；`metrics compute` 的 fourChar 与 `tone-density` 共用这一口径 |
 | 小说 AI 腔词表 | Fiction AI-cliché Terms | 小说 AI 腔词表 | 内置 short-story 与 novel 文体为 `ai-cliche` 规则声明的虚构写作套话词表，如"眼底闪过一丝" |
 | 对话标点 | Dialogue Punctuation | 对话标点 | `dialogue-punctuation` 规则检查的小说对话标点：应使用全角引号，对话后紧跟说话人时引号内句号应为逗号 |
 | 视角与人称一致 | POV Consistency | 视角一致 | `pov-consistency` 规则的启发式检查：按写作简报 `pov` 的人称检测叙述文字中的视角滑移 |
@@ -155,6 +159,7 @@
 | 片段 | Segment | 片段 | 打分的单位，即正文的一个段落，编号与 `wa-cli provenance` 相同 |
 | 分歧 | Score Disagreement | 分歧 | 同一片段各次打分的最高分减最低分；超过阈值时转为作者决策 |
 | 仅供参考 | Advisory | 仅供参考 | 与作者一致率低于阈值的指标：照常显示分数，但不再产生分歧决策 |
+| 口吻自然 | Natural Voice | 口吻自然 | 内置 tech-blog 与 wechat-marketing 文体声明的 AI 评分指标 `natural-voice`：按 1 到 5 分评判片段读起来像不像一个人在当面讲 |
 | 情绪曲线 | Emotion Curve | 情绪曲线 | 按单元顺序排列的情绪评分走势 |
 | 张力曲线 | Tension Curve | 张力曲线 | 按单元顺序排列的紧张度评分走势 |
 | 偏离发现项 | Deviation Finding | 偏离发现项 | 曲线取值与目标分值之差超过指标 tolerance 的单元；`wa-cli curve` 列出，只衡量偏离、不评判好坏，不阻塞验收 |
@@ -240,7 +245,7 @@
 | 结语 | Conclusion | 结语 | |
 | 金句 | Quotable Line / Punchline | 金句 | 便于传播、令人印象深刻的句子 |
 | 语气 | Tone | 语气 | 如正式、轻松、犀利 |
-| 文风 | Writing Style / Voice | 文风 | 作者稳定的表达特征 |
+| 文风 | Writing Style | 文风 | 作者稳定的表达特征；单篇正文要求的语气见口吻 |
 | 人设 | Persona | 人设 | 作者或账号对外呈现的形象 |
 | 总分总 | General–Specific–General Structure | 总分总 | 先总述、再分述、最后总结的结构 |
 | 金字塔原理 | Pyramid Principle | 金字塔原理 | 结论先行、以上统下的表达方法 |

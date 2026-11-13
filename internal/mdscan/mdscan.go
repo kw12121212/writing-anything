@@ -14,6 +14,14 @@ var (
 	tildeFence    = regexp.MustCompile(`^ {0,3}(~{3,})`)
 )
 
+// Heading 匹配 ATX 标题行：缩进不超过 3 个空格、1 至 6 个 #，其后为空白或行尾（子匹配为标记与标题文字）；ListItem 匹配
+// 列表项行：缩进不超过 3 个空格、-、*、+ 或 1 至 9 位数字加 . 或 )，其后为空白（子匹配为标记与内容）。导出的 Markdown 解析与
+// 文本检查的腔调密度（Tone Density）共用这两条规则。
+var (
+	Heading  = regexp.MustCompile(`^ {0,3}(#{1,6})(?:[ \t]+(.*?))?(?:[ \t]+#+)?[ \t]*$`)
+	ListItem = regexp.MustCompile(`^ {0,3}([-*+]|\d{1,9}[.)])[ \t]+(.*)$`)
+)
+
 // FenceLines 返回每行是否属于围栏代码块（含开头与结束行）。行可以带或不带结尾的换行。识别复用 FenceMarkers 的
 // 状态机：标记行本身属于围栏，两个标记行之间的内容行也属于（未闭合时到末尾）。
 func FenceLines(lines []string) []bool {

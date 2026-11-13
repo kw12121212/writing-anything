@@ -16,7 +16,8 @@ description: 和作者一起填写写作简报（受众、目的、前提、主�
    - 核心观点（短篇中承载关键转折）：`--message <id> --message-text <内容> --message-sources <素材 id>`；
    - 没有素材的观点：用决策（Decision）请作者确认。给出候选时运行 `wa-cli decision add --question <问题> --option <候选甲> --option <候选乙> --unit <单元> --blocking --json`，作者选定后运行 `wa-cli decide <决策 id> --option <a|b|…> --confirmation <作者原话> --json`；没有候选时 decision add 不加 --option，作者答复后运行 `wa-cli decide <决策 id> --answer <作者的答复> --confirmation <作者原话> --json`。再用 `--decision <决策 id>` 关联（只确认这一条观点时用 `--message-decision <决策 id>`）。
 3. 写作法（Method Template）：没有设置 method 时，只有作品的根单元使用文体的默认写作法，子单元（如场景）不用写作法。运行 `wa-cli method list --json` 把可用的写作法告诉作者；作者要换时用 `wa-cli brief set <单元> --method <id>`，不用写作法时为 `none`。
-4. `questions` 为空后运行 `wa-cli advance <单元> --json`。
+4. 口吻（Voice，可选）：问作者希望正文用什么口吻，如「像跟同事聊天，第一人称，允许口语」。作者给出时用 `wa-cli brief set <单元> --voice <作者给出的口吻> --json` 写入；作者没想好就跳过，不要替作者编造口吻。
+5. `questions` 为空后运行 `wa-cli advance <单元> --json`。
 
 ## 会话协议（可执行模板）
 
@@ -33,4 +34,6 @@ wa next --json   # 示例：每步先看下一步；把 wa 后面换成当前步
 ## 必须停下来问作者
 
 - 受众、目的、前提、视角、核心观点与禁区都只能来自作者；不要替作者决定。
+- 口吻只写作者自己给出的说法；作者没有给出时留空。
+- 之后草稿与审稿中 natural-voice 低分的段落与 tone-patterns、tone-density 的 warning 改还是保留，由作者决定；保留 tone-patterns 的命中时由作者自己在正文写单处豁免；tone-density 是全文级发现项，不能单处豁免：作者要保留时，由作者自己在 config.yaml 的 rules.tone-density 中放宽阈值，或在 waivers 中写规则级豁免（Waiver），Agent 不替作者改。
 - 观点或前提没有素材支撑时，必须登记决策等作者确认（`--decision <决策 id>`；只确认前提时用 `--premise-decision <决策 id>`），不能自己补出处。

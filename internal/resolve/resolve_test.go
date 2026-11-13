@@ -392,9 +392,9 @@ func TestDriftThreshold(t *testing.T) {
 }
 
 func TestStyleByGenreCategory(t *testing.T) {
-	// novel 属于小说类：default 规范包的两条文章类文风被排除，并说明原因。
+	// novel 属于小说类：default 规范包的四条文章类文风被排除，并说明原因。
 	r := mustResolve(t, setup(t, config("novel", "[]", ""), nil))
-	if r.Genre.Category != "fiction" || len(r.Style) != 0 || len(r.ExcludedStyle) != 2 {
+	if r.Genre.Category != "fiction" || len(r.Style) != 0 || len(r.ExcludedStyle) != 4 {
 		t.Fatalf("novel: genre = %+v, style = %+v, excluded = %+v", r.Genre, r.Style, r.ExcludedStyle)
 	}
 	for _, e := range r.ExcludedStyle {
@@ -406,14 +406,15 @@ func TestStyleByGenreCategory(t *testing.T) {
 	if r.ExcludedStyle[0].Text != "结论先行，先说结果再说过程。" {
 		t.Fatalf("excluded[0] = %+v", r.ExcludedStyle[0])
 	}
-	if r := mustResolve(t, setup(t, config("short-story", "[]", ""), nil)); len(r.Style) != 0 || len(r.ExcludedStyle) != 2 {
+	if r := mustResolve(t, setup(t, config("short-story", "[]", ""), nil)); len(r.Style) != 0 || len(r.ExcludedStyle) != 4 {
 		t.Fatalf("short-story: style = %+v", r.Style)
 	}
 
 	// 文章类文体保留，没有文体或文体未声明类别时全部生效。
 	for _, genre := range []string{"tech-blog", "wechat-marketing", "minimal", ""} {
 		r := mustResolve(t, setup(t, config(genre, "[]", ""), nil))
-		if len(r.Style) != 2 || r.Style[0].Text != "结论先行，先说结果再说过程。" || r.Style[0].Source != "pack:default" ||
+		if len(r.Style) != 4 || r.Style[0].Text != "结论先行，先说结果再说过程。" || r.Style[0].Source != "pack:default" ||
+			!strings.HasPrefix(r.Style[2].Text, "像当面讲给读者听") || !strings.HasPrefix(r.Style[3].Text, "直接讲事") ||
 			r.ExcludedStyle == nil || len(r.ExcludedStyle) != 0 {
 			t.Fatalf("%q: style = %+v, excluded = %+v", genre, r.Style, r.ExcludedStyle)
 		}
@@ -453,7 +454,7 @@ style:
 
 	// ForGenre 按作品自己的文体过滤，而不是 default_genre。
 	r, ps := ForGenre(setup(t, config("tech-blog", "[]", ""), nil), "novel")
-	if len(ps) > 0 || len(r.Style) != 0 || len(r.ExcludedStyle) != 2 {
+	if len(ps) > 0 || len(r.Style) != 0 || len(r.ExcludedStyle) != 4 {
 		t.Fatalf("ForGenre novel: %+v %+v", r, ps)
 	}
 }

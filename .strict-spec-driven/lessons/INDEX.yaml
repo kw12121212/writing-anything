@@ -350,6 +350,11 @@ categories:
       status: active
       occurrences: 1
       path: .strict-spec-driven/lessons/coding/wa-cli-path-wa-cli-wa-cli-134c20.yaml
+    lesson-27bddb:
+      title: 自写匹配器先全部收集再截断，命中上限形同虚设
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/coding/lesson-27bddb.yaml
   documentation:
     must-must-6af326:
       title: 修改一条 MUST 需求时，要检查同一规格里相邻的 MUST 是否因此冲突
@@ -394,8 +399,13 @@ categories:
     delta-d60013:
       title: delta 场景断言涉及既有行为时，逐分支对照该行为的既有测试
       status: active
-      occurrences: 1
+      occurrences: 2
       path: .strict-spec-driven/lessons/documentation/delta-d60013.yaml
+    lesson-b8b45d:
+      title: 带最低样本门槛的统计规则，场景给出的样本规模要先满足门槛
+      status: active
+      occurrences: 1
+      path: .strict-spec-driven/lessons/documentation/lesson-b8b45d.yaml
   operations:
     pr-gh-generate-notes-8e86ae:
       title: 不走 PR 的仓库里 gh --generate-notes 只生成一行比较链接，不是提交清单
@@ -447,7 +457,7 @@ categories:
     internal-cli-null-1ddaed:
       title: 新增可空输出字段要同时登记 internal/cli 测试里的两份 null 白名单
       status: active
-      occurrences: 2
+      occurrences: 3
       path: .strict-spec-driven/lessons/testing/internal-cli-null-1ddaed.yaml
     lesson-b17b72:
       title: 零提示类完成标准要先实测现状，矩阵断言文字不会被测试强制

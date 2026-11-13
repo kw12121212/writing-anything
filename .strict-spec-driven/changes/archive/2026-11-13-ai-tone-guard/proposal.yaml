@@ -1,0 +1,34 @@
+schema: strict-spec-driven/change-proposal/v1
+schema_version: 1
+artifact_type: change_proposal
+schema_file: templates/strict-spec-driven/schemas/change-proposal.yaml
+change:
+  id: ai-tone-guard
+  status: proposed
+summary:
+  what:
+    - 为文章类文体（tech-blog、wechat-marketing）新增 AI 腔（AI Tone）防护：两种 warning 级规则类型 formulaic-patterns（句式套路（Formulaic Pattern））与 tone-density（腔调密度（Tone Density）），写作简报新增可选的口吻（Voice）字段并进入上下文包，default 规范包补充文章类正面文风条目，两个文章类文体声明 AI 评分指标 natural-voice（口吻自然），内置技能 wa-draft、wa-review、wa-revise 加入去 AI 腔的自查与交接步骤。
+  why:
+    - 作者反馈：用 writing-anything 时 Agent 仍会写出太书面、太 AI 味的内容，最刺眼的是句式套路（不是…而是、首先/其次/最后、排比、段末总结升华、宏大开头）、书面用词（赋能、抓手、至关重要、四字词与连接词堆砌）与过于工整的结构（小标题与列表过多、各节长度对称、句长均匀）。产品定位是帮人写而不是替人写，产出一眼能看出是 AI 写的与定位矛盾。现状只有 default 规范包 5 个词的 ai-cliche 词表，没有句式、密度与结构检测；上下文包的文风引导只有两条；审稿评分标准没有口吻维度，同一模型自审难以发现自己的腔调。
+    - 解决标准（作者确认）：两者都要——Agent 写初稿时就少见这些写法（正面引导 + 自查），漏网的在文本检查（Lint）或审稿评分中定位到段落。
+scope:
+  in:
+    - lint：新增规则类型 formulaic-patterns：参数 patterns，每个模式含 id、1 到 3 个按顺序出现的词 terms、范围 scope（sentence 或 paragraph，默认 sentence）、位置 position（any、paragraph-start 或 paragraph-end，默认 any）与可选 message；每处命中报告一项，位置为第一个词；单个词的模式覆盖书面用词；跳过屏蔽区域，单处豁免与规则级 waivers 同现有规则。
+    - lint：新增规则类型 tone-density：全文级阈值检查，参数都可选：connectives（连接词数组）与 max_connectives_per_1000、max_four_char_per_1000、min_sentence_stdev、max_list_line_ratio 与 min_section_length_cv；超过阈值各报告一项全文级发现项，message 写明实测值与阈值；四字词与句长口径复用 metrics 主规格 deterministic-metrics。
+    - genres-and-packs：known-rule-types 加入 formulaic-patterns 与 tone-density 并定义参数校验；内置 tech-blog 与 wechat-marketing 文体各声明 severity 为 warning 的 formulaic-patterns 与 tone-density 规则（带默认模式表、词表与阈值），以及 AI 评分指标 natural-voice（scale 1 到 5，每个分值带锚定说明与示例片段）。
+    - brief：写作简报新增可选字段 voice（口吻，非空文本），wa-cli brief set --voice 设置、brief show 输出；context：上下文包的 brief 含 voice。
+    - genres-and-packs：内置 default 规范包新增 applies_to 为 article 的正面文风条目（短句、口语、少连接词与四字词、不在段末总结升华）。
+    - skills：wa-draft 在文本检查之后加入去 AI 腔自查（逐项处理 formulaic-patterns 与 tone-density 的 warning，不可替作者豁免）；wa-review 说明 natural-voice 指标的独立会话打分并把低分段落交给作者；wa-revise 说明按低分段落与 warning 修订。
+    - 场景：新增 lint 区域场景 ai-tone-drafting，覆盖 Agent 起草、自查、审稿打分与作者决定的主流程和例外流程；docs/GLOSSARY.md 加入句式套路、腔调密度、口吻等新术语。
+  out:
+    - 从作者修改中归纳反复被改掉的句式（扩展 pack prefer），另立后续变更。
+    - 作者范文（从过往文章截取片段进入上下文包），另立后续变更。
+    - 小说类文体（short-story、novel）的句式与密度检测、natural-voice 指标。
+    - wa-cli 自动改写正文或调用大语言模型。
+    - 新增评分标准（Rubric）评分项：会让在途单元在 standard/strict 关卡下因缺少结论被 accept 阻塞，改用 AI 评分指标。
+unchanged_behavior:
+  - default 规范包 ai-cliche 规则的 5 个词、error 级别与 metrics 的 aiCliche 指标口径不变。
+  - 新增检查都是 warning 级，不阻塞 advance 与 accept；已有工作区升级后不会出现新的 error 级发现项。
+  - 作者的 lint-ignore 单处豁免与规则级 waivers 照常生效；Agent 写入的豁免照旧报告 lint.agent-waiver、不生效。
+  - wa-cli 不改写正文、不调用模型；作者的编辑优先于 Agent。
+  - short-story、novel、minimal 文体的规则、评分标准与指标不变；评分标准（Rubric）与验收关卡不变。

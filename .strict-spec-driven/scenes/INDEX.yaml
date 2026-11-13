@@ -31,6 +31,10 @@ areas:
       status: draft
       path: .strict-spec-driven/scenes/illustrations/illustrate-before-acceptance.yaml
   lint:
+    ai-tone-drafting:
+      title: 文章类草稿的去 AI 腔（AI Tone）起草与审稿
+      status: draft
+      path: .strict-spec-driven/scenes/lint/ai-tone-drafting.yaml
     claim-candidates-coverage:
       title: 疑似论断（Claim Candidate）的登记与覆盖检查
       status: draft
